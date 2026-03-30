@@ -7,8 +7,8 @@
   "definitions": {
     "estado_pedido_llevadoo": {
       "type": "string",
-      "enum": ["recibido", "aceptado", "en_preparacion", "listo", "recogido", "cancelado"],
-      "description": "Estado del pedido Llevadoo"
+      "enum": ["recibido", "aceptado", "en_preparacion", "para_recoger", "listo", "entregado", "cancelado"],
+      "description": "Estado del pedido Llevadoo: recibido → aceptado → en_preparacion → para_recoger (horno) → listo → entregado (comandero entrega a repartidor)"
     },
 
     "pedido_llevadoo": {

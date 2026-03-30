@@ -250,6 +250,110 @@ export async function renderCartaHtml(
 }
 
 // =============================================================================
+// EDIT ACTIONS (fuente de verdad — solo menu-generator modifica datos)
+// =============================================================================
+
+export async function updateProduct(
+  cartaId: string,
+  productoId: string,
+  changes: { nombre?: string; precio?: number; categoria?: string; ingredientes?: Ingrediente[] }
+): Promise<boolean> {
+  try {
+    await mqttRequest('menu', 'update-product', { carta_id: cartaId, producto_id: productoId, ...changes });
+    await getCarta(cartaId); // refresh
+    return true;
+  } catch (error) {
+    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
+    return false;
+  }
+}
+
+export async function addProduct(
+  cartaId: string,
+  producto: { nombre: string; categoria: string; precio: number; ingredientes?: Ingrediente[] }
+): Promise<boolean> {
+  try {
+    await mqttRequest('menu', 'add-product', { carta_id: cartaId, ...producto });
+    await getCarta(cartaId);
+    return true;
+  } catch (error) {
+    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
+    return false;
+  }
+}
+
+export async function removeProduct(cartaId: string, productoId: string): Promise<boolean> {
+  try {
+    await mqttRequest('menu', 'remove-product', { carta_id: cartaId, producto_id: productoId });
+    await getCarta(cartaId);
+    return true;
+  } catch (error) {
+    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
+    return false;
+  }
+}
+
+export async function updatePrices(
+  cartaId: string,
+  changes: { porcentaje?: number; categoria?: string; precios?: Record<string, number> }
+): Promise<boolean> {
+  try {
+    await mqttRequest('menu', 'update-prices', { carta_id: cartaId, ...changes });
+    await getCarta(cartaId);
+    return true;
+  } catch (error) {
+    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
+    return false;
+  }
+}
+
+export async function addCategory(cartaId: string, nombre: string): Promise<boolean> {
+  try {
+    await mqttRequest('menu', 'add-category', { carta_id: cartaId, nombre });
+    await getCarta(cartaId);
+    return true;
+  } catch (error) {
+    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
+    return false;
+  }
+}
+
+// =============================================================================
+// VERSION CONTROL
+// =============================================================================
+
+export interface CartaVersion {
+  file: string;
+  timestamp: string;
+  nombre: string;
+  productos: number;
+  categorias: number;
+  size_bytes: number;
+}
+
+export async function listVersions(cartaId: string): Promise<CartaVersion[]> {
+  try {
+    const res = await mqttRequest<{ carta_id: string; versions: CartaVersion[]; total: number }>(
+      'menu', 'list-versions', { carta_id: cartaId }
+    );
+    return res.data.versions || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function restoreVersion(cartaId: string, versionFile: string): Promise<boolean> {
+  try {
+    await mqttRequest('menu', 'restore-version', { carta_id: cartaId, version_file: versionFile });
+    await getCarta(cartaId);
+    return true;
+  } catch (error) {
+    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
+    return false;
+  }
+}
+
+// =============================================================================
 // UI ACTIONS
 // =============================================================================
 

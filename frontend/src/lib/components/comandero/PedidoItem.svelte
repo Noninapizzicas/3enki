@@ -164,9 +164,9 @@
   }
 
   .nombre {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #e5e5e5;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #fff;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

@@ -1389,6 +1389,7 @@ class DatabaseManagerModule {
     await this.eventBus.publish(EVENTS.DB.QUERY_RESPONSE, {
       project_id: projectId,
       request_id: requestId,
+      correlation_id: correlationId || null,
       success,
       data: data || [],
       error: error || null
@@ -1399,6 +1400,7 @@ class DatabaseManagerModule {
     await this.eventBus.publish(EVENTS.DB.SCHEMA_INIT_RESPONSE, {
       project_id: projectId,
       request_id: requestId,
+      correlation_id: correlationId || null,
       success,
       error: error || null
     }, { correlationId });

@@ -922,6 +922,9 @@ class CocinaModule {
       cantidad: item.cantidad,
       categoria: item.categoria || null,
       estacion,
+      ingredientes: item.ingredientes || item.ingredientes_base || null,
+      variaciones: item.variaciones || null,
+      notas: item.notas || null,
       fases: item.fases || [],
       impresora: device?.impresora || null,
       timestamp: new Date().toISOString()

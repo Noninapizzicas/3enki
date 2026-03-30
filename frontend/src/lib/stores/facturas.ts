@@ -303,29 +303,46 @@ export async function subirFactura(
 /**
  * Exporta facturas a Excel
  */
-export async function exportarExcel(): Promise<string | null> {
+interface ExportResponse {
+  path: string;
+  nombre: string;
+  contenido: string;
+  mimeType: string;
+  total: number;
+}
+
+/**
+ * Exporta facturas a CSV y dispara descarga en el navegador
+ */
+export async function exportarExcel(): Promise<boolean> {
   const project = get(activeProject);
-  if (!project?.id) return null;
+  if (!project?.id) return false;
 
   facturasStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const response = await mqttRequest<{ path: string; total: number }>('facturas', 'exportar', {
+    const response = await mqttRequest<ExportResponse>('facturas', 'exportar', {
       proyecto: project.id
     });
 
     facturasStore.update(s => ({ ...s, loading: false }));
 
+    // Disparar descarga en el navegador
+    const { contenido, nombre, mimeType } = response.data;
+    if (contenido) {
+      triggerDownload(contenido, nombre || 'facturas.csv', mimeType || 'text/csv');
+    }
+
     // Recargar para actualizar estados
     await loadFacturas();
 
     console.log('[Facturas] Exported:', response.data.total, 'facturas');
-    return response.data.path;
+    return true;
   } catch (error) {
     const errorMessage = getErrorMessage(error);
     facturasStore.update(s => ({ ...s, loading: false, error: errorMessage }));
     console.error('[Facturas] Export failed:', errorMessage);
-    return null;
+    return false;
   }
 }
 
@@ -459,8 +476,127 @@ export function initFacturasSubscriptions(): () => void {
 }
 
 // =============================================================================
+// ASESORIA — Paquete ZIP para asesoría contable
+// =============================================================================
+
+interface PaqueteResponse {
+  archivo: string;
+  nombre: string;
+  contenido: string;
+  mimeType: string;
+  facturas: number;
+  periodo: string;
+  totales: { base: number; iva: number; total: number };
+}
+
+interface PaqueteHistorial {
+  nombre: string;
+  size: number;
+  fecha: string;
+}
+
+/**
+ * Genera y descarga paquete ZIP de asesoría (CSV + originales)
+ */
+export async function generarPaqueteAsesoria(
+  periodo?: string,
+  incluirOriginales: boolean = true
+): Promise<boolean> {
+  const project = get(activeProject);
+  if (!project?.id) return false;
+
+  facturasStore.update(s => ({ ...s, loading: true, error: null }));
+
+  try {
+    const response = await mqttRequest<PaqueteResponse>('asesoria', 'generar-paquete', {
+      proyecto: project.id,
+      periodo,
+      incluirOriginales
+    });
+
+    facturasStore.update(s => ({ ...s, loading: false }));
+
+    const { contenido, nombre, mimeType } = response.data;
+    if (contenido) {
+      triggerDownload(contenido, nombre || 'asesoria.zip', mimeType || 'application/zip');
+    }
+
+    console.log('[Facturas] Paquete asesoría:', response.data.facturas, 'facturas');
+    return true;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    facturasStore.update(s => ({ ...s, loading: false, error: errorMessage }));
+    console.error('[Facturas] Paquete asesoría failed:', errorMessage);
+    return false;
+  }
+}
+
+/**
+ * Lista historial de paquetes generados
+ */
+export async function listarPaquetesAsesoria(): Promise<PaqueteHistorial[]> {
+  const project = get(activeProject);
+  if (!project?.id) return [];
+
+  try {
+    const response = await mqttRequest<{ paquetes: PaqueteHistorial[] }>('asesoria', 'historial', {
+      proyecto: project.id
+    });
+    return response.data.paquetes || [];
+  } catch (error) {
+    console.error('[Facturas] Historial failed:', getErrorMessage(error));
+    return [];
+  }
+}
+
+/**
+ * Descarga un paquete ZIP existente del historial
+ */
+export async function descargarPaquete(archivo: string): Promise<boolean> {
+  const project = get(activeProject);
+  if (!project?.id) return false;
+
+  try {
+    const response = await mqttRequest<{ nombre: string; contenido: string; mimeType: string }>(
+      'asesoria', 'descargar', { proyecto: project.id, archivo }
+    );
+
+    const { contenido, nombre, mimeType } = response.data;
+    if (contenido) {
+      triggerDownload(contenido, nombre || archivo, mimeType || 'application/zip');
+    }
+    return true;
+  } catch (error) {
+    console.error('[Facturas] Descarga failed:', getErrorMessage(error));
+    return false;
+  }
+}
+
+// =============================================================================
 // HELPERS
 // =============================================================================
+
+/**
+ * Dispara descarga de archivo en el navegador desde base64
+ */
+function triggerDownload(base64Content: string, fileName: string, mimeType: string): void {
+  const byteCharacters = atob(base64Content);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  const blob = new Blob([byteArray], { type: mimeType });
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof MqttTimeoutError) {

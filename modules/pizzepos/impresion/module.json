@@ -1,14 +1,15 @@
 {
   "name": "impresion",
-  "version": "2.0.0",
-  "description": "Formateo ESC/POS para impresión térmica (58mm/80mm). Comandas cocina, tickets pieza, tickets venta. Envío delegado a módulo perifericos.",
+  "version": "3.0.0",
+  "description": "Formateo ESC/POS y envío directo a impresoras ESP32 via MQTT. Autodescubrimiento de impresoras. Sin capas intermedias.",
   "author": "Pizzepos Team",
 
   "provides": {
     "events": [
       "impresion.comanda_generada",
       "impresion.error",
-      "impresion.ticket_venta_generado"
+      "impresion.ticket_venta_generado",
+      "impresion.ticket_pieza_generado"
     ]
   },
 
@@ -16,33 +17,51 @@
     "publishes": [
       {
         "event": "impresion.comanda_generada",
-        "description": "Comanda formateada y enviada via periferico.imprimir",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/impresion_comanda_generada"
-        }
+        "description": "Comanda formateada y enviada directamente al ESP32 via MQTT"
       },
       {
         "event": "impresion.error",
-        "description": "Error al generar comanda",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/impresion_error"
-        }
+        "description": "Error al generar o enviar impresión"
       },
       {
-        "event": "periferico.imprimir",
-        "description": "Datos ESC/POS enviados al servicio de periféricos para impresión"
+        "event": "impresion.ticket_venta_generado",
+        "description": "Ticket de venta formateado y enviado"
+      },
+      {
+        "event": "impresion.ticket_pieza_generado",
+        "description": "Ticket de pieza individual formateado y enviado"
       }
     ],
     "subscribes": [
       {
-        "event": "pedido.enviado_cocina",
-        "description": "Generar e imprimir comanda cuando pedido se envia a cocina",
-        "handler": "onPedidoEnviadoCocina"
+        "event": "cocina.item_ticket",
+        "description": "Imprimir ticket de pieza individual cuando horno marca item como salido",
+        "handler": "onItemTicket"
       },
       {
-        "event": "cocina.item_ticket",
-        "description": "Imprimir ticket de pieza individual al completar item en estación con impresión",
-        "handler": "onItemTicket"
+        "event": "mesa.abierta",
+        "description": "Cachear nombre de mesa para impresión de tickets",
+        "handler": "onMesaAbierta"
+      },
+      {
+        "event": "mesa.renombrada",
+        "description": "Actualizar nombre de mesa cuando se renombra",
+        "handler": "onMesaRenombrada"
+      },
+      {
+        "event": "mesa.cerrada",
+        "description": "Limpiar cache de nombre al cerrar mesa",
+        "handler": "onMesaCerrada"
+      },
+      {
+        "event": "llevar.ticket_creado",
+        "description": "Cachear nombre de ticket llevar para impresión",
+        "handler": "onLlevarTicketCreado"
+      },
+      {
+        "event": "cuenta.actualizada",
+        "description": "Actualizar nombre en cache cuando se renombra cualquier cuenta",
+        "handler": "onCuentaActualizada"
       }
     ]
   },
@@ -62,7 +81,7 @@
       "method": "POST",
       "path": "/ticket",
       "handler": "handleImprimirComanda",
-      "description": "Reimprimir comanda manualmente. Body: { cuenta_id, items, destino? }"
+      "description": "Reimprimir comanda manualmente. Body: { cuenta_id, items, destino?, project_id? }"
     },
     {
       "method": "POST",
@@ -74,7 +93,7 @@
       "method": "GET",
       "path": "/estado",
       "handler": "handleGetEstado",
-      "description": "Estado actual del módulo de impresión"
+      "description": "Estado actual del módulo de impresión y impresoras descubiertas"
     },
     {
       "method": "GET",
@@ -86,7 +105,7 @@
       "method": "GET",
       "path": "/health",
       "handler": "handleHealthCheck",
-      "description": "Health check"
+      "description": "Health check — reporta impresoras listas"
     },
     {
       "method": "GET",
@@ -98,13 +117,13 @@
       "method": "GET",
       "path": "/impresoras",
       "handler": "handleListarImpresoras",
-      "description": "Lista impresoras disponibles para seleccionar destino"
+      "description": "Lista impresoras ESP32 descubiertas via autodescubrimiento MQTT"
     }
   ],
 
   "config": {
     "ancho": "58mm",
-    "destino_default": "cocina"
+    "destino_default": ""
   },
 
   "observability": {
@@ -118,7 +137,8 @@
       "counters": [
         "impresion.comanda.total",
         "impresion.reimpresion.total",
-        "impresion.error.total"
+        "impresion.error.total",
+        "impresion.impresoras.descubiertas"
       ]
     }
   }

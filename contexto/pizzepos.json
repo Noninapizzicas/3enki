@@ -191,7 +191,7 @@
       "3. comandero → enviar cocina → comandero.enviar_cocina",
       "4. pedidos → escucha comandero.enviar_cocina → crea pedido formal → pedido.creado + pedido.enviado_cocina",
       "5. cocina → recibe pedido.enviado_cocina → gestiona preparación item a item → cocina.pedido_listo",
-      "6. impresion → recibe pedido.enviado_cocina → genera comanda ESC/POS → imprime ticket",
+      "6. impresion → recibe cocina.item_ticket (cuando horno marca salido) → genera ticket pieza ESC/POS → imprime",
       "7. cobros → procesa pago (efectivo/tarjeta/bizum/transferencia/mixto/link/qr) → cobro.procesado",
       "8. cuentas → escucha todos los eventos y transiciona estado: pendiente→con_pedido→en_preparacion→listo→para_cobrar→cobrado (publica cuenta.estado_cambiado)",
       "9. cuentas-canales → detecta cobro.procesado → cierra cuenta por prefijo → cuenta.cerrada (EXCEPTO llevar: solo marca pagado, cierra al entregar)",
@@ -672,51 +672,76 @@
     },
 
     "impresion": {
-      "version": "1.1.0",
-      "descripcion": "Impresión de comandas de cocina via impresora térmica Bluetooth (58mm NETUM / 80mm). Sin precios — solo info relevante para cocina. Formato ESC/POS.",
+      "version": "3.0.0",
+      "descripcion": "Formateo ESC/POS y envío DIRECTO a impresoras ESP32 via MQTT. Autodescubrimiento. Sin capas intermedias.",
       "ui_domain": "impresion",
-      "uiHandlers": ["ticket", "conectar", "estado", "historial", "health", "metrics"],
-      "eventos_publica": ["impresion.comanda_generada", "impresion.error", "impresion.raw"],
-      "eventos_suscribe": ["pedido.enviado_cocina"],
-      "transporte": {
-        "modos": ["dispositivo (/dev/rfcomm0)", "rfcomm (MAC + canal)", "comando (shell)", "TCP (host:puerto)"],
-        "entorno": "Termux en Android con Bluetooth",
-        "auto_reconnect": "Si desconectado al imprimir, intenta reconectar una vez"
+      "uiHandlers": ["ticket", "ticket-venta", "estado", "historial", "health", "metrics", "impresoras"],
+      "eventos_publica": ["impresion.comanda_generada", "impresion.error", "impresion.ticket_venta_generado", "impresion.ticket_pieza_generado"],
+      "eventos_suscribe": ["pedido.enviado_cocina", "cocina.item_ticket"],
+      "envio_mqtt_directo": {
+        "topic_print": "impresion/{project}/print/{device} ← ESC/POS base64",
+        "topic_status": "impresion/+/status/+ → autodescubrimiento de ESP32",
+        "payload": "{ job_id, data: base64 }",
+        "nota": "Publica directo via mqtt.publish() — NO usa perifericos ni provider ni transport"
+      },
+      "autodescubrimiento": {
+        "escucha": "impresion/+/status/+",
+        "mantiene": "Map de impresoras con: device_id, project_id, online, printer_ready, printer_name, printer_addr, ancho, wifi_rssi, ip, uptime, last_seen",
+        "handleListarImpresoras": "Devuelve impresoras descubiertas en tiempo real"
       },
       "formateador": {
         "anchos": { "58mm": 32, "80mm": 42 },
-        "secciones": ["Header COMANDA", "Ref mesa/canal", "Hora/Fecha", "Items con variaciones", "Notas", "Footer", "Corte parcial"],
+        "tipos_ticket": ["comanda (cocina, sin precios)", "ticket_venta (cliente, con precios+IVA)", "ticket_pieza (individual por item)"],
         "items_formatea": ["cantidad + nombre", "mitad-mitad (IZQ/DER)", "ingredientes (+)", "variaciones (SIN/CON)", "notas (>> texto)"]
+      },
+      "config": {
+        "ancho": "58mm",
+        "project_id": "nonina",
+        "destino_default": "cocina-1"
       },
       "frontend": {
         "store": "frontend/src/lib/stores/impresion.ts",
         "ui_module": "frontend/src/lib/modules/impresion/ — work-bar, routes: ['/comandero']",
-        "panel": "ImpresionPanel.svelte — conectar, estado, historial, reimprimir"
+        "panel": "ImpresionPanel.svelte — estado, historial, reimprimir, selección impresora"
       },
-      "relacion_cocina": "COMPLEMENTARIO — impresión genera ticket físico (snapshot), pantalla cocina muestra cola digital (estado vivo). Ambos escuchan pedido.enviado_cocina."
+      "relacion_cocina": "COMPLEMENTARIO — impresión genera ticket físico (snapshot), pantalla cocina muestra cola digital (estado vivo). Ambos escuchan pedido.enviado_cocina.",
+      "relacion_perifericos": "INDEPENDIENTE — impresion v3.0 NO usa perifericos. Publica MQTT directo al ESP32."
     },
 
     "carta-impresion": {
-      "version": "1.0.0",
-      "descripcion": "Generación de HTML para imprimir cartas de restaurante desde el navegador (Ctrl+P). Templates A4, A5 y custom.",
+      "version": "1.1.0",
+      "descripcion": "Renderizado y exportación de cartas en múltiples formatos: HTML imprimible, PDF server-side, PNG alta resolución, SVG vectorial.",
       "ui_domain": "carta",
-      "uiHandlers": ["render", "plantillas", "plantilla_crear", "plantilla_eliminar"],
       "tools": [
         { "name": "carta.render", "desc": "Genera HTML imprimible desde carta_id + plantilla" },
-        { "name": "carta.plantillas", "desc": "Lista plantillas disponibles" },
-        { "name": "carta.plantilla_crear", "desc": "Crea plantilla custom" },
-        { "name": "carta.plantilla_eliminar", "desc": "Elimina plantilla" }
+        { "name": "carta.plantillas", "desc": "Lista plantillas disponibles (globales + proyecto)" },
+        { "name": "carta.plantilla_crear", "desc": "Crea plantilla custom con HTML/CSS" },
+        { "name": "carta.plantilla_eliminar", "desc": "Elimina plantilla del proyecto" },
+        { "name": "carta.export_pdf", "desc": "PDF server-side con pdfkit. A4/A5, portrait/landscape" },
+        { "name": "carta.export_image", "desc": "PNG alta resolución (2x). PDF→PNG via pdf-to-png-converter" },
+        { "name": "carta.export_svg", "desc": "SVG vectorial puro. Columnas por categoría. Editable en Figma/Illustrator" }
       ],
       "eventos_suscribe": ["project.activated", "project.deactivated"],
-      "plantillas_incluidas": ["a4-clasica", "a5-compacta"],
-      "nota": "Output es HTML — el navegador se encarga del print/PDF via Ctrl+P o window.print()"
+      "plantillas_incluidas": ["a4-clasica", "a5-menu-dia", "a4-cuadruple", "a4-diptico", "a4-paisaje-5col"],
+      "output": "storage/pizzepos/cartas-html/ — HTML, PDF, PNG, SVG",
+      "dependencias": { "pdfkit": "PDF generation", "pdf-to-png-converter": "PDF→PNG" }
+    },
+
+    "menu-generator_save": {
+      "nota": "menu.save_carta — tool nueva en menu-generator para guardar carta completa a disco desde JSON. El diseñador construye la carta y la persiste explícitamente."
     },
 
     "carta-digital": {
       "version": "1.1.0",
-      "descripcion": "Carta web para clientes (QR, WhatsApp link). Carrito client-side + pedido via WhatsApp. Export estático para hosting público con HTTPS.",
+      "descripcion": "Carta web para clientes (QR, WhatsApp link). Carrito client-side + pedido via WhatsApp. Export estático PWA. Sistema de ofertas, reseñas, analytics funnel, y chat AI via Cloudflare Worker.",
       "ui_domain": "carta-digital",
-      "uiHandlers": ["config", "update-config", "create-session", "register-pedido", "stats", "health", "export-static"],
+      "uiHandlers": [
+        "config", "update-config", "create-session", "register-pedido", "stats", "health",
+        "carta-completa", "export-static", "deploy-cf-worker",
+        "ofertas", "create-oferta", "update-oferta", "delete-oferta",
+        "track-event", "funnel",
+        "resenas", "create-resena"
+      ],
       "eventos_publica": ["carta-digital.sesion_creada", "carta-digital.pedido_recibido"],
       "eventos_suscribe": ["project.activated"],
       "apis": [
@@ -725,10 +750,36 @@
         { "method": "POST", "path": "/session", "desc": "Crear sesión de visualización (analytics)" },
         { "method": "POST", "path": "/pedido", "desc": "Registrar pedido desde carta digital" },
         { "method": "GET", "path": "/stats", "desc": "Estadísticas de uso" },
-        { "method": "GET", "path": "/media/:path", "desc": "Servir imágenes de productos desde storage" },
-        { "method": "GET", "path": "/carta", "desc": "Carta completa enriquecida con config, descripciones, imágenes" },
-        { "method": "POST", "path": "/export-static", "desc": "Genera sitio estático auto-contenido" }
+        { "method": "GET", "path": "/media/:path", "desc": "Servir imágenes de productos (CORS, cache 24h)" },
+        { "method": "GET", "path": "/carta", "desc": "Carta completa enriquecida con config, ofertas, reseñas" },
+        { "method": "POST", "path": "/export-static", "desc": "Genera sitio estático PWA auto-contenido" },
+        { "method": "POST", "path": "/deploy-cf-worker", "desc": "Deploy AI chat proxy a Cloudflare Workers" },
+        { "method": "GET", "path": "/ofertas", "desc": "Listar ofertas/combos (activas o todas)" },
+        { "method": "POST", "path": "/ofertas", "desc": "Crear oferta" },
+        { "method": "PATCH", "path": "/ofertas/:oferta_id", "desc": "Actualizar oferta" },
+        { "method": "DELETE", "path": "/ofertas/:oferta_id", "desc": "Eliminar oferta" },
+        { "method": "POST", "path": "/track", "desc": "Track evento funnel (page_view, product_view, add_to_cart, order_sent, chat_open)" },
+        { "method": "GET", "path": "/funnel", "desc": "Análisis conversión: tasas, top productos, sesiones únicas" },
+        { "method": "GET", "path": "/resenas", "desc": "Reseñas aprobadas con avg_rating y distribución" },
+        { "method": "POST", "path": "/resenas", "desc": "Enviar reseña (anti-spam por session_id)" }
       ],
+      "estado_memoria": {
+        "configPerProject": "Map — config por proyecto (persiste en disco)",
+        "sesionesActivas": "Map — sesiones activas (SOLO memoria, limpieza >30min inactivas)",
+        "pedidosRegistrados": "Map — pedidos recibidos (SOLO memoria)",
+        "ofertasPerProject": "Map — ofertas por proyecto (persiste en disco)",
+        "funnelEvents": "Map — eventos analytics (SOLO memoria, max 10k/proyecto FIFO)",
+        "resenasPerProject": "Map — reseñas por proyecto (persiste en disco)",
+        "projectPaths": "Map — rutas base por proyecto"
+      },
+      "persistencia_disco": {
+        "config": "storage/pizzepos/carta-digital.json",
+        "ofertas": "storage/pizzepos/carta-digital-ofertas.json",
+        "resenas": "storage/pizzepos/carta-digital-resenas.json",
+        "cartas": "storage/pizzepos/cartas/{carta_id}.json",
+        "imagenes": "storage/pizzepos/preprocesadas/",
+        "export": "storage/pizzepos/carta-static/{slug}/"
+      },
       "config_por_proyecto": {
         "nombre_negocio": "string — nombre para header y WhatsApp",
         "moneda": "string — símbolo (default: €)",
@@ -737,17 +788,44 @@
         "tema": {
           "color_primario": "hex — color de marca (default: #f59e0b)",
           "color_fondo": "hex — fondo oscuro (default: #0a0a0a)",
-          "color_texto": "hex — texto claro (default: #e5e5e5)"
+          "color_texto": "hex — texto claro (default: #e5e5e5)",
+          "logo_emoji": "string — emoji de marca (default: 🍕)"
         },
         "funcionalidades": {
           "carrito": "bool — habilitar carrito",
+          "whatsapp": "bool — botón WhatsApp",
           "compartir": "bool — botón compartir pedido",
           "variaciones": "bool — permitir quitar/añadir ingredientes"
         }
       },
+      "ofertas": {
+        "descripcion": "Sistema de promociones/combos con fecha de vigencia",
+        "tipos": ["combo", "2x1", "descuento", "especial"],
+        "campos": "id, nombre, descripcion, tipo, productos[], precio_oferta, emoji, imagen, activa, fecha_inicio, fecha_fin",
+        "filtrado": "Solo muestra activas + dentro de rango de fechas"
+      },
+      "resenas": {
+        "descripcion": "Sistema de reseñas de clientes con ratings 1-5",
+        "anti_spam": "Max 1 reseña por session_id",
+        "auto_aprobacion": true,
+        "max_por_proyecto": 1000,
+        "respuesta_incluye": "items[], total, avg_rating, distribution (1-5 estrellas)"
+      },
+      "analytics_funnel": {
+        "eventos": ["page_view", "product_view", "add_to_cart", "order_sent", "chat_open"],
+        "max_eventos": 10000,
+        "analisis": "conversion_rates (view→detail→cart→order), unique_sessions, top_products"
+      },
+      "ai_chat_cloudflare": {
+        "descripcion": "Chat AI para clientes que se despliega como Cloudflare Worker. Proxy seguro a DeepSeek con system prompt auto-generado desde la carta.",
+        "seguridad": ["API key nunca expuesta al cliente", "System prompt locked server-side", "Rate limit 12 req/min/IP", "Origin checking (CORS)", "Filtra mensajes system del cliente"],
+        "system_prompt": "Auto-generado: menú completo con precios, ingredientes, reglas de upselling dinámicas según categorías, ofertas activas",
+        "streaming": "SSE opcional (stream: true)",
+        "requisitos": ["Cuenta Cloudflare + API token", "DeepSeek API key", "Wrangler CLI"]
+      },
       "export_estatico": {
         "descripcion": "Genera bundle HTML auto-contenido deployable en GitHub Pages, Netlify o cualquier hosting estático. Zero backend.",
-        "archivos_generados": ["index.html (todo inline: CSS + JS + datos)", "sw.js (service worker para offline/PWA)", "manifest.json (PWA manifest)", "img/ (imágenes copiadas)"],
+        "archivos_generados": ["index.html (todo inline: CSS + JS + datos)", "sw.js (service worker para offline/PWA)", "manifest.json (PWA manifest)", "icon-192.svg, icon-512.svg", "img/ (imágenes copiadas)"],
         "cli": "node modules/pizzepos/carta-digital/export-cli.js --whatsapp 34XXX --nombre Pizzicas",
         "opciones_cli": ["--carta (ruta al JSON)", "--output (directorio salida)", "--whatsapp (número)", "--nombre (negocio)", "--moneda (€)", "--color (#hex)"],
         "funcionalidades_html": [
@@ -756,31 +834,49 @@
           "Carrito completo con +/- cantidades (todo client-side)",
           "Botón WhatsApp que abre wa.me/ con pedido formateado",
           "Service worker para funcionar offline (PWA instalable)",
-          "Responsive mobile-first (diseño dark, mismos estilos que CartaScreen.svelte)"
+          "Responsive mobile-first (diseño dark)",
+          "Ofertas carousel horizontal",
+          "Sección reseñas con avg_rating",
+          "Chat AI (conecta a CF Worker)",
+          "Motor de upselling con sugerencias contextuales",
+          "i18n: 5 idiomas (ES, EN, FR, DE, IT)",
+          "Repetir último pedido (localStorage)"
         ],
         "deploy_recomendado": {
           "netlify": "Drag & drop en app.netlify.com/drop → HTTPS instantáneo",
-          "github_pages": "git init + gh repo create + push → Settings > Pages",
-          "razon": "Resuelve el problema de servir a clientes fuera de la red local sin HTTPS propio ni servidor público"
+          "github_pages": "git init + gh repo create + push → Settings > Pages"
         }
       },
       "frontend": {
         "componentes": {
-          "CartaScreen.svelte": "Pantalla principal: header + categorías scroll + grid productos + carrito FAB. Usa VariacionesPanel (importado de comandero/) para variaciones",
-          "ProductoCard.svelte": "Tarjeta de producto: imagen/placeholder, nombre, ingredientes, precio, botón añadir",
-          "ProductoDetalle.svelte": "Modal detalle: imagen grande, descripción, ingredientes tipados, tags, botón añadir",
-          "CategoriaScroll.svelte": "Scroll horizontal de categorías con pill activa",
-          "CarritoPanel.svelte": "Panel slide-up: items con qty +/-, variaciones visibles, total, botones vaciar/compartir/WhatsApp"
+          "CartaScreen.svelte": "Pantalla principal: header + categorías scroll + grid productos + carrito FAB. Tres modales: ProductoDetalle, VariacionesPanel, CarritoPanel",
+          "ProductoCard.svelte": "Tarjeta dual-zone: click izq → detalle, click derecho → variaciones (si tiene). Badges: Vegano, Vegetariano, Picante, Popular, Nuevo, Premium",
+          "ProductoDetalle.svelte": "Modal: imagen 16:9, badges, descripción, ingredientes tipados, alérgenos, botones Personalizar/Añadir",
+          "CategoriaScroll.svelte": "Scroll horizontal de categorías con pill activa (amber). Botón 'Todas' + categorías",
+          "CarritoPanel.svelte": "Panel slide-up: items con qty +/-, variaciones visibles (rojo=sin, verde=extra), total, botones vaciar/compartir/WhatsApp"
         },
         "store": "frontend/src/lib/stores/carta.ts — cartaStore con carrito, categorías, productos, WhatsApp URL builder",
-        "ruta": "/carta/:projectId (standalone, sin AppShell)",
+        "ruta": "/[project_id]/carta (standalone, sin AppShell)",
+        "carga_datos": {
+          "primario": "mqttRequest('carta-digital', 'carta-completa') → categorías + productos (con ingredientes embebidos) + config + ofertas + reseñas",
+          "fallback": "mqttRequest('productos', 'carta_completa') → categorías + productos + ingredientes separados"
+        },
+        "carrito": {
+          "almacenamiento": "Solo en memoria (writable store), NO persiste en localStorage ni backend",
+          "id_unico": "Cada item del carrito tiene ID único (cart_{counter}_{timestamp}) — permite múltiples versiones del mismo producto con distintas variaciones",
+          "precio": "precio_unitario = precio_base + sum(extras.precio_extra)"
+        },
         "bugs_conocidos": {
           "ingredientes_vacios_enriched": "Cuando carta-digital.carta-completa responde (endpoint enriquecido), carta.ts:154 setea ings=[] porque los ingredientes van embebidos en cada producto. Pero VariacionesPanel recibe catalogoIngredientes={$ingredientes} que es [] → NO se pueden añadir extras. Solo funciona en fallback (productos.carta_completa devuelve ingredientes separados).",
-          "nombre_negocio_hardcoded": "carta.ts:88 — DEFAULT_CONFIG.nombre_negocio='Pizzicas' hardcodeado como fallback"
+          "nombre_negocio_hardcoded": "carta.ts:88 — DEFAULT_CONFIG.nombre_negocio='Pizzicas' hardcodeado como fallback",
+          "moneda_no_usada_en_ui": "Config soporta campo 'moneda' pero todos los componentes frontend hardcodean '€' en formatPrecio(). Debería usar config.moneda.",
+          "alergenos_sin_interface": "ProductoDetalle.svelte referencia producto.alergenos (líneas 110-119) pero el campo NO está en la interfaz Producto de carta.ts",
+          "carrito_no_persiste": "El carrito se pierde al recargar la página — no usa localStorage. El export estático SÍ persiste en localStorage (LS_CART)."
         }
       },
       "relacion_otros_modulos": {
         "menu-generator": "Provee los datos: carta enriquecida con descripciones AI, emojis, ingredientes clasificados, imágenes",
+        "variaciones": "VariacionesPanel llama a variaciones.get para config de ingredientes quitables/añadibles",
         "impresion": "Complementario: impresion=ticket físico cocina, carta-digital=web pública clientes",
         "carta-impresion": "Complementario: carta-impresion=imprimir para mesa, carta-digital=QR/WhatsApp digital"
       }
@@ -824,7 +920,7 @@
       "1_crear_cuenta": "cuentas-canales publica cuenta.creada → cuentas actualiza → persistencia registra cuenta activa",
       "2_añadir_items": "comandero publica comandero.item_agregado / item_eliminado / item_actualizado → cuentas actualiza items+total (por cantidad real) → persistencia graba",
       "3_enviar_cocina": "comandero publica comandero.enviar_cocina → pedidos escucha → pedidos publica pedido.creado + pedido.enviado_cocina",
-      "4_recepcion": "cocina recibe pedido.enviado_cocina (display digital) + impresion recibe pedido.enviado_cocina (ticket físico)",
+      "4_recepcion": "cocina recibe pedido.enviado_cocina (display digital). Impresión solo actúa cuando horno marca item salido (cocina.item_ticket)",
       "5_cocina_prepara": "cocinero marca items → cocina publica cocina.item_preparado → cuando todos listos → cocina.pedido_listo",
       "6_notificacion": "cocina.pedido_listo → canales telefono/llevar/glovo/whatsapp notifican al cliente",
       "7_cobrar": "cobros publica cobro.procesado → cuentas-canales detecta canal por prefijo → mesa/telefono/glovo/whatsapp: cierra cuenta → cuenta.cerrada | llevar: solo marca pagado=true (cuenta sigue activa hasta entregar)",

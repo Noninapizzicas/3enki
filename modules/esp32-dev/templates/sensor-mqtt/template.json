@@ -1,0 +1,8 @@
+{
+  "name": "Sensor MQTT",
+  "description": "Sensor genérico (temperatura, humedad, etc.) con publicación periódica via MQTT. Deep sleep entre lecturas.",
+  "category": "sensor",
+  "framework": "arduino",
+  "defaultBoard": "esp32dev",
+  "boards": ["esp32dev", "esp32-s2", "esp32-s3", "esp32-c3", "esp32-c6"]
+}

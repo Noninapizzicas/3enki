@@ -1,0 +1,389 @@
+{
+  "meta": {
+    "id": "carta_pizzicas",
+    "nombre": "Carta Pizzicas",
+    "generado_desde": "texto",
+    "created_at": "2026-02-18T12:00:00.000Z"
+  },
+  "categorias": [
+    { "id": "pizzicas", "nombre": "Pizzicas", "orden": 1, "estaciones": ["horno"] }
+  ],
+  "productos": [
+    {
+      "id": "pizzicas_country",
+      "nombre": "Country",
+      "categoria": "pizzicas",
+      "precio": 11.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Salsa BBQ" },
+        { "nombre": "Nata" },
+        { "nombre": "Pollo" },
+        { "nombre": "Mezcla de quesos" },
+        { "nombre": "Cebolla" },
+        { "nombre": "Bacon" }
+      ]
+    },
+    {
+      "id": "pizzicas_r_b",
+      "nombre": "R&B (Rhythm and Blues)",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Carne de ternera" },
+        { "nombre": "Bacon" },
+        { "nombre": "Queso" },
+        { "nombre": "Salsa BBQ" }
+      ]
+    },
+    {
+      "id": "pizzicas_hip_hop",
+      "nombre": "Hip-Hop",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Queso" },
+        { "nombre": "Carne de ternera" },
+        { "nombre": "Bacon" },
+        { "nombre": "Pepperoni" },
+        { "nombre": "Salsa Vitorino" }
+      ]
+    },
+    {
+      "id": "pizzicas_cumbia",
+      "nombre": "Cumbia",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Cebolla" },
+        { "nombre": "Carne de ternera" },
+        { "nombre": "Mezcla de quesos" },
+        { "nombre": "Piña" },
+        { "nombre": "Salsa Vitorino" }
+      ]
+    },
+    {
+      "id": "pizzicas_merengue",
+      "nombre": "Merengue",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Jamón York" },
+        { "nombre": "Bacon" }
+      ]
+    },
+    {
+      "id": "pizzicas_soul",
+      "nombre": "Soul",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Queso" },
+        { "nombre": "Pepperoni" },
+        { "nombre": "Bacon" },
+        { "nombre": "Champiñones" }
+      ]
+    },
+    {
+      "id": "pizzicas_bossa_nova",
+      "nombre": "Bossa Nova",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Atún" },
+        { "nombre": "Champiñones" },
+        { "nombre": "Pimiento verde" }
+      ]
+    },
+    {
+      "id": "pizzicas_blues",
+      "nombre": "Blues",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Queso" },
+        { "nombre": "Atún" },
+        { "nombre": "Cebolla" },
+        { "nombre": "Salsa de mostaza" }
+      ]
+    },
+    {
+      "id": "pizzicas_tango",
+      "nombre": "Tango",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Atún" },
+        { "nombre": "Cebolla" },
+        { "nombre": "Olivas" }
+      ]
+    },
+    {
+      "id": "pizzicas_chillout",
+      "nombre": "Chillout",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Atún" },
+        { "nombre": "Cebolla" }
+      ]
+    },
+    {
+      "id": "pizzicas_punk",
+      "nombre": "Punk",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Queso" },
+        { "nombre": "Jamón York" },
+        { "nombre": "Atún" },
+        { "nombre": "Olivas negras" },
+        { "nombre": "Maíz" }
+      ]
+    },
+    {
+      "id": "pizzicas_folk",
+      "nombre": "Folk",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate seco" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Cebolla" },
+        { "nombre": "Champiñones" },
+        { "nombre": "Salsa de ajo asado y trufa" },
+        { "nombre": "Anchoas" }
+      ]
+    },
+    {
+      "id": "pizzicas_bachata",
+      "nombre": "Bachata",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Anchoas" },
+        { "nombre": "Alcaparras" },
+        { "nombre": "Cebolla" },
+        { "nombre": "Olivas" }
+      ]
+    },
+    {
+      "id": "pizzicas_batucada",
+      "nombre": "Batucada",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Queso azul" },
+        { "nombre": "Mezcla de quesos" },
+        { "nombre": "Nata" }
+      ]
+    },
+    {
+      "id": "pizzicas_the_veggie_symphony",
+      "nombre": "The Veggie Symphony",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Cebolla" },
+        { "nombre": "Champiñones" },
+        { "nombre": "Calabacín" },
+        { "nombre": "Espárragos" },
+        { "nombre": "Pimiento verde" }
+      ]
+    },
+    {
+      "id": "pizzicas_swing",
+      "nombre": "Swing",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Crema de champiñones" },
+        { "nombre": "Nata" },
+        { "nombre": "Pimienta" },
+        { "nombre": "Queso azul" },
+        { "nombre": "Jamón York" },
+        { "nombre": "Mezcla de quesos" }
+      ]
+    },
+    {
+      "id": "pizzicas_trap",
+      "nombre": "Trap",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Queso" },
+        { "nombre": "Pepperoni" },
+        { "nombre": "Nata" },
+        { "nombre": "Maíz" },
+        { "nombre": "Pimiento verde" }
+      ]
+    },
+    {
+      "id": "pizzicas_samba",
+      "nombre": "Samba",
+      "categoria": "pizzicas",
+      "precio": 9.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Albahaca" }
+      ]
+    },
+    {
+      "id": "pizzicas_fandango",
+      "nombre": "Fandango",
+      "categoria": "pizzicas",
+      "precio": 9.50,
+      "ingredientes": [
+        { "nombre": "Ajo" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Queso azul" }
+      ]
+    },
+    {
+      "id": "pizzicas_milonga",
+      "nombre": "Milonga",
+      "categoria": "pizzicas",
+      "precio": 10.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "York" }
+      ]
+    },
+    {
+      "id": "pizzicas_ranchera",
+      "nombre": "Ranchera",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Bacon" },
+        { "nombre": "Cebolla" },
+        { "nombre": "Salsa BBQ" }
+      ]
+    },
+    {
+      "id": "pizzicas_rockabilly",
+      "nombre": "Rockabilly",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Bacon" },
+        { "nombre": "Cebolla" },
+        { "nombre": "Nata" }
+      ]
+    },
+    {
+      "id": "pizzicas_vallenato",
+      "nombre": "Vallenato",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Jamón York" },
+        { "nombre": "Piña" }
+      ]
+    },
+    {
+      "id": "pizzicas_indie",
+      "nombre": "Indie",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Jamón York" },
+        { "nombre": "Pepperoni" }
+      ]
+    },
+    {
+      "id": "pizzicas_k_pop",
+      "nombre": "K-Pop",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Jamón York" },
+        { "nombre": "Huevo" }
+      ]
+    },
+    {
+      "id": "pizzicas_flamenco",
+      "nombre": "Flamenco",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Mozzarella" },
+        { "nombre": "Pepperoni" },
+        { "nombre": "Cebolla" },
+        { "nombre": "Pimiento verde" },
+        { "nombre": "Huevo" }
+      ]
+    },
+    {
+      "id": "pizzicas_jazz",
+      "nombre": "Jazz",
+      "categoria": "pizzicas",
+      "precio": 10.50,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Queso" },
+        { "nombre": "Jamón York" },
+        { "nombre": "Champiñones" }
+      ]
+    },
+    {
+      "id": "pizzicas_funk",
+      "nombre": "Funk",
+      "categoria": "pizzicas",
+      "precio": 10.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Queso" },
+        { "nombre": "Pepperoni" }
+      ]
+    },
+    {
+      "id": "pizzicas_rap",
+      "nombre": "Rap",
+      "categoria": "pizzicas",
+      "precio": 11.00,
+      "ingredientes": [
+        { "nombre": "Tomate" },
+        { "nombre": "Queso" },
+        { "nombre": "Plátano maduro" },
+        { "nombre": "Maíz" },
+        { "nombre": "Bacon" }
+      ]
+    }
+  ]
+}

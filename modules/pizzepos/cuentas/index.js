@@ -13,7 +13,7 @@ const path = require('path');
 const TRANSICIONES_VALIDAS = {
   pendiente: ['con_pedido'],
   con_pedido: ['en_preparacion', 'con_pedido', 'cobrado'], // cobrado: pago rápido sin enviar cocina
-  en_preparacion: ['listo', 'en_preparacion', 'cobrado'],   // cobrado: pago mientras cocina prepara
+  en_preparacion: ['listo', 'en_preparacion', 'entregado', 'cobrado'], // entregado: llevadoo entrega desde horno; cobrado: pago mientras cocina prepara
   listo: ['entregado', 'para_cobrar', 'en_preparacion', 'cobrado'],
   entregado: ['para_cobrar', 'en_preparacion', 'cobrado'],
   para_cobrar: ['cobrado'],
@@ -401,6 +401,9 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
+    // Llevadoo paga externamente, no pasa por caja
+    if (cuenta.tipo === 'llevadoo') return;
+
     if (cuenta.estado === 'listo' || cuenta.estado === 'entregado') {
       await this.transicionarEstado(cuenta_id, 'para_cobrar');
     }
@@ -450,6 +453,9 @@ class CuentasModule {
     // Llevar: el cobro no cierra la cuenta, se mantiene hasta que se entregue.
     // La strategy de llevar gestiona el cierre vía llevar/entregar.
     if (cuenta.tipo === 'llevar') return;
+
+    // Llevadoo paga externamente (no pasa por caja), ignorar cobro
+    if (cuenta.tipo === 'llevadoo') return;
 
     // Transicionar a cobrado usando la máquina de estados formal
     await this.cerrarCuentaCobrada(cuenta_id);
@@ -730,8 +736,8 @@ class CuentasModule {
       return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
     }
 
-    if (cuenta.estado !== 'listo') {
-      return { status: 400, error: `Cuenta debe estar en estado 'listo' para marcar entregado (actual: ${cuenta.estado})` };
+    if (!['listo', 'en_preparacion'].includes(cuenta.estado)) {
+      return { status: 400, error: `Cuenta debe estar en estado 'listo' o 'en_preparacion' para marcar entregado (actual: ${cuenta.estado})` };
     }
 
     const ok = await this.transicionarEstado(id, 'entregado');

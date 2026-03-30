@@ -1,23 +1,32 @@
 {
-  "_VERSION": "2.0.0",
+  "_VERSION": "3.0.0",
   "_CREATED": "2026-03-18",
-  "_UPDATED": "2026-03-18",
-  "_DESCRIPTION": "Arquitectura del Servicio de Periféricos — infraestructura core de Enki. Fases 1-3 completadas.",
+  "_UPDATED": "2026-03-21",
+  "_DESCRIPTION": "Arquitectura de Periféricos y Nodos ESP32 — infraestructura core de Enki.",
 
   "_AI_INSTRUCTIONS": {
-    "IMPORTANT": "Este servicio es CORE de Enki, no de pizzepos. Cualquier módulo puede usarlo.",
-    "rule_1": "Los módulos publican eventos de CAPACIDAD (imprimir, display, abrir-cajon, cortar, escanear), no de dispositivo",
-    "rule_2": "El servicio resuelve nombre lógico → dispositivo físico → transporte correcto",
-    "rule_3": "Los transportes (BLE, TCP, USB, ESP32-proxy, comando) son plugins intercambiables",
-    "rule_4": "Los módulos NUNCA hablan directamente con un dispositivo — siempre via periferico.*",
-    "how_to_use": "eventBus.publish('periferico.imprimir', { destino: 'cocina', data: escposBuffer })",
-    "estado_migracion": "Las 3 fases están COMPLETADAS. impresion, cocina y cobros usan perifericos."
+    "IMPORTANT": "Este servicio es CORE de Enki, no de pizzepos. Gestiona dispositivos no-MQTT (BLE, TCP, USB, comando).",
+    "rule_1": "Los ESP32 son nodos de primera clase que hablan MQTT directamente — NO necesitan pasar por perifericos",
+    "rule_2": "Los módulos que hablan con ESP32 publican DIRECTO al topic MQTT del ESP32 (ej: impresion/{project}/print/{device})",
+    "rule_3": "Perifericos sigue siendo útil para dispositivos que NO hablan MQTT: BLE directo, TCP, USB, comando shell",
+    "rule_4": "Los ESP32 se autodescubren publicando su status — los módulos escuchan y mantienen registro vivo",
+    "rule_5": "Los transportes (BLE, TCP, USB, comando) son plugins intercambiables para dispositivos no-MQTT",
+    "impresion_directa": "impresion v3.0 publica directo a impresion/{project}/print/{device} via mqtt.publish() — sin perifericos",
+    "perifericos_para": "display (TCP), abrir-cajon (BLE), dispositivos sin MQTT propio",
+    "estado_actual": "impresion v3.0 usa MQTT directo al ESP32. perifericos sigue activo para display, cajón, y dispositivos no-MQTT."
   },
 
   "vision": {
-    "resumen": "Un servicio de periféricos a nivel de plataforma que descubre dispositivos, los registra con nombres lógicos, y los expone como capacidades genéricas. Cualquier módulo consume capacidades sin saber qué hardware hay detrás.",
-    "principio_clave": "Los módulos dicen QUÉ quieren hacer (imprimir, cortar, escanear). El servicio decide CÓMO y DÓNDE.",
-    "analogia": "Como un DNS de dispositivos: nombre lógico → dirección física → protocolo de transporte"
+    "resumen": "Arquitectura de dos vías: (1) Nodos ESP32 como ciudadanos de primera clase que hablan MQTT directo — autodescubrimiento, envío directo, sin capas intermedias. (2) Perifericos como servicio core para dispositivos no-MQTT (BLE, TCP, USB, comando).",
+    "principio_clave": "Si un dispositivo habla MQTT, publicas directo a su topic. Si no habla MQTT, usas perifericos como intermediario.",
+    "esp32_como_nodo": "Un ESP32 no es un periférico — es un nodo inteligente en la red de eventos. Se anuncia, recibe comandos, reporta estado, y puede ejecutar lógica. Cuesta 3€.",
+    "autodescubrimiento": "Los ESP32 publican su status al arrancar y periódicamente. Los módulos escuchan esos mensajes y tienen un mapa vivo de dispositivos disponibles con sus capacidades.",
+    "patron_universal_nodo": {
+      "status": "impresion/{project}/status/{device} → 'soy X, tengo Y, estoy Z'",
+      "comando": "impresion/{project}/print/{device} ← 'haz esto'",
+      "ack": "impresion/{project}/printed/{device} → 'hecho / error'"
+    },
+    "futuro": "El patrón ESP32 se extiende a sensores, actuadores, displays, botones, lectores NFC — cualquier nodo físico que hable MQTT es un ciudadano más del sistema de eventos."
   },
 
   "arquitectura": {
@@ -39,15 +48,16 @@
             "estado": "implementado"
           },
           "esp32-proxy": {
-            "descripcion": "ESP32 como bridge — recibe MQTT, reenvía a BLE/Serial local",
-            "casos": "Impresora BT fuera de alcance del servidor, dispositivos BLE remotos",
+            "descripcion": "ESP32 como bridge MQTT→BLE — OBSOLETO para impresión (usar MQTT directo)",
+            "casos": "Solo para perifericos no-impresión que necesiten ESP32 como bridge genérico",
             "config": { "esp32_device_id": "esp32-cocina-01", "canal": "ble" },
-            "protocolo_mqtt": {
-              "envio": "periferico/{esp32_device_id}/send",
-              "respuesta": "periferico/{esp32_device_id}/ack",
-              "status": "periferico/{esp32_device_id}/status"
+            "protocolo_mqtt_firmware_real": {
+              "print": "impresion/{project}/print/{device} ← ESC/POS base64",
+              "printed": "impresion/{project}/printed/{device} → ACK",
+              "status": "impresion/{project}/status/{device} → estado periódico"
             },
-            "estado": "implementado"
+            "estado": "implementado pero DEPRECADO para impresión — impresion v3.0 publica MQTT directo",
+            "nota": "El transporte esp32-proxy.js publicaba a 'periferico/{id}/send' que NO coincidía con el topic del firmware. Esto se resolvió en impresion v3.0 eliminando el transporte por completo."
           },
           "comando": {
             "descripcion": "Pipe a un comando shell arbitrario",
@@ -168,16 +178,13 @@
     },
 
     "flujo_completo": {
-      "ejemplo_imprimir_comanda": [
-        "1. módulo impresion (pizzepos) recibe evento pedido.enviado_cocina",
-        "2. impresion formatea ESC/POS (la lógica de formato está en pizzepos/impresion)",
-        "3. impresion publica: eventBus.publish('periferico.imprimir', { destino: 'cocina', data: escpos, formato: 'escpos' })",
-        "4. módulo perifericos recibe el evento via onImprimir()",
-        "5. perifericos busca 'cocina' en el registry → encuentra dispositivo con transporte esp32-proxy",
-        "6. perifericos obtiene el transporte esp32-proxy, llama transporte.enviar(datos)",
-        "7. el transporte publica MQTT a periferico/esp32-cocina-01/send con los datos base64",
-        "8. ESP32 recibe, reenvía por BLE a la impresora térmica",
-        "9. perifericos publica periferico.impreso con confirmación"
+      "ejemplo_imprimir_ticket_pieza_esp32": [
+        "1. módulo cocina marca item como salido en horno → publica cocina.item_ticket",
+        "2. módulo impresion recibe cocina.item_ticket → formatea ticket ESC/POS individual",
+        "3. impresion publica DIRECTO via mqtt.publish('impresion/{project}/print/{device}', { job_id, data: base64 })",
+        "4. ESP32 recibe en su topic MQTT, decodifica base64, envía por BLE a la impresora",
+        "5. ESP32 publica ACK en impresion/{project}/printed/{device}",
+        "NOTA: Sin perifericos, sin provider, sin registry, sin transport. 2 hops: servidor → MQTT → ESP32"
       ],
       "ejemplo_display_cocina": [
         "1. módulo cocina recibe pedido.enviado_cocina → nuevo pedido",
@@ -207,41 +214,42 @@
     }
   },
 
-  "migracion_desde_impresion_actual": {
-    "_estado": "COMPLETADA — Las 3 fases están implementadas.",
-    "fase_1_coexistencia": {
-      "descripcion": "El módulo perifericos se creó como servicio core. pizzepos/impresion seguía funcionando como estaba.",
-      "estado": "COMPLETADA",
-      "cambios_realizados": [
-        "Creado services/providers/local/perifericos/ con transportes (BLE, TCP, ESP32-proxy, comando)",
-        "Creado modules/perifericos/ como módulo core tier_2",
-        "Lógica de transporte movida de pizzepos/impresion a perifericos",
-        "pizzepos/impresion conserva solo la lógica ESC/POS de formateo"
-      ]
+  "evolucion_arquitectura": {
+    "_estado": "Fase 4 (MQTT directo) completada para impresión ESP32.",
+    "fase_1_2_3_perifericos": {
+      "descripcion": "Se creó perifericos como capa de abstracción. impresion v2.0 publicaba a periferico.imprimir.",
+      "estado": "COMPLETADA — pero superada por fase 4 para ESP32"
     },
-    "fase_2_adopcion": {
-      "descripcion": "pizzepos/impresion migrado a usar periferico.imprimir en vez de enviarImpresora() directo.",
+    "fase_4_mqtt_directo": {
+      "descripcion": "impresion v3.0 publica DIRECTO al topic MQTT del ESP32, eliminando 5 capas intermedias.",
       "estado": "COMPLETADA",
+      "fecha": "2026-03-20",
       "cambios_realizados": [
-        "impresion v2.0 — enviarPeriferico() publica periferico.imprimir",
-        "Eliminados: enviarImpresora(), enviarViaEsp32(), obtenerTransporte(), handleConectar()",
-        "Eliminados: this.transporte, this.transportes pool, config.transporte",
-        "Eliminado: transporte.js de pizzepos/impresion (código movido a perifericos/transportes/ble.js)",
-        "Eliminados: endpoint POST /conectar y ui_handler conectar"
-      ]
+        "impresion v3.0 — enviarImpresora() usa mqtt.publish() directo al topic del ESP32",
+        "Autodescubrimiento: impresion escucha impresion/+/status/+ y mantiene Map de impresoras",
+        "handleListarImpresoras() devuelve impresoras ESP32 descubiertas en tiempo real",
+        "pedidos agrega project_id al evento pedido.enviado_cocina",
+        "Zero dependencia de perifericos para impresión ESP32"
+      ],
+      "flujo_anterior_v2": "evento → impresion → periferico.imprimir → perifericos → provider → registry → esp32-proxy → MQTT (7 hops, topic incorrecto)",
+      "flujo_nuevo_v3": "evento → impresion.formatear() → mqtt.publish(impresion/{project}/print/{device}) → ESP32 (2 hops)"
     },
-    "fase_3_expansion": {
-      "descripcion": "Nuevos módulos usan perifericos directamente. Nuevas capacidades implementadas.",
-      "estado": "COMPLETADA",
-      "cambios_realizados": [
-        "perifericos v1.1 — onDisplay() y onAbrirCajon() implementados",
-        "cocina v3.1 — publica periferico.display en pedido nuevo y pedido listo",
-        "cobros v2.1 — publica periferico.abrir-cajon al confirmar pago efectivo",
-        "Provider: discover() implementado (método 'activos')",
-        "Módulo: handleDescubrir() UI handler añadido",
-        "Creado usb.js transporte stub para implementación futura",
-        "Creado data/perifericos/ directorio para persistencia"
-      ]
+    "perifericos_sigue_activo_para": [
+      "periferico.display — pantallas externas por TCP (cocina usa esto)",
+      "periferico.abrir-cajon — cajón de dinero por BLE directo (cobros usa esto)",
+      "Impresoras no-ESP32: BLE directo, TCP de red, USB, comando shell",
+      "Cualquier dispositivo que NO hable MQTT nativo"
+    ],
+    "fase_5_gateways_mqtt": {
+      "descripcion": "Convertir TODO dispositivo en nodo MQTT mediante gateways software. Un gateway es un 'ESP32 virtual' que traduce MQTT→protocolo nativo.",
+      "estado": "DOCUMENTADO — pendiente de implementación",
+      "fecha_documentacion": "2026-03-20",
+      "documento_detalle": "contexto/gateways-mqtt.json",
+      "concepto": "Cada tipo de protocolo (TCP, BLE, USB, comando) tiene un gateway que se suscribe a MQTT, traduce al protocolo nativo, y se anuncia con el mismo contrato que un ESP32. Desde el servidor todos los dispositivos son iguales.",
+      "gateways_planificados": ["gateway-tcp", "gateway-ble", "gateway-usb", "gateway-cmd"],
+      "autodescubrimiento": "Los gateways descubren dispositivos automáticamente (mDNS para TCP, BLE scan, lsusb, lpstat). Config manual es fallback.",
+      "impacto_en_perifericos": "perifericos se simplifica — deja de ser router de transportes y pasa a ser orquestador de dispositivos descubiertos por MQTT",
+      "reutiliza_transportes": "El código existente de tcp.js, ble.js, comando.js se reutiliza DENTRO de los gateways"
     }
   },
 
@@ -401,22 +409,16 @@
   },
 
   "relacion_con_impresion_pizzepos": {
-    "estado": "Migración COMPLETADA. impresion v2.0 solo formatea ESC/POS.",
-    "lo_que_queda_en_impresion": [
-      "Formateo ESC/POS de comandas de cocina",
-      "Formateo ESC/POS de tickets de venta",
-      "Formateo ESC/POS de tickets de pieza",
-      "Lógica de negocio: qué imprimir, cuándo, con qué datos",
-      "Historial de comandas impresas",
-      "enviarPeriferico(contenido, destino) — publica periferico.imprimir"
+    "estado": "impresion v3.0 es INDEPENDIENTE de perifericos para ESP32. Publica MQTT directo.",
+    "lo_que_hace_impresion_v3": [
+      "Formateo ESC/POS de comandas, tickets venta, tickets pieza",
+      "Envío DIRECTO al ESP32 via mqtt.publish('impresion/{project}/print/{device}')",
+      "Autodescubrimiento de impresoras ESP32 via impresion/+/status/+",
+      "Mapa vivo de impresoras con estado, MAC, IP, rssi, uptime, etc.",
+      "Historial de impresiones",
+      "Config: project_id, destino_default (device_id del ESP32)"
     ],
-    "lo_que_se_movio_a_perifericos": [
-      "TransporteBluetooth (transporte.js) → perifericos/transportes/ble.js",
-      "Pool de transportes (this.transportes Map) → perifericos/registry.js",
-      "enviarImpresora() → perifericos resuelve destino + transporte",
-      "enviarViaEsp32() → perifericos/transportes/esp32-proxy.js",
-      "Reconexión automática → perifericos gestiona estado de cada dispositivo",
-      "handleConectar() → perifericos gestiona conexiones"
-    ]
+    "impresion_NO_usa_perifericos": "impresion v3.0 no publica periferico.imprimir. Habla MQTT directo al ESP32.",
+    "perifericos_sigue_sirviendo_para": "display (cocina), abrir-cajon (cobros), impresoras no-MQTT"
   }
 }

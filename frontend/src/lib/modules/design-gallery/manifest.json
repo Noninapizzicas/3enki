@@ -1,0 +1,10 @@
+{
+  "id": "design-gallery",
+  "name": "Diseños",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 1,
+  "routes": ["/carta-design"],
+  "icon": "🎨",
+  "label": "Diseños"
+}

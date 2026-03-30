@@ -727,6 +727,7 @@ class PedidosModule {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       canal: pedido.canal || null,
+      project_id: pedido.project_id || null,
       items: pedido.items.map(item => {
         const mapped = {
           item_id: item.item_id,
@@ -859,11 +860,12 @@ class PedidosModule {
 
   /**
    * Detecta el canal de venta por el prefijo del cuenta_id
-   * mesa_ → mesa, tel_ → telefono, llevar_ → llevar, glovo_ → glovo, wa_ → whatsapp
+   * mesa_ → mesa, tel_ → telefono, llevar_ → llevar, glovo_ → glovo, wa_ → whatsapp, llevadoo_ → llevadoo
    * Sin prefijo conocido → genérico (cuenta simple)
    */
   detectarCanal(cuenta_id) {
     if (!cuenta_id) return null;
+    if (cuenta_id.startsWith('llevadoo_')) return 'llevadoo';
     if (cuenta_id.startsWith('mesa_')) return 'mesa';
     if (cuenta_id.startsWith('tel_')) return 'telefono';
     if (cuenta_id.startsWith('llevar_')) return 'llevar';

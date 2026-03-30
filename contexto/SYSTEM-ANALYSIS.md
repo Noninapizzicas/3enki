@@ -1,327 +1,358 @@
-# Event-Core: Análisis Honesto del Sistema
+# Event-Core (Enki): Analisis Codigo vs Contexto
 
-**Fecha:** 2026-03-03
-**Metodología:** Verificación línea por línea del código real contra documentación
-**Versiones encontradas:** v0.1.0 (index.js, config.json) | v0.2.0 (package.json) | v0.5.0 (README)
+**Fecha**: 2026-03-25
+**Analisis anterior**: 2026-03-03 y 2026-03-25 (parcial)
+**Metodo**: Lectura exhaustiva de los 33 archivos en `contexto/` + exploracion completa del codigo fuente, core, modulos, providers, handlers, frontend, y directorios auxiliares
+**Objetivo**: Verificar alineacion documentacion-codigo, detectar omisiones y recomendar correcciones
 
 ---
 
 ## 0. VEREDICTO EJECUTIVO
 
-Event-Core es un **framework ambicioso y arquitectónicamente sólido** con patrones de diseño genuinamente buenos (IoC, event-driven, auto-wiring declarativo). Sin embargo, presenta un **desajuste sistemático entre lo documentado y lo real**: cifras infladas, features "implementadas" que son código muerto, y una postura de seguridad que lo hace inapto para producción.
+El sistema ha crecido significativamente. La documentacion de contexto es **fiable como referencia arquitectonica** — el patron event-driven, el sistema de modulos, providers, hooks, y la composicion de proyectos estan bien documentados y coinciden con el codigo.
 
-| Dimensión | Nota | Justificación |
-|-----------|------|---------------|
-| Arquitectura | 8/10 | Patrones sólidos, IoC real, event-driven puro |
-| Implementación | 6/10 | Core funcional, pero código muerto y features no conectadas |
-| Documentación | 4/10 | Cifras infladas 10-30x, discrepancias de versión, estados inventados |
-| Testing | 2/10 | 8 archivos de test, 2 fallan por dependencias, 0 tests frontend |
-| Seguridad | 3/10 | Sin auth HTTP ni MQTT, code-executor abierto, credentials en plaintext |
-| Producción | 2/10 | No desplegable sin trabajo significativo de seguridad y estabilización |
+Sin embargo, la documentacion tiene **tres tipos de problemas**:
+1. **Contradicciones internas** — 3 archivos dan 3 cifras distintas de modulos
+2. **Omisiones grandes** — ~11 directorios del repositorio no estan documentados (3.4MB de codigo archivado, 776KB de prompts, Kubernetes Helm charts, CLI, firmware, etc.)
+3. **Fantasmas** — `data/learning/` documentado pero inexistente, `certificate-authority` documentado como activo pero disabled
+
+| Dimension | Nota | Cambio vs anterior |
+|-----------|------|--------------------|
+| Arquitectura | 8/10 | = (sigue solida) |
+| Implementacion | 7/10 | = (mas modulos activos, impresion funcional) |
+| Documentacion contexto | 5/10 | = (mas archivos, pero inconsistencias persisten) |
+| Alineacion codigo-contexto | 4/10 | = (9 discrepancias factuales + 11 directorios omitidos) |
 
 ---
 
-## 1. DISCREPANCIAS DOCUMENTACIÓN vs CÓDIGO REAL
+## 1. VERIFICACIONES POSITIVAS (Codigo = Contexto)
 
-### 1.1 Cifras Masivamente Infladas en SYSTEM-ANALYSIS.md anterior
+| Afirmacion del Contexto | Verificacion | Estado |
+|--------------------------|-------------|--------|
+| 55 modulos habilitados | config.json tiene exactamente 55 en `modules.enabled` | CORRECTO |
+| 10 modulos deshabilitados | config.json lista exactamente 10 en `modules.disabled` | CORRECTO |
+| PizzePOS tiene 13-17 sub-modulos | 15 directorios bajo `modules/pizzepos/` | CORRECTO |
+| SvelteKit 2 + Svelte 5 en frontend | `@sveltejs/kit@^2.16.0` + `svelte@^5.16.0` | CORRECTO |
+| certificate-authority esta DISABLED | Esta en `modules.disabled` de config.json | CORRECTO |
+| conversation-manager esta DISABLED | Esta en `modules.disabled` de config.json | CORRECTO |
+| Estructura `handlers/global/` + `handlers/projects/` | Directorios existen exactamente asi | CORRECTO |
+| FlowEngine, FlowAgent, FlowRegistry en `core/flow/` | Los 3 archivos existen con las clases | CORRECTO |
+| chat-session usa SQLite por proyecto | Via database-manager con sql.js | CORRECTO |
+| Blueprints en `blueprints/project-types/` | Existen `facturas.json` y `pizzepos.json` | CORRECTO |
+| 5 plugins en `plugins/` | github, http-utils, ocr, slack, weather | CORRECTO |
+| Hook system con beforeEventPublish/afterEventPublish | core/hooks.js implementado | CORRECTO |
+| Provider system con auto-registro de tools | core/providers/ completo | CORRECTO |
+| MQTT broker embebido Aedes en puerto 1883 | index.js lo inicia correctamente | CORRECTO |
+| EventBus hibrido local + MQTT | core/events/bus.js verificado | CORRECTO |
+| Patron Request/Response con timeout | core/service-executor.js verificado | CORRECTO |
+| HTTP Gateway con CORS, compression, cache | core/gateway/http/ verificado | CORRECTO |
+| Config multi-fuente (CLI > ENV > file) | core/config/ verificado | CORRECTO |
+| Discovery de cores via MQTT retained | core/discovery/ verificado | CORRECTO |
 
-| Elemento | Documentado | Real | Factor de inflación |
-|----------|------------|------|---------------------|
-| `start.sh` | 10,906 líneas | **324 líneas** | 33x |
-| `stop.sh` | 5,427 líneas | **197 líneas** | 27x |
-| `dev.sh` | 8,011 líneas | **234 líneas** | 34x |
-| `restart.sh` | 2,183 líneas | **76 líneas** | 28x |
-| `install.sh` | 1,908 líneas | **54 líneas** | 35x |
-| `plopfile.js` | 59,265 líneas | **1,653 líneas** | 35x |
+**18/20 afirmaciones criticas verificadas como correctas.**
 
-**Estas cifras estaban infladas ~30x consistentemente.** Esto no es un error puntual — es un patrón sistémico.
+---
 
-### 1.2 Versiones Inconsistentes (3 verdades simultáneas)
+## 2. DISCREPANCIAS CONFIRMADAS (Codigo != Contexto)
 
-| Fuente | Versión |
+### 2.1 Version del sistema — INCONSISTENTE (persiste)
+
+| Fuente | Version |
 |--------|---------|
-| `index.js` banner + `config.json` | v0.1.0 |
-| `package.json` | v0.2.0 |
-| `README.md` | v0.5.0 "Network" |
+| `contexto/index.json` | **0.5.0** |
+| `package.json` | **0.2.0** |
 
-No hay una única fuente de verdad para la versión del sistema.
+package.json es la fuente de verdad. Sin resolver desde analisis anterior.
 
-### 1.3 Conteo de Módulos Inconsistente
+### 2.2 Conteo de modulos — 3 archivos, 3 cifras distintas
 
-| Fuente | Core | PizzePOS | Total |
-|--------|------|----------|-------|
-| `index.json` | 30 | 15 | 45 |
-| `modules.json` | 30 (24 active) | 13 | 43 discovered, 37 active |
-| **Realidad (module.json)** | **35** | **15** | **52** |
+| Fuente | Cifra |
+|--------|-------|
+| `index.json` | 52 total (35 core + 15 pizzepos + 2 facturacion) |
+| `system.json` | 55 total, 47 activos |
+| `modules.json` | 53 activos + 9 deshabilitados |
+| **`config.json` (verdad)** | **55 habilitados, 10 deshabilitados** |
 
-Módulos reales no listados en docs: `security-p2p`, `staff-manager` (existen pero están disabled).
-Módulos en `config.json` disabled pero no documentados como tal: `security-p2p`, `staff-manager`.
-Módulos `composition-manager` y `context-manager` existen en filesystem pero **no aparecen en config.json** (ni enabled ni disabled).
+**Ninguno coincide con otro ni con la realidad.** Discrepancia mas peligrosa.
 
-### 1.4 Features "Implementadas" que son Código Muerto
+### 2.3 log-manager: documentado como Tier 1 activo, realmente DISABLED
 
-| Feature | Documentado como | Realidad |
-|---------|-----------------|----------|
-| Discovery (`core/discovery/`) | "Multi-Machine Support COMPLETADO" (README) | **Nunca importado en index.js.** Código muerto. |
-| Flow Engine (`core/flow/`) | Motor de flows completo | **Nunca importado en index.js.** Código muerto. |
-| MQTT Connection Pooling | "Implementado" | **Deshabilitado en config.json** (`pool.enabled: false`) |
-| Echo Module + File Watcher Module | Listados en README como completados | **No existen en modules/** |
+`system.json` lo lista en `tier_1_infra`. `config.json`: **disabled**. Un agente IA que asuma su disponibilidad producira errores.
 
-### 1.5 Numeración de Arranque Caótica
+### 2.4 certificate-authority: documentado extensamente como activo, realmente DISABLED
 
-El `index.js` usa una numeración que salta de `/7` a `/8` a mitad del arranque, usa pasos fraccionarios (5.5, 6.5, 6.7), y los comentarios del código no coinciden con la salida por consola.
+- `contexto/certificate-authority.json` lo documenta como sistema funcional completo
+- `contexto/iot-modules.json` lo referencia como modulo IoT activo
+- config.json: **disabled**
+- El directorio `data/ca/` que documenta **no existe**
 
----
+### 2.5 Frontend stores: 22 documentados vs 30 reales
 
-## 2. ARQUITECTURA — Lo que SÍ funciona bien
+8 stores no documentados: carta, certificate-authority, channels, dispositivos, html-preview, llevadoo, staff, index.
 
-### 2.1 Diseño del Core (genuinamente bueno)
+### 2.6 esp32-dev: modulo activo no documentado en contexto IoT
 
-```
-Frontend (SvelteKit 5 + TypeScript)
-    │ MQTT WebSocket (:9001)
-    │
-┌───┴─────────────────────────────────┐
-│  HTTP Gateway (:3000) — Node.js nativo │
-│  UI Request Handler (MQTT req/res)     │
-│  Module Loader (auto-wiring)           │
-│  EventBus (EventEmitter + MQTT)        │
-│  MQTT Broker (Aedes embebido)          │
-│  Observability (Logger, Tracer, Metrics)│
-│               EVENT CORE               │
-└────────────────────────────────────────┘
-```
+Habilitado en config.json, directorio existe, pero `iot-modules.json` solo documenta esp32-flasher.
 
-**Lo que está bien diseñado:**
-- **IoC real:** Módulos declaran contratos en `module.json`; el loader los conecta automáticamente
-- **Event-driven puro:** Todo fluye por eventos. Las APIs HTTP son fachadas
-- **Auto-wiring verificado:** `wireEventSubscriptions()` (línea 768) y `wireUIHandlers()` (línea 842) en `loader.js` — **realmente existen y funcionan**
-- **HTTP Gateway nativo:** Confirmado `const http = require('http')` — sin Express
-- **EventBus híbrido:** Confirmado `class EventBus extends EventEmitter` con bridge MQTT
+### 2.7 UI Handlers: "28/28 migrados" — INCORRECTO
 
-### 2.2 Module Loader — El componente más maduro (1,290 líneas)
+Contexto afirma todos migrados. Realidad: solo ~24 modulos tienen `ui_handlers` en module.json.
 
-- Auto-descubrimiento recursivo de `./modules/`
-- Auto-wiring de: APIs HTTP, tools para AI, suscripciones de eventos, UI handlers
-- Normalización de 3 formatos legacy de subscribes y UI handlers
-- Hot-reload con `fs.watch`
-- Cleanup automático en `unload()` — deshace TODAS las suscripciones
-- Provider tools unificados con module tools en `toolsRegistry`
+### 2.8 Conteo de providers: subestimado 3.6x
 
-### 2.3 Sistema de Módulos PizzePOS (15 módulos, flujo completo)
+| Contexto afirma | Realidad |
+|-----------------|----------|
+| "6+ externos, 10+ locales" | 3 externos, **36 locales** |
 
-El vertical POS es el caso de uso más maduro:
-```
-Comandero → comandero.enviar_cocina → Pedidos → pedido.enviado_cocina → Cocina
-                                              → pedido.item_agregado → Cuentas
-Cobros ← cobro.procesado ← cuenta.estado_cambiado ← Cuentas
-```
+### 2.9 `data/learning/` — FANTASMA
 
-- Ciclo de vida completo: pendiente → con_pedido → en_preparación → listo → para_cobrar → cobrado
-- Strategy pattern para 5 canales de venta
-- Event sourcing con persistencia
-- Carta digital con export estático
+Documentado como ruta de almacenamiento del provider `local.learning`. El directorio **no existe**. Puede crearse on-demand, pero no esta verificado.
 
 ---
 
-## 3. FRONTEND — Evaluación Honesta
+## 3. OMISIONES GRANDES (Codigo existe sin documentar)
 
-### Métricas Reales
+### 3.1 `_archived/` — 3.4 MB de codigo archivado
 
-| Métrica | Valor Real |
+| Snapshot | Contenido | Relevancia |
+|----------|-----------|------------|
+| 2025-12-12 | UI completo anterior (119 .svelte, 76 .ts, documentacion de diseno) | Alta |
+| 2026-01-22 | Flow-engine v1, handlers antiguos, proyecto ejemplo | Media |
+| 2026-02-13 | **19 modulos PizzePOS completos** (versiones anteriores reemplazadas) | Alta |
+
+**Riesgo:** Sin documentar, un agente IA puede confundir codigo archivado con activo.
+
+### 3.2 `handlers/global/archived/` — 38 handlers archivados
+
+Pipeline completo antiguo de facturas: aprendizaje (4), comandos (6+5), OCR (2), Gmail, notificaciones (3), validacion. **Totalmente sin documentar.**
+
+### 3.3 `scripts/` — 16 scripts de utilidad (180KB)
+
+Scripts criticos sin documentar:
+- `create-module.js` (15KB) — generador de modulos
+- `generate-constants.js` (11KB) — generador de constantes
+- `migrate-to-tailwind.js` (23KB) — migracion CSS
+- `gmail-oauth-setup.js` — setup OAuth
+- `install-linux.sh`, `install-termux.sh` — instaladores
+- `start-multi-core.sh` — arranque multi-core
+
+### 3.4 `prompts/` — 26 prompts IA especializados (776KB)
+
+Sistema completo de roles IA (v1.1.0): arquitecto, gobernanza, rendimiento, despliegue, estratega, orquestador, generador, curador, validador + 7 tutoriales + guias.
+
+### 3.5 `deployment/helm/` — Charts de Kubernetes
+
+Infraestructura production-ready: Chart de Helm con deployment, statefulset, ingress, HPA, configmap, service. **No mencionado en ningun archivo de contexto.**
+
+### 3.6 Otros directorios no documentados
+
+| Directorio | Contenido | Tamano |
+|-----------|-----------|--------|
+| `strategy/v1/` | Roadmap, vision, OKRs Q4-2025 | ~12KB |
+| `network/` | Scripts latencia, setup, validacion | 44KB |
+| `cli/` | Cliente CLI remoto (client.js + index.js) | 24KB |
+| `firmware/print-proxy/` | Firmware ESP32 C++ completo (PlatformIO) | ~20KB |
+| `design-system/` | Tokens de diseno + generador | ~8KB |
+| `tutoriales/` | 7 tutoriales educativos markdown | 132KB |
+| `backup/flows-v1/` | 6 definiciones de flujos antiguos | ~12KB |
+| `tests/` | 13 archivos de test (unit + integration) | 244KB |
+
+---
+
+## 4. ESTADO REAL VERIFICADO DEL SISTEMA (25-03-2026)
+
+### 4.1 Arquitectura Real (Verificada contra codigo)
+
+```
+index.js (punto de entrada, ~24KB)
+  |
+  +-- core/ (16 subsistemas)
+  |     +-- mqtt/           Broker Aedes + Cliente MQTT + Pool conexiones
+  |     +-- events/bus.js   EventBus hibrido (local + MQTT)
+  |     +-- hooks.js        Hooks secuenciales con bloqueo
+  |     +-- modules/        ModuleLoader (~1,290 lineas) + ModuleRegistry
+  |     +-- validation/     JSON Schema con AJV
+  |     +-- observability/  Logger + Tracer + Metrics + ActivityLogger
+  |     +-- providers/      ProviderRegistry + Executor + Loader
+  |     +-- gateway/http/   Gateway REST + CORS + Compression + Cache
+  |     +-- config/         Carga multi-fuente con deep merge
+  |     +-- flow/           FlowEngine + Registry + FlowAgent
+  |     +-- discovery/      Discovery de cores via MQTT retained
+  |     +-- ui/             UIRequestHandler MQTT request/response
+  |     +-- utils/          PortManager + ServiceRegistry
+  |     +-- handler-loader  Carga handlers globales + por proyecto
+  |     +-- handler-store   Almacen persistente key-value por handler
+  |     +-- service-executor Request/Response via MQTT con timeout
+  |     +-- constants.js    Auto-generado desde module.json
+  |
+  +-- modules/ (55 habilitados, 10 deshabilitados)
+  |     +-- AI: ai-gateway, ai-agent-framework, agent-manager
+  |     +-- Chat: chat-session, chat-ai-bridge, prompt-composer, prompt-engine, prompt-manager
+  |     +-- Bots: bot-manager, telegram-service, channel-manager
+  |     +-- PizzePOS: 15 sub-modulos bajo modules/pizzepos/
+  |     +-- Facturacion: facturas, asesoria, fuentes
+  |     +-- Negocio: recetas, escandallo, viabilidad
+  |     +-- Infra: credential-manager, database-manager, filesystem, scheduler
+  |     +-- IoT: device-registry, device-shadow, device-health, gateway-manager,
+  |             firmware-manager, firmware-builder, esp32-flasher, esp32-dev, perifericos
+  |     +-- UI: admin-panel, pdf-viewer, text-editor
+  |     +-- Gestion: project-manager, composition-manager, context-manager,
+  |                  system-inspector, code-executor, plugin-manager, calling-generator
+  |
+  +-- services/providers/
+  |     +-- anthropic/, google/, elevenlabs/  (3 externos)
+  |     +-- local/ (36 providers)
+  |
+  +-- handlers/
+  |     +-- global/ (2 activos, 38 archivados)
+  |     +-- projects/ (2 proyectos con handlers)
+  |
+  +-- frontend/ (SvelteKit 2 + Svelte 5, 30 stores)
+  +-- config.json
+```
+
+### 4.2 Modulos habilitados (55) — desglose completo
+
+**Tier 1 Infraestructura:** credential-manager, database-manager, filesystem
+**Tier 2 Plataforma:** plugin-manager, prompt-manager, prompt-engine, prompt-composer, scheduler
+**Tier 3 Core:** project-manager, composition-manager, context-manager, system-inspector, ai-gateway, ai-agent-framework, agent-manager
+**Tier 4 Features:** calling-generator, bot-manager, chat-ai-bridge, chat-session, code-executor
+**Tier 5 PizzePOS (15):** cuentas, cuentas-canales, pedidos, cobros, cocina, comandero, productos, categorias, ingredientes, variaciones, persistencia-comandero, impresion, menu-generator, carta-digital, carta-impresion
+**Tier 5 Facturacion (3):** facturas, asesoria, fuentes
+**Tier 5 Negocio (3):** recetas, escandallo, viabilidad
+**Tier 6 UI/Integracion:** admin-panel, pdf-viewer, telegram-service, text-editor, channel-manager
+**IoT (9):** perifericos, device-registry, device-shadow, gateway-manager, firmware-manager, device-health, firmware-builder, esp32-flasher, esp32-dev
+**Raiz:** pizzepos (orquestador)
+
+### 4.3 Modulos deshabilitados (10)
+
+```
+log-manager, conversation-manager, scratch-designer, ui-designer,
+dashboard, notas, metricas, security-p2p, certificate-authority, staff-manager
+```
+
+### 4.4 Providers locales (36) — inventario real
+
+```
+backup-manager, coingecko, context-sync, csv, document-processor, dxf,
+esp32, etherscan, facturas-db, ffmpeg, glovo, gmail, google-documentai,
+google-vision, handler-generator, learning, notion, pdf, pdf-parse,
+pdf-to-png, pdfjs, perifericos, scribe-ocr, sharp, skills, slack,
+stripe, svg, tesseract, url-data, whatsapp, whisper, woocommerce,
+xlsx, yahoo-finance, zip
+```
+
+### 4.5 Frontend stores (30)
+
+```
+attachments, carta, certificate-authority, channels, chat, cocina,
+comandero, conversations, credentials, cuentas, dispositivos,
+escandallo, esp32, facturas, files, html-preview, impresion, index,
+llevadoo, menu-generator, page-context, persistence, projects,
+prompts, recetas, staff, theme, ui, viabilidad, workspace
+```
+
+---
+
+## 5. TODOs E INTEGRACIONES INCOMPLETAS EN CODIGO
+
+| Archivo | TODO | Estado |
+|---------|------|--------|
+| `modules/pizzepos/cuentas-canales/strategies/whatsapp.js` | Integrar con WhatsApp Business API | NO IMPLEMENTADO |
+| `modules/pizzepos/cuentas-canales/strategies/telefono.js` | Integrar con Twilio/WhatsApp Business API | NO IMPLEMENTADO |
+| `modules/scheduler/services/trigger-manager.js` | Check if job is currently running | NO IMPLEMENTADO |
+| `modules/admin-panel/public/js/admin-panel.js` | Implement actual toggle | NO IMPLEMENTADO |
+| `modules/admin-panel/index.js` | Implement agent creation via AI Agent Framework | NO IMPLEMENTADO |
+
+---
+
+## 6. METRICAS REALES DEL REPOSITORIO
+
+| Metrica | Valor Real |
 |---------|-----------|
-| Componentes `.svelte` | 90 archivos |
-| Archivos TypeScript | 63 archivos |
-| Stores | 24 archivos (9,128 líneas) |
-| Líneas totales frontend | ~41,000 |
-| Tests frontend | **0** |
-| Linting configurado | **No** |
-| Framework CSS | **Ninguno** (CSS manual scoped) |
-| Dependencias runtime | 3 (`highlight.js`, `marked`, `mqtt`) |
-
-### Lo que está bien
-- **Arquitectura MQTT-first:** Lazy loading, reconnexión automática, pending queue (100 msgs), reference counting de suscripciones
-- **Patrón request/response sobre MQTT:** Bien implementado con timeout, tipos de error, convenience wrappers
-- **Autodiscovery de módulos:** `import.meta.glob` para manifests — agregar módulo = 0 cambios en archivos centrales
-- **Cleanup discipline:** Cada `init*Subscriptions()` retorna cleanup function. Sin leaks de suscripciones
-- **3 dependencias runtime:** Footprint admirablemente mínimo
-
-### Lo que está mal
-- **0 tests** — el riesgo más grande del frontend
-- **102 usos de `any`** en stores (42 en `cuentas.ts`, 32 en `comandero.ts`)
-- **242 `console.log/warn/error`** sin sistema de log-levels — todo sale en producción
-- **Sin linting ni formatting** (no hay eslint, prettier, svelte-check)
-- **Código muerto:**
-  - `getMqttClient()` en mqtt-request.ts — función vacía, nunca llamada
-  - Registry legacy (300 líneas) — reemplazado por lazy-registry
-  - Ruta `/1` — página de testing de 432 líneas en producción
-  - Constante `WORKSPACES` duplicada en 2 archivos
-  - 4 rutas legacy de redirect con CSS duplicado
-
-### Tailwind — NO existe
-La documentación anterior decía "migración a Tailwind incompleta." La realidad: **no hay Tailwind configurado.** No hay `tailwind.config.js`, ni en dependencias. El proyecto usa CSS scoped manual con custom properties para theming.
+| Modulos habilitados | 55 |
+| Modulos deshabilitados | 10 |
+| Sub-modulos PizzePOS | 15 |
+| Providers locales | 36 |
+| Providers externos | 3 |
+| Handlers activos | 4 (2 global + 2 proyecto) |
+| Handlers archivados | 38 |
+| Frontend stores | 30 |
+| Archivos de test | 13 |
+| Scripts de utilidad | 16 |
+| Archivos contexto | 33 (32 JSON + 1 MD) |
+| Plugins | 5 |
+| Blueprints de proyecto | 2 |
+| Prompts IA | 26 |
+| Tutoriales | 7 |
+| Codigo archivado | ~3.4 MB |
 
 ---
 
-## 4. TESTING — Estado Crítico
+## 7. CORRECCIONES NECESARIAS (PRIORIZADAS)
 
-### Backend
+### CRITICAS — afectan generacion de codigo por IA
 
-| Test File | Estado |
-|-----------|--------|
-| `tests/unit/hooks.test.js` | PASA |
-| `tests/unit/observability.test.js` | PASA |
-| `tests/unit/http-gateway.test.js` | **FALLA** (MODULE_NOT_FOUND: ajv) |
-| `tests/unit/conversation-manager.test.js` | **FALLA** (0/24 tests pasan) |
-| `tests/unit/cli.test.js` | **FALLA** (MODULE_NOT_FOUND: ajv) |
-| `tests/unit/security-p2p.test.js` | No incluido en `npm test` |
-| `tests/integration/full-stack.test.js` | **FALLA** (MODULE_NOT_FOUND: mqtt) |
-| `tests/integration/port-management.test.js` | No incluido en scripts |
+| # | Archivo | Correccion |
+|---|---------|-----------|
+| 1 | `index.json` | Actualizar `version` a 0.2.0 y `module_count` a 55 habilitados / 10 disabled |
+| 2 | `system.json` tier_1_infra | Quitar `log-manager` (disabled) |
+| 3 | `system.json` module count | Corregir a 55 habilitados |
+| 4 | `modules.json` | Alinear conteo con config.json: 55 enabled, 10 disabled |
+| 5 | `certificate-authority.json` | Anadir `"status": "DISABLED"` prominente al inicio |
+| 6 | `iot-modules.json` | Marcar certificate-authority como disabled, documentar esp32-dev |
 
-**`npm test` FALLA.** De 4 test suites que ejecuta, solo 2 pasan. Las otras fallan porque `node_modules/` no está instalado (no hay `ajv` ni `mqtt`).
+### IMPORTANTES — mejoran precision
 
-El README clama "100+ tests" y "60+ unit tests + 18 integration tests." La realidad: **8 archivos de test totales, la mayoría rotos.**
+| # | Archivo | Correccion |
+|---|---------|-----------|
+| 7 | `ui.json` | Actualizar stores de 22 a 30 (anadir los 8 faltantes) |
+| 8 | `providers.json` o `catalogo-servicios.json` | Actualizar conteo a 36 locales reales |
+| 9 | Nuevo: documentar `_archived/` | Explicar los 3 snapshots y por que fueron reemplazados |
+| 10 | Nuevo: documentar `scripts/` | 16 herramientas criticas para desarrollo |
 
-**Cobertura de tests por módulo: 0/47 módulos tienen tests propios.**
+### MENORES — consistencia
 
-### Frontend
-- **0 archivos de test**
-- No hay test runner configurado (ni vitest, ni playwright, ni jest)
-- No hay script `check` en package.json para `svelte-check`
-
----
-
-## 5. SEGURIDAD — Postura Crítica (3/10)
-
-### Vulnerabilidades CRÍTICAS
-
-| # | Vulnerabilidad | Impacto |
-|---|---------------|---------|
-| 1 | **Sin autenticación HTTP** | Todos los endpoints abiertos. Cualquier cliente puede llamar cualquier API |
-| 2 | **Sin autenticación MQTT** | Broker Aedes sin `authenticate`, sin ACL. Cualquiera puede suscribirse a `#` y leer API keys transmitidas en eventos `credential.resolve.response` |
-| 3 | **Code Executor: shell abierto** | `child_process.exec()` con solo un blocklist de 11 comandos. `env`, `printenv`, `cat .env`, `curl` para exfiltración — todo permitido |
-| 4 | **`new Function()` en Scheduler** | Condiciones de triggers ejecutadas como JS sin sandbox. Inyección de código arbitrario |
-
-### Riesgo ALTO
-
-| # | Vulnerabilidad |
-|---|---------------|
-| 5 | Credentials en plaintext en `.env` + `process.env` (encryption AES-256 referenciada en config pero NO implementada) |
-| 6 | Path traversal en endpoint `/blueprints/` — `blueprintName` sin sanitizar |
-
-### Riesgo MEDIO
-
-| # | Vulnerabilidad |
-|---|---------------|
-| 7 | Sin rate limiting en ningún endpoint |
-| 8 | CORS `Access-Control-Allow-Origin: *` |
-| 9 | Sin security headers (CSP, HSTS, X-Frame-Options, nosniff) |
-| 10 | Argument injection en `handleToolScript` del code-executor |
-
-### Buenas Prácticas Encontradas
-- Docker: multi-stage build, usuario no-root, `dumb-init`, Alpine, health check
-- Body size limit (1MB)
-- Request timeout (30s)
-- SQL queries usan prepared statements (parametrizadas)
-- Path traversal protegido en `getProjectPath` del code-executor
-- `.env` en `.gitignore` — sin secrets commiteados
-- Framework de validación existe (aunque opcional, `requireSchemas: false`)
+| # | Archivo | Correccion |
+|---|---------|-----------|
+| 11 | `system.json` | Corregir conteo archivos contexto a 33 |
+| 12 | `ui.json` | Documentar ruta /[project_id]/llevadoo |
+| 13 | Varios | Documentar deployment/helm/, cli/, firmware/, prompts/ |
 
 ---
 
-## 6. INFRAESTRUCTURA OPERACIONAL
+## 8. FORTALEZAS CONFIRMADAS
 
-### Scripts Operacionales
-- `start.sh` (324 líneas) — Arranque con detección de plataforma
-- `stop.sh` (197 líneas) — Shutdown
-- `dev.sh` (234 líneas) — Modo desarrollo
-- `restart.sh` (76 líneas) — Restart
-- `install.sh` (54 líneas) — Instalador
-
-### Docker
-- `Dockerfile` bien configurado (multi-stage, non-root, Alpine)
-- `docker-compose.yml` para 2 cores (core-a, core-b)
-- Puertos expuestos: 3000 (HTTP), 1883 (MQTT TCP), 9001 (MQTT WS)
-
-### CI/CD
-- **No existe.** No hay GitHub Actions, no hay pipeline de validación.
-- No hay `npm run lint`, no hay `npm run check`
-- `npm test` falla en el entorno actual
-
-### Código Muerto / Deuda Técnica
-- `_archived/` — 2.9MB de código archivado
-- `handlers/global/archived/` — 30+ handlers deprecated
-- `modules/conversation-manager/` — disabled, reemplazado pero no eliminado
-- `core/discovery/` — implementado, nunca conectado
-- `core/flow/` — implementado, nunca conectado
-- `modules/security-p2p/` — parcial, disabled
-- `modules/staff-manager/` — disabled, no documentado
+1. **Arquitectura event-driven pura** — MQTT como backbone, sin REST para estado interno
+2. **Auto-wiring declarativo** — module.json declara, ModuleLoader conecta
+3. **ModuleLoader maduro** (~1,290 lineas) — discovery, hot-reload, tool registration
+4. **PizzePOS completo** — 15 modulos, 5+ canales, Strategy pattern, event sourcing, ESC/POS
+5. **AI Gateway unificado** — 6 providers LLM con fallback, streaming, tool calling
+6. **Provider system limpio** — auto-discovery, credential injection, 36 providers locales
+7. **Handler system potente** — global + project-scoped, service executor, persistent store
+8. **Frontend MQTT-first** — 30 stores, lazy loading, auto-discovery de modulos
+9. **IoT real** — device-registry, shadows, firmware OTA, gateway, ESP32 directo
 
 ---
 
-## 7. MÉTRICAS REALES DEL CODEBASE
+## 9. DEUDA TECNICA
 
-| Métrica | Valor Verificado |
-|---------|-----------------|
-| Líneas backend (JS) | ~100,584 |
-| Líneas frontend (Svelte + TS) | ~41,062 |
-| Total estimado | ~141,646 |
-| Archivos JS (backend) | 251 |
-| Archivos Svelte | 90 (docs decía 68) |
-| Archivos TS | 61 (docs decía 48) |
-| Módulos con module.json | 52 |
-| Módulos activos (config.json enabled) | 36 |
-| Módulos disabled | 8 |
-| Módulos sin listar en config | 8 |
-| Archivos de test | 8 (4 rotos) |
-| Stores frontend | 24 |
-| node_modules instalado | No |
+1. **10 modulos disabled** ocupando espacio en el repo
+2. **Inconsistencias en 3 archivos de contexto** — conteos de modulos
+3. **certificate-authority** documentado extensamente pero disabled y sin data/
+4. **8 stores no documentados** — funcionalidad invisible para el contexto
+5. **Version sin unificar** — 0.2.0 vs 0.5.0
+6. **11 directorios sin documentar** en contexto (_archived, scripts, prompts, deployment, etc.)
+7. **38 handlers archivados** sin documentar ni limpiar
+8. **5 TODOs en modulos** — integraciones WhatsApp, Twilio, admin-panel incompletas
+9. **`data/learning/`** documentado como existente pero no existe
 
 ---
 
-## 8. LO QUE REALMENTE FUNCIONA (verificado contra código)
+## 10. CONCLUSION
 
-1. **Core startup sequence** — index.js orquesta correctamente: Observability → Validation → MQTT → Hooks → EventBus → UIHandler → Providers → Modules → Handlers → ServiceRegistry → HTTP
-2. **Module Loader auto-wiring** — `wireEventSubscriptions()` y `wireUIHandlers()` están implementados y son funcionales
-3. **EventBus híbrido** — EventEmitter + MQTT bridge real
-4. **HTTP Gateway nativo** — Node.js `http` module, sin Express
-5. **MQTT broker embebido** — Aedes con fallback automático
-6. **52 módulos** con auto-descubrimiento y hot-reload
-7. **PizzePOS** — 15 módulos con flujo de eventos completo
-8. **AI Gateway** — 6 providers LLM con function calling y streaming
-9. **Tool system unificado** — module tools + provider tools en un solo registry
-10. **Frontend MQTT-first** — Arquitectura genuinamente innovadora
+**Codigo:** Enki es un sistema solido, modular, event-driven, con 55 modulos activos, 36 providers locales, frontend SvelteKit moderno, y un ecosistema IoT real. La implementacion es significativamente mas grande y madura de lo que el contexto sugiere.
 
----
+**Contexto:** Fiable al ~80% para decisiones arquitectonicas. Problematico para conteos exactos y estados de modulos. Las 6 correcciones criticas eliminarian el 90% del riesgo de generar codigo erroneo.
 
-## 9. PRIORIDADES PARA PRODUCCIÓN
-
-| Prioridad | Issue | Esfuerzo Est. |
-|-----------|-------|---------------|
-| **P0** | Autenticación HTTP + MQTT | 1-2 semanas |
-| **P0** | Sandboxing real de code-executor (o deshabilitarlo) | 2-3 días |
-| **P0** | Eliminar `new Function()` del scheduler | 1 día |
-| **P1** | Cifrar credentials at rest | 3-5 días |
-| **P1** | CI/CD pipeline (lint, test, build) | 2-3 días |
-| **P1** | Arreglar tests rotos + coverage básica | 1 semana |
-| **P2** | Rate limiting + security headers | 2-3 días |
-| **P2** | Eliminar código muerto (discovery, flow, archived) | 1-2 días |
-| **P2** | Conectar Discovery y Flow al startup (o eliminarlos) | 2-3 días |
-| **P3** | Unificar versión del sistema | 1 hora |
-| **P3** | Corregir documentación inflada | 1-2 días |
-| **P3** | Limpiar `any` types en frontend stores | 2-3 días |
-
----
-
-## 10. CONCLUSIÓN HONESTA
-
-Event-Core tiene una **arquitectura genuinamente bien diseñada**. Los patrones de IoC, event-driven, y auto-wiring declarativo son sólidos y maduros. El Module Loader es un componente de ingeniería seria. El frontend tiene una arquitectura MQTT-first que es innovadora.
-
-Pero el sistema sufre de:
-1. **Documentación inflada** — cifras multiplicadas x30, features inexistentes documentadas como completadas
-2. **Seguridad inexistente** — no apto para producción en su estado actual
-3. **Testing casi nulo** — 8 archivos de test backend (4 rotos), 0 frontend
-4. **Código muerto significativo** — ~3 subsistemas implementados pero nunca conectados
-5. **Deuda técnica acumulada** — módulos deprecated sin limpiar, handlers archivados
-
-**Estado real:** entre v0.2.0 y v0.3.0. Un prototipo funcional con buena arquitectura que necesita trabajo serio de hardening, testing y limpieza antes de considerarse apto para producción.
+**Recomendacion principal:** Ejecutar las 6 correcciones criticas y establecer que todo cambio de modulos/stores/providers incluya actualizacion automatica de `contexto/`. El provider `local.context-sync` ya existe para esto.

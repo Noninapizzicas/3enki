@@ -1,0 +1,27 @@
+{
+  "id": "modern-bold",
+  "nombre": "Moderno Bold",
+  "description": "Alto contraste, tipografía sans-serif pesada, bloques de color. Headers de categoría con fondo sólido y texto blanco. Layout grid geométrico. Actual y urbano.",
+  "color_palette": {
+    "primary": "#111",
+    "secondary": "#f59e0b",
+    "background": "#fff",
+    "text": "#111",
+    "accent": "#ef4444",
+    "muted": "#888"
+  },
+  "fonts": {
+    "heading": "Montserrat",
+    "body": "Inter",
+    "accent": "Oswald"
+  },
+  "layout_type": "two_column",
+  "style_notes": "Categorías como bloques de color sólido con texto blanco en mayúsculas. Productos sobre fondo blanco con precio en accent color. Grid con gap definido. Bordes rectos, sin redondear. Efecto de tarjeta con sombra sutil. Diseño que grita modernidad.",
+  "decorations": {
+    "background_texture": "ninguna — contraste puro blanco/negro",
+    "category_headers": "fondo negro sólido, texto blanco, uppercase, padding generoso",
+    "price_style": "rojo o ámbar, bold, con €",
+    "border": "ninguno — el contraste de colores define las secciones",
+    "ornaments": "líneas geométricas, bloques de color, sin adornos orgánicos"
+  }
+}

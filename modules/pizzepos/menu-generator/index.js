@@ -208,10 +208,136 @@ class MenuGeneratorModule {
     try {
       await fs.mkdir(dir, { recursive: true });
       const filePath = path.join(dir, `${carta.meta.id}.json`);
+
+      // Versionado: guardar copia antes de sobreescribir
+      await this.saveVersion(carta.meta.id, dir);
+
+      // Actualizar timestamp
+      if (carta.meta) carta.meta.updated_at = new Date().toISOString();
+
       await fs.writeFile(filePath, JSON.stringify(carta, null, 2), 'utf-8');
     } catch (err) {
       this.logger.warn('menu-generator.carta.save_failed', { carta_id: carta.meta?.id, project_id: projectId, error: err.message });
     }
+  }
+
+  // ==========================================
+  // Version Control
+  // ==========================================
+
+  versionsDir(cartasDir, cartaId) {
+    return path.join(cartasDir, '.versions', cartaId);
+  }
+
+  async saveVersion(cartaId, cartasDir) {
+    const currentPath = path.join(cartasDir, `${cartaId}.json`);
+    try {
+      const current = await fs.readFile(currentPath, 'utf-8');
+      const vDir = this.versionsDir(cartasDir, cartaId);
+      await fs.mkdir(vDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      await fs.writeFile(path.join(vDir, `${ts}.json`), current, 'utf-8');
+
+      // Limitar a 50 versiones — eliminar las más antiguas
+      const files = (await fs.readdir(vDir)).filter(f => f.endsWith('.json')).sort();
+      if (files.length > 50) {
+        for (const old of files.slice(0, files.length - 50)) {
+          await fs.unlink(path.join(vDir, old)).catch(() => {});
+        }
+      }
+    } catch (err) {
+      // Si no existe el fichero actual, no hay nada que versionar (primera vez)
+      if (err.code !== 'ENOENT') {
+        this.logger.debug('menu-generator.version.save_skip', { carta_id: cartaId, error: err.message });
+      }
+    }
+  }
+
+  async toolListVersions({ carta_id, project_id }) {
+    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+
+    const dir = this.cartasDirFor(project_id);
+    if (!dir) {
+      return { status: 200, data: { carta_id, versions: [], total: 0 } };
+    }
+
+    const vDir = this.versionsDir(dir, carta_id);
+    let versions = [];
+    try {
+      const files = (await fs.readdir(vDir)).filter(f => f.endsWith('.json')).sort().reverse();
+      for (const file of files) {
+        try {
+          const raw = await fs.readFile(path.join(vDir, file), 'utf-8');
+          const carta = JSON.parse(raw);
+          versions.push({
+            file,
+            timestamp: carta.meta?.updated_at || file.replace('.json', ''),
+            nombre: carta.meta?.nombre || carta_id,
+            productos: carta.productos?.length || 0,
+            categorias: carta.categorias?.length || 0,
+            size_bytes: Buffer.byteLength(raw, 'utf-8')
+          });
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    return {
+      status: 200,
+      data: { carta_id, versions, total: versions.length }
+    };
+  }
+
+  async toolRestoreVersion({ carta_id, version_file, project_id }) {
+    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+    if (!version_file) return { status: 400, error: 'Se requiere version_file (de menu.list_versions)' };
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+
+    // Sanitizar: prevenir path traversal
+    if (carta_id.includes('..') || carta_id.includes('/')) return { status: 400, error: 'carta_id inválido' };
+    if (version_file.includes('..') || version_file.includes('/')) return { status: 400, error: 'version_file inválido' };
+
+    const dir = this.cartasDirFor(project_id);
+    if (!dir) return { status: 400, error: 'Proyecto sin paths configurados' };
+
+    const vDir = this.versionsDir(dir, carta_id);
+    const versionPath = path.join(vDir, version_file);
+
+    let carta;
+    try {
+      carta = JSON.parse(await fs.readFile(versionPath, 'utf-8'));
+    } catch (_) {
+      return { status: 404, error: `Versión "${version_file}" no encontrada` };
+    }
+
+    // Guardar versión actual antes de restaurar
+    await this.saveVersion(carta_id, dir);
+
+    // Restaurar
+    carta.meta.restored_from = version_file;
+    carta.meta.restored_at = new Date().toISOString();
+    await fs.writeFile(path.join(dir, `${carta_id}.json`), JSON.stringify(carta, null, 2), 'utf-8');
+
+    // Actualizar en memoria
+    const cartas = this.getCartas(project_id);
+    cartas.set(carta_id, carta);
+
+    // Notificar consumidores
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
+
+    this.logger.info('menu-generator.version.restored', { carta_id, version_file, project_id });
+
+    return {
+      status: 200,
+      data: {
+        carta_id,
+        restored_from: version_file,
+        nombre: carta.meta?.nombre,
+        productos: carta.productos?.length || 0,
+        categorias: carta.categorias?.length || 0,
+        message: `Carta restaurada desde versión ${version_file}. La versión anterior se guardó automáticamente.`
+      }
+    };
   }
 
   async loadCartasFromDisk(projectId) {
@@ -748,6 +874,9 @@ class MenuGeneratorModule {
     const categoria = { id: catId, nombre, orden: maxOrden + 1 };
     carta.categorias.push(categoria);
 
+    await this.saveCartaToDisk(carta, project_id);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
+
     return { status: 201, data: categoria };
   }
 
@@ -847,6 +976,9 @@ class MenuGeneratorModule {
         updated_at: new Date().toISOString()
       });
     }
+
+    // Notificar cambio de carta para que consumidores actualicen
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     return {
       status: 200,
@@ -1372,6 +1504,78 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
    * La imagen puede ser una ruta relativa al storage del proyecto,
    * una ruta absoluta local, o una URL externa.
    */
+  /**
+   * Guarda una carta completa a disco. El diseñador puede construir la carta
+   * pieza a pieza y llamar a esta tool para persistirla.
+   */
+  async toolSaveCarta({ carta, carta_id, project_id }) {
+    // Tolerar carta como string JSON (algunos LLMs la serializan)
+    if (typeof carta === 'string') {
+      try { carta = JSON.parse(carta); } catch (_) {
+        return { status: 400, error: 'El parámetro "carta" debe ser un objeto JSON válido' };
+      }
+    }
+    if (!carta || typeof carta !== 'object') return { status: 400, error: 'Se requiere "carta" como objeto con meta, categorias y productos' };
+
+    // Asegurar meta
+    if (!carta.meta) carta.meta = {};
+    if (carta_id) carta.meta.id = carta_id;
+    if (!carta.meta.id) carta.meta.id = `carta_${Date.now().toString(36)}`;
+    if (!carta.meta.nombre) carta.meta.nombre = 'Carta sin nombre';
+    if (!carta.meta.created_at) carta.meta.created_at = new Date().toISOString();
+    carta.meta.updated_at = new Date().toISOString();
+
+    // Validar estructura mínima
+    if (!Array.isArray(carta.categorias)) carta.categorias = [];
+    if (!Array.isArray(carta.productos)) carta.productos = [];
+
+    // Resolver project_id — fallback al primer proyecto activo o default
+    if (!project_id) {
+      const firstProject = this.projectPaths.keys().next().value;
+      project_id = firstProject || 'default';
+    }
+
+    // Guardar en memoria
+    const cartas = this.getCartas(project_id);
+    cartas.set(carta.meta.id, carta);
+
+    // Guardar en disco — con fallback a ruta por defecto
+    const dir = this.cartasDirFor(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'cartas');
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      const filePath = path.join(dir, `${carta.meta.id}.json`);
+
+      // Versionado antes de sobreescribir
+      await this.saveVersion(carta.meta.id, dir);
+
+      await fs.writeFile(filePath, JSON.stringify(carta, null, 2), 'utf-8');
+    } catch (err) {
+      return { status: 500, error: `Error guardando carta: ${err.message}` };
+    }
+
+    // Notificar — payload completo igual que las demás tools
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
+
+    this.logger.info('menu-generator.carta.saved', {
+      carta_id: carta.meta.id,
+      project_id,
+      categorias: carta.categorias.length,
+      productos: carta.productos.length
+    });
+
+    return {
+      status: 200,
+      data: {
+        carta_id: carta.meta.id,
+        nombre: carta.meta.nombre,
+        categorias: carta.categorias.length,
+        productos: carta.productos.length,
+        path: `storage/pizzepos/cartas/${carta.meta.id}.json`,
+        message: `Carta "${carta.meta.nombre}" guardada con ${carta.productos.length} productos en ${carta.categorias.length} categorías.`
+      }
+    };
+  }
+
   async toolSetProductImage({ carta_id, project_id, producto_id, imagen, imagen_base64 }) {
     if (!project_id) return { status: 400, error: 'Se requiere project_id' };
     if (!producto_id) return { status: 400, error: 'Se requiere producto_id' };
@@ -1441,6 +1645,7 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
     if (icon) cat.icon = icon;
 
     await this.saveCartaToDisk(carta, project_id);
+    await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     return {
       status: 200,

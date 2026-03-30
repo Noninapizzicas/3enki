@@ -1,0 +1,67 @@
+{
+  "name": "device-registry",
+  "version": "1.0.0",
+  "description": "Fuente única de verdad de todos los dispositivos IoT del sistema — ESP32, gateways, periféricos manuales",
+  "author": "Enki",
+  "tier": "tier_2_platform",
+
+  "provides": {
+    "events": [
+      "device.registered",
+      "device.unregistered",
+      "device.online",
+      "device.offline",
+      "device.updated"
+    ]
+  },
+
+  "events": {
+    "subscribes": [
+      {
+        "event": "device.register",
+        "handler": "onDeviceRegister",
+        "description": "Petición de registro manual de dispositivo"
+      },
+      {
+        "event": "device.unregister",
+        "handler": "onDeviceUnregister",
+        "description": "Petición de eliminación de dispositivo"
+      }
+    ],
+    "publishes": [
+      { "event": "device.registered", "description": "Nuevo dispositivo registrado en el sistema" },
+      { "event": "device.unregistered", "description": "Dispositivo eliminado del registro" },
+      { "event": "device.online", "description": "Dispositivo detectado online (birth/status)" },
+      { "event": "device.offline", "description": "Dispositivo detectado offline (LWT/timeout)" },
+      { "event": "device.updated", "description": "Metadata o estado de dispositivo actualizado" }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "devices", "action": "list", "handler": "handleList" },
+    { "domain": "devices", "action": "get", "handler": "handleGet" },
+    { "domain": "devices", "action": "register", "handler": "handleRegister" },
+    { "domain": "devices", "action": "unregister", "handler": "handleUnregister" },
+    { "domain": "devices", "action": "stats", "handler": "handleStats" }
+  ],
+
+  "config": {
+    "heartbeat_timeout_ms": 90000,
+    "persist_interval_ms": 30000,
+    "data_path": "./data/devices"
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "devices.registered.total",
+        "devices.online.current",
+        "devices.offline.current",
+        "devices.births.total",
+        "devices.lwts.total"
+      ]
+    }
+  }
+}

@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * BotonEspecial — Botón de barra superior con lógica especial
-   * Ejemplos: Mitad y mitad, Pizza al gusto, Menú
+   * Ejemplos: Mitad y mitad, Pizza al gusto, Porción
    */
   import { createEventDispatcher } from 'svelte';
 

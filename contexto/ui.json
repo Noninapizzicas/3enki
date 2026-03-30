@@ -36,7 +36,8 @@
         "/comandero/[cuenta_id]": "Pedido de cuenta (ruta alternativa sin project_id, usa activeProjectId)",
         "/[project_id]/recetas": "Modo recetas — gestión de recetas con ingredientes y precios",
         "/[project_id]/escandallo": "Modo escandallo — análisis de costes y márgenes",
-        "/[project_id]/viabilidad": "Modo viabilidad — estudio de viabilidad de negocio"
+        "/[project_id]/viabilidad": "Modo viabilidad — estudio de viabilidad de negocio",
+        "/dispositivos": "Modo dispositivos — ESP32 drivers, compilación, flash USB, firmware OTA, monitor serial"
       },
       "futuras": "Cada vertical (cobros, gestión...) puede tener su propia ruta con work-bar específica"
     },
@@ -96,7 +97,7 @@
       "heavy": "boolean (load in background)",
       "routes": "string[] (optional) — rutas donde el módulo aparece en work-bar. Sin definir = todas las rutas."
     },
-    "active_modules": ["project", "files", "provider", "prompts", "credentials", "conversations", "facturas", "impresion", "menu-pdf2img", "menu-prepare", "menu-ocr", "menu-generate", "menu-cartas", "recetas", "escandallo", "viabilidad"],
+    "active_modules": ["project", "files", "provider", "prompts", "credentials", "conversations", "facturas", "impresion", "menu-pdf2img", "menu-prepare", "menu-ocr", "menu-generate", "menu-cartas", "recetas", "escandallo", "viabilidad", "esp32"],
     "archived_modules": {
       "menu-generator": "Monolito 893 líneas, 3 tabs. Reemplazado por 5 micro-módulos. Manifest renombrado a .archived. Store compartido en stores/menu-generator.ts."
     }
@@ -105,7 +106,7 @@
     "location": "frontend/src/lib/stores/",
     "total_files": 22,
     "pattern": "Svelte writable stores + async functions",
-    "all_stores": ["attachments.ts", "chat.ts", "cocina.ts", "comandero.ts", "conversations.ts", "credentials.ts", "cuentas.ts", "escandallo.ts", "facturas.ts", "files.ts", "impresion.ts", "index.ts", "menu-generator.ts", "page-context.ts", "persistence.ts", "projects.ts", "prompts.ts", "recetas.ts", "theme.ts", "ui.ts", "viabilidad.ts", "workspace.ts"],
+    "all_stores": ["attachments.ts", "chat.ts", "cocina.ts", "comandero.ts", "conversations.ts", "credentials.ts", "cuentas.ts", "escandallo.ts", "esp32.ts", "facturas.ts", "files.ts", "impresion.ts", "index.ts", "menu-generator.ts", "page-context.ts", "persistence.ts", "projects.ts", "prompts.ts", "recetas.ts", "theme.ts", "ui.ts", "viabilidad.ts", "workspace.ts"],
     "examples": {
       "projects.ts": {
         "store": "projectsStore",

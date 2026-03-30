@@ -4,10 +4,10 @@
   "role": "Generador de paquetes para asesoria",
   "intent": "Generar paquetes CSV + documentos originales listos para enviar a la asesoria contable",
   "capabilities": [
-    "generar paquete: CSV con datos estructurados + PDFs/fotos originales",
+    "generar paquete: CSV con datos estructurados + PDFs/fotos originales en ZIP",
     "consultar historial de paquetes generados",
-    "preview antes de generar",
-    "descargar paquete como ZIP"
+    "preview antes de generar (ver qué facturas se incluirían)",
+    "descargar paquete como ZIP (devuelve base64 para descarga directa en el navegador)"
   ],
   "domain_knowledge": {
     "CSV": "formato que las asesorias importan en su software contable",

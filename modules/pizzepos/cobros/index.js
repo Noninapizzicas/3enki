@@ -148,6 +148,10 @@ class CobrosModule {
       if (!cuenta_id) {
         return { status: 400, error: 'cuenta_id es requerido' };
       }
+      // Llevadoo paga externamente, no se cobra por caja
+      if (cuenta_id.startsWith('llevadoo_')) {
+        return { status: 400, error: 'Las cuentas Llevadoo se pagan externamente, no se pueden cobrar por caja' };
+      }
       if (monto === undefined || monto <= 0) {
         return { status: 400, error: 'monto debe ser mayor que 0' };
       }

@@ -409,33 +409,33 @@ class ChannelManagerModule {
 
   dbQuery(sql, params = []) {
     return new Promise((resolve, reject) => {
-      const correlationId = `chm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const correlation_id = `chm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
       const handler = (event) => {
         const data = event.data || event;
-        if (data.correlationId !== correlationId) return;
-        this.eventBus.unsubscribe('db.query.response', handler);
+        if (data.correlation_id !== correlation_id) return;
+        unsub();
 
         if (data.error) {
           reject(new Error(data.error));
         } else {
-          resolve(data.rows || []);
+          resolve(data.data || data.rows || []);
         }
       };
 
-      this.eventBus.subscribe('db.query.response', handler);
+      const unsub = this.eventBus.subscribe('db.query.response', handler);
       this.eventBus.publish('db.query.request', {
-        projectId: this.config.db_project_id,
+        project_id: this.config.db_project_id,
         query: sql,
         params,
-        correlationId
+        correlation_id
       });
     });
   }
 
   dbExec(sql, params = []) {
     return new Promise((resolve, reject) => {
-      const correlationId = `chm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const correlation_id = `chm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
       // For schema init, use db.schema.init.request
       // For data mutations, use db.query.request (database-manager handles INSERT/UPDATE/DELETE too)
@@ -445,8 +445,8 @@ class ChannelManagerModule {
 
       const handler = (event) => {
         const data = event.data || event;
-        if (data.correlationId !== correlationId) return;
-        this.eventBus.unsubscribe(responseType, handler);
+        if (data.correlation_id !== correlation_id) return;
+        unsub();
 
         if (data.error) {
           reject(new Error(data.error));
@@ -455,20 +455,20 @@ class ChannelManagerModule {
         }
       };
 
-      this.eventBus.subscribe(responseType, handler);
+      const unsub = this.eventBus.subscribe(responseType, handler);
 
       if (isSchema) {
         this.eventBus.publish(eventType, {
-          projectId: this.config.db_project_id,
+          project_id: this.config.db_project_id,
           schema: sql,
-          correlationId
+          correlation_id
         });
       } else {
         this.eventBus.publish(eventType, {
-          projectId: this.config.db_project_id,
+          project_id: this.config.db_project_id,
           query: sql,
           params,
-          correlationId
+          correlation_id
         });
       }
     });

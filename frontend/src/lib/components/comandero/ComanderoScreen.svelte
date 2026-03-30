@@ -6,7 +6,7 @@
    * ┌────────────────────────────────────────┐
    * │ Header: nombre cuenta                  │
    * ├────────────────────────────────────────┤
-   * │ Especiales: Mitad | Al gusto | Menú    │
+   * │ Especiales: Mitad | Al gusto | Porción  │
    * ├────────────────────────────────────────┤
    * │ Familias: [🍕Pizza][🥗Ensaladas][...]  │
    * ├──────────────────────────┬─────────────┤
@@ -127,11 +127,12 @@
     }
   }
 
-  // Nombre editable de la cuenta (mesa y llevar)
+  // Nombre editable de la cuenta (mesa, llevar y llevadoo)
   const isMesa = cuenta_id.startsWith('mesa_');
   const isLlevar = cuenta_id.startsWith('llevar_');
-  const canRename = isMesa || isLlevar;
-  let cuentaNombre = isMesa ? 'Mesa...' : isLlevar ? 'Llevar...' : cuenta_id.split('_')[0] || 'Cuenta';
+  const isLlevadooRename = cuenta_id.startsWith('llevadoo_');
+  const canRename = isMesa || isLlevar || isLlevadooRename;
+  let cuentaNombre = isMesa ? 'Mesa...' : isLlevar ? 'Llevar...' : isLlevadooRename ? 'Llevadoo' : cuenta_id.split('_')[0] || 'Cuenta';
   let editingName = false;
   let nameInput = '';
   let nameInputEl: HTMLInputElement;
@@ -249,21 +250,35 @@
   // Estado del panel al gusto
   let showAlGusto = false;
 
+  // Estado del selector de porciones
+  let showPorciones = false;
+
+  // Precio porciones: cada 4 = pizza media (10.50€), sueltas a 3€
+  const PRECIO_PORCION = 3;
+  const PRECIO_PIZZA_MEDIA = 10.5;
+  function calcularPrecioPorciones(n: number): number {
+    const pizzas = Math.floor(n / 4);
+    const resto = n % 4;
+    return pizzas * PRECIO_PIZZA_MEDIA + resto * PRECIO_PORCION;
+  }
+
   // Botones especiales (configurables según negocio)
   const botonesEspeciales = [
     { id: 'mitad', label: 'Mitad', icon: '🍕½', color: '#8b5cf6' },
     { id: 'algusto', label: 'Al gusto', icon: '🎨', color: '#ec4899' },
-    { id: 'menu', label: 'Menú', icon: '📋', color: '#0ea5e9' }
+    { id: 'porcion', label: 'Porción', icon: '🍕', color: '#0ea5e9' }
   ];
 
-  // Acciones sidebar
-  const acciones = [
+  // Acciones sidebar (llevadoo no tiene cobro — pago externo)
+  $: isLlevadoo = cuenta_id.startsWith('llevadoo_');
+  const accionesBase = [
     { id: 'cuenta', label: 'Cuenta', icon: '📄', variant: 'default' as const },
     { id: 'enviar', label: 'Enviar', icon: '🍳', variant: 'primary' as const },
     { id: 'imprimir', label: 'Imprimir', icon: '🖨️', variant: 'default' as const },
     { id: 'cobro', label: 'Cobro', icon: '💶', variant: 'default' as const },
     { id: 'salir', label: 'Salir', icon: '↩️', variant: 'danger' as const }
   ];
+  $: acciones = isLlevadoo ? accionesBase.filter(a => a.id !== 'cobro') : accionesBase;
 
   // Estado resultado impresion
   let printResult: { type: 'ok' | 'error'; msg: string } | null = null;
@@ -356,8 +371,8 @@
       case 'algusto':
         showAlGusto = true;
         break;
-      case 'menu':
-        if (onOpenPanel) onOpenPanel(id);
+      case 'porcion':
+        showPorciones = true;
         break;
     }
   }
@@ -418,6 +433,17 @@
     });
 
     showAlGusto = false;
+  }
+
+  function handlePorcionSelect(n: number) {
+    const total = calcularPrecioPorciones(n);
+    const nombre = n === 1 ? 'Porción' : `${n} Porciones`;
+    addItem('porcion', 1, [], {
+      tipo: 'porcion',
+      nombre_override: nombre,
+      precio_override: total
+    });
+    showPorciones = false;
   }
 
   async function handleAccionClick(e: CustomEvent<{ id: string }>) {
@@ -516,7 +542,7 @@
           const data = (res as any)?.data;
           if (data?.nombre) cuentaNombre = data.nombre;
         } catch { /* usa nombre por defecto */ }
-      } else if (isLlevar) {
+      } else if (isLlevar || isLlevadoo) {
         try {
           const { mqttRequest } = await import('$lib/ui-core/mqtt-request');
           const res = await mqttRequest('cuenta', 'get', {
@@ -528,8 +554,8 @@
         } catch { /* usa nombre por defecto */ }
       }
 
-      // Auto-abrir cobro si se navega con ?view=cuenta
-      if (initialView === 'cuenta') {
+      // Auto-abrir cobro si se navega con ?view=cuenta (no para llevadoo)
+      if (initialView === 'cuenta' && !isLlevadoo) {
         showCobro = true;
       }
     }).catch((err) => {
@@ -711,6 +737,7 @@
       {cuenta_id}
       project_id={projectId}
       monto={$pedidoTotal}
+      items={$pedidoItems}
       pedido_ids={$pedidoItems.map(i => i.id)}
       visible={showCobro}
       on:close={handleCobroClose}
@@ -738,6 +765,24 @@
     />
   {/if}
 
+  <!-- Selector de porciones -->
+  {#if showPorciones}
+    <div class="porcion-overlay" on:click={() => showPorciones = false} on:keydown={(e) => e.key === 'Escape' && (showPorciones = false)}>
+      <div class="porcion-panel" on:click|stopPropagation>
+        <h3 class="porcion-title">🍕 Porciones</h3>
+        <p class="porcion-sub">4 porciones = pizza media (10.50€)</p>
+        <div class="porcion-grid">
+          {#each [1,2,3,4,5,6,7,8] as n}
+            <button class="porcion-btn" on:click={() => handlePorcionSelect(n)}>
+              <span class="porcion-n">{n}</span>
+              <span class="porcion-precio">{calcularPrecioPorciones(n).toFixed(2)}€</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Toast impresion -->
   {#if printResult}
     <div class="print-toast print-toast-{printResult.type}">
@@ -747,6 +792,68 @@
 </div>
 
 <style>
+  /* Selector porciones */
+  .porcion-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .porcion-panel {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 16px;
+    padding: 20px;
+    width: 320px;
+    text-align: center;
+  }
+  .porcion-title {
+    margin: 0 0 4px;
+    font-size: 1.1rem;
+    color: #fff;
+  }
+  .porcion-sub {
+    margin: 0 0 16px;
+    font-size: 0.75rem;
+    color: #888;
+  }
+  .porcion-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .porcion-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 8px;
+    border: 2px solid #333;
+    border-radius: 10px;
+    background: #222;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .porcion-btn:active {
+    transform: scale(0.95);
+    border-color: #0ea5e9;
+    background: rgba(14, 165, 233, 0.15);
+  }
+  .porcion-n {
+    font-size: 1.3rem;
+    font-weight: 800;
+  }
+  .porcion-precio {
+    font-size: 0.7rem;
+    color: #0ea5e9;
+    font-weight: 600;
+  }
+
   .comandero-screen {
     display: flex;
     flex-direction: column;

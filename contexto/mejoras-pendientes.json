@@ -1,6 +1,6 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-03-07",
+  "_updated": "2026-03-21",
   "mejoras": [
     {
       "id": "pantallas-cocina",
@@ -20,11 +20,12 @@
     },
     {
       "id": "sistema-impresion-multi-destino",
-      "titulo": "Sistema de impresión multi-destino con ESP32 como proxy local",
+      "titulo": "Sistema de impresión multi-destino con ESP32 como nodo MQTT directo",
       "prioridad": "alta",
-      "estado": "pendiente",
+      "estado": "parcial",
       "fecha_propuesta": "2026-03-05",
-      "descripcion": "Ampliar el módulo impresion para soportar múltiples impresoras (cocina, caja, barra) con routing por tipo de documento. ESP32 como proxy local entre VPS y impresoras en red local de la pizzería.",
+      "fecha_parcial": "2026-03-20",
+      "descripcion": "Sistema de impresión con ESP32 como nodo MQTT de primera clase. impresion v3.0 publica MQTT directo al ESP32 (sin perifericos). Autodescubrimiento. Firmware ESP32 refactorizado a arquitectura BASE+LOGIC con driver print-proxy. Backend simplificado: firmware-builder reemplaza esp32-dev. PARCIAL: falta routing por tipo documento, ticket_venta automático en cobro.procesado, UI de selección de impresora, hardware testing.",
       "contexto": {
         "problema": "El VPS no tiene acceso directo a las impresoras de la red local. Se necesita un puente.",
         "solucion": "ESP32 conectado al WiFi local se suscribe por MQTT al VPS y reenvía ESC/POS a impresoras por TCP o Bluetooth.",
@@ -66,18 +67,22 @@
           "nota": "Ya existe impresion.raw — ampliar para incluir destino"
         },
         "5_firmware_esp32": {
-          "que": "Firmware ESP32 — MQTT→TCP/BT bridge",
+          "que": "Firmware ESP32 — driver print-proxy (BASE + LOGIC architecture)",
+          "estado": "implementado",
+          "arquitectura": "BASE (plataforma universal: WiFi, MQTT, OTA, portal) + LOGIC (driver compilado via contrato enki_logic.h)",
+          "driver": "firmware/print-proxy/ — puente BLE con NimBLE para impresoras térmicas ESC/POS via MQTT",
+          "compilacion": "firmware-builder module escanea firmware/ y compila via PlatformIO (reemplaza esp32-dev)",
           "funciones": [
-            "Conectar WiFi local",
-            "Conectar MQTT broker del VPS (WSS con TLS)",
-            "Suscribirse a impresion/{proyecto}/print",
-            "Al recibir mensaje: decodificar base64, enviar por TCP o BT según destino",
-            "Publicar ACK en impresion/{proyecto}/printed"
+            "BASE: WiFi multi-red, MQTT con reconnect, portal web de config, NVS, OTA check, LED status, watchdog",
+            "LOGIC: Conexión BLE NimBLE, buffer ESC/POS chunked, suscripción a impresion/{project}/print/{device}",
+            "Publicar ACK en impresion/{project}/printed/{device}",
+            "Status periódico en enki/{project}/status/{device} con campo driver"
           ],
-          "lenguaje": "MicroPython o C/Arduino (lo de menos)",
+          "lenguaje": "C++ Arduino/PlatformIO",
           "hardware": "ESP32 estándar (~5€), WiFi+BT integrado",
           "limitacion_usb": "ESP32 NO soporta USB Host — no puede imprimir por USB. Usar impresoras WiFi/TCP o BT.",
-          "coste_estimado": "ESP32 ~5€ + impresora WiFi 80mm ~60€ + impresora WiFi 58mm ~35€"
+          "coste_estimado": "ESP32 ~5€ + impresora WiFi 80mm ~60€ + impresora WiFi 58mm ~35€",
+          "nota": "Requiere hardware testing. El firmware está compilable pero no validado en dispositivo real."
         },
         "6_config_destinos": {
           "que": "UI o JSON para configurar impresoras: nombre → IP:puerto o MAC BT",
@@ -104,7 +109,7 @@
         "2. Ticket cliente ESC/POS (formateador nuevo)",
         "3. Routing por tipo de documento",
         "4. Publicación MQTT con destino",
-        "5. Firmware ESP32 (proxy MQTT→TCP/BT)",
+        "5. Firmware ESP32 (driver print-proxy, BASE+LOGIC — IMPLEMENTADO, falta hardware test)",
         "6. UI de configuración de impresoras"
       ]
     },
@@ -563,6 +568,140 @@
       },
       "no_toca": "Cero cambios en módulos existentes — es puramente aditivo",
       "cuando_implementar": "Cuando el sistema de facturación esté estable y validado con uso real en Nonina"
+    },
+    {
+      "id": "gateways-mqtt-universal",
+      "titulo": "Gateways MQTT — convertir todo dispositivo en nodo MQTT",
+      "prioridad": "alta",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-20",
+      "descripcion": "Crear gateways software que traduzcan MQTT→protocolo nativo (TCP, BLE, USB, comando shell). Cada gateway se comporta como un 'ESP32 virtual' — mismo contrato MQTT, mismo autodescubrimiento, misma interfaz. El servidor no distingue entre ESP32 real y gateway software. Los gateways descubren dispositivos automáticamente (mDNS, BLE scan, lsusb, lpstat).",
+      "documento_detalle": "contexto/gateways-mqtt.json",
+      "componentes": {
+        "1_gateway_base": {
+          "que": "Clase base GatewayBase — conexión MQTT, autodescubrimiento, publicación de status, gestión de ACK",
+          "donde": "services/gateways/base.js"
+        },
+        "2_gateway_tcp": {
+          "que": "GatewayTCP — traduce MQTT→TCP socket. Autodescubrimiento via mDNS. Reutiliza transportes/tcp.js",
+          "donde": "services/gateways/tcp/",
+          "prioridad": "primera implementación — impresoras de red son el caso más común tras ESP32"
+        },
+        "3_gateway_cmd": {
+          "que": "GatewayCMD — traduce MQTT→comando shell (CUPS, lp). Autodescubrimiento via lpstat. Reutiliza transportes/comando.js",
+          "donde": "services/gateways/cmd/"
+        },
+        "4_gateway_ble": {
+          "que": "GatewayBLE — traduce MQTT→BLE/rfcomm. Para servidores con BT directo. Reutiliza transportes/ble.js",
+          "donde": "services/gateways/ble/"
+        },
+        "5_gateway_usb": {
+          "que": "GatewayUSB — traduce MQTT→USB. Implementar transporte USB real + gateway. Autodescubrimiento via lsusb.",
+          "donde": "services/gateways/usb/"
+        },
+        "6_simplificar_perifericos": {
+          "que": "Refactorizar perifericos — que consuma gateways MQTT en vez de transportes directos",
+          "donde": "modules/perifericos/"
+        }
+      },
+      "vision_escala": {
+        "pequeno": "1 ESP32 + opcional gateway-tcp",
+        "mediano": "ESP32 por local + gateway-tcp central (10 locales, 50 dispositivos)",
+        "grande": "Mezcla de ESP32 + gateways TCP/USB/CMD + broker bridging (300+ dispositivos)"
+      },
+      "cuando_implementar": "Después de validar que el sistema de impresión directa (ESP32 + impresion v3.0) es estable en producción"
+    },
+    {
+      "id": "llevadoo-direccion-callejero",
+      "titulo": "Llevadoo: campo de dirección con autocompletado de callejero",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "fecha_propuesta": "2026-03-24",
+      "descripcion": "Añadir campo de dirección editable en pedidos llevadoo con autocompletado basado en API de callejero. El campo debe estar accesible desde el comandero (header o modal) y la dirección debe propagarse en todo el recorrido del pedido (cuenta → cocina → ticket impreso).",
+      "contexto": {
+        "estado_actual": "El modelo de datos ya soporta 'direccion' en el pedido llevadoo (handleCrearPedido línea 303, evento llevadoo.pedido_recibido línea 323). Falta UI para introducirla y autocompletado.",
+        "nombre_pedido": "Implementado en 2026-03-24 — tap en header del comandero para editar nombre/número del pedido llevadoo"
+      },
+      "opciones_api_callejero": {
+        "cartociudad_ign": {
+          "nombre": "Cartociudad (IGN España)",
+          "url_autocomplete": "https://www.cartociudad.es/geocoder/api/geocoder/candidatesBySearch",
+          "coste": "gratuito",
+          "cobertura": "España — callejero oficial del Instituto Geográfico Nacional",
+          "ventajas": ["Callejero oficial español", "Gratuito sin límite conocido", "Muy preciso en direcciones españolas", "No requiere API key"],
+          "desventajas": ["Solo España", "API más lenta que alternativas comerciales", "Documentación escasa"],
+          "recomendacion": "Primera opción si solo se opera en España"
+        },
+        "google_places_autocomplete": {
+          "nombre": "Google Places Autocomplete",
+          "coste": "$2.83 por 1000 requests (Place Autocomplete)",
+          "cobertura": "global",
+          "ventajas": ["Máxima precisión", "Cobertura global", "Buena UX con session tokens"],
+          "desventajas": ["Requiere API key + facturación activa", "Coste por uso", "Términos de uso exigen mostrar Google Maps"],
+          "recomendacion": "Si se necesita máxima precisión y se acepta el coste"
+        },
+        "mapbox_geocoding": {
+          "nombre": "Mapbox Geocoding",
+          "coste": "100,000 requests gratis/mes, luego $5/1000",
+          "cobertura": "global",
+          "ventajas": ["Buen plan gratuito", "API rápida", "Sin obligación de mostrar mapa"],
+          "desventajas": ["Menos preciso que Google en calles españolas"],
+          "recomendacion": "Buen balance coste/calidad con plan gratuito generoso"
+        },
+        "nominatim_osm": {
+          "nombre": "Nominatim (OpenStreetMap)",
+          "coste": "gratuito (self-hosted o API pública con rate limit)",
+          "cobertura": "global — datos abiertos OSM",
+          "ventajas": ["Totalmente gratuito", "Self-hosteable", "Sin dependencia de terceros"],
+          "desventajas": ["API pública: max 1 req/segundo", "Menos completo que callejero oficial", "Self-hosting requiere servidor con ~50GB disco"],
+          "recomendacion": "Alternativa gratuita sin dependencias externas"
+        },
+        "photon_osm": {
+          "nombre": "Photon (basado en OSM)",
+          "coste": "gratuito (self-hosted)",
+          "cobertura": "global",
+          "ventajas": ["Muy rápido", "Diseñado para autocompletado", "Self-hosteable"],
+          "desventajas": ["Requiere servidor propio (~30GB RAM para import completo)", "Basado en datos OSM (mismas limitaciones)"],
+          "recomendacion": "Si se quiere autocompletado rápido self-hosted"
+        }
+      },
+      "recomendacion_nonina": "Cartociudad (gratuito, callejero oficial español) como primera opción. Nominatim como fallback.",
+      "implementacion_propuesta": {
+        "fase_1_ui": {
+          "titulo": "Campo de dirección en comandero llevadoo",
+          "tareas": [
+            "Añadir botón/sección de dirección en ComanderoScreen para llevadoo (debajo del nombre o en modal)",
+            "Input de texto con debounce (300ms) que consulta API de callejero",
+            "Dropdown con sugerencias de autocompletado",
+            "Al seleccionar: guardar dirección completa en la cuenta via MQTT (cuenta.update_direccion o reuse cuenta.actualizada)"
+          ]
+        },
+        "fase_2_backend": {
+          "titulo": "Propagación de dirección",
+          "tareas": [
+            "Añadir handler en cuentas para actualizar dirección (similar a handleRenameCuenta)",
+            "Llevar strategy escucha cambio de dirección y actualiza pedido.direccion",
+            "Dirección visible en tarjeta de llevadoo (LlevadooScreen)",
+            "Dirección incluida en comanda/ticket impreso"
+          ]
+        },
+        "fase_3_api": {
+          "titulo": "Integración con API de callejero",
+          "tareas": [
+            "Crear servicio frontend addressLookup(query) que llama a Cartociudad",
+            "Proxy backend si es necesario (CORS) o llamada directa desde frontend",
+            "Cache de búsquedas recientes en localStorage",
+            "Fallback si la API no responde: input libre sin autocompletado"
+          ]
+        }
+      },
+      "archivos_afectados": [
+        "frontend/src/lib/components/comandero/ComanderoScreen.svelte",
+        "frontend/src/lib/stores/cuentas.ts",
+        "modules/pizzepos/cuentas/index.js",
+        "modules/pizzepos/cuentas-canales/strategies/llevadoo.js"
+      ],
+      "cuando_implementar": "Cuando se valide el flujo de nombre/número de pedido y se decida qué API de callejero usar"
     }
   ]
 }

@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://enki.local/schemas/firmware-manager/events.json",
+  "title": "Firmware Manager Events",
+  "description": "Esquemas de eventos publicados por firmware-manager",
+
+  "definitions": {
+    "firmware_registered": {
+      "type": "object",
+      "required": ["type", "version", "sha256"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Tipo de firmware (ej: esp32-gateway-printer)"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+",
+          "description": "Versión semver"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Hash SHA256 del binario"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "ota_requested": {
+      "type": "object",
+      "required": ["device_id", "type", "target_version", "firmware_url", "timestamp"],
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+"
+        },
+        "firmware_url": {
+          "type": "string",
+          "pattern": "^/firmware/"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "ota_completed": {
+      "type": "object",
+      "required": ["device_id", "type", "to", "status", "completed_at"],
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": ["string", "null"],
+          "description": "Versión anterior (null si desconocida)"
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+"
+        },
+        "status": {
+          "type": "string",
+          "const": "completed"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "requested_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "ota_failed": {
+      "type": "object",
+      "required": ["device_id", "type", "to", "status", "reason", "failed_at"],
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": ["string", "null"]
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+"
+        },
+        "actual": {
+          "type": "string",
+          "description": "Versión reportada si hubo version_mismatch"
+        },
+        "status": {
+          "type": "string",
+          "const": "failed"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["timeout", "version_mismatch", "stale_cleanup"],
+          "description": "Razón del fallo"
+        },
+        "requested_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "failed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

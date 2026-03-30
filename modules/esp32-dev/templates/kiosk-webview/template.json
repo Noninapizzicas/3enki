@@ -1,0 +1,8 @@
+{
+  "name": "Kiosk WebView",
+  "description": "ESP32 como kiosk que carga una URL en pantalla táctil. WiFi + WebView + OTA + portal cautivo para config inicial.",
+  "category": "display",
+  "framework": "arduino",
+  "defaultBoard": "esp32-p4",
+  "boards": ["esp32-s3", "esp32-p4"]
+}

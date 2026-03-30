@@ -402,6 +402,59 @@
         },
         "required": ["carta_id", "categoria_id"]
       }
+    },
+    {
+      "name": "menu.save_carta",
+      "description": "Guarda una carta completa a disco. Recibe la carta como objeto JSON con meta, categorias y productos. Si ya existe, la sobreescribe.",
+      "handler": "toolSaveCarta",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta": {
+            "type": "object",
+            "description": "Objeto carta con meta (id, nombre), categorias[] y productos[]"
+          },
+          "carta_id": {
+            "type": "string",
+            "description": "ID de carta a sobreescribir (alternativa a meta.id)"
+          }
+        },
+        "required": ["carta"]
+      }
+    },
+    {
+      "name": "menu.list_versions",
+      "description": "Lista el historial de versiones de una carta (max 50). Cada versión incluye timestamp y número de productos.",
+      "handler": "toolListVersions",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta"
+          }
+        },
+        "required": ["carta_id"]
+      }
+    },
+    {
+      "name": "menu.restore_version",
+      "description": "Restaura una carta a una versión anterior. La versión actual se guarda antes de restaurar.",
+      "handler": "toolRestoreVersion",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta"
+          },
+          "version_file": {
+            "type": "string",
+            "description": "Nombre del fichero de versión (de menu.list_versions)"
+          }
+        },
+        "required": ["carta_id", "version_file"]
+      }
     }
   ],
 

@@ -1,0 +1,10 @@
+{
+  "id": "esp32",
+  "name": "ESP32",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 2,
+  "routes": ["/dispositivos"],
+  "icon": "⚡",
+  "label": "ESP32"
+}

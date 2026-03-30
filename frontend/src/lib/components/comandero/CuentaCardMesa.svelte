@@ -24,6 +24,7 @@
   $: color = TIPO_COLORS[cuenta.tipo] || '#3b82f6';
   $: icon = TIPO_ICONS[cuenta.tipo] || '\uD83C\uDFE0';
   $: isGlovo = cuenta.tipo === 'glovo';
+  $: isLlevadoo = cuenta.tipo === 'llevadoo';
   $: glovoListo = isGlovo && cuenta.estado === 'listo';
 
   // ===== TIMERS =====
@@ -105,14 +106,17 @@
   }).length;
 
   // Acción principal: botón entregar grande
-  // Visible cuando pedido listo, entregado o cobrado
-  $: showEntregarAction = cuenta.estado === 'listo' || cuenta.estado === 'entregado' || cuenta.estado === 'para_cobrar' || cuenta.estado === 'cobrado';
+  // Llevadoo: visible desde en_preparacion (no pasa por cobro)
+  // Resto: visible cuando pedido listo, entregado o cobrado
+  $: showEntregarAction = isLlevadoo
+    ? ['en_preparacion', 'para_recoger', 'listo'].includes(cuenta.estado)
+    : ['listo', 'entregado', 'para_cobrar', 'cobrado'].includes(cuenta.estado);
   // Pendiente sin items = se puede borrar
   $: showDeleteBtn = cuenta.estado === 'pendiente' && cuenta.items === 0;
 
   async function handleEntregarAction() {
-    if (cuenta.pagado) {
-      // Pagado → marcar entregado (cierra la cuenta via strategy)
+    if (cuenta.pagado || cuenta.tipo === 'llevadoo') {
+      // Pagado o llevadoo (pago externo) → marcar entregado directamente
       await marcarEntregado(projectId, cuenta.id);
     } else {
       // No pagado → abrir cobros
@@ -170,9 +174,11 @@
     {:else}
       <span class="tipo-icon">{icon}</span>
     {/if}
-    <span class="pago-pill" class:pagado={cuenta.pagado}>
-      {cuenta.pagado ? '\uD83D\uDCB0' : '\u274C'}
-    </span>
+    {#if !isLlevadoo}
+      <span class="pago-pill" class:pagado={cuenta.pagado}>
+        {cuenta.pagado ? '\uD83D\uDCB0' : '\u274C'}
+      </span>
+    {/if}
     <span class="nombre">{cuenta.nombre}</span>
     <span class="hora">{cuenta.hora}</span>
     {#if countdownStr}
@@ -255,12 +261,13 @@
       {#if showEntregarAction}
         <button
           class="entregar-btn"
-          class:entregar-cobrar={!cuenta.pagado}
-          class:entregar-cerrar={cuenta.pagado}
+          class:entregar-cobrar={!isLlevadoo && !cuenta.pagado}
+          class:entregar-cerrar={!isLlevadoo && cuenta.pagado}
+          class:entregar-llevadoo={isLlevadoo}
           on:click|stopPropagation={handleEntregarAction}
-          title={cuenta.pagado ? 'Cerrar cuenta' : 'Cobrar primero'}
+          title={isLlevadoo ? 'Entregar al repartidor' : cuenta.pagado ? 'Cerrar cuenta' : 'Cobrar primero'}
         >
-          {cuenta.pagado ? '\u2705' : '\uD83D\uDCB0'}
+          {isLlevadoo ? '\uD83D\uDEF5' : cuenta.pagado ? '\u2705' : '\uD83D\uDCB0'}
         </button>
       {/if}
       {#if showDeleteBtn}
@@ -657,6 +664,13 @@
     border-color: #22c55e;
     background: rgba(34, 197, 94, 0.15);
     box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+  }
+
+  .entregar-llevadoo {
+    border-color: #a855f7;
+    background: rgba(168, 85, 247, 0.2);
+    box-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
+    animation: blink-soft 1.5s ease-in-out infinite;
   }
 
   /* Delete para cuentas vacías */

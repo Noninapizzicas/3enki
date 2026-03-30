@@ -1,0 +1,27 @@
+{
+  "id": "rustic-italian",
+  "nombre": "Rústico Italiano",
+  "description": "Estética de trattoria italiana. Fondo textura papel/madera via CSS. Colores terracota y oliva. Tipografía serif cálida. Sensación artesanal y casera.",
+  "color_palette": {
+    "primary": "#8B4513",
+    "secondary": "#6B8E23",
+    "background": "#f5f0e8",
+    "text": "#3d2b1f",
+    "accent": "#c75000",
+    "muted": "#8b7355"
+  },
+  "fonts": {
+    "heading": "Crimson Text",
+    "body": "Lato",
+    "accent": "Caveat"
+  },
+  "layout_type": "two_column",
+  "style_notes": "Textura de lino CSS como fondo. Borde decorativo doble en terracota. Categorías con subrayado manuscrito (Caveat). Ingredientes en itálica. Sensación de carta escrita a mano pero legible. Iconos de ingredientes como emojis sutiles.",
+  "decorations": {
+    "background_texture": "linen texture + warm gradient",
+    "category_headers": "fuente handwritten (Caveat), color terracota, subrayado ondulado",
+    "price_style": "terracota, con €, fuente serif",
+    "border": "borde doble terracota, esquinas sin redondear",
+    "ornaments": "hoja de olivo ᚛ o flor de lis ⚜ como separadores"
+  }
+}

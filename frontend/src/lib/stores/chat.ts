@@ -14,6 +14,7 @@ import { publish, subscribe, mqttRequest } from '$lib/ui-core';
 import type { Message, Attachment } from '$lib/ui-core';
 import { attachments, clearAttachments } from './attachments';
 import { activeProjectId } from './projects';
+import { activeProvider, activeModel } from './workspace';
 import { notifyError } from './ui';
 import { generateUUID } from '$lib/utils';
 import { getPageContextSnapshot } from './page-context';
@@ -101,6 +102,10 @@ export async function sendMessage(content: string): Promise<void> {
     // Capturar contexto de página (si hay) para inyectar en el system prompt
     const currentPageContext = getPageContextSnapshot();
 
+    // Provider y modelo seleccionados (si hay)
+    const currentProvider = get(activeProvider);
+    const currentModel = get(activeModel);
+
     const response = await mqttRequest<{
       conversationId: string;
       user_message: Message;
@@ -115,6 +120,8 @@ export async function sendMessage(content: string): Promise<void> {
         path: a.path,
         name: a.name
       })),
+      provider: currentProvider?.id || undefined,
+      model: currentModel || undefined,
       pageContext: currentPageContext || undefined
     }, { timeout: 180000 }); // 180s para respuestas de IA con herramientas
 

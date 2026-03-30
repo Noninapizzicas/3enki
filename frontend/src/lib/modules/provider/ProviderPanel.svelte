@@ -18,8 +18,9 @@
   // Espejo de ai-gateway/module.json providers
   // Fuente de verdad: modules/ai-gateway/module.json config.providers
   const providers: Provider[] = [
+    { id: 'claude-cli', name: 'Claude Code 4.6 (1M)', icon: '🟣', models: ['sonnet', 'opus', 'haiku'] },
     { id: 'deepseek', name: 'DeepSeek', icon: '🔮', models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'] },
-    { id: 'anthropic', name: 'Anthropic', icon: '🧠', models: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'] },
+    { id: 'anthropic', name: 'Anthropic (API)', icon: '🧠', models: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'] },
     { id: 'openai', name: 'OpenAI', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
     { id: 'groq', name: 'Groq', icon: '⚡', models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
     { id: 'gemini', name: 'Google Gemini', icon: '💎', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },

@@ -405,21 +405,20 @@
     },
     {
       "name": "menu.save_carta",
-      "description": "Guarda una carta completa a disco. Recibe la carta como objeto JSON con meta, categorias y productos. Si ya existe, la sobreescribe.",
+      "description": "Guarda una carta a disco. Si se pasa carta_id, guarda la carta que ya está en memoria (generada previamente con menu.generate o modificada con add_product/update_product). Si se pasa nombre, crea una carta vacía nueva lista para añadirle productos.",
       "handler": "toolSaveCarta",
       "parameters": {
         "type": "object",
         "properties": {
-          "carta": {
-            "type": "object",
-            "description": "Objeto carta con meta (id, nombre), categorias[] y productos[]"
-          },
           "carta_id": {
             "type": "string",
-            "description": "ID de carta a sobreescribir (alternativa a meta.id)"
+            "description": "ID de carta existente en memoria a guardar a disco"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre para crear una carta nueva vacía (si no se pasa carta_id)"
           }
-        },
-        "required": ["carta"]
+        }
       }
     },
     {

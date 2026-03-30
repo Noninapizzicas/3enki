@@ -340,6 +340,44 @@ class MenuGeneratorModule {
     };
   }
 
+  async toolDeleteCarta({ carta_id, project_id }) {
+    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+
+    // Sanitizar
+    if (carta_id.includes('..') || carta_id.includes('/')) return { status: 400, error: 'carta_id inválido' };
+
+    const cartas = this.getCartas(project_id);
+    const carta = cartas.get(carta_id);
+    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+
+    const nombre = carta.meta?.nombre || carta_id;
+
+    // Guardar última versión antes de eliminar
+    const dir = this.cartasDirFor(project_id);
+    if (dir) {
+      await this.saveVersion(carta_id, dir);
+      // Eliminar fichero de disco
+      try {
+        await fs.unlink(path.join(dir, `${carta_id}.json`));
+      } catch (_) {}
+    }
+
+    // Eliminar de memoria
+    cartas.delete(carta_id);
+
+    this.logger.info('menu-generator.carta.deleted', { carta_id, project_id, nombre });
+
+    return {
+      status: 200,
+      data: {
+        carta_id,
+        nombre,
+        message: `Carta "${nombre}" eliminada. La última versión se guardó en el historial por si necesitas restaurarla.`
+      }
+    };
+  }
+
   async loadCartasFromDisk(projectId) {
     const dir = this.cartasDirFor(projectId);
     if (!dir) return;
@@ -1505,55 +1543,43 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
    * una ruta absoluta local, o una URL externa.
    */
   /**
-   * Guarda una carta completa a disco. El diseñador puede construir la carta
-   * pieza a pieza y llamar a esta tool para persistirla.
+   * Guarda una carta a disco.
+   * - Con carta_id: guarda la carta que ya está en memoria
+   * - Con nombre (sin carta_id): crea carta vacía nueva
    */
-  async toolSaveCarta({ carta, carta_id, project_id }) {
-    // Tolerar carta como string JSON (algunos LLMs la serializan)
-    if (typeof carta === 'string') {
-      try { carta = JSON.parse(carta); } catch (_) {
-        return { status: 400, error: 'El parámetro "carta" debe ser un objeto JSON válido' };
-      }
-    }
-    if (!carta || typeof carta !== 'object') return { status: 400, error: 'Se requiere "carta" como objeto con meta, categorias y productos' };
-
-    // Asegurar meta
-    if (!carta.meta) carta.meta = {};
-    if (carta_id) carta.meta.id = carta_id;
-    if (!carta.meta.id) carta.meta.id = `carta_${Date.now().toString(36)}`;
-    if (!carta.meta.nombre) carta.meta.nombre = 'Carta sin nombre';
-    if (!carta.meta.created_at) carta.meta.created_at = new Date().toISOString();
-    carta.meta.updated_at = new Date().toISOString();
-
-    // Validar estructura mínima
-    if (!Array.isArray(carta.categorias)) carta.categorias = [];
-    if (!Array.isArray(carta.productos)) carta.productos = [];
-
-    // Resolver project_id — fallback al primer proyecto activo o default
+  async toolSaveCarta({ carta_id, nombre, project_id }) {
     if (!project_id) {
       const firstProject = this.projectPaths.keys().next().value;
       project_id = firstProject || 'default';
     }
 
-    // Guardar en memoria
     const cartas = this.getCartas(project_id);
-    cartas.set(carta.meta.id, carta);
+    let carta;
 
-    // Guardar en disco — con fallback a ruta por defecto
-    const dir = this.cartasDirFor(project_id) || path.join(process.cwd(), 'storage', 'pizzepos', 'cartas');
-    try {
-      await fs.mkdir(dir, { recursive: true });
-      const filePath = path.join(dir, `${carta.meta.id}.json`);
-
-      // Versionado antes de sobreescribir
-      await this.saveVersion(carta.meta.id, dir);
-
-      await fs.writeFile(filePath, JSON.stringify(carta, null, 2), 'utf-8');
-    } catch (err) {
-      return { status: 500, error: `Error guardando carta: ${err.message}` };
+    if (carta_id) {
+      // Guardar carta existente en memoria a disco
+      carta = cartas.get(carta_id);
+      if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada en memoria. Usa menu.list_cartas para ver las disponibles.` };
+    } else {
+      // Crear carta nueva vacía
+      carta_id = `carta_${Date.now().toString(36)}`;
+      carta = {
+        meta: {
+          id: carta_id,
+          nombre: nombre || 'Carta sin nombre',
+          generado_desde: 'manual',
+          created_at: new Date().toISOString()
+        },
+        categorias: [],
+        productos: []
+      };
+      cartas.set(carta_id, carta);
     }
 
-    // Notificar — payload completo igual que las demás tools
+    carta.meta.updated_at = new Date().toISOString();
+    await this.saveCartaToDisk(carta, project_id);
+
+    // Notificar
     await this.eventBus.publish('carta.generada', { ...carta, project_id });
 
     this.logger.info('menu-generator.carta.saved', {
@@ -1570,7 +1596,6 @@ Devuelve SOLO un JSON con este formato exacto, sin explicaciones:
         nombre: carta.meta.nombre,
         categorias: carta.categorias.length,
         productos: carta.productos.length,
-        path: `storage/pizzepos/cartas/${carta.meta.id}.json`,
         message: `Carta "${carta.meta.nombre}" guardada con ${carta.productos.length} productos en ${carta.categorias.length} categorías.`
       }
     };

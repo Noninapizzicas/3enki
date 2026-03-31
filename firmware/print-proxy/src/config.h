@@ -11,7 +11,7 @@
 
 // --- BASE: Identidad del firmware ---
 #define DRIVER_TYPE             "print-proxy"
-#define FIRMWARE_VERSION        "3.1.0"
+#define FIRMWARE_VERSION        "3.2.0"
 
 // --- BASE: Defaults identidad (solo si no hay config en NVS) ---
 #define DEFAULT_DEVICE_ID       "enki-device-1"
@@ -35,7 +35,7 @@
 // --- BASE: Hardware (no configurables desde portal) ---
 #define LED_PIN                 2       // LED integrado del ESP32
 #define PORTAL_PORT             80      // puerto del portal web
-#define MAX_PAYLOAD_SIZE        4096    // buffer compartido para payloads grandes
+#define MAX_PAYLOAD_SIZE        8192    // buffer compartido para payloads grandes (8KB para tickets con logo)
 #define WDT_TIMEOUT_SEC         120     // watchdog timeout 2 min
 #define STATUS_INTERVAL_MS      30000   // cada 30s publica status
 
@@ -43,7 +43,7 @@
 #define OTA_CHECK_INTERVAL_MS   300000  // cada 5 min comprueba OTA
 
 // --- BASE: MQTT ---
-#define MQTT_BUFFER_SIZE        4352    // MAX_PAYLOAD_SIZE + 256 overhead
+#define MQTT_BUFFER_SIZE        8448    // MAX_PAYLOAD_SIZE + 256 overhead
 
 // --- NVS ---
 #define NVS_NAMESPACE           "enki"

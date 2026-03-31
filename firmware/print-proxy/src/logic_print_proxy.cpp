@@ -3,6 +3,12 @@
  *
  * Recibe ESC/POS en base64 por MQTT, decodifica, envía por BLE.
  * Implementa el contrato enki_logic.h.
+ *
+ * v3.1 — Fixes de estabilidad:
+ *   - Keepalive BLE: isConnected() en vez de ESC@ (no resetea impresora)
+ *   - Reconnect: solo conexión directa por MAC, sin scan bloqueante
+ *   - Scan BLE: solo desde portal web o primer setup (no en loop)
+ *   - on_message: reconecta por MAC antes de fallar un job
  */
 
 #include "enki_logic.h"
@@ -31,11 +37,12 @@ static char topicPrinted[80];
 
 // Timers
 static unsigned long lastBleRetryMs = 0;
-static unsigned long lastBleActivityMs = 0;
+static unsigned long lastBleCheckMs = 0;
 
 // Contadores
 static uint32_t printCount = 0;
 static uint32_t errorCount = 0;
+static uint32_t reconnectCount = 0;
 
 // ============================================
 // Config del driver (NVS)
@@ -58,16 +65,24 @@ static void saveDriverConfig() {
 }
 
 // ============================================
-// BLE — Conexión con impresora
+// BLE — Conexión directa por MAC (no bloquea)
 // ============================================
 
+/**
+ * Conecta a la impresora por dirección MAC.
+ * Tarda ~2-3s (vs 10s de scan). No bloquea el loop más de lo necesario.
+ */
 static bool connectPrinterByAddress(NimBLEAddress addr) {
-  Serial.printf("[BLE] Conectando directo a %s...\n", addr.toString().c_str());
+  Serial.printf("[BLE] Conectando a %s...\n", addr.toString().c_str());
 
   if (bleClient && bleClient->isConnected()) bleClient->disconnect();
   if (bleClient) NimBLEDevice::deleteClient(bleClient);
 
   bleClient = NimBLEDevice::createClient();
+
+  // Timeout de conexión de 5 segundos (default es 30s)
+  bleClient->setConnectTimeout(5);
+
   if (!bleClient->connect(addr)) {
     Serial.println("[BLE] Fallo conexion directa");
     return false;
@@ -77,21 +92,7 @@ static bool connectPrinterByAddress(NimBLEAddress addr) {
 
   NimBLERemoteService* svc = bleClient->getService(printerSvcUuid);
   if (!svc) {
-    Serial.printf("[BLE] Servicio %s no encontrado. Servicios disponibles:\n", printerSvcUuid);
-    auto* svcs = bleClient->getServices(true);
-    if (svcs) {
-      for (auto& s : *svcs) {
-        Serial.printf("[BLE]   Svc: %s\n", s->getUUID().toString().c_str());
-        auto chars = s->getCharacteristics(true);
-        if (chars) {
-          for (auto& c : *chars) {
-            Serial.printf("[BLE]     Char: %s [%s%s%s]\n",
-              c->getUUID().toString().c_str(),
-              c->canRead() ? "R" : "", c->canWrite() ? "W" : "", c->canNotify() ? "N" : "");
-          }
-        }
-      }
-    }
+    Serial.printf("[BLE] Servicio %s no encontrado\n", printerSvcUuid);
     bleClient->disconnect();
     return false;
   }
@@ -110,32 +111,47 @@ static bool connectPrinterByAddress(NimBLEAddress addr) {
   }
 
   printerReady = true;
-  lastBleActivityMs = millis();
-  Serial.printf("[BLE] Impresora lista (write%s)\n",
-    printChar->canWriteNoResponse() ? " no-response" : " con response");
+  lastBleCheckMs = millis();
+  reconnectCount++;
+  Serial.printf("[BLE] Impresora lista (write%s) — reconexiones: %d\n",
+    printChar->canWriteNoResponse() ? " no-response" : " con response", reconnectCount);
   enki_led_blink(3, 200);
   return true;
 }
 
-static bool connectPrinter() {
-  if (strlen(printerName) == 0) {
-    Serial.println("[BLE] No hay impresora configurada. Configura desde el portal web.");
+/**
+ * Reconecta a la impresora usando la MAC guardada en NVS.
+ * Si no hay MAC guardada, no hace nada (esperará scan desde portal web).
+ * NUNCA hace scan — la reconexión es rápida (~2-3s).
+ */
+static bool reconnectPrinter() {
+  if (strlen(printerAddr) == 0) {
+    // Sin MAC guardada — no podemos reconectar sin scan.
+    // El usuario debe configurar desde el portal web.
     return false;
   }
 
-  printerReady = false;
+  NimBLEAddress savedAddr(printerAddr);
+  return connectPrinterByAddress(savedAddr);
+}
 
-  // 1. Si tenemos MAC guardada, intentar conexión directa (sin escaneo)
-  if (strlen(printerAddr) > 0) {
-    Serial.printf("[BLE] MAC guardada: %s — conectando directo...\n", printerAddr);
-    NimBLEAddress savedAddr(printerAddr);
-    if (connectPrinterByAddress(savedAddr)) {
-      return true;
-    }
-    Serial.println("[BLE] Conexion directa fallo, cayendo a escaneo...");
+/**
+ * Primer setup: escanea por nombre, guarda MAC, conecta.
+ * Solo se usa desde portal web o primer arranque. NUNCA en loop.
+ */
+static bool scanAndConnect() {
+  if (strlen(printerName) == 0) {
+    Serial.println("[BLE] No hay impresora configurada.");
+    return false;
   }
 
-  // 2. Escanear por nombre
+  // Primero intentar por MAC guardada (rápido)
+  if (strlen(printerAddr) > 0) {
+    if (reconnectPrinter()) return true;
+    Serial.println("[BLE] Conexion directa fallo, escaneando...");
+  }
+
+  // Scan por nombre (bloqueante, solo setup)
   Serial.printf("[BLE] Escaneando '%s' (%d seg)...\n", printerName, BLE_SCAN_SECONDS);
 
   NimBLEScan* scan = NimBLEDevice::getScan();
@@ -159,7 +175,7 @@ static bool connectPrinter() {
     return false;
   }
 
-  // Guardar MAC en NVS para reconexión directa la próxima vez
+  // Guardar MAC para reconexión directa (sin scan)
   String foundAddr = printer->getAddress().toString().c_str();
   if (strcmp(printerAddr, foundAddr.c_str()) != 0) {
     strlcpy(printerAddr, foundAddr.c_str(), sizeof(printerAddr));
@@ -173,6 +189,9 @@ static bool connectPrinter() {
   return connectPrinterByAddress(addr);
 }
 
+/**
+ * Envía datos ESC/POS a la impresora BLE en chunks.
+ */
 static bool sendToPrinter(const uint8_t* data, size_t len) {
   if (!printerReady || !bleClient || !bleClient->isConnected() || !printChar) {
     Serial.println("[BLE] Impresora no conectada");
@@ -198,7 +217,7 @@ static bool sendToPrinter(const uint8_t* data, size_t len) {
   }
 
   enki_led_off();
-  lastBleActivityMs = millis();
+  lastBleCheckMs = millis();
   Serial.printf("[BLE] Enviado OK (%d bytes)\n", sent);
   return true;
 }
@@ -252,7 +271,7 @@ static void handleScan() {
 
 static void handleTestPrint() {
   if (!printerReady || !bleClient || !bleClient->isConnected()) {
-    if (!connectPrinter()) {
+    if (!scanAndConnect()) {
       webServer.send(200, "application/json", "{\"ok\":false,\"error\":\"Impresora no conectada\"}");
       return;
     }
@@ -307,16 +326,15 @@ static void handlePostDriverConfig() {
 
   saveDriverConfig();
 
-  // Reconectar impresora con nueva config
   if (strlen(printerName) > 0) {
-    connectPrinter();
+    scanAndConnect();
   }
 
   webServer.send(200, "application/json", "{\"ok\":true}");
 }
 
 // ============================================
-// Contrato: las 4 funciones que la BASE llama
+// Contrato: las 5 funciones que la BASE llama
 // ============================================
 
 void logic_setup() {
@@ -343,16 +361,15 @@ void logic_setup() {
   webServer.on("/api/printer",      HTTP_POST, handlePostDriverConfig);
 
   // 6. Conectar impresora BLE (solo si NO estamos en portal mode)
-  //    En portal mode el scan BLE bloquea ~10s y puede interferir con WiFi AP
   if (!portalMode && strlen(printerName) > 0) {
-    if (!connectPrinter()) {
+    if (!scanAndConnect()) {
       Serial.println("[PRINT] Impresora no disponible. Configura desde el portal web.");
     }
   }
 }
 
 void logic_loop() {
-  // Resuscribir si MQTT se reconectó O si la suscripción no se confirmó
+  // ── MQTT: re-suscribir si se reconectó ──────
   static bool wasConnected = false;
   static bool subscribed = false;
   bool isConnected = enki_mqtt_connected();
@@ -371,42 +388,41 @@ void logic_loop() {
   }
   wasConnected = isConnected;
 
-  // Detectar desconexión BLE
-  if (printerReady && bleClient && !bleClient->isConnected()) {
-    Serial.println("[BLE] Impresora desconectada");
-    printerReady = false;
-    lastBleRetryMs = millis();
-  }
-
-  // Reintentar conexión BLE periódicamente
-  if (!printerReady && strlen(printerName) > 0) {
+  // ── BLE: verificar conexión (non-destructive) ──
+  //
+  // FIX v3.1: En vez de enviar ESC@ como keepalive (que RESETEA la impresora
+  // y puede causar desconexión), simplemente comprobamos isConnected().
+  // NimBLE mantiene la conexión BLE activa internamente.
+  //
+  if (printerReady && bleClient) {
     unsigned long now = millis();
-    if (now - lastBleRetryMs > BLE_RECONNECT_MS) {
-      lastBleRetryMs = now;
-      Serial.println("[BLE] Reintentando conexion...");
-      connectPrinter();
-    }
-  }
+    if (now - lastBleCheckMs > BLE_KEEPALIVE_MS) {
+      lastBleCheckMs = now;
 
-  // Keepalive BLE: enviar pulso para evitar que la impresora entre en standby
-  if (printerReady && bleClient && bleClient->isConnected()) {
-    unsigned long now = millis();
-    if (now - lastBleActivityMs > BLE_KEEPALIVE_MS) {
-      lastBleActivityMs = now;
-      // ESC @ (init) — resetea formato sin imprimir nada visible
-      static const uint8_t keepalive[] = { 0x1B, 0x40 };
-      bool ok = printChar->writeValue(keepalive, sizeof(keepalive), false);
-      if (!ok) {
-        Serial.println("[BLE] Keepalive fallido, marcando desconectada");
+      if (!bleClient->isConnected()) {
+        Serial.println("[BLE] Impresora desconectada (detectado en check)");
         printerReady = false;
         lastBleRetryMs = millis();
       }
     }
   }
+
+  // ── BLE: reconectar por MAC (rápido, ~2-3s) ──
+  //
+  // FIX v3.1: Solo reconecta por MAC guardada. NUNCA escanea en loop.
+  // El scan bloqueante de 10s impedía que MQTT procesara mensajes.
+  //
+  if (!printerReady && strlen(printerAddr) > 0) {
+    unsigned long now = millis();
+    if (now - lastBleRetryMs > BLE_RECONNECT_MS) {
+      lastBleRetryMs = now;
+      Serial.println("[BLE] Reconectando por MAC...");
+      reconnectPrinter();
+    }
+  }
 }
 
 void logic_on_message(const char* topic, JsonDocument& doc) {
-  // Solo procesamos mensajes de nuestro topic de impresión
   if (strcmp(topic, topicPrint) != 0) return;
 
   const char* jobId   = doc["job_id"] | "no-id";
@@ -435,9 +451,10 @@ void logic_on_message(const char* topic, JsonDocument& doc) {
     return;
   }
 
+  // Si la impresora está desconectada, intentar reconectar por MAC (rápido)
   if (!printerReady || !bleClient || !bleClient->isConnected()) {
-    Serial.println("[PRINT] Impresora desconectada, reconectando...");
-    if (!connectPrinter()) {
+    Serial.println("[PRINT] Impresora desconectada, reconectando por MAC...");
+    if (!reconnectPrinter()) {
       errorCount++;
       publishResult(jobId, false, "Printer not connected");
       return;
@@ -457,11 +474,12 @@ void logic_on_message(const char* topic, JsonDocument& doc) {
 }
 
 void logic_status(JsonDocument& doc) {
-  doc["printer_ready"] = printerReady;
-  doc["printer_name"]  = printerName;
-  doc["printer_addr"]  = printerAddr;
-  doc["print_count"]   = printCount;
-  doc["error_count"]   = errorCount;
+  doc["printer_ready"]   = printerReady;
+  doc["printer_name"]    = printerName;
+  doc["printer_addr"]    = printerAddr;
+  doc["print_count"]     = printCount;
+  doc["error_count"]     = errorCount;
+  doc["reconnect_count"] = reconnectCount;
 }
 
 void logic_portal_status(JsonDocument& doc) {

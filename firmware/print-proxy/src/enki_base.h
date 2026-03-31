@@ -2,25 +2,19 @@
 #define ENKI_BASE_H
 
 /**
- * Enki BASE — Plataforma universal ESP32
+ * Enki BASE — Config NVS + servicios enki_* para la LÓGICA
  *
- * Gestiona: WiFi multi-red, MQTT, Portal web, NVS, OTA, Watchdog, LED.
- * La lógica específica se conecta mediante el contrato enki_logic.h.
+ * Este archivo define la estructura de config y la API que la LÓGICA consume.
+ * Los subsistemas (WiFi, MQTT, OTA, Portal) están en sus propios archivos.
  */
 
 #include <Arduino.h>
-#include <WiFi.h>
-#include <DNSServer.h>
-#include <WebServer.h>
 #include <Preferences.h>
-#include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <esp_task_wdt.h>
-#include <HTTPUpdate.h>
 #include "config.h"
 
 // ─────────────────────────────────────────────
-// Config genérica en RAM (cargada de NVS al boot)
+// Config en RAM (cargada de NVS al boot)
 // ─────────────────────────────────────────────
 
 struct WifiEntry {
@@ -41,48 +35,52 @@ struct EnkiBaseConfig {
   char mqttUser[32];
   char mqttPass[64];
   // OTA
-  char otaUrl[128];           // URL del servidor de firmware
+  char otaUrl[128];
   // Estado (no persistido)
   bool configured;
 };
 
 // ─────────────────────────────────────────────
-// Acceso global a la BASE
+// Acceso global
 // ─────────────────────────────────────────────
 
 extern EnkiBaseConfig baseCfg;
-extern Preferences    prefs;
-extern WebServer      webServer;
-extern PubSubClient   mqtt;
-extern WiFiClient     wifiClient;
-extern DNSServer      dnsServer;
-extern bool           portalMode;
 extern uint8_t        payloadBuffer[];
 
 // ─────────────────────────────────────────────
-// Funciones de la BASE
+// Config NVS
 // ─────────────────────────────────────────────
 
-// Config NVS
 void baseConfigLoad();
 void baseConfigSave();
 
-// WiFi
-bool baseSetupWiFi();
+// ─────────────────────────────────────────────
+// Servicios enki_* (contrato para la LÓGICA)
+// ─────────────────────────────────────────────
 
 // MQTT
-void baseSetupMQTT();
-void baseConnectMQTT();
+void enki_mqtt_publish(const char* topic, const char* payload);
+bool enki_mqtt_subscribe(const char* topic);
+bool enki_mqtt_connected();
 
-// Portal web (endpoints base: config, status, wifi-scan, reset)
-void basePortalSetup();
+// Identidad
+const char* enki_device_id();
+const char* enki_project_id();
 
-// OTA
-void baseCheckOTA();
+// Config custom del driver (NVS)
+void        enki_config_set(const char* key, const char* value);
+const char* enki_config_get(const char* key, const char* defaultValue = "");
+void        enki_config_set_u16(const char* key, uint16_t value);
+uint16_t    enki_config_get_u16(const char* key, uint16_t defaultValue = 0);
 
-// Loop helpers
-void baseHandleWifiReconnect();
-void baseHandleMqttReconnect();
-void basePublishStatus();
+// Utilidades
+void enki_led_blink(int times, int ms = 100);
+void enki_led_on();
+void enki_led_off();
+void enki_request_restart();
+
+// Buffer compartido (payloads grandes: ESC/POS, binarios)
+uint8_t* enki_buffer();
+size_t   enki_buffer_size();
 
 #endif // ENKI_BASE_H

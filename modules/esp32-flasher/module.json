@@ -88,6 +88,33 @@
     { "domain": "flash", "action": "history", "handler": "handleHistory" }
   ],
 
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/debug-control",
+      "handler": "handleDebugControl",
+      "description": "Activar/desactivar debug remoto de un ESP32 via MQTT"
+    },
+    {
+      "method": "GET",
+      "path": "/debug-stream",
+      "handler": "handleDebugStream",
+      "description": "Long-poll para recibir líneas de debug de un ESP32"
+    },
+    {
+      "method": "POST",
+      "path": "/serial-relay",
+      "handler": "handleSerialRelay",
+      "description": "Recibe output serial del CLI local y lo publica como evento"
+    },
+    {
+      "method": "GET",
+      "path": "/cli-download",
+      "handler": "handleCliDownload",
+      "description": "Descarga el script enki-esp32.js para usar localmente"
+    }
+  ],
+
   "config": {
     "esptool_path": "esptool",
     "platformio_path": "platformio",

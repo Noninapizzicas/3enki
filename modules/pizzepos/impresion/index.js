@@ -95,7 +95,7 @@ const ANCHOS = {
 class ImpresionModule {
   constructor() {
     this.name = 'impresion';
-    this.version = '3.0.0';
+    this.version = '3.1.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -136,6 +136,14 @@ class ImpresionModule {
 
     // Referencia al listener MQTT para cleanup
     this._onMqttMessage = null;
+
+    // TTL: marcar impresoras offline si no reportan en 90s (3x status interval de 30s)
+    this._ttlInterval = null;
+    this._ttlMs = 90000;
+
+    // Pending jobs: job_id → { resolve, reject, timer, deviceId, timestamp }
+    this._pendingJobs = new Map();
+    this._jobTimeoutMs = 15000;
   }
 
   // ==========================================
@@ -204,14 +212,18 @@ class ImpresionModule {
     try {
       await mqtt.subscribe('impresion/+/status/+');
       await mqtt.subscribe('enki/+/status/+');
+      await mqtt.subscribe('impresion/+/printed/+');
       this.logger.info('impresion.autodiscovery.iniciado', {
-        topics: ['impresion/+/status/+', 'enki/+/status/+']
+        topics: ['impresion/+/status/+', 'enki/+/status/+', 'impresion/+/printed/+']
       });
     } catch (err) {
       this.logger.warn('impresion.autodiscovery.subscribe_error', {
         error: err.message
       });
     }
+
+    // TTL: cada 30s comprobar impresoras que no han reportado en 90s
+    this._ttlInterval = setInterval(() => this._checkImpresorasTTL(), 30000);
   }
 
   _detenerAutoDescubrimiento() {
@@ -220,6 +232,15 @@ class ImpresionModule {
       mqtt.removeListener('message', this._onMqttMessage);
       this._onMqttMessage = null;
     }
+    if (this._ttlInterval) {
+      clearInterval(this._ttlInterval);
+      this._ttlInterval = null;
+    }
+    // Limpiar pending jobs
+    for (const [jobId, job] of this._pendingJobs) {
+      clearTimeout(job.timer);
+    }
+    this._pendingJobs.clear();
   }
 
   /**
@@ -228,6 +249,13 @@ class ImpresionModule {
    *         enki/{projectId}/status/{deviceId}
    */
   _handleStatusMessage(topic, payload) {
+    // ACK de impresión: impresion/{project}/printed/{device}
+    const ackMatch = topic.match(/^impresion\/([^/]+)\/printed\/([^/]+)$/);
+    if (ackMatch) {
+      this._handlePrintAck(topic, payload);
+      return;
+    }
+
     const match = topic.match(/^(?:impresion|enki)\/([^/]+)\/status\/([^/]+)$/);
     if (!match) return;
 
@@ -273,6 +301,72 @@ class ImpresionModule {
         ip: data.ip,
         printer_ready: data.printer_ready
       });
+    }
+  }
+
+  // ==========================================
+  // ACK handling — saber si el ESP32 imprimió
+  // ==========================================
+
+  _handlePrintAck(topic, payload) {
+    let data;
+    try {
+      data = typeof payload === 'string' ? JSON.parse(payload)
+           : Buffer.isBuffer(payload) ? JSON.parse(payload.toString())
+           : payload;
+    } catch {
+      return;
+    }
+
+    const jobId = data.job_id;
+    if (!jobId) return;
+
+    const pending = this._pendingJobs.get(jobId);
+    if (!pending) {
+      // ACK de un job que no estamos esperando (ok, solo logear)
+      this.logger.info('impresion.ack_recibido', {
+        job_id: jobId, success: data.success, device: data.device_id
+      });
+      return;
+    }
+
+    // Resolver la promesa del job
+    clearTimeout(pending.timer);
+    this._pendingJobs.delete(jobId);
+
+    if (data.success) {
+      this.logger.info('impresion.ack_ok', {
+        job_id: jobId, device: pending.deviceId,
+        latency_ms: Date.now() - pending.timestamp
+      });
+      pending.resolve({ success: true, job_id: jobId });
+    } else {
+      this.logger.warn('impresion.ack_error', {
+        job_id: jobId, device: pending.deviceId, error: data.error
+      });
+      pending.resolve({ success: false, job_id: jobId, error: data.error });
+    }
+  }
+
+  // ==========================================
+  // TTL — marcar impresoras offline si no reportan
+  // ==========================================
+
+  _checkImpresorasTTL() {
+    const now = Date.now();
+    for (const [deviceId, imp] of this.impresoras) {
+      if (!imp.online) continue;
+
+      const lastSeen = new Date(imp.last_seen).getTime();
+      if (now - lastSeen > this._ttlMs) {
+        imp.online = false;
+        imp.printer_ready = false;
+        this.logger.warn('impresion.impresora.ttl_expirado', {
+          device_id: deviceId,
+          last_seen: imp.last_seen,
+          ttl_ms: this._ttlMs
+        });
+      }
     }
   }
 
@@ -977,18 +1071,47 @@ class ImpresionModule {
 
     const topic = `impresion/${pid}/print/${deviceId}`;
     const buffer = Buffer.from(contenido, 'binary');
+    const jobId = `job_${Date.now().toString(36)}_${crypto.randomBytes(2).toString('hex')}`;
     const payload = JSON.stringify({
-      job_id: `job_${Date.now().toString(36)}`,
+      job_id: jobId,
       data: buffer.toString('base64')
+    });
+
+    // Publicar y esperar ACK (con timeout)
+    const ackPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this._pendingJobs.delete(jobId);
+        this.logger.warn('impresion.ack_timeout', {
+          job_id: jobId, device_id: deviceId, timeout_ms: this._jobTimeoutMs
+        });
+        resolve({ success: false, job_id: jobId, error: 'ACK timeout' });
+      }, this._jobTimeoutMs);
+
+      this._pendingJobs.set(jobId, {
+        resolve, timer, deviceId, timestamp: Date.now()
+      });
     });
 
     await mqtt.publish(topic, payload, { qos: 1 });
 
     this.logger.info('impresion.enviado', {
       topic,
+      job_id: jobId,
       device_id: deviceId,
       bytes: buffer.length
     });
+
+    // Esperar ACK — no bloquea otros eventos, pero el caller sabe si llegó
+    const result = await ackPromise;
+
+    if (!result.success) {
+      this.logger.warn('impresion.job_fallido', {
+        job_id: jobId, device_id: deviceId, error: result.error
+      });
+      this.internalMetrics.errores++;
+    }
+
+    return result;
   }
 
   // ==========================================

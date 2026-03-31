@@ -57,12 +57,12 @@
         class="preview-iframe"
         title="Vista previa de carta"
         srcdoc={state.html}
-        sandbox="allow-same-origin allow-modals"
+        sandbox="allow-same-origin allow-modals allow-popups"
       ></iframe>
     {:else}
       <div class="empty-state">
         <span class="empty-icon">📄</span>
-        <p>Usa <strong>carta.render</strong> en el chat para generar una carta de impresión.</p>
+        <p>Usa <strong>design.save</strong> en el chat para generar una carta de impresión profesional.</p>
       </div>
     {/if}
   </div>

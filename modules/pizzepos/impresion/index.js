@@ -818,6 +818,9 @@ class ImpresionModule {
       lineas.push(CMD.ALIGN_CENTER + CMD.BOLD_ON + detalleCuenta + CMD.BOLD_OFF);
     }
 
+    // ── Espacio entre pedido y producto (~2cm) ──
+    lineas.push(`${ESC}d\x04`);  // feed 4 líneas ≈ 20mm
+
     // ── Producto ──
     const prod = cantidad > 1 ? this.truncar(`${cantidad}x ${nombre}`) : this.truncar(nombre);
     lineas.push(CMD.DOUBLE_ON + CMD.BOLD_ON + prod + CMD.BOLD_OFF + CMD.DOUBLE_OFF);

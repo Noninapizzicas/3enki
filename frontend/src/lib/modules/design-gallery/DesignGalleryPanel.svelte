@@ -44,7 +44,7 @@
     try {
       const projectId = $page.params.project_id;
       const res = await mqttRequest<any>('menu', 'list', { project_id: projectId });
-      cartas = (res.data?.cartas || []).filter((c: any) => c.estado === 'generado');
+      cartas = (res.data?.cartas || []).filter((c: any) => c.estado === 'generada');
     } catch {}
     loadingCartas = false;
   }

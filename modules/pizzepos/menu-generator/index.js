@@ -774,7 +774,7 @@ class MenuGeneratorModule {
         productos: 0, categorias: 0, created_at: p.created_at
       })),
       ...cartas.map(c => ({
-        id: c.meta.id, nombre: c.meta.nombre, estado: 'generado',
+        id: c.meta.id, nombre: c.meta.nombre, estado: 'generada',
         productos: c.productos.length, categorias: c.categorias.length,
         created_at: c.meta.created_at
       }))

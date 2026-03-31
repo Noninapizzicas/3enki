@@ -13,6 +13,7 @@
 #include "enki_base.h"
 #include "enki_logic.h"
 #include "enki_ota.h"
+#include "enki_debug.h"
 
 WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
@@ -120,6 +121,15 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
+  // Debug control → activar/desactivar debug remoto
+  // (topic parsed as raw string since debugHandleControl needs char*)
+  char rawPayload[256];
+  if (length < sizeof(rawPayload)) {
+    memcpy(rawPayload, payload, length);
+    rawPayload[length] = '\0';
+    debugHandleControl(topic, rawPayload);
+  }
+
   // Delegar a la LÓGICA
   logic_on_message(topic, doc);
 }
@@ -176,7 +186,10 @@ void mqttConnect() {
     mqtt.subscribe(topicShadowDelta, 1);
     Serial.printf("[MQTT] Suscrito a: %s\n", topicShadowDelta);
 
-    // 3. Reported state
+    // 3. Debug control topic
+    debugSetup();
+
+    // 4. Reported state
     mqttPublishReported();
 
     // 4. Flush cola offline

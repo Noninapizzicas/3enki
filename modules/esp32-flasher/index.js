@@ -49,6 +49,11 @@ class ESP32FlasherModule {
 
     // Último build completado (para auto-suggest)
     this.lastBuild = null;
+
+    // Debug remoto: buffer de líneas recibidas por MQTT, keyed por device_id
+    // device_id → { lines: string[], waiters: Function[] }
+    this.debugBuffers = new Map();
+    this._onDebugMessage = null;
   }
 
   // ─── Lifecycle ────────────────────────────────────────────
@@ -67,6 +72,9 @@ class ESP32FlasherModule {
     // Métricas iniciales
     this.metrics.gauge('flash.active.count', 0);
     this.metrics.gauge('flash.monitors.count', 0);
+
+    // Suscribir a debug output de ESP32s
+    this._startDebugListener();
 
     this.logger.info('module.loaded', {
       module: this.name,
@@ -893,6 +901,179 @@ class ESP32FlasherModule {
     this.flashHistory.unshift(entry);
     if (this.flashHistory.length > this.config.max_history) {
       this.flashHistory.length = this.config.max_history;
+    }
+  }
+
+  // ─── Debug remoto: MQTT listener ─────────────────────────
+
+  _startDebugListener() {
+    const mqtt = this.eventBus?.mqtt;
+    if (!mqtt || !mqtt.isConnected) return;
+
+    this._onDebugMessage = (topic, payload) => {
+      const match = topic.match(/^enki\/([^/]+)\/debug\/([^/]+)$/);
+      if (!match) return;
+
+      const [, , deviceId] = match;
+      let data;
+      try {
+        data = typeof payload === 'string' ? JSON.parse(payload)
+             : Buffer.isBuffer(payload) ? JSON.parse(payload.toString())
+             : payload;
+      } catch { return; }
+
+      if (!data.lines || !Array.isArray(data.lines)) return;
+
+      // Almacenar líneas y notificar waiters (long-poll)
+      let buf = this.debugBuffers.get(deviceId);
+      if (!buf) {
+        buf = { lines: [], waiters: [] };
+        this.debugBuffers.set(deviceId, buf);
+      }
+
+      buf.lines.push(...data.lines);
+      // Limitar buffer a 500 líneas
+      if (buf.lines.length > 500) {
+        buf.lines = buf.lines.slice(-500);
+      }
+
+      // Resolver waiters del long-poll
+      const lines = buf.lines.splice(0);
+      for (const waiter of buf.waiters) {
+        waiter(lines);
+      }
+      buf.waiters = [];
+
+      // Publicar como evento interno para la UI web
+      this.eventBus.publish('flash.serial_output', {
+        port: `remote:${deviceId}`,
+        line: data.lines.join('\n'),
+        device_id: deviceId,
+        timestamp: new Date().toISOString()
+      }).catch(() => {});
+    };
+
+    mqtt.on('message', this._onDebugMessage);
+    mqtt.subscribe('enki/+/debug/+').catch(() => {});
+
+    this.logger.info('flash.debug_listener.started');
+  }
+
+  // ─── HTTP API: Debug control ──────────────────────────────
+
+  /**
+   * POST /debug-control
+   * Body: { device, project, enable: true/false }
+   *
+   * Publica un mensaje MQTT para activar/desactivar debug en el ESP32.
+   */
+  async handleDebugControl(req) {
+    const body = req.body;
+    const { device, project, enable } = body || {};
+
+    if (!device || !project) {
+      return req.res.status(400).json({ error: 'device y project requeridos' });
+    }
+
+    const mqtt = this.eventBus?.mqtt;
+    if (!mqtt || !mqtt.isConnected) {
+      return req.res.status(500).json({ error: 'MQTT no disponible' });
+    }
+
+    const topic = `enki/${project}/debug/${device}/control`;
+    await mqtt.publish(topic, JSON.stringify({ enable: !!enable }));
+
+    this.logger.info('flash.debug_control', { device, project, enable: !!enable });
+    req.res.json({ ok: true, device, enable: !!enable });
+  }
+
+  /**
+   * GET /debug-stream?device=ID&project=PROJECT
+   *
+   * Long-poll: espera hasta 30s por líneas de debug del ESP32.
+   * Retorna inmediatamente si hay líneas pendientes.
+   */
+  async handleDebugStream(req) {
+    const device = req.query?.device;
+    const project = req.query?.project;
+
+    if (!device) {
+      return req.res.status(400).json({ error: 'device query param requerido' });
+    }
+
+    let buf = this.debugBuffers.get(device);
+    if (!buf) {
+      buf = { lines: [], waiters: [] };
+      this.debugBuffers.set(device, buf);
+    }
+
+    // Si hay líneas pendientes, devolver inmediatamente
+    if (buf.lines.length > 0) {
+      const lines = buf.lines.splice(0);
+      return req.res.json({ lines, device });
+    }
+
+    // Long-poll: esperar hasta 30s
+    const timeout = setTimeout(() => {
+      const idx = buf.waiters.indexOf(resolve);
+      if (idx >= 0) buf.waiters.splice(idx, 1);
+      req.res.json({ lines: [], device });
+    }, 30000);
+
+    let resolve;
+    const promise = new Promise(r => { resolve = r; });
+    buf.waiters.push(resolve);
+
+    const lines = await promise;
+    clearTimeout(timeout);
+    req.res.json({ lines, device });
+  }
+
+  /**
+   * POST /serial-relay
+   * Body: { port, device, project, lines: string[] }
+   *
+   * Recibe output serial del CLI local y lo publica como evento.
+   */
+  async handleSerialRelay(req) {
+    const { port, device, project, lines } = req.body || {};
+    if (!lines || !Array.isArray(lines)) {
+      return req.res.status(400).json({ error: 'lines array requerido' });
+    }
+
+    for (const line of lines) {
+      this.eventBus.publish('flash.serial_output', {
+        port: port || 'cli-relay',
+        device_id: device,
+        line,
+        source: 'cli',
+        timestamp: new Date().toISOString()
+      }).catch(() => {});
+    }
+
+    req.res.json({ ok: true, relayed: lines.length });
+  }
+
+  /**
+   * GET /cli-download
+   *
+   * Descarga el script enki-esp32.js para usar localmente.
+   */
+  async handleCliDownload(req) {
+    const cliPath = path.join(__dirname, '..', '..', 'cli', 'enki-esp32.js');
+
+    try {
+      await fs.promises.access(cliPath, fs.constants.R_OK);
+      const stat = await fs.promises.stat(cliPath);
+
+      req.res.setHeader('Content-Type', 'application/javascript');
+      req.res.setHeader('Content-Disposition', 'attachment; filename="enki-esp32.js"');
+      req.res.setHeader('Content-Length', stat.size);
+
+      const stream = fs.createReadStream(cliPath);
+      stream.pipe(req.res);
+    } catch (err) {
+      req.res.status(500).json({ error: 'CLI no encontrado: ' + err.message });
     }
   }
 }

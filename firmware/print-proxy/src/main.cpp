@@ -23,6 +23,7 @@
 #include "enki_mqtt.h"
 #include "enki_ota.h"
 #include "enki_portal.h"
+#include "enki_debug.h"
 #include "enki_logic.h"
 #include <esp_task_wdt.h>
 
@@ -64,6 +65,9 @@ void setup() {
       mqttSetup();
       mqtt.setServer(baseCfg.mqttHost, baseCfg.mqttPort);
       mqttConnect();
+
+      // 4b. Debug remoto
+      debugSetup();
     } else {
       Serial.println("\n[!] No configurado. Abre el portal web para configurar.");
     }
@@ -109,6 +113,9 @@ void loop() {
 
   // OTA
   otaHandle();
+
+  // Debug remoto
+  debugLoop();
 
   // LÓGICA
   logic_loop();

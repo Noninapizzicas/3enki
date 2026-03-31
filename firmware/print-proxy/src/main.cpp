@@ -1,21 +1,31 @@
 /**
  * Enki ESP32 Firmware — Arquitectura BASE + LÓGICA
  *
- * main.cpp es el punto de entrada que cablea la BASE (plataforma)
- * con la LÓGICA (driver específico del dispositivo).
+ * main.cpp es el punto de entrada que cablea los subsistemas
+ * de la BASE con la LÓGICA (driver específico del dispositivo).
  *
- * BASE:   WiFi multi-red, MQTT, Portal web, NVS, OTA, Watchdog, LED
- * LÓGICA: Print Proxy (MQTT ←→ BLE thermal printer bridge)
+ * BASE (5 módulos):
+ *   enki_base    — Config NVS + servicios enki_* para la LÓGICA
+ *   enki_wifi    — WiFi multi-red + reconexión non-blocking + portal AP
+ *   enki_mqtt    — MQTT + cola offline + birth/LWT + shadow + status
+ *   enki_ota     — OTA via shadow delta + legacy polling
+ *   enki_portal  — Portal web + captive portal detection
+ *
+ * LÓGICA: Print Proxy (MQTT <-> BLE thermal printer bridge)
  *
  * Para crear un nuevo tipo de dispositivo, reemplaza
  * logic_print_proxy.cpp por tu propio logic_*.cpp
- * que implemente las 4 funciones del contrato enki_logic.h.
+ * que implemente las 5 funciones del contrato enki_logic.h.
  */
 
 #include "enki_base.h"
+#include "enki_wifi.h"
+#include "enki_mqtt.h"
+#include "enki_ota.h"
+#include "enki_portal.h"
 #include "enki_logic.h"
+#include <esp_task_wdt.h>
 
-// Timer para portal timeout
 static unsigned long portalStartMs = 0;
 
 void setup() {
@@ -28,18 +38,18 @@ void setup() {
   Serial.println("  Arquitectura BASE + LOGICA");
   Serial.println("========================================\n");
 
-  // Watchdog — reinicia si se queda colgado
+  // Watchdog
   esp_task_wdt_init(WDT_TIMEOUT_SEC, true);
   esp_task_wdt_add(NULL);
 
-  // 1. Cargar config base de NVS
+  // 1. Config NVS
   baseConfigLoad();
 
-  // 2. WiFi multi-red o portal cautivo
-  baseSetupWiFi();
+  // 2. WiFi
+  wifiSetup();
 
-  // 3. Portal web (endpoints base)
-  basePortalSetup();
+  // 3. Portal web
+  portalSetup();
   webServer.begin();
 
   if (portalMode) {
@@ -51,61 +61,55 @@ void setup() {
 
     // 4. MQTT
     if (baseCfg.configured) {
-      baseSetupMQTT();
+      mqttSetup();
       mqtt.setServer(baseCfg.mqttHost, baseCfg.mqttPort);
-      baseConnectMQTT();
+      mqttConnect();
     } else {
       Serial.println("\n[!] No configurado. Abre el portal web para configurar.");
     }
   }
 
   // 5. Inicializar la LÓGICA (driver)
-  // Siempre se llama, incluso en portal mode, para que registre sus endpoints web
   logic_setup();
 
   Serial.println("[READY] Enki operativo\n");
 }
 
 void loop() {
-  // Watchdog feed
   esp_task_wdt_reset();
 
-  // DNS para captive portal (solo en modo AP)
+  // DNS captive portal
   if (portalMode) {
     dnsServer.processNextRequest();
   }
 
-  // Servir portal web
+  // Portal web
   webServer.handleClient();
 
-  // Si estamos en modo portal, comprobar timeout
+  // Portal timeout
   if (portalMode) {
-    // Resetear timer si acaba de entrar en portal (fallback runtime)
     if (portalStartMs == 0) portalStartMs = millis();
-
     if (millis() - portalStartMs > WIFI_PORTAL_TIMEOUT) {
-      Serial.println("[BASE] Portal timeout — reiniciando para reintentar WiFi...");
+      Serial.println("[BASE] Portal timeout — reiniciando...");
       delay(500);
       ESP.restart();
     }
     return;
   }
-
-  // Si salimos de portal mode, resetear timer para la próxima vez
   portalStartMs = 0;
 
-  // --- BASE: WiFi monitoring (non-blocking) ---
-  baseHandleWifiReconnect();
+  // WiFi reconnect (non-blocking)
+  wifiHandleReconnect();
 
-  // --- BASE: MQTT reconnect + loop ---
-  baseHandleMqttReconnect();
+  // MQTT reconnect + loop
+  mqttHandleReconnect();
 
-  // --- BASE: Status periódico ---
-  basePublishStatus();
+  // Status periódico
+  mqttPublishStatus();
 
-  // --- BASE: OTA check ---
-  baseCheckOTA();
+  // OTA
+  otaHandle();
 
-  // --- LÓGICA: ciclo del driver ---
+  // LÓGICA
   logic_loop();
 }

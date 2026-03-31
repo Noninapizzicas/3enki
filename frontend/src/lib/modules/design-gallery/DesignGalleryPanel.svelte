@@ -9,6 +9,7 @@
    * Consumidor READ-ONLY — no modifica datos de carta.
    */
   import { onMount, onDestroy } from 'svelte';
+  import { page } from '$app/stores';
   import {
     cartaDesignStore,
     loadCartaForDesign,
@@ -41,8 +42,9 @@
   async function loadCartasList() {
     loadingCartas = true;
     try {
-      const res = await mqttRequest<any>('menu', 'list');
-      cartas = (res.data?.cartas || []).filter((c: any) => c.estado === 'generada');
+      const projectId = $page.params.project_id;
+      const res = await mqttRequest<any>('menu', 'list', { project_id: projectId });
+      cartas = (res.data?.cartas || []).filter((c: any) => c.estado === 'generado');
     } catch {}
     loadingCartas = false;
   }

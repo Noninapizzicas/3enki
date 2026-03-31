@@ -158,33 +158,39 @@ export function clearDesignError(): void {
 // SUBSCRIPTIONS
 // =============================================================================
 
-let cleanupFns: (() => void)[] = [];
+let cleanupFn: (() => void) | null = null;
+let initialized = false;
 
 export function initCartaDesignSubscriptions(): () => void {
-  cleanupFns.forEach(fn => fn());
-  cleanupFns = [];
+  // Si ya está inicializado, solo devolver cleanup sin reinicializar
+  if (initialized && cleanupFn) {
+    return cleanupFn;
+  }
+
+  initialized = true;
 
   // Escuchar cuando menu-generator actualiza la carta
-  cleanupFns.push(
-    mqttSubscribe('carta.generada', (_topic, payload: any) => {
-      const cartaId = payload?.meta?.id || payload?.carta_id;
-      cartaDesignStore.update(s => {
-        if (s.cartaId === cartaId) {
-          // La carta que estamos diseñando cambió → marcar como stale
-          return { ...s, cartaLoaded: false };
-        }
-        return s;
-      });
-    })
-  );
+  const unsubscribe = mqttSubscribe('carta.generada', (_topic, payload: any) => {
+    const cartaId = payload?.meta?.id || payload?.carta_id;
+    cartaDesignStore.update(s => {
+      if (s.cartaId === cartaId) {
+        // La carta que estamos diseñando cambió → marcar como stale
+        return { ...s, cartaLoaded: false };
+      }
+      return s;
+    });
+  });
 
   // Cargar perfiles
   loadProfiles();
 
-  return () => {
-    cleanupFns.forEach(fn => fn());
-    cleanupFns = [];
+  // Guardar cleanup function para cuando se desmonte
+  cleanupFn = () => {
+    initialized = false;
+    unsubscribe();
   };
+
+  return cleanupFn;
 }
 
 // =============================================================================

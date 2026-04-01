@@ -818,6 +818,9 @@ class ImpresionModule {
       lineas.push(CMD.ALIGN_CENTER + CMD.BOLD_ON + detalleCuenta + CMD.BOLD_OFF);
     }
 
+    // ── Espacio entre pedido y producto (~2cm) ──
+    lineas.push(`${ESC}d\x04`);  // feed 4 líneas ≈ 20mm
+
     // ── Producto ──
     const prod = cantidad > 1 ? this.truncar(`${cantidad}x ${nombre}`) : this.truncar(nombre);
     lineas.push(CMD.DOUBLE_ON + CMD.BOLD_ON + prod + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
@@ -867,17 +870,13 @@ class ImpresionModule {
     const lineas = [];
     const w = this.lineWidth;
 
-    lineas.push(CMD.INIT);
-    lineas.push(CMD.CODEPAGE_437);
-
+    lineas.push(CMD.INIT + CMD.CODEPAGE_437);
     lineas.push(CMD.ALIGN_CENTER);
 
     // Logo
     lineas.push(CMD.DOUBLE_ON + CMD.BOLD_ON + 'NO NI NA' + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
-    lineas.push('pizzicas');
-    lineas.push('643283034');
-
-    lineas.push(this.doubleSep);
+    lineas.push('pizzicas  |  643283034');
+    lineas.push(this.separator);
 
     lineas.push(CMD.ALIGN_LEFT);
     const { ref: refCuenta, detalle: detalleCuenta } = this.extraerRefCuenta(cuenta_id, canal);
@@ -886,18 +885,12 @@ class ImpresionModule {
     const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
     if (refCuenta) {
-      lineas.push(CMD.BOLD_ON);
-      lineas.push(refCuenta);
-      if (detalleCuenta) lineas.push(detalleCuenta);
-      lineas.push(CMD.BOLD_OFF);
+      lineas.push(CMD.BOLD_ON + refCuenta + (detalleCuenta ? `  ${detalleCuenta}` : '') + CMD.BOLD_OFF);
     }
     lineas.push(`${fecha} ${hora}`);
     lineas.push(this.separator);
 
-    lineas.push(CMD.BOLD_ON);
-    lineas.push(this.lineaColumnas('PRODUCTO', 'EUR', w));
-    lineas.push(CMD.BOLD_OFF);
-    lineas.push(this.separator);
+    lineas.push(CMD.BOLD_ON + this.lineaColumnas('PRODUCTO', 'EUR', w) + CMD.BOLD_OFF);
 
     for (const item of items) {
       const qty = item.cantidad > 1 ? `${item.cantidad}x ` : '';
@@ -926,44 +919,27 @@ class ImpresionModule {
       lineas.push(this.lineaColumnas('Propina', this.formatPrecio(propina), w));
     }
 
-    lineas.push(this.doubleSep);
-    lineas.push(CMD.DOUBLE_ON);
-    lineas.push(CMD.BOLD_ON);
-    lineas.push(this.lineaColumnas('TOTAL', this.formatPrecio(total), w));
-    lineas.push(CMD.BOLD_OFF);
-    lineas.push(CMD.DOUBLE_OFF);
+    lineas.push(this.separator);
+    lineas.push(CMD.DOUBLE_ON + CMD.BOLD_ON + this.lineaColumnas('TOTAL', this.formatPrecio(total), w) + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
 
     if (metodo_pago) {
-      lineas.push(this.separator);
       const metodos = {
-        efectivo: 'EFECTIVO',
-        tarjeta: 'TARJETA',
-        bizum: 'BIZUM',
-        transferencia: 'TRANSFERENCIA',
-        mixto: 'PAGO MIXTO',
-        link_pago: 'LINK DE PAGO',
-        qr: 'QR'
+        efectivo: 'EFECTIVO', tarjeta: 'TARJETA', bizum: 'BIZUM',
+        transferencia: 'TRANSFERENCIA', mixto: 'PAGO MIXTO',
+        link_pago: 'LINK DE PAGO', qr: 'QR'
       };
-      lineas.push(`Pago: ${metodos[metodo_pago] || metodo_pago.toUpperCase()}`);
-      if (referencia_pago) {
-        lineas.push(CMD.FONT_SMALL);
-        lineas.push(`Ref: ${referencia_pago}`);
-        lineas.push(CMD.FONT_NORMAL);
-      }
+      lineas.push(`Pago: ${metodos[metodo_pago] || metodo_pago.toUpperCase()}` +
+        (referencia_pago ? `  Ref: ${referencia_pago}` : ''));
     }
 
-    lineas.push(CMD.FEED_3);
-    lineas.push(CMD.ALIGN_CENTER);
-    lineas.push(CMD.FONT_SMALL);
+    lineas.push('');
+    lineas.push(CMD.ALIGN_CENTER + CMD.FONT_SMALL);
     lineas.push('SABOR EN CLAVE DE SOL S.COOP');
     lineas.push('CIF: F24747164');
-    lineas.push('C/ Narciso Yepes, 12');
-    lineas.push('30840 Alhama de Murcia');
-    lineas.push('Gracias por su visita');
-    lineas.push(CMD.FONT_NORMAL);
+    lineas.push('C/ Narciso Yepes, 12 - 30840 Alhama');
+    lineas.push('Gracias por su visita' + CMD.FONT_NORMAL);
 
-    lineas.push(CMD.FEED_5);
-    lineas.push(CMD.PARTIAL_CUT);
+    lineas.push(CMD.FEED_3 + CMD.PARTIAL_CUT);
 
     return lineas.join('\n');
   }

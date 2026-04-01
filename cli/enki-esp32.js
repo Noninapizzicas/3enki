@@ -198,10 +198,10 @@ async function cmdMonitor(args) {
     process.exit(1);
   }
 
-  // Abrir puerto para lectura
+  // Abrir puerto bidireccional (un solo fd)
   const fd = fs.openSync(port, 'r+');
-  const readStream = fs.createReadStream(null, { fd, encoding: 'utf-8' });
-  const writeStream = fs.createWriteStream(null, { fd: fs.openSync(port, 'w'), encoding: 'utf-8' });
+  const readStream = fs.createReadStream(null, { fd, encoding: 'utf-8', autoClose: false });
+  const writeStream = fs.createWriteStream(null, { fd, encoding: 'utf-8', autoClose: false });
 
   let lineBuffer = '';
 

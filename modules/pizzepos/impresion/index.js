@@ -1077,17 +1077,19 @@ class ImpresionModule {
       bytes: buffer.length
     });
 
-    // Esperar ACK — no bloquea otros eventos, pero el caller sabe si llegó
-    const result = await ackPromise;
+    // ACK en background — no bloquea al caller para no serializar envíos
+    // Si llegan 10 items a la vez, todos se envían inmediatamente.
+    // El resultado del ACK se logea pero no bloquea.
+    ackPromise.then(result => {
+      if (!result.success) {
+        this.logger.warn('impresion.job_fallido', {
+          job_id: jobId, device_id: deviceId, error: result.error
+        });
+        this.internalMetrics.errores++;
+      }
+    });
 
-    if (!result.success) {
-      this.logger.warn('impresion.job_fallido', {
-        job_id: jobId, device_id: deviceId, error: result.error
-      });
-      this.internalMetrics.errores++;
-    }
-
-    return result;
+    return { job_id: jobId, device_id: deviceId, sent: true };
   }
 
   // ==========================================

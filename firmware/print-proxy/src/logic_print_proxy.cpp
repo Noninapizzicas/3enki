@@ -13,6 +13,8 @@
 
 #include "enki_logic.h"
 #include "enki_base.h"
+#include "enki_portal.h"
+#include "enki_wifi.h"
 #include <NimBLEDevice.h>
 #include "mbedtls/base64.h"
 

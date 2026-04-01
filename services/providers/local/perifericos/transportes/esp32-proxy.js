@@ -52,7 +52,7 @@ class TransporteESP32Proxy extends TransporteBase {
   }
 
   async enviar(datos, opciones) {
-    const { esp32_device_id } = this.config;
+    const { esp32_device_id, project_id } = this.config;
     if (!esp32_device_id) {
       return { ok: false, error: 'esp32_device_id no configurado' };
     }
@@ -61,17 +61,26 @@ class TransporteESP32Proxy extends TransporteBase {
       return { ok: false, error: 'eventBus no disponible' };
     }
 
-    const buffer = Buffer.isBuffer(datos) ? datos : Buffer.from(datos, 'binary');
-    const topic = `periferico/${esp32_device_id}/send`;
+    const mqtt = this.eventBus.mqtt;
+    if (!mqtt || !mqtt.isConnected) {
+      return { ok: false, error: 'MQTT no disponible' };
+    }
 
-    const payload = {
-      data: buffer.toString('base64'),
-      ts: Date.now(),
-      id: `prf_${Date.now().toString(36)}`
-    };
+    const buffer = Buffer.isBuffer(datos) ? datos : Buffer.from(datos, 'binary');
+    const pid = project_id || 'enki';
+
+    // Publicar al topic que el ESP32 REALMENTE escucha:
+    //   impresion/{project}/print/{device}
+    // (NO periferico/{device}/send — ese topic no existe en el firmware)
+    const topic = `impresion/${pid}/print/${esp32_device_id}`;
+
+    const payload = JSON.stringify({
+      job_id: `test_${Date.now().toString(36)}`,
+      data: buffer.toString('base64')
+    });
 
     try {
-      await this.eventBus.publish(topic, payload);
+      await mqtt.publish(topic, payload, { qos: 1 });
 
       this.logger.info('transporte.esp32-proxy.enviado', {
         esp32_device_id,

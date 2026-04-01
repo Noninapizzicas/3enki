@@ -15,6 +15,7 @@ import {
   MqttRequestError
 } from '$lib/ui-core/mqtt-request';
 import { updatePageStateBatch } from '$lib/stores/page-context';
+import { getActiveProject } from '$lib/stores/workspace';
 
 // =============================================================================
 // TYPES
@@ -173,7 +174,10 @@ export async function loadCartas(): Promise<void> {
   menuGeneratorStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const response = await mqttRequest<ListResponse>('menu', 'list');
+    const project = getActiveProject();
+    const response = await mqttRequest<ListResponse>('menu', 'list', {
+      project_id: project?.id
+    });
 
     menuGeneratorStore.update(s => ({
       ...s,

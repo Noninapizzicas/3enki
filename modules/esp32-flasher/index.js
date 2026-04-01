@@ -1014,19 +1014,26 @@ class ESP32FlasherModule {
     }
 
     // Long-poll: esperar hasta 30s
-    const timeout = setTimeout(() => {
-      const idx = buf.waiters.indexOf(resolve);
-      if (idx >= 0) buf.waiters.splice(idx, 1);
-      req.res.json({ lines: [], device });
-    }, 30000);
+    let resolved = false;
 
-    let resolve;
-    const promise = new Promise(r => { resolve = r; });
-    buf.waiters.push(resolve);
+    const promise = new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        const idx = buf.waiters.indexOf(resolve);
+        if (idx >= 0) buf.waiters.splice(idx, 1);
+        req.res.json({ lines: [], device });
+      }, 30000);
 
-    const lines = await promise;
-    clearTimeout(timeout);
-    req.res.json({ lines, device });
+      buf.waiters.push((lines) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
+        req.res.json({ lines, device });
+      });
+    });
+
+    await promise;
   }
 
   /**

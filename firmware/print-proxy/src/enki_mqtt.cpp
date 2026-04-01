@@ -122,12 +122,17 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   }
 
   // Debug control → activar/desactivar debug remoto
-  // (topic parsed as raw string since debugHandleControl needs char*)
-  char rawPayload[256];
-  if (length < sizeof(rawPayload)) {
-    memcpy(rawPayload, payload, length);
-    rawPayload[length] = '\0';
-    debugHandleControl(topic, rawPayload);
+  {
+    char rawPayload[256];
+    if (length < sizeof(rawPayload)) {
+      memcpy(rawPayload, payload, length);
+      rawPayload[length] = '\0';
+      // Si es un mensaje de control de debug, no pasarlo a la lógica
+      if (strstr(topic, "/debug/") && strstr(topic, "/control")) {
+        debugHandleControl(topic, rawPayload);
+        return;
+      }
+    }
   }
 
   // Delegar a la LÓGICA

@@ -22,6 +22,10 @@
     ]
   },
 
+  "ui_handlers": [
+    { "domain": "carta", "action": "render", "handler": "handleRender" }
+  ],
+
   "tools": [
     {
       "name": "carta.render",

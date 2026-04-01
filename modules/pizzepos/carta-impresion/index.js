@@ -163,6 +163,22 @@ class CartaImpresionModule {
   }
 
   // ==========================================
+  // UI Handlers — expuestos al frontend via MQTT
+  // ==========================================
+
+  async handleRender(data) {
+    const result = await this.toolRender({
+      carta_id: data?.carta_id,
+      plantilla_id: data?.plantilla_id || 'a4-clasica',
+      project_id: data?.project_id
+    });
+    if (result.error) {
+      throw { status: result.status || 400, code: 'RENDER_ERROR', message: result.error };
+    }
+    return result.data;
+  }
+
+  // ==========================================
   // Tools — expuestos al LLM via agentic loop
   // ==========================================
 

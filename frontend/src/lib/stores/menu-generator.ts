@@ -201,7 +201,8 @@ export async function getCarta(id: string): Promise<Carta | null> {
   menuGeneratorStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const response = await mqttRequest<GetResponse>('menu', 'get', { id });
+    const project = getActiveProject();
+    const response = await mqttRequest<GetResponse>('menu', 'get', { id, project_id: project?.id });
 
     // response.data IS the carta object (meta, categorias, productos)
     const carta = response.data as Carta;
@@ -250,7 +251,8 @@ export async function renderCartaHtml(
   cartaId: string,
   plantillaId: string = 'a4-clasica'
 ): Promise<void> {
-  await mqttRequest('carta', 'render', { carta_id: cartaId, plantilla_id: plantillaId });
+  const project = getActiveProject();
+  await mqttRequest('carta', 'render', { carta_id: cartaId, plantilla_id: plantillaId, project_id: project?.id });
 }
 
 // =============================================================================

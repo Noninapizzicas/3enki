@@ -206,13 +206,16 @@ function resolveProject(project, profiles = new Map()) {
   // 3. Aplicar overrides del LLM encima de todo
   resolved = deepMerge(resolved, project);
 
-  // 4. Validar
+  // 4. Sanitizar campos críticos que no pueden ser null
+  sanitizeCriticalFields(resolved);
+
+  // 5. Validar
   const errors = validate(resolved);
   if (errors.length > 0) {
     warnings.push(...errors.map(e => `Validación: ${e}`));
   }
 
-  // 5. Limpiar campos meta que no son del render
+  // 6. Limpiar campos meta que no son del render
   resolved.version = '2.0';
 
   return { resolved, warnings };
@@ -287,6 +290,29 @@ function validate(project) {
   }
 
   return errors;
+}
+
+// =============================================================================
+// SANITIZACIÓN — proteger contra nulls en campos que generan CSS
+// =============================================================================
+
+function sanitizeCriticalFields(project) {
+  const d = DEFAULTS;
+  const p = project.design?.palette;
+  const dp = d.design.palette;
+  if (p) {
+    if (!p.background) p.background = dp.background;
+    if (!p.text) p.text = dp.text;
+    if (!p.primary) p.primary = dp.primary;
+    if (!p.accent) p.accent = dp.accent;
+    if (!p.muted) p.muted = dp.muted;
+  }
+  const f = project.typography?.fonts;
+  const df = d.typography.fonts;
+  if (f) {
+    if (!f.heading) f.heading = df.heading;
+    if (!f.body) f.body = df.body;
+  }
 }
 
 // =============================================================================

@@ -62,7 +62,7 @@
     {:else}
       <div class="empty-state">
         <span class="empty-icon">📄</span>
-        <p>Usa <strong>design.save</strong> en el chat para generar una carta de impresión profesional.</p>
+        <p>Usa <strong>design.create_project</strong> en el chat para generar una carta de impresión profesional.</p>
       </div>
     {/if}
   </div>

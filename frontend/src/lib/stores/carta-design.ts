@@ -35,18 +35,15 @@ export interface DesignMeta {
   created_at: string;
 }
 
-export interface CartaLayoutHints {
+export interface CartaResumen {
   total_productos: number;
   total_categorias: number;
   precio_min: number;
   precio_max: number;
-  precio_medio: number;
-  layout_sugerido: string;
-  orientacion_sugerida: string;
   categorias_stats: Array<{
     id: string;
     nombre: string;
-    productos: number;
+    productos_count: number;
     precio_min: number;
     precio_max: number;
   }>;
@@ -56,7 +53,7 @@ export interface CartaDesignState {
   // Carta cargada para diseño
   cartaId: string | null;
   cartaNombre: string | null;
-  layoutHints: CartaLayoutHints | null;
+  resumen: CartaResumen | null;
   cartaLoaded: boolean;
   // Perfiles
   profiles: DesignProfile[];
@@ -70,7 +67,7 @@ export interface CartaDesignState {
 const initialState: CartaDesignState = {
   cartaId: null,
   cartaNombre: null,
-  layoutHints: null,
+  resumen: null,
   cartaLoaded: false,
   profiles: [],
   designs: [],
@@ -100,7 +97,7 @@ export async function loadCartaForDesign(cartaId: string): Promise<boolean> {
       ...s,
       cartaId: data.carta_id,
       cartaNombre: data.nombre,
-      layoutHints: data.layout_hints,
+      resumen: data.resumen || null,
       cartaLoaded: true,
       loading: false
     }));
@@ -208,4 +205,4 @@ export const designGallery = derived(cartaDesignStore, $s => $s.designs);
 export const designLoading = derived(cartaDesignStore, $s => $s.loading);
 export const designError = derived(cartaDesignStore, $s => $s.error);
 export const cartaLoaded = derived(cartaDesignStore, $s => $s.cartaLoaded);
-export const layoutHints = derived(cartaDesignStore, $s => $s.layoutHints);
+export const cartaResumen = derived(cartaDesignStore, $s => $s.resumen);

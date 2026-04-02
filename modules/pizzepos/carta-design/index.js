@@ -1,33 +1,38 @@
 /**
- * Carta Design v1.0.0
+ * Carta Design v2.0.0
  *
  * Estudio de diseño profesional de cartas impresas.
- * El LLM genera HTML5+CSS completo — este módulo provee las tools
- * para cargar datos, guardar diseños y gestionar perfiles de estilo.
+ *
+ * Arquitectura v2: El LLM es "director creativo" — genera un JSON de
+ * decisiones (design project). El código renderiza el HTML determinísticamente.
  *
  * Flujo:
- *   1. LLM llama design.load_carta → recibe datos + metadata de layout
- *   2. LLM genera HTML5+CSS en su respuesta (guiado por prompt.json)
- *   3. LLM llama design.save → HTML se abre en HtmlPreviewPanel
- *   4. Usuario ve preview → Ctrl+P → PDF perfecto
+ *   1. LLM llama design.load_carta → datos + marketing_hints
+ *   2. LLM genera JSON de decisiones creativas (paleta, layout, marketing)
+ *   3. LLM llama design.create_project → código renderiza HTML completo
+ *   4. HTML se abre automáticamente en HtmlPreviewPanel
+ *   5. Usuario ve preview → Ctrl+P → PDF perfecto
  *
- * El valor está en prompt.json: psicología de ventas, marketing
- * gastronómico, jerarquía visual, color psychology, CSS print patterns.
+ * El HTML nunca se trunca: el motor de render genera todas las líneas
+ * determinísticamente sin importar el número de productos.
  */
 
 const path = require('path');
 const fs = require('fs').promises;
+const RenderEngine = require('./render-engine');
+const { resolveProject } = require('./design-project-schema');
 
 class CartaDesignModule {
   constructor() {
     this.name = 'carta-design';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
 
     this.projectPaths = new Map();
     this.builtinProfiles = new Map();
+    this.renderEngine = new RenderEngine();
   }
 
   // ==========================================
@@ -67,13 +72,9 @@ class CartaDesignModule {
 
   async onCartaGenerada(event) {
     const data = event?.data || event?.payload || event;
-    const projectId = data?.project_id;
-    const cartaId = data?.meta?.id || data?.carta_id;
     this.logger.info('carta-design.carta.updated', {
-      project_id: projectId,
-      carta_id: cartaId,
-      productos: data?.productos?.length,
-      categorias: data?.categorias?.length
+      project_id: data?.project_id,
+      carta_id: data?.meta?.id || data?.carta_id
     });
   }
 
@@ -122,6 +123,11 @@ class CartaDesignModule {
     return p ? path.join(p.featurePath, 'carta-design', 'profiles') : null;
   }
 
+  projectsDir(projectId) {
+    const p = this.getPaths(projectId);
+    return p ? path.join(p.featurePath, 'carta-design', 'projects') : null;
+  }
+
   defaultCartasDir() {
     return path.join(process.cwd(), 'storage', 'pizzepos', 'cartas');
   }
@@ -134,8 +140,12 @@ class CartaDesignModule {
     return path.join(process.cwd(), 'storage', 'pizzepos', 'carta-design', 'profiles');
   }
 
+  defaultProjectsDir() {
+    return path.join(process.cwd(), 'storage', 'pizzepos', 'carta-design', 'projects');
+  }
+
   // ==========================================
-  // Tool: design.load_carta
+  // Tool: design.load_carta (mejorada con marketing_hints)
   // ==========================================
 
   async toolLoadCarta({ carta_id, project_id }) {
@@ -146,13 +156,13 @@ class CartaDesignModule {
       return { status: 404, error: `Carta "${carta_id}" no encontrada. Usa menu.save_carta o menu.generate primero.` };
     }
 
-    // Enriquecer con metadata de layout
     const categorias = (carta.categorias || []).sort((a, b) => (a.orden || 0) - (b.orden || 0));
     const productos = carta.productos || [];
 
     const catStats = categorias.map(cat => {
       const prods = productos.filter(p => p.categoria === cat.id);
-      const precios = prods.map(p => p.precio).filter(p => typeof p === 'number');
+      const precios = prods.map(p => p.precio).filter(p => typeof p === 'number' && p > 0);
+      const sorted = [...precios].sort((a, b) => b - a);
       return {
         id: cat.id,
         nombre: cat.nombre,
@@ -160,14 +170,18 @@ class CartaDesignModule {
         productos: prods.length,
         precio_min: precios.length > 0 ? Math.min(...precios) : 0,
         precio_max: precios.length > 0 ? Math.max(...precios) : 0,
-        precio_medio: precios.length > 0 ? +(precios.reduce((a, b) => a + b, 0) / precios.length).toFixed(2) : 0
+        precio_medio: precios.length > 0 ? +(precios.reduce((a, b) => a + b, 0) / precios.length).toFixed(2) : 0,
+        // Marketing hints por categoría
+        needs_miller_split: prods.length > 9,
+        top_price_products: sorted.length >= 2
+          ? prods.filter(p => p.precio === sorted[0] || p.precio === sorted[1]).map(p => ({ id: p.id, nombre: p.nombre, precio: p.precio }))
+          : []
       };
     });
 
-    const todosPrecios = productos.map(p => p.precio).filter(p => typeof p === 'number');
+    const todosPrecios = productos.map(p => p.precio).filter(p => typeof p === 'number' && p > 0);
     const totalProductos = productos.length;
 
-    // Sugerencia de layout
     let layoutSugerido;
     if (totalProductos <= 15) layoutSugerido = 'single_column';
     else if (totalProductos <= 30) layoutSugerido = 'two_column';
@@ -192,9 +206,105 @@ class CartaDesignModule {
           precio_medio: todosPrecios.length > 0 ? +(todosPrecios.reduce((a, b) => a + b, 0) / todosPrecios.length).toFixed(2) : 0,
           layout_sugerido: layoutSugerido,
           orientacion_sugerida: totalProductos > 25 ? 'landscape' : 'portrait'
+        },
+        marketing_hints: {
+          star_candidates: this.findStarCandidates(productos, categorias),
+          miller_violations: catStats.filter(c => c.needs_miller_split).map(c => ({ id: c.id, nombre: c.nombre, count: c.productos }))
         }
       }
     };
+  }
+
+  /**
+   * Encuentra candidatos a productos estrella (mayor precio por categoría)
+   */
+  findStarCandidates(productos, categorias) {
+    const candidates = [];
+    for (const cat of categorias) {
+      const prods = productos.filter(p => p.categoria === cat.id && typeof p.precio === 'number');
+      if (prods.length === 0) continue;
+      const sorted = [...prods].sort((a, b) => b.precio - a.precio);
+      if (sorted[0]) candidates.push({ id: sorted[0].id, nombre: sorted[0].nombre, categoria: cat.id, precio: sorted[0].precio });
+    }
+    return candidates;
+  }
+
+  // ==========================================
+  // Tool: design.create_project (NUEVA — la principal)
+  // ==========================================
+
+  async toolCreateProject({ carta_id, design_project, nombre, project_id }) {
+    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
+    if (!design_project || typeof design_project !== 'object') {
+      return { status: 400, error: 'Se requiere design_project (JSON de decisiones creativas)' };
+    }
+
+    // 1. Cargar carta
+    const carta = await this.loadCarta(carta_id, project_id);
+    if (!carta) {
+      return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+    }
+
+    // 2. Resolver proyecto: defaults ← profile ← overrides
+    const { resolved, warnings } = resolveProject(design_project, this.builtinProfiles);
+
+    // 3. Renderizar HTML
+    const html = this.renderEngine.render(resolved, carta);
+
+    // 4. Guardar proyecto JSON
+    const projDir = this.projectsDir(project_id) || this.defaultProjectsDir();
+    await fs.mkdir(projDir, { recursive: true });
+    const ts = Date.now().toString(36);
+    const slug = (nombre || resolved.nombre || 'design').toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 30);
+    const projectFilename = `${carta_id}_${slug}_${ts}.project.json`;
+    await fs.writeFile(path.join(projDir, projectFilename), JSON.stringify(resolved, null, 2), 'utf-8');
+
+    // 5. Guardar HTML
+    const result = await this.toolSave({
+      carta_id,
+      html,
+      nombre: nombre || resolved.nombre || `Diseño ${carta_id}`,
+      profile_id: design_project.profile_base || null,
+      project_id
+    });
+
+    if (result.error) return result;
+
+    this.metrics?.increment('design.create_project.total');
+    this.logger.info('carta-design.project.created', {
+      carta_id,
+      profile_base: design_project.profile_base,
+      layout: resolved.design?.layout,
+      products: carta.productos?.length,
+      warnings: warnings.length
+    });
+
+    return {
+      status: 200,
+      data: {
+        ...result.data,
+        project_file: projectFilename,
+        warnings: warnings.length > 0 ? warnings : undefined,
+        message: `Diseño generado con ${carta.productos?.length || 0} productos y abierto en preview.`
+      }
+    };
+  }
+
+  // ==========================================
+  // UI Handler: design.render (para frontend)
+  // ==========================================
+
+  async handleRender(data) {
+    const result = await this.toolCreateProject({
+      carta_id: data?.carta_id,
+      design_project: data?.design_project || {},
+      nombre: data?.nombre,
+      project_id: data?.project_id
+    });
+    if (result.error) {
+      throw { status: result.status || 400, code: 'RENDER_ERROR', message: result.error };
+    }
+    return result.data;
   }
 
   // ==========================================
@@ -216,12 +326,12 @@ class CartaDesignModule {
   }
 
   // ==========================================
-  // Tool: design.save
+  // Tool: design.save (mantiene compatibilidad)
   // ==========================================
 
   async toolSave({ carta_id, html, nombre, profile_id, project_id }) {
     if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
-    if (!html || html.length < 50) return { status: 400, error: 'Se requiere html (HTML5+CSS completo)' };
+    if (!html || html.length < 50) return { status: 400, error: 'Se requiere html' };
 
     const dir = this.outputDir(project_id) || this.defaultOutputDir();
     await fs.mkdir(dir, { recursive: true });
@@ -233,7 +343,6 @@ class CartaDesignModule {
 
     await fs.writeFile(absolutePath, html, 'utf-8');
 
-    // Guardar metadata del diseño
     const meta = {
       carta_id,
       nombre: nombre || 'Diseño sin nombre',
@@ -244,7 +353,6 @@ class CartaDesignModule {
     };
     await fs.writeFile(absolutePath + '.meta.json', JSON.stringify(meta, null, 2), 'utf-8');
 
-    // Publicar evento → HtmlPreviewPanel se abre automáticamente
     await this.eventBus.publish('carta.html.generada', {
       carta_id,
       html,
@@ -258,7 +366,7 @@ class CartaDesignModule {
     const relativePath = '/' + path.relative(storagePath, absolutePath).replace(/\\/g, '/');
 
     this.metrics?.increment('design.save.total');
-    this.logger.info('carta-design.save', { carta_id, filename, size: meta.size_bytes, profile_id });
+    this.logger.info('carta-design.save', { carta_id, filename, size: meta.size_bytes });
 
     return {
       status: 200,
@@ -267,7 +375,7 @@ class CartaDesignModule {
         filename,
         path: relativePath,
         size_bytes: meta.size_bytes,
-        message: `Diseño guardado y abierto en preview. Usa el botón Imprimir para exportar a PDF.`
+        message: `Diseño guardado y abierto en preview.`
       }
     };
   }
@@ -284,8 +392,7 @@ class CartaDesignModule {
       .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
     const profile = {
-      id,
-      nombre,
+      id, nombre,
       description: description || '',
       color_palette: color_palette || {},
       fonts: fonts || {},
@@ -300,12 +407,7 @@ class CartaDesignModule {
     await fs.writeFile(path.join(dir, `${id}.json`), JSON.stringify(profile, null, 2), 'utf-8');
 
     this.metrics?.increment('design.save_profile.total');
-    this.logger.info('carta-design.profile.saved', { id, nombre });
-
-    return {
-      status: 201,
-      data: { ...profile, message: `Perfil "${nombre}" guardado con ID "${id}".` }
-    };
+    return { status: 201, data: { ...profile, message: `Perfil "${nombre}" guardado con ID "${id}".` } };
   }
 
   // ==========================================
@@ -314,15 +416,12 @@ class CartaDesignModule {
 
   async toolDeleteProfile({ profile_id, project_id }) {
     if (!profile_id) return { status: 400, error: 'Se requiere profile_id' };
-
     if (this.builtinProfiles.has(profile_id)) {
       return { status: 403, error: `"${profile_id}" es un perfil built-in y no se puede eliminar.` };
     }
-
     const dir = this.profilesDir(project_id) || this.defaultProfilesDir();
     try {
       await fs.unlink(path.join(dir, `${profile_id}.json`));
-      this.logger.info('carta-design.profile.deleted', { profile_id });
       return { status: 200, data: { profile_id, message: `Perfil "${profile_id}" eliminado.` } };
     } catch (_) {
       return { status: 404, error: `Perfil "${profile_id}" no encontrado.` };
@@ -342,27 +441,16 @@ class CartaDesignModule {
     try {
       const files = await fs.readdir(dir);
       const metaFiles = files.filter(f => f.startsWith(carta_id + '_') && f.endsWith('.meta.json'));
-
       for (const file of metaFiles) {
         try {
-          const raw = await fs.readFile(path.join(dir, file), 'utf-8');
-          designs.push(JSON.parse(raw));
+          designs.push(JSON.parse(await fs.readFile(path.join(dir, file), 'utf-8')));
         } catch (_) {}
       }
-
       designs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     } catch (_) {}
 
     this.metrics?.increment('design.gallery.total');
-
-    return {
-      status: 200,
-      data: {
-        carta_id,
-        designs,
-        total: designs.length
-      }
-    };
+    return { status: 200, data: { carta_id, designs, total: designs.length } };
   }
 
   // ==========================================
@@ -370,23 +458,18 @@ class CartaDesignModule {
   // ==========================================
 
   async loadCarta(cartaId, projectId) {
-    // Ruta del proyecto
     const dir = this.cartasDir(projectId);
     if (dir) {
       try {
         return JSON.parse(await fs.readFile(path.join(dir, `${cartaId}.json`), 'utf-8'));
       } catch (_) {}
     }
-
-    // Fallback: todos los proyectos
     for (const [pid, paths] of this.projectPaths) {
       if (pid === projectId) continue;
       try {
         return JSON.parse(await fs.readFile(path.join(paths.featurePath, 'cartas', `${cartaId}.json`), 'utf-8'));
       } catch (_) {}
     }
-
-    // Último fallback: ruta por defecto
     try {
       return JSON.parse(await fs.readFile(path.join(this.defaultCartasDir(), `${cartaId}.json`), 'utf-8'));
     } catch (_) {
@@ -401,8 +484,7 @@ class CartaDesignModule {
       const profiles = [];
       for (const file of files.filter(f => f.endsWith('.json'))) {
         try {
-          const profile = JSON.parse(await fs.readFile(path.join(dir, file), 'utf-8'));
-          profiles.push(profile);
+          profiles.push(JSON.parse(await fs.readFile(path.join(dir, file), 'utf-8')));
         } catch (_) {}
       }
       return profiles;

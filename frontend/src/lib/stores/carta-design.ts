@@ -9,6 +9,7 @@
 import { writable, derived } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 import { mqttRequest } from '$lib/ui-core/mqtt-request';
+import { getActiveProject } from '$lib/stores/workspace';
 
 // =============================================================================
 // TYPES
@@ -91,7 +92,8 @@ export async function loadCartaForDesign(cartaId: string): Promise<boolean> {
   cartaDesignStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const res = await mqttRequest<any>('design', 'load-carta', { carta_id: cartaId });
+    const project = getActiveProject();
+    const res = await mqttRequest<any>('design', 'load-carta', { carta_id: cartaId, project_id: project?.id });
     const data = res.data;
 
     cartaDesignStore.update(s => ({
@@ -116,7 +118,8 @@ export async function loadCartaForDesign(cartaId: string): Promise<boolean> {
 
 export async function loadProfiles(): Promise<void> {
   try {
-    const res = await mqttRequest<any>('design', 'profiles');
+    const project = getActiveProject();
+    const res = await mqttRequest<any>('design', 'profiles', { project_id: project?.id });
     const data = res.data;
     const all = [...(data.builtin || []), ...(data.custom || [])];
     cartaDesignStore.update(s => ({ ...s, profiles: all }));
@@ -125,14 +128,16 @@ export async function loadProfiles(): Promise<void> {
 
 export async function loadGallery(cartaId: string): Promise<void> {
   try {
-    const res = await mqttRequest<any>('design', 'gallery', { carta_id: cartaId });
+    const project = getActiveProject();
+    const res = await mqttRequest<any>('design', 'gallery', { carta_id: cartaId, project_id: project?.id });
     cartaDesignStore.update(s => ({ ...s, designs: res.data.designs || [] }));
   } catch {}
 }
 
 export async function saveProfile(profile: Partial<DesignProfile>): Promise<boolean> {
   try {
-    await mqttRequest('design', 'save-profile', profile);
+    const project = getActiveProject();
+    await mqttRequest('design', 'save-profile', { ...profile, project_id: project?.id });
     await loadProfiles();
     return true;
   } catch {
@@ -142,7 +147,8 @@ export async function saveProfile(profile: Partial<DesignProfile>): Promise<bool
 
 export async function deleteProfile(profileId: string): Promise<boolean> {
   try {
-    await mqttRequest('design', 'delete-profile', { profile_id: profileId });
+    const project = getActiveProject();
+    await mqttRequest('design', 'delete-profile', { profile_id: profileId, project_id: project?.id });
     await loadProfiles();
     return true;
   } catch {

@@ -230,6 +230,20 @@ ${highlightCSS}
   opacity: 0.4;
 }
 
+/* ── INGREDIENT PILLS ────────────────────────────────── */
+.ing-pill {
+  display: inline-block;
+  padding: 0.03cm 0.15cm;
+  margin: 0.02cm;
+  background: ${palette.muted}15;
+  border-radius: 0.2cm;
+  font-size: ${t.sizes.product_ingredients};
+  color: ${ingColor};
+}
+
+/* ── CATEGORY DECORATIONS ────────────────────────────── */
+${this.buildDecorationCSS(d, palette)}
+
 /* ── FOOTER ──────────────────────────────────────────── */
 .carta-footer {
   margin-top: ${spacing.category_gap};
@@ -264,9 +278,18 @@ ${highlightCSS}
     const categorias = this.orderCategories(carta.categorias, project);
     parts.push('<div class="carta-content">');
 
-    for (const cat of categorias) {
+    const decoStyle = project.design?.decorations?.category_separator;
+    const ornamentChar = project.design?.decorations?.ornament_char || '·';
+
+    for (let ci = 0; ci < categorias.length; ci++) {
+      const cat = categorias[ci];
       const productos = this.getProductsForCategory(cat.id, carta.productos, project);
       if (productos.length === 0) continue;
+
+      // Ornamento entre categorías (no antes de la primera)
+      if (ci > 0 && decoStyle === 'ornament') {
+        parts.push(`  <div class="category-ornament">${esc(ornamentChar)} ${esc(ornamentChar)} ${esc(ornamentChar)}</div>`);
+      }
 
       parts.push('  <div class="categoria">');
       parts.push(`    <div class="categoria-header">${esc(cat.nombre)}</div>`);
@@ -368,25 +391,66 @@ ${body}
   // ===========================================================================
 
   buildBackground(d) {
+    const bgColor = d.palette.background || '#ffffff';
+    const gradient = d.background.gradient && GRADIENTS[d.background.gradient];
+    const texture = d.background.texture && TEXTURES[d.background.texture];
+
+    // Combinar gradient + texture en una sola declaración para que no se pisen
+    if (gradient && texture) {
+      const extra = d.background.texture === 'dot_pattern' ? '\n  background-size: auto, 12px 12px;' : '';
+      return `background: ${gradient};\n  background-image: ${texture}, ${gradient};${extra}`;
+    }
+    if (gradient) {
+      return `background: ${gradient};`;
+    }
+    if (texture) {
+      const extra = d.background.texture === 'dot_pattern' ? '\n  background-size: 12px 12px;' : '';
+      return `background-color: ${bgColor};\n  background-image: ${texture};${extra}`;
+    }
+    return `background: ${bgColor};`;
+  }
+
+  // ===========================================================================
+  // HELPERS: Decoration CSS
+  // ===========================================================================
+
+  buildDecorationCSS(d, palette) {
+    const deco = d.decorations || {};
     const parts = [];
-    const bgColor = d.palette.background;
 
-    if (d.background.gradient && GRADIENTS[d.background.gradient]) {
-      parts.push(`background: ${GRADIENTS[d.background.gradient]};`);
-    } else {
-      parts.push(`background: ${bgColor};`);
+    // Separador entre categorías
+    switch (deco.category_separator) {
+      case 'double_line':
+        parts.push(`.categoria-header { border-bottom: 3px double ${palette.accent}; padding-bottom: 0.15cm; }`);
+        break;
+      case 'ornament':
+        // Se añade en HTML via .category-ornament
+        break;
+      case 'none':
+        parts.push(`.categoria-header { border-bottom: none; }`);
+        break;
+      // 'thin_line' is the default, handled by base CSS
     }
 
-    if (d.background.texture && TEXTURES[d.background.texture]) {
-      if (d.background.texture === 'dot_pattern') {
-        parts.push(`background-image: ${TEXTURES[d.background.texture]};`);
-        parts.push('background-size: 12px 12px;');
-      } else {
-        parts.push(`background-image: ${TEXTURES[d.background.texture]};`);
-      }
+    // Separador entre productos
+    switch (deco.product_separator) {
+      case 'thin_line':
+        parts.push(`.producto { border-bottom: 1px solid ${palette.muted}20; }`);
+        parts.push(`.producto:last-child { border-bottom: none; }`);
+        break;
+      case 'dotted':
+        parts.push(`.producto { border-bottom: 1px dotted ${palette.muted}30; }`);
+        parts.push(`.producto:last-child { border-bottom: none; }`);
+        break;
+      // 'none' is default
     }
 
-    return parts.join('\n  ');
+    // Borde de página
+    if (deco.page_border) {
+      parts.push(`body { border: 1px solid ${palette.accent}; }`);
+    }
+
+    return parts.join('\n');
   }
 
   // ===========================================================================

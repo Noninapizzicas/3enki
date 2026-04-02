@@ -11,7 +11,7 @@
 
 // --- BASE: Identidad del firmware ---
 #define DRIVER_TYPE             "print-proxy"
-#define FIRMWARE_VERSION        "3.2.0"
+#define FIRMWARE_VERSION        "3.3.0"
 
 // --- BASE: Defaults identidad (solo si no hay config en NVS) ---
 #define DEFAULT_DEVICE_ID       "enki-device-1"
@@ -59,7 +59,7 @@
 // --- BLE ---
 #define BLE_CHUNK_SIZE          20      // bytes por write BLE (MTU default)
 #define BLE_CHUNK_DELAY         20      // ms entre chunks
-#define BLE_SCAN_SECONDS        10      // duración del escaneo BLE
+#define BLE_SCAN_SECONDS        5       // duración del escaneo BLE (setup/portal)
 #define BLE_RECONNECT_MS        15000   // reintento reconexión BLE cada 15s
 #define BLE_KEEPALIVE_MS        30000   // keepalive BLE cada 30s para evitar standby
 

@@ -122,19 +122,48 @@ static bool connectPrinterByAddress(NimBLEAddress addr) {
 }
 
 /**
- * Reconecta a la impresora usando la MAC guardada en NVS.
- * Si no hay MAC guardada, no hace nada (esperará scan desde portal web).
- * NUNCA hace scan — la reconexión es rápida (~2-3s).
+ * Reconecta a la impresora.
+ * 1. Intenta conexión directa por MAC (rápido, ~2-3s)
+ * 2. Si falla, scan corto de 3s como fallback (algunas impresoras
+ *    no aceptan conexión directa por MAC)
  */
 static bool reconnectPrinter() {
-  if (strlen(printerAddr) == 0) {
-    // Sin MAC guardada — no podemos reconectar sin scan.
-    // El usuario debe configurar desde el portal web.
+  if (strlen(printerAddr) == 0 && strlen(printerName) == 0) {
     return false;
   }
 
-  NimBLEAddress savedAddr(printerAddr);
-  return connectPrinterByAddress(savedAddr);
+  // 1. Intentar por MAC (rápido)
+  if (strlen(printerAddr) > 0) {
+    if (connectPrinterByAddress(NimBLEAddress(printerAddr))) return true;
+    Serial.println("[BLE] Conexion directa fallo, scan corto...");
+  }
+
+  // 2. Fallback: scan corto (3s, no 10s)
+  if (strlen(printerName) == 0) return false;
+
+  Serial.printf("[BLE] Scan rapido '%s' (3s)...\n", printerName);
+  NimBLEScan* scan = NimBLEDevice::getScan();
+  scan->setActiveScan(true);
+  NimBLEScanResults results = scan->start(3);  // 3s, no 10s
+
+  for (int i = 0; i < results.getCount(); i++) {
+    NimBLEAdvertisedDevice dev = results.getDevice(i);
+    if (dev.getName() == printerName) {
+      scan->clearResults();
+      // Actualizar MAC si cambió
+      String foundAddr = dev.getAddress().toString().c_str();
+      if (strcmp(printerAddr, foundAddr.c_str()) != 0) {
+        strlcpy(printerAddr, foundAddr.c_str(), sizeof(printerAddr));
+        saveDriverConfig();
+        Serial.printf("[BLE] MAC actualizada: %s\n", printerAddr);
+      }
+      return connectPrinterByAddress(dev.getAddress());
+    }
+  }
+  scan->clearResults();
+
+  Serial.printf("[BLE] '%s' no encontrada\n", printerName);
+  return false;
 }
 
 /**

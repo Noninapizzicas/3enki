@@ -51,7 +51,7 @@
     elapsedTime = elapsed(pedido.recibido_at);
   }
 
-  $: ref = extractRef(pedido.cuenta_id);
+  $: ref = extractRef(pedido.cuenta_id, pedido.nombre_cuenta);
   $: isListo = pedido.estado === 'listo';
   $: hasPreparando = pedido.items.some(i => i.estado === 'preparando');
   $: allPendiente = pedido.items.every(i => i.estado === 'pendiente');

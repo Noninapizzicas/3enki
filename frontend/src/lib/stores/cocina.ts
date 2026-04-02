@@ -70,6 +70,7 @@ export interface GlovoMetadata {
 export interface PedidoCocina {
   pedido_id: string;
   cuenta_id: string;
+  nombre_cuenta: string | null;
   canal: string | null;
   items: ItemCocina[];
   estado: 'activo' | 'listo' | 'cancelado';
@@ -859,30 +860,37 @@ function playGlovoAlertSound() {
  * mesa_5_20260225_001 → "MESA 5"
  * tel_20260225_001 → "TEL #1"
  */
-export function extractRef(cuentaId: string): string {
+export function extractRef(cuentaId: string, nombreCuenta?: string | null): string {
   if (!cuentaId) return '???';
+
+  // Si hay nombre de cliente, usarlo como referencia principal
+  // con el tipo como sufijo: "JUAN (LLEVAR #5)"
+  let tipoRef = '';
+
   if (cuentaId.startsWith('mesa_')) {
     const parts = cuentaId.split('_');
-    return `MESA ${parts[1]}`;
-  }
-  if (cuentaId.startsWith('tel_')) {
+    tipoRef = `MESA ${parts[1]}`;
+  } else if (cuentaId.startsWith('tel_')) {
     const parts = cuentaId.split('_');
-    return `TEL #${parseInt(parts[2]) || parts[2]}`;
-  }
-  if (cuentaId.startsWith('llevar_')) {
+    tipoRef = `TEL #${parseInt(parts[2]) || parts[2]}`;
+  } else if (cuentaId.startsWith('llevar_')) {
     const parts = cuentaId.split('_');
-    return `LLEVAR #${parseInt(parts[2]) || parts[2]}`;
-  }
-  if (cuentaId.startsWith('glovo_')) {
+    tipoRef = `LLEVAR #${parseInt(parts[2]) || parts[2]}`;
+  } else if (cuentaId.startsWith('glovo_')) {
     const parts = cuentaId.split('_');
-    return `GLOVO #${parseInt(parts[2]) || parts[2]}`;
-  }
-  if (cuentaId.startsWith('wa_')) {
+    tipoRef = `GLOVO #${parseInt(parts[2]) || parts[2]}`;
+  } else if (cuentaId.startsWith('wa_')) {
     const parts = cuentaId.split('_');
-    return `WA #${parseInt(parts[2]) || parts[2]}`;
+    tipoRef = `WA #${parseInt(parts[2]) || parts[2]}`;
+  } else {
+    tipoRef = cuentaId.substring(0, 8).toUpperCase();
   }
-  // Fallback: UUID corto
-  return cuentaId.substring(0, 8).toUpperCase();
+
+  if (nombreCuenta && nombreCuenta !== tipoRef) {
+    return `${nombreCuenta.toUpperCase()} · ${tipoRef}`;
+  }
+
+  return tipoRef;
 }
 
 /**

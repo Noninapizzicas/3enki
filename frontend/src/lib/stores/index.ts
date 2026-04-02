@@ -226,9 +226,9 @@ export {
   designLoading,
   designError,
   cartaLoaded,
-  layoutHints
+  cartaResumen
 } from './carta-design';
-export type { DesignProfile, DesignMeta, CartaDesignState } from './carta-design';
+export type { DesignProfile, DesignMeta, CartaDesignState, CartaResumen } from './carta-design';
 
 // HTML Preview Store
 export {

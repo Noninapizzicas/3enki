@@ -19,7 +19,7 @@
     designLoading,
     designError,
     cartaLoaded,
-    layoutHints,
+    cartaResumen,
     clearDesignError
   } from '$lib/stores/carta-design';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
@@ -91,33 +91,25 @@
     {/if}
   </section>
 
-  <!-- Layout hints -->
-  {#if $cartaLoaded && $layoutHints}
+  <!-- Resumen de la carta -->
+  {#if $cartaLoaded && $cartaResumen}
     <section class="section">
-      <h3 class="section-title">Info de layout</h3>
+      <h3 class="section-title">Carta seleccionada</h3>
       <div class="hints-grid">
         <div class="hint-item">
           <span class="hint-label">Productos</span>
-          <span class="hint-value">{$layoutHints.total_productos}</span>
+          <span class="hint-value">{$cartaResumen.total_productos}</span>
         </div>
         <div class="hint-item">
           <span class="hint-label">Categorías</span>
-          <span class="hint-value">{$layoutHints.total_categorias}</span>
+          <span class="hint-value">{$cartaResumen.total_categorias}</span>
         </div>
         <div class="hint-item">
           <span class="hint-label">Precios</span>
-          <span class="hint-value">{$layoutHints.precio_min.toFixed(2)}–{$layoutHints.precio_max.toFixed(2)} €</span>
-        </div>
-        <div class="hint-item">
-          <span class="hint-label">Layout sugerido</span>
-          <span class="hint-value">{$layoutHints.layout_sugerido}</span>
-        </div>
-        <div class="hint-item">
-          <span class="hint-label">Orientación</span>
-          <span class="hint-value">{$layoutHints.orientacion_sugerida}</span>
+          <span class="hint-value">{$cartaResumen.precio_min.toFixed(2)}–{$cartaResumen.precio_max.toFixed(2)} €</span>
         </div>
       </div>
-      <div class="hint">Pide al chat: "diseña la carta con estilo rock" o "haz un diseño elegante"</div>
+      <div class="hint">Pide al chat que diseñe esta carta. El estudio creativo te guiará.</div>
     </section>
   {/if}
 

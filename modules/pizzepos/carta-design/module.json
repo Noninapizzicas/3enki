@@ -1,7 +1,7 @@
 {
   "name": "carta-design",
-  "version": "1.0.0",
-  "description": "Estudio de diseño profesional de cartas impresas. El LLM genera HTML5+CSS completo aplicando psicología de ventas, marketing gastronómico y diseño visual profesional.",
+  "version": "2.0.0",
+  "description": "Estudio de diseño profesional de cartas impresas. El LLM genera un JSON de decisiones creativas y el motor de render produce HTML completo determinísticamente.",
   "author": "Pizzepos Team",
   "main": "index.js",
 
@@ -19,12 +19,13 @@
     "subscribes": [
       { "event": "project.activated", "handler": "onProjectActivated" },
       { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "carta.generada", "handler": "onCartaGenerada", "description": "Invalidar cache cuando menu-generator actualiza datos de carta" }
+      { "event": "carta.generada", "handler": "onCartaGenerada" }
     ]
   },
 
   "ui_handlers": [
     { "domain": "design", "action": "load-carta", "handler": "toolLoadCarta" },
+    { "domain": "design", "action": "create-project", "handler": "handleRender" },
     { "domain": "design", "action": "profiles", "handler": "toolProfiles" },
     { "domain": "design", "action": "save", "handler": "toolSave" },
     { "domain": "design", "action": "save-profile", "handler": "toolSaveProfile" },
@@ -35,128 +36,211 @@
   "tools": [
     {
       "name": "design.load_carta",
-      "description": "Carga una carta desde disco y devuelve los datos enriquecidos con metadata de layout: productos por categoría, rangos de precio, sugerencia de layout. LLAMAR SIEMPRE antes de generar un diseño.",
+      "description": "Carga una carta y devuelve datos enriquecidos con marketing_hints: productos estrella sugeridos, violaciones de ley de Miller (categorías con >9 items), rangos de precio. LLAMAR SIEMPRE primero.",
       "handler": "toolLoadCarta",
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id": {
-            "type": "string",
-            "description": "ID de la carta a cargar (ej: carta_pizzicas)"
-          }
+          "carta_id": { "type": "string", "description": "ID de la carta a cargar" }
         },
         "required": ["carta_id"]
       }
     },
     {
-      "name": "design.profiles",
-      "description": "Lista los perfiles de diseño disponibles (built-in + custom del proyecto). Cada perfil incluye paleta de colores, tipografía, tipo de layout y notas de estilo.",
-      "handler": "toolProfiles",
+      "name": "design.create_project",
+      "description": "Genera un diseño completo de carta impresa a partir de un JSON de decisiones creativas. El motor de render produce el HTML determinísticamente — nunca se trunca. El JSON incluye decisiones de marketing (qué destacar), diseño visual (paleta, layout), y tipografía (fonts, tamaños). Si se indica profile_base, los defaults se cargan del perfil y solo necesitas especificar lo que quieres cambiar.",
+      "handler": "toolCreateProject",
       "parameters": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "carta_id": { "type": "string", "description": "ID de la carta a diseñar" },
+          "nombre": { "type": "string", "description": "Nombre descriptivo del diseño" },
+          "design_project": {
+            "type": "object",
+            "description": "JSON de decisiones creativas. Campos opcionales — los no indicados usan defaults sensatos o los del profile_base.",
+            "properties": {
+              "profile_base": { "type": "string", "description": "ID de perfil base (elegant-minimal, rock-bold, rustic-italian, modern-bold, seasonal-fresh). Sus valores se usan como defaults." },
+
+              "marketing": {
+                "type": "object",
+                "properties": {
+                  "star_products": { "type": "array", "items": { "type": "string" }, "description": "IDs de productos estrella a destacar visualmente (max 2-3 por categoría)" },
+                  "anchor_strategy": { "type": "string", "enum": ["most_expensive_first", "manual", "none"], "description": "Estrategia de ancla de precio. most_expensive_first pone el más caro primero en cada categoría." },
+                  "highlight_style": { "type": "string", "enum": ["subtle_box", "gold_border", "larger_font", "icon", "none"], "description": "Cómo destacar los productos estrella" },
+                  "price_display": { "type": "string", "enum": ["no_symbol", "with_symbol", "symbol_after"], "description": "Formato de precios: 11,50 | 11,50 € | 11,50€" },
+                  "product_order": { "type": "object", "description": "Orden manual por categoría: { categoria_id: [producto_ids..., '...rest'] }" },
+                  "golden_triangle": { "type": "object", "description": "Posiciones golden triangle: { top_right, center, bottom_left } con IDs de producto" }
+                }
+              },
+
+              "design": {
+                "type": "object",
+                "properties": {
+                  "orientation": { "type": "string", "enum": ["portrait", "landscape"] },
+                  "page_size": { "type": "string", "enum": ["A3", "A4", "A5"] },
+                  "layout": { "type": "string", "enum": ["single_column", "two_column", "three_column", "multi_column", "diptico"] },
+                  "palette": {
+                    "type": "object",
+                    "properties": {
+                      "background": { "type": "string" },
+                      "text": { "type": "string" },
+                      "primary": { "type": "string" },
+                      "secondary": { "type": "string" },
+                      "accent": { "type": "string" },
+                      "muted": { "type": "string" },
+                      "highlight_bg": { "type": "string" },
+                      "highlight_border": { "type": "string" }
+                    }
+                  },
+                  "background": {
+                    "type": "object",
+                    "properties": {
+                      "gradient": { "type": "string", "description": "dark_rock | warm_amber | spotlight | paper_aged | midnight | null" },
+                      "texture": { "type": "string", "description": "diagonal_lines | dot_pattern | noise_subtle | linen | null" }
+                    }
+                  },
+                  "spacing": {
+                    "type": "object",
+                    "properties": {
+                      "page_margin": { "type": "string" },
+                      "category_gap": { "type": "string" },
+                      "product_gap": { "type": "string" },
+                      "column_gap": { "type": "string" }
+                    }
+                  },
+                  "decorations": {
+                    "type": "object",
+                    "properties": {
+                      "category_separator": { "type": "string", "enum": ["thin_line", "double_line", "ornament", "none"] },
+                      "ornament_char": { "type": "string" }
+                    }
+                  }
+                }
+              },
+
+              "typography": {
+                "type": "object",
+                "properties": {
+                  "fonts": {
+                    "type": "object",
+                    "properties": {
+                      "heading": { "type": "string", "description": "Google Font para títulos" },
+                      "body": { "type": "string", "description": "Google Font para texto" },
+                      "accent": { "type": "string", "description": "Google Font decorativa" },
+                      "price": { "type": "string", "description": "Google Font para precios" }
+                    }
+                  },
+                  "sizes": {
+                    "type": "object",
+                    "properties": {
+                      "carta_title": { "type": "string" },
+                      "category_name": { "type": "string" },
+                      "product_name": { "type": "string" },
+                      "price": { "type": "string" }
+                    }
+                  },
+                  "category_style": {
+                    "type": "object",
+                    "properties": {
+                      "transform": { "type": "string" },
+                      "background": { "type": "string" },
+                      "text_color": { "type": "string" }
+                    }
+                  },
+                  "ingredients_style": {
+                    "type": "object",
+                    "properties": {
+                      "show": { "type": "boolean" },
+                      "format": { "type": "string", "enum": ["inline_comma", "inline_dash", "pills", "hidden"] },
+                      "show_emoji": { "type": "boolean" },
+                      "italic": { "type": "boolean" }
+                    }
+                  }
+                }
+              },
+
+              "header": {
+                "type": "object",
+                "properties": {
+                  "show": { "type": "boolean" },
+                  "title_override": { "type": "string" },
+                  "subtitle": { "type": "string" },
+                  "alignment": { "type": "string", "enum": ["left", "center", "right"] }
+                }
+              },
+
+              "footer": {
+                "type": "object",
+                "properties": {
+                  "show": { "type": "boolean" },
+                  "text": { "type": "string" },
+                  "alignment": { "type": "string", "enum": ["left", "center", "right"] }
+                }
+              }
+            }
+          }
+        },
+        "required": ["carta_id", "design_project"]
       }
     },
     {
+      "name": "design.profiles",
+      "description": "Lista los perfiles de diseño disponibles (built-in + custom). Cada perfil puede usarse como profile_base en design.create_project.",
+      "handler": "toolProfiles",
+      "parameters": { "type": "object", "properties": {} }
+    },
+    {
       "name": "design.save",
-      "description": "Guarda el HTML generado y lo abre automáticamente en el panel de preview del navegador. El usuario puede imprimir con Ctrl+P. LLAMAR después de generar el HTML completo.",
+      "description": "Guarda HTML directamente y lo abre en preview. Usar design.create_project en vez de esto para el flujo normal.",
       "handler": "toolSave",
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id": {
-            "type": "string",
-            "description": "ID de la carta a la que pertenece el diseño"
-          },
-          "html": {
-            "type": "string",
-            "description": "HTML5+CSS completo generado (desde <!DOCTYPE html> hasta </html>)"
-          },
-          "nombre": {
-            "type": "string",
-            "description": "Nombre descriptivo del diseño (ej: 'Nonina Rock Elegante')"
-          },
-          "profile_id": {
-            "type": "string",
-            "description": "ID del perfil de diseño usado (opcional, para referencia)"
-          }
+          "carta_id": { "type": "string" },
+          "html": { "type": "string" },
+          "nombre": { "type": "string" },
+          "profile_id": { "type": "string" }
         },
         "required": ["carta_id", "html"]
       }
     },
     {
       "name": "design.save_profile",
-      "description": "Guarda un perfil de diseño reutilizable. Define paleta, tipografía, estilo — NO contiene HTML, es metadata estética.",
+      "description": "Guarda un perfil de diseño reutilizable.",
       "handler": "toolSaveProfile",
       "parameters": {
         "type": "object",
         "properties": {
-          "nombre": {
-            "type": "string",
-            "description": "Nombre del perfil (ej: 'Rock Elegante')"
-          },
-          "description": {
-            "type": "string",
-            "description": "Descripción del estilo visual"
-          },
-          "color_palette": {
-            "type": "object",
-            "description": "Colores: { primary, secondary, background, text, accent }",
-            "properties": {
-              "primary": { "type": "string" },
-              "secondary": { "type": "string" },
-              "background": { "type": "string" },
-              "text": { "type": "string" },
-              "accent": { "type": "string" }
-            }
-          },
-          "fonts": {
-            "type": "object",
-            "description": "Tipografía: { heading, body, accent }",
-            "properties": {
-              "heading": { "type": "string" },
-              "body": { "type": "string" },
-              "accent": { "type": "string" }
-            }
-          },
-          "layout_type": {
-            "type": "string",
-            "description": "Tipo de layout: single_column, two_column, three_column, multi_column, diptico"
-          },
-          "style_notes": {
-            "type": "string",
-            "description": "Notas de estilo libre para guiar al diseñador"
-          }
+          "nombre": { "type": "string" },
+          "description": { "type": "string" },
+          "color_palette": { "type": "object" },
+          "fonts": { "type": "object" },
+          "layout_type": { "type": "string" },
+          "style_notes": { "type": "string" }
         },
         "required": ["nombre"]
       }
     },
     {
       "name": "design.delete_profile",
-      "description": "Elimina un perfil de diseño custom. Los perfiles built-in no se pueden eliminar.",
+      "description": "Elimina un perfil custom.",
       "handler": "toolDeleteProfile",
       "parameters": {
         "type": "object",
         "properties": {
-          "profile_id": {
-            "type": "string",
-            "description": "ID del perfil a eliminar"
-          }
+          "profile_id": { "type": "string" }
         },
         "required": ["profile_id"]
       }
     },
     {
       "name": "design.gallery",
-      "description": "Lista todos los diseños generados previamente para una carta, con timestamps y perfil usado.",
+      "description": "Lista diseños previos de una carta.",
       "handler": "toolGallery",
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id": {
-            "type": "string",
-            "description": "ID de la carta"
-          }
+          "carta_id": { "type": "string" }
         },
         "required": ["carta_id"]
       }
@@ -167,6 +251,7 @@
     "metrics": {
       "counters": [
         "design.load_carta.total",
+        "design.create_project.total",
         "design.save.total",
         "design.save_profile.total",
         "design.gallery.total"

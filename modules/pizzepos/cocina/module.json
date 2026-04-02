@@ -79,6 +79,16 @@
         "event": "pedido.cancelado",
         "description": "Pedido cancelado - remover de cocina",
         "handler": "onPedidoCancelado"
+      },
+      {
+        "event": "cuenta.creada",
+        "description": "Cachear nombre de cuenta para mostrar en cocina",
+        "handler": "onCuentaCreada"
+      },
+      {
+        "event": "cuenta.actualizada",
+        "description": "Actualizar nombre de cuenta cuando se renombra",
+        "handler": "onCuentaActualizada"
       }
     ]
   },

@@ -60,6 +60,9 @@ class CocinaModule {
     this.historial = []; // últimos 50 pedidos completados
     this.maxHistorial = 50;
 
+    // Cache de nombres de cuenta (cuenta_id → nombre)
+    this.cuentaNombres = new Map();
+
     // Rolling average tiempos preparación (últimos 100)
     this.tiemposPreparacion = [];
 
@@ -225,6 +228,28 @@ class CocinaModule {
   // Event Handlers (auto-wired from module.json)
   // ==========================================
 
+  // ==========================================
+  // Nombre de cuenta: cache
+  // ==========================================
+
+  async onCuentaCreada(event) {
+    const data = event?.data || event?.payload || event;
+    if (data.cuenta_id && data.nombre) {
+      this.cuentaNombres.set(data.cuenta_id, data.nombre);
+    }
+  }
+
+  async onCuentaActualizada(event) {
+    const data = event?.data || event?.payload || event;
+    if (data.cuenta_id && data.cambios?.nombre) {
+      this.cuentaNombres.set(data.cuenta_id, data.cambios.nombre);
+    }
+  }
+
+  // ==========================================
+  // Pedidos
+  // ==========================================
+
   async onPedidoEnviadoCocina(event) {
     const data = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
@@ -237,9 +262,13 @@ class CocinaModule {
       items_count: items?.length || 0
     });
 
+    // Resolver nombre de cuenta desde cache o metadata
+    const nombre_cuenta = metadata?.nombre || this.cuentaNombres.get(cuenta_id) || null;
+
     const pedidoCocina = {
       pedido_id,
       cuenta_id,
+      nombre_cuenta,
       canal: canal || null,
       items: (items || []).map(item => {
         const cocinaItem = {
@@ -276,6 +305,7 @@ class CocinaModule {
     await this.publishDisplayCocina('nuevo_pedido', {
       pedido_id,
       cuenta_id,
+      nombre_cuenta,
       canal: canal || null,
       items: pedidoCocina.items.map(i => ({ nombre: i.nombre, cantidad: i.cantidad, categoria: i.categoria })),
       items_count: pedidoCocina.items.length

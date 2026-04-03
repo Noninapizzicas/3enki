@@ -50,6 +50,7 @@
       "credential-manager",
       "database-manager",
       "filesystem",
+      "log-manager",
       "plugin-manager",
       "prompt-manager",
       "prompt-engine",
@@ -105,7 +106,6 @@
       "viabilidad"
     ],
     "disabled": [
-      "log-manager",
       "conversation-manager",
       "scratch-designer",
       "ui-designer",

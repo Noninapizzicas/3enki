@@ -87,13 +87,18 @@ btn,button,.btn{display:block;width:100%;padding:12px;border:none;border-radius:
 </div>
 
 <div class="card">
-<h2>Impresora BLE</h2>
+<h2>Impresora Bluetooth</h2>
+<label>Modo Bluetooth</label>
+<select id="bt_mode" style="width:100%;padding:10px;background:#0f3460;border:1px solid #1a4080;border-radius:8px;color:#fff;font-size:.95em">
+<option value="ble">BLE — Bajo consumo (NimBLE)</option>
+<option value="spp">SPP — Clasico, mas estable (Serial)</option>
+</select>
 <button class="btn btn-scan" onclick="bleScan()">Escanear impresoras BLE</button>
 <div id="printerList" class="printer-list"></div>
-<label>Nombre</label><input id="printer_name" placeholder="NT-1809">
+<label>Nombre</label><input id="printer_name" placeholder="BlueTooth Printer">
 <label>MAC (auto)</label><input id="printer_addr" placeholder="AA:BB:CC:DD:EE:FF" readonly>
-<label>Service UUID</label><input id="printer_svc" value="49535343-fe7d-4ae5-8fa9-9fafd205e455">
-<label>Characteristic UUID</label><input id="printer_char" value="49535343-8841-43f4-a8d4-ecbe34729bb3">
+<label>Service UUID (solo BLE)</label><input id="printer_svc" value="49535343-fe7d-4ae5-8fa9-9fafd205e455">
+<label>Characteristic UUID (solo BLE)</label><input id="printer_char" value="49535343-8841-43f4-a8d4-ecbe34729bb3">
 <button class="btn btn-scan" onclick="testPrint()">Test Print</button>
 </div>
 
@@ -123,6 +128,7 @@ function loadConfig(){
   fetch('/api/printer').then(r=>r.json()).then(c=>{
     ['printer_name','printer_addr','printer_svc','printer_char'].forEach(k=>{
       const el=document.getElementById(k);if(el&&c[k]!==undefined)el.value=c[k]});
+    if(c.bt_mode){document.getElementById('bt_mode').value=c.bt_mode}
   }).catch(()=>{});
 }
 
@@ -132,6 +138,7 @@ function loadStatus(){
     h+='<span class="badge '+(s.wifi?'badge-ok':'badge-err')+'">WiFi</span>';
     h+='<span class="badge '+(s.mqtt?'badge-ok':'badge-err')+'">MQTT</span>';
     h+='<span class="badge '+(s.printer?'badge-ok':'badge-err')+'">Printer</span>';
+    if(s.bt_mode)h+='<span class="badge badge-ok">'+(s.bt_mode==='spp'?'SPP':'BLE')+'</span>';
     document.getElementById('statusBar').innerHTML=h;
   });
 }
@@ -152,7 +159,8 @@ function saveConfig(){
         printer_name:document.getElementById('printer_name').value,
         printer_addr:document.getElementById('printer_addr').value,
         printer_svc:document.getElementById('printer_svc').value,
-        printer_char:document.getElementById('printer_char').value
+        printer_char:document.getElementById('printer_char').value,
+        bt_mode:document.getElementById('bt_mode').value
       };
       return fetch('/api/printer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(driverBody)}).then(r=>r.json());
     }

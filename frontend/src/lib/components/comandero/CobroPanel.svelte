@@ -79,8 +79,13 @@
     propina = valor;
   }
 
-  async function procesarCobro() {
-    if (!metodoSeleccionado) return;
+  /** Cobra con el método dado (o el seleccionado si no se pasa) */
+  async function procesarCobro(metodoDirecto?: string) {
+    const metodo = metodoDirecto || metodoSeleccionado;
+    if (!metodo) return;
+
+    // Si viene de cobro directo, fijar el método seleccionado
+    if (metodoDirecto) metodoSeleccionado = metodoDirecto;
 
     loading = true;
     error = null;
@@ -91,12 +96,12 @@
         project_id: project_id || undefined,
         pedido_ids,
         monto,
-        metodo_pago: metodoSeleccionado,
+        metodo_pago: metodo,
         propina
       };
 
       // Solo enviar monto_recibido si el usuario lo introdujo
-      if (metodoSeleccionado === 'efectivo' && montoRecibido > 0) {
+      if (metodo === 'efectivo' && montoRecibido > 0) {
         payload.monto_recibido = montoRecibido;
       }
 
@@ -137,11 +142,21 @@
   }
 
   /** Cobrar + imprimir ticket de venta */
-  async function cobrarEImprimir() {
-    await procesarCobro();
+  async function cobrarEImprimir(metodoDirecto?: string) {
+    await procesarCobro(metodoDirecto);
     if (!error && cobroCreado) {
       await imprimirTicket();
     }
+  }
+
+  /** Cobro directo desde botón dual — efectivo */
+  function cobroDirectoEfectivo() {
+    procesarCobro('efectivo');
+  }
+
+  /** Cobro directo desde botón dual — tarjeta */
+  function cobroDirectoTarjeta() {
+    procesarCobro('tarjeta');
   }
 
   function handleClose() {
@@ -336,12 +351,48 @@
               Cerrar
             </button>
           </div>
-        {:else}
-          <!-- Cobrar: con botón de imprimir al lado -->
+        {:else if !metodoSeleccionado || metodoSeleccionado === 'efectivo' || metodoSeleccionado === 'tarjeta'}
+          <!-- Cobro rápido: botón dual efectivo/tarjeta -->
           <div class="footer-actions">
             <button
               class="action-btn print"
-              disabled={loading || imprimiendo || !metodoSeleccionado || montoInsuficiente}
+              disabled={loading || imprimiendo}
+              on:click={() => cobrarEImprimir(metodoSeleccionado || 'efectivo')}
+              title="Cobrar e imprimir ticket"
+            >
+              {imprimiendo ? '🖨️...' : '🖨️'}
+            </button>
+            <div class="cobro-dual" class:loading>
+              <button
+                class="dual-zone dual-left"
+                disabled={loading || montoInsuficiente}
+                on:click={cobroDirectoEfectivo}
+              >
+                {#if loading && metodoSeleccionado === 'efectivo'}
+                  ⏳...
+                {:else}
+                  💵 Efectivo
+                {/if}
+              </button>
+              <button
+                class="dual-zone dual-right"
+                disabled={loading}
+                on:click={cobroDirectoTarjeta}
+              >
+                {#if loading && metodoSeleccionado === 'tarjeta'}
+                  ⏳...
+                {:else}
+                  💳 Tarjeta
+                {/if}
+              </button>
+            </div>
+          </div>
+        {:else}
+          <!-- Otros métodos: botón cobrar único -->
+          <div class="footer-actions">
+            <button
+              class="action-btn print"
+              disabled={loading || imprimiendo || !metodoSeleccionado}
               on:click={cobrarEImprimir}
               title="Cobrar e imprimir ticket"
             >
@@ -349,8 +400,8 @@
             </button>
             <button
               class="action-btn primary"
-              disabled={loading || !metodoSeleccionado || montoInsuficiente}
-              on:click={procesarCobro}
+              disabled={loading || !metodoSeleccionado}
+              on:click={() => procesarCobro()}
             >
               {#if loading}
                 ⏳ Procesando...
@@ -848,6 +899,58 @@
 
   .action-btn.secondary:hover {
     background: #444;
+  }
+
+  /* Botón dual cobro rápido — patrón ProductoBtn */
+  .cobro-dual {
+    flex: 1;
+    display: flex;
+    border-radius: 10px;
+    overflow: hidden;
+    min-height: 48px;
+  }
+
+  .cobro-dual.loading {
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  .dual-zone {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    padding: 14px 8px;
+  }
+
+  .dual-zone:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .dual-left {
+    background: #22c55e;
+    color: #fff;
+    border-right: 2px solid rgba(0, 0, 0, 0.2);
+  }
+
+  .dual-left:active:not(:disabled) {
+    background: #16a34a;
+  }
+
+  .dual-right {
+    background: #eab308;
+    color: #000;
+  }
+
+  .dual-right:active:not(:disabled) {
+    background: #ca8a04;
   }
 
   /* Mobile */

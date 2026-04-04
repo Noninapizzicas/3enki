@@ -55,7 +55,7 @@
 
   // Cálculos
   $: montoTotal = monto + propina;
-  $: cambio = metodoSeleccionado === 'efectivo' ? Math.max(0, montoRecibido - montoTotal) : 0;
+  $: cambio = metodoSeleccionado === 'efectivo' && montoRecibido > 0 ? Math.max(0, montoRecibido - montoTotal) : 0;
   $: montoInsuficiente = metodoSeleccionado === 'efectivo' && montoRecibido > 0 && montoRecibido < montoTotal;
 
   // Propinas rápidas
@@ -81,10 +81,6 @@
 
   async function procesarCobro() {
     if (!metodoSeleccionado) return;
-    if (metodoSeleccionado === 'efectivo' && montoRecibido < montoTotal) {
-      error = 'Monto recibido insuficiente';
-      return;
-    }
 
     loading = true;
     error = null;
@@ -99,7 +95,8 @@
         propina
       };
 
-      if (metodoSeleccionado === 'efectivo') {
+      // Solo enviar monto_recibido si el usuario lo introdujo
+      if (metodoSeleccionado === 'efectivo' && montoRecibido > 0) {
         payload.monto_recibido = montoRecibido;
       }
 
@@ -249,7 +246,7 @@
           <!-- Efectivo: monto recibido -->
           {#if metodoSeleccionado === 'efectivo'}
             <section class="section">
-              <h3 class="section-title">💵 Monto recibido</h3>
+              <h3 class="section-title">💵 Monto recibido (opcional)</h3>
               <div class="efectivo-input">
                 <input
                   type="number"
@@ -344,7 +341,7 @@
           <div class="footer-actions">
             <button
               class="action-btn print"
-              disabled={loading || imprimiendo || !metodoSeleccionado || (metodoSeleccionado === 'efectivo' && montoRecibido < montoTotal)}
+              disabled={loading || imprimiendo || !metodoSeleccionado || montoInsuficiente}
               on:click={cobrarEImprimir}
               title="Cobrar e imprimir ticket"
             >
@@ -352,7 +349,7 @@
             </button>
             <button
               class="action-btn primary"
-              disabled={loading || !metodoSeleccionado || (metodoSeleccionado === 'efectivo' && montoRecibido < montoTotal)}
+              disabled={loading || !metodoSeleccionado || montoInsuficiente}
               on:click={procesarCobro}
             >
               {#if loading}

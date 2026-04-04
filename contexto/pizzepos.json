@@ -5,6 +5,13 @@
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
   "_CHANGELOG": {
+    "5.2.0": {
+      "fecha": "2026-04-04",
+      "cambios": [
+        "FEAT: CobroPanel — botón dual cobro rápido en footer (patrón ProductoBtn): izquierda verde=efectivo, derecha amarillo=tarjeta. Cobro directo sin seleccionar método.",
+        "FIX: CobroPanel — efectivo ya no requiere introducir monto recibido. Monto es opcional: si se introduce, calcula cambio. Si no, cobra directo."
+      ]
+    },
     "5.1.0": {
       "fecha": "2026-03-08",
       "cambios": [
@@ -1127,9 +1134,15 @@
               "estado": "IMPLEMENTADO",
               "funcion": "Procesar pago de la cuenta",
               "metodos_pago": ["efectivo", "tarjeta", "bizum", "transferencia", "mixto", "link_pago", "qr"],
-              "efectivo": "Botones rápidos (5€, 10€, 20€, 50€, 100€, Exacto) + cálculo de cambio",
-              "propinas": "Selección de propina (0, 5%, 10%, redondeo)",
-              "mqtt": "mqttRequest('cobros', 'procesar', { cuenta_id, metodo, monto_recibido?, propina? })"
+              "cobro_rapido_dual": {
+                "descripcion": "Botón dual en footer (patrón ProductoBtn): izquierda verde = efectivo directo, derecha amarilla = tarjeta directo. Sin necesidad de seleccionar método primero.",
+                "izquierda": "💵 Efectivo — verde (#22c55e), cobra directo sin introducir monto",
+                "derecha": "💳 Tarjeta — amarillo (#eab308), cobra directo",
+                "otros_metodos": "Si se selecciona bizum/transferencia/link/QR del grid, el botón vuelve a ser único estándar"
+              },
+              "efectivo": "Monto recibido OPCIONAL — botones rápidos (5€, 10€, 20€, 50€, 100€, Exacto) + cálculo de cambio. Si no se introduce monto, cobra directo sin calcular cambio.",
+              "propinas": "Selección de propina (0, 1€, 2€, 5€)",
+              "mqtt": "mqttRequest('cobro', 'create', { cuenta_id, metodo_pago, monto, monto_recibido?, propina? })"
             },
             "MitadMitadPanel": {
               "estado": "IMPLEMENTADO",
@@ -1195,7 +1208,7 @@
       },
       "flotantes": {
         "VariacionesPanel.svelte": "Selección de variaciones — toggles de ingredientes agrupados, precio recalculado en vivo",
-        "CobroPanel.svelte": "Procesamiento de pago — 7 métodos, efectivo con billetes rápidos, propinas, cambio calculado",
+        "CobroPanel.svelte": "Procesamiento de pago — botón dual cobro rápido (verde=efectivo, amarillo=tarjeta), 7 métodos, efectivo con billetes opcionales, propinas, cambio calculado",
         "MitadMitadPanel.svelte": "Pizza mitad y mitad — selección visual de 2 pizzas, precio = max de ambas",
         "AlGustoPanel.svelte": "Pizza al gusto — selección de ingredientes individuales, precio = base + extras"
       },

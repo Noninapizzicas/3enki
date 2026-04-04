@@ -921,6 +921,7 @@ export function initCocinaSubscriptions(): () => void {
       const pedidoCocina: PedidoCocina = {
         pedido_id: data.pedido_id,
         cuenta_id: data.cuenta_id,
+        nombre_cuenta: data.nombre_cuenta || null,
         canal: data.canal || null,
         items: (data.items || []).map((item: any) => ({
           ...item,
@@ -945,7 +946,7 @@ export function initCocinaSubscriptions(): () => void {
         vibrateDevice([200, 100, 200, 100, 300]);
       } else {
         playNewOrderSound();
-        const ref = data.cuenta_id ? extractRef(data.cuenta_id) : 'Nuevo pedido';
+        const ref = data.cuenta_id ? extractRef(data.cuenta_id, data.nombre_cuenta) : 'Nuevo pedido';
         sendNotification('COCINA', `${ref} — ${(data.items || []).length} items`, `pedido-${data.pedido_id}`);
         vibrateDevice([200, 100, 200]);
       }

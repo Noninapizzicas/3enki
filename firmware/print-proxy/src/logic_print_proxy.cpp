@@ -378,7 +378,12 @@ static void publishResult(const char* jobId, bool success, const char* error = n
 // ============================================
 
 static void handleScan() {
-  // BLE scan (funciona en ambos modos — para descubrir impresoras)
+  // BLE scan solo disponible en modo BLE (NimBLE no coexiste con BluetoothSerial)
+  if (btMode == BT_MODE_SPP) {
+    webServer.send(200, "application/json", "[{\"name\":\"Scan no disponible en modo SPP\",\"addr\":\"\",\"rssi\":0}]");
+    return;
+  }
+
   NimBLEScan* scan = NimBLEDevice::getScan();
   scan->setActiveScan(true);
   NimBLEScanResults results = scan->start(BLE_SCAN_SECONDS);
@@ -464,26 +469,29 @@ static void handlePostDriverConfig() {
   if (doc["printer_svc"].is<const char*>())  strlcpy(printerSvcUuid,  doc["printer_svc"],  sizeof(printerSvcUuid));
   if (doc["printer_char"].is<const char*>()) strlcpy(printerCharUuid, doc["printer_char"], sizeof(printerCharUuid));
 
-  // Cambio de modo BT
+  // Cambio de modo BT — requiere reinicio (NimBLE y BluetoothSerial no coexisten)
+  bool needRestart = false;
   if (doc["bt_mode"].is<const char*>()) {
     const char* mode = doc["bt_mode"];
     uint8_t newMode = (strcmp(mode, "spp") == 0) ? BT_MODE_SPP : BT_MODE_BLE;
     if (newMode != btMode) {
-      // Desconectar modo actual
-      printerReady = false;
-      if (btMode == BT_MODE_SPP && sppInitialized) {
-        SerialBT.disconnect();
-      } else if (bleClient && bleClient->isConnected()) {
-        bleClient->disconnect();
-      }
       btMode = newMode;
-      Serial.printf("[PRINT] Modo cambiado a %s\n", btMode == BT_MODE_SPP ? "SPP" : "BLE");
+      needRestart = true;
+      Serial.printf("[PRINT] Modo cambiado a %s — reinicio necesario\n",
+        btMode == BT_MODE_SPP ? "SPP" : "BLE");
     }
   }
 
   saveDriverConfig();
 
-  // Reconectar con nueva config
+  if (needRestart) {
+    webServer.send(200, "application/json", "{\"ok\":true,\"restart\":true,\"msg\":\"Reiniciando para cambiar modo BT...\"}");
+    delay(1000);
+    ESP.restart();
+    return;
+  }
+
+  // Sin cambio de modo: reconectar con nueva config
   if (strlen(printerName) > 0 || strlen(printerAddr) > 0) {
     connectPrinter();
   }
@@ -499,14 +507,18 @@ void logic_setup() {
   // 1. Cargar config (incluye btMode)
   loadDriverConfig();
 
-  // 2. Inicializar BLE (siempre, para scan desde portal)
-  NimBLEDevice::init("EnkiPrint");
-
-  // 3. Si modo SPP, inicializar BluetoothSerial
+  // 2. Inicializar stack Bluetooth según modo
+  //    IMPORTANTE: NimBLE y BluetoothSerial NO pueden coexistir.
+  //    NimBLE reemplaza el stack BT completo del ESP32.
+  //    Al cambiar de modo se reinicia el ESP32.
   if (btMode == BT_MODE_SPP) {
-    SerialBT.begin("EnkiPrint", true);
+    SerialBT.begin("EnkiPrint", true);  // master mode
     sppInitialized = true;
-    Serial.println("[SPP] BluetoothSerial iniciado");
+    Serial.println("[SPP] BluetoothSerial iniciado (master)");
+    Serial.println("[SPP] Scan BLE no disponible en modo SPP");
+  } else {
+    NimBLEDevice::init("EnkiPrint");
+    Serial.println("[BLE] NimBLE iniciado");
   }
 
   // 4. Topics MQTT

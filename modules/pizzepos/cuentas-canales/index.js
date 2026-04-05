@@ -287,9 +287,8 @@ class CuentasCanalesModule {
   }
 
   getNextSecuencial(canal, subkey) {
-    const key = subkey
-      ? `${canal}_${subkey}_${this.fechaActual}`
-      : `${canal}_${this.fechaActual}`;
+    // Key sin fecha — el contador es continuo, solo cicla en 999→001
+    const key = subkey ? `${canal}_${subkey}` : canal;
 
     if (!this.contadores[key]) {
       this.contadores[key] = 1;
@@ -307,12 +306,12 @@ class CuentasCanalesModule {
   verificarReseoDiario() {
     const fechaActual = this.getFechaActual();
     if (fechaActual !== this.fechaActual) {
-      this.logger.info('canales.reseteo_diario', {
+      this.logger.info('canales.cambio_dia', {
         fecha_anterior: this.fechaActual,
         fecha_nueva: fechaActual
       });
       this.fechaActual = fechaActual;
-      this.contadores = {};
+      // No reseteamos contadores — solo ciclan en 999→001
     }
   }
 

@@ -60,6 +60,7 @@
     getPurposeIcon
   } from '$lib/stores/channels';
   import { closePanel } from '$lib/stores';
+  import { subscribe } from '$lib/ui-core/mqtt';
 
   export let _panelId: string;
 
@@ -99,6 +100,12 @@
     chatId: '',
     botName: ''
   };
+
+  // Discover Chat ID state
+  let discoveringChatId = false;
+  let discoverCountdown = 0;
+  let discoverTimer: ReturnType<typeof setInterval> | null = null;
+  let discoverUnsub: (() => void) | null = null;
 
   // Form state for "Config" tab
   let editApiKey = '';
@@ -204,6 +211,7 @@
 
   onDestroy(() => {
     cleanup?.();
+    stopDiscovery();
   });
 
   // Update default provider when providers load
@@ -429,6 +437,55 @@
     } finally {
       deleting = false;
     }
+  }
+
+  // ==========================================================================
+  // HANDLERS - DISCOVER CHAT ID
+  // ==========================================================================
+
+  function stopDiscovery() {
+    discoveringChatId = false;
+    discoverCountdown = 0;
+    if (discoverTimer) { clearInterval(discoverTimer); discoverTimer = null; }
+    if (discoverUnsub) { discoverUnsub(); discoverUnsub = null; }
+  }
+
+  function handleDiscoverChatId() {
+    if (discoveringChatId) { stopDiscovery(); return; }
+    if (!telegramNotifForm.botName) return;
+
+    const targetBot = telegramNotifForm.botName;
+    discoveringChatId = true;
+    discoverCountdown = 60;
+
+    // Countdown timer
+    discoverTimer = setInterval(() => {
+      discoverCountdown--;
+      if (discoverCountdown <= 0) stopDiscovery();
+    }, 1000);
+
+    // Listen for any message from the target bot
+    discoverUnsub = subscribe('telegram.text.received', (_topic: string, payload: any) => {
+      const data = payload?.data || payload;
+      if (data?.botName !== targetBot) return;
+
+      // Capture the chatId from whoever sent the message
+      telegramNotifForm.chatId = String(data.chatId);
+      stopDiscovery();
+    });
+
+    // Also listen for command events (like /start)
+    const unsubCmd = subscribe('telegram.command.received', (_topic: string, payload: any) => {
+      const data = payload?.data || payload;
+      if (data?.botName !== targetBot) return;
+
+      telegramNotifForm.chatId = String(data.chatId);
+      stopDiscovery();
+    });
+
+    // Combine both unsubscribes
+    const originalUnsub = discoverUnsub;
+    discoverUnsub = () => { originalUnsub(); unsubCmd(); };
   }
 
   // ==========================================================================
@@ -1024,6 +1081,12 @@
       <!-- TELEGRAM NEW BOT FORM -->
       {#if activeServiceValue === 'telegram'}
         <div class="form">
+          <div class="info-box">
+            <strong>Registrar Bot de Telegram</strong>
+            <p>Un bot es la conexion entre el sistema y Telegram. Puede enviar notificaciones (cierres de caja, reportes) y recibir datos (fotos de facturas, comandos).</p>
+            <p>Si no tienes un bot, crealo en Telegram: busca <strong>@BotFather</strong>, envia <code>/newbot</code> y copia el token que te da.</p>
+          </div>
+
           <div class="field">
             <label class="label" for="bot-name">Nombre del Bot</label>
             <input
@@ -1033,7 +1096,7 @@
               placeholder="facturas, ventas, alertas..."
               bind:value={telegramForm.botName}
             />
-            <span class="field-hint">Identificador interno (sin espacios)</span>
+            <span class="field-hint">Identificador interno para distinguir este bot de otros (ej: facturas, cierres, pedidos). Sin espacios.</span>
           </div>
 
           <div class="field">
@@ -1091,6 +1154,19 @@
         <div class="form">
           <h4 class="form-section-title">Destino de Notificaciones</h4>
 
+          <div class="info-box">
+            <strong>Donde se envian las notificaciones</strong>
+            <p>Configura a que persona o grupo de Telegram se envian las notificaciones automaticas (cierres de caja, reportes de ventas, alertas). Cada proyecto puede tener su propio destinatario.</p>
+            <details class="info-details">
+              <summary>Como funciona el nivel</summary>
+              <ul>
+                <li><strong>GLOBAL</strong> — Destino por defecto para todos los proyectos que no tengan uno propio.</li>
+                <li><strong>PROJECT</strong> — Destino especifico para un proyecto. El identificador es el nombre del proyecto (ej: <code>nonina</code>, <code>bar-pepe</code>). <em>Este es el mas comun.</em></li>
+                <li><strong>CLIENT / CUSTOM</strong> — Para casos avanzados con multiples destinatarios.</li>
+              </ul>
+            </details>
+          </div>
+
           <!-- Level -->
           <fieldset class="field">
             <legend class="label">Nivel</legend>
@@ -1120,21 +1196,54 @@
                 placeholder={telegramNotifForm.level === 'PROJECT' ? 'nonina' : 'identificador'}
                 bind:value={telegramNotifForm.identifier}
               />
-              <span class="field-hint">Nombre del proyecto o identificador</span>
+              <span class="field-hint">Nombre exacto del proyecto tal como aparece en el sistema (ej: nonina, bar-pepe). Las notificaciones de cierre de caja de este proyecto se enviaran a este destino.</span>
             </div>
           {/if}
 
           <!-- Chat ID -->
           <div class="field">
             <label class="label" for="notif-chat-id">Chat ID</label>
-            <input
-              id="notif-chat-id"
-              type="text"
-              class="input"
-              placeholder="1934798567"
-              bind:value={telegramNotifForm.chatId}
-            />
-            <span class="field-hint">ID del chat o usuario de Telegram</span>
+            <div class="input-with-action">
+              <input
+                id="notif-chat-id"
+                type="text"
+                class="input"
+                placeholder="1934798567"
+                bind:value={telegramNotifForm.chatId}
+              />
+              {#if telegramBots.length > 0}
+                <button
+                  type="button"
+                  class="btn secondary small"
+                  on:click={handleDiscoverChatId}
+                  disabled={discoveringChatId || !telegramNotifForm.botName}
+                  title={!telegramNotifForm.botName ? 'Selecciona un bot primero' : 'Detectar Chat ID automaticamente'}
+                >
+                  {#if discoveringChatId}
+                    Esperando... ({discoverCountdown}s)
+                  {:else}
+                    Detectar
+                  {/if}
+                </button>
+              {/if}
+            </div>
+            {#if discoveringChatId}
+              <div class="discover-status">
+                Envia <strong>/start</strong> al bot <strong>@{telegramNotifForm.botName}</strong> desde la cuenta de Telegram del destinatario. El Chat ID se capturara automaticamente.
+              </div>
+            {:else}
+              <span class="field-hint">ID numerico del usuario o grupo de Telegram que recibira las notificaciones. Usa "Detectar" o consultalo manualmente.</span>
+              <details class="info-details">
+                <summary>Como obtener el Chat ID manualmente</summary>
+                <ol>
+                  <li>El destinatario abre Telegram y busca el bot <strong>@{telegramNotifForm.botName || 'tu_bot'}</strong></li>
+                  <li>Le envia <strong>/start</strong> (obligatorio, sin esto el bot no puede escribirle)</li>
+                  <li>Busca <strong>@userinfobot</strong> en Telegram y le envia cualquier mensaje — te respondera con tu Chat ID</li>
+                  <li>Copia el numero y pegalo aqui</li>
+                </ol>
+                <p><em>O pulsa "Detectar" para capturarlo automaticamente.</em></p>
+              </details>
+            {/if}
           </div>
 
           <!-- Bot Name -->
@@ -1160,7 +1269,7 @@
                 bind:value={telegramNotifForm.botName}
               />
             {/if}
-            <span class="field-hint">Bot que enviará las notificaciones</span>
+            <span class="field-hint">Bot que enviara las notificaciones. Debe estar registrado arriba con su token. Un mismo bot puede enviar a distintos destinatarios.</span>
           </div>
 
           <!-- Configs existentes -->
@@ -2510,6 +2619,92 @@
     color: var(--_text-secondary, rgba(255,255,255,0.6));
     margin: 0 0 0.75rem 0;
     font-weight: 500;
+  }
+
+  /* Info boxes */
+  .info-box {
+    background: var(--_bg-surface, rgba(255,255,255,0.03));
+    border: 1px solid var(--_border, rgba(255,255,255,0.1));
+    border-left: 3px solid var(--_primary, #6366f1);
+    border-radius: var(--_radius, 6px);
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--_text-secondary, rgba(255,255,255,0.7));
+  }
+
+  .info-box strong {
+    color: var(--_text-primary, #fff);
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.8rem;
+  }
+
+  .info-box p {
+    margin: 0.25rem 0;
+  }
+
+  .info-box code {
+    background: rgba(255,255,255,0.08);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+  }
+
+  .info-details {
+    margin-top: 0.5rem;
+    font-size: 0.7rem;
+    color: var(--_text-muted, rgba(255,255,255,0.5));
+  }
+
+  .info-details summary {
+    cursor: pointer;
+    color: var(--_primary, #6366f1);
+    font-size: 0.72rem;
+  }
+
+  .info-details ul,
+  .info-details ol {
+    margin: 0.35rem 0;
+    padding-left: 1.2rem;
+  }
+
+  .info-details li {
+    margin-bottom: 0.2rem;
+  }
+
+  /* Input with action button */
+  .input-with-action {
+    display: flex;
+    gap: 0.375rem;
+    align-items: center;
+  }
+
+  .input-with-action .input {
+    flex: 1;
+  }
+
+  .input-with-action .btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Discover Chat ID */
+  .discover-status {
+    margin-top: 0.35rem;
+    padding: 0.5rem 0.65rem;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: var(--_radius, 6px);
+    font-size: 0.72rem;
+    color: var(--_text-secondary, rgba(255,255,255,0.7));
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { border-color: rgba(99, 102, 241, 0.3); }
+    50% { border-color: rgba(99, 102, 241, 0.7); }
   }
 
   .notif-config-item {

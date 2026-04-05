@@ -43,10 +43,12 @@ class CuentasCanalesModule {
     this.ajv = new Ajv({ allErrors: true, useDefaults: true });
     addFormats(this.ajv);
 
-    // Reseteo diario
+    // Contadores y fecha
     this.fechaActual = this.getFechaActual();
     this.contadores = {};
     this._resetInterval = null;
+    this._contadoresPath = './data/current/contadores_canales.json';
+    this._saveTimer = null;
 
     // Tracking de tiempos (utilidad compartida)
     this._timeArrays = {};
@@ -106,6 +108,7 @@ class CuentasCanalesModule {
     }
 
     this.iniciarReseoDiario();
+    await this.cargarContadores();
 
     this.logger.info('module.loaded', {
       module: this.name,
@@ -135,6 +138,13 @@ class CuentasCanalesModule {
     }
 
     this._timeArrays = {};
+
+    // Guardar contadores antes de limpiar
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    await this.guardarContadores();
     this.contadores = {};
 
     this.logger.info('module.unloaded', { module: this.name });
@@ -242,6 +252,7 @@ class CuentasCanalesModule {
       origen: `cuentas-canales:${data.tipo}`,
       project_id: data.project_id,
       total: data.total || 0,
+      ref_display: data.ref_display || null,
       metadata: data.metadata || {}
     }, { correlationId });
   }
@@ -260,6 +271,23 @@ class CuentasCanalesModule {
   // Helpers Comunes
   // ==========================================
 
+  /**
+   * Construye el ref_display canónico: "{símbolo} {num3} · {nombre}"
+   * Este string es la referencia visual única de la cuenta en TODO el sistema.
+   * @param {string} symbol - Letra del canal (M, L, T, G, W, D)
+   * @param {number} secuencial - Número secuencial del día
+   * @param {string} [nombre] - Nombre opcional del cliente/mesa
+   * @returns {string} ej: "L 005 · Juan" o "M 003"
+   */
+  buildRefDisplay(symbol, secuencial, nombre) {
+    const num = String(secuencial).padStart(3, '0');
+    const base = `${symbol} ${num}`;
+    if (nombre && nombre.trim()) {
+      return `${base} · ${nombre.trim()}`;
+    }
+    return base;
+  }
+
   getFechaActual() {
     const now = new Date();
     const year = now.getFullYear();
@@ -269,27 +297,32 @@ class CuentasCanalesModule {
   }
 
   getNextSecuencial(canal, subkey) {
-    const key = subkey
-      ? `${canal}_${subkey}_${this.fechaActual}`
-      : `${canal}_${this.fechaActual}`;
+    // Key sin fecha — el contador es continuo, solo cicla en 999→001
+    const key = subkey ? `${canal}_${subkey}` : canal;
 
     if (!this.contadores[key]) {
       this.contadores[key] = 1;
     } else {
       this.contadores[key]++;
+      // Ciclo de turno: 001→999→001 (3 dígitos siempre)
+      if (this.contadores[key] > 999) {
+        this.contadores[key] = 1;
+        this.logger?.info('canales.contador.ciclo_completado', { canal, key });
+      }
     }
+    this._debounceSave();
     return this.contadores[key];
   }
 
   verificarReseoDiario() {
     const fechaActual = this.getFechaActual();
     if (fechaActual !== this.fechaActual) {
-      this.logger.info('canales.reseteo_diario', {
+      this.logger.info('canales.cambio_dia', {
         fecha_anterior: this.fechaActual,
         fecha_nueva: fechaActual
       });
       this.fechaActual = fechaActual;
-      this.contadores = {};
+      // No reseteamos contadores — solo ciclan en 999→001
     }
   }
 
@@ -297,6 +330,53 @@ class CuentasCanalesModule {
     this._resetInterval = setInterval(() => {
       this.verificarReseoDiario();
     }, 60 * 60 * 1000);
+  }
+
+  // ==========================================
+  // Persistencia de contadores
+  // ==========================================
+
+  async cargarContadores() {
+    try {
+      const fs = require('fs').promises;
+      const contenido = await fs.readFile(this._contadoresPath, 'utf8');
+      const datos = JSON.parse(contenido);
+      this.contadores = datos.contadores || {};
+      this.logger.info('canales.contadores.cargados', {
+        canales: Object.keys(this.contadores),
+        valores: { ...this.contadores }
+      });
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        this.logger.info('canales.contadores.archivo_no_existe', { msg: 'empezando desde 001' });
+      } else {
+        this.logger.warn('canales.contadores.error_carga', { error: err.message });
+      }
+      this.contadores = {};
+    }
+  }
+
+  async guardarContadores() {
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      await fs.mkdir(path.dirname(this._contadoresPath), { recursive: true });
+      await fs.writeFile(this._contadoresPath, JSON.stringify({
+        contadores: this.contadores,
+        updated_at: new Date().toISOString()
+      }, null, 2));
+    } catch (err) {
+      this.logger?.warn('canales.contadores.error_guardado', { error: err.message });
+    }
+  }
+
+  // Guardar con debounce (máx 1 escritura cada 2s)
+  _debounceSave() {
+    if (this._saveTimer) return;
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      this.guardarContadores();
+    }, 2000);
   }
 
   calcularTiempoMinutos(desde) {

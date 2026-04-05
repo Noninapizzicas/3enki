@@ -39,8 +39,13 @@
         "handler": "onItemTicket"
       },
       {
+        "event": "cuenta.creada",
+        "description": "Cachear ref_display canónico para impresión de tickets",
+        "handler": "onCuentaCreada"
+      },
+      {
         "event": "mesa.abierta",
-        "description": "Cachear nombre de mesa para impresión de tickets",
+        "description": "Cachear nombre de mesa para impresión de tickets (legacy)",
         "handler": "onMesaAbierta"
       },
       {
@@ -55,12 +60,12 @@
       },
       {
         "event": "llevar.ticket_creado",
-        "description": "Cachear nombre de ticket llevar para impresión",
+        "description": "Cachear nombre de ticket llevar para impresión (legacy)",
         "handler": "onLlevarTicketCreado"
       },
       {
         "event": "cuenta.actualizada",
-        "description": "Actualizar nombre en cache cuando se renombra cualquier cuenta",
+        "description": "Actualizar ref_display en cache cuando se renombra cualquier cuenta",
         "handler": "onCuentaActualizada"
       }
     ]

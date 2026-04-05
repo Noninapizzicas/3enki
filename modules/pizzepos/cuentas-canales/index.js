@@ -295,6 +295,11 @@ class CuentasCanalesModule {
       this.contadores[key] = 1;
     } else {
       this.contadores[key]++;
+      // Ciclo de turno: 001→999→001 (3 dígitos siempre)
+      if (this.contadores[key] > 999) {
+        this.contadores[key] = 1;
+        this.logger?.info('canales.contador.ciclo_completado', { canal, key });
+      }
     }
     return this.contadores[key];
   }

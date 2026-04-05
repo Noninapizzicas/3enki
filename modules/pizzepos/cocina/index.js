@@ -60,7 +60,7 @@ class CocinaModule {
     this.historial = []; // últimos 50 pedidos completados
     this.maxHistorial = 50;
 
-    // Cache de nombres de cuenta (cuenta_id → nombre)
+    // Cache de ref_display de cuenta (cuenta_id → ref_display canónico)
     this.cuentaNombres = new Map();
 
     // Rolling average tiempos preparación (últimos 100)
@@ -234,15 +234,19 @@ class CocinaModule {
 
   async onCuentaCreada(event) {
     const data = event?.data || event?.payload || event;
-    if (data.cuenta_id && data.nombre) {
-      this.cuentaNombres.set(data.cuenta_id, data.nombre);
+    if (data.cuenta_id) {
+      // Prefer ref_display (canonical), fallback to nombre for backwards compat
+      const display = data.ref_display || data.metadata?.nombre || data.nombre || null;
+      if (display) this.cuentaNombres.set(data.cuenta_id, display);
     }
   }
 
   async onCuentaActualizada(event) {
     const data = event?.data || event?.payload || event;
-    if (data.cuenta_id && data.cambios?.nombre) {
-      this.cuentaNombres.set(data.cuenta_id, data.cambios.nombre);
+    if (data.cuenta_id) {
+      // Prefer ref_display (canonical), fallback to cambios.nombre
+      const display = data.cambios?.ref_display || data.cambios?.nombre || null;
+      if (display) this.cuentaNombres.set(data.cuenta_id, display);
     }
   }
 
@@ -262,8 +266,8 @@ class CocinaModule {
       items_count: items?.length || 0
     });
 
-    // Resolver nombre de cuenta desde cache o metadata
-    const nombre_cuenta = metadata?.nombre || this.cuentaNombres.get(cuenta_id) || null;
+    // Resolver ref_display canónico (ej: "L 005 · Juan") desde cache o metadata
+    const nombre_cuenta = this.cuentaNombres.get(cuenta_id) || metadata?.nombre || null;
 
     const pedidoCocina = {
       pedido_id,

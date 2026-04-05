@@ -856,15 +856,20 @@ function playGlovoAlertSound() {
 // =============================================================================
 
 /**
- * Extrae referencia legible del cuenta_id
- * mesa_5_20260225_001 → "MESA 5"
- * tel_20260225_001 → "TEL #1"
+ * Extrae referencia legible del cuenta_id.
+ * Si nombreCuenta contiene un ref_display canónico (ej: "L 005 · Juan"),
+ * lo usa directamente. Si no, reconstruye desde cuenta_id (legacy).
  */
 export function extractRef(cuentaId: string, nombreCuenta?: string | null): string {
   if (!cuentaId) return '???';
 
-  // Si hay nombre de cliente, usarlo como referencia principal
-  // con el tipo como sufijo: "JUAN (LLEVAR #5)"
+  // Si nombreCuenta es un ref_display canónico (patrón: "X NNN" o "X NNN · nombre"),
+  // usarlo directamente — es la fuente de verdad unificada
+  if (nombreCuenta && /^[A-Z] \d{3}/.test(nombreCuenta)) {
+    return nombreCuenta.toUpperCase();
+  }
+
+  // Legacy fallback: reconstruir desde cuenta_id
   let tipoRef = '';
 
   if (cuentaId.startsWith('mesa_')) {
@@ -886,6 +891,7 @@ export function extractRef(cuentaId: string, nombreCuenta?: string | null): stri
     tipoRef = cuentaId.substring(0, 8).toUpperCase();
   }
 
+  // If old-style nombreCuenta exists but not canonical format, combine
   if (nombreCuenta && nombreCuenta !== tipoRef) {
     return `${nombreCuenta.toUpperCase()} · ${tipoRef}`;
   }

@@ -242,6 +242,7 @@ class CuentasCanalesModule {
       origen: `cuentas-canales:${data.tipo}`,
       project_id: data.project_id,
       total: data.total || 0,
+      ref_display: data.ref_display || null,
       metadata: data.metadata || {}
     }, { correlationId });
   }
@@ -259,6 +260,23 @@ class CuentasCanalesModule {
   // ==========================================
   // Helpers Comunes
   // ==========================================
+
+  /**
+   * Construye el ref_display canónico: "{símbolo} {num3} · {nombre}"
+   * Este string es la referencia visual única de la cuenta en TODO el sistema.
+   * @param {string} symbol - Letra del canal (M, L, T, G, W, D)
+   * @param {number} secuencial - Número secuencial del día
+   * @param {string} [nombre] - Nombre opcional del cliente/mesa
+   * @returns {string} ej: "L 005 · Juan" o "M 003"
+   */
+  buildRefDisplay(symbol, secuencial, nombre) {
+    const num = String(secuencial).padStart(3, '0');
+    const base = `${symbol} ${num}`;
+    if (nombre && nombre.trim()) {
+      return `${base} · ${nombre.trim()}`;
+    }
+    return base;
+  }
 
   getFechaActual() {
     const now = new Date();

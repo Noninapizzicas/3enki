@@ -530,6 +530,7 @@ class CuentasModule {
       tipo: tipo || 'local',
       nombre: metadata?.nombre || tipo || 'Cuenta',
       cliente_nombre: metadata?.cliente_nombre || null,
+      ref_display: data.ref_display || null,
       estado: 'pendiente',
       pagado: false,
       hora,
@@ -775,8 +776,16 @@ class CuentasModule {
     cuenta.nombre = nombre.trim().slice(0, 50);
     cuenta.updated_at = new Date().toISOString();
 
+    // Rebuild ref_display with the new name, preserving the symbol+number prefix
+    if (cuenta.ref_display) {
+      // Extract "X NNN" prefix from existing ref_display (e.g. "L 005 · Juan" → "L 005")
+      const prefix = cuenta.ref_display.split(' · ')[0];
+      cuenta.ref_display = cuenta.nombre ? `${prefix} · ${cuenta.nombre}` : prefix;
+    }
+
     await this.publishCuentaActualizada(cuenta.project_id, id, {
-      nombre: cuenta.nombre
+      nombre: cuenta.nombre,
+      ref_display: cuenta.ref_display || null
     });
 
     this.logger.info('cuenta.renombrada', {

@@ -130,8 +130,8 @@ class ImpresionModule {
       impresoras_descubiertas: 0
     };
 
-    // Cache de nombres personalizados de cuenta (cuenta_id → nombre)
-    // Se alimenta de eventos mesa.abierta/renombrada, llevar.ticket_creado, etc.
+    // Cache de ref_display canónico (cuenta_id → { ref })
+    // Se alimenta primariamente de cuenta.creada (ref_display), con fallback a eventos legacy
     this.cuentaNombres = new Map();
 
     // Referencia al listener MQTT para cleanup
@@ -371,13 +371,27 @@ class ImpresionModule {
   }
 
   // ==========================================
-  // Event Handlers: mesa nombre cache
+  // Event Handler: ref_display canónico (cuenta.creada)
+  // ==========================================
+
+  async onCuentaCreada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, ref_display } = data;
+    if (cuenta_id && ref_display) {
+      this.cuentaNombres.set(cuenta_id, { ref: ref_display });
+      this.logger.info('impresion.ref_display.cached', { cuenta_id, ref_display });
+    }
+  }
+
+  // ==========================================
+  // Event Handlers: mesa nombre cache (legacy, para eventos sin ref_display)
   // ==========================================
 
   async onMesaAbierta(event) {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, nombre } = data;
-    if (cuenta_id && nombre) {
+    // Only set if not already cached via cuenta.creada (ref_display takes priority)
+    if (cuenta_id && nombre && !this.cuentaNombres.has(cuenta_id)) {
       this.cuentaNombres.set(cuenta_id, { ref: nombre });
       this.logger.info('impresion.cuenta_nombre.cached', { cuenta_id, nombre });
     }
@@ -403,8 +417,8 @@ class ImpresionModule {
   async onLlevarTicketCreado(event) {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, numero_ticket, cliente_nombre } = data;
-    if (cuenta_id && numero_ticket != null) {
-      // Si el cliente tiene nombre real (no el default "Cliente N"), usarlo como ref
+    // Only set if not already cached via cuenta.creada (ref_display takes priority)
+    if (cuenta_id && numero_ticket != null && !this.cuentaNombres.has(cuenta_id)) {
       const esNombreReal = cliente_nombre && !/^Cliente\s+\d+$/i.test(cliente_nombre);
       const ref = esNombreReal ? cliente_nombre : `LLEVAR ${numero_ticket}`;
       this.cuentaNombres.set(cuenta_id, { ref });
@@ -415,10 +429,13 @@ class ImpresionModule {
   async onCuentaActualizada(event) {
     const data = event?.data || event?.payload || event;
     const { cuenta_id, cambios } = data;
-    if (cuenta_id && cambios?.nombre) {
+    if (!cuenta_id) return;
+    // Prefer ref_display (canonical), fallback to nombre
+    const newRef = cambios?.ref_display || cambios?.nombre || null;
+    if (newRef) {
       const existing = this.cuentaNombres.get(cuenta_id);
-      this.cuentaNombres.set(cuenta_id, { ...existing, ref: cambios.nombre });
-      this.logger.info('impresion.cuenta_nombre.updated', { cuenta_id, nombre: cambios.nombre });
+      this.cuentaNombres.set(cuenta_id, { ...existing, ref: newRef });
+      this.logger.info('impresion.ref_display.updated', { cuenta_id, ref: newRef });
     }
   }
 

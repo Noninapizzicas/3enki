@@ -279,10 +279,15 @@ class WhatsAppStrategy {
 
       // Publicar cuenta.creada al crear pedido (no esperar a confirmar),
       // para que cuentas registre la cuenta y el comandero/cocina puedan operar.
+      // ref_display canónico: "W 003 · Pedro" (o "W 003" si nombre genérico)
+      const esNombreReal = pedido.nombre && pedido.nombre !== 'Cliente WhatsApp';
+      const ref_display = this.modulo.buildRefDisplay('W', secuencial, esNombreReal ? pedido.nombre : null);
+
       await this.modulo.publishCuentaCreada({
         cuenta_id: pedido.cuenta_id,
         tipo: 'whatsapp',
         total: pedido.total,
+        ref_display,
         metadata: {
           telefono: pedido.telefono,
           nombre: pedido.nombre,

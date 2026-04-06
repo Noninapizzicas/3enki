@@ -26,6 +26,11 @@ static bool wifiTryConnect(int idx) {
   if (idx < 0 || idx >= WIFI_MAX_NETWORKS) return false;
   if (strlen(baseCfg.wifi[idx].ssid) == 0) return false;
 
+  // Limpiar estado anterior completamente antes de intentar nueva red
+  WiFi.disconnect(true);  // true = borrar config AP cacheada
+  delay(100);
+  WiFi.mode(WIFI_STA);
+
   Serial.printf("[WiFi] Intentando red %d: %s...\n", idx + 1, baseCfg.wifi[idx].ssid);
   WiFi.begin(baseCfg.wifi[idx].ssid, baseCfg.wifi[idx].pass);
 
@@ -134,7 +139,7 @@ void wifiHandleReconnect() {
     if (now - reconnStartMs < WIFI_RECONNECT_TIMEOUT) return;
 
     Serial.printf("[WiFi] Red %d timeout\n", reconnTryingIdx + 1);
-    WiFi.disconnect();
+    WiFi.disconnect(true);
   }
 
   // Siguiente red
@@ -145,6 +150,7 @@ void wifiHandleReconnect() {
   }
 
   if (reconnTryingIdx < WIFI_MAX_NETWORKS) {
+    WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
     WiFi.begin(baseCfg.wifi[reconnTryingIdx].ssid, baseCfg.wifi[reconnTryingIdx].pass);
     reconnStartMs = now;

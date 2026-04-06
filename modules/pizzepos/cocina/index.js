@@ -257,22 +257,26 @@ class CocinaModule {
   async onPedidoEnviadoCocina(event) {
     const data = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { pedido_id, items, cuenta_id, canal, notas_generales, metadata } = data;
+    const { pedido_id, items, cuenta_id, canal, ref_display, notas_generales, metadata } = data;
 
     this.logger.info('cocina.pedido.recibido', {
       correlation_id: correlationId,
       pedido_id,
       canal: canal || 'directo',
+      ref_display: ref_display || null,
       items_count: items?.length || 0
     });
 
-    // Resolver ref_display canónico (ej: "L 005 · Juan") desde cache o metadata
-    const nombre_cuenta = this.cuentaNombres.get(cuenta_id) || metadata?.nombre || null;
+    // ref_display: preferir el que viene en el evento, fallback a cache
+    const nombre_cuenta = ref_display || this.cuentaNombres.get(cuenta_id) || metadata?.nombre || null;
+    // Actualizar cache con el ref_display recibido
+    if (cuenta_id && ref_display) this.cuentaNombres.set(cuenta_id, ref_display);
 
     const pedidoCocina = {
       pedido_id,
       cuenta_id,
       nombre_cuenta,
+      ref_display: nombre_cuenta,
       canal: canal || null,
       items: (items || []).map(item => {
         const cocinaItem = {
@@ -949,6 +953,7 @@ class CocinaModule {
     await this.eventBus.publish('cocina.item_ticket', {
       pedido_id: pedidoCocina.pedido_id,
       cuenta_id: pedidoCocina.cuenta_id,
+      ref_display: pedidoCocina.ref_display || null,
       canal: pedidoCocina.canal || null,
       item_id: item.item_id,
       producto_id: item.producto_id,
@@ -976,6 +981,7 @@ class CocinaModule {
     await this.eventBus.publish('cocina.pedido_listo', {
       pedido_id: pedido.pedido_id,
       cuenta_id: pedido.cuenta_id,
+      ref_display: pedido.ref_display || null,
       canal: pedido.canal || null,
       items_count: pedido.items.length,
       tiempo_preparacion: pedido.tiempo_preparacion,

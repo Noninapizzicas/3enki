@@ -25,6 +25,9 @@ class ComanderoModule {
     // Buffer de pedidos por cuenta: cuenta_id -> { items: [], notas: '', total: 0 }
     this.pedidos = new Map();
 
+    // Cache de ref_display por cuenta (cuenta_id -> ref_display string)
+    this.refDisplayCache = new Map();
+
     // Caché de productos (para resolver nombre/precio)
     this.productosCache = new Map();
 
@@ -169,6 +172,7 @@ class ComanderoModule {
   // ==========================================
 
   async subscribeToEvents() {
+    await this.eventBus.subscribe('cuenta.creada', this.onCuentaCreada.bind(this));
     await this.eventBus.subscribe('cuenta.actualizada', this.onCuentaActualizada.bind(this));
     await this.eventBus.subscribe('caja.cerrada', this.onCajaCerrada.bind(this));
     await this.eventBus.subscribe('dia.iniciado', this.onDiaIniciado.bind(this));
@@ -190,14 +194,20 @@ class ComanderoModule {
   // Event Handlers
   // ==========================================
 
+  async onCuentaCreada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, ref_display } = data;
+    if (cuenta_id && ref_display) {
+      this.refDisplayCache.set(cuenta_id, ref_display);
+    }
+  }
+
   async onCuentaActualizada(event) {
     const data = event?.data || event?.payload || event;
-    const { cuenta_id } = data;
-
-    this.logger.debug('cuenta.actualizada.received', {
-      cuenta_id,
-      correlation_id: event?.metadata?.correlationId
-    });
+    const { cuenta_id, cambios } = data;
+    if (cuenta_id && cambios?.ref_display) {
+      this.refDisplayCache.set(cuenta_id, cambios.ref_display);
+    }
   }
 
   async onCajaCerrada(event) {
@@ -547,6 +557,7 @@ class ComanderoModule {
       cuenta_id,
       pedido_id,
       project_id,
+      ref_display: this.refDisplayCache.get(cuenta_id) || null,
       items: itemsParaEnviar,
       total: totalEnviado,
       notas_generales: pedido.notas,

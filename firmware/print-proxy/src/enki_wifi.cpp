@@ -26,11 +26,6 @@ static bool wifiTryConnect(int idx) {
   if (idx < 0 || idx >= WIFI_MAX_NETWORKS) return false;
   if (strlen(baseCfg.wifi[idx].ssid) == 0) return false;
 
-  // Limpiar estado anterior completamente antes de intentar nueva red
-  WiFi.disconnect(true);  // true = borrar config AP cacheada
-  delay(100);
-  WiFi.mode(WIFI_STA);
-
   Serial.printf("[WiFi] Intentando red %d: %s...\n", idx + 1, baseCfg.wifi[idx].ssid);
   WiFi.begin(baseCfg.wifi[idx].ssid, baseCfg.wifi[idx].pass);
 
@@ -55,7 +50,7 @@ static bool wifiTryConnect(int idx) {
 }
 
 static bool wifiConnectMulti() {
-  // WiFi.mode(WIFI_STA) se setea dentro de cada wifiTryConnect()
+  WiFi.mode(WIFI_STA);
   baseCfg.wifiActive = -1;
   for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {
     if (wifiTryConnect(i)) return true;
@@ -70,7 +65,7 @@ void wifiStartPortal() {
   portalMode = true;
   reconnActive = false;
 
-  WiFi.disconnect(true);  // true = borrar config AP cacheada
+  WiFi.disconnect();
   WiFi.mode(WIFI_AP);
 
   String apName = String(WIFI_AP_NAME_PREFIX) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
@@ -109,12 +104,8 @@ void wifiHandleReconnect() {
   // Conectados — resetear estado
   if (WiFi.status() == WL_CONNECTED) {
     if (reconnActive) {
-      if (baseCfg.wifiActive >= 0 && baseCfg.wifiActive < WIFI_MAX_NETWORKS) {
-        Serial.printf("[WiFi] Reconectado a '%s' — IP: %s\n",
-          baseCfg.wifi[baseCfg.wifiActive].ssid, WiFi.localIP().toString().c_str());
-      } else {
-        Serial.printf("[WiFi] Reconectado — IP: %s\n", WiFi.localIP().toString().c_str());
-      }
+      Serial.printf("[WiFi] Reconectado a '%s' — IP: %s\n",
+        baseCfg.wifi[baseCfg.wifiActive].ssid, WiFi.localIP().toString().c_str());
       reconnActive = false;
       reconnFailCycles = 0;
       reconnTryingIdx = -1;
@@ -143,7 +134,7 @@ void wifiHandleReconnect() {
     if (now - reconnStartMs < WIFI_RECONNECT_TIMEOUT) return;
 
     Serial.printf("[WiFi] Red %d timeout\n", reconnTryingIdx + 1);
-    WiFi.disconnect(true);
+    WiFi.disconnect();
   }
 
   // Siguiente red
@@ -154,7 +145,6 @@ void wifiHandleReconnect() {
   }
 
   if (reconnTryingIdx < WIFI_MAX_NETWORKS) {
-    WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
     WiFi.begin(baseCfg.wifi[reconnTryingIdx].ssid, baseCfg.wifi[reconnTryingIdx].pass);
     reconnStartMs = now;

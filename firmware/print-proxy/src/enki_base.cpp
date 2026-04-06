@@ -112,10 +112,10 @@ void enki_config_set(const char* key, const char* value) {
 }
 
 const char* enki_config_get(const char* key, const char* defaultValue) {
-  static char bufs[8][128];
+  static char bufs[4][128];
   static int idx = 0;
   char* buf = bufs[idx];
-  idx = (idx + 1) % 8;
+  idx = (idx + 1) % 4;
   prefs.begin(NVS_NAMESPACE, true);
   strlcpy(buf, prefs.getString(key, defaultValue).c_str(), sizeof(bufs[0]));
   prefs.end();

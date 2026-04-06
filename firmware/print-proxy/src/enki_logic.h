@@ -76,12 +76,12 @@ const char* enki_project_id();
 // --- Config custom del driver (NVS) ---
 // La lógica puede guardar/leer hasta 8 pares clave-valor string
 void        enki_config_set(const char* key, const char* value);
-const char* enki_config_get(const char* key, const char* defaultValue);
+const char* enki_config_get(const char* key, const char* defaultValue = "");
 void        enki_config_set_u16(const char* key, uint16_t value);
-uint16_t    enki_config_get_u16(const char* key, uint16_t defaultValue);
+uint16_t    enki_config_get_u16(const char* key, uint16_t defaultValue = 0);
 
 // --- Utilidades ---
-void enki_led_blink(int times, int ms);
+void enki_led_blink(int times, int ms = 100);
 void enki_led_on();
 void enki_led_off();
 void enki_request_restart();

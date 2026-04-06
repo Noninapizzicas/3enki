@@ -14,7 +14,20 @@ WebServer webServer(PORTAL_PORT);
 // ── Handlers ────────────────────────────────────
 
 static void handleRoot() {
-  webServer.send_P(200, "text/html", PORTAL_HTML);
+  // Enviar HTML en chunks — con SPP activo el heap es limitado
+  size_t len = strlen_P(PORTAL_HTML);
+  webServer.setContentLength(len);
+  webServer.send(200, "text/html", "");
+
+  const size_t CHUNK = 512;
+  for (size_t i = 0; i < len; i += CHUNK) {
+    size_t n = min(CHUNK, len - i);
+    char buf[CHUNK + 1];
+    memcpy_P(buf, PORTAL_HTML + i, n);
+    buf[n] = 0;
+    webServer.sendContent(buf);
+  }
+  webServer.sendContent("");
 }
 
 static void handleGetConfig() {
@@ -100,9 +113,10 @@ static void handlePostConfig() {
 
 static void handleGetStatus() {
   JsonDocument doc;
-  doc["wifi"]   = (WiFi.status() == WL_CONNECTED);
-  doc["mqtt"]   = mqtt.connected();
-  doc["portal"] = portalMode;
+  doc["wifi"]      = (WiFi.status() == WL_CONNECTED);
+  doc["mqtt"]      = mqtt.connected();
+  doc["portal"]    = portalMode;
+  doc["free_heap"] = ESP.getFreeHeap();
 
   logic_portal_status(doc);
 
@@ -151,6 +165,11 @@ static void handleReset() {
 // ── Captive portal detection ────────────────────
 
 static void handleCaptiveRedirect() {
+  if (!portalMode) {
+    // En modo STA, devolver 404 (no redirigir a 0.0.0.0)
+    webServer.send(404, "text/plain", "Not found");
+    return;
+  }
   String target = "http://" + WiFi.softAPIP().toString() + "/";
   webServer.sendHeader("Location", target, true);
   webServer.send(302, "text/plain", "");

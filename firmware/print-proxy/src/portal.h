@@ -99,7 +99,7 @@ input:focus,select:focus{outline:none;border-color:#e94560}
 <script>
 var T,oM='ble';
 function sm(t,ok){var m=document.getElementById('msg');m.textContent=t;m.style.display='block';m.style.background=ok?'#1b4332':'#2d1b1b';m.style.color=ok?'#52b788':'#e94560';clearTimeout(T);T=setTimeout(function(){m.style.display='none'},4000)}
-function tgM(){var v=document.getElementById('btm').value,ble=v==='ble';document.getElementById('bf').style.display=ble?'':'none';document.getElementById('bu').style.display=ble?'':'none';document.getElementById('mi').textContent=v!==oM?'Cambiar modo reiniciara el ESP32':v==='spp'?'Conexion directa por MAC':'Scan + GATT service'}
+function tgM(){var v=document.getElementById('btm').value,ble=v==='ble',mac=document.getElementById('pa').value;document.getElementById('bf').style.display=ble?'':'none';document.getElementById('bu').style.display=ble?'':'none';var t='';if(v==='spp'&&!mac)t='SPP necesita MAC. Escanea primero en modo BLE';else if(v!==oM)t='Cambiar modo reiniciara el ESP32';else t=v==='spp'?'Conexion directa por MAC':'Scan + GATT service';document.getElementById('mi').textContent=t}
 function lc(){
 fetch('/api/config').then(function(r){return r.json()}).then(function(c){
 var m={device_id:'did',project_id:'pid',mqtt_host:'mh',mqtt_port:'mp',mqtt_user:'mu',mqtt_pass:'mw',wifi_ssid1:'ws1',wifi_pass1:'wp1',wifi_ssid2:'ws2',wifi_pass2:'wp2',wifi_ssid3:'ws3',wifi_pass3:'wp3'};
@@ -122,12 +122,13 @@ for(var i=1;i<=3;i++){b['wifi_ssid'+i]=document.getElementById('ws'+i).value;b['
 fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json()}).then(function(r){
 if(!r.ok)throw new Error(r.error||'Error');
 var d={printer_name:document.getElementById('pn').value,printer_addr:document.getElementById('pa').value,printer_svc:document.getElementById('ps').value,printer_char:document.getElementById('pc').value,bt_mode:document.getElementById('btm').value};
+if(d.bt_mode==='spp'&&!d.printer_addr){sm('SPP necesita MAC. Escanea primero en modo BLE',false);return}
 return fetch('/api/printer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).then(function(r){return r.json()})
 }).then(function(r){if(r.restart){sm('Guardado. Reiniciando (cambio modo BT)...',true);return}sm('Guardado OK',true);setTimeout(function(){lc();ls()},2000)}).catch(function(e){sm('Error: '+e.message,false)})}
 function bScan(){sm('Escaneando BLE (~10s)...',true);fetch('/api/scan').then(function(r){return r.json()}).then(function(d){var h='';d.forEach(function(v){h+='<div class="opt" onclick="sp(this,\''+v.name+'\',\''+v.addr+'\')"><span>'+v.name+'</span><span>'+v.rssi+'dBm</span></div>'});document.getElementById('pl').innerHTML=h||'<div style="color:#888;padding:8px">Nada</div>';sm(d.length+' encontrados',true)}).catch(function(){sm('Error scan',false)})}
 function wScan(){sm('Escaneando WiFi...',true);fetch('/api/wifi-scan').then(function(r){return r.json()}).then(function(n){var h='';n.forEach(function(v){h+='<div class="opt" onclick="sw(\''+v.ssid+'\')"><span>'+v.ssid+'</span><span>'+v.rssi+'dBm</span></div>'});document.getElementById('wl').innerHTML=h||'<div style="color:#888;padding:8px">Nada</div>';sm(n.length+' redes',true)}).catch(function(){sm('Error',false)})}
 function sw(s){for(var i=1;i<=3;i++){var el=document.getElementById('ws'+i);if(!el.value||el.value===s){el.value=s;document.getElementById('wp'+i).focus();return}}document.getElementById('ws1').value=s;document.getElementById('wp1').focus()}
-function sp(el,n,a){document.querySelectorAll('.opt').forEach(function(e){e.classList.remove('sel')});el.classList.add('sel');document.getElementById('pn').value=n;document.getElementById('pa').value=a}
+function sp(el,n,a){document.querySelectorAll('.opt').forEach(function(e){e.classList.remove('sel')});el.classList.add('sel');document.getElementById('pn').value=n;document.getElementById('pa').value=a;tgM()}
 function tPrint(){sm('Enviando...',true);fetch('/api/test-print',{method:'POST'}).then(function(r){return r.json()}).then(function(r){r.ok?sm('Test OK',true):sm(r.error,false)}).catch(function(){sm('Error red',false)})}
 function reset(){if(!confirm('Borrar TODO? Se reiniciara.'))return;fetch('/api/reset',{method:'POST'}).then(function(){sm('Reiniciando...',true)})}
 lc();ls();setInterval(ls,10000);

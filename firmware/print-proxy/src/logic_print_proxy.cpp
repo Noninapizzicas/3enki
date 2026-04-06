@@ -251,48 +251,14 @@ static bool bleReconnect() {
 }
 
 static bool bleScanAndConnect() {
-  if (strlen(printerName) == 0) {
+  if (strlen(printerName) == 0 && strlen(printerAddr) == 0) {
     Serial.println("[BLE] No hay impresora configurada.");
     return false;
   }
 
-  if (strlen(printerAddr) > 0) {
-    if (bleReconnect()) return true;
-    Serial.println("[BLE] Conexion directa fallo, scan largo...");
-  }
-
-  Serial.printf("[BLE] Escaneando '%s' (%d seg)...\n", printerName, BLE_SCAN_SECONDS);
-  NimBLEScan* scan = NimBLEDevice::getScan();
-  scan->setActiveScan(true);
-  NimBLEScanResults results = scan->start(BLE_SCAN_SECONDS);
-
-  NimBLEAdvertisedDevice* printer = nullptr;
-  for (int i = 0; i < results.getCount(); i++) {
-    NimBLEAdvertisedDevice dev = results.getDevice(i);
-    Serial.printf("[BLE]   Encontrado: %s (%s)\n",
-      dev.getName().c_str(), dev.getAddress().toString().c_str());
-    if (dev.getName() == printerName) {
-      printer = new NimBLEAdvertisedDevice(dev);
-      break;
-    }
-  }
-  scan->clearResults();
-
-  if (!printer) {
-    Serial.printf("[BLE] Impresora '%s' no encontrada\n", printerName);
-    return false;
-  }
-
-  String foundAddr = printer->getAddress().toString().c_str();
-  if (strcmp(printerAddr, foundAddr.c_str()) != 0) {
-    strlcpy(printerAddr, foundAddr.c_str(), sizeof(printerAddr));
-    saveDriverConfig();
-    Serial.printf("[BLE] MAC guardada en NVS: %s\n", printerAddr);
-  }
-
-  NimBLEAddress addr = printer->getAddress();
-  delete printer;
-  return bleConnectByAddress(addr);
+  // bleReconnect() ya hace: MAC directa → scan corto 3s
+  // No duplicar con otro scan largo
+  return bleReconnect();
 }
 
 static bool bleSend(const uint8_t* data, size_t len) {

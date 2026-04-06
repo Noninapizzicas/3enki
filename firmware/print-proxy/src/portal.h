@@ -41,7 +41,7 @@ input:focus,select:focus{outline:none;border-color:#e94560}
 </head>
 <body>
 <h1>Enki Print Proxy</h1>
-<p class="sub">v3.3.0</p>
+<p class="sub">v3.4.0</p>
 <div class="di" id="di"></div>
 <div class="sbar" id="sb"></div>
 <div id="msg" class="msg"></div>

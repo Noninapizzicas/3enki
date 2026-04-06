@@ -11,7 +11,7 @@
 
 // --- BASE: Identidad del firmware ---
 #define DRIVER_TYPE             "print-proxy"
-#define FIRMWARE_VERSION        "3.3.0"
+#define FIRMWARE_VERSION        "3.4.0"
 
 // --- BASE: Defaults identidad (solo si no hay config en NVS) ---
 #define DEFAULT_DEVICE_ID       "enki-device-1"

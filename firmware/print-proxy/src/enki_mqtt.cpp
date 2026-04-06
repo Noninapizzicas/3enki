@@ -1,12 +1,17 @@
 /**
- * Enki MQTT — Conexión estable, cola offline, autodescubrimiento.
+ * Enki MQTT — Conexion estable, cola offline, autodescubrimiento.
  *
  * Protocolo del dispositivo Enki:
  *   PUBLICA (retained): devices/{project}/{device}/birth
  *   PUBLICA (retained): devices/{project}/{device}/state/reported
- *   PUBLICA (periódico): enki/{project}/status/{device}
+ *   PUBLICA (periodico): enki/{project}/status/{device}
  *   LWT: devices/{project}/{device}/lwt → {"online":false}
  *   SUSCRITO: devices/{project}/{device}/state/delta (OTA + config)
+ *
+ * v3.4 mejoras:
+ *   - Verifica WiFi antes de intentar MQTT connect
+ *   - Socket timeout reducido a 5s (era 15s default)
+ *   - Backoff se resetea cuando WiFi reconecta
  */
 
 #include "enki_mqtt.h"
@@ -31,6 +36,9 @@ static unsigned long lastReconnectMs = 0;
 // Backoff
 static uint8_t  mqttReconnectAttempts = 0;
 static uint32_t mqttReconnectInterval = 2000;
+
+// Estado WiFi previo (para detectar reconexion WiFi)
+static bool wifiWasConnected = false;
 
 // ── Cola offline (circular, 8 items) ────────────
 
@@ -70,7 +78,6 @@ static void mqttFlushQueue() {
 
 // ── Publish con cola ────────────────────────────
 
-// Usado por enki_mqtt_publish() en enki_base.cpp
 void mqttPublishOrQueue(const char* topic, const char* payload) {
   if (mqtt.connected()) {
     mqtt.publish(topic, payload);
@@ -120,7 +127,7 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
-  // Delegar a la LÓGICA
+  // Delegar a la LOGICA
   logic_on_message(topic, doc);
 }
 
@@ -132,16 +139,23 @@ void mqttSetup() {
   mqtt.setBufferSize(MQTT_BUFFER_SIZE);
   mqtt.setKeepAlive(60);
 
+  // Reducir timeout del socket TCP (default 15s → 5s)
+  // Menos bloqueo si el broker no responde
+  wifiClient.setTimeout(5);
+
   for (int i = 0; i < MQTT_QUEUE_SIZE; i++) {
     mqttQueue[i].used = false;
   }
 }
 
-// ── Conexión con protocolo autodescubrimiento ───
+// ── Conexion con protocolo autodescubrimiento ───
 
 void mqttConnect() {
   if (mqtt.connected()) return;
   if (strlen(baseCfg.mqttHost) == 0) return;
+
+  // No intentar si WiFi no esta conectado
+  if (WiFi.status() != WL_CONNECTED) return;
 
   Serial.printf("[MQTT] Conectando a %s:%d (intento %d)...\n",
     baseCfg.mqttHost, baseCfg.mqttPort, mqttReconnectAttempts + 1);
@@ -196,6 +210,20 @@ void mqttConnect() {
 void mqttHandleReconnect() {
   if (!baseCfg.configured) return;
 
+  bool wifiNow = (WiFi.status() == WL_CONNECTED);
+
+  // Detectar reconexion WiFi → resetear backoff MQTT
+  if (wifiNow && !wifiWasConnected) {
+    Serial.println("[MQTT] WiFi reconecto — reseteando backoff");
+    mqttReconnectAttempts = 0;
+    mqttReconnectInterval = 2000;
+    lastReconnectMs = 0;  // intentar inmediatamente
+  }
+  wifiWasConnected = wifiNow;
+
+  // Sin WiFi → no intentar MQTT
+  if (!wifiNow) return;
+
   if (!mqtt.connected()) {
     unsigned long now = millis();
     if (now - lastReconnectMs > mqttReconnectInterval) {
@@ -208,7 +236,7 @@ void mqttHandleReconnect() {
   mqtt.loop();
 }
 
-// ── Status periódico ────────────────────────────
+// ── Status periodico ────────────────────────────
 
 void mqttPublishStatus() {
   unsigned long now = millis();

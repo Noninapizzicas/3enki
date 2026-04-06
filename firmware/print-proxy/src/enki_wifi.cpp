@@ -15,6 +15,18 @@
 #include "enki_wifi.h"
 #include "enki_base.h"
 #include <esp_task_wdt.h>
+#include <esp_wifi.h>
+
+// Coexistencia WiFi/BT — el header varia segun version ESP-IDF
+#if __has_include(<esp_coexist.h>)
+  #include <esp_coexist.h>
+#elif __has_include("esp_coexist.h")
+  #include "esp_coexist.h"
+#else
+  // Declaracion directa si el header no esta disponible
+  typedef enum { ESP_COEX_PREFER_WIFI = 0, ESP_COEX_PREFER_BT, ESP_COEX_PREFER_BALANCE } esp_coex_prefer_t;
+  extern "C" int esp_coex_preference_set(esp_coex_prefer_t prefer);
+#endif
 
 DNSServer dnsServer;
 bool      portalMode = false;
@@ -116,6 +128,10 @@ bool wifiSetup() {
   WiFi.persistent(false);       // no guardar creds en flash (las gestionamos nosotros via NVS)
   WiFi.setAutoReconnect(true);  // el driver reintenta con la ultima red automaticamente
   WiFi.onEvent(onWiFiEvent);    // deteccion instantanea de desconexion
+
+  // Coexistencia WiFi/BT: WiFi no duerme + prioridad WiFi por defecto
+  esp_wifi_set_ps(WIFI_PS_NONE);                     // WiFi siempre activo — timeslots garantizados
+  esp_coex_preference_set(ESP_COEX_PREFER_WIFI);     // WiFi prioritario (SPP lo cambia durante impresion)
 
   bool hasNetworks = false;
   for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {

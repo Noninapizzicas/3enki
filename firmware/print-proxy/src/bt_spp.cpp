@@ -4,11 +4,24 @@
  * BAJO DEMANDA: init/deinit por cada operacion de impresion.
  * Bluedroid consume ~70KB RAM. Solo vive durante el job (~3-5s).
  * Entre jobs: RAM libre, portal web funciona.
+ *
+ * Coexistencia WiFi/BT:
+ *   - Al init: prioridad BT (imprime rapido, ventana corta)
+ *   - Al deinit: prioridad WiFi (portal y MQTT libres)
  */
 
 #include "bt_common.h"
 #include "enki_base.h"
 #include "BluetoothSerial.h"
+
+#if __has_include(<esp_coexist.h>)
+  #include <esp_coexist.h>
+#elif __has_include("esp_coexist.h")
+  #include "esp_coexist.h"
+#else
+  typedef enum { ESP_COEX_PREFER_WIFI = 0, ESP_COEX_PREFER_BT, ESP_COEX_PREFER_BALANCE } esp_coex_prefer_t;
+  extern "C" int esp_coex_preference_set(esp_coex_prefer_t prefer);
+#endif
 
 // Estado interno
 static BluetoothSerial SerialBT;
@@ -18,10 +31,14 @@ static bool initialized = false;
 
 void spp_init() {
   if (initialized) return;
+
+  // Prioridad BT durante impresion — imprime mas rapido, ventana mas corta
+  esp_coex_preference_set(ESP_COEX_PREFER_BT);
+
   Serial.println("[SPP] Iniciando Bluedroid...");
   SerialBT.begin("EnkiPrint", true);  // master mode
   initialized = true;
-  Serial.printf("[SPP] Bluedroid OK (heap libre: %d)\n", ESP.getFreeHeap());
+  Serial.printf("[SPP] Bluedroid OK (heap: %d)\n", ESP.getFreeHeap());
 }
 
 void spp_deinit() {
@@ -32,7 +49,11 @@ void spp_deinit() {
   }
   SerialBT.end();
   initialized = false;
-  Serial.printf("[SPP] Bluedroid liberado (heap libre: %d)\n", ESP.getFreeHeap());
+
+  // Devolver prioridad WiFi — portal y MQTT libres
+  esp_coex_preference_set(ESP_COEX_PREFER_WIFI);
+
+  Serial.printf("[SPP] Bluedroid liberado (heap: %d)\n", ESP.getFreeHeap());
 }
 
 bool spp_connect(const char* addr) {
@@ -41,10 +62,8 @@ bool spp_connect(const char* addr) {
     return false;
   }
 
-  // Init si no esta activo
   if (!initialized) spp_init();
 
-  // Desconectar si ya habia conexion
   if (SerialBT.connected()) {
     SerialBT.disconnect();
     delay(200);

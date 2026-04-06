@@ -73,6 +73,10 @@ static void onOtaProgress(int current, int total) {
 
 static void executeOta() {
   if (!otaPending) return;
+
+  // No intentar sin WiFi
+  if (WiFi.status() != WL_CONNECTED) return;
+
   otaPending = false;
 
   Serial.printf("[OTA] Ejecutando: v%s -> v%s\n", FIRMWARE_VERSION, otaTargetVersion);
@@ -96,10 +100,11 @@ static void executeOta() {
       break;
 
     case HTTP_UPDATE_FAILED: {
-      const char* errMsg = httpUpdate.getLastErrorString().c_str();
-      Serial.printf("[OTA] Fallo: %s\n", errMsg);
+      char errBuf[128];
+      strlcpy(errBuf, httpUpdate.getLastErrorString().c_str(), sizeof(errBuf));
+      Serial.printf("[OTA] Fallo: %s\n", errBuf);
       strlcpy(otaFailedVersion, otaTargetVersion, sizeof(otaFailedVersion));
-      publishOtaStatus("failed", errMsg);
+      publishOtaStatus("failed", errBuf);
       Serial.printf("[OTA] v%s marcada como fallida. Todo sigue funcionando.\n", otaTargetVersion);
       break;
     }
@@ -156,8 +161,9 @@ void otaHandle() {
     return;
   }
 
-  // Legacy polling (solo si otaUrl configurado en NVS)
+  // Legacy polling (solo si otaUrl configurado en NVS y WiFi OK)
   if (strlen(baseCfg.otaUrl) == 0) return;
+  if (WiFi.status() != WL_CONNECTED) return;
 
   unsigned long now = millis();
   if (now - lastOtaCheckMs < OTA_CHECK_INTERVAL_MS) return;
@@ -177,10 +183,13 @@ void otaHandle() {
   digitalWrite(LED_PIN, LOW);
 
   switch (ret) {
-    case HTTP_UPDATE_FAILED:
-      Serial.printf("[OTA] Fallo: %s\n", httpUpdate.getLastErrorString().c_str());
-      publishOtaStatus("failed", httpUpdate.getLastErrorString().c_str());
+    case HTTP_UPDATE_FAILED: {
+      char errBuf[128];
+      strlcpy(errBuf, httpUpdate.getLastErrorString().c_str(), sizeof(errBuf));
+      Serial.printf("[OTA] Fallo: %s\n", errBuf);
+      publishOtaStatus("failed", errBuf);
       break;
+    }
     case HTTP_UPDATE_NO_UPDATES:
       break;
     case HTTP_UPDATE_OK:

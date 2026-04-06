@@ -43,19 +43,12 @@ bool ble_is_connected();
 void ble_disconnect();
 
 /**
- * Scan BLE: buscar impresoras por nombre, devolver lista.
+ * Scan BLE: buscar dispositivos BT, devolver lista.
  * Resultado en doc (JsonArray): [{name, addr, rssi}, ...]
- * Bloqueante ~10s. Solo usar desde portal web.
+ * Bloqueante ~5s. Solo usar desde portal web.
+ * IMPORTANTE: desconectar impresora ANTES de llamar (radio compartido).
  */
 void ble_scan(JsonDocument& doc);
-
-/**
- * Scan + connect: buscar por nombre, guardar MAC, conectar.
- * Devuelve true si conectado. Solo setup/portal.
- * save_callback: funcion para persistir la MAC encontrada.
- */
-bool ble_scan_and_connect(const char* name, char* addrOut, size_t addrSize,
-                          void (*save_callback)());
 
 // ─── SPP (bt_spp.cpp) ──────────────────────────
 

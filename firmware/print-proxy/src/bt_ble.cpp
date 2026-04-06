@@ -114,9 +114,11 @@ void ble_disconnect() {
 }
 
 void ble_scan(JsonDocument& doc) {
+  Serial.println("[BLE] Escaneando (5s)...");
+
   NimBLEScan* scan = NimBLEDevice::getScan();
   scan->setActiveScan(true);
-  NimBLEScanResults results = scan->start(BLE_SCAN_SECONDS);
+  NimBLEScanResults results = scan->start(5);  // 5s, no 10 — suficiente para impresoras
 
   auto arr = doc.to<JsonArray>();
   for (int i = 0; i < results.getCount(); i++) {
@@ -130,55 +132,5 @@ void ble_scan(JsonDocument& doc) {
     obj["rssi"] = dev.getRSSI();
   }
   scan->clearResults();
-}
-
-bool ble_scan_and_connect(const char* name, char* addrOut, size_t addrSize,
-                          void (*save_callback)()) {
-  if (strlen(name) == 0) {
-    Serial.println("[BLE] No hay nombre configurado");
-    return false;
-  }
-
-  // Intentar por MAC guardada primero (rapido)
-  if (strlen(addrOut) > 0) {
-    if (ble_connect(addrOut)) return true;
-    Serial.println("[BLE] MAC directa fallo, escaneando...");
-  }
-
-  // Scan por nombre (bloqueante, solo setup/portal)
-  Serial.printf("[BLE] Escaneando '%s' (%ds)...\n", name, BLE_SCAN_SECONDS);
-
-  NimBLEScan* scan = NimBLEDevice::getScan();
-  scan->setActiveScan(true);
-  NimBLEScanResults results = scan->start(BLE_SCAN_SECONDS);
-
-  NimBLEAdvertisedDevice* found = nullptr;
-  for (int i = 0; i < results.getCount(); i++) {
-    NimBLEAdvertisedDevice dev = results.getDevice(i);
-    Serial.printf("[BLE]   %s (%s)\n",
-      dev.getName().c_str(), dev.getAddress().toString().c_str());
-    if (dev.getName() == name) {
-      found = new NimBLEAdvertisedDevice(dev);
-      break;
-    }
-  }
-  scan->clearResults();
-
-  if (!found) {
-    Serial.printf("[BLE] '%s' no encontrada\n", name);
-    return false;
-  }
-
-  // Guardar MAC
-  String foundAddr = found->getAddress().toString().c_str();
-  if (strcmp(addrOut, foundAddr.c_str()) != 0) {
-    strlcpy(addrOut, foundAddr.c_str(), addrSize);
-    if (save_callback) save_callback();
-    Serial.printf("[BLE] MAC guardada: %s\n", addrOut);
-  }
-
-  NimBLEAddress addr = found->getAddress();
-  delete found;
-
-  return ble_connect(addrOut);
+  Serial.printf("[BLE] Scan OK: %d dispositivos con nombre\n", arr.size());
 }

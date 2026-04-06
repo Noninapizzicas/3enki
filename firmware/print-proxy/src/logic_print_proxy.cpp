@@ -227,11 +227,29 @@ static void handleScan() {
     webServer.send(200, "application/json", "[]");
     return;
   }
+
+  // Desconectar impresora antes de escanear — el radio no puede hacer ambos
+  bool wasConnected = ble_is_connected();
+  if (wasConnected) {
+    Serial.println("[BLE] Desconectando para scan...");
+    ble_disconnect();
+    printerReady = false;
+  }
+
   JsonDocument doc;
   ble_scan(doc);
+
   char buf[1024];
   serializeJson(doc, buf, sizeof(buf));
   webServer.send(200, "application/json", buf);
+
+  // Reconectar si estaba conectada
+  if (wasConnected && strlen(printerAddr) > 0) {
+    Serial.println("[BLE] Reconectando tras scan...");
+    if (ble_connect(printerAddr)) {
+      printerReady = true;
+    }
+  }
 }
 
 static void handleTestPrint() {
@@ -308,9 +326,9 @@ static void handlePostDriverConfig() {
     return;
   }
 
-  // Reconectar con nueva config (solo BLE — SPP es bajo demanda)
-  if (btMode == BT_MODE_BLE && (strlen(printerAddr) > 0 || strlen(printerName) > 0)) {
-    ble_scan_and_connect(printerName, printerAddr, sizeof(printerAddr), saveDriverConfig);
+  // Reconectar con nueva config (solo BLE, solo MAC directa)
+  if (btMode == BT_MODE_BLE && strlen(printerAddr) > 0) {
+    ble_connect(printerAddr);
   }
 
   webServer.send(200, "application/json", "{\"ok\":true}");
@@ -346,15 +364,13 @@ void logic_setup() {
   webServer.on("/api/printer",      HTTP_GET,  handleGetDriverConfig);
   webServer.on("/api/printer",      HTTP_POST, handlePostDriverConfig);
 
-  // 6. Conectar impresora (solo BLE, solo si no es portal mode)
-  if (btMode == BT_MODE_BLE && !portalMode) {
-    if (strlen(printerAddr) > 0 || strlen(printerName) > 0) {
-      if (ble_scan_and_connect(printerName, printerAddr, sizeof(printerAddr), saveDriverConfig)) {
-        printerReady = true;
-        reconnectCount++;
-      } else {
-        Serial.println("[PRINT] Impresora no disponible. Configura desde el portal.");
-      }
+  // 6. Conectar impresora (solo BLE, solo MAC directa, NUNCA scan al boot)
+  if (btMode == BT_MODE_BLE && !portalMode && strlen(printerAddr) > 0) {
+    if (ble_connect(printerAddr)) {
+      printerReady = true;
+      reconnectCount++;
+    } else {
+      Serial.println("[PRINT] Impresora no responde. Reintentara en el loop.");
     }
   }
 

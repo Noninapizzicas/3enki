@@ -151,9 +151,7 @@ static void handleReset() {
 // ── Captive portal detection ────────────────────
 
 static void handleCaptiveRedirect() {
-  // En modo normal (WiFi STA), redirigir a la IP local, no a softAPIP
-  String ip = portalMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
-  String target = "http://" + ip + "/";
+  String target = "http://" + WiFi.softAPIP().toString() + "/";
   webServer.sendHeader("Location", target, true);
   webServer.send(302, "text/plain", "");
 }
@@ -161,7 +159,7 @@ static void handleCaptiveRedirect() {
 // ── Setup ───────────────────────────────────────
 
 void portalSetup() {
-  // Endpoints base (siempre disponibles)
+  // Endpoints base
   webServer.on("/",              HTTP_GET,  handleRoot);
   webServer.on("/api/config",    HTTP_GET,  handleGetConfig);
   webServer.on("/api/config",    HTTP_POST, handlePostConfig);
@@ -169,19 +167,15 @@ void portalSetup() {
   webServer.on("/api/wifi-scan", HTTP_GET,  handleWifiScan);
   webServer.on("/api/reset",     HTTP_POST, handleReset);
 
-  // Captive portal detection — SOLO en portal mode
-  // En modo normal (WiFi STA) estos endpoints no deben existir
-  // porque redirigirían tráfico legítimo del navegador
-  if (portalMode) {
-    webServer.on("/generate_204",              HTTP_GET, handleCaptiveRedirect);
-    webServer.on("/gen_204",                   HTTP_GET, handleCaptiveRedirect);
-    webServer.on("/hotspot-detect.html",       HTTP_GET, handleCaptiveRedirect);
-    webServer.on("/library/test/success.html", HTTP_GET, handleCaptiveRedirect);
-    webServer.on("/ncsi.txt",                  HTTP_GET, handleCaptiveRedirect);
-    webServer.on("/connecttest.txt",           HTTP_GET, handleCaptiveRedirect);
-    webServer.on("/fwlink",                    HTTP_GET, handleCaptiveRedirect);
+  // Captive portal detection (Android, iOS, Windows)
+  webServer.on("/generate_204",              HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/gen_204",                   HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/hotspot-detect.html",       HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/library/test/success.html", HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/ncsi.txt",                  HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/connecttest.txt",           HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/fwlink",                    HTTP_GET, handleCaptiveRedirect);
 
-    // Catch-all — solo en portal mode
-    webServer.onNotFound(handleCaptiveRedirect);
-  }
+  // Catch-all → portal
+  webServer.onNotFound(handleCaptiveRedirect);
 }

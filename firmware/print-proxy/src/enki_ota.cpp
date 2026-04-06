@@ -96,9 +96,7 @@ static void executeOta() {
       break;
 
     case HTTP_UPDATE_FAILED: {
-      // Copiar string temporal antes de que se destruya
-      char errMsg[128];
-      strlcpy(errMsg, httpUpdate.getLastErrorString().c_str(), sizeof(errMsg));
+      const char* errMsg = httpUpdate.getLastErrorString().c_str();
       Serial.printf("[OTA] Fallo: %s\n", errMsg);
       strlcpy(otaFailedVersion, otaTargetVersion, sizeof(otaFailedVersion));
       publishOtaStatus("failed", errMsg);

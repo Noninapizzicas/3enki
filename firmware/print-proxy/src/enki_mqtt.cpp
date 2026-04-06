@@ -13,7 +13,6 @@
 #include "enki_base.h"
 #include "enki_logic.h"
 #include "enki_ota.h"
-#include "enki_debug.h"
 
 WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
@@ -55,13 +54,8 @@ static void mqttEnqueue(const char* topic, const char* payload, bool retain) {
 }
 
 static void mqttFlushQueue() {
-  // mqttQueueHead apunta al próximo slot a escribir.
-  // El item más antiguo está en mqttQueueHead (si está llena)
-  // o hay que recorrer buscando los used=true en orden.
-  // Recorremos desde el slot más antiguo posible.
   int sent = 0;
   for (int i = 0; i < MQTT_QUEUE_SIZE; i++) {
-    // Empezar desde mqttQueueHead = el slot más antiguo (circular)
     int idx = (mqttQueueHead + i) % MQTT_QUEUE_SIZE;
     MqttQueueItem& item = mqttQueue[idx];
     if (!item.used) continue;
@@ -126,20 +120,6 @@ static void onMqttMessage(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
-  // Debug control → activar/desactivar debug remoto
-  {
-    char rawPayload[256];
-    if (length < sizeof(rawPayload)) {
-      memcpy(rawPayload, payload, length);
-      rawPayload[length] = '\0';
-      // Si es un mensaje de control de debug, no pasarlo a la lógica
-      if (strstr(topic, "/debug/") && strstr(topic, "/control")) {
-        debugHandleControl(topic, rawPayload);
-        return;
-      }
-    }
-  }
-
   // Delegar a la LÓGICA
   logic_on_message(topic, doc);
 }
@@ -196,10 +176,7 @@ void mqttConnect() {
     mqtt.subscribe(topicShadowDelta, 1);
     Serial.printf("[MQTT] Suscrito a: %s\n", topicShadowDelta);
 
-    // 3. Debug control topic
-    debugSetup();
-
-    // 4. Reported state
+    // 3. Reported state
     mqttPublishReported();
 
     // 4. Flush cola offline

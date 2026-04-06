@@ -23,7 +23,6 @@
 #include "enki_mqtt.h"
 #include "enki_ota.h"
 #include "enki_portal.h"
-#include "enki_debug.h"
 #include "enki_logic.h"
 #include <esp_task_wdt.h>
 
@@ -65,17 +64,13 @@ void setup() {
       mqttSetup();
       mqtt.setServer(baseCfg.mqttHost, baseCfg.mqttPort);
       mqttConnect();
-      // debugSetup() ya se llama dentro de mqttConnect() tras conectar
     } else {
       Serial.println("\n[!] No configurado. Abre el portal web para configurar.");
     }
   }
 
-  // 5. Inicializar la LÓGICA (driver) — solo si hay WiFi
-  //    En portal mode no hay MQTT ni sentido en iniciar Bluetooth
-  if (!portalMode) {
-    logic_setup();
-  }
+  // 5. Inicializar la LÓGICA (driver)
+  logic_setup();
 
   Serial.println("[READY] Enki operativo\n");
 }
@@ -114,9 +109,6 @@ void loop() {
 
   // OTA
   otaHandle();
-
-  // Debug remoto
-  debugLoop();
 
   // LÓGICA
   logic_loop();

@@ -34,7 +34,7 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
 
   Serial.println("\n========================================");
-  Serial.println("  Enki ESP32 — Print Proxy v3.0");
+  Serial.println("  Enki ESP32 — Print Proxy v3.3");
   Serial.println("  Arquitectura BASE + LOGICA");
   Serial.println("========================================\n");
 

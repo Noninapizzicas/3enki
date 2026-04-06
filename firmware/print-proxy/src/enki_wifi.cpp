@@ -55,7 +55,7 @@ static bool wifiTryConnect(int idx) {
 }
 
 static bool wifiConnectMulti() {
-  WiFi.mode(WIFI_STA);
+  // WiFi.mode(WIFI_STA) se setea dentro de cada wifiTryConnect()
   baseCfg.wifiActive = -1;
   for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {
     if (wifiTryConnect(i)) return true;
@@ -70,7 +70,7 @@ void wifiStartPortal() {
   portalMode = true;
   reconnActive = false;
 
-  WiFi.disconnect();
+  WiFi.disconnect(true);  // true = borrar config AP cacheada
   WiFi.mode(WIFI_AP);
 
   String apName = String(WIFI_AP_NAME_PREFIX) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
@@ -109,8 +109,12 @@ void wifiHandleReconnect() {
   // Conectados — resetear estado
   if (WiFi.status() == WL_CONNECTED) {
     if (reconnActive) {
-      Serial.printf("[WiFi] Reconectado a '%s' — IP: %s\n",
-        baseCfg.wifi[baseCfg.wifiActive].ssid, WiFi.localIP().toString().c_str());
+      if (baseCfg.wifiActive >= 0 && baseCfg.wifiActive < WIFI_MAX_NETWORKS) {
+        Serial.printf("[WiFi] Reconectado a '%s' — IP: %s\n",
+          baseCfg.wifi[baseCfg.wifiActive].ssid, WiFi.localIP().toString().c_str());
+      } else {
+        Serial.printf("[WiFi] Reconectado — IP: %s\n", WiFi.localIP().toString().c_str());
+      }
       reconnActive = false;
       reconnFailCycles = 0;
       reconnTryingIdx = -1;

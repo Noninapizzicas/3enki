@@ -35,7 +35,7 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
 
   Serial.println("\n========================================");
-  Serial.println("  Enki ESP32 — Print Proxy v3.0");
+  Serial.printf("  Enki ESP32 — Print Proxy v%s\n", FIRMWARE_VERSION);
   Serial.println("  Arquitectura BASE + LOGICA");
   Serial.println("========================================\n");
 
@@ -65,16 +65,17 @@ void setup() {
       mqttSetup();
       mqtt.setServer(baseCfg.mqttHost, baseCfg.mqttPort);
       mqttConnect();
-
-      // 4b. Debug remoto
-      debugSetup();
+      // debugSetup() ya se llama dentro de mqttConnect() tras conectar
     } else {
       Serial.println("\n[!] No configurado. Abre el portal web para configurar.");
     }
   }
 
-  // 5. Inicializar la LÓGICA (driver)
-  logic_setup();
+  // 5. Inicializar la LÓGICA (driver) — solo si hay WiFi
+  //    En portal mode no hay MQTT ni sentido en iniciar Bluetooth
+  if (!portalMode) {
+    logic_setup();
+  }
 
   Serial.println("[READY] Enki operativo\n");
 }

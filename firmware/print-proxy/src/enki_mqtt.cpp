@@ -55,8 +55,13 @@ static void mqttEnqueue(const char* topic, const char* payload, bool retain) {
 }
 
 static void mqttFlushQueue() {
+  // mqttQueueHead apunta al próximo slot a escribir.
+  // El item más antiguo está en mqttQueueHead (si está llena)
+  // o hay que recorrer buscando los used=true en orden.
+  // Recorremos desde el slot más antiguo posible.
   int sent = 0;
   for (int i = 0; i < MQTT_QUEUE_SIZE; i++) {
+    // Empezar desde mqttQueueHead = el slot más antiguo (circular)
     int idx = (mqttQueueHead + i) % MQTT_QUEUE_SIZE;
     MqttQueueItem& item = mqttQueue[idx];
     if (!item.used) continue;

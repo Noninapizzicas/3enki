@@ -30,7 +30,7 @@ const LlevadooStrategy = require('./strategies/llevadoo');
 class CuentasCanalesModule {
   constructor() {
     this.name = 'cuentas-canales';
-    this.version = '3.0.0';
+    this.version = '4.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -43,12 +43,9 @@ class CuentasCanalesModule {
     this.ajv = new Ajv({ allErrors: true, useDefaults: true });
     addFormats(this.ajv);
 
-    // Contadores y fecha
+    // Tracking de fecha (para reseteos diarios de metricas internas de strategies)
     this.fechaActual = this.getFechaActual();
-    this.contadores = {};
     this._resetInterval = null;
-    this._contadoresPath = './data/current/contadores_canales.json';
-    this._saveTimer = null;
 
     // Tracking de tiempos (utilidad compartida)
     this._timeArrays = {};
@@ -76,6 +73,7 @@ class CuentasCanalesModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
+    this.moduleRegistry = core.moduleRegistry;
     this.config = core.config || {};
 
     this.logger.info('module.loading', {
@@ -108,7 +106,6 @@ class CuentasCanalesModule {
     }
 
     this.iniciarReseoDiario();
-    await this.cargarContadores();
 
     this.logger.info('module.loaded', {
       module: this.name,
@@ -138,14 +135,6 @@ class CuentasCanalesModule {
     }
 
     this._timeArrays = {};
-
-    // Guardar contadores antes de limpiar
-    if (this._saveTimer) {
-      clearTimeout(this._saveTimer);
-      this._saveTimer = null;
-    }
-    await this.guardarContadores();
-    this.contadores = {};
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -182,9 +171,16 @@ class CuentasCanalesModule {
     }
   }
 
+  /**
+   * Identifica la strategy a la que pertenece un cuenta_id por prefijo.
+   * Soporta el formato nuevo `{LETRA}_{uuid8}` (prefijo) y los formatos
+   * legacy heredados (mesa_, llevar_, tel_, wa_, glovo_, llevadoo_) para
+   * que las cuentas creadas antes de la migración sigan resolviéndose.
+   */
   detectarCanal(cuenta_id) {
     for (const strategy of Object.values(this.strategies)) {
-      if (cuenta_id.startsWith(strategy.prefijo)) {
+      if (cuenta_id.startsWith(strategy.prefijo)) return strategy;
+      if (strategy.prefijoLegacy && cuenta_id.startsWith(strategy.prefijoLegacy)) {
         return strategy;
       }
     }
@@ -242,19 +238,49 @@ class CuentasCanalesModule {
   }
 
   // ==========================================
-  // Publishers Comunes
+  // Delegacion a cuentas (owner unico)
   // ==========================================
+  //
+  // Llamada directa a la instancia de `cuentas` via moduleRegistry. cuentas
+  // carga antes que cuentas-canales en config.modules.enabled, asi que la
+  // instancia esta disponible cuando cada strategy ejecuta su init/handler.
 
-  async publishCuentaCreada(data, correlationId) {
-    await this.eventBus.publish('cuenta.creada', {
-      cuenta_id: data.cuenta_id,
-      tipo: data.tipo,
-      origen: `cuentas-canales:${data.tipo}`,
-      project_id: data.project_id,
-      total: data.total || 0,
-      ref_display: data.ref_display || null,
-      metadata: data.metadata || {}
-    }, { correlationId });
+  /** @private */
+  _cuentasInstance() {
+    const instance = this.moduleRegistry?.get('cuentas')?.instance;
+    if (!instance) {
+      throw new Error('Modulo cuentas no disponible');
+    }
+    return instance;
+  }
+
+  /**
+   * Crea una cuenta delegando a cuentas.handleCreateCuenta.
+   * Devuelve el objeto cuenta (no el envelope {status, data}).
+   * Lanza si cuentas no esta disponible o el handler falla.
+   *
+   * @param {object} data - { project_id, tipo, nombre?, total?, metadata?, cuenta_id? }
+   * @returns {Promise<object>} objeto cuenta con { id, turno, ref_display, ... }
+   */
+  async crearCuentaViaCuentas(data) {
+    const result = await this._cuentasInstance().handleCreateCuenta(data);
+    if (!result || result.status >= 400) {
+      const err = new Error(result?.error || 'Error creando cuenta');
+      err.status = result?.status || 500;
+      throw err;
+    }
+    return result.data;
+  }
+
+  /**
+   * Renombra una cuenta delegando a cuentas.handleRenameCuenta.
+   * Simetrica a crearCuentaViaCuentas — unico camino de rename desde strategies.
+   *
+   * @param {object} data - { project_id, id, nombre }
+   * @returns {Promise<object>} { status, data: { nombre_anterior, nombre_nuevo } }
+   */
+  async renombrarCuentaViaCuentas(data) {
+    return await this._cuentasInstance().handleRenameCuenta(data);
   }
 
   async publishCuentaCerrada(data, correlationId) {
@@ -270,23 +296,11 @@ class CuentasCanalesModule {
   // ==========================================
   // Helpers Comunes
   // ==========================================
-
-  /**
-   * Construye el ref_display canónico: "{símbolo} {num3} · {nombre}"
-   * Este string es la referencia visual única de la cuenta en TODO el sistema.
-   * @param {string} symbol - Letra del canal (M, L, T, G, W, D)
-   * @param {number} secuencial - Número secuencial del día
-   * @param {string} [nombre] - Nombre opcional del cliente/mesa
-   * @returns {string} ej: "L 005 · Juan" o "M 003"
-   */
-  buildRefDisplay(symbol, secuencial, nombre) {
-    const num = String(secuencial).padStart(3, '0');
-    const base = `${symbol} ${num}`;
-    if (nombre && nombre.trim()) {
-      return `${base} · ${nombre.trim()}`;
-    }
-    return base;
-  }
+  //
+  // El ref_display canónico lo genera el módulo `cuentas` usando su contador
+  // global de turnos. Este módulo no construye ref_display — solo publica
+  // cuenta.creada sin ese campo y deja que `cuentas` lo complete vía
+  // cuenta.actualizada. Ver cuentas/index.js:generateRefDisplay().
 
   getFechaActual() {
     const now = new Date();
@@ -294,24 +308,6 @@ class CuentasCanalesModule {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     return `${year}${month}${day}`;
-  }
-
-  getNextSecuencial(canal, subkey) {
-    // Key sin fecha — el contador es continuo, solo cicla en 999→001
-    const key = subkey ? `${canal}_${subkey}` : canal;
-
-    if (!this.contadores[key]) {
-      this.contadores[key] = 1;
-    } else {
-      this.contadores[key]++;
-      // Ciclo de turno: 001→999→001 (3 dígitos siempre)
-      if (this.contadores[key] > 999) {
-        this.contadores[key] = 1;
-        this.logger?.info('canales.contador.ciclo_completado', { canal, key });
-      }
-    }
-    this._debounceSave();
-    return this.contadores[key];
   }
 
   verificarReseoDiario() {
@@ -322,7 +318,6 @@ class CuentasCanalesModule {
         fecha_nueva: fechaActual
       });
       this.fechaActual = fechaActual;
-      // No reseteamos contadores — solo ciclan en 999→001
     }
   }
 
@@ -330,53 +325,6 @@ class CuentasCanalesModule {
     this._resetInterval = setInterval(() => {
       this.verificarReseoDiario();
     }, 60 * 60 * 1000);
-  }
-
-  // ==========================================
-  // Persistencia de contadores
-  // ==========================================
-
-  async cargarContadores() {
-    try {
-      const fs = require('fs').promises;
-      const contenido = await fs.readFile(this._contadoresPath, 'utf8');
-      const datos = JSON.parse(contenido);
-      this.contadores = datos.contadores || {};
-      this.logger.info('canales.contadores.cargados', {
-        canales: Object.keys(this.contadores),
-        valores: { ...this.contadores }
-      });
-    } catch (err) {
-      if (err.code === 'ENOENT') {
-        this.logger.info('canales.contadores.archivo_no_existe', { msg: 'empezando desde 001' });
-      } else {
-        this.logger.warn('canales.contadores.error_carga', { error: err.message });
-      }
-      this.contadores = {};
-    }
-  }
-
-  async guardarContadores() {
-    try {
-      const fs = require('fs').promises;
-      const path = require('path');
-      await fs.mkdir(path.dirname(this._contadoresPath), { recursive: true });
-      await fs.writeFile(this._contadoresPath, JSON.stringify({
-        contadores: this.contadores,
-        updated_at: new Date().toISOString()
-      }, null, 2));
-    } catch (err) {
-      this.logger?.warn('canales.contadores.error_guardado', { error: err.message });
-    }
-  }
-
-  // Guardar con debounce (máx 1 escritura cada 2s)
-  _debounceSave() {
-    if (this._saveTimer) return;
-    this._saveTimer = setTimeout(() => {
-      this._saveTimer = null;
-      this.guardarContadores();
-    }, 2000);
   }
 
   calcularTiempoMinutos(desde) {
@@ -414,6 +362,7 @@ class CuentasCanalesModule {
       this.logger?.warn('canales.schema.error', { id: schema.$id, error: err.message });
     }
   }
+
 }
 
 module.exports = CuentasCanalesModule;

@@ -483,8 +483,13 @@ class ImpresionModule {
 
   async onItemTicket(event) {
     const data = event?.data || event?.payload || event;
-    const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion,
+    const { pedido_id, cuenta_id, canal, ref_display, item_id, nombre, cantidad, categoria, estacion,
             ingredientes, variaciones, notas, impresora, project_id } = data;
+
+    // Actualizar cache con ref_display si viene en el evento
+    if (cuenta_id && ref_display) {
+      this.cuentaNombres.set(cuenta_id, { ref: ref_display });
+    }
 
     const destino = impresora?.destino || this.config.destino_default;
 
@@ -1019,39 +1024,53 @@ class ImpresionModule {
   extraerRefCuenta(cuenta_id, canal) {
     if (!cuenta_id) return { ref: null };
 
-    // Primero: nombre personalizado cacheado (de eventos mesa/llevar)
+    // Primero: ref_display canónico cacheado (de cuenta.creada/cuenta.actualizada).
+    // El cache se alimenta del módulo `cuentas` con el contador global de turnos
+    // y es la fuente correcta — este método solo cae a fallbacks si el cache no
+    // tiene la cuenta (caso raro: ticket llega antes de que el evento se procese,
+    // o reinicio sin restaurar todavía).
     const cached = this.cuentaNombres.get(cuenta_id);
     if (cached) {
       return { ref: cached.ref.toUpperCase(), detalle: cached.detalle || null };
     }
 
-    // Fallback: extraer del patrón cuenta_id
-    const prefijos = {
+    // Fallback nuevo formato: M_a3f9c2d1 → "MESA a3f9c2d1" (display feo pero
+    // útil para debug). El caso normal NO debería caer aquí.
+    const LETRA_LABEL = {
+      M: 'MESA', L: 'LLEVAR', T: 'TEL',
+      W: 'WHATSAPP', G: 'GLOVO', D: 'LLEVADOO'
+    };
+    const matchNuevo = cuenta_id.match(/^([MLTWGD])_([a-f0-9]{4,})$/);
+    if (matchNuevo) {
+      return { ref: `${LETRA_LABEL[matchNuevo[1]]} ${matchNuevo[2].slice(0, 4).toUpperCase()}` };
+    }
+
+    // Fallback formato legacy: mesa_7_20250325_001 → "MESA 7"
+    const prefijosLegacy = {
       mesa: 'MESA',
-      telefono: 'TEL',
+      tel: 'TEL',
       llevar: 'LLEVAR',
       glovo: 'GLOVO',
-      whatsapp: 'WHATSAPP'
+      wa: 'WHATSAPP',
+      whatsapp: 'WHATSAPP',
+      llevadoo: 'LLEVADOO'
     };
 
-    for (const [prefijo, label] of Object.entries(prefijos)) {
+    for (const [prefijo, label] of Object.entries(prefijosLegacy)) {
       if (cuenta_id.startsWith(`${prefijo}_`)) {
         const rest = cuenta_id.slice(prefijo.length + 1);
-        // mesa_7_20250325_001 → rest="7_20250325_001" → id="7" → "MESA 7"
-        // llevar_20250325_001 → rest="20250325_001" → id="" → extraer seq
         const id = rest.replace(/_?\d{8}_\d+$/, '');
         if (id) {
           return { ref: `${label} ${id}` };
         }
-        // Sin identificador intermedio (llevar, telefono): usar el secuencial
         const seqMatch = rest.match(/_(\d+)$/);
         const seq = seqMatch ? parseInt(seqMatch[1], 10) : rest;
         return { ref: `${label} ${seq}` };
       }
     }
 
-    if (canal && prefijos[canal]) {
-      return { ref: `${prefijos[canal]} - ${cuenta_id}` };
+    if (canal && prefijosLegacy[canal]) {
+      return { ref: `${prefijosLegacy[canal]} - ${cuenta_id}` };
     }
 
     return { ref: `REF: ${cuenta_id}` };

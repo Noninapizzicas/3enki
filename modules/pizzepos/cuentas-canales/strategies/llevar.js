@@ -11,8 +11,13 @@
 class LlevarStrategy {
   constructor() {
     this.tipo = 'llevar';
-    this.prefijo = 'llevar_';
-    this.version = '3.0.0';
+    this.prefijo = 'L_';              // formato nuevo
+    this.prefijoLegacy = 'llevar_';   // formato heredado
+    this.version = '4.0.0';
+
+    // Contador interno para numero_ticket display (no es identidad — el turno
+    // global del módulo `cuentas` es la identidad humana). Solo en memoria.
+    this._ticketSeq = 0;
 
     this.ticketsActivos = new Map();
     this.ticketsListos = new Map();
@@ -68,6 +73,26 @@ class LlevarStrategy {
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));
+    // Listener pasivo: mantener el nombre del ticket sincronizado cuando el
+    // rename entre por `cuenta.rename` (único camino unificado).
+    await eventBus.subscribe('cuenta.actualizada', this.onCuentaActualizada.bind(this));
+  }
+
+  /**
+   * Sincroniza el cliente_nombre del Map local cuando `cuentas` publica un cambio.
+   * Idempotente: solo aplica si el cuenta_id pertenece a esta strategy.
+   */
+  async onCuentaActualizada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, cambios } = data;
+    if (!cuenta_id || !cambios) return;
+    if (cambios.nombre === undefined) return;
+
+    const ticket = this.ticketsActivos.get(cuenta_id);
+    if (!ticket) return;
+    if (ticket.cliente_nombre === cambios.nombre) return;
+
+    ticket.cliente_nombre = cambios.nombre;
   }
 
   async onCobroProcesado(cuenta_id, correlationId) {
@@ -161,15 +186,29 @@ class LlevarStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      const secuencial = this.modulo.getNextSecuencial('llevar');
-      const fecha = this.modulo.getFechaActual();
-      const cuenta_id = `llevar_${fecha}_${secuencial.toString().padStart(3, '0')}`;
-      const numero_ticket = secuencial;
+      this._ticketSeq = (this._ticketSeq % 999) + 1;
+      const numero_ticket = this._ticketSeq;
+      const clienteNombreFinal = cliente_nombre || `Cliente ${numero_ticket}`;
+
+      const cuenta = await this.modulo.crearCuentaViaCuentas({
+        project_id,
+        tipo: 'llevar',
+        nombre: clienteNombreFinal,
+        metadata: {
+          cliente_nombre: clienteNombreFinal,
+          numero_ticket,
+          // Llevar tiene ciclo especial: el cobro marca pagado pero NO cierra
+          // la cuenta. El cierre lo dispara llevar/entregar cuando el cliente
+          // recoge el pedido. Ver cuentas._cerrarAlCobrar().
+          cerrar_al_cobrar: false
+        }
+      });
+      const cuenta_id = cuenta.id;
 
       const ticket = {
         cuenta_id,
         numero_ticket,
-        cliente_nombre: cliente_nombre || `Cliente ${numero_ticket}`,
+        cliente_nombre: clienteNombreFinal,
         estado: 'pendiente',
         pagado: false,
         total: 0,
@@ -183,28 +222,11 @@ class LlevarStrategy {
       this.internalMetrics.tickets_creados++;
 
       await this.modulo.eventBus.publish('llevar.ticket_creado', {
-        cuenta_id: ticket.cuenta_id,
-        numero_ticket: ticket.numero_ticket,
-        cliente_nombre: ticket.cliente_nombre,
+        cuenta_id,
+        numero_ticket,
+        cliente_nombre: clienteNombreFinal,
         hora_creacion: ticket.hora_creacion,
         project_id
-      });
-
-      // ref_display canónico: "L 005 · Juan" (o "L 005" si no hay nombre real)
-      const esNombreReal = ticket.cliente_nombre && !/^Cliente\s+\d+$/i.test(ticket.cliente_nombre);
-      const ref_display = this.modulo.buildRefDisplay('L', secuencial, esNombreReal ? ticket.cliente_nombre : null);
-
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: ticket.cuenta_id,
-        tipo: 'llevar',
-        total: ticket.total,
-        project_id,
-        ref_display,
-        metadata: {
-          nombre: String(numero_ticket).padStart(3, '0'),
-          cliente_nombre: ticket.cliente_nombre,
-          numero_ticket: ticket.numero_ticket
-        }
       });
 
       this.modulo.logger.info('llevar.ticket_creado', {
@@ -307,10 +329,18 @@ class LlevarStrategy {
       let restaurados = 0;
       let maxSeq = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        if (!cuenta_id.startsWith(this.prefijo)) continue;
+        // Aceptar formato nuevo (L_xxxxxxxx) y legacy (llevar_...)
+        const esNuevo = cuenta_id.startsWith(this.prefijo);
+        const esLegacy = this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy);
+        if (!esNuevo && !esLegacy) continue;
 
-        const seqMatch = cuenta_id.match(/_(\d+)$/);
-        const seq = seqMatch ? parseInt(seqMatch[1], 10) : (restaurados + 1);
+        // numero_ticket: del snapshot; sino del cuenta_id legacy; sino incremental
+        let seq = cuenta.datos_especificos?.numero_ticket || null;
+        if (!seq && esLegacy) {
+          const seqMatch = cuenta_id.match(/_(\d+)$/);
+          seq = seqMatch ? parseInt(seqMatch[1], 10) : null;
+        }
+        if (!seq) seq = restaurados + 1;
         if (seq > maxSeq) maxSeq = seq;
 
         const ticket = {
@@ -333,8 +363,12 @@ class LlevarStrategy {
       }
 
       if (restaurados > 0) {
+        // Avanzar el contador interno de display al maximo seq visto, para que
+        // los siguientes tickets no colisionen con los restaurados.
+        if (maxSeq > this._ticketSeq) this._ticketSeq = maxSeq;
         this.modulo.logger.info('canal.llevar.estado_restaurado', {
-          tickets_restaurados: restaurados
+          tickets_restaurados: restaurados,
+          ticket_seq: this._ticketSeq
         });
       }
     } catch (error) {

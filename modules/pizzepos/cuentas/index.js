@@ -9,11 +9,13 @@ const crypto = require('crypto');
 const fs = require('fs').promises;
 const path = require('path');
 
-// Transiciones válidas de estado
+// Transiciones válidas de estado.
+// pendiente es re-alcanzable desde con_pedido cuando los items vuelven a 0
+// (comandero.item_eliminado → items=0). Es una regresion legitima, no un atajo.
 const TRANSICIONES_VALIDAS = {
   pendiente: ['con_pedido'],
-  con_pedido: ['en_preparacion', 'con_pedido', 'cobrado'], // cobrado: pago rápido sin enviar cocina
-  en_preparacion: ['listo', 'en_preparacion', 'entregado', 'cobrado'], // entregado: llevadoo entrega desde horno; cobrado: pago mientras cocina prepara
+  con_pedido: ['en_preparacion', 'con_pedido', 'pendiente', 'cobrado'], // cobrado: pago rápido sin enviar cocina
+  en_preparacion: ['listo', 'en_preparacion', 'entregado', 'cobrado'],  // entregado: delivery entrega desde horno; cobrado: pago mientras cocina prepara
   listo: ['entregado', 'para_cobrar', 'en_preparacion', 'cobrado'],
   entregado: ['para_cobrar', 'en_preparacion', 'cobrado'],
   para_cobrar: ['cobrado'],
@@ -31,9 +33,12 @@ class CuentasModule {
     // Estado en memoria
     this.cuentas = new Map(); // cuenta_id -> cuenta
 
-    // Contadores para auto-numeración con reinicio diario
-    this.counters = { local: 1, delivery: 1, llevar: 1 };
-    this._counterDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    // Contador único global de turnos 001→999→001 (persistido en disco).
+    // El turno es la identidad humana de la cuenta: orden de llegada al sistema,
+    // independiente del canal. Se asigna una sola vez al crear y nunca cambia.
+    this._turno = 0;
+    this._turnoFile = null; // se asigna en onLoad con path del proyecto
+    this._turnoSaveTimer = null;
 
     // Timers activos (para cleanup en onUnload)
     this._metricsInterval = null;
@@ -68,6 +73,10 @@ class CuentasModule {
     this.registerUIHandlers();
     this.startMetricsReporting();
 
+    // Cargar contador global de turnos de disco
+    this._turnoFile = path.join('.', 'data', 'current', 'contador_global.json');
+    await this._loadTurno();
+
     // Restaurar cuentas activas desde persistencia (sobrevive reinicio servidor)
     await this.restaurarDesdeArchivo();
 
@@ -94,6 +103,13 @@ class CuentasModule {
       clearTimeout(timeout);
     }
     this._alertaTimers.clear();
+
+    // Flush final del contador de turnos (cancela debounce y guarda ya)
+    if (this._turnoSaveTimer) {
+      clearTimeout(this._turnoSaveTimer);
+      this._turnoSaveTimer = null;
+      try { await this._saveTurno(); } catch (_) { /* ignore */ }
+    }
 
     // Desregistrar UI handlers
     if (this.uiHandler) {
@@ -273,18 +289,12 @@ class CuentasModule {
     cuenta.total = Math.max(0, cuenta.total - (precio_total || 0));
     cuenta.updated_at = new Date().toISOString();
 
-    // Si se quedó sin items y estaba en con_pedido, volver a pendiente
-    // Nota: con_pedido→pendiente no está en TRANSICIONES_VALIDAS (es una regresión especial),
-    // así que se maneja explícitamente aquí como caso controlado.
+    // Si se quedó sin items y estaba en con_pedido, regresar a pendiente.
+    // Esta transicion esta en TRANSICIONES_VALIDAS asi que pasa por la
+    // maquina de estados formal (publica cuenta.estado_cambiado y maneja
+    // alertas correctamente).
     if (cuenta.items === 0 && cuenta.estado === 'con_pedido') {
-      const estado_anterior = cuenta.estado;
-      cuenta.estado = 'pendiente';
-      this.gestionarAlerta(cuenta_id, 'pendiente');
-      this.logger.info('cuenta.estado_cambiado', {
-        cuenta_id, estado_anterior, estado_nuevo: 'pendiente', motivo: 'items_vacios'
-      });
-      this.metrics?.increment?.('cuenta.transicion.total');
-      await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, 'pendiente');
+      await this.transicionarEstado(cuenta_id, 'pendiente');
     }
 
     await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
@@ -401,8 +411,8 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    // Llevadoo paga externamente, no pasa por caja
-    if (cuenta.tipo === 'llevadoo') return;
+    // Cuentas con pago_externo (llevadoo y similares) no pasan por caja
+    if (this._pagoExterno(cuenta)) return;
 
     if (cuenta.estado === 'listo' || cuenta.estado === 'entregado') {
       await this.transicionarEstado(cuenta_id, 'para_cobrar');
@@ -450,15 +460,40 @@ class CuentasModule {
       estado: cuenta.estado
     });
 
-    // Llevar: el cobro no cierra la cuenta, se mantiene hasta que se entregue.
-    // La strategy de llevar gestiona el cierre vía llevar/entregar.
-    if (cuenta.tipo === 'llevar') return;
+    // pago_externo: no pasa por caja (llevadoo y similares)
+    if (this._pagoExterno(cuenta)) return;
 
-    // Llevadoo paga externamente (no pasa por caja), ignorar cobro
-    if (cuenta.tipo === 'llevadoo') return;
+    // cerrar_al_cobrar=false: el cobro marca pagado pero NO cierra la cuenta.
+    // La cuenta vive hasta que otro trigger la cierre (ej. llevar → entregar).
+    if (this._cerrarAlCobrar(cuenta) === false) return;
 
     // Transicionar a cobrado usando la máquina de estados formal
     await this.cerrarCuentaCobrada(cuenta_id);
+  }
+
+  /**
+   * Reglas de comportamiento que vienen en cuenta.metadata como flags.
+   * Los fallback a cuenta.tipo son por compat con cuentas legacy creadas
+   * antes de que las strategies setearan los flags explicitos.
+   */
+  _pagoExterno(cuenta) {
+    if (cuenta?.metadata?.pago_externo !== undefined) {
+      return !!cuenta.metadata.pago_externo;
+    }
+    return cuenta?.tipo === 'llevadoo';
+  }
+
+  /**
+   * Devuelve true si el cobro debe cerrar la cuenta (comportamiento por defecto),
+   * false si el cobro solo marca pagado y el cierre lo dispara otro trigger.
+   */
+  _cerrarAlCobrar(cuenta) {
+    if (cuenta?.metadata?.cerrar_al_cobrar !== undefined) {
+      return !!cuenta.metadata.cerrar_al_cobrar;
+    }
+    // Legacy: llevar no cerraba al cobrar (cierre via llevar/entregar)
+    if (cuenta?.tipo === 'llevar') return false;
+    return true;
   }
 
   /**
@@ -509,48 +544,6 @@ class CuentasModule {
   }
 
   /**
-   * cuenta.creada → registrar cuenta de canal externo (cuentas-canales) en el Map.
-   * Permite que la máquina de estados funcione para mesas, teléfono, llevar, glovo, whatsapp.
-   */
-  async onCuentaExternaCreada(event) {
-    const data = event?.data || event?.payload || event;
-    const { cuenta_id, tipo, project_id, total, metadata } = data;
-
-    if (!cuenta_id) return;
-
-    // Dedup: si ya existe (creada por handleCreateCuenta), no duplicar
-    if (this.cuentas.has(cuenta_id)) return;
-
-    const now = new Date();
-    const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    const cuenta = {
-      id: cuenta_id,
-      project_id: project_id || null,
-      tipo: tipo || 'local',
-      nombre: metadata?.nombre || tipo || 'Cuenta',
-      cliente_nombre: metadata?.cliente_nombre || null,
-      ref_display: data.ref_display || null,
-      estado: 'pendiente',
-      pagado: false,
-      hora,
-      items: 0,
-      total: total || 0,
-      alerta: false,
-      created_at: now.toISOString(),
-      updated_at: now.toISOString()
-    };
-
-    this.cuentas.set(cuenta_id, cuenta);
-    this.gestionarAlerta(cuenta_id, 'pendiente');
-
-    this.logger.info('cuenta.externa.registrada', {
-      cuenta_id, tipo, project_id,
-      origen: data.origen || 'unknown'
-    });
-  }
-
-  /**
    * cuenta.cerrada → limpiar cuenta del Map, timers y timeouts pendientes.
    * Si cerrarCuentaCobrada() programó una eliminación con timeout,
    * la cancelamos aquí porque la cuenta se elimina inmediatamente.
@@ -598,15 +591,20 @@ class CuentasModule {
     const start_time = Date.now();
 
     try {
-      const { project_id, tipo, nombre } = data || {};
+      const {
+        project_id, tipo, nombre, metadata, pedido_inicial,
+        total: totalInicial,
+        cuenta_id: cuentaIdPropuesto
+      } = data || {};
 
       if (!project_id) {
         return { status: 400, error: 'project_id es requerido' };
       }
 
-      const cuenta_id = crypto.randomUUID();
       const tipoFinal = tipo || 'local';
-      const cuenta_nombre = nombre || this.generateNombre(tipoFinal);
+      // Si la strategy propone explicito, respetar; si no, generar opaco.
+      const cuenta_id = cuentaIdPropuesto || this._buildCuentaId(tipoFinal);
+      const { turno, numero, ref_display } = this.generateRefDisplay(tipoFinal, nombre);
 
       const now = new Date();
       const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -614,14 +612,17 @@ class CuentasModule {
       const cuenta = {
         id: cuenta_id,
         project_id,
+        turno,
         tipo: tipoFinal,
-        nombre: cuenta_nombre,
+        nombre: nombre || null,
+        ref_display,
         estado: 'pendiente',
         pagado: false,
         hora,
         items: 0,
-        total: 0,
+        total: Number.isFinite(totalInicial) ? totalInicial : 0,
         alerta: false,
+        metadata: metadata || {},
         created_at: now.toISOString(),
         updated_at: now.toISOString()
       };
@@ -640,8 +641,15 @@ class CuentasModule {
       await this.publishCuentaCreada(cuenta);
 
       this.logger.info('cuenta.creada', {
-        project_id, cuenta_id, tipo: tipoFinal, nombre: cuenta_nombre, duration: Date.now() - start_time
+        project_id, cuenta_id, tipo: tipoFinal, ref_display, duration: Date.now() - start_time
       });
+
+      // Si la creacion incluye un pedido inicial (caso delivery: Glovo, Llevadoo,
+      // integraciones externas que ya traen items resueltos), inyectarlo en el
+      // flujo estandar para que la cuenta entre con su turno en la cola general.
+      if (pedido_inicial && Array.isArray(pedido_inicial.items) && pedido_inicial.items.length > 0) {
+        await this._inyectarPedidoInicial(cuenta, pedido_inicial);
+      }
 
       return { status: 201, data: cuenta };
 
@@ -650,6 +658,70 @@ class CuentasModule {
       this.logger.error('cuenta.create.error', { error: error.message });
       return { status: 500, error: error.message };
     }
+  }
+
+  /**
+   * Inyecta un pedido pre-formado en una cuenta recién creada (delivery
+   * webhooks, Glovo, Llevadoo, integraciones externas).
+   *
+   * Reusa el mismo bus de eventos que usa el comandero — publica
+   * `comandero.enviar_cocina` con los items, y deja que pedidos cree el
+   * pedido formal y cocina lo reciba. Cuentas (esta misma instancia)
+   * escucha `comandero.enviar_cocina` y transiciona la cuenta a
+   * `en_preparacion` en su propio handler `onComanderoEnviarCocina`.
+   *
+   * Ventajas: cero codigo nuevo en pedidos/cocina/persistencia. La cuenta
+   * delivery agarra el siguiente turno del contador global y aparece en
+   * la pantalla de cuentas como cualquier otra, en orden de llegada.
+   *
+   * @param {object} cuenta - Cuenta recien creada (estado: pendiente)
+   * @param {object} pedido_inicial - { items, total?, notas_generales? }
+   */
+  async _inyectarPedidoInicial(cuenta, pedido_inicial) {
+    const itemsCount = pedido_inicial.items.reduce(
+      (s, i) => s + (i.cantidad || 1), 0
+    );
+    const total = pedido_inicial.total ?? pedido_inicial.items.reduce(
+      (s, i) => s + (i.subtotal || (i.precio || 0) * (i.cantidad || 1)), 0
+    );
+
+    // Actualizar totales locales (lo que onComanderoItemAgregado hace en el
+    // flujo normal del comandero, agrupado en una sola actualizacion).
+    cuenta.items = itemsCount;
+    cuenta.total = total;
+    cuenta.updated_at = new Date().toISOString();
+
+    // Transicion pendiente → con_pedido (los items ya existen). Esto es lo
+    // que hace onComanderoItemAgregado en el primer item del flujo normal.
+    await this.transicionarEstado(cuenta.id, 'con_pedido');
+    await this.publishCuentaActualizada(cuenta.project_id, cuenta.id, {
+      items: cuenta.items,
+      total: cuenta.total
+    });
+
+    // Publicar comandero.enviar_cocina como si viniera del buffer del comandero.
+    // Este modulo escucha ese evento en onComanderoEnviarCocina y transiciona
+    // la cuenta a en_preparacion. Pedidos lo recoge en su propio bridge y
+    // crea el pedido formal + publica pedido.enviado_cocina (lo que cocina
+    // espera para mostrar el pedido en pantalla).
+    const pedido_id = `ped_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+    await this.eventBus.publish('comandero.enviar_cocina', {
+      cuenta_id: cuenta.id,
+      pedido_id,
+      project_id: cuenta.project_id,
+      ref_display: cuenta.ref_display,
+      items: pedido_inicial.items,
+      total,
+      notas_generales: pedido_inicial.notas_generales || null,
+      created_at: cuenta.created_at
+    });
+
+    this.logger.info('cuenta.pedido_inicial.inyectado', {
+      cuenta_id: cuenta.id,
+      pedido_id,
+      items_count: itemsCount,
+      total
+    });
   }
 
   async handleListCuentas(data) {
@@ -776,11 +848,17 @@ class CuentasModule {
     cuenta.nombre = nombre.trim().slice(0, 50);
     cuenta.updated_at = new Date().toISOString();
 
-    // Rebuild ref_display with the new name, preserving the symbol+number prefix
-    if (cuenta.ref_display) {
-      // Extract "X NNN" prefix from existing ref_display (e.g. "L 005 · Juan" → "L 005")
-      const prefix = cuenta.ref_display.split(' · ')[0];
-      cuenta.ref_display = cuenta.nombre ? `${prefix} · ${cuenta.nombre}` : prefix;
+    // Recomponer ref_display: si tenemos turno (fuente de verdad), regenerar
+    // limpio desde turno + tipo + nombre. Si no (cuenta restaurada sin turno,
+    // caso legacy), intentar extraer el código "X NNN" del ref_display actual.
+    if (Number.isInteger(cuenta.turno)) {
+      const numero = String(cuenta.turno).padStart(3, '0');
+      const symbol = CuentasModule.SIMBOLOS[cuenta.tipo] || 'M';
+      cuenta.ref_display = this.buildRefDisplay(symbol, numero, cuenta.nombre);
+    } else if (cuenta.ref_display) {
+      const match = cuenta.ref_display.match(/[A-Z]\s\d{3}/);
+      const code = match ? match[0] : cuenta.ref_display;
+      cuenta.ref_display = cuenta.nombre ? `${cuenta.nombre} ${code}` : code;
     }
 
     await this.publishCuentaActualizada(cuenta.project_id, id, {
@@ -858,10 +936,13 @@ class CuentasModule {
     await this.eventBus.publish('cuenta.creada', {
       project_id: cuenta.project_id,
       cuenta_id: cuenta.id,
+      turno: cuenta.turno,
       tipo: cuenta.tipo,
       nombre: cuenta.nombre,
+      ref_display: cuenta.ref_display,
       origen: cuenta.nombre || cuenta.tipo,
-      metadata: { nombre: cuenta.nombre },
+      total: cuenta.total,
+      metadata: cuenta.metadata || {},
       estado: cuenta.estado,
       created_at: cuenta.created_at
     });
@@ -912,6 +993,7 @@ class CuentasModule {
       if (!datos.cuentas || Object.keys(datos.cuentas).length === 0) return;
 
       let restauradas = 0;
+      let maxTurnoVisto = 0;
       for (const [cuenta_id, cp] of Object.entries(datos.cuentas)) {
         // Usar estado real de persistencia si existe, sino inferir
         let estado = cp.estado || 'pendiente';
@@ -937,18 +1019,31 @@ class CuentasModule {
           hora = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         } catch (_) { /* ignore */ }
 
+        // Restaurar turno persistido si existe (nunca regenerar — el turno es inmutable)
+        const turnoRestaurado = Number.isInteger(cp.turno) ? cp.turno : null;
+        if (turnoRestaurado && turnoRestaurado > maxTurnoVisto) {
+          maxTurnoVisto = turnoRestaurado;
+        }
+
+        // Nombre explícito del snapshot; evita fallbacks que contaminen con tipo
+        const nombreRestaurado =
+          cp.datos_especificos?.nombre || cp.nombre || null;
+
         const cuenta = {
           id: cuenta_id,
           project_id: cp.project_id || null,
+          turno: turnoRestaurado,
           tipo: cp.tipo || 'local',
-          nombre: cp.datos_especificos?.nombre || cp.nombre || cp.tipo || 'Cuenta',
+          nombre: nombreRestaurado,
           cliente_nombre: cp.datos_especificos?.cliente_nombre || cp.cliente_nombre || null,
+          ref_display: cp.ref_display || null,
           estado,
           pagado: cp.pagado || false,
           hora,
           items: itemsCount,
           total: cp.total || 0,
           alerta: false,
+          metadata: cp.datos_especificos || cp.metadata || {},
           created_at: cp.created_at || new Date().toISOString(),
           updated_at: cp.updated_at || cp.created_at || new Date().toISOString()
         };
@@ -957,10 +1052,18 @@ class CuentasModule {
         restauradas++;
       }
 
+      // Avanzar el contador global para que no re-use turnos ya asignados a
+      // cuentas restauradas. Solo sube nunca baja.
+      if (maxTurnoVisto > this._turno) {
+        this._turno = maxTurnoVisto;
+        this._saveTurnoDebounced();
+      }
+
       this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
 
       this.logger.info('cuentas.estado_restaurado', {
-        cuentas_restauradas: restauradas
+        cuentas_restauradas: restauradas,
+        turno_actual: this._turno
       });
     } catch (error) {
       // No hay archivo o está vacío — arranque limpio
@@ -974,21 +1077,105 @@ class CuentasModule {
   // Helpers
   // ==========================================
 
-  generateNombre(tipo) {
-    // Reinicio diario de contadores
-    const today = new Date().toISOString().slice(0, 10);
-    if (this._counterDate !== today) {
-      this.counters = { local: 1, delivery: 1, llevar: 1 };
-      this._counterDate = today;
-      this.logger?.info('cuentas.counters.daily_reset', { date: today });
-    }
+  // ── Contador único global de turnos (001→999→001, persistido) ──
+  //
+  // El turno es la identidad humana de la cuenta (orden de llegada). Se asigna
+  // una sola vez en creación, nunca cambia, y es independiente del canal.
+  // Una cuenta renombrada o que cambia de estado mantiene su turno original.
 
-    // Numero 3 digitos (ej: 001) — el emoji se muestra desde TIPO_ICONS en la UI
-    const pad = (num) => String(num).padStart(3, '0');
-    const nombre = pad(this.counters[tipo] || 1);
-    this.counters[tipo] = (this.counters[tipo] || 1) + 1;
-    return nombre;
+  /**
+   * Genera un cuenta_id opaco con formato `{LETRA}_{uuid8}`.
+   * La letra viene de SIMBOLOS y es puramente decorativa (el codigo no
+   * debe parsearla — el tipo real viaja en el campo `tipo` del evento).
+   * Debe coincidir con cuentas-canales.buildCuentaId para uniformidad.
+   */
+  _buildCuentaId(tipo) {
+    const letra = CuentasModule.SIMBOLOS[tipo] || 'X';
+    const uuid8 = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+    return `${letra}_${uuid8}`;
   }
+
+  /**
+   * Devuelve el siguiente turno como entero (1..999, cicla).
+   * Persiste con debounce de 1s.
+   */
+  getNextTurno() {
+    this._turno++;
+    if (this._turno > 999) this._turno = 1;
+    this._saveTurnoDebounced();
+    return this._turno;
+  }
+
+  buildRefDisplay(symbol, number, nombre) {
+    const code = `${symbol} ${number}`;
+    return nombre ? `${nombre} ${code}` : code;
+  }
+
+  /**
+   * Genera turno + ref_display para una cuenta nueva.
+   * Punto único de generación — handleCreateCuenta lo usa.
+   * Devuelve { turno, numero, ref_display }:
+   *   - turno: entero (1..999), identidad humana
+   *   - numero: mismo turno formateado a 3 dígitos ("001")
+   *   - ref_display: string derivado "{nombre? }{simbolo} {numero}"
+   */
+  generateRefDisplay(tipo, nombre) {
+    const turno = this.getNextTurno();
+    const numero = String(turno).padStart(3, '0');
+    const symbol = CuentasModule.SIMBOLOS[tipo] || 'M';
+    // Excluir nombres automaticos ("Mesa 5", "Cliente 16", etc)
+    const esAuto = nombre && /^(Mesa|Cliente|Llevadoo|Cliente Glovo|Cliente WhatsApp)\s/i.test(nombre);
+    const nombreFinal = esAuto ? null : (nombre || null);
+    return { turno, numero, ref_display: this.buildRefDisplay(symbol, numero, nombreFinal) };
+  }
+
+  async _loadTurno() {
+    try {
+      const data = await fs.readFile(this._turnoFile, 'utf8');
+      const json = JSON.parse(data);
+      // Acepta 'turno' (nuevo) o 'counter' (legacy) para no perder estado tras migración
+      this._turno = json.turno ?? json.counter ?? 0;
+      this.logger?.info?.('cuentas.turno.loaded', { turno: this._turno });
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        this.logger?.warn?.('cuentas.turno.load_error', { error: err.message });
+      }
+      this._turno = 0;
+    }
+  }
+
+  _saveTurnoDebounced() {
+    if (this._turnoSaveTimer) clearTimeout(this._turnoSaveTimer);
+    // No persistir si no se ha inicializado (smoke tests, instanciacion sin onLoad)
+    if (!this._turnoFile) return;
+    this._turnoSaveTimer = setTimeout(() => this._saveTurno(), 1000);
+  }
+
+  async _saveTurno() {
+    if (!this._turnoFile) return;
+    try {
+      const dir = path.dirname(this._turnoFile);
+      await fs.mkdir(dir, { recursive: true });
+      // Escribe ambos campos durante migración para compat hacia atrás
+      await fs.writeFile(
+        this._turnoFile,
+        JSON.stringify({ turno: this._turno, counter: this._turno })
+      );
+    } catch (err) {
+      this.logger?.warn?.('cuentas.turno.save_error', { error: err.message });
+    }
+  }
+
+  // Mapa de símbolo por tipo de canal
+  static SIMBOLOS = {
+    mesa: 'M', local: 'M',
+    llevar: 'L',
+    telefono: 'T',
+    whatsapp: 'W',
+    glovo: 'G',
+    llevadoo: 'D',
+    delivery: 'D'
+  };
 
   startMetricsReporting() {
     this._metricsInterval = setInterval(() => {

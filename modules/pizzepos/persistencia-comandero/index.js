@@ -318,7 +318,7 @@ class PersistenciaComanderoModule {
         venta_id: venta.venta_id,
         total: venta.resumen.total_final
       });
-    } else if (cuenta_id && cuenta_id.startsWith('llevadoo_') && metadata?.motivo !== 'cancelado') {
+    } else if (cuenta_id && (cuenta_id.startsWith('llevadoo_') || cuenta_id.startsWith('D_')) && metadata?.motivo !== 'cancelado') {
       // Llevadoo paga externamente (no pasa por caja) pero se refleja en totales de venta
       // No crear venta si fue cancelado (total=0, no hubo venta real)
       const cuentaCreadaEvento = this.eventosCache
@@ -391,17 +391,27 @@ class PersistenciaComanderoModule {
 
     await this.onEvento(event);
 
-    const { cuenta_id, project_id, tipo, origen, metadata } = eventData;
+    const { cuenta_id, project_id, turno, tipo, nombre, origen, ref_display, estado, total, metadata } = eventData;
+
+    // Shim: tambien reflejamos nombre en datos_especificos.nombre por compat
+    // con restauradores legacy. TODO: eliminar cuando todos lean top-level.
+    const datosEspecificos = { ...(metadata || {}) };
+    if (nombre && !datosEspecificos.nombre) {
+      datosEspecificos.nombre = nombre;
+    }
 
     const cuentaActiva = {
       cuenta_id,
       project_id: project_id || null,
+      turno: Number.isInteger(turno) ? turno : null,
       tipo,
+      nombre: nombre || null,
       origen,
-      estado: 'abierta',
-      datos_especificos: metadata || {},
+      ref_display: ref_display || null,
+      estado: estado || 'pendiente',
+      datos_especificos: datosEspecificos,
       pedidos: [],
-      total: 0,
+      total: Number.isFinite(total) ? total : 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -446,7 +456,7 @@ class PersistenciaComanderoModule {
 
     const cuenta = this.cuentasActivasCache.get(cuenta_id);
     if (cuenta) {
-      // Persistir campos relevantes: pagado, servido, total, items, estado, nombre
+      // Persistir campos relevantes: pagado, servido, total, items, estado, nombre, ref_display
       if (cambios.pagado !== undefined) cuenta.pagado = cambios.pagado;
       if (cambios.servido !== undefined) cuenta.servido = cambios.servido;
       if (cambios.total !== undefined) cuenta.total = cambios.total;
@@ -456,6 +466,7 @@ class PersistenciaComanderoModule {
         cuenta.datos_especificos = cuenta.datos_especificos || {};
         cuenta.datos_especificos.nombre = cambios.nombre;
       }
+      if (cambios.ref_display !== undefined) cuenta.ref_display = cambios.ref_display;
       cuenta.updated_at = eventData.updated_at || new Date().toISOString();
       await this.guardarCuentasActivas();
 

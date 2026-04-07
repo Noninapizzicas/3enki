@@ -17,6 +17,9 @@
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  */
 
+const fs = require('fs').promises;
+const path = require('path');
+
 // Tipos de estación: el pase es un contador acumulativo del item, no de la estación.
 // Cada estación filtra por el pase mínimo que necesita para mostrar el item.
 // General: pase_minimo=0 (items nuevos), Horno: pase_minimo=1 (ya pasaron por general).
@@ -46,7 +49,7 @@ const TIPOS_ESTACION = {
 class CocinaModule {
   constructor() {
     this.name = 'cocina';
-    this.version = '3.0.0';
+    this.version = '3.1.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -59,6 +62,12 @@ class CocinaModule {
     this.pedidosActivos = new Map(); // pedido_id -> pedido_cocina
     this.historial = []; // últimos 50 pedidos completados
     this.maxHistorial = 50;
+
+    // Snapshot persistente (sobrevive reinicios del servidor preservando
+    // estado real de cada item: pase, fases, estado, device_id).
+    // Es la fuente de verdad; cuentas_activas.json es solo fallback legacy.
+    this._snapshotFile = null; // se asigna en onLoad
+    this._snapshotSaveTimer = null;
 
     // Cache de ref_display de cuenta (cuenta_id → ref_display canónico)
     this.cuentaNombres = new Map();
@@ -104,14 +113,26 @@ class CocinaModule {
     // Event subscriptions are auto-wired from module.json by the loader.
     this.registerUIHandlers();
 
-    // Restaurar pedidos activos en cocina desde persistencia
-    await this.restaurarDesdeArchivo();
+    // Restaurar pedidos: snapshot propio si existe (preserva pase/fases/estado),
+    // si no, fallback a cuentas_activas.json que reconstruye como pendientes.
+    this._snapshotFile = path.join('.', 'data', 'current', 'cocina_snapshot.json');
+    const restoredFromSnapshot = await this._restaurarSnapshot();
+    if (!restoredFromSnapshot) {
+      await this.restaurarDesdeArchivo();
+    }
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
+
+    // Flush final del snapshot (cancela debounce y guarda ya)
+    if (this._snapshotSaveTimer) {
+      clearTimeout(this._snapshotSaveTimer);
+      this._snapshotSaveTimer = null;
+      try { await this._saveSnapshot(); } catch (_) { /* ignore */ }
+    }
 
     // Desregistrar UI handlers
     if (this.uiHandler) {
@@ -133,6 +154,72 @@ class CocinaModule {
     this.devices.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // Snapshot persistente
+  // ==========================================
+
+  /**
+   * Guarda el snapshot de pedidosActivos con debounce (1s).
+   * Se llama tras cualquier mutación del Map (nuevo pedido, tap item,
+   * cancelar, marcar listo).
+   */
+  _saveSnapshotDebounced() {
+    if (this._snapshotSaveTimer) clearTimeout(this._snapshotSaveTimer);
+    if (!this._snapshotFile) return;
+    this._snapshotSaveTimer = setTimeout(() => this._saveSnapshot(), 1000);
+  }
+
+  async _saveSnapshot() {
+    if (!this._snapshotFile) return;
+    // Escritura atomica: write-to-tmp + rename. Evita snapshots corruptos
+    // si el proceso muere mid-write (el rename es atomico en POSIX/NTFS).
+    const tmpFile = `${this._snapshotFile}.tmp`;
+    try {
+      await fs.mkdir(path.dirname(this._snapshotFile), { recursive: true });
+      const snapshot = {
+        _saved_at: new Date().toISOString(),
+        pedidos: Object.fromEntries(this.pedidosActivos)
+      };
+      await fs.writeFile(tmpFile, JSON.stringify(snapshot));
+      await fs.rename(tmpFile, this._snapshotFile);
+    } catch (err) {
+      this.logger?.warn?.('cocina.snapshot.save_error', { error: err.message });
+      // Best-effort cleanup del tmp si rename no llego a ejecutarse
+      try { await fs.unlink(tmpFile); } catch (_) { /* ignore */ }
+    }
+  }
+
+  /**
+   * Restaura pedidosActivos desde el snapshot propio de cocina.
+   * Preserva estado real (pase, fases, estado, device_id, preparando_at).
+   * Devuelve true si restauró algo, false si no existe o está vacío.
+   */
+  async _restaurarSnapshot() {
+    try {
+      const contenido = await fs.readFile(this._snapshotFile, 'utf8');
+      const snapshot = JSON.parse(contenido);
+      if (!snapshot.pedidos || Object.keys(snapshot.pedidos).length === 0) {
+        return false;
+      }
+
+      for (const [pedido_id, pedido] of Object.entries(snapshot.pedidos)) {
+        this.pedidosActivos.set(pedido_id, pedido);
+      }
+
+      this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
+      this.logger.info('cocina.snapshot_restaurado', {
+        pedidos_restaurados: this.pedidosActivos.size,
+        saved_at: snapshot._saved_at
+      });
+      return true;
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        this.logger?.warn?.('cocina.snapshot.load_error', { error: err.message });
+      }
+      return false;
+    }
   }
 
   // ==========================================
@@ -243,10 +330,46 @@ class CocinaModule {
 
   async onCuentaActualizada(event) {
     const data = event?.data || event?.payload || event;
-    if (data.cuenta_id) {
-      // Prefer ref_display (canonical), fallback to cambios.nombre
-      const display = data.cambios?.ref_display || data.cambios?.nombre || null;
-      if (display) this.cuentaNombres.set(data.cuenta_id, display);
+    if (!data.cuenta_id) return;
+
+    const display = data.cambios?.ref_display || data.cambios?.nombre || null;
+    if (!display) return;
+
+    // Actualizar cache
+    this.cuentaNombres.set(data.cuenta_id, display);
+
+    // Actualizar pedidos activos en pantalla que pertenecen a esta cuenta
+    for (const pedido of this.pedidosActivos.values()) {
+      if (pedido.cuenta_id === data.cuenta_id) {
+        pedido.nombre_cuenta = display;
+        pedido.ref_display = display;
+      }
+    }
+  }
+
+  /**
+   * Housekeeping al eliminar una cuenta: limpia cuentaNombres y cualquier
+   * pedido huerfano de esa cuenta que quedara en pedidosActivos (defensa
+   * contra pedidos bloqueados que nunca llegaron a marcarPedidoListo).
+   */
+  async onCuentaEliminada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id } = data || {};
+    if (!cuenta_id) return;
+
+    this.cuentaNombres.delete(cuenta_id);
+
+    let removed = 0;
+    for (const [pedido_id, pedido] of this.pedidosActivos) {
+      if (pedido.cuenta_id === cuenta_id) {
+        this.pedidosActivos.delete(pedido_id);
+        removed++;
+      }
+    }
+    if (removed > 0) {
+      this._saveSnapshotDebounced();
+      this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
+      this.logger.info('cocina.pedidos_huerfanos_limpiados', { cuenta_id, removed });
     }
   }
 
@@ -257,22 +380,26 @@ class CocinaModule {
   async onPedidoEnviadoCocina(event) {
     const data = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { pedido_id, items, cuenta_id, canal, notas_generales, metadata } = data;
+    const { pedido_id, items, cuenta_id, canal, ref_display, notas_generales, metadata } = data;
 
     this.logger.info('cocina.pedido.recibido', {
       correlation_id: correlationId,
       pedido_id,
       canal: canal || 'directo',
+      ref_display: ref_display || null,
       items_count: items?.length || 0
     });
 
-    // Resolver ref_display canónico (ej: "L 005 · Juan") desde cache o metadata
-    const nombre_cuenta = this.cuentaNombres.get(cuenta_id) || metadata?.nombre || null;
+    // ref_display: preferir el que viene en el evento, fallback a cache
+    const nombre_cuenta = ref_display || this.cuentaNombres.get(cuenta_id) || metadata?.nombre || null;
+    // Actualizar cache con el ref_display recibido
+    if (cuenta_id && ref_display) this.cuentaNombres.set(cuenta_id, ref_display);
 
     const pedidoCocina = {
       pedido_id,
       cuenta_id,
       nombre_cuenta,
+      ref_display: nombre_cuenta,
       canal: canal || null,
       items: (items || []).map(item => {
         const cocinaItem = {
@@ -301,6 +428,7 @@ class CocinaModule {
     };
 
     this.pedidosActivos.set(pedido_id, pedidoCocina);
+    this._saveSnapshotDebounced();
 
     this.metrics?.increment?.('cocina.pedido_recibido.total');
     this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
@@ -323,6 +451,7 @@ class CocinaModule {
     if (!this.pedidosActivos.has(pedido_id)) return;
 
     this.pedidosActivos.delete(pedido_id);
+    this._saveSnapshotDebounced();
 
     this.metrics?.increment?.('cocina.pedido_cancelado.total');
     this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
@@ -448,6 +577,7 @@ class CocinaModule {
         pedido_id: pedidoEncontrado.pedido_id, item_id, pase: itemEncontrado.pase
       });
 
+      this._saveSnapshotDebounced();
       return { status: 200, data: { item: itemEncontrado, pedido_completo: false } };
     }
 
@@ -507,6 +637,7 @@ class CocinaModule {
         siguiente: siguienteTipo.id
       });
 
+      this._saveSnapshotDebounced();
       return { status: 200, data: { item: itemEncontrado, pedido_completo: false, avanzado: true } };
     }
 
@@ -529,6 +660,7 @@ class CocinaModule {
       pedido_completo: todosListos
     });
 
+    if (!todosListos) this._saveSnapshotDebounced();
     return { status: 200, data: { item: itemEncontrado, pedido_completo: todosListos } };
   }
 
@@ -750,8 +882,6 @@ class CocinaModule {
    */
   async restaurarDesdeArchivo() {
     try {
-      const fs = require('fs').promises;
-      const path = require('path');
       const archivo = path.join('./data/current', 'cuentas_activas.json');
       const contenido = await fs.readFile(archivo, 'utf8');
       const datos = JSON.parse(contenido);
@@ -793,12 +923,26 @@ class CocinaModule {
 
           if (items.length === 0) continue;
 
-          // Detectar canal por prefijo del cuenta_id
-          let canal = null;
-          if (cuenta_id.startsWith('mesa_')) canal = 'mesa';
-          else if (cuenta_id.startsWith('tel_')) canal = 'telefono';
-          else if (cuenta_id.startsWith('llevar_')) canal = 'llevar';
-          else if (cuenta_id.startsWith('glovo_')) canal = 'glovo';
+          // Canal: preferir el `tipo` persistido en el snapshot (fuente de verdad).
+          // Fallback: detectar por prefijo del cuenta_id (formato nuevo
+          // {LETRA}_xxxx y formato legacy {canal}_xxxx).
+          let canal = cuenta.tipo || null;
+          if (!canal) {
+            // Formato nuevo: M_, L_, T_, W_, G_, D_
+            if (cuenta_id.startsWith('M_')) canal = 'mesa';
+            else if (cuenta_id.startsWith('L_')) canal = 'llevar';
+            else if (cuenta_id.startsWith('T_')) canal = 'telefono';
+            else if (cuenta_id.startsWith('W_')) canal = 'whatsapp';
+            else if (cuenta_id.startsWith('G_')) canal = 'glovo';
+            else if (cuenta_id.startsWith('D_')) canal = 'llevadoo';
+            // Formato legacy
+            else if (cuenta_id.startsWith('mesa_')) canal = 'mesa';
+            else if (cuenta_id.startsWith('llevar_')) canal = 'llevar';
+            else if (cuenta_id.startsWith('tel_')) canal = 'telefono';
+            else if (cuenta_id.startsWith('wa_')) canal = 'whatsapp';
+            else if (cuenta_id.startsWith('glovo_')) canal = 'glovo';
+            else if (cuenta_id.startsWith('llevadoo_')) canal = 'llevadoo';
+          }
 
           const pedidoCocina = {
             pedido_id,
@@ -859,6 +1003,7 @@ class CocinaModule {
     }
 
     this.pedidosActivos.delete(pedido.pedido_id);
+    this._saveSnapshotDebounced();
 
     await this.publishPedidoListo(pedido);
 
@@ -949,6 +1094,7 @@ class CocinaModule {
     await this.eventBus.publish('cocina.item_ticket', {
       pedido_id: pedidoCocina.pedido_id,
       cuenta_id: pedidoCocina.cuenta_id,
+      ref_display: pedidoCocina.ref_display || null,
       canal: pedidoCocina.canal || null,
       item_id: item.item_id,
       producto_id: item.producto_id,
@@ -976,6 +1122,7 @@ class CocinaModule {
     await this.eventBus.publish('cocina.pedido_listo', {
       pedido_id: pedido.pedido_id,
       cuenta_id: pedido.cuenta_id,
+      ref_display: pedido.ref_display || null,
       canal: pedido.canal || null,
       items_count: pedido.items.length,
       tiempo_preparacion: pedido.tiempo_preparacion,

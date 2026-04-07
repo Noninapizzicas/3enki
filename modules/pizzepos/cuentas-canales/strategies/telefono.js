@@ -12,11 +12,15 @@
 class TelefonoStrategy {
   constructor() {
     this.tipo = 'telefono';
-    this.prefijo = 'tel_';
-    this.version = '3.0.0';
+    this.prefijo = 'T_';            // formato nuevo
+    this.prefijoLegacy = 'tel_';    // formato heredado
+    this.version = '4.0.0';
 
     this.pedidosActivos = new Map();
     this.contactos = new Map();
+
+    // Contador interno para numero_pedido display (no es identidad)
+    this._pedidoSeq = 0;
 
     this.internalMetrics = {
       llamadas_recibidas: 0,
@@ -204,14 +208,12 @@ class TelefonoStrategy {
         return { status: 400, error: 'Request inválido', details: validate.errors };
       }
 
-      const { telefono, nombre, hora_recogida_estimada, tiempo_preparacion, notas } = data;
+      const { telefono, nombre, hora_recogida_estimada, tiempo_preparacion, notas, project_id } = data;
 
       this.modulo.verificarReseoDiario();
 
-      const secuencial = this.modulo.getNextSecuencial('telefono');
-      const fecha = this.modulo.getFechaActual();
-      const cuenta_id = `tel_${fecha}_${secuencial.toString().padStart(3, '0')}`;
-      const numero_pedido = secuencial;
+      this._pedidoSeq = (this._pedidoSeq % 999) + 1;
+      const numero_pedido = this._pedidoSeq;
 
       let horaRecogida = hora_recogida_estimada;
       if (!horaRecogida) {
@@ -222,17 +224,26 @@ class TelefonoStrategy {
       }
 
       const contacto = this.contactos.get(telefono);
+      const contactoFinal = contacto || {
+        telefono,
+        nombre: nombre || 'Cliente',
+        pedidos_anteriores: 0
+      };
+
+      const cuenta = await this.modulo.crearCuentaViaCuentas({
+        project_id,
+        tipo: 'telefono',
+        nombre: contactoFinal.nombre,
+        metadata: { telefono, numero_pedido, hora_recogida_estimada: horaRecogida }
+      });
+      const cuenta_id = cuenta.id;
 
       const pedido = {
         cuenta_id,
         numero_pedido,
         telefono,
         caller_id_detectado: !!contacto,
-        contacto: contacto || {
-          telefono,
-          nombre: nombre || 'Cliente',
-          pedidos_anteriores: 0
-        },
+        contacto: contactoFinal,
         estado: 'pendiente',
         pagado: false,
         total: 0,
@@ -247,27 +258,11 @@ class TelefonoStrategy {
       this.internalMetrics.pedidos_creados++;
 
       await this.modulo.eventBus.publish('telefono.pedido_creado', {
-        cuenta_id: pedido.cuenta_id,
-        numero_pedido: pedido.numero_pedido,
-        telefono: pedido.telefono,
-        nombre: pedido.contacto.nombre,
-        hora_recogida_estimada: pedido.hora_recogida_estimada
-      });
-
-      // ref_display canónico: "T 002 · María" (o "T 002" si nombre genérico)
-      const esNombreReal = pedido.contacto.nombre && pedido.contacto.nombre !== 'Cliente';
-      const ref_display = this.modulo.buildRefDisplay('T', secuencial, esNombreReal ? pedido.contacto.nombre : null);
-
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: pedido.cuenta_id,
-        tipo: 'telefono',
-        total: pedido.total,
-        ref_display,
-        metadata: {
-          nombre: pedido.contacto.nombre,
-          telefono: pedido.telefono,
-          hora_recogida_estimada: pedido.hora_recogida_estimada
-        }
+        cuenta_id,
+        numero_pedido,
+        telefono,
+        nombre: contactoFinal.nombre,
+        hora_recogida_estimada: horaRecogida
       });
 
       this.modulo.logger.info('telefono.pedido_creado', {
@@ -411,11 +406,20 @@ class TelefonoStrategy {
       if (!datos.cuentas) return;
 
       let restaurados = 0;
+      let maxSeq = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        if (!cuenta_id.startsWith(this.prefijo)) continue;
+        // Aceptar formato nuevo (T_xxxxxxxx) y legacy (tel_...)
+        const esNuevo = cuenta_id.startsWith(this.prefijo);
+        const esLegacy = this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy);
+        if (!esNuevo && !esLegacy) continue;
 
-        const numMatch = cuenta_id.match(/_(\d+)$/);
-        const numero = numMatch ? parseInt(numMatch[1], 10) : (restaurados + 1);
+        let numero = cuenta.datos_especificos?.numero_pedido || null;
+        if (!numero && esLegacy) {
+          const numMatch = cuenta_id.match(/_(\d+)$/);
+          numero = numMatch ? parseInt(numMatch[1], 10) : null;
+        }
+        if (!numero) numero = restaurados + 1;
+        if (numero > maxSeq) maxSeq = numero;
 
         const pedido = {
           cuenta_id,
@@ -442,8 +446,10 @@ class TelefonoStrategy {
       }
 
       if (restaurados > 0) {
+        if (maxSeq > this._pedidoSeq) this._pedidoSeq = maxSeq;
         this.modulo.logger.info('canal.telefono.estado_restaurado', {
-          pedidos_restaurados: restaurados
+          pedidos_restaurados: restaurados,
+          pedido_seq: this._pedidoSeq
         });
       }
     } catch (error) {

@@ -16,8 +16,9 @@
 class MesaStrategy {
   constructor() {
     this.tipo = 'mesa';
-    this.prefijo = 'mesa_';
-    this.version = '4.0.0';
+    this.prefijo = 'M_';            // formato nuevo: {LETRA}_{uuid8}
+    this.prefijoLegacy = 'mesa_';   // formato heredado pre-migración
+    this.version = '5.0.0';
 
     // Mesas activas: cuenta_id -> mesa data
     this.mesasActivas = new Map();
@@ -78,6 +79,27 @@ class MesaStrategy {
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('pedido.creado', this.onPedidoCreado.bind(this));
+    // Listener pasivo: si el rename llega por `cuenta.rename` directamente
+    // (no por `mesa.renombrar`), mantener el Map local sincronizado.
+    await eventBus.subscribe('cuenta.actualizada', this.onCuentaActualizada.bind(this));
+  }
+
+  /**
+   * Sincroniza el nombre del Map local cuando `cuentas` publica un cambio.
+   * Idempotente: solo aplica si el cuenta_id pertenece a esta strategy y el
+   * nombre efectivamente cambió.
+   */
+  async onCuentaActualizada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, cambios } = data;
+    if (!cuenta_id || !cambios) return;
+    if (cambios.nombre === undefined) return;
+
+    const mesa = this.mesasActivas.get(cuenta_id);
+    if (!mesa) return;
+    if (mesa.nombre === cambios.nombre) return;
+
+    mesa.nombre = cambios.nombre;
   }
 
   async onCobroProcesado(cuenta_id, correlationId, project_id) {
@@ -119,12 +141,22 @@ class MesaStrategy {
   // Event Handlers
   // ==========================================
 
+  /**
+   * Verifica si un cuenta_id pertenece a esta strategy.
+   * Tolera el formato nuevo (M_xxxxxxxx) y el legacy (mesa_...).
+   */
+  matches(cuenta_id) {
+    if (!cuenta_id) return false;
+    return cuenta_id.startsWith(this.prefijo)
+      || (this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy));
+  }
+
   async onPedidoCreado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
     const { cuenta_id, total } = eventData;
 
-    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!this.matches(cuenta_id)) return;
 
     const mesa = this.mesasActivas.get(cuenta_id);
     if (!mesa) {
@@ -156,17 +188,26 @@ class MesaStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      // Auto-incrementar contador diario
+      // Auto-incrementar contador diario (solo para auto-nombre "Mesa N";
+      // ya no participa en el cuenta_id ni es identidad humana — el turno
+      // global del módulo `cuentas` es la identidad humana de la cuenta).
       this.contadorDiario++;
       const numero = this.contadorDiario;
 
       // Nombre libre: lo que pase el usuario, o auto "Mesa N"
       const nombre_mesa = nombre || `Mesa ${numero}`;
 
-      // Generar cuenta_id con prefijo
-      const secuencial = this.modulo.getNextSecuencial('mesa', numero);
-      const fecha = this.modulo.getFechaActual();
-      const cuenta_id = `mesa_${numero}_${fecha}_${secuencial.toString().padStart(3, '0')}`;
+      const cuenta = await this.modulo.crearCuentaViaCuentas({
+        project_id,
+        tipo: 'mesa',
+        nombre: nombre_mesa,
+        metadata: {
+          numero,
+          camarero: camarero || null,
+          comensales: comensales || null
+        }
+      });
+      const cuenta_id = cuenta.id;
 
       const mesa = {
         cuenta_id,
@@ -184,33 +225,15 @@ class MesaStrategy {
       this.mesasActivas.set(cuenta_id, mesa);
       this.internalMetrics.mesas_abiertas++;
 
-      // Publicar eventos
+      // Evento especifico del canal (info que no va en cuenta.creada)
       await this.modulo.eventBus.publish('mesa.abierta', {
-        cuenta_id: mesa.cuenta_id,
+        cuenta_id,
         nombre: mesa.nombre,
         numero: mesa.numero,
         comensales: mesa.comensales,
         camarero: mesa.camarero,
         hora_apertura: mesa.hora_apertura,
         project_id
-      });
-
-      // ref_display canónico: "M 003 · Terraza" o "M 003" si nombre auto
-      const esNombreCustom = nombre && nombre !== `Mesa ${numero}`;
-      const ref_display = this.modulo.buildRefDisplay('M', numero, esNombreCustom ? nombre : null);
-
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: mesa.cuenta_id,
-        tipo: 'mesa',
-        total: mesa.total,
-        project_id,
-        ref_display,
-        metadata: {
-          nombre: mesa.nombre,
-          numero: mesa.numero,
-          camarero: mesa.camarero,
-          comensales: mesa.comensales
-        }
       });
 
       this.modulo.logger.info('mesa.abierta', {
@@ -228,7 +251,7 @@ class MesaStrategy {
 
   async handleRenombrarMesa(data) {
     try {
-      const { cuenta_id, nombre } = data;
+      const { cuenta_id, nombre, project_id } = data;
 
       if (!nombre || nombre.trim().length === 0) {
         return { status: 400, error: 'nombre es requerido' };
@@ -240,18 +263,37 @@ class MesaStrategy {
       }
 
       const nombre_anterior = mesa.nombre;
-      mesa.nombre = nombre.trim();
+      const nombre_nuevo = nombre.trim();
 
+      // cuentas es el owner unico del nombre — delegamos via wrapper simetrico
+      // a crearCuentaViaCuentas. El listener pasivo onCuentaActualizada
+      // sincroniza mesasActivas cuando llega el evento canonico.
+      const rpcResult = await this.modulo.renombrarCuentaViaCuentas({
+        project_id,
+        id: cuenta_id,
+        nombre: nombre_nuevo
+      });
+
+      if (!rpcResult || rpcResult.status >= 400) {
+        return rpcResult || { status: 500, error: 'Error delegando rename a cuentas' };
+      }
+
+      // Actualizar Map local de inmediato para que la respuesta al frontend
+      // refleje el nombre nuevo sin depender del round-trip del evento.
+      mesa.nombre = nombre_nuevo;
+
+      // Evento legacy para consumidores antiguos que aún escuchen mesa.renombrada.
+      // Se puede eliminar cuando se confirme que nadie lo consume.
       await this.modulo.eventBus.publish('mesa.renombrada', {
         cuenta_id: mesa.cuenta_id,
-        nombre: mesa.nombre,
+        nombre: nombre_nuevo,
         nombre_anterior,
-        project_id: data.project_id
+        project_id
       });
 
       this.modulo.logger.info('mesa.renombrada', {
         cuenta_id,
-        nombre: mesa.nombre,
+        nombre: nombre_nuevo,
         nombre_anterior
       });
 
@@ -368,11 +410,20 @@ class MesaStrategy {
       let restauradas = 0;
       let maxNumero = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        if (!cuenta_id.startsWith(this.prefijo)) continue;
+        // Aceptar formato nuevo (M_xxxxxxxx) y legacy (mesa_...)
+        const esNuevo = cuenta_id.startsWith(this.prefijo);
+        const esLegacy = this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy);
+        if (!esNuevo && !esLegacy) continue;
 
-        // Extraer número de mesa del cuenta_id (mesa_{num}_{fecha}_{seq})
-        const numMatch = cuenta_id.match(/^mesa_(\d+)_/);
-        const numero = numMatch ? parseInt(numMatch[1], 10) : (restauradas + 1);
+        // Numero de auto-nombre: del snapshot si está, sino del cuenta_id legacy,
+        // sino contador incremental local. Solo afecta al contadorDiario para
+        // siguientes auto-nombres "Mesa N" — no participa en la identidad.
+        let numero = cuenta.datos_especificos?.numero || null;
+        if (!numero && esLegacy) {
+          const numMatch = cuenta_id.match(/^mesa_(\d+)_/);
+          numero = numMatch ? parseInt(numMatch[1], 10) : (restauradas + 1);
+        }
+        if (!numero) numero = restauradas + 1;
         if (numero > maxNumero) maxNumero = numero;
 
         const mesa = {

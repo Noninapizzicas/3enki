@@ -18,8 +18,12 @@
 class LlevadooStrategy {
   constructor() {
     this.tipo = 'llevadoo';
-    this.prefijo = 'llevadoo_';
-    this.version = '1.0.0';
+    this.prefijo = 'D_';                // formato nuevo (D = delivery/llevadoo)
+    this.prefijoLegacy = 'llevadoo_';   // formato heredado
+    this.version = '2.0.0';
+
+    // Contador interno para numero_pedido display (no es identidad)
+    this._pedidoSeq = 0;
 
     this.pedidosActivos = new Map();
 
@@ -44,6 +48,16 @@ class LlevadooStrategy {
       'carta_delivery',
       'health', 'metrics'
     ];
+  }
+
+  /**
+   * Verifica si un cuenta_id pertenece a esta strategy.
+   * Tolera el formato nuevo (D_xxxxxxxx) y el legacy (llevadoo_...).
+   */
+  matches(cuenta_id) {
+    if (!cuenta_id) return false;
+    return cuenta_id.startsWith(this.prefijo)
+      || (this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy));
   }
 
   // ==========================================
@@ -184,7 +198,7 @@ class LlevadooStrategy {
     const correlationId = event?.metadata?.correlationId;
     const { cuenta_id, pase } = eventData;
 
-    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!this.matches(cuenta_id)) return;
 
     // pase=1 significa que el item acaba de entrar al horno (avanzó desde general pase_minimo=0)
     if (pase !== 1) return;
@@ -222,7 +236,7 @@ class LlevadooStrategy {
     const correlationId = event?.metadata?.correlationId;
     const { cuenta_id, estado_nuevo } = eventData;
 
-    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!this.matches(cuenta_id)) return;
     if (estado_nuevo !== 'entregado') return;
 
     const pedido = this.pedidosActivos.get(cuenta_id);
@@ -264,7 +278,7 @@ class LlevadooStrategy {
     const eventData = event?.data || event?.payload || event;
     const { cuenta_id, cambios } = eventData;
 
-    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!this.matches(cuenta_id)) return;
     if (!cambios?.nombre) return;
 
     const pedido = this.pedidosActivos.get(cuenta_id);
@@ -282,7 +296,7 @@ class LlevadooStrategy {
     const eventData = event?.data || event?.payload || event;
     const { cuenta_id, pedido_id } = eventData;
 
-    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!this.matches(cuenta_id)) return;
 
     const pedido = this.pedidosActivos.get(cuenta_id);
     if (!pedido) return;
@@ -307,22 +321,35 @@ class LlevadooStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      const secuencial = this.modulo.getNextSecuencial('llevadoo');
-      const fecha = this.modulo.getFechaActual();
-      const cuenta_id = `llevadoo_${fecha}_${secuencial.toString().padStart(3, '0')}`;
-      const numero_pedido = secuencial;
+      this._pedidoSeq = (this._pedidoSeq % 999) + 1;
+      const numero_pedido = this._pedidoSeq;
+      const nombreFinal = nombre_cliente || 'Llevadoo';
 
-      let horaRecogida = null;
       const minutos = tiempo_preparacion || 25;
       const now = new Date();
       now.setMinutes(now.getMinutes() + minutos);
-      horaRecogida = now.toISOString();
+      const horaRecogida = now.toISOString();
+
+      const cuenta = await this.modulo.crearCuentaViaCuentas({
+        project_id,
+        tipo: 'llevadoo',
+        nombre: nombreFinal,
+        metadata: {
+          nombre_cliente: nombreFinal,
+          telefono_cliente: telefono_cliente || '',
+          direccion: direccion || '',
+          numero_pedido,
+          hora_recogida_estimada: horaRecogida,
+          pago_externo: true
+        }
+      });
+      const cuenta_id = cuenta.id;
 
       const pedido = {
         cuenta_id,
         project_id,
         numero_pedido,
-        nombre_cliente: nombre_cliente || 'Llevadoo',
+        nombre_cliente: nombreFinal,
         telefono_cliente: telefono_cliente || '',
         direccion: direccion || '',
         estado: 'recibido',
@@ -340,9 +367,9 @@ class LlevadooStrategy {
       this.internalMetrics.pedidos_recibidos++;
 
       await this.modulo.eventBus.publish('llevadoo.pedido_recibido', {
-        cuenta_id: pedido.cuenta_id,
-        numero_pedido: pedido.numero_pedido,
-        nombre_cliente: pedido.nombre_cliente,
+        cuenta_id,
+        numero_pedido,
+        nombre_cliente: nombreFinal,
         direccion: pedido.direccion,
         total: pedido.total,
         recargo_total: pedido.recargo_total,
@@ -350,28 +377,10 @@ class LlevadooStrategy {
         timestamp: new Date().toISOString()
       });
 
-      // ref_display canónico: "D 001 · Ana" (o "D 001" si nombre genérico)
-      const esNombreReal = pedido.nombre_cliente && pedido.nombre_cliente !== 'Llevadoo';
-      const ref_display = this.modulo.buildRefDisplay('D', secuencial, esNombreReal ? pedido.nombre_cliente : null);
-
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: pedido.cuenta_id,
-        tipo: 'llevadoo',
-        project_id,
-        total: pedido.total,
-        ref_display,
-        metadata: {
-          nombre: pedido.nombre_cliente,
-          nombre_cliente: pedido.nombre_cliente,
-          direccion: pedido.direccion,
-          hora_recogida_estimada: pedido.hora_recogida_estimada
-        }
-      });
-
       this.modulo.logger.info('llevadoo.pedido_creado', {
         cuenta_id,
         numero_pedido,
-        nombre_cliente: pedido.nombre_cliente
+        nombre_cliente: nombreFinal
       });
 
       return { status: 201, data: pedido };
@@ -662,11 +671,17 @@ class LlevadooStrategy {
       if (!datos.cuentas) return;
 
       let restaurados = 0;
+      let maxSeq = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        if (!cuenta_id.startsWith(this.prefijo)) continue;
+        if (!this.matches(cuenta_id)) continue;
 
-        const numMatch = cuenta_id.match(/_(\d+)$/);
-        const numero = numMatch ? parseInt(numMatch[1], 10) : (restaurados + 1);
+        let numero = cuenta.datos_especificos?.numero_pedido || null;
+        if (!numero && cuenta_id.startsWith(this.prefijoLegacy)) {
+          const numMatch = cuenta_id.match(/_(\d+)$/);
+          numero = numMatch ? parseInt(numMatch[1], 10) : null;
+        }
+        if (!numero) numero = restaurados + 1;
+        if (numero > maxSeq) maxSeq = numero;
 
         const pedido = {
           cuenta_id,
@@ -690,8 +705,10 @@ class LlevadooStrategy {
       }
 
       if (restaurados > 0) {
+        if (maxSeq > this._pedidoSeq) this._pedidoSeq = maxSeq;
         this.modulo.logger.info('canal.llevadoo.estado_restaurado', {
-          pedidos_restaurados: restaurados
+          pedidos_restaurados: restaurados,
+          pedido_seq: this._pedidoSeq
         });
       }
     } catch (error) {

@@ -167,7 +167,7 @@ class PedidosModule {
   async onComanderoEnviarCocina(event) {
     const data = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { cuenta_id, pedido_id: comandero_pedido_id, items, total, notas_generales, created_at, project_id } = data;
+    const { cuenta_id, pedido_id: comandero_pedido_id, items, total, notas_generales, created_at, project_id, ref_display } = data;
 
     if (!cuenta_id || !items || items.length === 0) {
       this.logger.warn('pedidos.bridge.datos_incompletos', { cuenta_id, correlation_id: correlationId });
@@ -191,6 +191,7 @@ class PedidosModule {
         id: pedido_id,
         cuenta_id,
         canal,
+        ref_display: ref_display || null,
         project_id: project_id || null,
         items: items.map(item => ({
           item_id: item.id || item.item_id || require('crypto').randomUUID(),
@@ -683,6 +684,7 @@ class PedidosModule {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       canal: pedido.canal || null,
+      ref_display: pedido.ref_display || null,
       project_id: pedido.project_id || null,
       estado: pedido.estado,
       total: pedido.total,
@@ -727,6 +729,7 @@ class PedidosModule {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       canal: pedido.canal || null,
+      ref_display: pedido.ref_display || null,
       project_id: pedido.project_id || null,
       items: pedido.items.map(item => {
         const mapped = {
@@ -859,12 +862,21 @@ class PedidosModule {
   }
 
   /**
-   * Detecta el canal de venta por el prefijo del cuenta_id
-   * mesa_ → mesa, tel_ → telefono, llevar_ → llevar, glovo_ → glovo, wa_ → whatsapp, llevadoo_ → llevadoo
-   * Sin prefijo conocido → genérico (cuenta simple)
+   * Detecta el canal de venta por el prefijo del cuenta_id.
+   * Soporta el formato nuevo `{LETRA}_{uuid8}` (M_, L_, T_, W_, G_, D_) y
+   * el formato heredado pre-migracion (mesa_, llevar_, tel_, wa_, glovo_,
+   * llevadoo_). Sin prefijo conocido → null (cuenta simple sin canal).
    */
   detectarCanal(cuenta_id) {
     if (!cuenta_id) return null;
+    // Formato nuevo {LETRA}_xxxxxxxx
+    if (cuenta_id.startsWith('M_')) return 'mesa';
+    if (cuenta_id.startsWith('L_')) return 'llevar';
+    if (cuenta_id.startsWith('T_')) return 'telefono';
+    if (cuenta_id.startsWith('W_')) return 'whatsapp';
+    if (cuenta_id.startsWith('G_')) return 'glovo';
+    if (cuenta_id.startsWith('D_')) return 'llevadoo';
+    // Formato legacy
     if (cuenta_id.startsWith('llevadoo_')) return 'llevadoo';
     if (cuenta_id.startsWith('mesa_')) return 'mesa';
     if (cuenta_id.startsWith('tel_')) return 'telefono';

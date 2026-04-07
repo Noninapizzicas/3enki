@@ -239,20 +239,29 @@ class CuentasCanalesModule {
   }
 
   // ==========================================
-  // Publishers Comunes
+  // Delegacion a cuentas (owner unico)
   // ==========================================
 
-  async publishCuentaCreada(data, correlationId) {
-    // ref_display NO se envia aqui — lo genera cuentas con el contador global
-    // y lo publica en cuenta.actualizada inmediatamente despues
-    await this.eventBus.publish('cuenta.creada', {
-      cuenta_id: data.cuenta_id,
-      tipo: data.tipo,
-      origen: `cuentas-canales:${data.tipo}`,
-      project_id: data.project_id,
-      total: data.total || 0,
-      metadata: data.metadata || {}
-    }, { correlationId });
+  /**
+   * Crea una cuenta delegando al modulo `cuentas` via moduleRegistry.
+   *
+   * Llamada directa a la instancia: cuentas carga antes que cuentas-canales
+   * en config.modules.enabled, asi que la instancia esta disponible cuando
+   * cada strategy ejecuta su init/handler.
+   *
+   * Reemplaza el antiguo patron publishCuentaCreada + cuentas.onCuentaExternaCreada,
+   * eliminando la race window entre ambos eventos: cuentas.creada nace ya
+   * con turno, ref_display y metadata completos en un solo paso.
+   *
+   * @param {object} data - { project_id, tipo, nombre?, metadata?, cuenta_id? }
+   * @returns {Promise<object>} { status, data: cuenta } del handler de cuentas
+   */
+  async crearCuentaViaCuentas(data) {
+    const cuentasInstance = this.moduleRegistry?.get('cuentas')?.instance;
+    if (!cuentasInstance || typeof cuentasInstance.handleCreateCuenta !== 'function') {
+      throw new Error('Modulo cuentas no disponible');
+    }
+    return await cuentasInstance.handleCreateCuenta(data);
   }
 
   async publishCuentaCerrada(data, correlationId) {

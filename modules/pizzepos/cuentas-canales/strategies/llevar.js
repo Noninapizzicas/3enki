@@ -186,15 +186,32 @@ class LlevarStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      // cuenta_id opaco; numero_ticket es solo display interno del SSE display.
-      const cuenta_id = this.modulo.buildCuentaId('llevar');
+      // numero_ticket es solo display interno del SSE display (no identidad).
       this._ticketSeq = (this._ticketSeq % 999) + 1;
       const numero_ticket = this._ticketSeq;
+      const clienteNombreFinal = cliente_nombre || `Cliente ${numero_ticket}`;
+
+      // Delegar a cuentas — crea la cuenta con turno en un solo paso.
+      const rpcResult = await this.modulo.crearCuentaViaCuentas({
+        project_id,
+        tipo: 'llevar',
+        nombre: clienteNombreFinal,
+        metadata: {
+          cliente_nombre: clienteNombreFinal,
+          numero_ticket
+        }
+      });
+
+      if (!rpcResult || rpcResult.status >= 400) {
+        return rpcResult || { status: 500, error: 'Error creando cuenta' };
+      }
+
+      const cuenta_id = rpcResult.data.id;
 
       const ticket = {
         cuenta_id,
         numero_ticket,
-        cliente_nombre: cliente_nombre || `Cliente ${numero_ticket}`,
+        cliente_nombre: clienteNombreFinal,
         estado: 'pendiente',
         pagado: false,
         total: 0,
@@ -208,24 +225,11 @@ class LlevarStrategy {
       this.internalMetrics.tickets_creados++;
 
       await this.modulo.eventBus.publish('llevar.ticket_creado', {
-        cuenta_id: ticket.cuenta_id,
-        numero_ticket: ticket.numero_ticket,
-        cliente_nombre: ticket.cliente_nombre,
+        cuenta_id,
+        numero_ticket,
+        cliente_nombre: clienteNombreFinal,
         hora_creacion: ticket.hora_creacion,
         project_id
-      });
-
-      // ref_display lo genera cuentas con el contador global
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: ticket.cuenta_id,
-        tipo: 'llevar',
-        total: ticket.total,
-        project_id,
-        metadata: {
-          nombre: String(numero_ticket).padStart(3, '0'),
-          cliente_nombre: ticket.cliente_nombre,
-          numero_ticket: ticket.numero_ticket
-        }
       });
 
       this.modulo.logger.info('llevar.ticket_creado', {

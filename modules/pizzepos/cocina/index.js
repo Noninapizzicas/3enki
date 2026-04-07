@@ -46,7 +46,7 @@ const TIPOS_ESTACION = {
 class CocinaModule {
   constructor() {
     this.name = 'cocina';
-    this.version = '3.0.0';
+    this.version = '3.1.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -59,6 +59,12 @@ class CocinaModule {
     this.pedidosActivos = new Map(); // pedido_id -> pedido_cocina
     this.historial = []; // últimos 50 pedidos completados
     this.maxHistorial = 50;
+
+    // Snapshot persistente (sobrevive reinicios del servidor preservando
+    // estado real de cada item: pase, fases, estado, device_id).
+    // Es la fuente de verdad; cuentas_activas.json es solo fallback legacy.
+    this._snapshotFile = null; // se asigna en onLoad
+    this._snapshotSaveTimer = null;
 
     // Cache de ref_display de cuenta (cuenta_id → ref_display canónico)
     this.cuentaNombres = new Map();
@@ -104,14 +110,28 @@ class CocinaModule {
     // Event subscriptions are auto-wired from module.json by the loader.
     this.registerUIHandlers();
 
-    // Restaurar pedidos activos en cocina desde persistencia
-    await this.restaurarDesdeArchivo();
+    // Restaurar pedidos activos: primero intentar snapshot propio (preserva
+    // pase/fases/estado/device_id), si no existe caer al fallback que lee
+    // cuentas_activas.json (reconstruye pedidos como pendientes).
+    const path = require('path');
+    this._snapshotFile = path.join('.', 'data', 'current', 'cocina_snapshot.json');
+    const restoredFromSnapshot = await this._restaurarSnapshot();
+    if (!restoredFromSnapshot) {
+      await this.restaurarDesdeArchivo();
+    }
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
+
+    // Flush final del snapshot (cancela debounce y guarda ya)
+    if (this._snapshotSaveTimer) {
+      clearTimeout(this._snapshotSaveTimer);
+      this._snapshotSaveTimer = null;
+      try { await this._saveSnapshot(); } catch (_) { /* ignore */ }
+    }
 
     // Desregistrar UI handlers
     if (this.uiHandler) {
@@ -133,6 +153,69 @@ class CocinaModule {
     this.devices.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // Snapshot persistente
+  // ==========================================
+
+  /**
+   * Guarda el snapshot de pedidosActivos con debounce (1s).
+   * Se llama tras cualquier mutación del Map (nuevo pedido, tap item,
+   * cancelar, marcar listo).
+   */
+  _saveSnapshotDebounced() {
+    if (this._snapshotSaveTimer) clearTimeout(this._snapshotSaveTimer);
+    if (!this._snapshotFile) return;
+    this._snapshotSaveTimer = setTimeout(() => this._saveSnapshot(), 1000);
+  }
+
+  async _saveSnapshot() {
+    if (!this._snapshotFile) return;
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      await fs.mkdir(path.dirname(this._snapshotFile), { recursive: true });
+      const snapshot = {
+        _saved_at: new Date().toISOString(),
+        pedidos: Object.fromEntries(this.pedidosActivos)
+      };
+      await fs.writeFile(this._snapshotFile, JSON.stringify(snapshot));
+    } catch (err) {
+      this.logger?.warn?.('cocina.snapshot.save_error', { error: err.message });
+    }
+  }
+
+  /**
+   * Restaura pedidosActivos desde el snapshot propio de cocina.
+   * Preserva estado real (pase, fases, estado, device_id, preparando_at).
+   * Devuelve true si restauró algo, false si no existe o está vacío.
+   */
+  async _restaurarSnapshot() {
+    try {
+      const fs = require('fs').promises;
+      const contenido = await fs.readFile(this._snapshotFile, 'utf8');
+      const snapshot = JSON.parse(contenido);
+      if (!snapshot.pedidos || Object.keys(snapshot.pedidos).length === 0) {
+        return false;
+      }
+
+      for (const [pedido_id, pedido] of Object.entries(snapshot.pedidos)) {
+        this.pedidosActivos.set(pedido_id, pedido);
+      }
+
+      this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
+      this.logger.info('cocina.snapshot_restaurado', {
+        pedidos_restaurados: this.pedidosActivos.size,
+        saved_at: snapshot._saved_at
+      });
+      return true;
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        this.logger?.warn?.('cocina.snapshot.load_error', { error: err.message });
+      }
+      return false;
+    }
   }
 
   // ==========================================
@@ -260,6 +343,18 @@ class CocinaModule {
     }
   }
 
+  /**
+   * Limpia el cache cuentaNombres cuando una cuenta se elimina.
+   * Housekeeping puro — evita que el Map crezca indefinidamente con
+   * ids de cuentas que ya no existen.
+   */
+  async onCuentaEliminada(event) {
+    const data = event?.data || event?.payload || event;
+    if (data?.cuenta_id) {
+      this.cuentaNombres.delete(data.cuenta_id);
+    }
+  }
+
   // ==========================================
   // Pedidos
   // ==========================================
@@ -315,6 +410,7 @@ class CocinaModule {
     };
 
     this.pedidosActivos.set(pedido_id, pedidoCocina);
+    this._saveSnapshotDebounced();
 
     this.metrics?.increment?.('cocina.pedido_recibido.total');
     this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
@@ -337,6 +433,7 @@ class CocinaModule {
     if (!this.pedidosActivos.has(pedido_id)) return;
 
     this.pedidosActivos.delete(pedido_id);
+    this._saveSnapshotDebounced();
 
     this.metrics?.increment?.('cocina.pedido_cancelado.total');
     this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
@@ -462,6 +559,7 @@ class CocinaModule {
         pedido_id: pedidoEncontrado.pedido_id, item_id, pase: itemEncontrado.pase
       });
 
+      this._saveSnapshotDebounced();
       return { status: 200, data: { item: itemEncontrado, pedido_completo: false } };
     }
 
@@ -521,6 +619,7 @@ class CocinaModule {
         siguiente: siguienteTipo.id
       });
 
+      this._saveSnapshotDebounced();
       return { status: 200, data: { item: itemEncontrado, pedido_completo: false, avanzado: true } };
     }
 
@@ -543,6 +642,9 @@ class CocinaModule {
       pedido_completo: todosListos
     });
 
+    // Si todosListos, marcarPedidoListo ya guardo el snapshot (al borrar del Map);
+    // si no, el item cambio de estado y hay que persistirlo.
+    if (!todosListos) this._saveSnapshotDebounced();
     return { status: 200, data: { item: itemEncontrado, pedido_completo: todosListos } };
   }
 
@@ -887,6 +989,7 @@ class CocinaModule {
     }
 
     this.pedidosActivos.delete(pedido.pedido_id);
+    this._saveSnapshotDebounced();
 
     await this.publishPedidoListo(pedido);
 

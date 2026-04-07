@@ -89,6 +89,11 @@
         "event": "cuenta.actualizada",
         "description": "Actualizar nombre de cuenta cuando se renombra",
         "handler": "onCuentaActualizada"
+      },
+      {
+        "event": "cuenta.eliminada",
+        "description": "Limpiar cache de ref_display al eliminar cuenta (housekeeping)",
+        "handler": "onCuentaEliminada"
       }
     ]
   },

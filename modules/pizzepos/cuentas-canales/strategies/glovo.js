@@ -209,10 +209,28 @@ class GlovoStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      // cuenta_id opaco; numero_pedido es solo display interno del canal.
-      const cuenta_id = this.modulo.buildCuentaId('glovo');
+      // numero_pedido es solo display interno del canal (no identidad).
       this._pedidoSeq = (this._pedidoSeq % 999) + 1;
       const numero_pedido = this._pedidoSeq;
+      const clienteNombreFinal = cliente_nombre || 'Cliente Glovo';
+
+      // Delegar a cuentas — crea la cuenta con turno en un solo paso.
+      const rpcResult = await this.modulo.crearCuentaViaCuentas({
+        project_id: data.project_id,
+        tipo: 'glovo',
+        nombre: clienteNombreFinal,
+        metadata: {
+          glovo_order_id,
+          numero_pedido,
+          direccion_entrega: direccion_entrega || ''
+        }
+      });
+
+      if (!rpcResult || rpcResult.status >= 400) {
+        return rpcResult || { status: 500, error: 'Error creando cuenta' };
+      }
+
+      const cuenta_id = rpcResult.data.id;
 
       const pedido = {
         cuenta_id,
@@ -223,7 +241,7 @@ class GlovoStrategy {
         pagado: false,
         items: items || [],
         total: total || 0,
-        cliente_nombre: cliente_nombre || 'Cliente Glovo',
+        cliente_nombre: clienteNombreFinal,
         direccion_entrega: direccion_entrega || '',
         notas: notas || '',
         tiempo_estimado_entrega: tiempo_estimado_entrega || 45,
@@ -244,23 +262,8 @@ class GlovoStrategy {
         glovo_order_id,
         total: pedido.total,
         items: pedido.items,
-        cliente_nombre: pedido.cliente_nombre,
+        cliente_nombre: clienteNombreFinal,
         hora_recibido: pedido.hora_recibido
-      });
-
-      // Publicar cuenta.creada ANTES de enviar a cocina, para que el módulo
-      // cuentas registre la cuenta y el tracking de _pedidosEnCocina funcione.
-      // ref_display lo genera cuentas con el contador global
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: pedido.cuenta_id,
-        tipo: 'glovo',
-        total: pedido.total,
-        project_id: data.project_id,
-        metadata: {
-          nombre: pedido.cliente_nombre,
-          glovo_order_id,
-          direccion_entrega: direccion_entrega || ''
-        }
       });
 
       // Auto-enviar a cocina — el pedido entra directo a la cola de cocina

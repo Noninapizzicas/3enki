@@ -391,17 +391,25 @@ class PersistenciaComanderoModule {
 
     await this.onEvento(event);
 
-    const { cuenta_id, project_id, turno, tipo, origen, ref_display, metadata } = eventData;
+    const { cuenta_id, project_id, turno, tipo, nombre, origen, ref_display, metadata } = eventData;
+
+    // nombre va como campo top-level en el evento, pero tambien lo reflejamos
+    // en datos_especificos.nombre por compat con restauradores que lo leen de ahi
+    const datosEspecificos = { ...(metadata || {}) };
+    if (nombre && !datosEspecificos.nombre) {
+      datosEspecificos.nombre = nombre;
+    }
 
     const cuentaActiva = {
       cuenta_id,
       project_id: project_id || null,
       turno: Number.isInteger(turno) ? turno : null,
       tipo,
+      nombre: nombre || null,
       origen,
       ref_display: ref_display || null,
       estado: 'abierta',
-      datos_especificos: metadata || {},
+      datos_especificos: datosEspecificos,
       pedidos: [],
       total: 0,
       created_at: new Date().toISOString(),

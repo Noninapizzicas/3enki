@@ -236,25 +236,49 @@ class WhatsAppStrategy {
         return { status: 400, error: 'Request inválido', details: validate.errors };
       }
 
-      const { telefono, nombre, items, notas, modo_entrega } = data;
+      const { telefono, nombre, items, notas, modo_entrega, project_id } = data;
 
       this.modulo.verificarReseoDiario();
 
-      // cuenta_id opaco; numero_pedido es solo display interno del canal.
-      const cuenta_id = this.modulo.buildCuentaId('whatsapp');
+      // numero_pedido es solo display interno del canal (no identidad).
       this._pedidoSeq = (this._pedidoSeq % 999) + 1;
       const numero_pedido = this._pedidoSeq;
 
       const contacto = this.contactos.get(telefono);
+      const nombreFinal = nombre || contacto?.nombre || 'Cliente WhatsApp';
+
+      // Calcular total inicial si los items vienen con precio
+      const itemsIniciales = items || [];
+      const totalInicial = itemsIniciales.reduce(
+        (sum, item) => sum + ((item.precio || 0) * (item.cantidad || 1)), 0
+      );
+
+      // Delegar a cuentas — crea la cuenta con turno en un solo paso.
+      const rpcResult = await this.modulo.crearCuentaViaCuentas({
+        project_id,
+        tipo: 'whatsapp',
+        nombre: nombreFinal,
+        metadata: {
+          telefono,
+          numero_pedido,
+          modo_entrega: modo_entrega || 'recogida'
+        }
+      });
+
+      if (!rpcResult || rpcResult.status >= 400) {
+        return rpcResult || { status: 500, error: 'Error creando cuenta' };
+      }
+
+      const cuenta_id = rpcResult.data.id;
 
       const pedido = {
         cuenta_id,
         numero_pedido,
         telefono,
-        nombre: nombre || contacto?.nombre || 'Cliente WhatsApp',
+        nombre: nombreFinal,
         estado: 'pendiente_confirmacion',
-        items: items || [],
-        total: 0,
+        items: itemsIniciales,
+        total: totalInicial,
         modo_entrega: modo_entrega || 'recogida',
         hora_pedido: new Date().toISOString(),
         confirmado: false,
@@ -263,13 +287,6 @@ class WhatsAppStrategy {
         pedidos: [],
         notas: notas || ''
       };
-
-      // Calcular total de items si tienen precio
-      if (pedido.items.length > 0) {
-        pedido.total = pedido.items.reduce((sum, item) => {
-          return sum + ((item.precio || 0) * (item.cantidad || 1));
-        }, 0);
-      }
 
       this.pedidosActivos.set(cuenta_id, pedido);
       this.internalMetrics.pedidos_creados++;
@@ -280,20 +297,6 @@ class WhatsAppStrategy {
         conversacion.cuenta_id = cuenta_id;
         conversacion.estado = 'pedido_creado';
       }
-
-      // Publicar cuenta.creada al crear pedido (no esperar a confirmar),
-      // para que cuentas registre la cuenta y el comandero/cocina puedan operar.
-      // ref_display lo genera cuentas con el contador global
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: pedido.cuenta_id,
-        tipo: 'whatsapp',
-        total: pedido.total,
-        metadata: {
-          telefono: pedido.telefono,
-          nombre: pedido.nombre,
-          modo_entrega: pedido.modo_entrega
-        }
-      });
 
       await this.modulo.eventBus.publish('whatsapp.pedido_creado', {
         cuenta_id,

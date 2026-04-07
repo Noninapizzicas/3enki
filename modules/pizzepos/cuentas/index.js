@@ -523,61 +523,6 @@ class CuentasModule {
   }
 
   /**
-   * cuenta.creada → registrar cuenta de canal externo (cuentas-canales) en el Map.
-   * Permite que la máquina de estados funcione para mesas, teléfono, llevar, glovo, whatsapp.
-   */
-  async onCuentaExternaCreada(event) {
-    const data = event?.data || event?.payload || event;
-    const { cuenta_id, tipo, project_id, total, metadata } = data;
-
-    if (!cuenta_id) return;
-
-    // Dedup: si ya existe (creada por handleCreateCuenta), no duplicar
-    if (this.cuentas.has(cuenta_id)) return;
-
-    const now = new Date();
-    const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    const tipoFinal = tipo || 'local';
-    const rawNombre = metadata?.cliente_nombre || metadata?.nombre || null;
-    const { turno, numero, ref_display } = this.generateRefDisplay(tipoFinal, rawNombre);
-
-    const cuenta = {
-      id: cuenta_id,
-      project_id: project_id || null,
-      turno,
-      tipo: tipoFinal,
-      nombre: metadata?.nombre || null,
-      cliente_nombre: metadata?.cliente_nombre || null,
-      ref_display,
-      estado: 'pendiente',
-      pagado: false,
-      hora,
-      items: 0,
-      total: total || 0,
-      alerta: false,
-      created_at: now.toISOString(),
-      updated_at: now.toISOString()
-    };
-
-    this.cuentas.set(cuenta_id, cuenta);
-    this.gestionarAlerta(cuenta_id, 'pendiente');
-
-    // Publicar ref_display correcto (con contador global) a todos los modulos.
-    // cuentas-canales ya publico cuenta.creada con ref_display viejo.
-    // Esta actualizacion sobreescribe con el correcto.
-    await this.publishCuentaActualizada(project_id || null, cuenta_id, {
-      ref_display: cuenta.ref_display,
-      nombre: cuenta.nombre
-    });
-
-    this.logger.info('cuenta.externa.registrada', {
-      cuenta_id, tipo: tipoFinal, ref_display, project_id,
-      origen: data.origen || 'unknown'
-    });
-  }
-
-  /**
    * cuenta.cerrada → limpiar cuenta del Map, timers y timeouts pendientes.
    * Si cerrarCuentaCobrada() programó una eliminación con timeout,
    * la cancelamos aquí porque la cuenta se elimina inmediatamente.
@@ -625,14 +570,19 @@ class CuentasModule {
     const start_time = Date.now();
 
     try {
-      const { project_id, tipo, nombre, pedido_inicial } = data || {};
+      const {
+        project_id, tipo, nombre, metadata, pedido_inicial,
+        cuenta_id: cuentaIdPropuesto
+      } = data || {};
 
       if (!project_id) {
         return { status: 400, error: 'project_id es requerido' };
       }
 
-      const cuenta_id = crypto.randomUUID();
       const tipoFinal = tipo || 'local';
+      // cuenta_id opaco: {LETRA}_{uuid8}. Si la strategy lo propone explicito,
+      // respetarlo (permite a un intake con id propio preservar trazabilidad).
+      const cuenta_id = cuentaIdPropuesto || this._buildCuentaId(tipoFinal);
       const { turno, numero, ref_display } = this.generateRefDisplay(tipoFinal, nombre);
 
       const now = new Date();
@@ -651,6 +601,7 @@ class CuentasModule {
         items: 0,
         total: 0,
         alerta: false,
+        metadata: metadata || {},
         created_at: now.toISOString(),
         updated_at: now.toISOString()
       };
@@ -961,6 +912,9 @@ class CuentasModule {
   // ==========================================
 
   async publishCuentaCreada(cuenta) {
+    // metadata viaja tal cual (permite que las strategies incluyan numero_pedido,
+    // glovo_order_id, comensales, etc). nombre siempre esta en cuenta.nombre
+    // como campo de primera clase — no hace falta duplicarlo en metadata.
     await this.eventBus.publish('cuenta.creada', {
       project_id: cuenta.project_id,
       cuenta_id: cuenta.id,
@@ -969,7 +923,7 @@ class CuentasModule {
       nombre: cuenta.nombre,
       ref_display: cuenta.ref_display,
       origen: cuenta.nombre || cuenta.tipo,
-      metadata: { nombre: cuenta.nombre },
+      metadata: cuenta.metadata || {},
       estado: cuenta.estado,
       created_at: cuenta.created_at
     });
@@ -1070,6 +1024,7 @@ class CuentasModule {
           items: itemsCount,
           total: cp.total || 0,
           alerta: false,
+          metadata: cp.datos_especificos || cp.metadata || {},
           created_at: cp.created_at || new Date().toISOString(),
           updated_at: cp.updated_at || cp.created_at || new Date().toISOString()
         };
@@ -1110,6 +1065,18 @@ class CuentasModule {
   // Una cuenta renombrada o que cambia de estado mantiene su turno original.
 
   /**
+   * Genera un cuenta_id opaco con formato `{LETRA}_{uuid8}`.
+   * La letra viene de SIMBOLOS y es puramente decorativa (el codigo no
+   * debe parsearla — el tipo real viaja en el campo `tipo` del evento).
+   * Debe coincidir con cuentas-canales.buildCuentaId para uniformidad.
+   */
+  _buildCuentaId(tipo) {
+    const letra = CuentasModule.SIMBOLOS[tipo] || 'X';
+    const uuid8 = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+    return `${letra}_${uuid8}`;
+  }
+
+  /**
    * Devuelve el siguiente turno como entero (1..999, cicla).
    * Persiste con debounce de 1s.
    */
@@ -1127,7 +1094,7 @@ class CuentasModule {
 
   /**
    * Genera turno + ref_display para una cuenta nueva.
-   * Punto único de generación — handleCreateCuenta y onCuentaExternaCreada lo usan.
+   * Punto único de generación — handleCreateCuenta lo usa.
    * Devuelve { turno, numero, ref_display }:
    *   - turno: entero (1..999), identidad humana
    *   - numero: mismo turno formateado a 3 dígitos ("001")

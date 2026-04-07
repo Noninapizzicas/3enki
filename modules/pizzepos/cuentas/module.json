@@ -85,11 +85,6 @@
         "handler": "onCobroProcesado"
       },
       {
-        "event": "cuenta.creada",
-        "description": "Cuenta creada desde cualquier canal (cuentas-canales), registrar en Map si no existe",
-        "handler": "onCuentaExternaCreada"
-      },
-      {
         "event": "cuenta.cerrada",
         "description": "Cuenta cerrada desde canal externo, limpiar del Map y timers",
         "handler": "onCuentaExternaCerrada"

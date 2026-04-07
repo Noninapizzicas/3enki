@@ -197,8 +197,25 @@ class MesaStrategy {
       // Nombre libre: lo que pase el usuario, o auto "Mesa N"
       const nombre_mesa = nombre || `Mesa ${numero}`;
 
-      // Generar cuenta_id opaco: M_{uuid8}
-      const cuenta_id = this.modulo.buildCuentaId('mesa');
+      // Delegar a cuentas — crea la cuenta con turno y ref_display en un
+      // solo paso, sin race window. cuentas asigna el cuenta_id.
+      const rpcResult = await this.modulo.crearCuentaViaCuentas({
+        project_id,
+        tipo: 'mesa',
+        nombre: nombre_mesa,
+        metadata: {
+          numero,
+          camarero: camarero || null,
+          comensales: comensales || null
+        }
+      });
+
+      if (!rpcResult || rpcResult.status >= 400) {
+        return rpcResult || { status: 500, error: 'Error creando cuenta' };
+      }
+
+      const cuenta = rpcResult.data;
+      const cuenta_id = cuenta.id;
 
       const mesa = {
         cuenta_id,
@@ -216,29 +233,15 @@ class MesaStrategy {
       this.mesasActivas.set(cuenta_id, mesa);
       this.internalMetrics.mesas_abiertas++;
 
-      // Publicar eventos
+      // Evento especifico del canal (info que no va en cuenta.creada)
       await this.modulo.eventBus.publish('mesa.abierta', {
-        cuenta_id: mesa.cuenta_id,
+        cuenta_id,
         nombre: mesa.nombre,
         numero: mesa.numero,
         comensales: mesa.comensales,
         camarero: mesa.camarero,
         hora_apertura: mesa.hora_apertura,
         project_id
-      });
-
-      // ref_display lo genera cuentas con el contador global
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: mesa.cuenta_id,
-        tipo: 'mesa',
-        total: mesa.total,
-        project_id,
-        metadata: {
-          nombre: mesa.nombre,
-          numero: mesa.numero,
-          camarero: mesa.camarero,
-          comensales: mesa.comensales
-        }
       });
 
       this.modulo.logger.info('mesa.abierta', {

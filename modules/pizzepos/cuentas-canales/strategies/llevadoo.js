@@ -321,22 +321,42 @@ class LlevadooStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      // cuenta_id opaco; numero_pedido es solo display interno del canal.
-      const cuenta_id = this.modulo.buildCuentaId('llevadoo');
+      // numero_pedido es solo display interno del canal (no identidad).
       this._pedidoSeq = (this._pedidoSeq % 999) + 1;
       const numero_pedido = this._pedidoSeq;
+      const nombreFinal = nombre_cliente || 'Llevadoo';
 
-      let horaRecogida = null;
       const minutos = tiempo_preparacion || 25;
       const now = new Date();
       now.setMinutes(now.getMinutes() + minutos);
-      horaRecogida = now.toISOString();
+      const horaRecogida = now.toISOString();
+
+      // Delegar a cuentas — crea la cuenta con turno en un solo paso.
+      const rpcResult = await this.modulo.crearCuentaViaCuentas({
+        project_id,
+        tipo: 'llevadoo',
+        nombre: nombreFinal,
+        metadata: {
+          nombre_cliente: nombreFinal,
+          telefono_cliente: telefono_cliente || '',
+          direccion: direccion || '',
+          numero_pedido,
+          hora_recogida_estimada: horaRecogida,
+          pago_externo: true
+        }
+      });
+
+      if (!rpcResult || rpcResult.status >= 400) {
+        return rpcResult || { status: 500, error: 'Error creando cuenta' };
+      }
+
+      const cuenta_id = rpcResult.data.id;
 
       const pedido = {
         cuenta_id,
         project_id,
         numero_pedido,
-        nombre_cliente: nombre_cliente || 'Llevadoo',
+        nombre_cliente: nombreFinal,
         telefono_cliente: telefono_cliente || '',
         direccion: direccion || '',
         estado: 'recibido',
@@ -354,9 +374,9 @@ class LlevadooStrategy {
       this.internalMetrics.pedidos_recibidos++;
 
       await this.modulo.eventBus.publish('llevadoo.pedido_recibido', {
-        cuenta_id: pedido.cuenta_id,
-        numero_pedido: pedido.numero_pedido,
-        nombre_cliente: pedido.nombre_cliente,
+        cuenta_id,
+        numero_pedido,
+        nombre_cliente: nombreFinal,
         direccion: pedido.direccion,
         total: pedido.total,
         recargo_total: pedido.recargo_total,
@@ -364,24 +384,10 @@ class LlevadooStrategy {
         timestamp: new Date().toISOString()
       });
 
-      // ref_display lo genera cuentas con el contador global
-      await this.modulo.publishCuentaCreada({
-        cuenta_id: pedido.cuenta_id,
-        tipo: 'llevadoo',
-        project_id,
-        total: pedido.total,
-        metadata: {
-          nombre: pedido.nombre_cliente,
-          nombre_cliente: pedido.nombre_cliente,
-          direccion: pedido.direccion,
-          hora_recogida_estimada: pedido.hora_recogida_estimada
-        }
-      });
-
       this.modulo.logger.info('llevadoo.pedido_creado', {
         cuenta_id,
         numero_pedido,
-        nombre_cliente: pedido.nombre_cliente
+        nombre_cliente: nombreFinal
       });
 
       return { status: 201, data: pedido };

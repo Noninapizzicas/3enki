@@ -625,7 +625,7 @@ class CuentasModule {
     const start_time = Date.now();
 
     try {
-      const { project_id, tipo, nombre } = data || {};
+      const { project_id, tipo, nombre, pedido_inicial } = data || {};
 
       if (!project_id) {
         return { status: 400, error: 'project_id es requerido' };
@@ -672,6 +672,13 @@ class CuentasModule {
         project_id, cuenta_id, tipo: tipoFinal, ref_display, duration: Date.now() - start_time
       });
 
+      // Si la creacion incluye un pedido inicial (caso delivery: Glovo, Llevadoo,
+      // integraciones externas que ya traen items resueltos), inyectarlo en el
+      // flujo estandar para que la cuenta entre con su turno en la cola general.
+      if (pedido_inicial && Array.isArray(pedido_inicial.items) && pedido_inicial.items.length > 0) {
+        await this._inyectarPedidoInicial(cuenta, pedido_inicial);
+      }
+
       return { status: 201, data: cuenta };
 
     } catch (error) {
@@ -679,6 +686,70 @@ class CuentasModule {
       this.logger.error('cuenta.create.error', { error: error.message });
       return { status: 500, error: error.message };
     }
+  }
+
+  /**
+   * Inyecta un pedido pre-formado en una cuenta recién creada (delivery
+   * webhooks, Glovo, Llevadoo, integraciones externas).
+   *
+   * Reusa el mismo bus de eventos que usa el comandero — publica
+   * `comandero.enviar_cocina` con los items, y deja que pedidos cree el
+   * pedido formal y cocina lo reciba. Cuentas (esta misma instancia)
+   * escucha `comandero.enviar_cocina` y transiciona la cuenta a
+   * `en_preparacion` en su propio handler `onComanderoEnviarCocina`.
+   *
+   * Ventajas: cero codigo nuevo en pedidos/cocina/persistencia. La cuenta
+   * delivery agarra el siguiente turno del contador global y aparece en
+   * la pantalla de cuentas como cualquier otra, en orden de llegada.
+   *
+   * @param {object} cuenta - Cuenta recien creada (estado: pendiente)
+   * @param {object} pedido_inicial - { items, total?, notas_generales? }
+   */
+  async _inyectarPedidoInicial(cuenta, pedido_inicial) {
+    const itemsCount = pedido_inicial.items.reduce(
+      (s, i) => s + (i.cantidad || 1), 0
+    );
+    const total = pedido_inicial.total ?? pedido_inicial.items.reduce(
+      (s, i) => s + (i.subtotal || (i.precio || 0) * (i.cantidad || 1)), 0
+    );
+
+    // Actualizar totales locales (lo que onComanderoItemAgregado hace en el
+    // flujo normal del comandero, agrupado en una sola actualizacion).
+    cuenta.items = itemsCount;
+    cuenta.total = total;
+    cuenta.updated_at = new Date().toISOString();
+
+    // Transicion pendiente → con_pedido (los items ya existen). Esto es lo
+    // que hace onComanderoItemAgregado en el primer item del flujo normal.
+    await this.transicionarEstado(cuenta.id, 'con_pedido');
+    await this.publishCuentaActualizada(cuenta.project_id, cuenta.id, {
+      items: cuenta.items,
+      total: cuenta.total
+    });
+
+    // Publicar comandero.enviar_cocina como si viniera del buffer del comandero.
+    // Este modulo escucha ese evento en onComanderoEnviarCocina y transiciona
+    // la cuenta a en_preparacion. Pedidos lo recoge en su propio bridge y
+    // crea el pedido formal + publica pedido.enviado_cocina (lo que cocina
+    // espera para mostrar el pedido en pantalla).
+    const pedido_id = `ped_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+    await this.eventBus.publish('comandero.enviar_cocina', {
+      cuenta_id: cuenta.id,
+      pedido_id,
+      project_id: cuenta.project_id,
+      ref_display: cuenta.ref_display,
+      items: pedido_inicial.items,
+      total,
+      notas_generales: pedido_inicial.notas_generales || null,
+      created_at: cuenta.created_at
+    });
+
+    this.logger.info('cuenta.pedido_inicial.inyectado', {
+      cuenta_id: cuenta.id,
+      pedido_id,
+      items_count: itemsCount,
+      total
+    });
   }
 
   async handleListCuentas(data) {

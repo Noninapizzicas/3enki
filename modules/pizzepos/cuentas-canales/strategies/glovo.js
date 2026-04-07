@@ -13,8 +13,12 @@
 class GlovoStrategy {
   constructor() {
     this.tipo = 'glovo';
-    this.prefijo = 'glovo_';
-    this.version = '3.0.0';
+    this.prefijo = 'G_';            // formato nuevo
+    this.prefijoLegacy = 'glovo_';  // formato heredado
+    this.version = '4.0.0';
+
+    // Contador interno para numero_pedido display (no es identidad)
+    this._pedidoSeq = 0;
 
     // Pedidos activos de Glovo
     this.pedidosActivos = new Map();
@@ -205,14 +209,15 @@ class GlovoStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      const secuencial = this.modulo.getNextSecuencial('glovo');
-      const fecha = this.modulo.getFechaActual();
-      const cuenta_id = `glovo_${fecha}_${secuencial.toString().padStart(3, '0')}`;
+      // cuenta_id opaco; numero_pedido es solo display interno del canal.
+      const cuenta_id = this.modulo.buildCuentaId('glovo');
+      this._pedidoSeq = (this._pedidoSeq % 999) + 1;
+      const numero_pedido = this._pedidoSeq;
 
       const pedido = {
         cuenta_id,
         glovo_order_id,
-        numero_pedido: secuencial,
+        numero_pedido,
         plataforma: 'glovo',
         estado: 'recibido',
         pagado: false,
@@ -574,11 +579,20 @@ class GlovoStrategy {
       if (!datos.cuentas) return;
 
       let restaurados = 0;
+      let maxSeq = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        if (!cuenta_id.startsWith(this.prefijo)) continue;
+        // Aceptar formato nuevo (G_xxxxxxxx) y legacy (glovo_...)
+        const esNuevo = cuenta_id.startsWith(this.prefijo);
+        const esLegacy = this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy);
+        if (!esNuevo && !esLegacy) continue;
 
-        const seqMatch = cuenta_id.match(/_(\d+)$/);
-        const seq = seqMatch ? parseInt(seqMatch[1], 10) : (restaurados + 1);
+        let seq = cuenta.datos_especificos?.numero_pedido || null;
+        if (!seq && esLegacy) {
+          const seqMatch = cuenta_id.match(/_(\d+)$/);
+          seq = seqMatch ? parseInt(seqMatch[1], 10) : null;
+        }
+        if (!seq) seq = restaurados + 1;
+        if (seq > maxSeq) maxSeq = seq;
 
         const pedido = {
           cuenta_id,
@@ -609,8 +623,10 @@ class GlovoStrategy {
       }
 
       if (restaurados > 0) {
+        if (maxSeq > this._pedidoSeq) this._pedidoSeq = maxSeq;
         this.modulo.logger.info('canal.glovo.estado_restaurado', {
-          pedidos_restaurados: restaurados
+          pedidos_restaurados: restaurados,
+          pedido_seq: this._pedidoSeq
         });
       }
     } catch (error) {

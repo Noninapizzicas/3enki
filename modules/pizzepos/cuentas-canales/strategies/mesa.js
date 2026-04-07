@@ -16,8 +16,9 @@
 class MesaStrategy {
   constructor() {
     this.tipo = 'mesa';
-    this.prefijo = 'mesa_';
-    this.version = '4.0.0';
+    this.prefijo = 'M_';            // formato nuevo: {LETRA}_{uuid8}
+    this.prefijoLegacy = 'mesa_';   // formato heredado pre-migración
+    this.version = '5.0.0';
 
     // Mesas activas: cuenta_id -> mesa data
     this.mesasActivas = new Map();
@@ -177,17 +178,17 @@ class MesaStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      // Auto-incrementar contador diario
+      // Auto-incrementar contador diario (solo para auto-nombre "Mesa N";
+      // ya no participa en el cuenta_id ni es identidad humana — el turno
+      // global del módulo `cuentas` es la identidad humana de la cuenta).
       this.contadorDiario++;
       const numero = this.contadorDiario;
 
       // Nombre libre: lo que pase el usuario, o auto "Mesa N"
       const nombre_mesa = nombre || `Mesa ${numero}`;
 
-      // Generar cuenta_id con prefijo
-      const secuencial = this.modulo.getNextSecuencial('mesa', numero);
-      const fecha = this.modulo.getFechaActual();
-      const cuenta_id = `mesa_${numero}_${fecha}_${secuencial.toString().padStart(3, '0')}`;
+      // Generar cuenta_id opaco: M_{uuid8}
+      const cuenta_id = this.modulo.buildCuentaId('mesa');
 
       const mesa = {
         cuenta_id,
@@ -405,11 +406,20 @@ class MesaStrategy {
       let restauradas = 0;
       let maxNumero = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        if (!cuenta_id.startsWith(this.prefijo)) continue;
+        // Aceptar formato nuevo (M_xxxxxxxx) y legacy (mesa_...)
+        const esNuevo = cuenta_id.startsWith(this.prefijo);
+        const esLegacy = this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy);
+        if (!esNuevo && !esLegacy) continue;
 
-        // Extraer número de mesa del cuenta_id (mesa_{num}_{fecha}_{seq})
-        const numMatch = cuenta_id.match(/^mesa_(\d+)_/);
-        const numero = numMatch ? parseInt(numMatch[1], 10) : (restauradas + 1);
+        // Numero de auto-nombre: del snapshot si está, sino del cuenta_id legacy,
+        // sino contador incremental local. Solo afecta al contadorDiario para
+        // siguientes auto-nombres "Mesa N" — no participa en la identidad.
+        let numero = cuenta.datos_especificos?.numero || null;
+        if (!numero && esLegacy) {
+          const numMatch = cuenta_id.match(/^mesa_(\d+)_/);
+          numero = numMatch ? parseInt(numMatch[1], 10) : (restauradas + 1);
+        }
+        if (!numero) numero = restauradas + 1;
         if (numero > maxNumero) maxNumero = numero;
 
         const mesa = {

@@ -807,12 +807,26 @@ class CocinaModule {
 
           if (items.length === 0) continue;
 
-          // Detectar canal por prefijo del cuenta_id
-          let canal = null;
-          if (cuenta_id.startsWith('mesa_')) canal = 'mesa';
-          else if (cuenta_id.startsWith('tel_')) canal = 'telefono';
-          else if (cuenta_id.startsWith('llevar_')) canal = 'llevar';
-          else if (cuenta_id.startsWith('glovo_')) canal = 'glovo';
+          // Canal: preferir el `tipo` persistido en el snapshot (fuente de verdad).
+          // Fallback: detectar por prefijo del cuenta_id (formato nuevo
+          // {LETRA}_xxxx y formato legacy {canal}_xxxx).
+          let canal = cuenta.tipo || null;
+          if (!canal) {
+            // Formato nuevo: M_, L_, T_, W_, G_, D_
+            if (cuenta_id.startsWith('M_')) canal = 'mesa';
+            else if (cuenta_id.startsWith('L_')) canal = 'llevar';
+            else if (cuenta_id.startsWith('T_')) canal = 'telefono';
+            else if (cuenta_id.startsWith('W_')) canal = 'whatsapp';
+            else if (cuenta_id.startsWith('G_')) canal = 'glovo';
+            else if (cuenta_id.startsWith('D_')) canal = 'llevadoo';
+            // Formato legacy
+            else if (cuenta_id.startsWith('mesa_')) canal = 'mesa';
+            else if (cuenta_id.startsWith('llevar_')) canal = 'llevar';
+            else if (cuenta_id.startsWith('tel_')) canal = 'telefono';
+            else if (cuenta_id.startsWith('wa_')) canal = 'whatsapp';
+            else if (cuenta_id.startsWith('glovo_')) canal = 'glovo';
+            else if (cuenta_id.startsWith('llevadoo_')) canal = 'llevadoo';
+          }
 
           const pedidoCocina = {
             pedido_id,

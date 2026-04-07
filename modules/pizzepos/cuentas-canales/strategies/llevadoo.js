@@ -18,8 +18,12 @@
 class LlevadooStrategy {
   constructor() {
     this.tipo = 'llevadoo';
-    this.prefijo = 'llevadoo_';
-    this.version = '1.0.0';
+    this.prefijo = 'D_';                // formato nuevo (D = delivery/llevadoo)
+    this.prefijoLegacy = 'llevadoo_';   // formato heredado
+    this.version = '2.0.0';
+
+    // Contador interno para numero_pedido display (no es identidad)
+    this._pedidoSeq = 0;
 
     this.pedidosActivos = new Map();
 
@@ -44,6 +48,16 @@ class LlevadooStrategy {
       'carta_delivery',
       'health', 'metrics'
     ];
+  }
+
+  /**
+   * Verifica si un cuenta_id pertenece a esta strategy.
+   * Tolera el formato nuevo (D_xxxxxxxx) y el legacy (llevadoo_...).
+   */
+  matches(cuenta_id) {
+    if (!cuenta_id) return false;
+    return cuenta_id.startsWith(this.prefijo)
+      || (this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy));
   }
 
   // ==========================================
@@ -184,7 +198,7 @@ class LlevadooStrategy {
     const correlationId = event?.metadata?.correlationId;
     const { cuenta_id, pase } = eventData;
 
-    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!this.matches(cuenta_id)) return;
 
     // pase=1 significa que el item acaba de entrar al horno (avanzó desde general pase_minimo=0)
     if (pase !== 1) return;
@@ -222,7 +236,7 @@ class LlevadooStrategy {
     const correlationId = event?.metadata?.correlationId;
     const { cuenta_id, estado_nuevo } = eventData;
 
-    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!this.matches(cuenta_id)) return;
     if (estado_nuevo !== 'entregado') return;
 
     const pedido = this.pedidosActivos.get(cuenta_id);
@@ -264,7 +278,7 @@ class LlevadooStrategy {
     const eventData = event?.data || event?.payload || event;
     const { cuenta_id, cambios } = eventData;
 
-    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!this.matches(cuenta_id)) return;
     if (!cambios?.nombre) return;
 
     const pedido = this.pedidosActivos.get(cuenta_id);
@@ -282,7 +296,7 @@ class LlevadooStrategy {
     const eventData = event?.data || event?.payload || event;
     const { cuenta_id, pedido_id } = eventData;
 
-    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!this.matches(cuenta_id)) return;
 
     const pedido = this.pedidosActivos.get(cuenta_id);
     if (!pedido) return;
@@ -307,10 +321,10 @@ class LlevadooStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      const secuencial = this.modulo.getNextSecuencial('llevadoo');
-      const fecha = this.modulo.getFechaActual();
-      const cuenta_id = `llevadoo_${fecha}_${secuencial.toString().padStart(3, '0')}`;
-      const numero_pedido = secuencial;
+      // cuenta_id opaco; numero_pedido es solo display interno del canal.
+      const cuenta_id = this.modulo.buildCuentaId('llevadoo');
+      this._pedidoSeq = (this._pedidoSeq % 999) + 1;
+      const numero_pedido = this._pedidoSeq;
 
       let horaRecogida = null;
       const minutos = tiempo_preparacion || 25;
@@ -658,11 +672,17 @@ class LlevadooStrategy {
       if (!datos.cuentas) return;
 
       let restaurados = 0;
+      let maxSeq = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        if (!cuenta_id.startsWith(this.prefijo)) continue;
+        if (!this.matches(cuenta_id)) continue;
 
-        const numMatch = cuenta_id.match(/_(\d+)$/);
-        const numero = numMatch ? parseInt(numMatch[1], 10) : (restaurados + 1);
+        let numero = cuenta.datos_especificos?.numero_pedido || null;
+        if (!numero && cuenta_id.startsWith(this.prefijoLegacy)) {
+          const numMatch = cuenta_id.match(/_(\d+)$/);
+          numero = numMatch ? parseInt(numMatch[1], 10) : null;
+        }
+        if (!numero) numero = restaurados + 1;
+        if (numero > maxSeq) maxSeq = numero;
 
         const pedido = {
           cuenta_id,
@@ -686,8 +706,10 @@ class LlevadooStrategy {
       }
 
       if (restaurados > 0) {
+        if (maxSeq > this._pedidoSeq) this._pedidoSeq = maxSeq;
         this.modulo.logger.info('canal.llevadoo.estado_restaurado', {
-          pedidos_restaurados: restaurados
+          pedidos_restaurados: restaurados,
+          pedido_seq: this._pedidoSeq
         });
       }
     } catch (error) {

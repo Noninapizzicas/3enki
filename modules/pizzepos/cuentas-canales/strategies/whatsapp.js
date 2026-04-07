@@ -15,8 +15,12 @@
 class WhatsAppStrategy {
   constructor() {
     this.tipo = 'whatsapp';
-    this.prefijo = 'wa_';
-    this.version = '3.0.0';
+    this.prefijo = 'W_';            // formato nuevo
+    this.prefijoLegacy = 'wa_';     // formato heredado
+    this.version = '4.0.0';
+
+    // Contador interno para numero_pedido display (no es identidad)
+    this._pedidoSeq = 0;
 
     // Pedidos activos por WhatsApp
     this.pedidosActivos = new Map();
@@ -236,10 +240,10 @@ class WhatsAppStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      const secuencial = this.modulo.getNextSecuencial('whatsapp');
-      const fecha = this.modulo.getFechaActual();
-      const cuenta_id = `wa_${fecha}_${secuencial.toString().padStart(3, '0')}`;
-      const numero_pedido = secuencial;
+      // cuenta_id opaco; numero_pedido es solo display interno del canal.
+      const cuenta_id = this.modulo.buildCuentaId('whatsapp');
+      this._pedidoSeq = (this._pedidoSeq % 999) + 1;
+      const numero_pedido = this._pedidoSeq;
 
       const contacto = this.contactos.get(telefono);
 

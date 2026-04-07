@@ -19,6 +19,7 @@
 
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
+const crypto = require('crypto');
 
 const MesaStrategy = require('./strategies/mesa');
 const TelefonoStrategy = require('./strategies/telefono');
@@ -30,7 +31,7 @@ const LlevadooStrategy = require('./strategies/llevadoo');
 class CuentasCanalesModule {
   constructor() {
     this.name = 'cuentas-canales';
-    this.version = '3.0.0';
+    this.version = '4.0.0';
 
     // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
@@ -43,12 +44,9 @@ class CuentasCanalesModule {
     this.ajv = new Ajv({ allErrors: true, useDefaults: true });
     addFormats(this.ajv);
 
-    // Contadores y fecha
+    // Tracking de fecha (para reseteos diarios de metricas internas de strategies)
     this.fechaActual = this.getFechaActual();
-    this.contadores = {};
     this._resetInterval = null;
-    this._contadoresPath = './data/current/contadores_canales.json';
-    this._saveTimer = null;
 
     // Tracking de tiempos (utilidad compartida)
     this._timeArrays = {};
@@ -108,7 +106,6 @@ class CuentasCanalesModule {
     }
 
     this.iniciarReseoDiario();
-    await this.cargarContadores();
 
     this.logger.info('module.loaded', {
       module: this.name,
@@ -138,14 +135,6 @@ class CuentasCanalesModule {
     }
 
     this._timeArrays = {};
-
-    // Guardar contadores antes de limpiar
-    if (this._saveTimer) {
-      clearTimeout(this._saveTimer);
-      this._saveTimer = null;
-    }
-    await this.guardarContadores();
-    this.contadores = {};
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -182,9 +171,16 @@ class CuentasCanalesModule {
     }
   }
 
+  /**
+   * Identifica la strategy a la que pertenece un cuenta_id por prefijo.
+   * Soporta el formato nuevo `{LETRA}_{uuid8}` (prefijo) y los formatos
+   * legacy heredados (mesa_, llevar_, tel_, wa_, glovo_, llevadoo_) para
+   * que las cuentas creadas antes de la migración sigan resolviéndose.
+   */
   detectarCanal(cuenta_id) {
     for (const strategy of Object.values(this.strategies)) {
-      if (cuenta_id.startsWith(strategy.prefijo)) {
+      if (cuenta_id.startsWith(strategy.prefijo)) return strategy;
+      if (strategy.prefijoLegacy && cuenta_id.startsWith(strategy.prefijoLegacy)) {
         return strategy;
       }
     }
@@ -285,22 +281,18 @@ class CuentasCanalesModule {
     return `${year}${month}${day}`;
   }
 
-  getNextSecuencial(canal, subkey) {
-    // Key sin fecha — el contador es continuo, solo cicla en 999→001
-    const key = subkey ? `${canal}_${subkey}` : canal;
-
-    if (!this.contadores[key]) {
-      this.contadores[key] = 1;
-    } else {
-      this.contadores[key]++;
-      // Ciclo de turno: 001→999→001 (3 dígitos siempre)
-      if (this.contadores[key] > 999) {
-        this.contadores[key] = 1;
-        this.logger?.info('canales.contador.ciclo_completado', { canal, key });
-      }
-    }
-    this._debounceSave();
-    return this.contadores[key];
+  /**
+   * Construye un cuenta_id nuevo con formato `{LETRA}_{uuid8}`.
+   * La letra es decorativa para legibilidad humana en logs y dashboards;
+   * el código JAMÁS debe parsearla — el `tipo` real viaja en los eventos.
+   * Ver detectarCanal() para el matching tolerante de prefijos.
+   *
+   * Ejemplos: `M_a3f9c2d1` (mesa), `G_4d8e9c1a` (glovo), `D_3a7b5c2e` (llevadoo).
+   */
+  buildCuentaId(tipo) {
+    const letra = CuentasCanalesModule.LETRA_POR_TIPO[tipo] || 'X';
+    const uuid8 = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+    return `${letra}_${uuid8}`;
   }
 
   verificarReseoDiario() {
@@ -311,7 +303,6 @@ class CuentasCanalesModule {
         fecha_nueva: fechaActual
       });
       this.fechaActual = fechaActual;
-      // No reseteamos contadores — solo ciclan en 999→001
     }
   }
 
@@ -319,53 +310,6 @@ class CuentasCanalesModule {
     this._resetInterval = setInterval(() => {
       this.verificarReseoDiario();
     }, 60 * 60 * 1000);
-  }
-
-  // ==========================================
-  // Persistencia de contadores
-  // ==========================================
-
-  async cargarContadores() {
-    try {
-      const fs = require('fs').promises;
-      const contenido = await fs.readFile(this._contadoresPath, 'utf8');
-      const datos = JSON.parse(contenido);
-      this.contadores = datos.contadores || {};
-      this.logger.info('canales.contadores.cargados', {
-        canales: Object.keys(this.contadores),
-        valores: { ...this.contadores }
-      });
-    } catch (err) {
-      if (err.code === 'ENOENT') {
-        this.logger.info('canales.contadores.archivo_no_existe', { msg: 'empezando desde 001' });
-      } else {
-        this.logger.warn('canales.contadores.error_carga', { error: err.message });
-      }
-      this.contadores = {};
-    }
-  }
-
-  async guardarContadores() {
-    try {
-      const fs = require('fs').promises;
-      const path = require('path');
-      await fs.mkdir(path.dirname(this._contadoresPath), { recursive: true });
-      await fs.writeFile(this._contadoresPath, JSON.stringify({
-        contadores: this.contadores,
-        updated_at: new Date().toISOString()
-      }, null, 2));
-    } catch (err) {
-      this.logger?.warn('canales.contadores.error_guardado', { error: err.message });
-    }
-  }
-
-  // Guardar con debounce (máx 1 escritura cada 2s)
-  _debounceSave() {
-    if (this._saveTimer) return;
-    this._saveTimer = setTimeout(() => {
-      this._saveTimer = null;
-      this.guardarContadores();
-    }, 2000);
   }
 
   calcularTiempoMinutos(desde) {
@@ -403,6 +347,25 @@ class CuentasCanalesModule {
       this.logger?.warn('canales.schema.error', { id: schema.$id, error: err.message });
     }
   }
+
+  /**
+   * Mapa de letra de control por tipo de canal. La letra forma parte del
+   * cuenta_id (ej: `M_a3f9c2d1`) puramente como decoración legible. Debe
+   * coincidir con `CuentasModule.SIMBOLOS` en cuentas/index.js para que
+   * el ref_display generado por cuentas use la misma letra.
+   *
+   * Si añades un canal nuevo, registra aquí su letra y en cuentas.SIMBOLOS.
+   */
+  static LETRA_POR_TIPO = {
+    mesa: 'M',
+    local: 'M',     // alias histórico
+    llevar: 'L',
+    telefono: 'T',
+    whatsapp: 'W',
+    glovo: 'G',
+    llevadoo: 'D',
+    delivery: 'D'   // alias histórico
+  };
 }
 
 module.exports = CuentasCanalesModule;

@@ -11,8 +11,13 @@
 class LlevarStrategy {
   constructor() {
     this.tipo = 'llevar';
-    this.prefijo = 'llevar_';
-    this.version = '3.0.0';
+    this.prefijo = 'L_';              // formato nuevo
+    this.prefijoLegacy = 'llevar_';   // formato heredado
+    this.version = '4.0.0';
+
+    // Contador interno para numero_ticket display (no es identidad — el turno
+    // global del módulo `cuentas` es la identidad humana). Solo en memoria.
+    this._ticketSeq = 0;
 
     this.ticketsActivos = new Map();
     this.ticketsListos = new Map();
@@ -181,10 +186,10 @@ class LlevarStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      const secuencial = this.modulo.getNextSecuencial('llevar');
-      const fecha = this.modulo.getFechaActual();
-      const cuenta_id = `llevar_${fecha}_${secuencial.toString().padStart(3, '0')}`;
-      const numero_ticket = secuencial;
+      // cuenta_id opaco; numero_ticket es solo display interno del SSE display.
+      const cuenta_id = this.modulo.buildCuentaId('llevar');
+      this._ticketSeq = (this._ticketSeq % 999) + 1;
+      const numero_ticket = this._ticketSeq;
 
       const ticket = {
         cuenta_id,
@@ -323,10 +328,18 @@ class LlevarStrategy {
       let restaurados = 0;
       let maxSeq = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        if (!cuenta_id.startsWith(this.prefijo)) continue;
+        // Aceptar formato nuevo (L_xxxxxxxx) y legacy (llevar_...)
+        const esNuevo = cuenta_id.startsWith(this.prefijo);
+        const esLegacy = this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy);
+        if (!esNuevo && !esLegacy) continue;
 
-        const seqMatch = cuenta_id.match(/_(\d+)$/);
-        const seq = seqMatch ? parseInt(seqMatch[1], 10) : (restaurados + 1);
+        // numero_ticket: del snapshot; sino del cuenta_id legacy; sino incremental
+        let seq = cuenta.datos_especificos?.numero_ticket || null;
+        if (!seq && esLegacy) {
+          const seqMatch = cuenta_id.match(/_(\d+)$/);
+          seq = seqMatch ? parseInt(seqMatch[1], 10) : null;
+        }
+        if (!seq) seq = restaurados + 1;
         if (seq > maxSeq) maxSeq = seq;
 
         const ticket = {
@@ -349,8 +362,12 @@ class LlevarStrategy {
       }
 
       if (restaurados > 0) {
+        // Avanzar el contador interno de display al maximo seq visto, para que
+        // los siguientes tickets no colisionen con los restaurados.
+        if (maxSeq > this._ticketSeq) this._ticketSeq = maxSeq;
         this.modulo.logger.info('canal.llevar.estado_restaurado', {
-          tickets_restaurados: restaurados
+          tickets_restaurados: restaurados,
+          ticket_seq: this._ticketSeq
         });
       }
     } catch (error) {

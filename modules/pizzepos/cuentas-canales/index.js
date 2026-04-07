@@ -173,17 +173,16 @@ class CuentasCanalesModule {
 
   /**
    * Identifica la strategy a la que pertenece un cuenta_id por prefijo.
-   * Soporta el formato nuevo `{LETRA}_{uuid8}` (prefijo) y los formatos
-   * legacy heredados (mesa_, llevar_, tel_, wa_, glovo_, llevadoo_) para
-   * que las cuentas creadas antes de la migración sigan resolviéndose.
+   * Cada strategy declara un solo prefijo de palabra completa
+   * (mesa_, llevar_, telefono_, whatsapp_, glovo_, llevadoo_).
    */
   detectarCanal(cuenta_id) {
+    if (!cuenta_id) return null;
     for (const strategy of Object.values(this.strategies)) {
       if (cuenta_id.startsWith(strategy.prefijo)) return strategy;
-      if (strategy.prefijoLegacy && cuenta_id.startsWith(strategy.prefijoLegacy)) {
-        return strategy;
-      }
     }
+    // Compat con cuenta_id legacy de telefono que usaba 'tel_'
+    if (cuenta_id.startsWith('tel_')) return this.strategies['telefono'] || null;
     return null;
   }
 

@@ -12,8 +12,7 @@
 class TelefonoStrategy {
   constructor() {
     this.tipo = 'telefono';
-    this.prefijo = 'T_';            // formato nuevo
-    this.prefijoLegacy = 'tel_';    // formato heredado
+    this.prefijo = 'telefono_';
     this.version = '4.0.0';
 
     this.pedidosActivos = new Map();
@@ -408,17 +407,13 @@ class TelefonoStrategy {
       let restaurados = 0;
       let maxSeq = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        // Aceptar formato nuevo (T_xxxxxxxx) y legacy (tel_...)
-        const esNuevo = cuenta_id.startsWith(this.prefijo);
-        const esLegacy = this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy);
-        if (!esNuevo && !esLegacy) continue;
+        if (!cuenta_id.startsWith(this.prefijo) && !cuenta_id.startsWith('tel_')) continue;
 
         let numero = cuenta.datos_especificos?.numero_pedido || null;
-        if (!numero && esLegacy) {
+        if (!numero) {
           const numMatch = cuenta_id.match(/_(\d+)$/);
-          numero = numMatch ? parseInt(numMatch[1], 10) : null;
+          numero = numMatch ? parseInt(numMatch[1], 10) : (restaurados + 1);
         }
-        if (!numero) numero = restaurados + 1;
         if (numero > maxSeq) maxSeq = numero;
 
         const pedido = {

@@ -384,6 +384,11 @@ async function main() {
         metrics: core.metrics
       });
 
+      // Los modulos reciben moduleRegistry en su contexto de onLoad para
+      // poder invocar metodos directos de otros modulos (ej: strategies
+      // delegando cuenta.create/rename a cuentas via moduleRegistry.get).
+      coreContext.moduleRegistry = core.moduleRegistry;
+
       core.moduleLoader = new ModuleLoader({
         modulesPath,
         core: coreContext,

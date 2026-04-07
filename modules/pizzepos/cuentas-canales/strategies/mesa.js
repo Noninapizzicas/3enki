@@ -16,8 +16,7 @@
 class MesaStrategy {
   constructor() {
     this.tipo = 'mesa';
-    this.prefijo = 'M_';            // formato nuevo: {LETRA}_{uuid8}
-    this.prefijoLegacy = 'mesa_';   // formato heredado pre-migración
+    this.prefijo = 'mesa_';
     this.version = '5.0.0';
 
     // Mesas activas: cuenta_id -> mesa data
@@ -143,12 +142,9 @@ class MesaStrategy {
 
   /**
    * Verifica si un cuenta_id pertenece a esta strategy.
-   * Tolera el formato nuevo (M_xxxxxxxx) y el legacy (mesa_...).
    */
   matches(cuenta_id) {
-    if (!cuenta_id) return false;
-    return cuenta_id.startsWith(this.prefijo)
-      || (this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy));
+    return !!cuenta_id && cuenta_id.startsWith(this.prefijo);
   }
 
   async onPedidoCreado(event) {
@@ -410,20 +406,17 @@ class MesaStrategy {
       let restauradas = 0;
       let maxNumero = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        // Aceptar formato nuevo (M_xxxxxxxx) y legacy (mesa_...)
-        const esNuevo = cuenta_id.startsWith(this.prefijo);
-        const esLegacy = this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy);
-        if (!esNuevo && !esLegacy) continue;
+        if (!cuenta_id.startsWith(this.prefijo)) continue;
 
-        // Numero de auto-nombre: del snapshot si está, sino del cuenta_id legacy,
-        // sino contador incremental local. Solo afecta al contadorDiario para
-        // siguientes auto-nombres "Mesa N" — no participa en la identidad.
+        // Numero de auto-nombre: del snapshot si está, sino contador incremental
+        // local. Solo afecta al contadorDiario para siguientes auto-nombres
+        // "Mesa N" — no participa en la identidad.
         let numero = cuenta.datos_especificos?.numero || null;
-        if (!numero && esLegacy) {
+        if (!numero) {
+          // Formato viejo mesa_5_20251207_001: extraer numero de mesa
           const numMatch = cuenta_id.match(/^mesa_(\d+)_/);
           numero = numMatch ? parseInt(numMatch[1], 10) : (restauradas + 1);
         }
-        if (!numero) numero = restauradas + 1;
         if (numero > maxNumero) maxNumero = numero;
 
         const mesa = {

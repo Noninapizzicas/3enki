@@ -13,8 +13,7 @@
 class GlovoStrategy {
   constructor() {
     this.tipo = 'glovo';
-    this.prefijo = 'G_';            // formato nuevo
-    this.prefijoLegacy = 'glovo_';  // formato heredado
+    this.prefijo = 'glovo_';
     this.version = '4.0.0';
 
     // Contador interno para numero_pedido display (no es identidad)
@@ -574,17 +573,13 @@ class GlovoStrategy {
       let restaurados = 0;
       let maxSeq = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        // Aceptar formato nuevo (G_xxxxxxxx) y legacy (glovo_...)
-        const esNuevo = cuenta_id.startsWith(this.prefijo);
-        const esLegacy = this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy);
-        if (!esNuevo && !esLegacy) continue;
+        if (!cuenta_id.startsWith(this.prefijo)) continue;
 
         let seq = cuenta.datos_especificos?.numero_pedido || null;
-        if (!seq && esLegacy) {
+        if (!seq) {
           const seqMatch = cuenta_id.match(/_(\d+)$/);
-          seq = seqMatch ? parseInt(seqMatch[1], 10) : null;
+          seq = seqMatch ? parseInt(seqMatch[1], 10) : (restaurados + 1);
         }
-        if (!seq) seq = restaurados + 1;
         if (seq > maxSeq) maxSeq = seq;
 
         const pedido = {

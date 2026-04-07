@@ -1084,15 +1084,18 @@ class CuentasModule {
   // Una cuenta renombrada o que cambia de estado mantiene su turno original.
 
   /**
-   * Genera un cuenta_id opaco con formato `{LETRA}_{uuid8}`.
-   * La letra viene de SIMBOLOS y es puramente decorativa (el codigo no
-   * debe parsearla — el tipo real viaja en el campo `tipo` del evento).
-   * Debe coincidir con cuentas-canales.buildCuentaId para uniformidad.
+   * Genera un cuenta_id con formato `{tipo}_{uuid8}`.
+   * El prefijo es la palabra completa del tipo (mesa_, llevar_, delivery_,
+   * llevadoo_, telefono_, whatsapp_, glovo_). Esto permite al frontend
+   * identificar el canal de una cuenta con startsWith sin depender del
+   * campo `tipo` del evento (compat con el codigo existente).
+   *
+   * Aliases: `local` → `mesa` (historico).
    */
   _buildCuentaId(tipo) {
-    const letra = CuentasModule.SIMBOLOS[tipo] || 'X';
+    const tipoCanonico = tipo === 'local' ? 'mesa' : (tipo || 'cuenta');
     const uuid8 = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
-    return `${letra}_${uuid8}`;
+    return `${tipoCanonico}_${uuid8}`;
   }
 
   /**
@@ -1167,14 +1170,20 @@ class CuentasModule {
   }
 
   // Mapa de símbolo por tipo de canal
+  // Letra visible en el ref_display. `delivery` y `llevadoo` son tipos
+  // DISTINTOS aunque ambos sean domicilio:
+  //   - delivery: pedido a domicilio propio del local (desde /comandero)
+  //   - llevadoo: plataforma externa (desde /llevadoo, pago externo)
+  // El prefijo del cuenta_id usa palabra completa (mesa_, llevar_, etc)
+  // para compat con el frontend existente.
   static SIMBOLOS = {
     mesa: 'M', local: 'M',
     llevar: 'L',
     telefono: 'T',
     whatsapp: 'W',
     glovo: 'G',
-    llevadoo: 'D',
-    delivery: 'D'
+    delivery: 'D',
+    llevadoo: 'V'
   };
 
   startMetricsReporting() {

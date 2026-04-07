@@ -1034,25 +1034,17 @@ class ImpresionModule {
       return { ref: cached.ref.toUpperCase(), detalle: cached.detalle || null };
     }
 
-    // Fallback nuevo formato: M_a3f9c2d1 → "MESA a3f9c2d1" (display feo pero
-    // útil para debug). El caso normal NO debería caer aquí.
-    const LETRA_LABEL = {
-      M: 'MESA', L: 'LLEVAR', T: 'TEL',
-      W: 'WHATSAPP', G: 'GLOVO', D: 'LLEVADOO'
-    };
-    const matchNuevo = cuenta_id.match(/^([MLTWGD])_([a-f0-9]{4,})$/);
-    if (matchNuevo) {
-      return { ref: `${LETRA_LABEL[matchNuevo[1]]} ${matchNuevo[2].slice(0, 4).toUpperCase()}` };
-    }
-
-    // Fallback formato legacy: mesa_7_20250325_001 → "MESA 7"
+    // Fallback: extraer del prefijo de palabra completa del cuenta_id.
+    // mesa_7_20250325_001 → "MESA 7", llevadoo_xxxxxxxx → "LLEVADOO xxxx".
     const prefijosLegacy = {
       mesa: 'MESA',
       tel: 'TEL',
+      telefono: 'TEL',
       llevar: 'LLEVAR',
       glovo: 'GLOVO',
       wa: 'WHATSAPP',
       whatsapp: 'WHATSAPP',
+      delivery: 'DELIVERY',
       llevadoo: 'LLEVADOO'
     };
 

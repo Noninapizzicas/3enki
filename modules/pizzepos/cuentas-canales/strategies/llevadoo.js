@@ -18,8 +18,7 @@
 class LlevadooStrategy {
   constructor() {
     this.tipo = 'llevadoo';
-    this.prefijo = 'D_';                // formato nuevo (D = delivery/llevadoo)
-    this.prefijoLegacy = 'llevadoo_';   // formato heredado
+    this.prefijo = 'llevadoo_';
     this.version = '2.0.0';
 
     // Contador interno para numero_pedido display (no es identidad)
@@ -52,12 +51,9 @@ class LlevadooStrategy {
 
   /**
    * Verifica si un cuenta_id pertenece a esta strategy.
-   * Tolera el formato nuevo (D_xxxxxxxx) y el legacy (llevadoo_...).
    */
   matches(cuenta_id) {
-    if (!cuenta_id) return false;
-    return cuenta_id.startsWith(this.prefijo)
-      || (this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy));
+    return !!cuenta_id && cuenta_id.startsWith(this.prefijo);
   }
 
   // ==========================================
@@ -676,11 +672,10 @@ class LlevadooStrategy {
         if (!this.matches(cuenta_id)) continue;
 
         let numero = cuenta.datos_especificos?.numero_pedido || null;
-        if (!numero && cuenta_id.startsWith(this.prefijoLegacy)) {
+        if (!numero) {
           const numMatch = cuenta_id.match(/_(\d+)$/);
-          numero = numMatch ? parseInt(numMatch[1], 10) : null;
+          numero = numMatch ? parseInt(numMatch[1], 10) : (restaurados + 1);
         }
-        if (!numero) numero = restaurados + 1;
         if (numero > maxSeq) maxSeq = numero;
 
         const pedido = {

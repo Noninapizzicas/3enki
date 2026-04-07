@@ -11,8 +11,7 @@
 class LlevarStrategy {
   constructor() {
     this.tipo = 'llevar';
-    this.prefijo = 'L_';              // formato nuevo
-    this.prefijoLegacy = 'llevar_';   // formato heredado
+    this.prefijo = 'llevar_';
     this.version = '4.0.0';
 
     // Contador interno para numero_ticket display (no es identidad — el turno
@@ -329,18 +328,13 @@ class LlevarStrategy {
       let restaurados = 0;
       let maxSeq = 0;
       for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        // Aceptar formato nuevo (L_xxxxxxxx) y legacy (llevar_...)
-        const esNuevo = cuenta_id.startsWith(this.prefijo);
-        const esLegacy = this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy);
-        if (!esNuevo && !esLegacy) continue;
+        if (!cuenta_id.startsWith(this.prefijo)) continue;
 
-        // numero_ticket: del snapshot; sino del cuenta_id legacy; sino incremental
         let seq = cuenta.datos_especificos?.numero_ticket || null;
-        if (!seq && esLegacy) {
+        if (!seq) {
           const seqMatch = cuenta_id.match(/_(\d+)$/);
-          seq = seqMatch ? parseInt(seqMatch[1], 10) : null;
+          seq = seqMatch ? parseInt(seqMatch[1], 10) : (restaurados + 1);
         }
-        if (!seq) seq = restaurados + 1;
         if (seq > maxSeq) maxSeq = seq;
 
         const ticket = {

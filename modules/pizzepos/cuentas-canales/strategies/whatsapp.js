@@ -15,8 +15,7 @@
 class WhatsAppStrategy {
   constructor() {
     this.tipo = 'whatsapp';
-    this.prefijo = 'W_';            // formato nuevo
-    this.prefijoLegacy = 'wa_';     // formato heredado
+    this.prefijo = 'whatsapp_';
     this.version = '4.0.0';
 
     // Contador interno para numero_pedido display (no es identidad)

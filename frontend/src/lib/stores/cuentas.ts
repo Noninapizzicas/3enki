@@ -390,22 +390,15 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
       const cuentas: Cuenta[] = cuentasPersistencia.map((cp: any) => {
         const mappedTipo = TIPO_MAP[cp.tipo] || 'local';
 
-        // Nombre: para Glovo, extraer número secuencial del cuenta_id (glovo_20260226_003 → "Glovo #3")
-        let nombre = cp.datos_especificos?.nombre
+        // Nombre: prioridad nombre custom → ref_display canónico del backend
+        // (ej: "D 001", "M 003", "Paco L 002") → vacío. NO usamos TIPO_LABELS
+        // como fallback porque convertia cuentas sin nombre en "Delivery",
+        // "Local", etc literal.
+        const nombreCustom = cp.nombre
+          || cp.datos_especificos?.nombre
           || cp.datos_especificos?.cliente_nombre
-          || cp.datos_especificos?.numero_ticket
-          || TIPO_LABELS[mappedTipo]
-          || cp.tipo;
-        if (cp.tipo === 'glovo') {
-          const seqMatch = cp.cuenta_id?.match(/_(\d+)$/);
-          const num = seqMatch ? parseInt(seqMatch[1], 10) : 0;
-          if (num > 0) nombre = `Glovo #${num}`;
-        }
-        if (cp.tipo === 'llevadoo') {
-          const seqMatch = cp.cuenta_id?.match(/_(\d+)$/);
-          const num = seqMatch ? parseInt(seqMatch[1], 10) : 0;
-          if (num > 0) nombre = cp.datos_especificos?.nombre_cliente || `Llevadoo #${num}`;
-        }
+          || cp.datos_especificos?.nombre_cliente;
+        const nombre = nombreCustom || cp.ref_display || '';
 
         // Preservar estados de cocina del store actual (evita que reload borre preparando/listo)
         const existingCuenta = currentCuentasMap.get(cp.cuenta_id);

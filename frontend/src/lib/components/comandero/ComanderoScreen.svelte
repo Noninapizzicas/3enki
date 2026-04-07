@@ -503,9 +503,9 @@
             return ci;
           });
 
-          // Detectar canal desde cuenta_id
+          // Detectar canal desde cuenta_id (acepta prefijos largos)
           const canalDetected: Canal = cuenta_id.startsWith('mesa_') ? 'mesa'
-            : cuenta_id.startsWith('telefono_') ? 'telefono'
+            : cuenta_id.startsWith('telefono_') || cuenta_id.startsWith('tel_') ? 'telefono'
             : cuenta_id.startsWith('llevar_') ? 'llevar'
             : cuenta_id.startsWith('glovo_') ? 'glovo'
             : 'mesa';

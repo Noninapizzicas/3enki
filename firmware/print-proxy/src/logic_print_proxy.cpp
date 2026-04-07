@@ -136,32 +136,111 @@ static void saveDriverConfig() {
 }
 
 // ============================================
+// Codigos de error de impresion (diagnostico)
+// ============================================
+
+enum PrintError {
+  PRINT_OK = 0,
+  PRINT_ERR_NO_MAC,          // No hay MAC configurada
+  PRINT_ERR_INIT_FAILED,     // SPP no pudo iniciar Bluedroid
+  PRINT_ERR_CONNECT_FAILED,  // No se pudo conectar al BT
+  PRINT_ERR_WRITE_FAILED,    // Conectado pero escritura fallo
+  PRINT_ERR_DISCONNECTED     // Se desconecto durante el envio
+};
+
+static const char* printErrorCode(PrintError e) {
+  switch (e) {
+    case PRINT_OK:                return "ok";
+    case PRINT_ERR_NO_MAC:        return "no_mac";
+    case PRINT_ERR_INIT_FAILED:   return "init_failed";
+    case PRINT_ERR_CONNECT_FAILED: return "connect_failed";
+    case PRINT_ERR_WRITE_FAILED:  return "write_failed";
+    case PRINT_ERR_DISCONNECTED:  return "disconnected_mid_send";
+  }
+  return "unknown";
+}
+
+// ============================================
+// Circuit breaker
+// ============================================
+
+#define MAX_RETRIES_PER_JOB     3
+#define RETRY_BACKOFF_BASE_MS   2000   // 2s, 4s, 8s
+#define BREAKER_OPEN_MS         30000  // 30s pausa tras abrir
+#define BREAKER_FAIL_THRESHOLD  3      // fallos consecutivos para abrir
+
+static uint8_t  consecutiveFailures = 0;
+static bool     breakerOpen = false;
+static unsigned long breakerOpenedAt = 0;
+
+static void openBreaker() {
+  breakerOpen = true;
+  breakerOpenedAt = millis();
+  Serial.printf("[BREAKER] ABIERTO — pausa impresion %ds tras %d fallos consecutivos\n",
+    BREAKER_OPEN_MS / 1000, consecutiveFailures);
+}
+
+static void closeBreaker() {
+  if (breakerOpen) {
+    Serial.println("[BREAKER] CERRADO — reanudando impresion");
+  }
+  breakerOpen = false;
+  consecutiveFailures = 0;
+}
+
+// Health check: intenta conectar y desconectar sin enviar datos
+static bool healthCheck() {
+  if (strlen(printerAddr) == 0) return false;
+
+  Serial.println("[BREAKER] Health check...");
+  if (btMode == BT_MODE_SPP) {
+    spp_init();
+    bool ok = spp_connect(printerAddr);
+    if (ok) spp_disconnect();
+    spp_deinit();
+    return ok;
+  } else {
+    // BLE: aprovecha conexion existente o intenta nueva
+    if (ble_is_connected()) return true;
+    return ble_connect(printerAddr);
+  }
+}
+
+// ============================================
 // SPP bajo demanda — ciclo completo por job
 // ============================================
 
-static bool sppPrintJob(const uint8_t* data, size_t len) {
+static PrintError sppPrintJob(const uint8_t* data, size_t len) {
   Serial.printf("[SPP] Job: init > connect > send > disconnect > deinit\n");
 
   spp_init();
+  if (!spp_is_connected() && strlen(printerAddr) == 0) {
+    spp_deinit();
+    return PRINT_ERR_NO_MAC;
+  }
 
   if (!spp_connect(printerAddr)) {
     spp_deinit();
-    return false;
+    return PRINT_ERR_CONNECT_FAILED;
   }
 
   bool ok = spp_send(data, len);
+  bool stillConnected = spp_is_connected();
 
   spp_disconnect();
   spp_deinit();
 
-  return ok;
+  if (!ok) return stillConnected ? PRINT_ERR_WRITE_FAILED : PRINT_ERR_DISCONNECTED;
+  return PRINT_OK;
 }
 
 // ============================================
-// Ejecutar un job (BLE o SPP)
+// Ejecutar un job (BLE o SPP) con diagnostico
 // ============================================
 
-static bool executeJob(const uint8_t* data, size_t len) {
+static PrintError executeJob(const uint8_t* data, size_t len) {
+  if (strlen(printerAddr) == 0) return PRINT_ERR_NO_MAC;
+
   if (btMode == BT_MODE_SPP) {
     return sppPrintJob(data, len);
   }
@@ -169,53 +248,123 @@ static bool executeJob(const uint8_t* data, size_t len) {
   // BLE: reconectar si hace falta
   if (!printerReady || !ble_is_connected()) {
     Serial.println("[BLE] Reconectando para job...");
-    if (ble_connect(printerAddr)) {
-      printerReady = true;
-      reconnectCount++;
-    } else {
-      return false;
+    if (!ble_connect(printerAddr)) {
+      return PRINT_ERR_CONNECT_FAILED;
     }
+    printerReady = true;
+    reconnectCount++;
   }
-  return ble_send(data, len);
+
+  bool ok = ble_send(data, len);
+  if (ok) return PRINT_OK;
+
+  // Fallo: diagnosticar si es desconexion o error de escritura
+  return ble_is_connected() ? PRINT_ERR_WRITE_FAILED : PRINT_ERR_DISCONNECTED;
 }
+
+// ============================================
+// Procesar cola con retry + circuit breaker
+// ============================================
+
+// Estado del job en curso (persiste entre llamadas a processQueue)
+static uint8_t  currentAttempts = 0;
+static unsigned long nextAttemptAt = 0;
+static PrintError lastError = PRINT_OK;
 
 // ============================================
 // Procesar cola (llamado desde logic_loop)
 // ============================================
 
+// Publica resultado con diagnostico completo
+static void publishResult(const char* jobId, bool success, PrintError err, uint8_t attempts) {
+  JsonDocument doc;
+  doc["device_id"]   = enki_device_id();
+  doc["job_id"]      = jobId;
+  doc["success"]     = success;
+  doc["timestamp"]   = millis();
+  doc["print_count"] = printCount;
+  doc["attempts"]    = attempts;
+  doc["bt_mode"]     = btMode == BT_MODE_SPP ? "spp" : "ble";
+  doc["free_heap"]   = ESP.getFreeHeap();
+  doc["reconnect_count"] = reconnectCount;
+  if (!success) {
+    doc["error_code"] = printErrorCode(err);
+    doc["ble_connected"] = ble_is_connected();
+  }
+  char buf[384];
+  serializeJson(doc, buf, sizeof(buf));
+  enki_mqtt_publish(topicPrinted, buf);
+}
+
 static void processQueue() {
+  // Circuit breaker: si esta abierto, esperar y hacer health check
+  if (breakerOpen) {
+    unsigned long now = millis();
+    if (now - breakerOpenedAt < BREAKER_OPEN_MS) return;  // sigue abierto
+    // Tiempo de reintento — health check
+    if (healthCheck()) {
+      closeBreaker();
+    } else {
+      // Sigue sin responder — reset timer para otro ciclo
+      breakerOpenedAt = now;
+      Serial.printf("[BREAKER] Health check fallo — otros %ds de pausa\n",
+        BREAKER_OPEN_MS / 1000);
+      return;
+    }
+  }
+
   PrintJob* job = pqPeek();
   if (!job) return;
 
+  // Respetar backoff entre reintentos
+  if (nextAttemptAt > 0 && millis() < nextAttemptAt) return;
+
+  currentAttempts++;
   uint8_t* data = pqPeekData();
-  bool ok = executeJob(data, job->dataLen);
+  PrintError err = executeJob(data, job->dataLen);
 
-  if (ok) {
+  if (err == PRINT_OK) {
+    // Exito — resetear estado
     printCount++;
-    Serial.printf("[PRINT] Job %s OK (#%d) [%s]\n", job->jobId, printCount,
+    consecutiveFailures = 0;
+    Serial.printf("[PRINT] Job %s OK (#%d) tras %d intento(s) [%s]\n",
+      job->jobId, printCount, currentAttempts,
       btMode == BT_MODE_SPP ? "SPP" : "BLE");
-  } else {
-    errorCount++;
-    printerReady = false;
-    Serial.printf("[PRINT] Job %s FALLO [%s]\n", job->jobId,
-      btMode == BT_MODE_SPP ? "SPP" : "BLE");
+    publishResult(job->jobId, true, PRINT_OK, currentAttempts);
+    currentAttempts = 0;
+    nextAttemptAt = 0;
+    lastError = PRINT_OK;
+    pqDequeue();
+    return;
   }
 
-  // Publicar resultado (MQTT puede estar disponible ahora)
-  {
-    JsonDocument doc;
-    doc["device_id"]   = enki_device_id();
-    doc["job_id"]      = job->jobId;
-    doc["success"]     = ok;
-    doc["timestamp"]   = millis();
-    doc["print_count"] = printCount;
-    if (!ok) doc["error"] = "Write failed";
-    char buf[256];
-    serializeJson(doc, buf, sizeof(buf));
-    enki_mqtt_publish(topicPrinted, buf);
+  // Error
+  lastError = err;
+  printerReady = false;
+  Serial.printf("[PRINT] Job %s fallo intento %d/%d — %s\n",
+    job->jobId, currentAttempts, MAX_RETRIES_PER_JOB, printErrorCode(err));
+
+  if (currentAttempts < MAX_RETRIES_PER_JOB) {
+    // Programar retry con backoff exponencial (2s, 4s, 8s)
+    uint32_t delay = RETRY_BACKOFF_BASE_MS * (1 << (currentAttempts - 1));
+    nextAttemptAt = millis() + delay;
+    Serial.printf("[PRINT] Retry en %dms\n", delay);
+    return;
   }
 
+  // Se agotaron los reintentos — descartar job y abrir breaker si procede
+  errorCount++;
+  consecutiveFailures++;
+  Serial.printf("[PRINT] Job %s DESCARTADO tras %d intentos — %s\n",
+    job->jobId, currentAttempts, printErrorCode(err));
+  publishResult(job->jobId, false, err, currentAttempts);
   pqDequeue();
+  currentAttempts = 0;
+  nextAttemptAt = 0;
+
+  if (consecutiveFailures >= BREAKER_FAIL_THRESHOLD) {
+    openBreaker();
+  }
 }
 
 // ============================================
@@ -269,13 +418,15 @@ static void handleTestPrint() {
   };
 
   // Test print es sincrono (el usuario espera respuesta)
-  bool ok = executeJob(testData, sizeof(testData));
+  PrintError err = executeJob(testData, sizeof(testData));
 
-  if (ok) {
+  if (err == PRINT_OK) {
     printCount++;
     webServer.send(200, "application/json", "{\"ok\":true}");
   } else {
-    webServer.send(200, "application/json", "{\"ok\":false,\"error\":\"Error write\"}");
+    char resp[128];
+    snprintf(resp, sizeof(resp), "{\"ok\":false,\"error_code\":\"%s\"}", printErrorCode(err));
+    webServer.send(200, "application/json", resp);
   }
 }
 

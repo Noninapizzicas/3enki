@@ -529,14 +529,12 @@ class CuentasModule {
     const now = new Date();
     const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // Generar ref_display: usar el del evento si viene, si no construirlo
+    // SIEMPRE generar ref_display con el contador unico
     const tipoFinal = tipo || 'local';
-    let ref_display = data.ref_display || null;
-    if (!ref_display) {
-      const numero = this.getNextNumber();
-      const symbol = CuentasModule.SIMBOLOS[tipoFinal] || 'M';
-      ref_display = this.buildRefDisplay(symbol, numero, metadata?.cliente_nombre || null);
-    }
+    const numero = this.getNextNumber();
+    const symbol = CuentasModule.SIMBOLOS[tipoFinal] || 'M';
+    const clienteNombre = metadata?.cliente_nombre || null;
+    const ref_display = this.buildRefDisplay(symbol, numero, clienteNombre);
 
     const cuenta = {
       id: cuenta_id,

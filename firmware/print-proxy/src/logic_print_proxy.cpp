@@ -227,11 +227,11 @@ static bool healthCheck() {
 static PrintError sppPrintJob(const uint8_t* data, size_t len) {
   Serial.printf("[SPP] Job: init > connect > send > disconnect > deinit\n");
 
-  spp_init();
-  if (!spp_is_connected() && strlen(printerAddr) == 0) {
-    spp_deinit();
+  if (strlen(printerAddr) == 0) {
     return PRINT_ERR_NO_MAC;
   }
+
+  spp_init();
 
   if (!spp_connect(printerAddr)) {
     spp_deinit();
@@ -330,6 +330,7 @@ static void wakePrinter() {
       printerReady = true;
       printerAlive = true;
       reconnectCount++;
+      lastHeartbeatMs = millis();  // wake cuenta como heartbeat reciente
       Serial.println("[WAKE] BLE refrescado OK");
     }
   }
@@ -407,6 +408,7 @@ static void processQueue() {
     printCount++;
     consecutiveFailures = 0;
     lastPrintMs = millis();
+    lastHeartbeatMs = millis();  // impresion exitosa cuenta como heartbeat
     printerAlive = true;
     Serial.printf("[PRINT] Job %s OK (#%d) tras %d intento(s) [%s]\n",
       job->jobId, printCount, currentAttempts,
@@ -656,7 +658,8 @@ void logic_loop() {
 
     // -- Heartbeat real cada 5 min (solo BLE, solo si hay MAC) --
     // Detecta conexiones zombie: BLE dice conectado pero impresora no responde
-    if (printerReady && strlen(printerAddr) > 0) {
+    // Skip si hay jobs en cola — no interferir con impresion en curso
+    if (printerReady && strlen(printerAddr) > 0 && pqCount == 0) {
       unsigned long now = millis();
       if (now - lastHeartbeatMs > HEARTBEAT_INTERVAL_MS) {
         lastHeartbeatMs = now;

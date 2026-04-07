@@ -246,13 +246,14 @@ class CuentasCanalesModule {
   // ==========================================
 
   async publishCuentaCreada(data, correlationId) {
+    // ref_display NO se envia aqui — lo genera cuentas con el contador global
+    // y lo publica en cuenta.actualizada inmediatamente despues
     await this.eventBus.publish('cuenta.creada', {
       cuenta_id: data.cuenta_id,
       tipo: data.tipo,
       origen: `cuentas-canales:${data.tipo}`,
       project_id: data.project_id,
       total: data.total || 0,
-      ref_display: data.ref_display || null,
       metadata: data.metadata || {}
     }, { correlationId });
   }

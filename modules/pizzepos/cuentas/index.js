@@ -529,12 +529,9 @@ class CuentasModule {
     const now = new Date();
     const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // SIEMPRE generar ref_display con el contador unico
     const tipoFinal = tipo || 'local';
-    const numero = this.getNextNumber();
-    const symbol = CuentasModule.SIMBOLOS[tipoFinal] || 'M';
-    const clienteNombre = metadata?.cliente_nombre || null;
-    const ref_display = this.buildRefDisplay(symbol, numero, clienteNombre);
+    const rawNombre = metadata?.cliente_nombre || metadata?.nombre || null;
+    const { numero, ref_display } = this.generateRefDisplay(tipoFinal, rawNombre);
 
     const cuenta = {
       id: cuenta_id,
@@ -626,9 +623,7 @@ class CuentasModule {
 
       const cuenta_id = crypto.randomUUID();
       const tipoFinal = tipo || 'local';
-      const numero = this.getNextNumber();
-      const symbol = CuentasModule.SIMBOLOS[tipoFinal] || 'M';
-      const ref_display = this.buildRefDisplay(symbol, numero, nombre || null);
+      const { numero, ref_display } = this.generateRefDisplay(tipoFinal, nombre);
 
       const now = new Date();
       const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -663,7 +658,7 @@ class CuentasModule {
       await this.publishCuentaCreada(cuenta);
 
       this.logger.info('cuenta.creada', {
-        project_id, cuenta_id, tipo: tipoFinal, nombre: cuenta_nombre, duration: Date.now() - start_time
+        project_id, cuenta_id, tipo: tipoFinal, ref_display, duration: Date.now() - start_time
       });
 
       return { status: 201, data: cuenta };
@@ -799,11 +794,12 @@ class CuentasModule {
     cuenta.nombre = nombre.trim().slice(0, 50);
     cuenta.updated_at = new Date().toISOString();
 
-    // Rebuild ref_display: preservar "X NNN" + nuevo nombre
+    // Rebuild ref_display: extraer codigo "X NNN" del final, poner nombre nuevo delante
     if (cuenta.ref_display) {
-      // Extraer prefijo "X NNN" (primeros 5 chars: símbolo + espacio + 3 dígitos)
-      const prefix = cuenta.ref_display.substring(0, 5);
-      cuenta.ref_display = cuenta.nombre ? `${prefix} ${cuenta.nombre}` : prefix;
+      // Extraer "X NNN" (ultimos 5 chars del ref_display)
+      const match = cuenta.ref_display.match(/[A-Z]\s\d{3}/);
+      const code = match ? match[0] : cuenta.ref_display;
+      cuenta.ref_display = cuenta.nombre ? `${cuenta.nombre} ${code}` : code;
     }
 
     await this.publishCuentaActualizada(cuenta.project_id, id, {
@@ -1008,8 +1004,21 @@ class CuentasModule {
   }
 
   buildRefDisplay(symbol, number, nombre) {
-    const base = `${symbol} ${number}`;
-    return nombre ? `${base} ${nombre}` : base;
+    const code = `${symbol} ${number}`;
+    return nombre ? `${nombre} ${code}` : code;
+  }
+
+  /**
+   * Genera ref_display completo: counter++ + simbolo + nombre filtrado.
+   * Punto unico de generacion — handleCreateCuenta y onCuentaExternaCreada lo usan.
+   */
+  generateRefDisplay(tipo, nombre) {
+    const numero = this.getNextNumber();
+    const symbol = CuentasModule.SIMBOLOS[tipo] || 'M';
+    // Excluir nombres automaticos ("Mesa 5", "Cliente 16", etc)
+    const esAuto = nombre && /^(Mesa|Cliente|Llevadoo|Cliente Glovo|Cliente WhatsApp)\s/i.test(nombre);
+    const nombreFinal = esAuto ? null : (nombre || null);
+    return { numero, ref_display: this.buildRefDisplay(symbol, numero, nombreFinal) };
   }
 
   async _loadCounter() {

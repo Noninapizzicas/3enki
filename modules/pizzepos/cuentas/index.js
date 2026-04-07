@@ -556,8 +556,16 @@ class CuentasModule {
     this.cuentas.set(cuenta_id, cuenta);
     this.gestionarAlerta(cuenta_id, 'pendiente');
 
+    // Publicar ref_display correcto (con contador global) a todos los modulos.
+    // cuentas-canales ya publico cuenta.creada con ref_display viejo.
+    // Esta actualizacion sobreescribe con el correcto.
+    await this.publishCuentaActualizada(project_id || null, cuenta_id, {
+      ref_display: cuenta.ref_display,
+      nombre: cuenta.nombre
+    });
+
     this.logger.info('cuenta.externa.registrada', {
-      cuenta_id, tipo, project_id,
+      cuenta_id, tipo: tipoFinal, ref_display, project_id,
       origen: data.origen || 'unknown'
     });
   }

@@ -167,7 +167,7 @@ class PedidosModule {
   async onComanderoEnviarCocina(event) {
     const data = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { cuenta_id, pedido_id: comandero_pedido_id, items, total, notas_generales, created_at, project_id, ref_display } = data;
+    const { cuenta_id, pedido_id: comandero_pedido_id, items, total, notas_generales, created_at, project_id } = data;
 
     if (!cuenta_id || !items || items.length === 0) {
       this.logger.warn('pedidos.bridge.datos_incompletos', { cuenta_id, correlation_id: correlationId });
@@ -191,7 +191,6 @@ class PedidosModule {
         id: pedido_id,
         cuenta_id,
         canal,
-        ref_display: ref_display || null,
         project_id: project_id || null,
         items: items.map(item => ({
           item_id: item.id || item.item_id || require('crypto').randomUUID(),
@@ -684,7 +683,6 @@ class PedidosModule {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       canal: pedido.canal || null,
-      ref_display: pedido.ref_display || null,
       project_id: pedido.project_id || null,
       estado: pedido.estado,
       total: pedido.total,
@@ -729,7 +727,6 @@ class PedidosModule {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       canal: pedido.canal || null,
-      ref_display: pedido.ref_display || null,
       project_id: pedido.project_id || null,
       items: pedido.items.map(item => {
         const mapped = {

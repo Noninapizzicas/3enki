@@ -321,31 +321,69 @@ class ImpresionModule {
     const jobId = data.job_id;
     if (!jobId) return;
 
+    // Extraer diagnostico completo del ESP32
+    const diagnostico = {
+      job_id: jobId,
+      device_id: data.device_id,
+      success: data.success,
+      error_code: data.error_code || null,
+      error_detail: this._mensajeError(data.error_code),
+      attempts: data.attempts || 1,
+      bt_mode: data.bt_mode || null,
+      ble_connected: data.ble_connected,
+      free_heap: data.free_heap || null,
+      reconnect_count: data.reconnect_count || null,
+      timestamp: new Date().toISOString()
+    };
+
     const pending = this._pendingJobs.get(jobId);
-    if (!pending) {
-      // ACK de un job que no estamos esperando (ok, solo logear)
+
+    // Resolver la promesa si estamos esperando este job
+    if (pending) {
+      clearTimeout(pending.timer);
+      this._pendingJobs.delete(jobId);
+
+      if (data.success) {
+        this.logger.info('impresion.ack_ok', {
+          job_id: jobId, device: pending.deviceId,
+          attempts: diagnostico.attempts,
+          latency_ms: Date.now() - pending.timestamp
+        });
+        pending.resolve({ success: true, job_id: jobId, attempts: diagnostico.attempts });
+      } else {
+        this.logger.warn('impresion.ack_error', diagnostico);
+        pending.resolve({ success: false, job_id: jobId, ...diagnostico });
+      }
+    } else if (!data.success) {
+      // ACK de error de un job que no estabamos esperando — loggear
+      this.logger.warn('impresion.ack_error_huerfano', diagnostico);
+    } else {
       this.logger.info('impresion.ack_recibido', {
         job_id: jobId, success: data.success, device: data.device_id
       });
-      return;
     }
 
-    // Resolver la promesa del job
-    clearTimeout(pending.timer);
-    this._pendingJobs.delete(jobId);
-
-    if (data.success) {
-      this.logger.info('impresion.ack_ok', {
-        job_id: jobId, device: pending.deviceId,
-        latency_ms: Date.now() - pending.timestamp
+    // Publicar evento para el frontend SIEMPRE que haya error
+    if (!data.success) {
+      this.eventBus.publish('impresion.error', {
+        ...diagnostico,
+        error: diagnostico.error_detail  // campo legible para el store del frontend
       });
-      pending.resolve({ success: true, job_id: jobId });
-    } else {
-      this.logger.warn('impresion.ack_error', {
-        job_id: jobId, device: pending.deviceId, error: data.error
-      });
-      pending.resolve({ success: false, job_id: jobId, error: data.error });
     }
+  }
+
+  /**
+   * Traduce error_code del firmware a mensaje legible en español
+   */
+  _mensajeError(code) {
+    const mensajes = {
+      no_mac: 'Impresora sin configurar (no hay MAC)',
+      init_failed: 'Error iniciando Bluetooth',
+      connect_failed: 'No se pudo conectar a la impresora',
+      write_failed: 'Error escribiendo en la impresora (sin papel?)',
+      disconnected_mid_send: 'Impresora desconectada durante el envio'
+    };
+    return mensajes[code] || `Error desconocido (${code || 'sin codigo'})`;
   }
 
   // ==========================================
@@ -445,13 +483,8 @@ class ImpresionModule {
 
   async onItemTicket(event) {
     const data = event?.data || event?.payload || event;
-    const { pedido_id, cuenta_id, canal, ref_display, item_id, nombre, cantidad, categoria, estacion,
+    const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion,
             ingredientes, variaciones, notas, impresora, project_id } = data;
-
-    // Actualizar cache con ref_display si viene en el evento
-    if (cuenta_id && ref_display) {
-      this.cuentaNombres.set(cuenta_id, { ref: ref_display });
-    }
 
     const destino = impresora?.destino || this.config.destino_default;
 

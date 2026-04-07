@@ -271,23 +271,11 @@ class CuentasCanalesModule {
   // ==========================================
   // Helpers Comunes
   // ==========================================
-
-  /**
-   * Construye el ref_display canónico: "{símbolo} {num3} · {nombre}"
-   * Este string es la referencia visual única de la cuenta en TODO el sistema.
-   * @param {string} symbol - Letra del canal (M, L, T, G, W, D)
-   * @param {number} secuencial - Número secuencial del día
-   * @param {string} [nombre] - Nombre opcional del cliente/mesa
-   * @returns {string} ej: "L 005 · Juan" o "M 003"
-   */
-  buildRefDisplay(symbol, secuencial, nombre) {
-    const num = String(secuencial).padStart(3, '0');
-    const base = `${symbol} ${num}`;
-    if (nombre && nombre.trim()) {
-      return `${base} · ${nombre.trim()}`;
-    }
-    return base;
-  }
+  //
+  // El ref_display canónico lo genera el módulo `cuentas` usando su contador
+  // global de turnos. Este módulo no construye ref_display — solo publica
+  // cuenta.creada sin ese campo y deja que `cuentas` lo complete vía
+  // cuenta.actualizada. Ver cuentas/index.js:generateRefDisplay().
 
   getFechaActual() {
     const now = new Date();

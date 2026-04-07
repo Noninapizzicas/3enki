@@ -805,9 +805,14 @@ class CuentasModule {
     cuenta.nombre = nombre.trim().slice(0, 50);
     cuenta.updated_at = new Date().toISOString();
 
-    // Rebuild ref_display: extraer codigo "X NNN" del final, poner nombre nuevo delante
-    if (cuenta.ref_display) {
-      // Extraer "X NNN" (ultimos 5 chars del ref_display)
+    // Recomponer ref_display: si tenemos turno (fuente de verdad), regenerar
+    // limpio desde turno + tipo + nombre. Si no (cuenta restaurada sin turno,
+    // caso legacy), intentar extraer el código "X NNN" del ref_display actual.
+    if (Number.isInteger(cuenta.turno)) {
+      const numero = String(cuenta.turno).padStart(3, '0');
+      const symbol = CuentasModule.SIMBOLOS[cuenta.tipo] || 'M';
+      cuenta.ref_display = this.buildRefDisplay(symbol, numero, cuenta.nombre);
+    } else if (cuenta.ref_display) {
       const match = cuenta.ref_display.match(/[A-Z]\s\d{3}/);
       const code = match ? match[0] : cuenta.ref_display;
       cuenta.ref_display = cuenta.nombre ? `${cuenta.nombre} ${code}` : code;

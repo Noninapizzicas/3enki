@@ -68,6 +68,26 @@ class LlevarStrategy {
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));
+    // Listener pasivo: mantener el nombre del ticket sincronizado cuando el
+    // rename entre por `cuenta.rename` (único camino unificado).
+    await eventBus.subscribe('cuenta.actualizada', this.onCuentaActualizada.bind(this));
+  }
+
+  /**
+   * Sincroniza el cliente_nombre del Map local cuando `cuentas` publica un cambio.
+   * Idempotente: solo aplica si el cuenta_id pertenece a esta strategy.
+   */
+  async onCuentaActualizada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, cambios } = data;
+    if (!cuenta_id || !cambios) return;
+    if (cambios.nombre === undefined) return;
+
+    const ticket = this.ticketsActivos.get(cuenta_id);
+    if (!ticket) return;
+    if (ticket.cliente_nombre === cambios.nombre) return;
+
+    ticket.cliente_nombre = cambios.nombre;
   }
 
   async onCobroProcesado(cuenta_id, correlationId) {

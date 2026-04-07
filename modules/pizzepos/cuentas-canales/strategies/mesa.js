@@ -78,6 +78,27 @@ class MesaStrategy {
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('pedido.creado', this.onPedidoCreado.bind(this));
+    // Listener pasivo: si el rename llega por `cuenta.rename` directamente
+    // (no por `mesa.renombrar`), mantener el Map local sincronizado.
+    await eventBus.subscribe('cuenta.actualizada', this.onCuentaActualizada.bind(this));
+  }
+
+  /**
+   * Sincroniza el nombre del Map local cuando `cuentas` publica un cambio.
+   * Idempotente: solo aplica si el cuenta_id pertenece a esta strategy y el
+   * nombre efectivamente cambió.
+   */
+  async onCuentaActualizada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id, cambios } = data;
+    if (!cuenta_id || !cambios) return;
+    if (cambios.nombre === undefined) return;
+
+    const mesa = this.mesasActivas.get(cuenta_id);
+    if (!mesa) return;
+    if (mesa.nombre === cambios.nombre) return;
+
+    mesa.nombre = cambios.nombre;
   }
 
   async onCobroProcesado(cuenta_id, correlationId, project_id) {
@@ -224,7 +245,7 @@ class MesaStrategy {
 
   async handleRenombrarMesa(data) {
     try {
-      const { cuenta_id, nombre } = data;
+      const { cuenta_id, nombre, project_id } = data;
 
       if (!nombre || nombre.trim().length === 0) {
         return { status: 400, error: 'nombre es requerido' };
@@ -236,18 +257,38 @@ class MesaStrategy {
       }
 
       const nombre_anterior = mesa.nombre;
-      mesa.nombre = nombre.trim();
+      const nombre_nuevo = nombre.trim();
 
+      // Delegar al módulo `cuentas` — owner único del nombre y del ref_display.
+      // cuentas recompone ref_display con el contador global y publica
+      // cuenta.actualizada, que esta strategy consume pasivamente en
+      // onCuentaActualizada para mantener su Map sincronizado.
+      const rpcResult = await this.modulo.eventBus.request('cuenta', 'rename', {
+        project_id,
+        id: cuenta_id,
+        nombre: nombre_nuevo
+      });
+
+      if (!rpcResult || rpcResult.status >= 400) {
+        return rpcResult || { status: 500, error: 'Error delegando rename a cuentas' };
+      }
+
+      // Actualizar Map local de inmediato para que la respuesta al frontend
+      // refleje el nombre nuevo sin depender del round-trip del evento.
+      mesa.nombre = nombre_nuevo;
+
+      // Evento legacy para consumidores antiguos que aún escuchen mesa.renombrada.
+      // Se puede eliminar cuando se confirme que nadie lo consume.
       await this.modulo.eventBus.publish('mesa.renombrada', {
         cuenta_id: mesa.cuenta_id,
-        nombre: mesa.nombre,
+        nombre: nombre_nuevo,
         nombre_anterior,
-        project_id: data.project_id
+        project_id
       });
 
       this.modulo.logger.info('mesa.renombrada', {
         cuenta_id,
-        nombre: mesa.nombre,
+        nombre: nombre_nuevo,
         nombre_anterior
       });
 

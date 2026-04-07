@@ -856,47 +856,30 @@ function playGlovoAlertSound() {
 // =============================================================================
 
 /**
- * Extrae referencia legible del cuenta_id.
- * Si nombreCuenta contiene un ref_display canónico (ej: "L 005 · Juan"),
- * lo usa directamente. Si no, reconstruye desde cuenta_id (legacy).
+ * Extrae la referencia corta de un pedido.
+ * El backend ya compone ref_display canónico en nombre_cuenta
+ * (ej: "M 001", "Paco L 002", "D 003"). Lo usamos directamente.
+ * Fallback: sin nombreCuenta, derivar del prefijo largo del cuenta_id.
  */
 export function extractRef(cuentaId: string, nombreCuenta?: string | null): string {
   if (!cuentaId) return '???';
 
-  // Si nombreCuenta es un ref_display canónico (patrón: "X NNN" o "X NNN · nombre"),
-  // usarlo directamente — es la fuente de verdad unificada
-  if (nombreCuenta && /^[A-Z] \d{3}/.test(nombreCuenta)) {
+  // Backend ya publica ref_display canonico — respetarlo tal cual
+  if (nombreCuenta && nombreCuenta.trim()) {
     return nombreCuenta.toUpperCase();
   }
 
-  // Legacy fallback: reconstruir desde cuenta_id
-  let tipoRef = '';
+  // Fallback: extraer solo el tipo del prefijo largo del cuenta_id
+  // (el formato nuevo es `{tipo}_{uuid8}`, sin fecha/seq dentro)
+  if (cuentaId.startsWith('mesa_')) return 'MESA';
+  if (cuentaId.startsWith('llevar_')) return 'LLEVAR';
+  if (cuentaId.startsWith('telefono_') || cuentaId.startsWith('tel_')) return 'TEL';
+  if (cuentaId.startsWith('whatsapp_') || cuentaId.startsWith('wa_')) return 'WA';
+  if (cuentaId.startsWith('glovo_')) return 'GLOVO';
+  if (cuentaId.startsWith('delivery_')) return 'DELIVERY';
+  if (cuentaId.startsWith('llevadoo_')) return 'LLEVADOO';
 
-  if (cuentaId.startsWith('mesa_')) {
-    const parts = cuentaId.split('_');
-    tipoRef = `MESA ${parts[1]}`;
-  } else if (cuentaId.startsWith('tel_')) {
-    const parts = cuentaId.split('_');
-    tipoRef = `TEL #${parseInt(parts[2]) || parts[2]}`;
-  } else if (cuentaId.startsWith('llevar_')) {
-    const parts = cuentaId.split('_');
-    tipoRef = `LLEVAR #${parseInt(parts[2]) || parts[2]}`;
-  } else if (cuentaId.startsWith('glovo_')) {
-    const parts = cuentaId.split('_');
-    tipoRef = `GLOVO #${parseInt(parts[2]) || parts[2]}`;
-  } else if (cuentaId.startsWith('wa_')) {
-    const parts = cuentaId.split('_');
-    tipoRef = `WA #${parseInt(parts[2]) || parts[2]}`;
-  } else {
-    tipoRef = cuentaId.substring(0, 8).toUpperCase();
-  }
-
-  // If old-style nombreCuenta exists but not canonical format, combine
-  if (nombreCuenta && nombreCuenta !== tipoRef) {
-    return `${nombreCuenta.toUpperCase()} · ${tipoRef}`;
-  }
-
-  return tipoRef;
+  return cuentaId.substring(0, 8).toUpperCase();
 }
 
 /**

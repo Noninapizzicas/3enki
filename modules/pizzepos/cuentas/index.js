@@ -529,15 +529,9 @@ class CuentasModule {
     const now = new Date();
     const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // SIEMPRE generar ref_display con el contador unico
     const tipoFinal = tipo || 'local';
-    const numero = this.getNextNumber();
-    const symbol = CuentasModule.SIMBOLOS[tipoFinal] || 'M';
-    // Nombre real del cliente (excluir nombres automaticos tipo "Mesa 5", "Cliente 16")
     const rawNombre = metadata?.cliente_nombre || metadata?.nombre || null;
-    const esNombreAuto = rawNombre && /^(Mesa|Cliente|Llevadoo|Cliente Glovo|Cliente WhatsApp)\b/i.test(rawNombre);
-    const clienteNombre = esNombreAuto ? null : rawNombre;
-    const ref_display = this.buildRefDisplay(symbol, numero, clienteNombre);
+    const { numero, ref_display } = this.generateRefDisplay(tipoFinal, rawNombre);
 
     const cuenta = {
       id: cuenta_id,
@@ -629,9 +623,7 @@ class CuentasModule {
 
       const cuenta_id = crypto.randomUUID();
       const tipoFinal = tipo || 'local';
-      const numero = this.getNextNumber();
-      const symbol = CuentasModule.SIMBOLOS[tipoFinal] || 'M';
-      const ref_display = this.buildRefDisplay(symbol, numero, nombre || null);
+      const { numero, ref_display } = this.generateRefDisplay(tipoFinal, nombre);
 
       const now = new Date();
       const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -1014,6 +1006,19 @@ class CuentasModule {
   buildRefDisplay(symbol, number, nombre) {
     const code = `${symbol} ${number}`;
     return nombre ? `${nombre} ${code}` : code;
+  }
+
+  /**
+   * Genera ref_display completo: counter++ + simbolo + nombre filtrado.
+   * Punto unico de generacion — handleCreateCuenta y onCuentaExternaCreada lo usan.
+   */
+  generateRefDisplay(tipo, nombre) {
+    const numero = this.getNextNumber();
+    const symbol = CuentasModule.SIMBOLOS[tipo] || 'M';
+    // Excluir nombres automaticos ("Mesa 5", "Cliente 16", etc)
+    const esAuto = nombre && /^(Mesa|Cliente|Llevadoo|Cliente Glovo|Cliente WhatsApp)\s/i.test(nombre);
+    const nombreFinal = esAuto ? null : (nombre || null);
+    return { numero, ref_display: this.buildRefDisplay(symbol, numero, nombreFinal) };
   }
 
   async _loadCounter() {

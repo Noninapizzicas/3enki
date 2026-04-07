@@ -195,16 +195,12 @@ class MesaStrategy {
         project_id
       });
 
-      // ref_display canónico: "M 003 · Terraza" o "M 003" si nombre auto
-      const esNombreCustom = nombre && nombre !== `Mesa ${numero}`;
-      const ref_display = this.modulo.buildRefDisplay('M', numero, esNombreCustom ? nombre : null);
-
+      // ref_display lo genera cuentas con el contador global
       await this.modulo.publishCuentaCreada({
         cuenta_id: mesa.cuenta_id,
         tipo: 'mesa',
         total: mesa.total,
         project_id,
-        ref_display,
         metadata: {
           nombre: mesa.nombre,
           numero: mesa.numero,

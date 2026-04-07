@@ -533,7 +533,10 @@ class CuentasModule {
     const tipoFinal = tipo || 'local';
     const numero = this.getNextNumber();
     const symbol = CuentasModule.SIMBOLOS[tipoFinal] || 'M';
-    const clienteNombre = metadata?.cliente_nombre || null;
+    // Nombre real del cliente (excluir nombres automaticos tipo "Mesa 5", "Cliente 16")
+    const rawNombre = metadata?.cliente_nombre || metadata?.nombre || null;
+    const esNombreAuto = rawNombre && /^(Mesa|Cliente|Llevadoo|Cliente Glovo|Cliente WhatsApp)\b/i.test(rawNombre);
+    const clienteNombre = esNombreAuto ? null : rawNombre;
     const ref_display = this.buildRefDisplay(symbol, numero, clienteNombre);
 
     const cuenta = {

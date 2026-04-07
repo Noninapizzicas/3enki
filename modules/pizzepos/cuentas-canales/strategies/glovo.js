@@ -245,16 +245,12 @@ class GlovoStrategy {
 
       // Publicar cuenta.creada ANTES de enviar a cocina, para que el módulo
       // cuentas registre la cuenta y el tracking de _pedidosEnCocina funcione.
-      // ref_display canónico: "G 001 · Carlos" (o "G 001" si nombre genérico)
-      const esNombreReal = pedido.cliente_nombre && pedido.cliente_nombre !== 'Cliente Glovo';
-      const ref_display = this.modulo.buildRefDisplay('G', secuencial, esNombreReal ? pedido.cliente_nombre : null);
-
+      // ref_display lo genera cuentas con el contador global
       await this.modulo.publishCuentaCreada({
         cuenta_id: pedido.cuenta_id,
         tipo: 'glovo',
         total: pedido.total,
         project_id: data.project_id,
-        ref_display,
         metadata: {
           nombre: pedido.cliente_nombre,
           glovo_order_id,

@@ -190,16 +190,12 @@ class LlevarStrategy {
         project_id
       });
 
-      // ref_display canónico: "L 005 · Juan" (o "L 005" si no hay nombre real)
-      const esNombreReal = ticket.cliente_nombre && !/^Cliente\s+\d+$/i.test(ticket.cliente_nombre);
-      const ref_display = this.modulo.buildRefDisplay('L', secuencial, esNombreReal ? ticket.cliente_nombre : null);
-
+      // ref_display lo genera cuentas con el contador global
       await this.modulo.publishCuentaCreada({
         cuenta_id: ticket.cuenta_id,
         tipo: 'llevar',
         total: ticket.total,
         project_id,
-        ref_display,
         metadata: {
           nombre: String(numero_ticket).padStart(3, '0'),
           cliente_nombre: ticket.cliente_nombre,

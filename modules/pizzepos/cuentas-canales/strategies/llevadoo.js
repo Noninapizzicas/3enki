@@ -350,16 +350,12 @@ class LlevadooStrategy {
         timestamp: new Date().toISOString()
       });
 
-      // ref_display canónico: "D 001 · Ana" (o "D 001" si nombre genérico)
-      const esNombreReal = pedido.nombre_cliente && pedido.nombre_cliente !== 'Llevadoo';
-      const ref_display = this.modulo.buildRefDisplay('D', secuencial, esNombreReal ? pedido.nombre_cliente : null);
-
+      // ref_display lo genera cuentas con el contador global
       await this.modulo.publishCuentaCreada({
         cuenta_id: pedido.cuenta_id,
         tipo: 'llevadoo',
         project_id,
         total: pedido.total,
-        ref_display,
         metadata: {
           nombre: pedido.nombre_cliente,
           nombre_cliente: pedido.nombre_cliente,

@@ -254,15 +254,11 @@ class TelefonoStrategy {
         hora_recogida_estimada: pedido.hora_recogida_estimada
       });
 
-      // ref_display canónico: "T 002 · María" (o "T 002" si nombre genérico)
-      const esNombreReal = pedido.contacto.nombre && pedido.contacto.nombre !== 'Cliente';
-      const ref_display = this.modulo.buildRefDisplay('T', secuencial, esNombreReal ? pedido.contacto.nombre : null);
-
+      // ref_display lo genera cuentas con el contador global
       await this.modulo.publishCuentaCreada({
         cuenta_id: pedido.cuenta_id,
         tipo: 'telefono',
         total: pedido.total,
-        ref_display,
         metadata: {
           nombre: pedido.contacto.nombre,
           telefono: pedido.telefono,

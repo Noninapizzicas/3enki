@@ -529,14 +529,12 @@ class CuentasModule {
     const now = new Date();
     const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // Generar ref_display: usar el del evento si viene, si no construirlo
+    // SIEMPRE generar ref_display con el contador unico
     const tipoFinal = tipo || 'local';
-    let ref_display = data.ref_display || null;
-    if (!ref_display) {
-      const numero = this.getNextNumber();
-      const symbol = CuentasModule.SIMBOLOS[tipoFinal] || 'M';
-      ref_display = this.buildRefDisplay(symbol, numero, metadata?.cliente_nombre || null);
-    }
+    const numero = this.getNextNumber();
+    const symbol = CuentasModule.SIMBOLOS[tipoFinal] || 'M';
+    const clienteNombre = metadata?.cliente_nombre || null;
+    const ref_display = this.buildRefDisplay(symbol, numero, clienteNombre);
 
     const cuenta = {
       id: cuenta_id,
@@ -558,8 +556,16 @@ class CuentasModule {
     this.cuentas.set(cuenta_id, cuenta);
     this.gestionarAlerta(cuenta_id, 'pendiente');
 
+    // Publicar ref_display correcto (con contador global) a todos los modulos.
+    // cuentas-canales ya publico cuenta.creada con ref_display viejo.
+    // Esta actualizacion sobreescribe con el correcto.
+    await this.publishCuentaActualizada(project_id || null, cuenta_id, {
+      ref_display: cuenta.ref_display,
+      nombre: cuenta.nombre
+    });
+
     this.logger.info('cuenta.externa.registrada', {
-      cuenta_id, tipo, project_id,
+      cuenta_id, tipo: tipoFinal, ref_display, project_id,
       origen: data.origen || 'unknown'
     });
   }

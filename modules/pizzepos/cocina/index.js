@@ -243,10 +243,20 @@ class CocinaModule {
 
   async onCuentaActualizada(event) {
     const data = event?.data || event?.payload || event;
-    if (data.cuenta_id) {
-      // Prefer ref_display (canonical), fallback to cambios.nombre
-      const display = data.cambios?.ref_display || data.cambios?.nombre || null;
-      if (display) this.cuentaNombres.set(data.cuenta_id, display);
+    if (!data.cuenta_id) return;
+
+    const display = data.cambios?.ref_display || data.cambios?.nombre || null;
+    if (!display) return;
+
+    // Actualizar cache
+    this.cuentaNombres.set(data.cuenta_id, display);
+
+    // Actualizar pedidos activos en pantalla que pertenecen a esta cuenta
+    for (const pedido of this.pedidos.values()) {
+      if (pedido.cuenta_id === data.cuenta_id) {
+        pedido.nombre_cuenta = display;
+        pedido.ref_display = display;
+      }
     }
   }
 

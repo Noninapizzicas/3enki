@@ -169,6 +169,20 @@ static const char* printErrorCode(PrintError e) {
 #define BREAKER_OPEN_MS         30000  // 30s pausa tras abrir
 #define BREAKER_FAIL_THRESHOLD  3      // fallos consecutivos para abrir
 
+// ============================================
+// Mantenimiento preventivo
+// ============================================
+
+#define HEARTBEAT_INTERVAL_MS    300000  // 5 min — heartbeat real (ESC @)
+#define IDLE_WAKE_MS             300000  // 5 min — wake preventivo si llega job tras idle
+
+// ESC @ — comando "init printer" — no imprime nada, solo verifica que la impresora responde
+static const uint8_t HEARTBEAT_BYTES[] = { 0x1B, 0x40 };
+
+static unsigned long lastPrintMs = 0;        // ultima impresion exitosa
+static unsigned long lastHeartbeatMs = 0;    // ultimo heartbeat real
+static bool printerAlive = false;            // ultima respuesta de heartbeat OK
+
 static uint8_t  consecutiveFailures = 0;
 static bool     breakerOpen = false;
 static unsigned long breakerOpenedAt = 0;
@@ -263,6 +277,66 @@ static PrintError executeJob(const uint8_t* data, size_t len) {
 }
 
 // ============================================
+// Mantenimiento preventivo
+// ============================================
+
+/**
+ * Heartbeat real: envia ESC @ (init printer) sin imprimir nada.
+ * Si la impresora responde al write, esta viva.
+ * Solo se ejecuta en BLE — SPP es bajo demanda y no mantiene conexion.
+ */
+static void heartbeatBLE() {
+  if (btMode != BT_MODE_BLE) return;
+  if (strlen(printerAddr) == 0) return;
+
+  // Solo si esta supuestamente conectado
+  if (!ble_is_connected()) {
+    printerAlive = false;
+    return;
+  }
+
+  Serial.println("[HB] Heartbeat real (ESC @)...");
+  bool ok = ble_send(HEARTBEAT_BYTES, sizeof(HEARTBEAT_BYTES));
+
+  if (ok) {
+    printerAlive = true;
+    Serial.println("[HB] Impresora viva");
+  } else {
+    printerAlive = false;
+    printerReady = false;
+    Serial.println("[HB] Impresora NO responde — marcando para reconectar");
+  }
+}
+
+/**
+ * Wake preventivo: si han pasado >IDLE_WAKE_MS desde la ultima impresion,
+ * fuerza una reconexion fresca antes del proximo job.
+ * Las impresoras BT entran en standby y la primera escritura tras inactividad
+ * suele fallar. Reconectar despierta la impresora.
+ */
+static bool needsWake() {
+  if (lastPrintMs == 0) return false;  // primera impresion del boot
+  return (millis() - lastPrintMs) > IDLE_WAKE_MS;
+}
+
+static void wakePrinter() {
+  if (strlen(printerAddr) == 0) return;
+  Serial.println("[WAKE] Refrescando conexion tras idle...");
+
+  if (btMode == BT_MODE_BLE) {
+    if (ble_is_connected()) ble_disconnect();
+    delay(200);
+    if (ble_connect(printerAddr)) {
+      printerReady = true;
+      printerAlive = true;
+      reconnectCount++;
+      Serial.println("[WAKE] BLE refrescado OK");
+    }
+  }
+  // SPP no necesita wake — cada job ya hace init/connect/disconnect/deinit
+}
+
+// ============================================
 // Procesar cola con retry + circuit breaker
 // ============================================
 
@@ -319,6 +393,11 @@ static void processQueue() {
   // Respetar backoff entre reintentos
   if (nextAttemptAt > 0 && millis() < nextAttemptAt) return;
 
+  // Wake preventivo: solo en el primer intento del job, si la impresora ha estado idle
+  if (currentAttempts == 0 && needsWake()) {
+    wakePrinter();
+  }
+
   currentAttempts++;
   uint8_t* data = pqPeekData();
   PrintError err = executeJob(data, job->dataLen);
@@ -327,6 +406,8 @@ static void processQueue() {
     // Exito — resetear estado
     printCount++;
     consecutiveFailures = 0;
+    lastPrintMs = millis();
+    printerAlive = true;
     Serial.printf("[PRINT] Job %s OK (#%d) tras %d intento(s) [%s]\n",
       job->jobId, printCount, currentAttempts,
       btMode == BT_MODE_SPP ? "SPP" : "BLE");
@@ -555,6 +636,7 @@ void logic_loop() {
         if (!ble_is_connected()) {
           Serial.println("[BLE] Desconectada");
           printerReady = false;
+          printerAlive = false;
           lastRetryMs = millis();
         }
       }
@@ -569,6 +651,16 @@ void logic_loop() {
           printerReady = true;
           reconnectCount++;
         }
+      }
+    }
+
+    // -- Heartbeat real cada 5 min (solo BLE, solo si hay MAC) --
+    // Detecta conexiones zombie: BLE dice conectado pero impresora no responde
+    if (printerReady && strlen(printerAddr) > 0) {
+      unsigned long now = millis();
+      if (now - lastHeartbeatMs > HEARTBEAT_INTERVAL_MS) {
+        lastHeartbeatMs = now;
+        heartbeatBLE();
       }
     }
   }
@@ -652,6 +744,14 @@ void logic_status(JsonDocument& doc) {
   doc["reconnect_count"] = reconnectCount;
   doc["queue_pending"]   = pqCount;
   doc["free_heap"]       = ESP.getFreeHeap();
+
+  // Salud preventiva
+  doc["printer_alive"]        = printerAlive;       // ultimo heartbeat respondio
+  doc["consecutive_failures"] = consecutiveFailures; // fallos seguidos
+  doc["breaker_open"]         = breakerOpen;         // circuit breaker activo
+  doc["last_error_code"]      = printErrorCode(lastError);
+  doc["last_print_ms_ago"]    = lastPrintMs > 0 ? (millis() - lastPrintMs) : 0;
+  doc["last_heartbeat_ms_ago"] = lastHeartbeatMs > 0 ? (millis() - lastHeartbeatMs) : 0;
 }
 
 void logic_portal_status(JsonDocument& doc) {

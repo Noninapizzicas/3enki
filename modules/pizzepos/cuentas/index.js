@@ -799,11 +799,12 @@ class CuentasModule {
     cuenta.nombre = nombre.trim().slice(0, 50);
     cuenta.updated_at = new Date().toISOString();
 
-    // Rebuild ref_display: preservar "X NNN" + nuevo nombre
+    // Rebuild ref_display: extraer codigo "X NNN" del final, poner nombre nuevo delante
     if (cuenta.ref_display) {
-      // Extraer prefijo "X NNN" (primeros 5 chars: símbolo + espacio + 3 dígitos)
-      const prefix = cuenta.ref_display.substring(0, 5);
-      cuenta.ref_display = cuenta.nombre ? `${prefix} ${cuenta.nombre}` : prefix;
+      // Extraer "X NNN" (ultimos 5 chars del ref_display)
+      const match = cuenta.ref_display.match(/[A-Z]\s\d{3}/);
+      const code = match ? match[0] : cuenta.ref_display;
+      cuenta.ref_display = cuenta.nombre ? `${cuenta.nombre} ${code}` : code;
     }
 
     await this.publishCuentaActualizada(cuenta.project_id, id, {
@@ -1008,8 +1009,8 @@ class CuentasModule {
   }
 
   buildRefDisplay(symbol, number, nombre) {
-    const base = `${symbol} ${number}`;
-    return nombre ? `${base} ${nombre}` : base;
+    const code = `${symbol} ${number}`;
+    return nombre ? `${nombre} ${code}` : code;
   }
 
   async _loadCounter() {

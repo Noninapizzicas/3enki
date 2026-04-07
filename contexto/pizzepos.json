@@ -1,10 +1,47 @@
 {
-  "_VERSION": "5.0.0",
+  "_VERSION": "6.0.0",
   "_CREATED": "2026-02-03",
-  "_UPDATED": "2026-03-08",
+  "_UPDATED": "2026-04-07",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
   "_CHANGELOG": {
+    "6.0.0": {
+      "fecha": "2026-04-07",
+      "tema": "Refactor del sistema de cuentas: identidad humana unica, rename unificado, cuenta_id opaco, soporte de pedido_inicial",
+      "cambios": [
+        "FIX CRITICO: cocina/index.js:255 — onCuentaActualizada usaba this.pedidos.values() (no existe). El typo silenciaba todos los renombrados en cocina (TypeError atrapado por el bus). Cambiado a this.pedidosActivos.values().",
+        "FEAT: cuentas v2.3 — nuevo campo `turno` como identidad humana unica de la cuenta. Entero global 1..999 ciclico, persistido, asignado UNA SOLA vez al crear, INMUTABLE. Independiente del canal — orden de llegada al sistema. _counter/getNextNumber renombrados a _turno/getNextTurno. generateRefDisplay devuelve { turno, numero, ref_display }. _loadTurno acepta clave 'turno' (nuevo) o 'counter' (legacy) sin perder estado.",
+        "FEAT: cuentas — turno se persiste en publishCuentaCreada y se restaura desde cuentas_activas.json sin regenerar (es inmutable). restaurarDesdeArchivo avanza el contador al maximo turno visto para no reciclar.",
+        "FIX: cuentas — handleCreateCuenta ya no contamina nombre con el numero ('001') ni con el tipo ('Cuenta'). Default `nombre = null`. La UI compone el display.",
+        "FIX: cuentas.handleRenameCuenta — usa `turno` como fuente de verdad para recomponer ref_display. El regex sobre ref_display queda solo como fallback legacy.",
+        "FEAT: persistencia-comandero — onCuentaCreada persiste turno y ref_display. onCuentaActualizada acepta cambios.ref_display. Antes se perdian tras reinicio.",
+        "REFACTOR: rename unificado — cuentas es el OWNER UNICO del nombre. mesa.handleRenombrarMesa delega a cuentas.handleRenameCuenta via moduleRegistry directo (cuentas-canales guarda this.moduleRegistry en onLoad). Las strategies de mesa y llevar se suscriben pasivamente a cuenta.actualizada para mantener su Map en sync cuando el rename entra por la puerta canonica. mesa.renombrada (legacy) sigue publicandose para consumidores antiguos.",
+        "REFACTOR: cuenta_id opaco {LETRA}_{uuid8} — eliminada la triple numeracion en paralelo. cuentas-canales.buildCuentaId(tipo) genera ej M_a3f9c2d1, G_4d8e9c1a. La letra es DECORATIVA: el codigo NUNCA la parsea, el tipo va en el campo `tipo` de los eventos. static LETRA_POR_TIPO en cuentas-canales (M/L/T/W/G/D) coincide con cuentas.SIMBOLOS.",
+        "REFACTOR: cuentas-canales v4.0.0 — eliminados getNextSecuencial, contadores Map, _saveTimer, _debounceSave, cargarContadores, guardarContadores. El JSON data/current/contadores_canales.json queda huerfano (no se borra de disco). detectarCanal tolera prefijo nuevo (M_) y legacy (mesa_).",
+        "REFACTOR: cuentas-canales — buildRefDisplay eliminado (era dead code; cuentas es el unico dueno del ref_display).",
+        "REFACTOR: cada strategy declara prefijo (nuevo: M_/L_/T_/W_/G_/D_) y prefijoLegacy (mesa_/llevar_/tel_/wa_/glovo_/llevadoo_). cuenta_id se construye con this.modulo.buildCuentaId(this.tipo). El numero_ticket/numero_pedido interno (display del canal, no identidad) ahora viene de un contador local en memoria (_ticketSeq/_pedidoSeq).",
+        "REFACTOR: mesa.contadorDiario se mantiene SOLO para auto-nombre 'Mesa N' — ya no participa en el cuenta_id.",
+        "REFACTOR: llevadoo.matches(cuenta_id) y mesa.matches(cuenta_id) son helpers que verifican pertenencia tolerando ambos formatos. Reemplazan startsWith inline.",
+        "REFACTOR: strategies versionadas — mesa v5.0.0, llevar/telefono/whatsapp/glovo v4.0.0, llevadoo v2.0.0.",
+        "FIX: cocina.restaurarDesdeArchivo — detecta canal preferentemente del campo `tipo` persistido (que ahora si esta), fallback a deteccion por prefijo nuevo+legacy completa (whatsapp y llevadoo anadidos).",
+        "FIX: impresion.extraerRefCuenta — anadido fallback para formato {LETRA}_{uuid8}. Prefijos legacy ampliados a wa_ y llevadoo_ que faltaban.",
+        "FIX: pedidos.detectarCanal — anadidos los 6 prefijos nuevos (M_, L_, T_, W_, G_, D_) ademas del legacy. Antes los pedidos formales perdian el tag canal para cuentas nuevas.",
+        "FIX: mesa.onPedidoCreado — usa el helper matches() para tolerar ambos formatos. Antes las cuentas legacy mesa_xxx no entraban al handler tras la migracion.",
+        "FIX: persistencia-comandero — branch llevadoo de onCuentaCerrada acepta D_xxx ademas de llevadoo_.",
+        "FEAT: cuenta.create acepta `pedido_inicial: { items, total?, notas_generales? }` opcional — pensado para webhooks de Glovo, Llevadoo y otras integraciones que ya traen items resueltos. Si viene, _inyectarPedidoInicial actualiza items/total, transiciona pendiente→con_pedido y publica comandero.enviar_cocina. El resto del flujo (pedidos→cocina→en_preparacion) cae solo SIN tocar pedidos/cocina/persistencia. La cuenta delivery agarra el siguiente turno del contador global y entra en orden de llegada como cualquier otra.",
+        "FIX: cuentas._saveTurno defensivo contra logger null (smoke tests). Optional chaining + early-return si _turnoFile no esta inicializado.",
+        "PRINCIPIO: una cuenta se identifica por (a) cuenta_id opaco para el codigo (UUID con letra decorativa), (b) turno entero global como identidad humana inmutable, (c) tipo de canal de origen, (d) nombre opcional libre como capa informativa. ref_display se deriva, no se persiste como verdad.",
+        "PRINCIPIO: cuentas es el OWNER UNICO del nombre, del ref_display y del estado. Las strategies de canales son intake adapters + caches pasivos.",
+        "NOTA: hay cuatro usages pre-existentes de eventBus.request en cocina/cobros/carta-digital/llevadoo que estan latentemente rotos (el metodo no existe en core/events/bus.js). Todos en handlers poco usados envueltos en try/catch que devuelven respuesta vacia. NO arreglados en esta migracion (scope creep). Documentado para tracking."
+      ],
+      "commits": [
+        "03cbef0 feat: turno como identidad humana unica + fix rename en cocina",
+        "1588331 refactor: rename unificado — cuentas es el owner unico del nombre",
+        "4245318 refactor: cuenta_id como {LETRA}_{uuid8} y elimina contadores duplicados",
+        "79e5648 feat: cuenta.create acepta pedido_inicial para integraciones delivery",
+        "19da134 fix: auditoria post-migracion — RPC, defensiva y consumidores legacy"
+      ]
+    },
     "5.2.0": {
       "fecha": "2026-04-04",
       "cambios": [
@@ -245,6 +282,41 @@
         "itemsDetalle_source": "Antes de enviar cocina: viene del buffer merge. Después de enviar: viene de persistencia.pedidos[]. Ambas fuentes se combinan sin duplicar."
       }
     },
+    "modelo_identidad_cuenta": {
+      "_descripcion": "Una cuenta tiene CUATRO atributos de identidad. Conocer la diferencia es critico para no contaminar uno con otro.",
+      "cuenta_id": {
+        "que": "UUID opaco con letra decorativa de prefijo",
+        "formato_nuevo": "{LETRA}_{uuid8} — ej: M_a3f9c2d1, L_8b1e4f7a, G_4d8e9c1a, D_3a7b5c2e",
+        "formato_legacy": "Pre-migracion: {canal}_{numero?}_{fecha?}_{seq} — ej: mesa_5_20251207_017, llevar_20251207_001",
+        "compat": "detectarCanal y los helpers matches() de las strategies toleran ambos formatos. Las cuentas legacy en disco siguen funcionando.",
+        "regla_oro": "El codigo NUNCA debe parsear la letra del cuenta_id. Es decoracion para humanos en logs/dashboards. El tipo real va en el campo `tipo` de los eventos.",
+        "generador": "cuentas-canales.buildCuentaId(tipo) — punto unico"
+      },
+      "turno": {
+        "que": "Identidad humana de la cuenta — orden de llegada al sistema",
+        "tipo": "entero global 1..999, ciclico, persistido en data/current/contador_global.json (claves 'turno' nuevo, 'counter' legacy)",
+        "asignacion": "UNA SOLA VEZ en handleCreateCuenta o onCuentaExternaCreada. INMUTABLE despues.",
+        "cross_canal": "Independiente del canal — una mesa, un Glovo y un telefono comparten la misma cola de turnos. El siguiente turno disponible se le asigna a quien llegue.",
+        "generador": "cuentas.getNextTurno() / generateRefDisplay() — punto unico",
+        "restauracion": "cuentas.restaurarDesdeArchivo lee turno persistido SIN regenerarlo. Avanza _turno al maximo visto para no reciclar."
+      },
+      "tipo": {
+        "que": "Canal de origen de la cuenta",
+        "valores": ["mesa", "local (alias mesa)", "llevar", "telefono", "whatsapp", "glovo", "llevadoo", "delivery (alias llevadoo)"],
+        "uso": "Determina la letra del ref_display, el comportamiento (llevar no cierra al cobrar, llevadoo paga externo), y el routing en cobro.procesado"
+      },
+      "nombre": {
+        "que": "Etiqueta opcional libre — capa informativa, no afecta identidad",
+        "tipo": "string libre o null. Default: null (NO contaminar con tipo o numero).",
+        "rename": "Solo via cuenta.rename (cuentas.handleRenameCuenta es el OWNER UNICO). Las strategies son consumers pasivos via cuenta.actualizada. Recompone ref_display con el turno como fuente de verdad."
+      },
+      "ref_display": {
+        "que": "String derivado de turno + tipo + nombre. Se genera y publica desde cuentas.",
+        "formato": "'{nombre? }{LETRA} {NNN}' — ej: 'M 047', 'Paco L 048', 'G 049'",
+        "filtro_nombres_auto": "generateRefDisplay excluye nombres que matcheen /^(Mesa|Cliente|Llevadoo|Cliente Glovo|Cliente WhatsApp)\\s/i para no duplicar la letra de canal con palabras genericas.",
+        "regla_oro": "ref_display NO es persistencia, es derivacion. Idealmente se compondria solo en la UI a partir de turno+tipo+nombre. De momento se publica como cache para los consumers, pero si se cambia el formato algun dia, no hay que migrar nada porque cuentas lo regenera al renombrar."
+      }
+    },
     "ciclo_vida_cuenta": {
       "descripcion": "El módulo cuentas (v2.3) refleja el ciclo de vida completo escuchando eventos de otros módulos",
       "estados": ["pendiente", "con_pedido", "en_preparacion", "listo", "entregado", "para_cobrar", "cobrado"],
@@ -285,16 +357,20 @@
 
   "modulos": {
     "cuentas-canales": {
-      "version": "3.0.0",
-      "descripcion": "Sistema unificado de canales de venta con Strategy pattern — reemplaza cuentas-mesa + cuentas-telefono + cuentas-llevar",
-      "patron": "Composición con Strategy — 1 módulo base + 5 strategies independientes",
+      "version": "4.0.0",
+      "descripcion": "Sistema unificado de canales de venta con Strategy pattern. cuenta_id opaco {LETRA}_{uuid8}; el modulo base ya NO tiene contadores propios (cuentas es la unica fuente de identidad humana via su contador global de turnos).",
+      "patron": "Composición con Strategy — 1 módulo base + 6 strategies independientes (mesa, telefono, llevar, glovo, whatsapp, llevadoo)",
+      "letra_por_tipo": "static LETRA_POR_TIPO = { mesa:'M', llevar:'L', telefono:'T', whatsapp:'W', glovo:'G', llevadoo:'D' } — coincide con cuentas.SIMBOLOS. La letra es decorativa para legibilidad humana en logs; el codigo NUNCA la parsea, el tipo va en el campo `tipo` de los eventos.",
+      "buildCuentaId": "modulo.buildCuentaId(tipo) → '{LETRA}_{uuid8}' (ej: M_a3f9c2d1). Punto unico de generacion.",
+      "moduleRegistry": "cuentas-canales guarda this.moduleRegistry = core.moduleRegistry en onLoad. Las strategies acceden via this.modulo.moduleRegistry para invocar metodos directos en otros modulos (ej: mesa rename delega a cuentas.handleRenameCuenta).",
       "estructura": {
-        "index.js": "Módulo base: lifecycle, cobro.procesado routing por prefijo, reseteo diario, contadores, tracking tiempos, publishers cuenta.creada/cerrada",
-        "strategies/mesa.js": "Servicio en mesa — mesas dinámicas, nombre libre, métricas de tiempo, camareros",
-        "strategies/telefono.js": "Pedidos telefónicos — caller ID, CRM contactos, notificación WhatsApp",
-        "strategies/llevar.js": "Pedidos para llevar — tickets numerados, display SSE, 2 fases (listo → entregado)",
-        "strategies/glovo.js": "Delivery externo Glovo — aceptar/rechazar, notificar rider, mapeo order_id externo",
-        "strategies/whatsapp.js": "Pedidos vía WhatsApp Business API — conversaciones, auto-reply, templates configurables"
+        "index.js": "Módulo base: lifecycle, cobro.procesado routing por prefijo (tolera nuevo+legacy), reseteo diario, tracking tiempos, publishers cuenta.creada/cerrada, helper buildCuentaId",
+        "strategies/mesa.js": "Servicio en mesa — v5.0.0, prefijo M_, prefijoLegacy mesa_. contadorDiario solo para auto-nombre 'Mesa N'. handleRenombrarMesa delega a cuentas.handleRenameCuenta. Listener pasivo onCuentaActualizada.",
+        "strategies/telefono.js": "Pedidos telefónicos — v4.0.0, prefijo T_, prefijoLegacy tel_. _pedidoSeq interno para display.",
+        "strategies/llevar.js": "Pedidos para llevar — v4.0.0, prefijo L_, prefijoLegacy llevar_. _ticketSeq interno. Listener pasivo onCuentaActualizada.",
+        "strategies/glovo.js": "Delivery externo Glovo — v4.0.0, prefijo G_, prefijoLegacy glovo_. _pedidoSeq interno.",
+        "strategies/whatsapp.js": "Pedidos vía WhatsApp — v4.0.0, prefijo W_, prefijoLegacy wa_. _pedidoSeq interno.",
+        "strategies/llevadoo.js": "Delivery propio (Llevadoo) — v2.0.0, prefijo D_, prefijoLegacy llevadoo_. Helper matches() para tolerar ambos formatos."
       },
       "ui_domains": {
         "mesa": ["abrir", "cerrar", "asignar_camarero", "get", "disponibles", "ocupadas", "list", "health", "metrics"],
@@ -314,10 +390,14 @@
       ],
       "eventos_suscribe": ["cobro.procesado", "pedido.creado", "cocina.pedido_listo"],
       "como_agregar_canal": [
-        "1. Crear strategies/nuevo-canal.js implementando: tipo, prefijo, version, init(), registerUIHandlers(), unregisterUIHandlers(), subscribeToEvents(), onCobroProcesado(), getHealth(), getMetrics(), getCuentasActivas(), cleanup()",
-        "2. Crear schemas/nuevo-canal.json y schemas/nuevo-canal-events.json",
-        "3. Registrar en constructor de index.js: this.registerStrategy(new NuevoCanalStrategy())",
-        "4. El routing por prefijo de cobro.procesado funciona automáticamente"
+        "1. Anadir letra del canal a CuentasCanalesModule.LETRA_POR_TIPO (cuentas-canales/index.js) Y a CuentasModule.SIMBOLOS (cuentas/index.js). Las dos tablas DEBEN coincidir.",
+        "2. Crear strategies/nuevo-canal.js implementando: tipo, prefijo='X_', prefijoLegacy?, version, init(), registerUIHandlers(), unregisterUIHandlers(), subscribeToEvents(), onCobroProcesado(), getHealth(), getMetrics(), getCuentasActivas(), cleanup()",
+        "3. Generar cuenta_id con this.modulo.buildCuentaId(this.tipo) — NUNCA inventar formato propio.",
+        "4. Si la strategy filtra eventos por cuenta_id (onPedidoCreado, etc), implementar matches(cuenta_id) y reusarlo. NO hacer startsWith inline.",
+        "5. Si necesita renombrar cuentas, NO crear handler propio — delegar a cuentas.handleRenameCuenta via moduleRegistry. Subscribirse pasivamente a cuenta.actualizada para mantener Map local en sync.",
+        "6. Crear schemas/nuevo-canal.json y schemas/nuevo-canal-events.json",
+        "7. Registrar en constructor de index.js: this.registerStrategy(new NuevoCanalStrategy())",
+        "8. El routing por prefijo de cobro.procesado funciona automáticamente (detectarCanal tolera nuevo+legacy)"
       ]
     },
 
@@ -1071,7 +1151,8 @@
           "comportamiento": "Las tarjetas aparecen, se actualizan y desaparecen automáticamente sin recargar"
         },
         "mqtt_handlers": [
-          "mqttRequest('cuenta', 'create', { tipo, nombre? })",
+          "mqttRequest('cuenta', 'create', { project_id, tipo, nombre?, pedido_inicial? })  ← pedido_inicial opcional para webhooks delivery (Glovo, Llevadoo, etc) que ya traen items resueltos. Estructura: { items: [], total?, notas_generales? }. Si viene, la cuenta entra atomicamente con turno asignado, transiciona a con_pedido y publica comandero.enviar_cocina (que activa todo el flujo pedidos→cocina).",
+          "mqttRequest('cuenta', 'rename', { id, nombre, project_id? })  ← OWNER UNICO del rename. Las strategies (mesa, etc) delegan aqui.",
           "mqttRequest('cuenta', 'list', { tipo?, estado? })",
           "mqttRequest('cuenta', 'get', { id })",
           "mqttRequest('cuenta', 'delete', { id })",

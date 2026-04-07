@@ -9,11 +9,13 @@ const crypto = require('crypto');
 const fs = require('fs').promises;
 const path = require('path');
 
-// Transiciones válidas de estado
+// Transiciones válidas de estado.
+// pendiente es re-alcanzable desde con_pedido cuando los items vuelven a 0
+// (comandero.item_eliminado → items=0). Es una regresion legitima, no un atajo.
 const TRANSICIONES_VALIDAS = {
   pendiente: ['con_pedido'],
-  con_pedido: ['en_preparacion', 'con_pedido', 'cobrado'], // cobrado: pago rápido sin enviar cocina
-  en_preparacion: ['listo', 'en_preparacion', 'entregado', 'cobrado'], // entregado: llevadoo entrega desde horno; cobrado: pago mientras cocina prepara
+  con_pedido: ['en_preparacion', 'con_pedido', 'pendiente', 'cobrado'], // cobrado: pago rápido sin enviar cocina
+  en_preparacion: ['listo', 'en_preparacion', 'entregado', 'cobrado'],  // entregado: delivery entrega desde horno; cobrado: pago mientras cocina prepara
   listo: ['entregado', 'para_cobrar', 'en_preparacion', 'cobrado'],
   entregado: ['para_cobrar', 'en_preparacion', 'cobrado'],
   para_cobrar: ['cobrado'],
@@ -287,18 +289,12 @@ class CuentasModule {
     cuenta.total = Math.max(0, cuenta.total - (precio_total || 0));
     cuenta.updated_at = new Date().toISOString();
 
-    // Si se quedó sin items y estaba en con_pedido, volver a pendiente
-    // Nota: con_pedido→pendiente no está en TRANSICIONES_VALIDAS (es una regresión especial),
-    // así que se maneja explícitamente aquí como caso controlado.
+    // Si se quedó sin items y estaba en con_pedido, regresar a pendiente.
+    // Esta transicion esta en TRANSICIONES_VALIDAS asi que pasa por la
+    // maquina de estados formal (publica cuenta.estado_cambiado y maneja
+    // alertas correctamente).
     if (cuenta.items === 0 && cuenta.estado === 'con_pedido') {
-      const estado_anterior = cuenta.estado;
-      cuenta.estado = 'pendiente';
-      this.gestionarAlerta(cuenta_id, 'pendiente');
-      this.logger.info('cuenta.estado_cambiado', {
-        cuenta_id, estado_anterior, estado_nuevo: 'pendiente', motivo: 'items_vacios'
-      });
-      this.metrics?.increment?.('cuenta.transicion.total');
-      await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, 'pendiente');
+      await this.transicionarEstado(cuenta_id, 'pendiente');
     }
 
     await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
@@ -415,8 +411,8 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    // Llevadoo paga externamente, no pasa por caja
-    if (cuenta.tipo === 'llevadoo') return;
+    // Cuentas con pago_externo (llevadoo y similares) no pasan por caja
+    if (this._pagoExterno(cuenta)) return;
 
     if (cuenta.estado === 'listo' || cuenta.estado === 'entregado') {
       await this.transicionarEstado(cuenta_id, 'para_cobrar');
@@ -464,15 +460,40 @@ class CuentasModule {
       estado: cuenta.estado
     });
 
-    // Llevar: el cobro no cierra la cuenta, se mantiene hasta que se entregue.
-    // La strategy de llevar gestiona el cierre vía llevar/entregar.
-    if (cuenta.tipo === 'llevar') return;
+    // pago_externo: no pasa por caja (llevadoo y similares)
+    if (this._pagoExterno(cuenta)) return;
 
-    // Llevadoo paga externamente (no pasa por caja), ignorar cobro
-    if (cuenta.tipo === 'llevadoo') return;
+    // cerrar_al_cobrar=false: el cobro marca pagado pero NO cierra la cuenta.
+    // La cuenta vive hasta que otro trigger la cierre (ej. llevar → entregar).
+    if (this._cerrarAlCobrar(cuenta) === false) return;
 
     // Transicionar a cobrado usando la máquina de estados formal
     await this.cerrarCuentaCobrada(cuenta_id);
+  }
+
+  /**
+   * Reglas de comportamiento que vienen en cuenta.metadata como flags.
+   * Los fallback a cuenta.tipo son por compat con cuentas legacy creadas
+   * antes de que las strategies setearan los flags explicitos.
+   */
+  _pagoExterno(cuenta) {
+    if (cuenta?.metadata?.pago_externo !== undefined) {
+      return !!cuenta.metadata.pago_externo;
+    }
+    return cuenta?.tipo === 'llevadoo';
+  }
+
+  /**
+   * Devuelve true si el cobro debe cerrar la cuenta (comportamiento por defecto),
+   * false si el cobro solo marca pagado y el cierre lo dispara otro trigger.
+   */
+  _cerrarAlCobrar(cuenta) {
+    if (cuenta?.metadata?.cerrar_al_cobrar !== undefined) {
+      return !!cuenta.metadata.cerrar_al_cobrar;
+    }
+    // Legacy: llevar no cerraba al cobrar (cierre via llevar/entregar)
+    if (cuenta?.tipo === 'llevar') return false;
+    return true;
   }
 
   /**

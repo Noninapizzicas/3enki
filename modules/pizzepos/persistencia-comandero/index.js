@@ -391,11 +391,10 @@ class PersistenciaComanderoModule {
 
     await this.onEvento(event);
 
-    const { cuenta_id, project_id, turno, tipo, nombre, origen, ref_display, total, metadata } = eventData;
+    const { cuenta_id, project_id, turno, tipo, nombre, origen, ref_display, estado, total, metadata } = eventData;
 
     // Shim: tambien reflejamos nombre en datos_especificos.nombre por compat
-    // con restauradores legacy que lo leen de ahi. TODO: eliminar cuando todos
-    // los consumers lean el campo top-level.
+    // con restauradores legacy. TODO: eliminar cuando todos lean top-level.
     const datosEspecificos = { ...(metadata || {}) };
     if (nombre && !datosEspecificos.nombre) {
       datosEspecificos.nombre = nombre;
@@ -409,7 +408,7 @@ class PersistenciaComanderoModule {
       nombre: nombre || null,
       origen,
       ref_display: ref_display || null,
-      estado: 'abierta',
+      estado: estado || 'pendiente',
       datos_especificos: datosEspecificos,
       pedidos: [],
       total: Number.isFinite(total) ? total : 0,

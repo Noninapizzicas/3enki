@@ -194,7 +194,14 @@ class LlevarStrategy {
         project_id,
         tipo: 'llevar',
         nombre: clienteNombreFinal,
-        metadata: { cliente_nombre: clienteNombreFinal, numero_ticket }
+        metadata: {
+          cliente_nombre: clienteNombreFinal,
+          numero_ticket,
+          // Llevar tiene ciclo especial: el cobro marca pagado pero NO cierra
+          // la cuenta. El cierre lo dispara llevar/entregar cuando el cliente
+          // recoge el pedido. Ver cuentas._cerrarAlCobrar().
+          cerrar_al_cobrar: false
+        }
       });
       const cuenta_id = cuenta.id;
 

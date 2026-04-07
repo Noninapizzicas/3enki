@@ -658,7 +658,7 @@ class CuentasModule {
       await this.publishCuentaCreada(cuenta);
 
       this.logger.info('cuenta.creada', {
-        project_id, cuenta_id, tipo: tipoFinal, nombre: cuenta_nombre, duration: Date.now() - start_time
+        project_id, cuenta_id, tipo: tipoFinal, ref_display, duration: Date.now() - start_time
       });
 
       return { status: 201, data: cuenta };

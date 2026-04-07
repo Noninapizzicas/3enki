@@ -445,13 +445,8 @@ class ImpresionModule {
 
   async onItemTicket(event) {
     const data = event?.data || event?.payload || event;
-    const { pedido_id, cuenta_id, canal, ref_display, item_id, nombre, cantidad, categoria, estacion,
+    const { pedido_id, cuenta_id, canal, item_id, nombre, cantidad, categoria, estacion,
             ingredientes, variaciones, notas, impresora, project_id } = data;
-
-    // Actualizar cache con ref_display si viene en el evento
-    if (cuenta_id && ref_display) {
-      this.cuentaNombres.set(cuenta_id, { ref: ref_display });
-    }
 
     const destino = impresora?.destino || this.config.destino_default;
 

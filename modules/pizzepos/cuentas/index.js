@@ -31,10 +31,9 @@ class CuentasModule {
     // Estado en memoria
     this.cuentas = new Map(); // cuenta_id -> cuenta
 
-    // Contador único global 001→999→001 (persistido en disco)
-    this._counter = 0;
-    this._counterFile = null; // se asigna en onLoad con path del proyecto
-    this._counterSaveTimer = null;
+    // Contadores para auto-numeración con reinicio diario
+    this.counters = { local: 1, delivery: 1, llevar: 1 };
+    this._counterDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
     // Timers activos (para cleanup en onUnload)
     this._metricsInterval = null;
@@ -68,10 +67,6 @@ class CuentasModule {
     // Do NOT subscribe manually here to avoid duplicate handlers.
     this.registerUIHandlers();
     this.startMetricsReporting();
-
-    // Cargar contador global de disco
-    this._counterFile = path.join('.', 'data', 'current', 'contador_global.json');
-    await this._loadCounter();
 
     // Restaurar cuentas activas desde persistencia (sobrevive reinicio servidor)
     await this.restaurarDesdeArchivo();
@@ -529,17 +524,13 @@ class CuentasModule {
     const now = new Date();
     const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    const tipoFinal = tipo || 'local';
-    const rawNombre = metadata?.cliente_nombre || metadata?.nombre || null;
-    const { numero, ref_display } = this.generateRefDisplay(tipoFinal, rawNombre);
-
     const cuenta = {
       id: cuenta_id,
       project_id: project_id || null,
-      tipo: tipoFinal,
-      nombre: metadata?.nombre || tipoFinal || 'Cuenta',
+      tipo: tipo || 'local',
+      nombre: metadata?.nombre || tipo || 'Cuenta',
       cliente_nombre: metadata?.cliente_nombre || null,
-      ref_display,
+      ref_display: data.ref_display || null,
       estado: 'pendiente',
       pagado: false,
       hora,
@@ -553,16 +544,8 @@ class CuentasModule {
     this.cuentas.set(cuenta_id, cuenta);
     this.gestionarAlerta(cuenta_id, 'pendiente');
 
-    // Publicar ref_display correcto (con contador global) a todos los modulos.
-    // cuentas-canales ya publico cuenta.creada con ref_display viejo.
-    // Esta actualizacion sobreescribe con el correcto.
-    await this.publishCuentaActualizada(project_id || null, cuenta_id, {
-      ref_display: cuenta.ref_display,
-      nombre: cuenta.nombre
-    });
-
     this.logger.info('cuenta.externa.registrada', {
-      cuenta_id, tipo: tipoFinal, ref_display, project_id,
+      cuenta_id, tipo, project_id,
       origen: data.origen || 'unknown'
     });
   }
@@ -623,7 +606,7 @@ class CuentasModule {
 
       const cuenta_id = crypto.randomUUID();
       const tipoFinal = tipo || 'local';
-      const { numero, ref_display } = this.generateRefDisplay(tipoFinal, nombre);
+      const cuenta_nombre = nombre || this.generateNombre(tipoFinal);
 
       const now = new Date();
       const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -632,8 +615,7 @@ class CuentasModule {
         id: cuenta_id,
         project_id,
         tipo: tipoFinal,
-        nombre: nombre || numero,
-        ref_display,
+        nombre: cuenta_nombre,
         estado: 'pendiente',
         pagado: false,
         hora,
@@ -658,7 +640,7 @@ class CuentasModule {
       await this.publishCuentaCreada(cuenta);
 
       this.logger.info('cuenta.creada', {
-        project_id, cuenta_id, tipo: tipoFinal, ref_display, duration: Date.now() - start_time
+        project_id, cuenta_id, tipo: tipoFinal, nombre: cuenta_nombre, duration: Date.now() - start_time
       });
 
       return { status: 201, data: cuenta };
@@ -794,12 +776,11 @@ class CuentasModule {
     cuenta.nombre = nombre.trim().slice(0, 50);
     cuenta.updated_at = new Date().toISOString();
 
-    // Rebuild ref_display: extraer codigo "X NNN" del final, poner nombre nuevo delante
+    // Rebuild ref_display with the new name, preserving the symbol+number prefix
     if (cuenta.ref_display) {
-      // Extraer "X NNN" (ultimos 5 chars del ref_display)
-      const match = cuenta.ref_display.match(/[A-Z]\s\d{3}/);
-      const code = match ? match[0] : cuenta.ref_display;
-      cuenta.ref_display = cuenta.nombre ? `${cuenta.nombre} ${code}` : code;
+      // Extract "X NNN" prefix from existing ref_display (e.g. "L 005 · Juan" → "L 005")
+      const prefix = cuenta.ref_display.split(' · ')[0];
+      cuenta.ref_display = cuenta.nombre ? `${prefix} · ${cuenta.nombre}` : prefix;
     }
 
     await this.publishCuentaActualizada(cuenta.project_id, id, {
@@ -879,7 +860,6 @@ class CuentasModule {
       cuenta_id: cuenta.id,
       tipo: cuenta.tipo,
       nombre: cuenta.nombre,
-      ref_display: cuenta.ref_display,
       origen: cuenta.nombre || cuenta.tipo,
       metadata: { nombre: cuenta.nombre },
       estado: cuenta.estado,
@@ -994,72 +974,21 @@ class CuentasModule {
   // Helpers
   // ==========================================
 
-  // ── Contador único global (001→999→001, persistido) ──
-
-  getNextNumber() {
-    this._counter++;
-    if (this._counter > 999) this._counter = 1;
-    this._saveCounterDebounced();
-    return String(this._counter).padStart(3, '0');
-  }
-
-  buildRefDisplay(symbol, number, nombre) {
-    const code = `${symbol} ${number}`;
-    return nombre ? `${nombre} ${code}` : code;
-  }
-
-  /**
-   * Genera ref_display completo: counter++ + simbolo + nombre filtrado.
-   * Punto unico de generacion — handleCreateCuenta y onCuentaExternaCreada lo usan.
-   */
-  generateRefDisplay(tipo, nombre) {
-    const numero = this.getNextNumber();
-    const symbol = CuentasModule.SIMBOLOS[tipo] || 'M';
-    // Excluir nombres automaticos ("Mesa 5", "Cliente 16", etc)
-    const esAuto = nombre && /^(Mesa|Cliente|Llevadoo|Cliente Glovo|Cliente WhatsApp)\s/i.test(nombre);
-    const nombreFinal = esAuto ? null : (nombre || null);
-    return { numero, ref_display: this.buildRefDisplay(symbol, numero, nombreFinal) };
-  }
-
-  async _loadCounter() {
-    try {
-      const data = await fs.readFile(this._counterFile, 'utf8');
-      const json = JSON.parse(data);
-      this._counter = json.counter || 0;
-      this.logger.info('cuentas.counter.loaded', { counter: this._counter });
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        this.logger.warn('cuentas.counter.load_error', { error: err.message });
-      }
-      this._counter = 0;
+  generateNombre(tipo) {
+    // Reinicio diario de contadores
+    const today = new Date().toISOString().slice(0, 10);
+    if (this._counterDate !== today) {
+      this.counters = { local: 1, delivery: 1, llevar: 1 };
+      this._counterDate = today;
+      this.logger?.info('cuentas.counters.daily_reset', { date: today });
     }
-  }
 
-  _saveCounterDebounced() {
-    if (this._counterSaveTimer) clearTimeout(this._counterSaveTimer);
-    this._counterSaveTimer = setTimeout(() => this._saveCounter(), 1000);
+    // Numero 3 digitos (ej: 001) — el emoji se muestra desde TIPO_ICONS en la UI
+    const pad = (num) => String(num).padStart(3, '0');
+    const nombre = pad(this.counters[tipo] || 1);
+    this.counters[tipo] = (this.counters[tipo] || 1) + 1;
+    return nombre;
   }
-
-  async _saveCounter() {
-    try {
-      const dir = path.dirname(this._counterFile);
-      await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(this._counterFile, JSON.stringify({ counter: this._counter }));
-    } catch (err) {
-      this.logger.warn('cuentas.counter.save_error', { error: err.message });
-    }
-  }
-
-  // Mapa de símbolo por tipo de canal
-  static SIMBOLOS = {
-    mesa: 'M', local: 'M',
-    llevar: 'L',
-    telefono: 'T',
-    whatsapp: 'W',
-    glovo: 'G',
-    llevadoo: 'D',
-    delivery: 'D'
-  };
 
   startMetricsReporting() {
     this._metricsInterval = setInterval(() => {

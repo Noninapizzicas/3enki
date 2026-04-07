@@ -23,9 +23,6 @@ class CobrosModule {
     this.uiHandler = null;
     this.config = {};
 
-    // Cache de ref_display (cuenta_id → ref_display string)
-    this.refDisplayCache = new Map();
-
     // Validación JSON Schema
     this.ajv = new Ajv({ allErrors: true, useDefaults: true });
     addFormats(this.ajv);
@@ -119,14 +116,6 @@ class CobrosModule {
   // ==========================================
 
   async subscribeToEvents() {
-    await this.eventBus.subscribe('cuenta.creada', (event) => {
-      const d = event?.data || event?.payload || event;
-      if (d.cuenta_id && d.ref_display) this.refDisplayCache.set(d.cuenta_id, d.ref_display);
-    });
-    await this.eventBus.subscribe('cuenta.actualizada', (event) => {
-      const d = event?.data || event?.payload || event;
-      if (d.cuenta_id && d.cambios?.ref_display) this.refDisplayCache.set(d.cuenta_id, d.cambios.ref_display);
-    });
     await this.eventBus.subscribe('pedido.completado', this.onPedidoCompletado.bind(this));
 
     this.logger.info('cobros.events.subscribed', {
@@ -459,7 +448,6 @@ class CobrosModule {
     await this.eventBus.publish('cobro.procesado', {
       cobro_id: cobro.id,
       cuenta_id: cobro.cuenta_id,
-      ref_display: this.refDisplayCache.get(cobro.cuenta_id) || null,
       monto_total: cobro.monto_total,
       metodo_pago: cobro.metodo_pago,
       referencia_pago: cobro.referencia_pago,

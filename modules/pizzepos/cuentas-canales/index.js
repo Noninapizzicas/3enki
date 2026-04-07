@@ -74,6 +74,7 @@ class CuentasCanalesModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
+    this.moduleRegistry = core.moduleRegistry;
     this.config = core.config || {};
 
     this.logger.info('module.loading', {

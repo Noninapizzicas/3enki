@@ -862,12 +862,21 @@ class PedidosModule {
   }
 
   /**
-   * Detecta el canal de venta por el prefijo del cuenta_id
-   * mesa_ → mesa, tel_ → telefono, llevar_ → llevar, glovo_ → glovo, wa_ → whatsapp, llevadoo_ → llevadoo
-   * Sin prefijo conocido → genérico (cuenta simple)
+   * Detecta el canal de venta por el prefijo del cuenta_id.
+   * Soporta el formato nuevo `{LETRA}_{uuid8}` (M_, L_, T_, W_, G_, D_) y
+   * el formato heredado pre-migracion (mesa_, llevar_, tel_, wa_, glovo_,
+   * llevadoo_). Sin prefijo conocido → null (cuenta simple sin canal).
    */
   detectarCanal(cuenta_id) {
     if (!cuenta_id) return null;
+    // Formato nuevo {LETRA}_xxxxxxxx
+    if (cuenta_id.startsWith('M_')) return 'mesa';
+    if (cuenta_id.startsWith('L_')) return 'llevar';
+    if (cuenta_id.startsWith('T_')) return 'telefono';
+    if (cuenta_id.startsWith('W_')) return 'whatsapp';
+    if (cuenta_id.startsWith('G_')) return 'glovo';
+    if (cuenta_id.startsWith('D_')) return 'llevadoo';
+    // Formato legacy
     if (cuenta_id.startsWith('llevadoo_')) return 'llevadoo';
     if (cuenta_id.startsWith('mesa_')) return 'mesa';
     if (cuenta_id.startsWith('tel_')) return 'telefono';

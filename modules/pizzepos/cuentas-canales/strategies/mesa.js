@@ -141,12 +141,22 @@ class MesaStrategy {
   // Event Handlers
   // ==========================================
 
+  /**
+   * Verifica si un cuenta_id pertenece a esta strategy.
+   * Tolera el formato nuevo (M_xxxxxxxx) y el legacy (mesa_...).
+   */
+  matches(cuenta_id) {
+    if (!cuenta_id) return false;
+    return cuenta_id.startsWith(this.prefijo)
+      || (this.prefijoLegacy && cuenta_id.startsWith(this.prefijoLegacy));
+  }
+
   async onPedidoCreado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
     const { cuenta_id, total } = eventData;
 
-    if (!cuenta_id || !cuenta_id.startsWith(this.prefijo)) return;
+    if (!this.matches(cuenta_id)) return;
 
     const mesa = this.mesasActivas.get(cuenta_id);
     if (!mesa) {
@@ -261,10 +271,17 @@ class MesaStrategy {
       const nombre_nuevo = nombre.trim();
 
       // Delegar al módulo `cuentas` — owner único del nombre y del ref_display.
-      // cuentas recompone ref_display con el contador global y publica
-      // cuenta.actualizada, que esta strategy consume pasivamente en
-      // onCuentaActualizada para mantener su Map sincronizado.
-      const rpcResult = await this.modulo.eventBus.request('cuenta', 'rename', {
+      // Llamada directa a la instancia via moduleRegistry: cuentas se carga
+      // antes que cuentas-canales en config.modules.enabled, asi que la
+      // instancia esta disponible en init.
+      const cuentasEntry = this.modulo.moduleRegistry?.get('cuentas');
+      const cuentasInstance = cuentasEntry?.instance;
+      if (!cuentasInstance || typeof cuentasInstance.handleRenameCuenta !== 'function') {
+        this.modulo.logger.error('canal.mesa.renombrar.cuentas_no_disponible');
+        return { status: 500, error: 'Modulo cuentas no disponible' };
+      }
+
+      const rpcResult = await cuentasInstance.handleRenameCuenta({
         project_id,
         id: cuenta_id,
         nombre: nombre_nuevo

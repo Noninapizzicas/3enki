@@ -1149,10 +1149,10 @@ class CuentasModule {
       const json = JSON.parse(data);
       // Acepta 'turno' (nuevo) o 'counter' (legacy) para no perder estado tras migración
       this._turno = json.turno ?? json.counter ?? 0;
-      this.logger.info('cuentas.turno.loaded', { turno: this._turno });
+      this.logger?.info?.('cuentas.turno.loaded', { turno: this._turno });
     } catch (err) {
       if (err.code !== 'ENOENT') {
-        this.logger.warn('cuentas.turno.load_error', { error: err.message });
+        this.logger?.warn?.('cuentas.turno.load_error', { error: err.message });
       }
       this._turno = 0;
     }
@@ -1160,10 +1160,13 @@ class CuentasModule {
 
   _saveTurnoDebounced() {
     if (this._turnoSaveTimer) clearTimeout(this._turnoSaveTimer);
+    // No persistir si no se ha inicializado (smoke tests, instanciacion sin onLoad)
+    if (!this._turnoFile) return;
     this._turnoSaveTimer = setTimeout(() => this._saveTurno(), 1000);
   }
 
   async _saveTurno() {
+    if (!this._turnoFile) return;
     try {
       const dir = path.dirname(this._turnoFile);
       await fs.mkdir(dir, { recursive: true });
@@ -1173,7 +1176,7 @@ class CuentasModule {
         JSON.stringify({ turno: this._turno, counter: this._turno })
       );
     } catch (err) {
-      this.logger.warn('cuentas.turno.save_error', { error: err.message });
+      this.logger?.warn?.('cuentas.turno.save_error', { error: err.message });
     }
   }
 

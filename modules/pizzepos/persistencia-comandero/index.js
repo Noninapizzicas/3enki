@@ -318,7 +318,7 @@ class PersistenciaComanderoModule {
         venta_id: venta.venta_id,
         total: venta.resumen.total_final
       });
-    } else if (cuenta_id && cuenta_id.startsWith('llevadoo_') && metadata?.motivo !== 'cancelado') {
+    } else if (cuenta_id && (cuenta_id.startsWith('llevadoo_') || cuenta_id.startsWith('D_')) && metadata?.motivo !== 'cancelado') {
       // Llevadoo paga externamente (no pasa por caja) pero se refleja en totales de venta
       // No crear venta si fue cancelado (total=0, no hubo venta real)
       const cuentaCreadaEvento = this.eventosCache

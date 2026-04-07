@@ -252,7 +252,7 @@ class CocinaModule {
     this.cuentaNombres.set(data.cuenta_id, display);
 
     // Actualizar pedidos activos en pantalla que pertenecen a esta cuenta
-    for (const pedido of this.pedidos.values()) {
+    for (const pedido of this.pedidosActivos.values()) {
       if (pedido.cuenta_id === data.cuenta_id) {
         pedido.nombre_cuenta = display;
         pedido.ref_display = display;

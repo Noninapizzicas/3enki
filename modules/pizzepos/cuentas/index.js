@@ -31,10 +31,12 @@ class CuentasModule {
     // Estado en memoria
     this.cuentas = new Map(); // cuenta_id -> cuenta
 
-    // Contador único global 001→999→001 (persistido en disco)
-    this._counter = 0;
-    this._counterFile = null; // se asigna en onLoad con path del proyecto
-    this._counterSaveTimer = null;
+    // Contador único global de turnos 001→999→001 (persistido en disco).
+    // El turno es la identidad humana de la cuenta: orden de llegada al sistema,
+    // independiente del canal. Se asigna una sola vez al crear y nunca cambia.
+    this._turno = 0;
+    this._turnoFile = null; // se asigna en onLoad con path del proyecto
+    this._turnoSaveTimer = null;
 
     // Timers activos (para cleanup en onUnload)
     this._metricsInterval = null;
@@ -69,9 +71,9 @@ class CuentasModule {
     this.registerUIHandlers();
     this.startMetricsReporting();
 
-    // Cargar contador global de disco
-    this._counterFile = path.join('.', 'data', 'current', 'contador_global.json');
-    await this._loadCounter();
+    // Cargar contador global de turnos de disco
+    this._turnoFile = path.join('.', 'data', 'current', 'contador_global.json');
+    await this._loadTurno();
 
     // Restaurar cuentas activas desde persistencia (sobrevive reinicio servidor)
     await this.restaurarDesdeArchivo();
@@ -99,6 +101,13 @@ class CuentasModule {
       clearTimeout(timeout);
     }
     this._alertaTimers.clear();
+
+    // Flush final del contador de turnos (cancela debounce y guarda ya)
+    if (this._turnoSaveTimer) {
+      clearTimeout(this._turnoSaveTimer);
+      this._turnoSaveTimer = null;
+      try { await this._saveTurno(); } catch (_) { /* ignore */ }
+    }
 
     // Desregistrar UI handlers
     if (this.uiHandler) {
@@ -531,13 +540,14 @@ class CuentasModule {
 
     const tipoFinal = tipo || 'local';
     const rawNombre = metadata?.cliente_nombre || metadata?.nombre || null;
-    const { numero, ref_display } = this.generateRefDisplay(tipoFinal, rawNombre);
+    const { turno, numero, ref_display } = this.generateRefDisplay(tipoFinal, rawNombre);
 
     const cuenta = {
       id: cuenta_id,
       project_id: project_id || null,
+      turno,
       tipo: tipoFinal,
-      nombre: metadata?.nombre || tipoFinal || 'Cuenta',
+      nombre: metadata?.nombre || null,
       cliente_nombre: metadata?.cliente_nombre || null,
       ref_display,
       estado: 'pendiente',
@@ -623,7 +633,7 @@ class CuentasModule {
 
       const cuenta_id = crypto.randomUUID();
       const tipoFinal = tipo || 'local';
-      const { numero, ref_display } = this.generateRefDisplay(tipoFinal, nombre);
+      const { turno, numero, ref_display } = this.generateRefDisplay(tipoFinal, nombre);
 
       const now = new Date();
       const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -631,8 +641,9 @@ class CuentasModule {
       const cuenta = {
         id: cuenta_id,
         project_id,
+        turno,
         tipo: tipoFinal,
-        nombre: nombre || numero,
+        nombre: nombre || null,
         ref_display,
         estado: 'pendiente',
         pagado: false,
@@ -877,6 +888,7 @@ class CuentasModule {
     await this.eventBus.publish('cuenta.creada', {
       project_id: cuenta.project_id,
       cuenta_id: cuenta.id,
+      turno: cuenta.turno,
       tipo: cuenta.tipo,
       nombre: cuenta.nombre,
       ref_display: cuenta.ref_display,
@@ -932,6 +944,7 @@ class CuentasModule {
       if (!datos.cuentas || Object.keys(datos.cuentas).length === 0) return;
 
       let restauradas = 0;
+      let maxTurnoVisto = 0;
       for (const [cuenta_id, cp] of Object.entries(datos.cuentas)) {
         // Usar estado real de persistencia si existe, sino inferir
         let estado = cp.estado || 'pendiente';
@@ -957,12 +970,24 @@ class CuentasModule {
           hora = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         } catch (_) { /* ignore */ }
 
+        // Restaurar turno persistido si existe (nunca regenerar — el turno es inmutable)
+        const turnoRestaurado = Number.isInteger(cp.turno) ? cp.turno : null;
+        if (turnoRestaurado && turnoRestaurado > maxTurnoVisto) {
+          maxTurnoVisto = turnoRestaurado;
+        }
+
+        // Nombre explícito del snapshot; evita fallbacks que contaminen con tipo
+        const nombreRestaurado =
+          cp.datos_especificos?.nombre || cp.nombre || null;
+
         const cuenta = {
           id: cuenta_id,
           project_id: cp.project_id || null,
+          turno: turnoRestaurado,
           tipo: cp.tipo || 'local',
-          nombre: cp.datos_especificos?.nombre || cp.nombre || cp.tipo || 'Cuenta',
+          nombre: nombreRestaurado,
           cliente_nombre: cp.datos_especificos?.cliente_nombre || cp.cliente_nombre || null,
+          ref_display: cp.ref_display || null,
           estado,
           pagado: cp.pagado || false,
           hora,
@@ -977,10 +1002,18 @@ class CuentasModule {
         restauradas++;
       }
 
+      // Avanzar el contador global para que no re-use turnos ya asignados a
+      // cuentas restauradas. Solo sube nunca baja.
+      if (maxTurnoVisto > this._turno) {
+        this._turno = maxTurnoVisto;
+        this._saveTurnoDebounced();
+      }
+
       this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
 
       this.logger.info('cuentas.estado_restaurado', {
-        cuentas_restauradas: restauradas
+        cuentas_restauradas: restauradas,
+        turno_actual: this._turno
       });
     } catch (error) {
       // No hay archivo o está vacío — arranque limpio
@@ -994,13 +1027,21 @@ class CuentasModule {
   // Helpers
   // ==========================================
 
-  // ── Contador único global (001→999→001, persistido) ──
+  // ── Contador único global de turnos (001→999→001, persistido) ──
+  //
+  // El turno es la identidad humana de la cuenta (orden de llegada). Se asigna
+  // una sola vez en creación, nunca cambia, y es independiente del canal.
+  // Una cuenta renombrada o que cambia de estado mantiene su turno original.
 
-  getNextNumber() {
-    this._counter++;
-    if (this._counter > 999) this._counter = 1;
-    this._saveCounterDebounced();
-    return String(this._counter).padStart(3, '0');
+  /**
+   * Devuelve el siguiente turno como entero (1..999, cicla).
+   * Persiste con debounce de 1s.
+   */
+  getNextTurno() {
+    this._turno++;
+    if (this._turno > 999) this._turno = 1;
+    this._saveTurnoDebounced();
+    return this._turno;
   }
 
   buildRefDisplay(symbol, number, nombre) {
@@ -1009,44 +1050,54 @@ class CuentasModule {
   }
 
   /**
-   * Genera ref_display completo: counter++ + simbolo + nombre filtrado.
-   * Punto unico de generacion — handleCreateCuenta y onCuentaExternaCreada lo usan.
+   * Genera turno + ref_display para una cuenta nueva.
+   * Punto único de generación — handleCreateCuenta y onCuentaExternaCreada lo usan.
+   * Devuelve { turno, numero, ref_display }:
+   *   - turno: entero (1..999), identidad humana
+   *   - numero: mismo turno formateado a 3 dígitos ("001")
+   *   - ref_display: string derivado "{nombre? }{simbolo} {numero}"
    */
   generateRefDisplay(tipo, nombre) {
-    const numero = this.getNextNumber();
+    const turno = this.getNextTurno();
+    const numero = String(turno).padStart(3, '0');
     const symbol = CuentasModule.SIMBOLOS[tipo] || 'M';
     // Excluir nombres automaticos ("Mesa 5", "Cliente 16", etc)
     const esAuto = nombre && /^(Mesa|Cliente|Llevadoo|Cliente Glovo|Cliente WhatsApp)\s/i.test(nombre);
     const nombreFinal = esAuto ? null : (nombre || null);
-    return { numero, ref_display: this.buildRefDisplay(symbol, numero, nombreFinal) };
+    return { turno, numero, ref_display: this.buildRefDisplay(symbol, numero, nombreFinal) };
   }
 
-  async _loadCounter() {
+  async _loadTurno() {
     try {
-      const data = await fs.readFile(this._counterFile, 'utf8');
+      const data = await fs.readFile(this._turnoFile, 'utf8');
       const json = JSON.parse(data);
-      this._counter = json.counter || 0;
-      this.logger.info('cuentas.counter.loaded', { counter: this._counter });
+      // Acepta 'turno' (nuevo) o 'counter' (legacy) para no perder estado tras migración
+      this._turno = json.turno ?? json.counter ?? 0;
+      this.logger.info('cuentas.turno.loaded', { turno: this._turno });
     } catch (err) {
       if (err.code !== 'ENOENT') {
-        this.logger.warn('cuentas.counter.load_error', { error: err.message });
+        this.logger.warn('cuentas.turno.load_error', { error: err.message });
       }
-      this._counter = 0;
+      this._turno = 0;
     }
   }
 
-  _saveCounterDebounced() {
-    if (this._counterSaveTimer) clearTimeout(this._counterSaveTimer);
-    this._counterSaveTimer = setTimeout(() => this._saveCounter(), 1000);
+  _saveTurnoDebounced() {
+    if (this._turnoSaveTimer) clearTimeout(this._turnoSaveTimer);
+    this._turnoSaveTimer = setTimeout(() => this._saveTurno(), 1000);
   }
 
-  async _saveCounter() {
+  async _saveTurno() {
     try {
-      const dir = path.dirname(this._counterFile);
+      const dir = path.dirname(this._turnoFile);
       await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(this._counterFile, JSON.stringify({ counter: this._counter }));
+      // Escribe ambos campos durante migración para compat hacia atrás
+      await fs.writeFile(
+        this._turnoFile,
+        JSON.stringify({ turno: this._turno, counter: this._turno })
+      );
     } catch (err) {
-      this.logger.warn('cuentas.counter.save_error', { error: err.message });
+      this.logger.warn('cuentas.turno.save_error', { error: err.message });
     }
   }
 

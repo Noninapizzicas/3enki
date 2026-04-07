@@ -186,27 +186,17 @@ class LlevarStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      // numero_ticket es solo display interno del SSE display (no identidad).
       this._ticketSeq = (this._ticketSeq % 999) + 1;
       const numero_ticket = this._ticketSeq;
       const clienteNombreFinal = cliente_nombre || `Cliente ${numero_ticket}`;
 
-      // Delegar a cuentas — crea la cuenta con turno en un solo paso.
-      const rpcResult = await this.modulo.crearCuentaViaCuentas({
+      const cuenta = await this.modulo.crearCuentaViaCuentas({
         project_id,
         tipo: 'llevar',
         nombre: clienteNombreFinal,
-        metadata: {
-          cliente_nombre: clienteNombreFinal,
-          numero_ticket
-        }
+        metadata: { cliente_nombre: clienteNombreFinal, numero_ticket }
       });
-
-      if (!rpcResult || rpcResult.status >= 400) {
-        return rpcResult || { status: 500, error: 'Error creando cuenta' };
-      }
-
-      const cuenta_id = rpcResult.data.id;
+      const cuenta_id = cuenta.id;
 
       const ticket = {
         cuenta_id,

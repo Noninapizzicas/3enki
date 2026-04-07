@@ -212,7 +212,6 @@ class TelefonoStrategy {
 
       this.modulo.verificarReseoDiario();
 
-      // numero_pedido es solo display interno del canal (no identidad).
       this._pedidoSeq = (this._pedidoSeq % 999) + 1;
       const numero_pedido = this._pedidoSeq;
 
@@ -231,23 +230,13 @@ class TelefonoStrategy {
         pedidos_anteriores: 0
       };
 
-      // Delegar a cuentas — crea la cuenta con turno en un solo paso.
-      const rpcResult = await this.modulo.crearCuentaViaCuentas({
+      const cuenta = await this.modulo.crearCuentaViaCuentas({
         project_id,
         tipo: 'telefono',
         nombre: contactoFinal.nombre,
-        metadata: {
-          telefono,
-          numero_pedido,
-          hora_recogida_estimada: horaRecogida
-        }
+        metadata: { telefono, numero_pedido, hora_recogida_estimada: horaRecogida }
       });
-
-      if (!rpcResult || rpcResult.status >= 400) {
-        return rpcResult || { status: 500, error: 'Error creando cuenta' };
-      }
-
-      const cuenta_id = rpcResult.data.id;
+      const cuenta_id = cuenta.id;
 
       const pedido = {
         cuenta_id,

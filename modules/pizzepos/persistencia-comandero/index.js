@@ -391,10 +391,11 @@ class PersistenciaComanderoModule {
 
     await this.onEvento(event);
 
-    const { cuenta_id, project_id, turno, tipo, nombre, origen, ref_display, metadata } = eventData;
+    const { cuenta_id, project_id, turno, tipo, nombre, origen, ref_display, total, metadata } = eventData;
 
-    // nombre va como campo top-level en el evento, pero tambien lo reflejamos
-    // en datos_especificos.nombre por compat con restauradores que lo leen de ahi
+    // Shim: tambien reflejamos nombre en datos_especificos.nombre por compat
+    // con restauradores legacy que lo leen de ahi. TODO: eliminar cuando todos
+    // los consumers lean el campo top-level.
     const datosEspecificos = { ...(metadata || {}) };
     if (nombre && !datosEspecificos.nombre) {
       datosEspecificos.nombre = nombre;
@@ -411,7 +412,7 @@ class PersistenciaComanderoModule {
       estado: 'abierta',
       datos_especificos: datosEspecificos,
       pedidos: [],
-      total: 0,
+      total: Number.isFinite(total) ? total : 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };

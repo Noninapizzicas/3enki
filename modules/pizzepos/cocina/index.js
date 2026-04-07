@@ -17,6 +17,9 @@
  * Alineado con patrones event-core: uiHandler, event envelope, cleanup
  */
 
+const fs = require('fs').promises;
+const path = require('path');
+
 // Tipos de estación: el pase es un contador acumulativo del item, no de la estación.
 // Cada estación filtra por el pase mínimo que necesita para mostrar el item.
 // General: pase_minimo=0 (items nuevos), Horno: pase_minimo=1 (ya pasaron por general).
@@ -110,10 +113,8 @@ class CocinaModule {
     // Event subscriptions are auto-wired from module.json by the loader.
     this.registerUIHandlers();
 
-    // Restaurar pedidos activos: primero intentar snapshot propio (preserva
-    // pase/fases/estado/device_id), si no existe caer al fallback que lee
-    // cuentas_activas.json (reconstruye pedidos como pendientes).
-    const path = require('path');
+    // Restaurar pedidos: snapshot propio si existe (preserva pase/fases/estado),
+    // si no, fallback a cuentas_activas.json que reconstruye como pendientes.
     this._snapshotFile = path.join('.', 'data', 'current', 'cocina_snapshot.json');
     const restoredFromSnapshot = await this._restaurarSnapshot();
     if (!restoredFromSnapshot) {
@@ -172,17 +173,21 @@ class CocinaModule {
 
   async _saveSnapshot() {
     if (!this._snapshotFile) return;
+    // Escritura atomica: write-to-tmp + rename. Evita snapshots corruptos
+    // si el proceso muere mid-write (el rename es atomico en POSIX/NTFS).
+    const tmpFile = `${this._snapshotFile}.tmp`;
     try {
-      const fs = require('fs').promises;
-      const path = require('path');
       await fs.mkdir(path.dirname(this._snapshotFile), { recursive: true });
       const snapshot = {
         _saved_at: new Date().toISOString(),
         pedidos: Object.fromEntries(this.pedidosActivos)
       };
-      await fs.writeFile(this._snapshotFile, JSON.stringify(snapshot));
+      await fs.writeFile(tmpFile, JSON.stringify(snapshot));
+      await fs.rename(tmpFile, this._snapshotFile);
     } catch (err) {
       this.logger?.warn?.('cocina.snapshot.save_error', { error: err.message });
+      // Best-effort cleanup del tmp si rename no llego a ejecutarse
+      try { await fs.unlink(tmpFile); } catch (_) { /* ignore */ }
     }
   }
 
@@ -193,7 +198,6 @@ class CocinaModule {
    */
   async _restaurarSnapshot() {
     try {
-      const fs = require('fs').promises;
       const contenido = await fs.readFile(this._snapshotFile, 'utf8');
       const snapshot = JSON.parse(contenido);
       if (!snapshot.pedidos || Object.keys(snapshot.pedidos).length === 0) {
@@ -344,14 +348,28 @@ class CocinaModule {
   }
 
   /**
-   * Limpia el cache cuentaNombres cuando una cuenta se elimina.
-   * Housekeeping puro — evita que el Map crezca indefinidamente con
-   * ids de cuentas que ya no existen.
+   * Housekeeping al eliminar una cuenta: limpia cuentaNombres y cualquier
+   * pedido huerfano de esa cuenta que quedara en pedidosActivos (defensa
+   * contra pedidos bloqueados que nunca llegaron a marcarPedidoListo).
    */
   async onCuentaEliminada(event) {
     const data = event?.data || event?.payload || event;
-    if (data?.cuenta_id) {
-      this.cuentaNombres.delete(data.cuenta_id);
+    const { cuenta_id } = data || {};
+    if (!cuenta_id) return;
+
+    this.cuentaNombres.delete(cuenta_id);
+
+    let removed = 0;
+    for (const [pedido_id, pedido] of this.pedidosActivos) {
+      if (pedido.cuenta_id === cuenta_id) {
+        this.pedidosActivos.delete(pedido_id);
+        removed++;
+      }
+    }
+    if (removed > 0) {
+      this._saveSnapshotDebounced();
+      this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
+      this.logger.info('cocina.pedidos_huerfanos_limpiados', { cuenta_id, removed });
     }
   }
 
@@ -642,8 +660,6 @@ class CocinaModule {
       pedido_completo: todosListos
     });
 
-    // Si todosListos, marcarPedidoListo ya guardo el snapshot (al borrar del Map);
-    // si no, el item cambio de estado y hay que persistirlo.
     if (!todosListos) this._saveSnapshotDebounced();
     return { status: 200, data: { item: itemEncontrado, pedido_completo: todosListos } };
   }
@@ -866,8 +882,6 @@ class CocinaModule {
    */
   async restaurarDesdeArchivo() {
     try {
-      const fs = require('fs').promises;
-      const path = require('path');
       const archivo = path.join('./data/current', 'cuentas_activas.json');
       const contenido = await fs.readFile(archivo, 'utf8');
       const datos = JSON.parse(contenido);

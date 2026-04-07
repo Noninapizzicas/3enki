@@ -197,9 +197,7 @@ class MesaStrategy {
       // Nombre libre: lo que pase el usuario, o auto "Mesa N"
       const nombre_mesa = nombre || `Mesa ${numero}`;
 
-      // Delegar a cuentas — crea la cuenta con turno y ref_display en un
-      // solo paso, sin race window. cuentas asigna el cuenta_id.
-      const rpcResult = await this.modulo.crearCuentaViaCuentas({
+      const cuenta = await this.modulo.crearCuentaViaCuentas({
         project_id,
         tipo: 'mesa',
         nombre: nombre_mesa,
@@ -209,12 +207,6 @@ class MesaStrategy {
           comensales: comensales || null
         }
       });
-
-      if (!rpcResult || rpcResult.status >= 400) {
-        return rpcResult || { status: 500, error: 'Error creando cuenta' };
-      }
-
-      const cuenta = rpcResult.data;
       const cuenta_id = cuenta.id;
 
       const mesa = {
@@ -273,18 +265,10 @@ class MesaStrategy {
       const nombre_anterior = mesa.nombre;
       const nombre_nuevo = nombre.trim();
 
-      // Delegar al módulo `cuentas` — owner único del nombre y del ref_display.
-      // Llamada directa a la instancia via moduleRegistry: cuentas se carga
-      // antes que cuentas-canales en config.modules.enabled, asi que la
-      // instancia esta disponible en init.
-      const cuentasEntry = this.modulo.moduleRegistry?.get('cuentas');
-      const cuentasInstance = cuentasEntry?.instance;
-      if (!cuentasInstance || typeof cuentasInstance.handleRenameCuenta !== 'function') {
-        this.modulo.logger.error('canal.mesa.renombrar.cuentas_no_disponible');
-        return { status: 500, error: 'Modulo cuentas no disponible' };
-      }
-
-      const rpcResult = await cuentasInstance.handleRenameCuenta({
+      // cuentas es el owner unico del nombre — delegamos via wrapper simetrico
+      // a crearCuentaViaCuentas. El listener pasivo onCuentaActualizada
+      // sincroniza mesasActivas cuando llega el evento canonico.
+      const rpcResult = await this.modulo.renombrarCuentaViaCuentas({
         project_id,
         id: cuenta_id,
         nombre: nombre_nuevo

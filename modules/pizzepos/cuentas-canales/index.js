@@ -19,7 +19,6 @@
 
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
-const crypto = require('crypto');
 
 const MesaStrategy = require('./strategies/mesa');
 const TelefonoStrategy = require('./strategies/telefono');
@@ -241,27 +240,47 @@ class CuentasCanalesModule {
   // ==========================================
   // Delegacion a cuentas (owner unico)
   // ==========================================
+  //
+  // Llamada directa a la instancia de `cuentas` via moduleRegistry. cuentas
+  // carga antes que cuentas-canales en config.modules.enabled, asi que la
+  // instancia esta disponible cuando cada strategy ejecuta su init/handler.
 
-  /**
-   * Crea una cuenta delegando al modulo `cuentas` via moduleRegistry.
-   *
-   * Llamada directa a la instancia: cuentas carga antes que cuentas-canales
-   * en config.modules.enabled, asi que la instancia esta disponible cuando
-   * cada strategy ejecuta su init/handler.
-   *
-   * Reemplaza el antiguo patron publishCuentaCreada + cuentas.onCuentaExternaCreada,
-   * eliminando la race window entre ambos eventos: cuentas.creada nace ya
-   * con turno, ref_display y metadata completos en un solo paso.
-   *
-   * @param {object} data - { project_id, tipo, nombre?, metadata?, cuenta_id? }
-   * @returns {Promise<object>} { status, data: cuenta } del handler de cuentas
-   */
-  async crearCuentaViaCuentas(data) {
-    const cuentasInstance = this.moduleRegistry?.get('cuentas')?.instance;
-    if (!cuentasInstance || typeof cuentasInstance.handleCreateCuenta !== 'function') {
+  /** @private */
+  _cuentasInstance() {
+    const instance = this.moduleRegistry?.get('cuentas')?.instance;
+    if (!instance) {
       throw new Error('Modulo cuentas no disponible');
     }
-    return await cuentasInstance.handleCreateCuenta(data);
+    return instance;
+  }
+
+  /**
+   * Crea una cuenta delegando a cuentas.handleCreateCuenta.
+   * Devuelve el objeto cuenta (no el envelope {status, data}).
+   * Lanza si cuentas no esta disponible o el handler falla.
+   *
+   * @param {object} data - { project_id, tipo, nombre?, total?, metadata?, cuenta_id? }
+   * @returns {Promise<object>} objeto cuenta con { id, turno, ref_display, ... }
+   */
+  async crearCuentaViaCuentas(data) {
+    const result = await this._cuentasInstance().handleCreateCuenta(data);
+    if (!result || result.status >= 400) {
+      const err = new Error(result?.error || 'Error creando cuenta');
+      err.status = result?.status || 500;
+      throw err;
+    }
+    return result.data;
+  }
+
+  /**
+   * Renombra una cuenta delegando a cuentas.handleRenameCuenta.
+   * Simetrica a crearCuentaViaCuentas — unico camino de rename desde strategies.
+   *
+   * @param {object} data - { project_id, id, nombre }
+   * @returns {Promise<object>} { status, data: { nombre_anterior, nombre_nuevo } }
+   */
+  async renombrarCuentaViaCuentas(data) {
+    return await this._cuentasInstance().handleRenameCuenta(data);
   }
 
   async publishCuentaCerrada(data, correlationId) {
@@ -289,20 +308,6 @@ class CuentasCanalesModule {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     return `${year}${month}${day}`;
-  }
-
-  /**
-   * Construye un cuenta_id nuevo con formato `{LETRA}_{uuid8}`.
-   * La letra es decorativa para legibilidad humana en logs y dashboards;
-   * el código JAMÁS debe parsearla — el `tipo` real viaja en los eventos.
-   * Ver detectarCanal() para el matching tolerante de prefijos.
-   *
-   * Ejemplos: `M_a3f9c2d1` (mesa), `G_4d8e9c1a` (glovo), `D_3a7b5c2e` (llevadoo).
-   */
-  buildCuentaId(tipo) {
-    const letra = CuentasCanalesModule.LETRA_POR_TIPO[tipo] || 'X';
-    const uuid8 = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
-    return `${letra}_${uuid8}`;
   }
 
   verificarReseoDiario() {
@@ -358,24 +363,6 @@ class CuentasCanalesModule {
     }
   }
 
-  /**
-   * Mapa de letra de control por tipo de canal. La letra forma parte del
-   * cuenta_id (ej: `M_a3f9c2d1`) puramente como decoración legible. Debe
-   * coincidir con `CuentasModule.SIMBOLOS` en cuentas/index.js para que
-   * el ref_display generado por cuentas use la misma letra.
-   *
-   * Si añades un canal nuevo, registra aquí su letra y en cuentas.SIMBOLOS.
-   */
-  static LETRA_POR_TIPO = {
-    mesa: 'M',
-    local: 'M',     // alias histórico
-    llevar: 'L',
-    telefono: 'T',
-    whatsapp: 'W',
-    glovo: 'G',
-    llevadoo: 'D',
-    delivery: 'D'   // alias histórico
-  };
 }
 
 module.exports = CuentasCanalesModule;

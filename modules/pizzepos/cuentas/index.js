@@ -572,6 +572,7 @@ class CuentasModule {
     try {
       const {
         project_id, tipo, nombre, metadata, pedido_inicial,
+        total: totalInicial,
         cuenta_id: cuentaIdPropuesto
       } = data || {};
 
@@ -580,8 +581,7 @@ class CuentasModule {
       }
 
       const tipoFinal = tipo || 'local';
-      // cuenta_id opaco: {LETRA}_{uuid8}. Si la strategy lo propone explicito,
-      // respetarlo (permite a un intake con id propio preservar trazabilidad).
+      // Si la strategy propone explicito, respetar; si no, generar opaco.
       const cuenta_id = cuentaIdPropuesto || this._buildCuentaId(tipoFinal);
       const { turno, numero, ref_display } = this.generateRefDisplay(tipoFinal, nombre);
 
@@ -599,7 +599,7 @@ class CuentasModule {
         pagado: false,
         hora,
         items: 0,
-        total: 0,
+        total: Number.isFinite(totalInicial) ? totalInicial : 0,
         alerta: false,
         metadata: metadata || {},
         created_at: now.toISOString(),
@@ -912,9 +912,6 @@ class CuentasModule {
   // ==========================================
 
   async publishCuentaCreada(cuenta) {
-    // metadata viaja tal cual (permite que las strategies incluyan numero_pedido,
-    // glovo_order_id, comensales, etc). nombre siempre esta en cuenta.nombre
-    // como campo de primera clase — no hace falta duplicarlo en metadata.
     await this.eventBus.publish('cuenta.creada', {
       project_id: cuenta.project_id,
       cuenta_id: cuenta.id,
@@ -923,6 +920,7 @@ class CuentasModule {
       nombre: cuenta.nombre,
       ref_display: cuenta.ref_display,
       origen: cuenta.nombre || cuenta.tipo,
+      total: cuenta.total,
       metadata: cuenta.metadata || {},
       estado: cuenta.estado,
       created_at: cuenta.created_at

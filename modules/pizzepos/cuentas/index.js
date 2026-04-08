@@ -1126,8 +1126,11 @@ class CuentasModule {
     const turno = this.getNextTurno();
     const numero = String(turno).padStart(3, '0');
     const symbol = CuentasModule.SIMBOLOS[tipo] || 'M';
-    // Excluir nombres automaticos ("Mesa 5", "Cliente 16", etc)
-    const esAuto = nombre && /^(Mesa|Cliente|Llevadoo|Cliente Glovo|Cliente WhatsApp)\s/i.test(nombre);
+    // Excluir nombres automaticos ("Mesa 5", "Cliente 16", etc) y tambien
+    // los literales sin sufijo numerico ("Llevadoo", "Cliente Glovo", etc).
+    // El `(\s|$)` captura tanto "Mesa 5" como "Llevadoo" exacto — las
+    // strategies viejas/legacy pueden caer con un literal sin numero.
+    const esAuto = nombre && /^(Mesa|Llevadoo|Cliente Glovo|Cliente WhatsApp|Cliente)(\s|$)/i.test(nombre);
     const nombreFinal = esAuto ? null : (nombre || null);
     return { turno, numero, ref_display: this.buildRefDisplay(symbol, numero, nombreFinal) };
   }

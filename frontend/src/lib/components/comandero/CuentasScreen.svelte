@@ -75,8 +75,10 @@
   // Navigation handlers
   function handleCreated(e: CustomEvent<{ cuenta_id: string; tipo: TipoCuenta }>) {
     // New cuenta created via sidebar → open comandero for it
+    // ?new=1 hace que el comandero abra el modo edit de nombre + voz
+    // automaticamente (ver ComanderoScreen.onMount).
     if (onNavigate) {
-      onNavigate(`/comandero/${e.detail.cuenta_id}`);
+      onNavigate(`/comandero/${e.detail.cuenta_id}?new=1`);
     }
   }
 

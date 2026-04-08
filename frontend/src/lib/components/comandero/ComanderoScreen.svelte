@@ -74,6 +74,9 @@
   /** Vista inicial: 'cuenta' abre panel de cobro al cargar */
   export let initialView: string | undefined = undefined;
 
+  /** Cuenta recien creada — abre edit de nombre + voz al montar */
+  export let isNew: boolean = false;
+
   let cleanupSubs: (() => void) | null = null;
   let contentEl: HTMLElement;
   let pedidoSectionEl: HTMLElement;
@@ -141,10 +144,21 @@
   let listening = false;
   let voiceError = '';
 
-  function startEditName() {
-    nameInput = cuentaNombre;
+  /**
+   * Abre el modo edit del nombre.
+   * @param prefill  true = pre-rellenar con el nombre actual y seleccionarlo
+   *                        (tap manual para renombrar: primera tecla reemplaza,
+   *                        las flechas permiten editar letras sueltas).
+   *                 false = input vacio (cuenta recien creada: el autoname de
+   *                         strategy no sirve, el usuario va a escribir de cero).
+   */
+  function startEditName(prefill: boolean = true) {
+    nameInput = prefill ? cuentaNombre : '';
     editingName = true;
-    setTimeout(() => nameInputEl?.focus(), 50);
+    setTimeout(() => {
+      nameInputEl?.focus();
+      if (prefill) nameInputEl?.select();
+    }, 50);
   }
 
   async function saveName() {
@@ -557,6 +571,19 @@
       // Auto-abrir cobro si se navega con ?view=cuenta (no para llevadoo)
       if (initialView === 'cuenta' && !isLlevadoo) {
         showCobro = true;
+      }
+
+      // Cuenta recien creada (?new=1) → abrir edit de nombre con input vacio
+      // y best-effort para activar el microfono. Solo aplica a tipos que
+      // permiten renombrar (mesa, llevar, llevadoo). Para delivery y otros
+      // no hay input editable.
+      if (isNew && canRename) {
+        startEditName(false);
+        // El microfono puede fallar si el navegador no considera esto un
+        // gesto de usuario directo (navegacion asincrona tras el click del
+        // TipoButton). startVoice() gestiona el error y el usuario puede
+        // tocar el boton 🎤 manualmente.
+        setTimeout(() => startVoice(), 150);
       }
     }).catch((err) => {
       console.error('[ComanderoScreen] MQTT connection failed', err);

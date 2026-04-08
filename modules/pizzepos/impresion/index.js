@@ -499,7 +499,8 @@ class ImpresionModule {
 
     try {
       const ticket = this.formatearTicketPieza({
-        pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion,
+        pedido_id, cuenta_id, canal, ref_display,
+        nombre, cantidad, categoria, estacion,
         ingredientes, variaciones, notas
       });
 
@@ -862,7 +863,8 @@ class ImpresionModule {
     }
   }
 
-  formatearTicketPieza({ pedido_id, cuenta_id, canal, nombre, cantidad, categoria, estacion,
+  formatearTicketPieza({ pedido_id, cuenta_id, canal, ref_display,
+                         nombre, cantidad, categoria, estacion,
                          ingredientes, variaciones, notas }) {
     const lineas = [];
     const w = this.lineWidth;
@@ -871,7 +873,18 @@ class ImpresionModule {
 
     // ── Header — ref pedido ──
     lineas.push(CMD.FEED_3);
-    const { ref: refCuenta, detalle: detalleCuenta } = this.extraerRefCuenta(cuenta_id, canal);
+    // Fuente preferida: ref_display canonico que viene en cocina.item_ticket
+    // (mismo valor que muestra la pantalla de cocina). Garantiza trazabilidad
+    // exacta entre lo que ve el cocinero en pantalla y lo que llega al ticket.
+    // Solo cae al cache + parser legacy si el evento no trajo ref_display
+    // (caso excepcional: cuenta antigua o secuencia rara de eventos).
+    let refCuenta, detalleCuenta;
+    if (ref_display) {
+      refCuenta = ref_display.toUpperCase();
+      detalleCuenta = null;
+    } else {
+      ({ ref: refCuenta, detalle: detalleCuenta } = this.extraerRefCuenta(cuenta_id, canal));
+    }
     const ref = refCuenta || `#${pedido_id || '-'}`;
     lineas.push(CMD.ALIGN_CENTER + CMD.DOUBLE_ON + CMD.BOLD_ON + ref + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
     if (detalleCuenta) {

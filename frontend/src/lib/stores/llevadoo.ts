@@ -324,7 +324,10 @@ export async function enviarPedido(datos: {
     // 1. Crear la cuenta Llevadoo
     const crearRes = await mqttRequest('llevadoo', 'crear_pedido', {
       project_id: state.project_id,
-      nombre_cliente: datos.nombre_cliente || 'Llevadoo',
+      // undefined cuando no hay nombre real: el backend (llevadoo.js) mantiene
+      // el fallback a null y genera ref_display solo con el codigo del turno
+      // en vez de pegar "Llevadoo" literal como nombre de cliente.
+      nombre_cliente: datos.nombre_cliente || undefined,
       telefono_cliente: datos.telefono_cliente || '',
       direccion: datos.direccion || '',
       notas: datos.notas || ''

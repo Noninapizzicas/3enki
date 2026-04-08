@@ -319,7 +319,11 @@ class LlevadooStrategy {
 
       this._pedidoSeq = (this._pedidoSeq % 999) + 1;
       const numero_pedido = this._pedidoSeq;
-      const nombreFinal = nombre_cliente || 'Llevadoo';
+      // null cuando no hay nombre real del cliente: el backend generara
+      // ref_display solo con el codigo del turno (ej "V 025") en vez de
+      // pegar "Llevadoo" literal como si fuera el nombre del cliente.
+      const nombreCliente = nombre_cliente || null;
+      const nombreLabel = nombreCliente || '';
 
       const minutos = tiempo_preparacion || 25;
       const now = new Date();
@@ -329,9 +333,9 @@ class LlevadooStrategy {
       const cuenta = await this.modulo.crearCuentaViaCuentas({
         project_id,
         tipo: 'llevadoo',
-        nombre: nombreFinal,
+        nombre: nombreCliente,
         metadata: {
-          nombre_cliente: nombreFinal,
+          nombre_cliente: nombreLabel,
           telefono_cliente: telefono_cliente || '',
           direccion: direccion || '',
           numero_pedido,
@@ -345,7 +349,7 @@ class LlevadooStrategy {
         cuenta_id,
         project_id,
         numero_pedido,
-        nombre_cliente: nombreFinal,
+        nombre_cliente: nombreLabel,
         telefono_cliente: telefono_cliente || '',
         direccion: direccion || '',
         estado: 'recibido',
@@ -365,7 +369,7 @@ class LlevadooStrategy {
       await this.modulo.eventBus.publish('llevadoo.pedido_recibido', {
         cuenta_id,
         numero_pedido,
-        nombre_cliente: nombreFinal,
+        nombre_cliente: nombreLabel,
         direccion: pedido.direccion,
         total: pedido.total,
         recargo_total: pedido.recargo_total,
@@ -376,7 +380,7 @@ class LlevadooStrategy {
       this.modulo.logger.info('llevadoo.pedido_creado', {
         cuenta_id,
         numero_pedido,
-        nombre_cliente: nombreFinal
+        nombre_cliente: nombreLabel
       });
 
       return { status: 201, data: pedido };
@@ -681,7 +685,7 @@ class LlevadooStrategy {
         const pedido = {
           cuenta_id,
           numero_pedido: numero,
-          nombre_cliente: cuenta.datos_especificos?.nombre || 'Llevadoo',
+          nombre_cliente: cuenta.datos_especificos?.nombre_cliente || cuenta.datos_especificos?.nombre || '',
           telefono_cliente: cuenta.datos_especificos?.telefono || '',
           direccion: cuenta.datos_especificos?.direccion || '',
           estado: 'en_preparacion',

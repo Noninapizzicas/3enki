@@ -243,7 +243,11 @@ class WhatsAppStrategy {
       const numero_pedido = this._pedidoSeq;
 
       const contacto = this.contactos.get(telefono);
-      const nombreFinal = nombre || contacto?.nombre || 'Cliente WhatsApp';
+      // null si no hay nombre real del contacto (ni del input ni del contacto
+      // guardado): el backend genera ref_display solo con el codigo del turno
+      // en vez de pegar "Cliente WhatsApp" literal como nombre de la cuenta.
+      const nombreReal = nombre || contacto?.nombre || null;
+      const nombreLabel = nombreReal || '';
 
       // Calcular total inicial si los items vienen con precio
       const itemsIniciales = items || [];
@@ -254,7 +258,7 @@ class WhatsAppStrategy {
       const cuenta = await this.modulo.crearCuentaViaCuentas({
         project_id,
         tipo: 'whatsapp',
-        nombre: nombreFinal,
+        nombre: nombreReal,
         total: totalInicial,
         metadata: { telefono, numero_pedido, modo_entrega: modo_entrega || 'recogida' }
       });
@@ -264,7 +268,7 @@ class WhatsAppStrategy {
         cuenta_id,
         numero_pedido,
         telefono,
-        nombre: nombreFinal,
+        nombre: nombreLabel,
         estado: 'pendiente_confirmacion',
         items: itemsIniciales,
         total: totalInicial,

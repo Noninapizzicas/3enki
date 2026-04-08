@@ -210,12 +210,15 @@ class GlovoStrategy {
 
       this._pedidoSeq = (this._pedidoSeq % 999) + 1;
       const numero_pedido = this._pedidoSeq;
-      const clienteNombreFinal = cliente_nombre || 'Cliente Glovo';
+      // null cuando no hay nombre real: el backend genera ref_display
+      // solo con el codigo del turno en vez de pegar "Cliente Glovo" literal.
+      const clienteNombreReal = cliente_nombre || null;
+      const clienteNombreLabel = clienteNombreReal || '';
 
       const cuenta = await this.modulo.crearCuentaViaCuentas({
         project_id: data.project_id,
         tipo: 'glovo',
-        nombre: clienteNombreFinal,
+        nombre: clienteNombreReal,
         total: total || 0,
         metadata: { glovo_order_id, numero_pedido, direccion_entrega: direccion_entrega || '' }
       });
@@ -230,7 +233,7 @@ class GlovoStrategy {
         pagado: false,
         items: items || [],
         total: total || 0,
-        cliente_nombre: clienteNombreFinal,
+        cliente_nombre: clienteNombreLabel,
         direccion_entrega: direccion_entrega || '',
         notas: notas || '',
         tiempo_estimado_entrega: tiempo_estimado_entrega || 45,
@@ -251,7 +254,7 @@ class GlovoStrategy {
         glovo_order_id,
         total: pedido.total,
         items: pedido.items,
-        cliente_nombre: clienteNombreFinal,
+        cliente_nombre: clienteNombreLabel,
         hora_recibido: pedido.hora_recibido
       });
 
@@ -281,7 +284,7 @@ class GlovoStrategy {
         notas_generales: notas || '',
         metadata: {
           glovo_order_id,
-          cliente_nombre: cliente_nombre || 'Cliente Glovo',
+          cliente_nombre: clienteNombreLabel,
           direccion_entrega: direccion_entrega || '',
           requiere_confirmacion: true,
           tiempo_estimado_entrega: tiempo_estimado_entrega || 45,
@@ -591,7 +594,7 @@ class GlovoStrategy {
           pagado: false,
           items: [],
           total: cuenta.total || 0,
-          cliente_nombre: cuenta.datos_especificos?.cliente_nombre || 'Cliente Glovo',
+          cliente_nombre: cuenta.datos_especificos?.cliente_nombre || '',
           direccion_entrega: cuenta.datos_especificos?.direccion_entrega || '',
           notas: '',
           tiempo_estimado_entrega: 45,

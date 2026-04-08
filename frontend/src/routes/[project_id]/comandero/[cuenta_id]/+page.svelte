@@ -17,6 +17,9 @@
   $: urlProjectId = $page.params.project_id;
   $: cuenta_id = $page.params.cuenta_id;
   $: initialView = $page.url.searchParams.get('view') || undefined;
+  // ?new=1 lo pone CuentasScreen tras crear una cuenta via TipoButton
+  // → ComanderoScreen abre el modo edit de nombre + voz automaticamente
+  $: isNew = $page.url.searchParams.get('new') === '1';
 
   // Para datos, usar el UUID real del store global
   $: projectId = $activeProjectId || urlProjectId;
@@ -45,6 +48,7 @@
   {cuenta_id}
   {projectId}
   {initialView}
+  {isNew}
   onNavigate={handleNavigate}
   onOpenPanel={handleOpenPanel}
 />

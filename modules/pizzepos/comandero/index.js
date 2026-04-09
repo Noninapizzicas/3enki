@@ -31,8 +31,8 @@ class ComanderoModule {
     // Caché de productos (para resolver nombre/precio)
     this.productosCache = new Map();
 
-    // Referencia al módulo de tarifas (menu-generator)
-    this._menuGenerator = null;
+    // Referencia al módulo de tarifas
+    this._tarifasModule = null;
 
     // Persistencia del buffer (debounced)
     this._bufferFile = path.join('./data/current', 'comandero_buffers.json');
@@ -744,12 +744,12 @@ class ComanderoModule {
     if (!canal || canal === 'mesa') return producto.precio;
 
     try {
-      if (!this._menuGenerator && this._moduleLoader) {
-        const mod = this._moduleLoader.getModule?.('menu-generator');
-        this._menuGenerator = mod?.instance || null;
+      if (!this._tarifasModule && this._moduleLoader) {
+        const mod = this._moduleLoader.getModule?.('tarifas');
+        this._tarifasModule = mod?.instance || null;
       }
-      if (this._menuGenerator?.resolverPrecio) {
-        return this._menuGenerator.resolverPrecio(producto, canal);
+      if (this._tarifasModule?.resolverPrecio) {
+        return this._tarifasModule.resolverPrecio(producto, canal);
       }
     } catch (err) {
       this.logger?.debug('comandero.tarifa.fallback', { error: err.message });

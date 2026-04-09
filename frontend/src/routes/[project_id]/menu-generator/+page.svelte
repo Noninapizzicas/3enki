@@ -64,12 +64,12 @@ Exportación:
 - menu.export_to_pos: sincronizar con POS
 - carta.render: renderizar HTML imprimible con plantilla
 
-Tarifas por canal de venta:
-- menu.set_tarifa_canal: configurar multiplicador y/o recargo por canal (mesa, llevar, telefono, whatsapp, glovo, llevadoo)
-- menu.set_tarifa_categoria: excepción de tarifa para una categoría en canal(es) (ej: bebidas sin recargo en delivery)
-- menu.get_tarifas: ver configuración actual de tarifas
-- menu.preview_precios: previsualizar precios de un producto o categoría en todos los canales
-- menu.set_precio_fijo: marcar productos como precio fijo (exentos de tarifas de canal — ideal para bebidas, menús, ofertas)`,
+Tarifas por canal de venta (módulo tarifas):
+- tarifas.set_canal: configurar multiplicador y/o recargo por canal (mesa, llevar, telefono, whatsapp, glovo, llevadoo)
+- tarifas.set_categoria: excepción de tarifa para una categoría en canal(es) (ej: bebidas sin recargo en delivery)
+- tarifas.get: ver configuración actual de tarifas
+- tarifas.preview: previsualizar precios de un producto o categoría en todos los canales
+- tarifas.set_precio_fijo: marcar productos como precio fijo (exentos de tarifas de canal — ideal para bebidas, menús, ofertas)`,
       state: {
         projectId: project_id
       }

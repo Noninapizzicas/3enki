@@ -1,0 +1,158 @@
+{
+  "name": "tarifas",
+  "version": "1.0.0",
+  "description": "Tarifas por canal de venta — precios diferenciados para mesa, llevar, delivery. Cascada: precio_fijo → categoría+canal → canal → precio base.",
+  "author": "Pizzepos Team",
+
+  "provides": {
+    "events": ["tarifa.config.actualizada"]
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "tarifa.config.actualizada",
+        "description": "Configuración de tarifas actualizada (canales, categorías, redondeo)"
+      }
+    ],
+    "subscribes": [
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "tarifas", "action": "get", "handler": "handleGetTarifas" },
+    { "domain": "tarifas", "action": "set_canal", "handler": "handleSetTarifaCanal" },
+    { "domain": "tarifas", "action": "set_categoria", "handler": "handleSetTarifaCategoria" },
+    { "domain": "tarifas", "action": "preview", "handler": "handlePreviewPrecios" }
+  ],
+
+  "tools": [
+    {
+      "name": "tarifas.set_canal",
+      "description": "Configura la tarifa de un canal de venta. Multiplicador (ej: 1.15 = +15%) y/o recargo fijo (ej: 0.50€). Mesa siempre es precio de carta (1.0). Canales: mesa, llevar, telefono, whatsapp, glovo, llevadoo.",
+      "handler": "toolSetTarifaCanal",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "canal": {
+            "type": "string",
+            "enum": ["mesa", "llevar", "telefono", "whatsapp", "glovo", "llevadoo"],
+            "description": "Canal de venta"
+          },
+          "multiplicador": {
+            "type": "number",
+            "description": "Factor de precio (1.0=sin cambio, 1.15=+15%, 0.9=-10%)"
+          },
+          "recargo": {
+            "type": "number",
+            "description": "Recargo fijo en euros añadido a cada producto (ej: 0.50)"
+          }
+        },
+        "required": ["canal"]
+      }
+    },
+    {
+      "name": "tarifas.set_categoria",
+      "description": "Configura una excepción de tarifa para una categoría en uno o varios canales. Ej: bebidas sin recargo en delivery. Si no se indica canales, aplica a todos los canales no-mesa.",
+      "handler": "toolSetTarifaCategoria",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "categoria": {
+            "type": "string",
+            "description": "ID de la categoría (ej: bebidas, postres)"
+          },
+          "canales": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Canales a los que aplicar esta excepción (ej: ['glovo','llevadoo']). Si no se indica, aplica a todos los no-mesa."
+          },
+          "multiplicador": {
+            "type": "number",
+            "description": "Factor de precio para esta categoría en esos canales (1.0=precio carta)"
+          },
+          "recargo": {
+            "type": "number",
+            "description": "Recargo fijo para esta categoría en esos canales"
+          }
+        },
+        "required": ["categoria"]
+      }
+    },
+    {
+      "name": "tarifas.get",
+      "description": "Muestra la configuración actual de tarifas: reglas por canal, excepciones por categoría y redondeo.",
+      "handler": "toolGetTarifas",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "tarifas.preview",
+      "description": "Previsualiza los precios de un producto o categoría en todos los canales. No modifica nada — solo muestra cómo quedarían los precios con las tarifas actuales.",
+      "handler": "toolPreviewPrecios",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta"
+          },
+          "producto_id": {
+            "type": "string",
+            "description": "ID de producto específico (opcional)"
+          },
+          "categoria": {
+            "type": "string",
+            "description": "Previsualizar todos los productos de esta categoría (opcional)"
+          }
+        },
+        "required": ["carta_id"]
+      }
+    },
+    {
+      "name": "tarifas.set_precio_fijo",
+      "description": "Marca productos como precio fijo — no se les aplican tarifas de canal. Ideal para bebidas, menús y ofertas que deben mantener el mismo precio en todos los canales.",
+      "handler": "toolSetPrecioFijo",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta"
+          },
+          "producto_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "IDs de productos a marcar/desmarcar"
+          },
+          "precio_fijo": {
+            "type": "boolean",
+            "description": "true = precio fijo (exento de tarifas), false = sujeto a tarifas"
+          }
+        },
+        "required": ["carta_id", "producto_ids", "precio_fijo"]
+      }
+    }
+  ],
+
+  "ui": {
+    "zone": "work-bar",
+    "icon": "💰",
+    "routes": ["/menu-generator", "/comandero"]
+  },
+
+  "observability": {
+    "metrics": {
+      "counters": [
+        "tarifas.canal.updated",
+        "tarifas.categoria.updated",
+        "tarifas.precio_fijo.updated",
+        "tarifas.preview.requested"
+      ]
+    }
+  }
+}

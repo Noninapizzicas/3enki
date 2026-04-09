@@ -101,6 +101,7 @@
       "firmware-builder",
       "esp32-flasher",
       "menu-generator",
+      "tarifas",
       "recetas",
       "escandallo",
       "viabilidad"

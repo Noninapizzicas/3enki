@@ -31,6 +31,9 @@ class ComanderoModule {
     // Caché de productos (para resolver nombre/precio)
     this.productosCache = new Map();
 
+    // Referencia al módulo de tarifas
+    this._tarifasModule = null;
+
     // Persistencia del buffer (debounced)
     this._bufferFile = path.join('./data/current', 'comandero_buffers.json');
     this._saveTimer = null;
@@ -48,6 +51,9 @@ class ComanderoModule {
     this.validator = core.validationManager || null;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
+
+    // Referencia al moduleLoader para acceso lazy a menu-generator (tarifas)
+    this._moduleLoader = core.moduleLoader || null;
 
     // Registrar schemas de validación para los handlers
     this.registerSchemas();
@@ -242,7 +248,8 @@ class ComanderoModule {
           nombre: producto.nombre || producto.id,
           precio: producto.precio,
           categoria: producto.categoria || null,
-          estaciones: producto.estaciones || null
+          estaciones: producto.estaciones || null,
+          precio_fijo: producto.precio_fijo || false
         });
       }
     }
@@ -308,12 +315,19 @@ class ComanderoModule {
     // Resolver nombre/precio: prioridad data > cache > fallback
     const cached = this.productosCache.get(producto_id);
     const itemNombre = nombre || cached?.nombre || producto_id;
-    const itemPrecio = precio ?? cached?.precio ?? 0;
+    const precioBase = precio ?? cached?.precio ?? 0;
     const itemCantidad = cantidad || 1;
 
     if (!cached && precio === undefined) {
       this.logger.warn('comandero.producto.not_in_cache', { producto_id });
     }
+
+    // Aplicar tarifa por canal si menu-generator está disponible
+    const canal = this._detectarCanalCuenta(cuenta_id);
+    const itemPrecio = this._aplicarTarifa(
+      { precio: precioBase, categoria: cached?.categoria, precio_fijo: cached?.precio_fijo },
+      canal
+    );
 
     const item_id = crypto.randomUUID();
     const item = {
@@ -699,6 +713,49 @@ class ComanderoModule {
 
   calcularTotal(items) {
     return items.reduce((total, item) => total + item.subtotal, 0);
+  }
+
+  /**
+   * Detecta el canal de venta a partir del prefijo del cuenta_id.
+   * Soporta formato nuevo (M_xxx) y legacy (mesa_xxx).
+   */
+  _detectarCanalCuenta(cuenta_id) {
+    if (!cuenta_id) return 'mesa';
+    const PREFIJOS = {
+      'mesa_': 'mesa', 'M_': 'mesa',
+      'llevar_': 'llevar', 'L_': 'llevar',
+      'telefono_': 'telefono', 'tel_': 'telefono', 'T_': 'telefono',
+      'whatsapp_': 'whatsapp', 'W_': 'whatsapp',
+      'glovo_': 'glovo', 'G_': 'glovo',
+      'llevadoo_': 'llevadoo', 'D_': 'llevadoo'
+    };
+    for (const [prefix, canal] of Object.entries(PREFIJOS)) {
+      if (cuenta_id.startsWith(prefix)) return canal;
+    }
+    return 'mesa';
+  }
+
+  /**
+   * Aplica tarifa de canal al precio del producto.
+   * Accede lazy a menu-generator via moduleLoader.
+   * Si menu-generator no existe o no tiene tarifas, devuelve precio base.
+   */
+  _aplicarTarifa(producto, canal) {
+    if (!canal || canal === 'mesa') return producto.precio;
+
+    try {
+      if (!this._tarifasModule && this._moduleLoader) {
+        const mod = this._moduleLoader.getModule?.('tarifas');
+        this._tarifasModule = mod?.instance || null;
+      }
+      if (this._tarifasModule?.resolverPrecio) {
+        return this._tarifasModule.resolverPrecio(producto, canal);
+      }
+    } catch (err) {
+      this.logger?.debug('comandero.tarifa.fallback', { error: err.message });
+    }
+
+    return producto.precio;
   }
 }
 

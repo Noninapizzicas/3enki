@@ -1271,7 +1271,7 @@ class MenuGeneratorModule {
     // Transform productos: ingredientes → ingredientes_base with IDs
     const productos = carta.productos.map(p => {
       const grupo = p.categoria || 'otro';
-      return {
+      const prod = {
         id: p.id,
         nombre: p.nombre,
         categoria: p.categoria,
@@ -1289,6 +1289,8 @@ class MenuGeneratorModule {
         }),
         activo: true
       };
+      if (p.precio_fijo) prod.precio_fijo = true;
+      return prod;
     });
 
     return {

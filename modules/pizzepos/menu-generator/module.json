@@ -1,232 +1,62 @@
 {
   "name": "menu-generator",
-  "version": "5.0.0",
-  "description": "Dueño de datos de cartas de restaurante — CRUD, persistencia, versionado. La extracción, estructuración y enriquecimiento se delegan a agentes especializados.",
+  "version": "6.0.0",
+  "description": "Genera cartas estructuradas en JSON a partir de cualquier input: fotos, PDF, texto, audio, dictado, recetas, scraping. Siempre pregunta el nombre.",
   "author": "Pizzepos Team",
   "main": "index.js",
 
-  "provides": {
-    "events": ["carta.generada"]
-  },
-
   "events": {
-    "publishes": [
-      {
-        "event": "carta.generada",
-        "description": "Carta creada, actualizada o restaurada",
-        "schema": { "$ref": "./schemas/carta-output.json" }
-      }
-    ],
-    "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
-    ]
+    "subscribes": []
   },
 
   "ui_handlers": [
-    { "domain": "menu", "action": "list", "handler": "handleListCartas" },
-    { "domain": "menu", "action": "get", "handler": "handleGetCarta" },
+    { "domain": "menu", "action": "generate", "handler": "handleGenerate" },
     { "domain": "menu", "action": "health", "handler": "handleHealth" }
   ],
 
   "tools": [
     {
-      "name": "menu.save_carta",
-      "description": "Guarda una carta a disco. Acepta: carta_id (existente en memoria), carta (objeto JSON completo con categorias[] y productos[]), o nombre (crear vacía). Los agentes structurer y enricher usan esta tool para persistir sus resultados.",
-      "handler": "toolSaveCarta",
+      "name": "menu.generate",
+      "description": "Genera una carta estructurada desde cualquier input. SIEMPRE requiere nombre — pregúntalo antes de llamar. Acepta texto (OCR, dictado, lista, JSON, recetas) o filePath (PDF/imagen). Dispara agentes especializados y emite el resultado cuando termina.",
+      "handler": "toolGenerate",
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id": { "type": "string", "description": "ID de carta existente en memoria" },
-          "nombre": { "type": "string", "description": "Nombre para carta nueva" },
-          "carta": {
-            "type": "object",
-            "description": "Carta completa con { meta?, categorias[], productos[] }"
+          "nombre": {
+            "type": "string",
+            "description": "Nombre de la carta (OBLIGATORIO — preguntar al usuario)"
+          },
+          "texto": {
+            "type": "string",
+            "description": "Contenido del menú en cualquier formato textual"
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Ruta a archivo PDF o imagen (alternativa a texto)"
           }
-        }
-      }
-    },
-    {
-      "name": "menu.get_carta",
-      "description": "Obtiene una carta completa por ID con todas sus categorías, productos e ingredientes",
-      "handler": "toolGetCarta",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string", "description": "ID de la carta" }
         },
-        "required": ["carta_id"]
-      }
-    },
-    {
-      "name": "menu.list_cartas",
-      "description": "Lista todas las cartas con resumen (nombre, nº productos, nº categorías, fecha)",
-      "handler": "toolListCartas",
-      "parameters": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
-      "name": "menu.delete_carta",
-      "description": "Elimina una carta. Guarda la última versión en el historial antes de borrar.",
-      "handler": "toolDeleteCarta",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string", "description": "ID de la carta a eliminar" }
-        },
-        "required": ["carta_id"]
-      }
-    },
-    {
-      "name": "menu.add_product",
-      "description": "Añade un producto nuevo a una carta existente",
-      "handler": "toolAddProduct",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string" },
-          "nombre": { "type": "string" },
-          "categoria": { "type": "string" },
-          "precio": { "type": "number" },
-          "ingredientes": { "type": "array", "items": { "type": "object", "properties": { "nombre": { "type": "string" } }, "required": ["nombre"] } }
-        },
-        "required": ["carta_id", "nombre", "categoria", "precio"]
-      }
-    },
-    {
-      "name": "menu.remove_product",
-      "description": "Elimina un producto de una carta",
-      "handler": "toolRemoveProduct",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string" },
-          "producto_id": { "type": "string" }
-        },
-        "required": ["carta_id", "producto_id"]
-      }
-    },
-    {
-      "name": "menu.update_product",
-      "description": "Actualiza datos de un producto existente (nombre, precio, ingredientes, categoría)",
-      "handler": "toolUpdateProduct",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string" },
-          "producto_id": { "type": "string" },
-          "nombre": { "type": "string" },
-          "precio": { "type": "number" },
-          "categoria": { "type": "string" },
-          "ingredientes": { "type": "array", "items": { "type": "object", "properties": { "nombre": { "type": "string" } }, "required": ["nombre"] } }
-        },
-        "required": ["carta_id", "producto_id"]
-      }
-    },
-    {
-      "name": "menu.add_category",
-      "description": "Añade una categoría nueva a una carta existente",
-      "handler": "toolAddCategory",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string" },
-          "nombre": { "type": "string" }
-        },
-        "required": ["carta_id", "nombre"]
-      }
-    },
-    {
-      "name": "menu.update_prices",
-      "description": "Actualiza precios de productos. Puede aplicar porcentaje global, por categoría, o precios individuales.",
-      "handler": "toolUpdatePrices",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string" },
-          "porcentaje": { "type": "number" },
-          "categoria": { "type": "string" },
-          "precios": { "type": "object" }
-        },
-        "required": ["carta_id"]
-      }
-    },
-    {
-      "name": "menu.search_products",
-      "description": "Busca productos en una carta por nombre o ingrediente",
-      "handler": "toolSearchProducts",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string" },
-          "query": { "type": "string" }
-        },
-        "required": ["carta_id", "query"]
-      }
-    },
-    {
-      "name": "menu.stats",
-      "description": "Estadísticas de una carta: total productos, por categoría, rango de precios, precio medio",
-      "handler": "toolStats",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string" }
-        },
-        "required": ["carta_id"]
-      }
-    },
-    {
-      "name": "menu.list_versions",
-      "description": "Lista el historial de versiones de una carta (max 50)",
-      "handler": "toolListVersions",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string" }
-        },
-        "required": ["carta_id"]
-      }
-    },
-    {
-      "name": "menu.restore_version",
-      "description": "Restaura una carta a una versión anterior. La versión actual se guarda antes.",
-      "handler": "toolRestoreVersion",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": { "type": "string" },
-          "version_file": { "type": "string" }
-        },
-        "required": ["carta_id", "version_file"]
+        "required": ["nombre"]
       }
     }
   ],
 
   "agents": {
-    "description": "Las operaciones complejas (extracción OCR, estructuración IA, enriquecimiento) se delegan a agentes especializados del ai-agent-framework",
-    "agents": [
-      { "name": "menu-extractor", "role": "Pipeline OCR: PDF/foto → texto legible" },
-      { "name": "menu-structurer", "role": "Texto → carta JSON estructurada" },
-      { "name": "menu-enricher", "role": "Enriquecimiento: descripciones, emojis, tags, clasificación" },
-      { "name": "menu-validator", "role": "Validación de calidad y coherencia" }
-    ],
-    "pipelines": [
-      { "name": "menu-full", "agents": ["menu-extractor", "menu-structurer", "menu-enricher", "menu-validator"], "description": "Pipeline completo: documento → carta enriquecida y validada" },
-      { "name": "menu-quick", "agents": ["menu-structurer"], "description": "Pipeline rápido: texto → carta estructurada" },
-      { "name": "menu-document", "agents": ["menu-extractor", "menu-structurer"], "description": "Pipeline documento: PDF/foto → carta estructurada" }
-    ]
+    "description": "La generación la ejecutan agentes del ai-agent-framework",
+    "pipeline_document": {
+      "trigger": "menu.document.request",
+      "agents": ["menu-extractor", "menu-structurer"],
+      "description": "PDF/foto → OCR → carta JSON"
+    },
+    "pipeline_text": {
+      "trigger": "menu.text.request",
+      "agents": ["menu-structurer"],
+      "description": "Texto → carta JSON"
+    }
   },
 
   "observability": {
     "metrics": {
-      "counters": [
-        "menu.product.added",
-        "menu.product.removed",
-        "menu.prices.updated"
-      ]
+      "counters": ["menu.generate.requested"]
     }
   }
 }

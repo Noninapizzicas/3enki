@@ -8,8 +8,8 @@
   "prompt_file": "prompts/menu-structurer-system.md",
 
   "tools": [
-    "menu.save_carta",
-    "menu.list_cartas"
+    "carta.save",
+    "carta.list"
   ],
 
   "provider": "auto",

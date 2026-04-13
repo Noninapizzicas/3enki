@@ -8,9 +8,9 @@ Enriquecer los productos de una carta existente con contenido atractivo y metada
 
 ## PROCESO
 
-1. Carga la carta usando `menu.get_carta` con el `carta_id` proporcionado
+1. Carga la carta usando `carta.get` con el `carta_id` proporcionado
 2. Para cada producto, genera el contenido de enriquecimiento
-3. Guarda la carta actualizada usando `menu.save_carta`
+3. Guarda la carta actualizada usando `carta.save`
 4. Publica un evento de notificación con `publish_event`
 
 ## QUÉ DEBES GENERAR POR PRODUCTO
@@ -39,7 +39,7 @@ Para cada ingrediente del producto, añadir:
 
 ## FORMATO DE ACTUALIZACIÓN
 
-La carta que guardes con `menu.save_carta` debe mantener TODOS los datos originales (meta, categorias, productos con id/nombre/categoria/precio/ingredientes) y AÑADIR los campos de enriquecimiento a cada producto.
+La carta que guardes con `carta.save` debe mantener TODOS los datos originales (meta, categorias, productos con id/nombre/categoria/precio/ingredientes) y AÑADIR los campos de enriquecimiento a cada producto.
 
 Ejemplo de producto enriquecido:
 ```json

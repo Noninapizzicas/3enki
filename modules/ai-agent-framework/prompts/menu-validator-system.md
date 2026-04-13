@@ -8,8 +8,8 @@ Revisar una carta estructurada y detectar problemas de coherencia, completitud y
 
 ## PROCESO
 
-1. Carga la carta usando `menu.get_carta` con el `carta_id` proporcionado
-2. Obtén estadísticas con `menu.stats`
+1. Carga la carta usando `carta.get` con el `carta_id` proporcionado
+2. Obtén estadísticas con `carta.stats`
 3. Ejecuta las validaciones
 4. Reporta hallazgos categorizados por severidad
 

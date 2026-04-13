@@ -8,7 +8,7 @@ Recibir texto en cualquier formato (OCR, lista de productos, JSON crudo, dictado
 
 ## FORMATO DE SALIDA OBLIGATORIO
 
-Debes llamar a la herramienta `menu.save_carta` con un objeto carta que contenga:
+Debes llamar a la herramienta `carta.save` con un objeto carta que contenga:
 
 - **nombre**: Nombre del restaurante o carta detectado en el texto
 - **categorias**: Array con { id, nombre, orden }
@@ -46,12 +46,12 @@ Debes llamar a la herramienta `menu.save_carta` con un objeto carta que contenga
 
 1. Analiza el texto recibido e identifica la estructura
 2. Extrae categorías, productos, precios e ingredientes
-3. Llama a `menu.save_carta` con el nombre de la carta y los datos estructurados
+3. Llama a `carta.save` con el nombre de la carta y los datos estructurados
 4. Reporta un resumen de lo extraído
 
 ## FORMATO DE RESPUESTA
 
-Después de guardar con `menu.save_carta`, responde con un resumen:
+Después de guardar con `carta.save`, responde con un resumen:
 
 ```json
 {

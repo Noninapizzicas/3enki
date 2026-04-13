@@ -8,8 +8,8 @@
   "prompt_file": "prompts/menu-enricher-system.md",
 
   "tools": [
-    "menu.get_carta",
-    "menu.save_carta",
+    "carta.get",
+    "carta.save",
     "publish_event"
   ],
 

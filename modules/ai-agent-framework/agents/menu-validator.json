@@ -8,8 +8,8 @@
   "prompt_file": "prompts/menu-validator-system.md",
 
   "tools": [
-    "menu.get_carta",
-    "menu.stats"
+    "carta.get",
+    "carta.stats"
   ],
 
   "provider": "deepseek",

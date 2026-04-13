@@ -1,0 +1,111 @@
+{
+  "name": "carta-manager",
+  "version": "1.0.0",
+  "description": "Dueño de datos de cartas — CRUD, persistencia, versionado, búsqueda, estadísticas",
+  "author": "Pizzepos Team",
+  "main": "index.js",
+
+  "events": {
+    "publishes": [
+      { "event": "carta.actualizada", "description": "Carta modificada (producto añadido/eliminado, precios cambiados, restaurada)" }
+    ],
+    "subscribes": [
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
+      { "event": "carta.generada", "handler": "onCartaGenerada" }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "carta-manager", "action": "list", "handler": "handleList" },
+    { "domain": "carta-manager", "action": "get", "handler": "handleGet" },
+    { "domain": "carta-manager", "action": "health", "handler": "handleHealth" }
+  ],
+
+  "tools": [
+    {
+      "name": "carta.save",
+      "description": "Guarda carta a disco. Acepta carta_id (existente), carta (objeto completo), o nombre (nueva vacía).",
+      "handler": "toolSave",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" }, "nombre": { "type": "string" }, "carta": { "type": "object" } } }
+    },
+    {
+      "name": "carta.get",
+      "description": "Obtiene carta completa por ID",
+      "handler": "toolGet",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" } }, "required": ["carta_id"] }
+    },
+    {
+      "name": "carta.list",
+      "description": "Lista todas las cartas con resumen",
+      "handler": "toolList",
+      "parameters": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "carta.delete",
+      "description": "Elimina carta (guarda versión antes)",
+      "handler": "toolDelete",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" } }, "required": ["carta_id"] }
+    },
+    {
+      "name": "carta.add_product",
+      "description": "Añade producto a carta",
+      "handler": "toolAddProduct",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" }, "nombre": { "type": "string" }, "categoria": { "type": "string" }, "precio": { "type": "number" }, "ingredientes": { "type": "array" } }, "required": ["carta_id", "nombre", "categoria", "precio"] }
+    },
+    {
+      "name": "carta.remove_product",
+      "description": "Elimina producto de carta",
+      "handler": "toolRemoveProduct",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" }, "producto_id": { "type": "string" } }, "required": ["carta_id", "producto_id"] }
+    },
+    {
+      "name": "carta.update_product",
+      "description": "Actualiza producto (nombre, precio, categoría, ingredientes)",
+      "handler": "toolUpdateProduct",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" }, "producto_id": { "type": "string" }, "nombre": { "type": "string" }, "precio": { "type": "number" }, "categoria": { "type": "string" }, "ingredientes": { "type": "array" } }, "required": ["carta_id", "producto_id"] }
+    },
+    {
+      "name": "carta.add_category",
+      "description": "Añade categoría a carta",
+      "handler": "toolAddCategory",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" }, "nombre": { "type": "string" } }, "required": ["carta_id", "nombre"] }
+    },
+    {
+      "name": "carta.update_prices",
+      "description": "Ajusta precios (porcentaje global, por categoría, o individuales)",
+      "handler": "toolUpdatePrices",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" }, "porcentaje": { "type": "number" }, "categoria": { "type": "string" }, "precios": { "type": "object" } }, "required": ["carta_id"] }
+    },
+    {
+      "name": "carta.search",
+      "description": "Busca productos por nombre o ingrediente",
+      "handler": "toolSearch",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" }, "query": { "type": "string" } }, "required": ["carta_id", "query"] }
+    },
+    {
+      "name": "carta.stats",
+      "description": "Estadísticas de carta",
+      "handler": "toolStats",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" } }, "required": ["carta_id"] }
+    },
+    {
+      "name": "carta.versions",
+      "description": "Historial de versiones (max 50)",
+      "handler": "toolVersions",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" } }, "required": ["carta_id"] }
+    },
+    {
+      "name": "carta.restore",
+      "description": "Restaura carta a versión anterior",
+      "handler": "toolRestore",
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" }, "version_file": { "type": "string" } }, "required": ["carta_id", "version_file"] }
+    }
+  ],
+
+  "observability": {
+    "metrics": {
+      "counters": ["carta.saved", "carta.deleted", "carta.product.added", "carta.product.removed", "carta.prices.updated"]
+    }
+  }
+}

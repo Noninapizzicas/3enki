@@ -27,39 +27,33 @@
     setPageContext({
       route: '/menu-generator',
       title: 'Menu Generator',
-      description: 'Pipeline de creación de cartas de restaurante: PDF→Imagen→OCR→Generar carta estructurada con IA.',
-      instructions: `El usuario está en menu-generator para el proyecto "${project_id}". Este es el módulo DUEÑO de los datos de carta — aquí se crean, modifican y gestionan productos, precios, ingredientes y categorías.
+      description: 'Generación de cartas de restaurante desde cualquier input + gestión de datos de carta.',
+      instructions: `El usuario está en menu-generator para el proyecto "${project_id}".
 
-Cuando el usuario dice "genera con eso", "usa el texto que acabo de escanear" o similar, usa el valor de ocrText del estado.
-Cuando menciona "la carta", "esa carta" o similar, se refiere a la activeCarta del estado (si existe).
+Dos módulos trabajan aquí:
+- menu-generator: GENERA cartas desde cualquier input (foto, PDF, texto, dictado)
+- carta-manager: GESTIONA las cartas generadas (editar, versionar, buscar, stats)
 
-Tools CRUD (menu-generator — datos de carta):
-- menu.save_carta: guarda carta completa a disco
-- menu.list_cartas: lista cartas generadas
-- menu.get_carta: obtiene carta por ID
-- menu.delete_carta: elimina carta (guarda versión antes)
-- menu.add_product: añadir producto a carta
-- menu.remove_product: quitar producto de carta
-- menu.update_product: actualizar nombre, precio, ingredientes, categoría
-- menu.update_prices: ajustar precios (porcentaje, por categoría, individuales)
-- menu.add_category: añadir categoría
-- menu.search_products: buscar productos por nombre o ingrediente
-- menu.stats: estadísticas de carta
-- menu.list_versions: historial de versiones (max 50)
-- menu.restore_version: restaurar versión anterior
+IMPORTANTE: menu.generate SIEMPRE requiere nombre. Pregúntalo antes de generar.
 
-Agentes especializados (via agent-manager pipelines):
-- menu-extractor: extrae texto de PDF/foto via OCR (pipeline step 1)
-- menu-structurer: estructura texto en carta JSON con IA (pipeline step 2)
-- menu-enricher: enriquece con descripciones, emojis, tags (pipeline step 3)
-- menu-validator: valida calidad y coherencia (pipeline step 4)
+Generación (menu-generator):
+- menu.generate: genera carta desde texto o archivo. REQUIERE nombre.
 
-Tarifas por canal de venta (módulo tarifas):
-- tarifas.set_canal: configurar multiplicador y/o recargo por canal
-- tarifas.set_categoria: excepción de tarifa para una categoría
-- tarifas.get: ver configuración actual de tarifas
-- tarifas.preview: previsualizar precios en todos los canales
-- tarifas.set_precio_fijo: marcar productos como precio fijo`,
+Gestión de datos (carta-manager):
+- carta.save / carta.get / carta.list / carta.delete
+- carta.add_product / carta.remove_product / carta.update_product
+- carta.add_category / carta.update_prices
+- carta.search / carta.stats
+- carta.versions / carta.restore
+
+Agentes especializados (pipeline automático):
+- menu-extractor: OCR de documentos (pipeline step 1)
+- menu-structurer: estructura texto en JSON (pipeline step 2)
+- menu-enricher: descripciones, emojis, tags (bajo demanda)
+- menu-validator: auditoría de calidad (bajo demanda)
+
+Tarifas (módulo tarifas):
+- tarifas.set_canal / tarifas.set_categoria / tarifas.get / tarifas.preview / tarifas.set_precio_fijo`,
       state: {
         projectId: project_id
       }

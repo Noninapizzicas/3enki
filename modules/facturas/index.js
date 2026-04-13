@@ -3,65 +3,25 @@
  *
  * Procesamiento de facturas: cualquier formato de entrada → datos estructurados.
  *
- * Pipeline unitario:
- *   Archivo (PDF/IMG) → [PDF→PNG] → Sharp prepare → OCR → IA estructura → JSON
+ * Pipeline comercial v2:
+ *   Intake → Convert → Prepare → OCR → Structure (IA) → Validate → Store
+ *   Cada paso: retry, timeout, métricas, resumible.
  *
  * Expone:
  * - UI handlers (domain: facturas) para el frontend
  * - Tools para AI agents
  * - Eventos en tiempo real (factura.recibida/procesada/error/exportada)
  *
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const ServiceExecutor = require('../../core/service-executor');
+const InvoicePipeline = require('./pipeline/invoice-pipeline');
 
-// Prompt para estructurar texto OCR en JSON de factura
-const PROMPT_ESTRUCTURA = `Eres un experto en extracción de datos de facturas. A partir del texto OCR que te proporciono, extrae los datos estructurados en JSON con este formato exacto:
-
-{
-  "emisor": {
-    "nombre": "",
-    "cif": "",
-    "direccion": "",
-    "telefono": "",
-    "web": ""
-  },
-  "receptor": {
-    "nombre": "",
-    "cif": "",
-    "direccion": "",
-    "codigo_cliente": ""
-  },
-  "factura": {
-    "numero": "",
-    "fecha": "",
-    "forma_pago": ""
-  },
-  "lineas": [
-    {
-      "descripcion": "",
-      "unidades": 0,
-      "precio": 0,
-      "descuento": "",
-      "importe": 0
-    }
-  ],
-  "totales": {
-    "base_imponible": 0,
-    "iva_porcentaje": 0,
-    "iva_importe": 0,
-    "total_factura": 0,
-    "resto_cobrar": 0
-  }
-}
-
-Devuelve SOLO el JSON, sin explicaciones ni markdown.`;
-
-// Extensiones de imagen soportadas
+// Extensiones de imagen soportadas (used by UI handlers for validation)
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif'];
 
 
@@ -127,7 +87,15 @@ class FacturasModule {
       Object.assign(this.config, context.moduleConfig);
     }
 
-    this.logger.info('facturas.loaded');
+    // Initialize commercial pipeline
+    this.pipeline = new InvoicePipeline({
+      services: this.services,
+      eventBus: this.eventBus,
+      logger: this.logger,
+      config: this.config
+    });
+
+    this.logger.info('facturas.loaded', { pipeline: 'v2' });
   }
 
   async onUnload() {
@@ -176,379 +144,24 @@ class FacturasModule {
   // ==========================================
 
   /**
-   * Procesa un archivo de factura y devuelve datos estructurados.
-   * Este es el corazón del módulo.
+   * Procesa un archivo de factura via pipeline comercial.
+   *
+   * Pipeline v2: intake → convert → prepare → ocr → structure → validate → store
+   * Cada paso: retry con backoff, timeout, métricas, resumible.
    *
    * @param {string} filePath - Ruta al archivo (PDF o imagen)
    * @param {string} projectId - ID del proyecto
-   * @param {Object} options - Opciones adicionales
-   * @param {string} options.source - Origen: 'telegram' | 'gmail' | 'manual'
-   * @param {Object} options.origen - Metadata del origen (botName, chatId, etc.)
-   * @param {string} options.facturaId - ID existente en DB (para reprocesar)
-   * @returns {Promise<Object>} Resultado con datos estructurados
+   * @param {Object} options
+   * @param {string} options.source - 'telegram' | 'gmail' | 'manual'
+   * @param {Object} options.origen - Metadata del origen
+   * @param {number} options.facturaId - ID existente (para reprocesar)
+   * @param {boolean} options.skipDuplicateCheck - Omitir dedup
+   * @param {string} options.resumeFrom - Paso desde el que resumir
+   * @param {Object} options.previousState - Estado de ejecución anterior
+   * @returns {Promise<Object>} Resultado con datos estructurados y métricas
    */
   async procesarArchivo(filePath, projectId, options = {}) {
-    const { source = 'manual', origen = {}, facturaId = null, skipDuplicateCheck = false } = options;
-    const startTime = Date.now();
-    const fileName = path.basename(filePath);
-    const ext = path.extname(filePath).toLowerCase();
-
-    this.logger.info('facturas.procesando', { filePath, projectId, source });
-
-    // Calcular hash del archivo para detección de duplicados y registro
-    let fileHash = null;
-    if (!facturaId) {
-      try {
-        const fileBuffer = fs.readFileSync(filePath);
-        fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-      } catch (e) {
-        this.logger.debug('facturas.hash.calc-error', { error: e.message });
-      }
-    }
-
-    // Detección de duplicados por hash del contenido del archivo
-    if (fileHash && !facturaId && !skipDuplicateCheck) {
-      const duplicate = await this.buscarDuplicado(fileHash, projectId);
-      if (duplicate) {
-        this.logger.warn('facturas.duplicado', { fileName, projectId, duplicateId: duplicate.id });
-        return {
-          success: false,
-          duplicate: true,
-          existingId: duplicate.id,
-          existingNombre: duplicate.nombre_archivo,
-          error: `Factura duplicada: ya existe como "${duplicate.nombre_archivo}" (${duplicate.proveedor_nombre || 'proveedor desconocido'}, ${duplicate.factura_fecha || 'sin fecha'})`
-        };
-      }
-    }
-
-    // Directorios de trabajo del proyecto
-    const storageDir = path.join(process.cwd(), 'data/projects', projectId, 'storage');
-    const preproDir = path.join(storageDir, 'preprocesadas');
-    const ocrDir = path.join(storageDir, 'ocr');
-    const structDir = path.join(storageDir, 'estructuradas');
-
-    for (const dir of [preproDir, ocrDir, structDir]) {
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    }
-
-    // Registrar en DB (o actualizar si reprocesando)
-    let facturaDbId = facturaId;
-    if (!facturaDbId) {
-      try {
-        const regResult = await this.services.call(
-          'local.facturas-db', 'registrar',
-          { proyecto: projectId, nombre_archivo: fileName, source, path_original: filePath, origen },
-          { timeout: this.config.timeouts.db }
-        );
-        const regData = regResult.data || regResult;
-        facturaDbId = regData.id;
-
-        // Notificar UI
-        this.eventBus.publish('factura.recibida', {
-          projectId, id: facturaDbId, nombre_archivo: fileName, source
-        });
-
-        // Guardar hash del archivo para detección de duplicados futuros
-        if (fileHash) {
-          await this.actualizarDB(projectId, facturaDbId, { file_hash: fileHash });
-        }
-      } catch (e) {
-        this.logger.error('facturas.registrar.error', { error: e.message });
-      }
-    }
-
-    // Marcar como procesando
-    if (facturaDbId) {
-      await this.actualizarDB(projectId, facturaDbId, { estado: 'procesando' });
-    }
-
-    try {
-      // PASO 1: Obtener imágenes del archivo
-      let imagenes = [];
-
-      if (ext === '.pdf') {
-        imagenes = await this.convertirPDF(filePath, preproDir);
-      } else if (IMAGE_EXTENSIONS.includes(ext)) {
-        // Copiar imagen a preprocesadas si no está ya ahí
-        const dest = path.join(preproDir, fileName);
-        if (path.resolve(filePath) !== path.resolve(dest)) {
-          fs.copyFileSync(filePath, dest);
-        }
-        imagenes = [dest];
-      } else {
-        throw new Error(`Formato no soportado: ${ext}`);
-      }
-
-      if (imagenes.length === 0) {
-        throw new Error('No se generaron imágenes del archivo');
-      }
-
-      // PASO 2-4: Procesar cada imagen
-      const resultadosPagina = [];
-
-      for (const imgPath of imagenes) {
-        const baseName = path.basename(imgPath, path.extname(imgPath));
-
-        // PASO 2: Preparar imagen para OCR
-        const preparedPath = path.join(preproDir, `prepared_${baseName}.png`);
-        await this.prepararImagen(imgPath, preparedPath);
-
-        // PASO 3: OCR
-        const textoOCR = await this.extraerOCR(preparedPath);
-
-        if (!textoOCR) {
-          this.logger.warn('facturas.ocr.vacio', { imagen: baseName });
-          continue;
-        }
-
-        // Guardar texto OCR
-        fs.writeFileSync(path.join(ocrDir, `${baseName}.txt`), textoOCR, 'utf-8');
-
-        // PASO 4: Estructurar con IA
-        const estructura = await this.estructurarConIA(textoOCR);
-
-        if (estructura) {
-          // Guardar JSON estructurado
-          fs.writeFileSync(
-            path.join(structDir, `${baseName}.json`),
-            JSON.stringify(estructura, null, 2),
-            'utf-8'
-          );
-          resultadosPagina.push({ baseName, textoOCR, estructura });
-        }
-      }
-
-      if (resultadosPagina.length === 0) {
-        throw new Error('No se pudo extraer datos de ninguna página');
-      }
-
-      // Combinar resultados (si multi-página, usar el primer resultado con datos)
-      const resultado = resultadosPagina[0].estructura;
-      const textoCompleto = resultadosPagina.map(r => r.textoOCR).join('\n\n--- PÁGINA ---\n\n');
-
-      // Aplanar datos para la DB
-      const datosDB = this.aplanarParaDB(resultado, textoCompleto);
-      datosDB.estado = 'procesada';
-      datosDB.fecha_procesado = new Date().toISOString();
-      datosDB.path_procesada = path.join(structDir, `${path.basename(fileName, ext)}.json`);
-
-      // Actualizar en DB
-      if (facturaDbId) {
-        await this.actualizarDB(projectId, facturaDbId, datosDB);
-      }
-
-      const duration = Date.now() - startTime;
-      this.logger.info('facturas.procesada', {
-        id: facturaDbId, fileName, duration_ms: duration,
-        proveedor: resultado.emisor?.nombre, total: resultado.totales?.total_factura
-      });
-
-      // Notificar UI en tiempo real
-      this.eventBus.publish('factura.procesada', {
-        projectId, id: facturaDbId,
-        datos: {
-          estado: 'procesada',
-          numero_factura: resultado.factura?.numero,
-          nombre_proveedor: resultado.emisor?.nombre,
-          total: resultado.totales?.total_factura,
-          fecha_factura: resultado.factura?.fecha
-        }
-      });
-
-      return {
-        success: true,
-        id: facturaDbId,
-        estructura: resultado,
-        datosDB,
-        paginas: resultadosPagina.length,
-        duration_ms: duration
-      };
-
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      this.logger.error('facturas.error', {
-        id: facturaDbId, fileName, error: error.message, duration_ms: duration
-      });
-
-      // Actualizar estado error en DB
-      if (facturaDbId) {
-        await this.actualizarDB(projectId, facturaDbId, {
-          estado: 'error',
-          ocr_error: error.message
-        });
-      }
-
-      // Notificar UI
-      this.eventBus.publish('factura.error', {
-        projectId, id: facturaDbId, error: error.message
-      });
-
-      return {
-        success: false,
-        id: facturaDbId,
-        error: error.message,
-        duration_ms: duration
-      };
-    }
-  }
-
-  // ==========================================
-  // Pipeline Steps
-  // ==========================================
-
-  /**
-   * Convierte PDF a imágenes PNG
-   */
-  async convertirPDF(pdfPath, outputDir) {
-    const result = await this.services.call('local.pdf-to-png', 'convert', {
-      pdf: pdfPath,
-      dpi: this.config.processing.dpi,
-      outputFolder: outputDir
-    }, { timeout: this.config.timeouts.pdfConvert });
-
-    const data = result.data || result;
-    return (data.images || []).map(img => img.path || path.join(outputDir, img.name));
-  }
-
-  /**
-   * Prepara imagen para OCR (grayscale, normalize, sharpen)
-   */
-  async prepararImagen(inputPath, outputPath) {
-    await this.services.call('local.sharp', 'prepare-ocr', {
-      image: inputPath,
-      options: {
-        ...this.config.processing.sharp,
-        maxWidth: this.config.processing.maxWidth,
-        maxHeight: this.config.processing.maxHeight
-      },
-      output: outputPath
-    }, { timeout: this.config.timeouts.sharp });
-  }
-
-  /**
-   * Extrae texto via OCR (Google Vision)
-   */
-  async extraerOCR(imagePath) {
-    const result = await this.services.call(this.config.ocr.provider, 'extract', {
-      image: imagePath,
-      hint: this.config.ocr.hint,
-      languageHints: this.config.ocr.languages
-    }, { timeout: this.config.timeouts.ocr });
-
-    const data = result.data || result;
-    return data.text || '';
-  }
-
-  /**
-   * Estructura texto OCR con IA — cadena de fallback entre providers
-   */
-  async estructurarConIA(textoOCR) {
-    const providers = this.config.ai.providers || ['deepseek'];
-    let lastError = null;
-
-    for (const provider of providers) {
-      try {
-        this.logger.debug('facturas.ia.intentando', { provider });
-
-        const result = await this.services.call('ai', 'chat', {
-          messages: [
-            { role: 'system', content: PROMPT_ESTRUCTURA },
-            { role: 'user', content: textoOCR }
-          ],
-          provider,
-          temperature: this.config.ai.temperature,
-          max_tokens: this.config.ai.maxTokens
-        }, { timeout: this.config.timeouts.ai });
-
-        const data = result.data || result;
-        const respuesta = data.content || data.message || '';
-
-        if (!respuesta) {
-          this.logger.warn('facturas.ia.respuesta-vacia', { provider });
-          continue;
-        }
-
-        // Limpiar posible markdown wrapping
-        const cleaned = respuesta.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-
-        try {
-          const parsed = JSON.parse(cleaned);
-          this.logger.info('facturas.ia.exito', { provider });
-          return parsed;
-        } catch (e) {
-          this.logger.warn('facturas.ia.parse-error', { provider, error: e.message });
-          lastError = e;
-          continue;
-        }
-
-      } catch (e) {
-        this.logger.warn('facturas.ia.provider-error', { provider, error: e.message });
-        lastError = e;
-        continue;
-      }
-    }
-
-    this.logger.error('facturas.ia.todos-fallaron', {
-      providers,
-      lastError: lastError?.message
-    });
-    return null;
-  }
-
-  // ==========================================
-  // Helpers
-  // ==========================================
-
-  /**
-   * Busca en la DB si ya existe una factura con el mismo hash de archivo.
-   * El hash se calcula una sola vez en procesarArchivo y se reutiliza.
-   */
-  async buscarDuplicado(fileHash, projectId) {
-    try {
-      const result = await this.services.call('local.facturas-db', 'buscarPorHash', {
-        proyecto: projectId, hash: fileHash
-      }, { timeout: this.config.timeouts.db });
-
-      const data = result.data || result;
-      return data.factura || null;
-    } catch (e) {
-      // Si el método no existe todavía en facturas-db, no bloquear el procesamiento
-      this.logger.debug('facturas.duplicate-check.skip', { error: e.message });
-      return null;
-    }
-  }
-
-  /**
-   * Aplana la estructura JSON de DeepSeek al formato plano de la DB
-   */
-  aplanarParaDB(estructura, textoOCR) {
-    return {
-      factura_numero: estructura.factura?.numero || null,
-      factura_fecha: estructura.factura?.fecha || null,
-      proveedor_nif: estructura.emisor?.cif || null,
-      proveedor_nombre: estructura.emisor?.nombre || null,
-      concepto: (estructura.lineas || []).map(l => l.descripcion).filter(Boolean).join(' + ') || null,
-      base_imponible: estructura.totales?.base_imponible || null,
-      tipo_iva: estructura.totales?.iva_porcentaje || null,
-      cuota_iva: estructura.totales?.iva_importe || null,
-      total_factura: estructura.totales?.total_factura || null,
-      metodo_pago: estructura.factura?.forma_pago || null,
-      ocr_texto: textoOCR ? textoOCR.substring(0, 5000) : null,
-      ocr_provider: this.config.ocr.provider
-    };
-  }
-
-  /**
-   * Actualiza campos de una factura en la DB
-   */
-  async actualizarDB(projectId, facturaId, campos) {
-    try {
-      await this.services.call('local.facturas-db', 'actualizar', {
-        proyecto: projectId, id: facturaId, campos
-      }, { timeout: this.config.timeouts.db });
-    } catch (e) {
-      this.logger.error('facturas.db.actualizar.error', { id: facturaId, error: e.message });
-    }
+    return this.pipeline.process(filePath, projectId, options);
   }
 
   // ==========================================

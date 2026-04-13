@@ -1,6 +1,7 @@
 const Agent = require('./agent');
 const ContextManager = require('./context-manager');
 const ToolManager = require('./tool-manager');
+const ServiceExecutor = require('../../core/service-executor');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -173,75 +174,25 @@ class AIAgentFrameworkModule {
 
   /**
    * Resolve dependencies (Prompt Manager, AI Gateway)
+   * Uses ServiceExecutor (EventBus request/response) — same pattern as all other modules.
    */
   async resolveDependencies(context) {
-    // These will be injected by the core or accessed via HTTP
-    // For now, we'll create lightweight wrappers
+    this.services = new ServiceExecutor(this.eventBus, this.logger);
 
     this.promptManager = {
       renderTemplate: async (promptId, variables) => {
-        return this.callModuleAPI('prompt-manager', 'POST', `/prompts/${promptId}/render`, {
+        return this.services.call('prompt-manager', 'render', {
+          prompt_id: promptId,
           variables
-        });
+        }, { timeout: 10000 });
       }
     };
 
     this.aiGateway = {
       chatCompletion: async (params) => {
-        return this.callModuleAPI('ai-gateway', 'POST', '/chat', params);
+        return this.services.call('ai', 'chat', params, { timeout: params.timeout || 60000 });
       }
     };
-  }
-
-  /**
-   * Call another module's API
-   */
-  async callModuleAPI(moduleName, method, path, body = null) {
-    const http = require('http');
-    const baseUrl = process.env.CORE_URL || 'http://localhost:3000';
-    const url = `${baseUrl}/modules/${moduleName}${path}`;
-
-    return new Promise((resolve, reject) => {
-      const urlObj = new URL(url);
-
-      const options = {
-        method,
-        hostname: urlObj.hostname,
-        port: urlObj.port || 3000,
-        path: urlObj.pathname,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      };
-
-      const req = http.request(options, (res) => {
-        let data = '';
-
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              resolve(JSON.parse(data));
-            } catch {
-              resolve(data);
-            }
-          } else {
-            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
-          }
-        });
-      });
-
-      req.on('error', reject);
-
-      if (body) {
-        req.write(JSON.stringify(body));
-      }
-
-      req.end();
-    });
   }
 
   /**

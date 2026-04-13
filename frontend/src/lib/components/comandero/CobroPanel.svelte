@@ -11,7 +11,7 @@
    */
   import { createEventDispatcher, onMount } from 'svelte';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
-  import { imprimirTicketVenta } from '$lib/stores/impresion';
+  import { imprimirTicketVenta, loadImpresoras, type ImpresoraInfo } from '$lib/stores/impresion';
   import CierreCajaPanel from './CierreCajaPanel.svelte';
 
   export let cuenta_id: string;
@@ -23,6 +23,40 @@
 
   // Cierre de caja
   let showCierreCaja = false;
+
+  // Selector de impresora (long-press)
+  const PRINTER_KEY = 'cobro_impresora_destino';
+  let showPrinterSelector = false;
+  let impresorasDisponibles: ImpresoraInfo[] = [];
+  let loadingImpresoras = false;
+  let selectedDestino: string = '';
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function loadDestinoFromStorage() {
+    try { selectedDestino = localStorage.getItem(PRINTER_KEY) || ''; } catch {}
+  }
+
+  function saveDestino(destino: string) {
+    selectedDestino = destino;
+    try { localStorage.setItem(PRINTER_KEY, destino); } catch {}
+  }
+
+  async function openPrinterSelector() {
+    loadingImpresoras = true;
+    showPrinterSelector = true;
+    impresorasDisponibles = await loadImpresoras();
+    loadingImpresoras = false;
+  }
+
+  function startLongPress() {
+    longPressTimer = setTimeout(() => { openPrinterSelector(); }, 600);
+  }
+
+  function cancelLongPress() {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  }
+
+  onMount(() => { loadDestinoFromStorage(); });
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -183,6 +217,8 @@
       }));
       await imprimirTicketVenta({
         cuenta_id,
+        project_id: project_id || undefined,
+        destino: selectedDestino || undefined,
         items: ticketItems,
         total: cobroCreado.monto_total || montoTotal,
         metodo_pago: cobroCreado.metodo_pago || metodoSeleccionado || undefined,
@@ -344,8 +380,11 @@
               class="action-btn print"
               disabled={imprimiendo}
               on:click={() => { imprimirTicket(); }}
+              on:pointerdown={startLongPress}
+              on:pointerup={cancelLongPress}
+              on:pointerleave={cancelLongPress}
             >
-              {imprimiendo ? '🖨️...' : '🖨️'}
+              {imprimiendo ? '🖨️...' : '🖨️'}{#if selectedDestino}<span class="dest-dot"></span>{/if}
             </button>
             <button class="action-btn success" on:click={handleClose}>
               Cerrar
@@ -358,9 +397,12 @@
               class="action-btn print"
               disabled={loading || imprimiendo}
               on:click={() => cobrarEImprimir(metodoSeleccionado || 'efectivo')}
-              title="Cobrar e imprimir ticket"
+              on:pointerdown={startLongPress}
+              on:pointerup={cancelLongPress}
+              on:pointerleave={cancelLongPress}
+              title="Cobrar e imprimir ticket · Mantener para elegir impresora"
             >
-              {imprimiendo ? '🖨️...' : '🖨️'}
+              {imprimiendo ? '🖨️...' : '🖨️'}{#if selectedDestino}<span class="dest-dot"></span>{/if}
             </button>
             <div class="cobro-dual" class:loading>
               <button
@@ -394,9 +436,12 @@
               class="action-btn print"
               disabled={loading || imprimiendo || !metodoSeleccionado}
               on:click={cobrarEImprimir}
-              title="Cobrar e imprimir ticket"
+              on:pointerdown={startLongPress}
+              on:pointerup={cancelLongPress}
+              on:pointerleave={cancelLongPress}
+              title="Cobrar e imprimir ticket · Mantener para elegir impresora"
             >
-              {imprimiendo ? '🖨️...' : '🖨️'}
+              {imprimiendo ? '🖨️...' : '🖨️'}{#if selectedDestino}<span class="dest-dot"></span>{/if}
             </button>
             <button
               class="action-btn primary"
@@ -412,6 +457,50 @@
           </div>
         {/if}
       </footer>
+
+      <!-- Printer selector (long-press on print button) -->
+      {#if showPrinterSelector}
+        <div class="printer-overlay" on:click={() => showPrinterSelector = false} role="dialog">
+          <div class="printer-panel" on:click|stopPropagation>
+            <div class="printer-header">
+              <span class="printer-title">🖨️ Impresora destino</span>
+              <button class="printer-close" on:click={() => showPrinterSelector = false}>&times;</button>
+            </div>
+            {#if loadingImpresoras}
+              <p class="printer-loading">Buscando impresoras...</p>
+            {:else if impresorasDisponibles.length === 0}
+              <p class="printer-empty">No hay impresoras descubiertas</p>
+            {:else}
+              <div class="printer-chips">
+                <button
+                  class="printer-chip"
+                  class:active={!selectedDestino}
+                  on:click={() => { saveDestino(''); showPrinterSelector = false; }}
+                >AUTO</button>
+                {#each impresorasDisponibles as imp}
+                  <button
+                    class="printer-chip"
+                    class:active={selectedDestino === imp.device_id}
+                    class:offline={!imp.online}
+                    on:click={() => { saveDestino(imp.device_id); showPrinterSelector = false; }}
+                  >
+                    {(imp.printer_name || imp.device_id).toUpperCase()}
+                    <span class="printer-dot" class:online={imp.online && imp.printer_ready}></span>
+                  </button>
+                {/each}
+              </div>
+              {#if selectedDestino}
+                {@const sel = impresorasDisponibles.find(i => i.device_id === selectedDestino)}
+                {#if sel}
+                  <p class="printer-info">{sel.ip || ''} · {sel.online ? 'Online' : 'Offline'}</p>
+                {/if}
+              {:else}
+                <p class="printer-info">Primera impresora online disponible</p>
+              {/if}
+            {/if}
+          </div>
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -966,5 +1055,125 @@
     .billetes-grid {
       grid-template-columns: repeat(2, 1fr);
     }
+  }
+
+  /* Printer destination dot on print button */
+  .dest-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 4px rgba(34, 197, 94, 0.5);
+  }
+
+  .action-btn.print { position: relative; }
+
+  /* Printer selector overlay */
+  .printer-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 20;
+    display: flex;
+    align-items: flex-end;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .printer-panel {
+    width: 100%;
+    background: #1e293b;
+    border-top: 1px solid #334155;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    animation: slideUp 0.15s ease-out;
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .printer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .printer-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #f8fafc;
+  }
+
+  .printer-close {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .printer-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .printer-chip {
+    padding: 8px 14px;
+    border: 2px solid #334155;
+    border-radius: 10px;
+    background: transparent;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    position: relative;
+    padding-right: 22px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+  .printer-chip.active {
+    background: #f97316;
+    border-color: #f97316;
+    color: #fff;
+  }
+
+  .printer-chip.offline { opacity: 0.5; }
+
+  .printer-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #64748b;
+  }
+
+  .printer-dot.online {
+    background: #22c55e;
+    box-shadow: 0 0 5px rgba(34, 197, 94, 0.5);
+  }
+
+  .printer-loading, .printer-empty {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-style: italic;
+  }
+
+  .printer-info {
+    font-size: 0.7rem;
+    color: #64748b;
+    margin: 0;
   }
 </style>

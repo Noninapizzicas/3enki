@@ -279,7 +279,7 @@ class ImpresionModule {
       printer_ready: data.printer_ready || false,
       printer_name: data.printer_name || null,
       printer_addr: data.printer_addr || null,
-      ancho: data.ancho || null,
+      ancho: data.ancho || this.config.ancho || '58mm',
       wifi_rssi: data.wifi_rssi || null,
       wifi_ssid: data.wifi_ssid || null,
       ip: data.ip || null,

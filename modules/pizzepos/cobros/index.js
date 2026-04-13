@@ -354,7 +354,7 @@ class CobrosModule {
     this.metrics.gauge('cobros.monto_total', this.internalMetrics.monto_total_cobrado);
 
     // cobro.procesado es el evento que cuentas escucha para marcar como cobrado
-    await this.publishCoboProcesado(cobro);
+    await this.publishCobroProcesado(cobro);
 
     // Abrir cajón de dinero para pagos en efectivo
     if (cobro.metodo_pago === 'efectivo') {
@@ -491,7 +491,7 @@ class CobrosModule {
     });
   }
 
-  async publishCoboProcesado(cobro) {
+  async publishCobroProcesado(cobro) {
     await this.eventBus.publish('cobro.procesado', {
       cobro_id: cobro.id,
       cuenta_id: cobro.cuenta_id,

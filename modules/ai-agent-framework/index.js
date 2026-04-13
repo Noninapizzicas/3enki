@@ -156,6 +156,72 @@ class AIAgentFrameworkModule {
   }
 
   /**
+   * Handle agent.invoke.request — synchronous request/response pattern
+   *
+   * Allows any module to call an agent via ServiceExecutor:
+   *   services.call('agent', 'invoke', { agentName, message, projectId })
+   *
+   * Returns the agent's AI response directly (not fire-and-forget).
+   * Used by invoice-pipeline and other modules that need agent results inline.
+   */
+  async onInvokeRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, agentName, message, context: extraContext, projectId } = data;
+
+    const agent = Array.from(this.agents.values()).find(a => a.name === agentName);
+
+    if (!agent) {
+      this.eventBus.publish('agent.invoke.response', {
+        request_id,
+        success: false,
+        error: `Agent '${agentName}' not found`
+      });
+      return;
+    }
+
+    if (!agent.enabled) {
+      this.eventBus.publish('agent.invoke.response', {
+        request_id,
+        success: false,
+        error: `Agent '${agentName}' is disabled`
+      });
+      return;
+    }
+
+    try {
+      const executionEvent = {
+        type: 'agent.invoke',
+        payload: {
+          message,
+          context: extraContext,
+          projectId
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      const result = await agent.handleEvent(executionEvent);
+
+      this.eventBus.publish('agent.invoke.response', {
+        request_id,
+        success: true,
+        data: result
+      });
+
+    } catch (error) {
+      this.logger.error('ai-agent-framework.invoke.failed', {
+        agentName,
+        error: error.message
+      });
+
+      this.eventBus.publish('agent.invoke.response', {
+        request_id,
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
    * Module lifecycle: onUnload
    */
   async onUnload() {

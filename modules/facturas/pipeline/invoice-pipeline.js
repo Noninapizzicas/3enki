@@ -445,22 +445,82 @@ class InvoicePipeline {
 
   // ==========================================================================
   // STEP 5: STRUCTURE — IA: OCR text → structured JSON
+  //
+  // Strategy: Agent first (specialized prompt, metrics) → direct AI fallback.
+  // The agent (invoice-structurer) has a better prompt and tracks its own stats.
+  // If the agent is unavailable, falls back to direct ai.chat with STRUCTURING_PROMPT.
   // ==========================================================================
 
   async _step_structure(state) {
     const fullText = state.ocrTexts.map(t => t.text).join('\n\n--- PAGE ---\n\n');
 
+    // Try agent first
+    const agentResult = await this._tryAgentStructure(fullText, state);
+    if (agentResult) return agentResult;
+
+    // Fallback: direct AI call with provider chain
+    return this._directAIStructure(fullText, state);
+  }
+
+  /**
+   * Try to structure via invoice-structurer agent.
+   * Returns { cost, tokens } on success, null if agent unavailable.
+   */
+  async _tryAgentStructure(ocrText, state) {
+    try {
+      this.logger.debug('pipeline.structure.agent', { agent: 'invoice-structurer' });
+
+      const result = await this.services.call('agent', 'invoke', {
+        agentName: 'invoice-structurer',
+        message: ocrText,
+        projectId: state.projectId
+      }, { timeout: this.config.timeouts.ai });
+
+      const data = result.data || result;
+      const content = data?.content || '';
+
+      if (!content) {
+        this.logger.warn('pipeline.structure.agent.empty');
+        return null;
+      }
+
+      const cleaned = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+
+      state.estructura = parsed;
+      state.structureProvider = 'agent:invoice-structurer';
+
+      const cost = data?.cost || 0;
+      const tokens = data?.usage?.total_tokens || 0;
+
+      this._saveStructuredJSON(state);
+
+      this.logger.info('pipeline.structure.agent.success', { cost, tokens });
+      return { cost, tokens };
+
+    } catch (e) {
+      // Agent not available or failed — fall through to direct AI
+      this.logger.debug('pipeline.structure.agent.fallback', { error: e.message });
+      return null;
+    }
+  }
+
+  /**
+   * Direct AI call with provider fallback chain.
+   * Used when agent is not available.
+   */
+  async _directAIStructure(ocrText, state) {
     const providers = this.config.ai.providers || ['deepseek'];
     let lastError = null;
 
     for (const provider of providers) {
       try {
-        this.logger.debug('pipeline.structure.trying', { provider });
+        this.logger.debug('pipeline.structure.direct', { provider });
 
         const result = await this.services.call('ai', 'chat', {
           messages: [
             { role: 'system', content: STRUCTURING_PROMPT },
-            { role: 'user', content: fullText }
+            { role: 'user', content: ocrText }
           ],
           provider,
           temperature: this.config.ai.temperature,
@@ -475,25 +535,16 @@ class InvoicePipeline {
           continue;
         }
 
-        // Clean markdown wrapping
         const cleaned = response.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
 
         try {
           state.estructura = JSON.parse(cleaned);
           state.structureProvider = provider;
 
-          // Track cost
           const cost = data.cost || 0;
           const tokens = data.usage?.total_tokens || 0;
 
-          // Save structured JSON to disk
-          const baseName = path.basename(state.fileName, state.ext);
-          const structDir = path.join(state.storageDir, 'estructuradas');
-          fs.writeFileSync(
-            path.join(structDir, `${baseName}.json`),
-            JSON.stringify(state.estructura, null, 2),
-            'utf-8'
-          );
+          this._saveStructuredJSON(state);
 
           this.logger.info('pipeline.structure.success', { provider, cost, tokens });
           return { cost, tokens };
@@ -503,7 +554,6 @@ class InvoicePipeline {
           lastError = e;
           continue;
         }
-
       } catch (e) {
         this.logger.warn('pipeline.structure.provider-error', { provider, error: e.message });
         lastError = e;
@@ -514,8 +564,23 @@ class InvoicePipeline {
     throw new Error(`All AI providers failed to structure invoice: ${lastError?.message}`);
   }
 
+  _saveStructuredJSON(state) {
+    const baseName = path.basename(state.fileName, state.ext);
+    const structDir = path.join(state.storageDir, 'estructuradas');
+    fs.writeFileSync(
+      path.join(structDir, `${baseName}.json`),
+      JSON.stringify(state.estructura, null, 2),
+      'utf-8'
+    );
+  }
+
   // ==========================================================================
-  // STEP 6: VALIDATE — IA: verify data coherence
+  // STEP 6: VALIDATE — Deterministic checks + optional AI validation
+  //
+  // Strategy: deterministic validations first (free, instant, 100% reliable),
+  // then optionally invoke invoice-validator agent for deeper checks.
+  // Agent validation is additive — it can add issues but never removes
+  // deterministic ones.
   // ==========================================================================
 
   async _step_validate(state) {
@@ -524,19 +589,19 @@ class InvoicePipeline {
       throw new Error('No structured data to validate');
     }
 
-    // Deterministic validations first (free, instant, reliable)
+    // ── Phase 1: Deterministic validations (free, instant, reliable) ──
     const issues = [];
 
-    // Check totals coherence
     const totales = estructura.totales || {};
     const base = parseFloat(totales.base_imponible) || 0;
     const ivaPct = parseFloat(totales.iva_porcentaje) || 0;
     const ivaAmount = parseFloat(totales.iva_importe) || 0;
     const total = parseFloat(totales.total_factura) || 0;
 
+    // Math coherence: base + IVA = total
     if (base > 0 && total > 0) {
       const expectedTotal = base + ivaAmount;
-      const tolerance = 0.02; // 2 cent tolerance for rounding
+      const tolerance = 0.02;
       if (Math.abs(expectedTotal - total) > tolerance) {
         issues.push({
           field: 'totales',
@@ -547,7 +612,7 @@ class InvoicePipeline {
       }
     }
 
-    // Verify IVA percentage makes sense (Spain: 0, 4, 10, 21)
+    // IVA percentage sanity (Spain: 0, 4, 10, 21)
     if (ivaPct > 0 && ![4, 10, 21].includes(ivaPct)) {
       issues.push({
         field: 'totales.iva_porcentaje',
@@ -557,7 +622,20 @@ class InvoicePipeline {
       });
     }
 
-    // Check lines sum vs base
+    // IVA calculation: base × % ≈ cuota
+    if (base > 0 && ivaPct > 0 && ivaAmount > 0) {
+      const expectedIva = base * ivaPct / 100;
+      if (Math.abs(expectedIva - ivaAmount) > 0.05) {
+        issues.push({
+          field: 'totales.iva_importe',
+          type: 'iva_mismatch',
+          message: `base(${base}) × ${ivaPct}% = ${expectedIva.toFixed(2)}, but cuota = ${ivaAmount}`,
+          severity: 'warning'
+        });
+      }
+    }
+
+    // Lines sum vs base
     const lineas = estructura.lineas || [];
     if (lineas.length > 0 && base > 0) {
       const lineSum = lineas.reduce((acc, l) => acc + (parseFloat(l.importe) || 0), 0);
@@ -571,7 +649,7 @@ class InvoicePipeline {
       }
     }
 
-    // Check required fields
+    // Required fields
     if (!estructura.emisor?.nombre && !estructura.emisor?.cif) {
       issues.push({
         field: 'emisor',
@@ -590,13 +668,46 @@ class InvoicePipeline {
       });
     }
 
+    // CIF format validation
+    const cif = estructura.emisor?.cif;
+    if (cif && !/^[A-Z]\d{8}$|^\d{8}[A-Z]$|^[A-Z]\d{7}[A-Z]$/i.test(cif.replace(/[-\s]/g, ''))) {
+      issues.push({
+        field: 'emisor.cif',
+        type: 'invalid_cif',
+        message: `CIF/NIF "${cif}" does not match Spanish format`,
+        severity: 'warning'
+      });
+    }
+
+    // ── Phase 2: Agent validation (optional, additive) ──
+    const agentValidation = await this._tryAgentValidation(state, issues);
+
+    // Merge agent issues (additive only)
+    if (agentValidation) {
+      for (const issue of (agentValidation.issues || [])) {
+        // Avoid duplicates
+        const isDupe = issues.some(i => i.type === issue.type && i.field === issue.field);
+        if (!isDupe) {
+          issues.push(issue);
+        }
+      }
+
+      // Apply corrections if agent suggested them
+      if (agentValidation.corrections && Object.keys(agentValidation.corrections).length > 0) {
+        state.agentCorrections = agentValidation.corrections;
+        this.logger.info('pipeline.validate.agent.corrections', {
+          fields: Object.keys(agentValidation.corrections)
+        });
+      }
+    }
+
     state.validacion = {
       valid: !issues.some(i => i.severity === 'error'),
+      confidence: agentValidation?.confidence || null,
       issues,
       checkedAt: new Date().toISOString()
     };
 
-    // If there are warnings, log them but don't fail
     if (issues.length > 0) {
       this.logger.info('pipeline.validate.issues', {
         id: state.facturaId,
@@ -604,6 +715,48 @@ class InvoicePipeline {
         errors: issues.filter(i => i.severity === 'error').length,
         warnings: issues.filter(i => i.severity === 'warning').length
       });
+    }
+  }
+
+  /**
+   * Try AI-powered validation via invoice-validator agent.
+   * Returns parsed validation result or null if unavailable.
+   * Never throws — agent validation is a bonus, not a requirement.
+   */
+  async _tryAgentValidation(state, deterministicIssues) {
+    try {
+      const ocrText = state.ocrTexts.map(t => t.text).join('\n');
+      const message = `## Datos extraídos\n\`\`\`json\n${JSON.stringify(state.estructura, null, 2)}\n\`\`\`\n\n## Texto OCR original\n${ocrText.substring(0, 3000)}`;
+
+      const result = await this.services.call('agent', 'invoke', {
+        agentName: 'invoice-validator',
+        message,
+        projectId: state.projectId
+      }, { timeout: 30000 });
+
+      const data = result.data || result;
+      const content = data?.content || '';
+
+      if (!content) return null;
+
+      const cleaned = content.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+
+      const cost = data?.cost || 0;
+      const tokens = data?.usage?.total_tokens || 0;
+
+      this.logger.info('pipeline.validate.agent.success', {
+        confidence: parsed.confidence,
+        issues: parsed.issues?.length || 0,
+        cost, tokens
+      });
+
+      return { cost, tokens, ...parsed };
+
+    } catch (e) {
+      // Agent unavailable or failed — deterministic validation is sufficient
+      this.logger.debug('pipeline.validate.agent.skip', { error: e.message });
+      return null;
     }
   }
 

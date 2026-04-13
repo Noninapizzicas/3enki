@@ -20,6 +20,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const ServiceExecutor = require('../../core/service-executor');
 const InvoicePipeline = require('./pipeline/invoice-pipeline');
+const PipelineMetrics = require('./pipeline/pipeline-metrics');
 
 // Extensiones de imagen soportadas (used by UI handlers for validation)
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif'];
@@ -95,7 +96,10 @@ class FacturasModule {
       config: this.config
     });
 
-    this.logger.info('facturas.loaded', { pipeline: 'v2' });
+    // Initialize metrics collector (uses core Metrics if available)
+    this.pipelineMetrics = new PipelineMetrics(context.metrics, this.logger);
+
+    this.logger.info('facturas.loaded', { pipeline: 'v2', metrics: !!context.metrics });
   }
 
   async onUnload() {
@@ -161,7 +165,12 @@ class FacturasModule {
    * @returns {Promise<Object>} Resultado con datos estructurados y métricas
    */
   async procesarArchivo(filePath, projectId, options = {}) {
-    return this.pipeline.process(filePath, projectId, options);
+    const result = await this.pipeline.process(filePath, projectId, options);
+
+    // Record metrics for every pipeline execution
+    this.pipelineMetrics.record(result);
+
+    return result;
   }
 
   // ==========================================
@@ -428,6 +437,23 @@ class FacturasModule {
 
   async handleToolEstadisticas(args) {
     return this.handleEstadisticas({ proyecto: args.projectId });
+  }
+
+  // ==========================================
+  // Pipeline Metrics (observability)
+  // ==========================================
+
+  /**
+   * Dashboard de métricas del pipeline de procesamiento.
+   * UI: mqttRequest('facturas', 'pipeline-metrics', {})
+   *
+   * Returns: summary, cost, timing per step, validation stats, recent history
+   */
+  async handlePipelineMetrics() {
+    return {
+      status: 200,
+      data: this.pipelineMetrics.getDashboard()
+    };
   }
 
   // ==========================================

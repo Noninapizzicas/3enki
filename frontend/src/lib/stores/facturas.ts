@@ -626,6 +626,71 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 // =============================================================================
+// PIPELINE METRICS — Commercial observability
+// =============================================================================
+
+export interface PipelineMetricsDashboard {
+  available: boolean;
+  summary?: {
+    total: number;
+    success: number;
+    failed: number;
+    duplicates: number;
+    successRate: number;
+  };
+  cost?: {
+    totalCents: number;
+    totalEur: string;
+    perInvoice: { count: number; avg: number; p50: number; p95: number };
+    totalTokens: number;
+  };
+  timing?: {
+    overall: { count: number; avg: number; p50: number; p95: number; min: number; max: number };
+    steps: Record<string, {
+      timing: { count: number; avg: number; p50: number; p95: number };
+      total: number;
+      completed: number;
+      failed: number;
+      retries: number;
+    }>;
+  };
+  validation?: {
+    total: number;
+    passed: number;
+    failed: number;
+    totalIssues: number;
+  };
+  recent?: Array<{
+    id: number;
+    success: boolean;
+    timestamp: string;
+    duration_ms: number;
+    cost: number;
+    proveedor: string | null;
+    total: number | null;
+    error: string | null;
+  }>;
+}
+
+export const pipelineMetrics = writable<PipelineMetricsDashboard>({ available: false });
+
+/**
+ * Carga métricas del pipeline de procesamiento.
+ * UI: mqttRequest('facturas', 'pipeline-metrics', {})
+ */
+export async function loadPipelineMetrics(): Promise<void> {
+  try {
+    const response = await mqttRequest<PipelineMetricsDashboard>(
+      'facturas', 'pipeline-metrics', {}
+    );
+    pipelineMetrics.set(response.data);
+  } catch (error) {
+    console.error('[Facturas] Pipeline metrics failed:', getErrorMessage(error));
+    pipelineMetrics.set({ available: false });
+  }
+}
+
+// =============================================================================
 // DERIVED STORES
 // =============================================================================
 

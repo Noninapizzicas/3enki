@@ -178,6 +178,71 @@ class FuentesModule {
   }
 
   /**
+   * Obtener config de fuentes de un proyecto
+   * UI: mqttRequest('fuentes', 'get-config', { proyecto })
+   */
+  async handleGetConfig(data) {
+    const { proyecto } = data;
+    if (!proyecto) {
+      return { status: 400, error: 'proyecto es requerido' };
+    }
+
+    // Load from project config
+    const config = await this.getProjectFuentesConfig(proyecto);
+    const fuentes = config?.fuentes || {};
+
+    // Get strategy health
+    const strategies = {};
+    for (const [tipo, strategy] of Object.entries(this.strategies)) {
+      strategies[tipo] = {
+        configured: !!fuentes[tipo]?.enabled,
+        health: strategy.getHealth ? strategy.getHealth() : 'unknown'
+      };
+    }
+
+    return {
+      status: 200,
+      data: {
+        proyecto,
+        fuentes,
+        strategies
+      }
+    };
+  }
+
+  /**
+   * Guardar config de fuentes de un proyecto
+   * UI: mqttRequest('fuentes', 'save-config', { proyecto, fuentes: { telegram: {...}, gmail: {...} } })
+   */
+  async handleSaveConfig(data) {
+    const { proyecto, fuentes } = data;
+    if (!proyecto || !fuentes) {
+      return { status: 400, error: 'proyecto y fuentes son requeridos' };
+    }
+
+    try {
+      // Save to project config via filesystem service
+      await this.services.call('local.project-config', 'set', {
+        project_id: proyecto,
+        key: 'fuentes',
+        value: fuentes
+      }, { timeout: 5000 });
+
+      // Update local cache
+      const existing = this.projectConfigs.get(proyecto) || {};
+      existing.fuentes = fuentes;
+      this.projectConfigs.set(proyecto, existing);
+
+      this.logger.info('fuentes.config.saved', { proyecto, keys: Object.keys(fuentes) });
+
+      return { status: 200, data: { saved: true, fuentes } };
+    } catch (e) {
+      this.logger.error('fuentes.config.save.error', { proyecto, error: e.message });
+      return { status: 500, error: e.message };
+    }
+  }
+
+  /**
    * Forzar check de Gmail para un proyecto
    * UI: mqttRequest('fuentes', 'check-gmail', { proyecto })
    */

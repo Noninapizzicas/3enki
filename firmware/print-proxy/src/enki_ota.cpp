@@ -94,8 +94,8 @@ static void executeOta() {
     case HTTP_UPDATE_OK:
       Serial.println("[OTA] OK — reiniciando...");
       publishOtaStatus("success");
-      mqtt.loop();
-      delay(500);
+      // Flush MQTT buffer — varios loops para asegurar delivery
+      for (int i = 0; i < 5; i++) { mqtt.loop(); delay(100); }
       ESP.restart();
       break;
 
@@ -195,8 +195,7 @@ void otaHandle() {
     case HTTP_UPDATE_OK:
       Serial.println("[OTA] OK — reiniciando...");
       publishOtaStatus("success");
-      mqtt.loop();
-      delay(500);
+      for (int i = 0; i < 5; i++) { mqtt.loop(); delay(100); }
       ESP.restart();
       break;
   }

@@ -746,7 +746,7 @@ void logic_status(JsonDocument& doc) {
   doc["error_count"]     = errorCount;
   doc["reconnect_count"] = reconnectCount;
   doc["queue_pending"]   = pqCount;
-  doc["free_heap"]       = ESP.getFreeHeap();
+  // free_heap ya lo pone base en mqttPublishStatus() — no duplicar
 
   // Salud preventiva
   doc["printer_alive"]        = printerAlive;       // ultimo heartbeat respondio

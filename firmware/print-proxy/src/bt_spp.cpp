@@ -95,15 +95,27 @@ bool spp_send(const uint8_t* data, size_t len) {
 
   Serial.printf("[SPP] Enviando %d bytes...\n", len);
   enki_led_on();
-  size_t written = SerialBT.write(data, len);
-  enki_led_off();
 
-  if (written == len) {
-    Serial.printf("[SPP] OK (%d bytes)\n", written);
-    return true;
+  // Enviar en chunks para alimentar watchdog en payloads grandes
+  const size_t CHUNK = 512;
+  size_t sent = 0;
+  while (sent < len) {
+    size_t chunkLen = min(CHUNK, len - sent);
+    size_t written = SerialBT.write(data + sent, chunkLen);
+    if (written != chunkLen) {
+      Serial.printf("[SPP] Error en offset %d: %d de %d bytes\n", sent, written, chunkLen);
+      enki_led_off();
+      return false;
+    }
+    sent += written;
+    if (sent < len) {
+      delay(1);  // yield para watchdog y WiFi
+    }
   }
-  Serial.printf("[SPP] Error: %d de %d bytes\n", written, len);
-  return false;
+
+  enki_led_off();
+  Serial.printf("[SPP] OK (%d bytes)\n", sent);
+  return true;
 }
 
 bool spp_is_connected() {

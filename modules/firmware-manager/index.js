@@ -1,5 +1,5 @@
 /**
- * Módulo Firmware Manager v1.1.0
+ * Módulo Firmware Manager v2.0.0
  *
  * Gestión de firmwares, versionado, y orquestación de OTA.
  *
@@ -24,7 +24,7 @@ const crypto = require('crypto');
 class FirmwareManagerModule {
   constructor() {
     this.name = 'firmware-manager';
-    this.version = '1.1.0';
+    this.version = '2.0.0';
 
     // Dependencias
     this.eventBus = null;
@@ -317,7 +317,12 @@ class FirmwareManagerModule {
       type,
       version,
       file: fileName,
-      changelog: `Build de driver ${driverName} (${board || 'esp32dev'})`
+      changelog: `Build de driver ${driverName} (${board || 'esp32dev'})`,
+      // Pass metadata from builder
+      utility: data.utility || '',
+      description: data.description || '',
+      board: board || 'esp32dev',
+      capabilities: data.capabilities || []
     });
 
     if (result.status === 201) {
@@ -359,6 +364,11 @@ class FirmwareManagerModule {
         latest: entry.latest,
         releases_count: Object.keys(entry.releases).length,
         releases: Object.keys(entry.releases),
+        utility: entry.utility || '',
+        description: entry.description || '',
+        board: entry.board || '',
+        capabilities: entry.capabilities || [],
+        projects: entry.projects || [],
         binary_path: latestRelease?.file
           ? path.join(this.config.data_path, 'binaries', latestRelease.file)
           : null
@@ -407,8 +417,22 @@ class FirmwareManagerModule {
 
     // Registrar en catálogo
     if (!this.catalog[type]) {
-      this.catalog[type] = { latest: version, releases: {} };
+      this.catalog[type] = {
+        latest: version,
+        releases: {},
+        utility: data.utility || '',
+        description: data.description || '',
+        board: data.board || '',
+        capabilities: data.capabilities || [],
+        projects: data.projects || []
+      };
     }
+
+    // Update metadata if provided (refresh on each build)
+    if (data.utility) this.catalog[type].utility = data.utility;
+    if (data.description) this.catalog[type].description = data.description;
+    if (data.board) this.catalog[type].board = data.board;
+    if (data.capabilities && data.capabilities.length > 0) this.catalog[type].capabilities = data.capabilities;
 
     this.catalog[type].releases[version] = {
       file,
@@ -648,6 +672,90 @@ class FirmwareManagerModule {
   }
 
   /**
+   * Actualizar metadatos de un tipo de firmware existente.
+   */
+  async handleUpdateMeta(data) {
+    const { type, utility, description, board, capabilities, projects, docs_url } = data;
+    if (!type) return { status: 400, error: 'type requerido' };
+
+    const entry = this.catalog[type];
+    if (!entry) return { status: 404, error: `Tipo '${type}' no encontrado` };
+
+    if (utility !== undefined) entry.utility = utility;
+    if (description !== undefined) entry.description = description;
+    if (board !== undefined) entry.board = board;
+    if (capabilities !== undefined) entry.capabilities = capabilities;
+    if (projects !== undefined) entry.projects = projects;
+    if (docs_url !== undefined) entry.docs_url = docs_url;
+
+    await this._saveCatalog();
+
+    this.logger.info('firmware.meta.updated', { type });
+
+    return { status: 200, data: { type, ...this._getTypeMeta(type) } };
+  }
+
+  /**
+   * Información detallada de un tipo de firmware.
+   */
+  async handleGetInfo(data) {
+    const { type } = data;
+    if (!type) return { status: 400, error: 'type requerido' };
+
+    const entry = this.catalog[type];
+    if (!entry) return { status: 404, error: `Tipo '${type}' no encontrado` };
+
+    const releases = Object.entries(entry.releases || {}).map(([version, rel]) => ({
+      version,
+      file: rel.file,
+      sha256: rel.sha256,
+      size: rel.size,
+      date: rel.date,
+      changelog: rel.changelog,
+      min_version: rel.min_version
+    })).sort((a, b) => b.date.localeCompare(a.date));
+
+    return {
+      status: 200,
+      data: {
+        type,
+        latest: entry.latest,
+        utility: entry.utility || '',
+        description: entry.description || '',
+        board: entry.board || '',
+        capabilities: entry.capabilities || [],
+        projects: entry.projects || [],
+        docs_url: entry.docs_url || '',
+        releases_count: releases.length,
+        releases
+      }
+    };
+  }
+
+  /**
+   * Listar firmwares asociados a un proyecto.
+   */
+  async handleListByProject(data) {
+    const { project_id } = data;
+    if (!project_id) return { status: 400, error: 'project_id requerido' };
+
+    const types = [];
+    for (const [type, entry] of Object.entries(this.catalog)) {
+      if (entry.projects && entry.projects.includes(project_id)) {
+        types.push({
+          type,
+          latest: entry.latest,
+          utility: entry.utility || '',
+          board: entry.board || '',
+          releases_count: Object.keys(entry.releases).length
+        });
+      }
+    }
+
+    return { status: 200, data: { project_id, types, total: types.length } };
+  }
+
+  /**
    * HTTP handler: sirve binarios de firmware.
    * GET /firmware/:type/:version/:file
    */
@@ -797,7 +905,7 @@ class FirmwareManagerModule {
     try {
       await fs.promises.mkdir(this.config.data_path, { recursive: true });
       const data = {
-        _version: '1.0.0',
+        _version: '2.0.0',
         _updated: new Date().toISOString(),
         catalog: this.catalog
       };
@@ -905,6 +1013,22 @@ class FirmwareManagerModule {
   // ==========================================
   // Utilidades
   // ==========================================
+
+  /**
+   * Obtener metadatos de un tipo de firmware.
+   */
+  _getTypeMeta(type) {
+    const entry = this.catalog[type];
+    if (!entry) return {};
+    return {
+      utility: entry.utility || '',
+      description: entry.description || '',
+      board: entry.board || '',
+      capabilities: entry.capabilities || [],
+      projects: entry.projects || [],
+      docs_url: entry.docs_url || ''
+    };
+  }
 
   /**
    * Comparación simple de versiones semver.

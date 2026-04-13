@@ -1,0 +1,7 @@
+{
+  "name": "print-proxy",
+  "utility": "Puente MQTT-BLE para impresoras térmicas",
+  "description": "Firmware ESP32 que recibe tickets ESC/POS por MQTT y los envía via BLE o SPP a impresoras térmicas (Netum, Peripage). Cola de impresión, circuit breaker, OTA, portal web de configuración.",
+  "board": "esp32dev",
+  "capabilities": ["print", "ble", "spp", "thermal-printer"]
+}

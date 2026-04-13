@@ -2,10 +2,10 @@
  * firmware-builder — Compilación de firmware ESP32 (BASE + LÓGICA)
  *
  * Reemplaza al antiguo esp32-dev. En vez de templates y scaffolding,
- * detecta drivers en firmware/ y compila directamente via PlatformIO.
+ * detecta drivers en firmware/drivers/ y compila directamente via PlatformIO.
  *
- * Cada subdirectorio de firmware/ que tenga platformio.ini es un driver.
- * Ejemplo: firmware/print-proxy/ → driver "print-proxy"
+ * Cada subdirectorio de firmware/drivers/ que tenga platformio.ini es un driver.
+ * Ejemplo: firmware/drivers/print-proxy/ → driver "print-proxy"
  *
  * Simplificación radical:
  *   Antes:  elegir template → crear proyecto → configurar variables → compilar
@@ -30,14 +30,14 @@ const BOARDS = {
 class FirmwareBuilderModule {
   constructor() {
     this.name = 'firmware-builder';
-    this.version = '1.0.0';
+    this.version = '1.1.0';
 
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
 
     this.config = {
-      firmware_path: './firmware',
+      firmware_path: './firmware/drivers',
       platformio_path: 'platformio',
       build_timeout_ms: 5 * 60 * 1000,
       max_concurrent_builds: 2
@@ -96,7 +96,7 @@ class FirmwareBuilderModule {
   // ─── UI Handlers ──────────────────────────────────────────
 
   /**
-   * Lista drivers disponibles (subdirectorios de firmware/ con platformio.ini).
+   * Lista drivers disponibles (subdirectorios de firmware/drivers/ con platformio.ini).
    */
   async handleListDrivers() {
     // Re-escanear para detectar cambios
@@ -108,7 +108,9 @@ class FirmwareBuilderModule {
         id,
         name: driver.name,
         description: driver.description,
+        utility: driver.utility || '',
         board: driver.board,
+        capabilities: driver.capabilities || [],
         path: driver.path,
         has_binary: driver.has_binary,
         binary_size: driver.binary_size || null,
@@ -308,7 +310,11 @@ class FirmwareBuilderModule {
             board,
             binary_path: binPath,
             binary_size: binarySize,
-            duration_ms: duration
+            duration_ms: duration,
+            // Pass metadata for firmware-manager auto-registration
+            utility: driverInfo?.utility || '',
+            description: driverInfo?.description || '',
+            capabilities: driverInfo?.capabilities || []
           });
 
           resolve({ success: true, binary_path: binPath, binary_size: binarySize, duration_ms: duration });
@@ -391,7 +397,7 @@ class FirmwareBuilderModule {
   // ─── Driver scanner ───────────────────────────────────────
 
   /**
-   * Escanea firmware/ buscando subdirectorios con platformio.ini.
+   * Escanea firmware/drivers/ buscando subdirectorios con platformio.ini.
    * Cada uno es un driver compilable.
    */
   async _scanDrivers() {
@@ -439,6 +445,13 @@ class FirmwareBuilderModule {
           if (firstLine) description = firstLine.trim().substring(0, 120);
         } catch (_) {}
 
+        // Read driver metadata if exists
+        let driverMeta = {};
+        try {
+          const metaRaw = await fs.promises.readFile(path.join(driverPath, 'driver.json'), 'utf-8');
+          driverMeta = JSON.parse(metaRaw);
+        } catch (_) {}
+
         // Resolver directorio de build (env name o board name)
         const buildEnv = envName || board;
 
@@ -465,9 +478,11 @@ class FirmwareBuilderModule {
 
         this.drivers.set(entry.name, {
           name: entry.name,
-          description,
+          description: driverMeta.description || description,
+          utility: driverMeta.utility || '',
+          board: driverMeta.board || board,
+          capabilities: driverMeta.capabilities || [],
           path: driverPath,
-          board,
           buildEnv,
           has_binary: hasBinary,
           binary_size: binarySize,

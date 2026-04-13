@@ -1,7 +1,7 @@
 {
   "name": "firmware-builder",
-  "version": "1.0.0",
-  "description": "Compilación de firmware ESP32 con arquitectura BASE + LÓGICA. Detecta drivers en firmware/, compila via PlatformIO",
+  "version": "1.1.0",
+  "description": "Compilación de firmware ESP32 con arquitectura BASE + LÓGICA. Detecta drivers en firmware/drivers/, compila via PlatformIO",
   "author": "Enki",
   "tier": "tier_3_core",
 
@@ -43,8 +43,54 @@
     { "domain": "builder", "action": "list-boards", "handler": "handleListBoards" }
   ],
 
+  "tools": [
+    {
+      "name": "builder.list_drivers",
+      "description": "Lista los drivers ESP32 disponibles para compilar, con metadatos (utility, board, capabilities, archivos fuente)",
+      "handler": "handleListDrivers",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "builder.build",
+      "description": "Compila un driver ESP32 via PlatformIO. Asíncrono: retorna inmediatamente, usa builder.build_status para seguir el progreso.",
+      "handler": "handleBuild",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "driver": { "type": "string", "description": "Nombre del driver (ej: print-proxy)" },
+          "board": { "type": "string", "description": "Board alternativo (opcional, usa el del platformio.ini si no se indica)" },
+          "clean": { "type": "boolean", "description": "Limpiar build antes de compilar (más lento pero asegura build limpio)" }
+        },
+        "required": ["driver"]
+      }
+    },
+    {
+      "name": "builder.build_status",
+      "description": "Estado del build actual o último build de un driver. Incluye log de compilación.",
+      "handler": "handleBuildStatus",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "driver": { "type": "string", "description": "Nombre del driver (opcional, sin filtro muestra todos los activos)" }
+        }
+      }
+    },
+    {
+      "name": "builder.list_boards",
+      "description": "Lista los boards ESP32 soportados (esp32dev, esp32-s3, esp32-c3, etc.)",
+      "handler": "handleListBoards",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+
   "config": {
-    "firmware_path": "./firmware",
+    "firmware_path": "./firmware/drivers",
     "platformio_path": "platformio",
     "build_timeout_ms": 300000,
     "max_concurrent_builds": 2

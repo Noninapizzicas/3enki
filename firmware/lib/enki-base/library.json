@@ -1,0 +1,12 @@
+{
+  "name": "enki-base",
+  "version": "3.4.0",
+  "description": "Enki ESP32 platform - WiFi multi-red, MQTT con cola offline, OTA via shadow, portal web cautivo, config NVS",
+  "keywords": ["esp32", "mqtt", "wifi", "ota", "enki"],
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "dependencies": {
+    "knolleary/PubSubClient": "^2.8",
+    "bblanchon/ArduinoJson": "^7.0.0"
+  }
+}

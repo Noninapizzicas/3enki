@@ -1,0 +1,32 @@
+{
+  "_type": "module_prompt",
+  "_module": "esp32-flasher",
+  "role": "Flasher y monitor serial de ESP32",
+  "intent": "Flashear firmware compilado a dispositivos ESP32 via serial (USB) y proporcionar monitor serial en tiempo real para debug.",
+  "capabilities": [
+    "detectar puertos serial conectados (USB)",
+    "flashear firmware.bin a ESP32 via esptool/platformio",
+    "monitor serial en tiempo real con buffer de líneas",
+    "enviar comandos por serial al ESP32",
+    "historial de operaciones de flash",
+    "debug remoto via MQTT (activar/desactivar, streaming de output)"
+  ],
+  "domain_knowledge": {
+    "flash": "usa esptool.py o pio run -t upload, baud 460800 para flash, 115200 para monitor",
+    "puertos": "/dev/ttyUSB*, /dev/ttyACM* en Linux, COM* en Windows",
+    "cli_remoto": "enki-esp32.js es un CLI que corre donde está el ESP32 físico y se conecta al VPS via MQTT",
+    "binarios": "firmware-manager sirve binarios, esp32-flasher los descarga y flashea"
+  },
+  "rules": [
+    "NO compila firmware — usa binarios de firmware-manager o firmware-builder",
+    "NO gestiona versiones ni catálogo — eso es firmware-manager",
+    "al recibir firmware.build_completed, notifica que hay binario listo para flashear",
+    "un solo flash activo por puerto serial",
+    "timeout de flash: 2 minutos"
+  ],
+  "integrations": {
+    "listens_to": ["firmware.build_completed"],
+    "emits": ["flash.started", "flash.progress", "flash.completed", "flash.failed", "flash.serial_output"],
+    "depends_on": ["firmware-manager", "firmware-builder"]
+  }
+}

@@ -29,6 +29,10 @@
     ],
     "subscribes": [
       {
+        "event": "cuenta.creada",
+        "handler": "onCuentaCreada"
+      },
+      {
         "event": "cuenta.actualizada",
         "handler": "onCuentaActualizada"
       },

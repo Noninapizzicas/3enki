@@ -135,6 +135,20 @@ class CobrosModule {
   }
 
   // ==========================================
+  // Event Handlers: cuenta lifecycle (ref_display cache)
+  // ==========================================
+
+  async onCuentaCreada(event) {
+    const d = event?.data || event?.payload || event;
+    if (d.cuenta_id && d.ref_display) this.refDisplayCache.set(d.cuenta_id, d.ref_display);
+  }
+
+  async onCuentaActualizada(event) {
+    const d = event?.data || event?.payload || event;
+    if (d.cuenta_id && d.cambios?.ref_display) this.refDisplayCache.set(d.cuenta_id, d.cambios.ref_display);
+  }
+
+  // ==========================================
   // Event Handlers
   // ==========================================
 

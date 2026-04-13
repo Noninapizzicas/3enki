@@ -54,6 +54,11 @@
         "handler": "onMesaRenombrada"
       },
       {
+        "event": "cuenta.eliminada",
+        "description": "Limpiar cache de ref_display al eliminar cualquier tipo de cuenta",
+        "handler": "onCuentaEliminada"
+      },
+      {
         "event": "mesa.cerrada",
         "description": "Limpiar cache de nombre al cerrar mesa",
         "handler": "onMesaCerrada"

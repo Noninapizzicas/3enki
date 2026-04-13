@@ -381,7 +381,11 @@ class ImpresionModule {
       init_failed: 'Error iniciando Bluetooth',
       connect_failed: 'No se pudo conectar a la impresora',
       write_failed: 'Error escribiendo en la impresora (sin papel?)',
-      disconnected_mid_send: 'Impresora desconectada durante el envio'
+      disconnected_mid_send: 'Impresora desconectada durante el envio',
+      missing_data: 'Job sin campo data (payload vacio)',
+      payload_too_large: 'Payload demasiado grande para el buffer',
+      base64_error: 'Error decodificando base64',
+      queue_full: 'Cola de impresion llena (intentar de nuevo)'
     };
     return mensajes[code] || `Error desconocido (${code || 'sin codigo'})`;
   }
@@ -474,6 +478,14 @@ class ImpresionModule {
       const existing = this.cuentaNombres.get(cuenta_id);
       this.cuentaNombres.set(cuenta_id, { ...existing, ref: newRef });
       this.logger.info('impresion.ref_display.updated', { cuenta_id, ref: newRef });
+    }
+  }
+
+  async onCuentaEliminada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id } = data;
+    if (cuenta_id) {
+      this.cuentaNombres.delete(cuenta_id);
     }
   }
 

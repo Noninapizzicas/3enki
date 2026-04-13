@@ -960,6 +960,7 @@ class CocinaModule {
           // Fallback: detectar por prefijo del cuenta_id (palabra completa).
           let canal = cuenta.tipo || null;
           if (!canal) {
+            // Prefijos largos (legacy)
             if (cuenta_id.startsWith('mesa_')) canal = 'mesa';
             else if (cuenta_id.startsWith('llevar_')) canal = 'llevar';
             else if (cuenta_id.startsWith('telefono_') || cuenta_id.startsWith('tel_')) canal = 'telefono';
@@ -967,6 +968,13 @@ class CocinaModule {
             else if (cuenta_id.startsWith('glovo_')) canal = 'glovo';
             else if (cuenta_id.startsWith('delivery_')) canal = 'delivery';
             else if (cuenta_id.startsWith('llevadoo_')) canal = 'llevadoo';
+            // Prefijos cortos (nuevos)
+            else if (cuenta_id.startsWith('M_')) canal = 'mesa';
+            else if (cuenta_id.startsWith('L_')) canal = 'llevar';
+            else if (cuenta_id.startsWith('T_')) canal = 'telefono';
+            else if (cuenta_id.startsWith('W_')) canal = 'whatsapp';
+            else if (cuenta_id.startsWith('G_')) canal = 'glovo';
+            else if (cuenta_id.startsWith('D_')) canal = 'llevadoo';
           }
 
           const pedidoCocina = {

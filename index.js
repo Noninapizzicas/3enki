@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 
 // Load environment variables from .env file
-require('dotenv').config();
+// Priority: data/.env (writable, managed by credential-manager) > root .env (legacy)
+const _path = require('path');
+const _fs = require('fs');
+const _dataEnv = _path.join(__dirname, 'data', '.env');
+if (_fs.existsSync(_dataEnv)) {
+  require('dotenv').config({ path: _dataEnv });
+}
+require('dotenv').config(); // root .env as fallback (won't override existing vars)
 
 /**
  * Event Core - Main Entry Point

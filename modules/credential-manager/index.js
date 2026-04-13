@@ -59,9 +59,30 @@ class CredentialManagerModule {
       version: this.version
     });
 
-    // Configure env file path - use project root (2 levels up from module)
+    // Configure env file path
+    // Priority: config.envFile > data/.env (writable in Docker) > root .env
     const projectRoot = path.resolve(__dirname, '..', '..');
-    this.envFilePath = path.join(projectRoot, this.config.envFile || '.env');
+    if (this.config.envFile) {
+      this.envFilePath = path.resolve(projectRoot, this.config.envFile);
+    } else {
+      // Default: data/.env — always writable (Docker volume or local dev)
+      const dataDir = path.join(projectRoot, 'data');
+      if (!fsSync.existsSync(dataDir)) {
+        fsSync.mkdirSync(dataDir, { recursive: true });
+      }
+      this.envFilePath = path.join(dataDir, '.env');
+
+      // Migration: if root .env exists but data/.env doesn't, copy it
+      const rootEnv = path.join(projectRoot, '.env');
+      if (fsSync.existsSync(rootEnv) && !fsSync.existsSync(this.envFilePath)) {
+        try {
+          fsSync.copyFileSync(rootEnv, this.envFilePath);
+          this.logger.info('env.file.migrated', { from: rootEnv, to: this.envFilePath });
+        } catch (e) {
+          this.logger.debug('env.file.migration.skip', { error: e.message });
+        }
+      }
+    }
 
     // Load existing credentials
     await this.loadEnvFile();

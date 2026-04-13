@@ -147,6 +147,28 @@ class CobrosModule {
     });
   }
 
+  async onCajaCerrada(event) {
+    const size = this.cobros.size;
+    this.cobros.clear();
+    this.refDisplayCache.clear();
+
+    this.logger.info('cobros.reset.caja_cerrada', {
+      cobros_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  async onDiaIniciado(event) {
+    const size = this.cobros.size;
+    this.cobros.clear();
+    this.refDisplayCache.clear();
+
+    this.logger.info('cobros.reset.dia_iniciado', {
+      cobros_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
   // ==========================================
   // UI Handlers (MQTT Request/Response)
   // ==========================================

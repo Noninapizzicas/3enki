@@ -67,6 +67,16 @@
         "event": "cuenta.actualizada",
         "description": "Actualizar ref_display en cache cuando se renombra cualquier cuenta",
         "handler": "onCuentaActualizada"
+      },
+      {
+        "event": "caja.cerrada",
+        "description": "Cierre de caja - limpiar caches y historial",
+        "handler": "onCajaCerrada"
+      },
+      {
+        "event": "dia.iniciado",
+        "description": "Nuevo día - limpiar caches",
+        "handler": "onDiaIniciado"
       }
     ]
   },

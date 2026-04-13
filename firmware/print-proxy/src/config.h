@@ -35,7 +35,7 @@
 // --- BASE: Hardware (no configurables desde portal) ---
 #define LED_PIN                 2       // LED integrado del ESP32
 #define PORTAL_PORT             80      // puerto del portal web
-#define MAX_PAYLOAD_SIZE        8192    // buffer compartido para payloads grandes (8KB para tickets con logo)
+#define MAX_PAYLOAD_SIZE        4096    // max payload decodificado (alineado con PRINT_QUEUE_BUF en logic)
 #define WDT_TIMEOUT_SEC         120     // watchdog timeout 2 min
 #define STATUS_INTERVAL_MS      30000   // cada 30s publica status
 
@@ -43,7 +43,9 @@
 #define OTA_CHECK_INTERVAL_MS   300000  // cada 5 min comprueba OTA
 
 // --- BASE: MQTT ---
-#define MQTT_BUFFER_SIZE        8448    // MAX_PAYLOAD_SIZE + 256 overhead
+// Buffer MQTT debe caber: base64(MAX_PAYLOAD_SIZE) + JSON overhead + topic
+// 4096 bytes binario = ~5462 chars base64 + ~200 JSON/topic = ~5662 → 6144 con margen
+#define MQTT_BUFFER_SIZE        6144
 
 // --- NVS ---
 #define NVS_NAMESPACE           "enki"

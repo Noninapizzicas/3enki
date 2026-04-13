@@ -161,6 +161,34 @@ class PedidosModule {
   }
 
   // ==========================================
+  // Reset: caja.cerrada / dia.iniciado
+  // ==========================================
+
+  async onCajaCerrada(event) {
+    const size = this.pedidos.size;
+    this.pedidos.clear();
+    this.pedidosPorCuenta.clear();
+
+    this.metrics?.gauge?.('pedido.activos.count', 0);
+    this.logger.info('pedidos.reset.caja_cerrada', {
+      pedidos_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  async onDiaIniciado(event) {
+    const size = this.pedidos.size;
+    this.pedidos.clear();
+    this.pedidosPorCuenta.clear();
+
+    this.metrics?.gauge?.('pedido.activos.count', 0);
+    this.logger.info('pedidos.reset.dia_iniciado', {
+      pedidos_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  // ==========================================
   // Bridge: Comandero → Pedidos
   // ==========================================
 

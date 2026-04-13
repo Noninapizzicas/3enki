@@ -478,6 +478,31 @@ class ImpresionModule {
   }
 
   // ==========================================
+  // Reset: caja.cerrada / dia.iniciado
+  // ==========================================
+
+  async onCajaCerrada(event) {
+    this.cuentaNombres.clear();
+    this.historial = [];
+    this.internalMetrics.comandas_generadas = 0;
+    this.internalMetrics.reimpresiones = 0;
+    this.internalMetrics.errores = 0;
+
+    this.logger.info('impresion.reset.caja_cerrada', {
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  async onDiaIniciado(event) {
+    this.cuentaNombres.clear();
+    this.historial = [];
+
+    this.logger.info('impresion.reset.dia_iniciado', {
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  // ==========================================
   // Event Handler: cocina.item_ticket
   // ==========================================
 

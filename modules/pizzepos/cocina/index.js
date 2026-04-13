@@ -374,13 +374,45 @@ class CocinaModule {
   }
 
   // ==========================================
+  // Reset: caja.cerrada / dia.iniciado
+  // ==========================================
+
+  async onCajaCerrada(event) {
+    const size = this.pedidosActivos.size;
+    this.pedidosActivos.clear();
+    this.cuentaNombres.clear();
+    this.historial = [];
+    this._saveSnapshotDebounced();
+
+    this.metrics?.gauge?.('cocina.pedidos_activos.count', 0);
+    this.logger.info('cocina.reset.caja_cerrada', {
+      pedidos_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  async onDiaIniciado(event) {
+    const size = this.pedidosActivos.size;
+    this.pedidosActivos.clear();
+    this.cuentaNombres.clear();
+    this.historial = [];
+    this._saveSnapshotDebounced();
+
+    this.metrics?.gauge?.('cocina.pedidos_activos.count', 0);
+    this.logger.info('cocina.reset.dia_iniciado', {
+      pedidos_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  // ==========================================
   // Pedidos
   // ==========================================
 
   async onPedidoEnviadoCocina(event) {
     const data = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { pedido_id, items, cuenta_id, canal, ref_display, notas_generales, metadata } = data;
+    const { pedido_id, items, cuenta_id, canal, ref_display, project_id, notas_generales, metadata } = data;
 
     this.logger.info('cocina.pedido.recibido', {
       correlation_id: correlationId,
@@ -422,6 +454,7 @@ class CocinaModule {
         return cocinaItem;
       }),
       estado: 'activo',
+      project_id: project_id || null,
       notas_generales: notas_generales || '',
       recibido_at: new Date().toISOString(),
       metadata: metadata || null
@@ -1086,6 +1119,7 @@ class CocinaModule {
     await this.eventBus.publish('cocina.item_ticket', {
       pedido_id: pedidoCocina.pedido_id,
       cuenta_id: pedidoCocina.cuenta_id,
+      project_id: pedidoCocina.project_id || null,
       ref_display: pedidoCocina.ref_display || null,
       canal: pedidoCocina.canal || null,
       item_id: item.item_id,

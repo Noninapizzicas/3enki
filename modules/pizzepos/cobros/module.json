@@ -47,6 +47,16 @@
         "event": "pedido.completado",
         "description": "Pedido completado - permitir cobro",
         "handler": "onPedidoCompletado"
+      },
+      {
+        "event": "caja.cerrada",
+        "description": "Cierre de caja - limpiar cobros del día",
+        "handler": "onCajaCerrada"
+      },
+      {
+        "event": "dia.iniciado",
+        "description": "Nuevo día - limpiar cobros stale",
+        "handler": "onDiaIniciado"
       }
     ]
   },

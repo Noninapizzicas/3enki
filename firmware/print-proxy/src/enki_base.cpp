@@ -90,7 +90,7 @@ void enki_mqtt_publish(const char* topic, const char* payload) {
 }
 
 bool enki_mqtt_subscribe(const char* topic) {
-  return mqtt.subscribe(topic);
+  return mqtt.subscribe(topic, 1);  // QoS 1: at-least-once delivery
 }
 
 bool enki_mqtt_connected() {

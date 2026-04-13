@@ -335,15 +335,16 @@ export async function loadImpresoras(): Promise<ImpresoraInfo[]> {
     }
   } catch {}
 
-  // Fuente 2: perifericos (registry — impresoras registradas manualmente o por auto-discovery)
+  // Fuente 2: perifericos (registry — impresoras auto-descubiertas o manuales)
+  // perifericos usa el device_id del ESP32 como 'nombre' del dispositivo
   try {
     const res2 = await mqttRequest<any>('perifericos', 'listar-por-capacidad', { capacidad: 'imprimir' }, { timeout: 4000 });
     for (const p of res2.data?.dispositivos || []) {
-      const id = p.metadata?.esp32_device_id || p.nombre;
+      const id = p.nombre;  // nombre = device_id del ESP32 en auto-discovery
       if (!results.has(id)) {
         results.set(id, {
           device_id: id,
-          project_id: p.metadata?.project_id || '',
+          project_id: '',
           online: p.estado === 'online',
           printer_ready: p.conectado || false,
           printer_name: p.metadata?.printer_name || p.nombre,

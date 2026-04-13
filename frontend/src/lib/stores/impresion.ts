@@ -297,6 +297,8 @@ export interface DatosNegocio {
 
 export interface TicketVentaParams {
   cuenta_id: string;
+  project_id?: string;
+  destino?: string;
   canal?: Canal;
   items: TicketVentaItem[];
   subtotal?: number;
@@ -306,6 +308,28 @@ export interface TicketVentaParams {
   propina?: number;
   referencia_pago?: string;
   datos_negocio?: DatosNegocio;
+}
+
+export interface ImpresoraInfo {
+  device_id: string;
+  project_id: string;
+  online: boolean;
+  printer_ready: boolean;
+  printer_name: string | null;
+  ip: string | null;
+  last_seen: string;
+}
+
+/**
+ * Carga impresoras ESP32 descubiertas por el módulo impresion
+ */
+export async function loadImpresoras(): Promise<ImpresoraInfo[]> {
+  try {
+    const response = await mqttRequest<{ impresoras: ImpresoraInfo[]; total: number }>('impresion', 'impresoras');
+    return response.data?.impresoras || [];
+  } catch {
+    return [];
+  }
 }
 
 /**

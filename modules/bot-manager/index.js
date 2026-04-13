@@ -227,8 +227,8 @@ class BotManagerModule {
     const data = event?.data || event?.payload || event;
     const { key, provider, level } = data;
 
-    // Solo procesar credenciales de Telegram BOT
-    if (provider !== 'TELEGRAM' || level !== 'BOT') return;
+    // Procesar credenciales de Telegram (level: BOT o CUSTOM)
+    if (provider !== 'TELEGRAM' || (level !== 'BOT' && level !== 'CUSTOM')) return;
 
     // Extraer nombre del bot del key
     const match = key?.match(/^TELEGRAM_API_KEY_(?:BOT|CUSTOM)_(.+)$/);

@@ -296,8 +296,8 @@ class TelegramServiceModule {
     const data = event?.data || event?.payload || event;
     const { key, provider, level } = data;
 
-    // Only handle Telegram BOT credentials
-    if (provider !== 'TELEGRAM' || level !== 'BOT') return;
+    // Handle Telegram credentials (level: BOT or CUSTOM)
+    if (provider !== 'TELEGRAM' || (level !== 'BOT' && level !== 'CUSTOM')) return;
 
     const match = key?.match(CREDENTIAL_PATTERN);
     if (!match) return;

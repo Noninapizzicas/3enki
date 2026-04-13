@@ -61,6 +61,7 @@
   } from '$lib/stores/channels';
   import { closePanel } from '$lib/stores';
   import { subscribe } from '$lib/ui-core/mqtt';
+  import { activeProject } from '$lib/stores/workspace';
 
   export let _panelId: string;
 
@@ -386,6 +387,23 @@
         telegramForm.botName,
         telegramForm.token
       );
+
+      // Auto-register channel binding if there's an active project
+      const project = $activeProject;
+      if (project?.id) {
+        try {
+          await registerChannel(
+            'telegram',
+            telegramForm.botName,
+            project.id,
+            'facturas',
+            `Bot ${telegramForm.botName}`
+          );
+        } catch (e) {
+          // Channel might already exist — non-blocking
+          console.warn('[Credentials] Channel auto-register:', e);
+        }
+      }
 
       // Reset form
       telegramForm = { botName: '', token: '' };

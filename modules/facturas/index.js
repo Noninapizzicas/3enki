@@ -137,9 +137,59 @@ class FacturasModule {
     this.logger.info('facturas.entrada.recibida', { source, projectId, filePath });
 
     try {
-      await this.procesarArchivo(filePath, projectId, { source, origen });
+      const result = await this.procesarArchivo(filePath, projectId, { source, origen });
+
+      // Notificar resultado al chat de origen (Telegram)
+      if (source === 'telegram' && origen?.botName && origen?.chatId) {
+        await this._notifyTelegramResult(origen.botName, origen.chatId, result);
+      }
     } catch (e) {
       this.logger.error('facturas.entrada.error', { error: e.message, filePath, projectId });
+
+      // Notificar error al chat de origen
+      if (source === 'telegram' && origen?.botName && origen?.chatId) {
+        this._notifyTelegramResult(origen.botName, origen.chatId, {
+          success: false, error: e.message
+        }).catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Envía notificación de resultado al chat de Telegram que envió la factura.
+   */
+  async _notifyTelegramResult(botName, chatId, result) {
+    let text;
+
+    if (result.duplicate) {
+      text = `⚠️ <b>Factura duplicada</b>\nYa existe en el sistema.`;
+    } else if (result.success) {
+      const e = result.estructura || {};
+      const proveedor = e.emisor?.nombre || 'Proveedor desconocido';
+      const total = e.totales?.total_factura;
+      const numero = e.factura?.numero;
+      const fecha = e.factura?.fecha;
+
+      text = `✅ <b>Factura procesada</b>\n\n`
+        + `📋 <b>${proveedor}</b>\n`
+        + (numero ? `🔢 Nº: <code>${numero}</code>\n` : '')
+        + (fecha ? `📅 ${fecha}\n` : '')
+        + (total ? `💰 ${Number(total).toFixed(2)} €\n` : '')
+        + `\n⏱ ${((result.metrics?.totalDuration || 0) / 1000).toFixed(1)}s`;
+    } else {
+      text = `❌ <b>Error procesando factura</b>\n<code>${result.error || 'Error desconocido'}</code>`;
+    }
+
+    try {
+      this.eventBus.publish('telegram.send_message.request', {
+        request_id: `factura_notify_${Date.now()}`,
+        botName,
+        chatId,
+        text,
+        parseMode: 'HTML'
+      });
+    } catch (e) {
+      this.logger.debug('facturas.telegram.notify.error', { error: e.message });
     }
   }
 

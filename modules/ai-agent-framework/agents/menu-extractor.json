@@ -1,0 +1,44 @@
+{
+  "id": "menu-extractor",
+  "name": "menu-extractor",
+  "description": "Extrae texto legible de documentos de carta de restaurante (PDF, foto, imagen) usando el pipeline OCR óptimo",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "prompt_file": "prompts/menu-extractor-system.md",
+
+  "tools": [
+    "pdfjs_info",
+    "pdfjs_render",
+    "sharp_prepare_ocr",
+    "google_vision_extract",
+    "tesseract_extract",
+    "scribe_ocr_extract"
+  ],
+
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "temperature": 0.1,
+  "max_tokens": 2000,
+
+  "context_enabled": false,
+  "timeout_ms": 120000,
+  "max_retries": 2,
+
+  "metadata": {
+    "type": "pipeline-agent",
+    "domain": "menu-generator",
+    "pipeline_role": "step-1-extraction",
+    "author": "system",
+    "created_at": "2026-04-13",
+    "tags": ["menu", "ocr", "extraction", "pdf", "image"]
+  },
+
+  "created_at": "2026-04-13T00:00:00.000Z",
+  "updated_at": "2026-04-13T00:00:00.000Z",
+  "stats": {
+    "executions": 0, "successes": 0, "failures": 0,
+    "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0,
+    "last_execution": null
+  }
+}

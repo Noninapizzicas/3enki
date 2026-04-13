@@ -321,15 +321,40 @@ export interface ImpresoraInfo {
 }
 
 /**
- * Carga impresoras ESP32 descubiertas por el módulo impresion
+ * Carga impresoras de ambas fuentes: módulo impresion (auto-discovery MQTT)
+ * y perifericos (registry). Merge por device_id, preferencia a impresion.
  */
 export async function loadImpresoras(): Promise<ImpresoraInfo[]> {
+  const results: Map<string, ImpresoraInfo> = new Map();
+
+  // Fuente 1: módulo impresion (ESP32 descubiertos por MQTT directo)
   try {
-    const response = await mqttRequest<{ impresoras: ImpresoraInfo[]; total: number }>('impresion', 'impresoras');
-    return response.data?.impresoras || [];
-  } catch {
-    return [];
-  }
+    const res = await mqttRequest<{ impresoras: ImpresoraInfo[]; total: number }>('impresion', 'impresoras', {}, { timeout: 4000 });
+    for (const imp of res.data?.impresoras || []) {
+      results.set(imp.device_id, imp);
+    }
+  } catch {}
+
+  // Fuente 2: perifericos (registry — impresoras registradas manualmente o por auto-discovery)
+  try {
+    const res2 = await mqttRequest<any>('perifericos', 'listar-por-capacidad', { capacidad: 'imprimir' }, { timeout: 4000 });
+    for (const p of res2.data?.dispositivos || []) {
+      const id = p.metadata?.esp32_device_id || p.nombre;
+      if (!results.has(id)) {
+        results.set(id, {
+          device_id: id,
+          project_id: p.metadata?.project_id || '',
+          online: p.estado === 'online',
+          printer_ready: p.conectado || false,
+          printer_name: p.metadata?.printer_name || p.nombre,
+          ip: p.metadata?.ip || null,
+          last_seen: ''
+        });
+      }
+    }
+  } catch {}
+
+  return Array.from(results.values());
 }
 
 /**

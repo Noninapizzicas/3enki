@@ -8,6 +8,8 @@
 
   "handlers": [
     { "domain": "fuentes", "action": "status", "method": "handleStatus" },
+    { "domain": "fuentes", "action": "get-config", "method": "handleGetConfig" },
+    { "domain": "fuentes", "action": "save-config", "method": "handleSaveConfig" },
     { "domain": "fuentes", "action": "check-gmail", "method": "handleCheckGmail" }
   ],
 

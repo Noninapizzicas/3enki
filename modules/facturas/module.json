@@ -1,7 +1,7 @@
 {
   "name": "facturas",
-  "version": "1.0.0",
-  "description": "Procesamiento de facturas: cualquier formato de entrada → datos estructurados",
+  "version": "2.0.0",
+  "description": "Procesamiento comercial de facturas: pipeline step-based con agentes IA, validación y observabilidad",
   "author": "Event-Core Team",
   "main": "index.js",
 
@@ -13,7 +13,8 @@
     { "domain": "facturas", "action": "obtener", "method": "handleObtener" },
     { "domain": "facturas", "action": "actualizar", "method": "handleActualizar" },
     { "domain": "facturas", "action": "estadisticas", "method": "handleEstadisticas" },
-    { "domain": "facturas", "action": "exportar", "method": "handleExportar" }
+    { "domain": "facturas", "action": "exportar", "method": "handleExportar" },
+    { "domain": "facturas", "action": "pipeline-metrics", "method": "handlePipelineMetrics" }
   ],
 
   "tools": [

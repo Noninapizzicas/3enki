@@ -27,11 +27,25 @@
     exportarExcel,
     marcarPagada,
     clearError,
+    pipelineMetrics,
+    loadPipelineMetrics,
     type Factura,
     type FacturaEstado,
-    type FacturaSource
+    type FacturaSource,
+    type PipelineMetricsDashboard
   } from '$lib/stores/facturas';
+  import {
+    channelsStore,
+    loadChannels,
+    registerChannel,
+    removeChannel,
+    channelsByType,
+    type ChannelBinding
+  } from '$lib/stores/channels';
   import { activeProject } from '$lib/stores/workspace';
+  import {
+    mqttRequest
+  } from '$lib/ui-core/mqtt-request';
 
   export let panelId: string = '';
 
@@ -50,6 +64,15 @@
   let editMode = false;
   let editForm: Partial<Factura> = {};
 
+  // Config state
+  let configTab: 'telegram' | 'gmail' | 'metrics' = 'telegram';
+  let telegramBotName = '';
+  let gmailAccount = '';
+  let gmailQuery = 'has:attachment is:unread';
+  let gmailChecking = false;
+  let fuentesConfig: any = null;
+  let configLoading = false;
+
   // Reactive
   $: tab = $facturasStore.activeTab;
   $: stats = $facturasStats;
@@ -59,6 +82,12 @@
   $: facturas = $filteredFacturas;
   $: filter = $facturasStore.filter;
   $: project = $activeProject;
+  $: metrics = $pipelineMetrics;
+  $: projectChannels = ($channelsStore.channels || []).filter(
+    (ch: ChannelBinding) => ch.project_id === project?.id
+  );
+  $: telegramChannels = projectChannels.filter((ch: ChannelBinding) => ch.channel_type === 'telegram');
+  $: gmailChannels = projectChannels.filter((ch: ChannelBinding) => ch.channel_type === 'gmail');
 
   // ==========================================================================
   // LIFECYCLE
@@ -66,6 +95,7 @@
 
   onMount(() => {
     cleanup = initFacturasSubscriptions();
+    loadChannels();
   });
 
   onDestroy(() => {
@@ -203,6 +233,74 @@
   }
 
   // ==========================================================================
+  // HANDLERS - CONFIG
+  // ==========================================================================
+
+  async function loadFuentesConfig() {
+    if (!project?.id) return;
+    configLoading = true;
+    try {
+      const res = await mqttRequest<any>('fuentes', 'get-config', { proyecto: project.id });
+      fuentesConfig = res.data;
+      const fuentes = fuentesConfig?.fuentes || {};
+      gmailAccount = fuentes.gmail?.account || '';
+      gmailQuery = fuentes.gmail?.query || 'has:attachment is:unread';
+    } catch (e) {
+      console.error('[Config] Load failed:', e);
+    }
+    configLoading = false;
+  }
+
+  async function handleAddTelegramChannel() {
+    if (!project?.id || !telegramBotName.trim()) return;
+    try {
+      await registerChannel('telegram', telegramBotName.trim(), project.id, 'facturas', `Bot ${telegramBotName.trim()}`);
+      telegramBotName = '';
+    } catch (e) { /* error in store */ }
+  }
+
+  async function handleRemoveChannel(type: string, externalId: string) {
+    await removeChannel(type, externalId);
+  }
+
+  async function handleSaveGmailConfig() {
+    if (!project?.id) return;
+    configLoading = true;
+    try {
+      const fuentes = fuentesConfig?.fuentes || {};
+      fuentes.gmail = {
+        enabled: !!gmailAccount,
+        account: gmailAccount,
+        query: gmailQuery
+      };
+      await mqttRequest('fuentes', 'save-config', { proyecto: project.id, fuentes });
+      await loadFuentesConfig();
+    } catch (e) {
+      console.error('[Config] Gmail save failed:', e);
+    }
+    configLoading = false;
+  }
+
+  async function handleCheckGmailNow() {
+    if (!project?.id) return;
+    gmailChecking = true;
+    try {
+      const res = await mqttRequest<any>('fuentes', 'check-gmail', { proyecto: project.id });
+      const data = res.data;
+      alert(`Gmail: ${data.processed || 0} procesadas, ${data.errors || 0} errores, ${data.total_attachments || 0} adjuntos`);
+    } catch (e) {
+      alert(`Error: ${e instanceof Error ? e.message : 'desconocido'}`);
+    }
+    gmailChecking = false;
+  }
+
+  function handleConfigTabChange(newTab: typeof configTab) {
+    configTab = newTab;
+    if (newTab === 'metrics') loadPipelineMetrics();
+    if (newTab === 'telegram' || newTab === 'gmail') loadFuentesConfig();
+  }
+
+  // ==========================================================================
   // HELPERS
   // ==========================================================================
 
@@ -287,6 +385,13 @@
         on:click={() => handleTabChange('subir')}
       >
         📤 Subir
+      </button>
+      <button
+        class="tab"
+        class:active={tab === 'config'}
+        on:click={() => { handleTabChange('config'); loadFuentesConfig(); loadChannels(); }}
+      >
+        ⚙️ Config
       </button>
     </div>
     <span class="stats-badge">
@@ -616,6 +721,212 @@
           <p>📌 Las facturas subidas manualmente se procesan igual que las recibidas por Telegram o Gmail.</p>
           <p>⚙️ El OCR extrae automáticamente: proveedor, fecha, importes, etc.</p>
         </div>
+      </div>
+
+    <!-- ================================================================== -->
+    <!-- TAB: CONFIG (Fuentes + Métricas) -->
+    <!-- ================================================================== -->
+    {:else if tab === 'config'}
+      <div class="config-view">
+        <!-- Sub-tabs -->
+        <div class="config-tabs">
+          <button class="config-tab" class:active={configTab === 'telegram'} on:click={() => handleConfigTabChange('telegram')}>
+            📱 Telegram
+          </button>
+          <button class="config-tab" class:active={configTab === 'gmail'} on:click={() => handleConfigTabChange('gmail')}>
+            📧 Gmail
+          </button>
+          <button class="config-tab" class:active={configTab === 'metrics'} on:click={() => handleConfigTabChange('metrics')}>
+            📊 Métricas
+          </button>
+        </div>
+
+        <!-- Telegram config -->
+        {#if configTab === 'telegram'}
+          <div class="config-section">
+            <h4>Bots de Telegram vinculados</h4>
+            <p class="config-hint">Vincula un bot de Telegram para recibir facturas. Las fotos y PDFs enviados al bot se procesarán automáticamente.</p>
+
+            {#if telegramChannels.length > 0}
+              <div class="channel-list">
+                {#each telegramChannels as ch (ch.id)}
+                  <div class="channel-item">
+                    <span class="channel-icon">📱</span>
+                    <div class="channel-info">
+                      <span class="channel-name">{ch.label || ch.external_id}</span>
+                      <span class="channel-meta">@{ch.external_id} · {ch.purpose}</span>
+                    </div>
+                    <button class="btn-icon danger" on:click={() => handleRemoveChannel('telegram', ch.external_id)} title="Eliminar">
+                      ✕
+                    </button>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class="config-empty">
+                Sin bots vinculados. Añade uno abajo.
+              </div>
+            {/if}
+
+            <div class="config-form">
+              <input
+                type="text"
+                class="config-input"
+                placeholder="Nombre del bot (ej: mi_facturas_bot)"
+                bind:value={telegramBotName}
+                on:keydown={(e) => e.key === 'Enter' && handleAddTelegramChannel()}
+              />
+              <button class="btn primary" on:click={handleAddTelegramChannel} disabled={!telegramBotName.trim()}>
+                + Vincular bot
+              </button>
+            </div>
+
+            <div class="config-flow">
+              <h4>Flujo automático</h4>
+              <div class="flow-diagram">
+                <span class="flow-step">📱 Foto/PDF al bot</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">📥 Descarga</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">🔍 OCR</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">🤖 IA estructura</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">✅ Factura lista</span>
+              </div>
+            </div>
+          </div>
+
+        <!-- Gmail config -->
+        {:else if configTab === 'gmail'}
+          <div class="config-section">
+            <h4>Cuenta Gmail</h4>
+            <p class="config-hint">Configura una cuenta de Gmail para importar facturas automáticamente desde correos con adjuntos PDF.</p>
+
+            <div class="config-form">
+              <label class="config-label">Nombre de la cuenta (credential-manager)</label>
+              <input
+                type="text"
+                class="config-input"
+                placeholder="ej: Nonina"
+                bind:value={gmailAccount}
+              />
+
+              <label class="config-label">Filtro de búsqueda</label>
+              <input
+                type="text"
+                class="config-input"
+                placeholder="has:attachment is:unread"
+                bind:value={gmailQuery}
+              />
+
+              <div class="config-actions">
+                <button class="btn primary" on:click={handleSaveGmailConfig} disabled={configLoading}>
+                  {configLoading ? '⏳' : '💾'} Guardar
+                </button>
+                <button class="btn" on:click={handleCheckGmailNow} disabled={gmailChecking || !gmailAccount}>
+                  {gmailChecking ? '⏳ Buscando...' : '📧 Revisar ahora'}
+                </button>
+              </div>
+            </div>
+
+            <div class="config-flow">
+              <h4>Flujo</h4>
+              <div class="flow-diagram">
+                <span class="flow-step">📧 Correo con adjunto</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">📥 Descarga PDF</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">🔍 OCR</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">🤖 IA estructura</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">✅ Factura lista</span>
+              </div>
+            </div>
+          </div>
+
+        <!-- Metrics -->
+        {:else if configTab === 'metrics'}
+          <div class="config-section">
+            {#if !metrics.available}
+              <div class="config-empty">Sin datos de métricas. Procesa alguna factura primero.</div>
+            {:else}
+              <!-- Summary -->
+              <div class="metrics-grid">
+                <div class="metric-card">
+                  <span class="metric-value">{metrics.summary?.total || 0}</span>
+                  <span class="metric-label">Total procesadas</span>
+                </div>
+                <div class="metric-card success">
+                  <span class="metric-value">{metrics.summary?.successRate || 0}%</span>
+                  <span class="metric-label">Tasa de éxito</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-value">{metrics.cost?.totalEur || '0'} EUR</span>
+                  <span class="metric-label">Coste total IA</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-value">{metrics.cost?.totalTokens || 0}</span>
+                  <span class="metric-label">Tokens consumidos</span>
+                </div>
+              </div>
+
+              <!-- Timing -->
+              {#if metrics.timing?.overall?.count}
+                <h4>Tiempos de procesamiento</h4>
+                <div class="metrics-grid">
+                  <div class="metric-card">
+                    <span class="metric-value">{(metrics.timing.overall.avg / 1000).toFixed(1)}s</span>
+                    <span class="metric-label">Media</span>
+                  </div>
+                  <div class="metric-card">
+                    <span class="metric-value">{(metrics.timing.overall.p50 / 1000).toFixed(1)}s</span>
+                    <span class="metric-label">P50</span>
+                  </div>
+                  <div class="metric-card">
+                    <span class="metric-value">{(metrics.timing.overall.p95 / 1000).toFixed(1)}s</span>
+                    <span class="metric-label">P95</span>
+                  </div>
+                </div>
+              {/if}
+
+              <!-- Validation -->
+              {#if metrics.validation?.total}
+                <h4>Validación</h4>
+                <div class="metrics-grid">
+                  <div class="metric-card success">
+                    <span class="metric-value">{metrics.validation.passed}</span>
+                    <span class="metric-label">Válidas</span>
+                  </div>
+                  <div class="metric-card danger">
+                    <span class="metric-value">{metrics.validation.failed}</span>
+                    <span class="metric-label">Con errores</span>
+                  </div>
+                  <div class="metric-card">
+                    <span class="metric-value">{metrics.validation.totalIssues}</span>
+                    <span class="metric-label">Issues detectados</span>
+                  </div>
+                </div>
+              {/if}
+
+              <!-- Recent -->
+              {#if metrics.recent && metrics.recent.length > 0}
+                <h4>Últimas facturas</h4>
+                <div class="recent-list">
+                  {#each metrics.recent as item}
+                    <div class="recent-item" class:success={item.success} class:error={!item.success}>
+                      <span class="recent-status">{item.success ? '✅' : '❌'}</span>
+                      <span class="recent-provider">{item.proveedor || 'Desconocido'}</span>
+                      <span class="recent-total">{item.total ? `${item.total.toFixed(2)} EUR` : '-'}</span>
+                      <span class="recent-time">{(item.duration_ms / 1000).toFixed(1)}s</span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            {/if}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -1158,4 +1469,94 @@
     cursor: pointer;
     padding: 0.25rem;
   }
+
+  /* ===== CONFIG VIEW ===== */
+  .config-view { padding: 0.5rem; overflow-y: auto; flex: 1; }
+
+  .config-tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.1));
+    padding-bottom: 0.5rem;
+  }
+
+  .config-tab {
+    padding: 0.375rem 0.625rem;
+    background: transparent;
+    border: none;
+    border-radius: 0.375rem;
+    color: var(--color-text-muted, #888);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .config-tab:hover { background: rgba(255,255,255,0.05); color: var(--color-text, #e5e5e5); }
+  .config-tab.active { background: rgba(59,130,246,0.2); color: var(--color-primary, #3b82f6); }
+
+  .config-section h4 { margin: 0.75rem 0 0.25rem; font-size: 0.8rem; font-weight: 600; }
+  .config-hint { font-size: 0.7rem; color: var(--color-text-muted, #888); margin-bottom: 0.5rem; }
+  .config-empty { padding: 1rem; text-align: center; color: var(--color-text-muted, #888); font-size: 0.75rem; }
+
+  .config-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+  .config-label { font-size: 0.7rem; color: var(--color-text-muted, #888); }
+  .config-input {
+    padding: 0.5rem;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--color-border, rgba(255,255,255,0.1));
+    border-radius: 0.375rem;
+    color: var(--color-text, #e5e5e5);
+    font-size: 0.8rem;
+  }
+  .config-input:focus { outline: none; border-color: var(--color-primary, #3b82f6); }
+  .config-actions { display: flex; gap: 0.5rem; margin-top: 0.25rem; }
+
+  .btn { padding: 0.375rem 0.75rem; border: 1px solid var(--color-border, rgba(255,255,255,0.15)); border-radius: 0.375rem; background: transparent; color: var(--color-text, #e5e5e5); font-size: 0.75rem; cursor: pointer; }
+  .btn:hover:not(:disabled) { background: rgba(255,255,255,0.05); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn.primary { background: rgba(59,130,246,0.2); border-color: rgba(59,130,246,0.3); color: var(--color-primary, #3b82f6); }
+  .btn.primary:hover:not(:disabled) { background: rgba(59,130,246,0.3); }
+
+  /* Channel list */
+  .channel-list { display: flex; flex-direction: column; gap: 0.25rem; }
+  .channel-item {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.5rem; border-radius: 0.375rem;
+    background: rgba(0,0,0,0.15);
+  }
+  .channel-icon { font-size: 1.1rem; }
+  .channel-info { flex: 1; display: flex; flex-direction: column; }
+  .channel-name { font-size: 0.8rem; font-weight: 500; }
+  .channel-meta { font-size: 0.65rem; color: var(--color-text-muted, #888); }
+  .btn-icon { background: none; border: none; color: var(--color-text-muted, #888); cursor: pointer; padding: 0.25rem; font-size: 0.8rem; }
+  .btn-icon.danger:hover { color: var(--color-error, #ef4444); }
+
+  /* Flow diagram */
+  .config-flow { margin-top: 0.75rem; }
+  .flow-diagram { display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; padding: 0.5rem; background: rgba(0,0,0,0.15); border-radius: 0.375rem; }
+  .flow-step { font-size: 0.7rem; padding: 0.25rem 0.5rem; background: rgba(59,130,246,0.1); border-radius: 0.25rem; white-space: nowrap; }
+  .flow-arrow { color: var(--color-text-muted, #888); font-size: 0.7rem; }
+
+  /* Metrics */
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.5rem; margin: 0.5rem 0; }
+  .metric-card {
+    padding: 0.5rem; text-align: center;
+    background: rgba(0,0,0,0.15); border-radius: 0.375rem;
+    border: 1px solid var(--color-border, rgba(255,255,255,0.05));
+  }
+  .metric-card.success { border-color: rgba(34,197,94,0.3); }
+  .metric-card.danger { border-color: rgba(239,68,68,0.3); }
+  .metric-value { display: block; font-size: 1.1rem; font-weight: 700; }
+  .metric-label { display: block; font-size: 0.65rem; color: var(--color-text-muted, #888); margin-top: 0.125rem; }
+
+  .recent-list { display: flex; flex-direction: column; gap: 0.25rem; }
+  .recent-item {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.375rem 0.5rem; border-radius: 0.25rem;
+    background: rgba(0,0,0,0.1); font-size: 0.75rem;
+  }
+  .recent-item.error { background: rgba(239,68,68,0.08); }
+  .recent-provider { flex: 1; }
+  .recent-total { color: var(--color-text-muted, #888); }
+  .recent-time { color: var(--color-text-muted, #888); font-size: 0.65rem; }
 </style>

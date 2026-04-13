@@ -379,12 +379,24 @@
     saving = true;
     error = null;
 
+    // Sanitize bot name: remove @, spaces, special chars
+    const cleanBotName = telegramForm.botName
+      .replace(/^@/, '')
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_]/g, '');
+
+    if (!cleanBotName) {
+      error = 'Nombre de bot inválido';
+      saving = false;
+      return;
+    }
+
     try {
       // Crear credencial con provider=TELEGRAM, level=CUSTOM, identifier=botName
       await createCredential(
         'TELEGRAM',
         'CUSTOM',
-        telegramForm.botName,
+        cleanBotName,
         telegramForm.token
       );
 
@@ -394,10 +406,10 @@
         try {
           await registerChannel(
             'telegram',
-            telegramForm.botName,
+            cleanBotName,
             project.id,
             'facturas',
-            `Bot ${telegramForm.botName}`
+            `Bot ${cleanBotName}`
           );
         } catch (e) {
           // Channel might already exist — non-blocking

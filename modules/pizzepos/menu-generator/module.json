@@ -1,11 +1,15 @@
 {
   "name": "menu-generator",
-  "version": "6.0.0",
-  "description": "Genera cartas estructuradas en JSON a partir de cualquier input: fotos, PDF, texto, audio, dictado, recetas, scraping. Siempre pregunta el nombre.",
+  "version": "6.1.0",
+  "description": "Genera cartas estructuradas en JSON desde cualquier input: fotos, PDF, texto. Pipeline OCR determinista (Google Vision) + agente IA para estructuración. Siempre pregunta el nombre.",
   "author": "Pizzepos Team",
   "main": "index.js",
 
   "events": {
+    "publishes": [
+      { "event": "menu.generation.progress", "description": "Progreso del pipeline: extracting, structuring" },
+      { "event": "menu.generation.failed", "description": "Error en el pipeline de generación" }
+    ],
     "subscribes": []
   },
 
@@ -17,7 +21,7 @@
   "tools": [
     {
       "name": "menu.generate",
-      "description": "Genera una carta estructurada desde cualquier input. SIEMPRE requiere nombre — pregúntalo antes de llamar. Acepta texto (OCR, dictado, lista, JSON, recetas) o filePath (PDF/imagen). Dispara agentes especializados y emite el resultado cuando termina.",
+      "description": "Genera una carta estructurada desde cualquier input. SIEMPRE requiere nombre — pregúntalo antes de llamar. Acepta texto (OCR, dictado, lista, JSON, recetas) o filePath (PDF/imagen). Si es archivo, extrae texto con Google Vision antes de estructurar.",
       "handler": "toolGenerate",
       "parameters": {
         "type": "object",
@@ -40,23 +44,23 @@
     }
   ],
 
-  "agents": {
-    "description": "La generación la ejecutan agentes del ai-agent-framework",
-    "pipeline_document": {
-      "trigger": "menu.document.request",
-      "agents": ["menu-extractor", "menu-structurer"],
-      "description": "PDF/foto → OCR → carta JSON"
+  "pipeline": {
+    "extraction": {
+      "description": "Pipeline OCR determinista (no usa LLM)",
+      "steps": ["pdfjs.render (si PDF)", "sharp.prepare-ocr", "google-vision.extract"],
+      "provider": "Google Vision",
+      "timeouts": { "pdfInfo": 15000, "pdfRender": 30000, "sharp": 15000, "ocr": 60000 }
     },
-    "pipeline_text": {
-      "trigger": "menu.text.request",
-      "agents": ["menu-structurer"],
-      "description": "Texto → carta JSON"
+    "structuring": {
+      "description": "Agente IA que estructura el texto en carta JSON",
+      "agent": "menu-structurer",
+      "trigger": "menu.text.request"
     }
   },
 
   "observability": {
     "metrics": {
-      "counters": ["menu.generate.requested"]
+      "counters": ["menu.generate.requested", "menu.generate.extract_failed"]
     }
   }
 }

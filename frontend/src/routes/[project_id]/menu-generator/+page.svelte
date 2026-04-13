@@ -27,33 +27,23 @@
     setPageContext({
       route: '/menu-generator',
       title: 'Menu Generator',
-      description: 'Generación de cartas de restaurante desde cualquier input + gestión de datos de carta.',
-      instructions: `El usuario está en menu-generator para el proyecto "${project_id}".
+      description: 'Generar cartas de restaurante desde cualquier input y gestionarlas.',
+      instructions: `Proyecto "${project_id}". Dos módulos:
 
-Dos módulos trabajan aquí:
-- menu-generator: GENERA cartas desde cualquier input (foto, PDF, texto, dictado)
-- carta-manager: GESTIONA las cartas generadas (editar, versionar, buscar, stats)
+GENERAR (menu-generator) — SIEMPRE pedir nombre antes de generar:
+- menu.generate: genera carta desde texto o archivo (PDF/foto). REQUIERE nombre.
+  Si es archivo → extrae texto con Google Vision OCR automáticamente.
+  Si es texto → estructura directamente con IA.
 
-IMPORTANTE: menu.generate SIEMPRE requiere nombre. Pregúntalo antes de generar.
-
-Generación (menu-generator):
-- menu.generate: genera carta desde texto o archivo. REQUIERE nombre.
-
-Gestión de datos (carta-manager):
+GESTIONAR (carta-manager):
 - carta.save / carta.get / carta.list / carta.delete
 - carta.add_product / carta.remove_product / carta.update_product
 - carta.add_category / carta.update_prices
 - carta.search / carta.stats
 - carta.versions / carta.restore
 
-Agentes especializados (pipeline automático):
-- menu-extractor: OCR de documentos (pipeline step 1)
-- menu-structurer: estructura texto en JSON (pipeline step 2)
-- menu-enricher: descripciones, emojis, tags (bajo demanda)
-- menu-validator: auditoría de calidad (bajo demanda)
-
-Tarifas (módulo tarifas):
-- tarifas.set_canal / tarifas.set_categoria / tarifas.get / tarifas.preview / tarifas.set_precio_fijo`,
+TARIFAS:
+- tarifas.set_canal / tarifas.get / tarifas.preview / tarifas.set_precio_fijo`,
       state: {
         projectId: project_id
       }

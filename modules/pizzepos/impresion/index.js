@@ -279,7 +279,7 @@ class ImpresionModule {
       printer_ready: data.printer_ready || false,
       printer_name: data.printer_name || null,
       printer_addr: data.printer_addr || null,
-      ancho: data.ancho || null,
+      ancho: data.ancho || this.config.ancho || '58mm',
       wifi_rssi: data.wifi_rssi || null,
       wifi_ssid: data.wifi_ssid || null,
       ip: data.ip || null,
@@ -381,7 +381,11 @@ class ImpresionModule {
       init_failed: 'Error iniciando Bluetooth',
       connect_failed: 'No se pudo conectar a la impresora',
       write_failed: 'Error escribiendo en la impresora (sin papel?)',
-      disconnected_mid_send: 'Impresora desconectada durante el envio'
+      disconnected_mid_send: 'Impresora desconectada durante el envio',
+      missing_data: 'Job sin campo data (payload vacio)',
+      payload_too_large: 'Payload demasiado grande para el buffer',
+      base64_error: 'Error decodificando base64',
+      queue_full: 'Cola de impresion llena (intentar de nuevo)'
     };
     return mensajes[code] || `Error desconocido (${code || 'sin codigo'})`;
   }
@@ -475,6 +479,39 @@ class ImpresionModule {
       this.cuentaNombres.set(cuenta_id, { ...existing, ref: newRef });
       this.logger.info('impresion.ref_display.updated', { cuenta_id, ref: newRef });
     }
+  }
+
+  async onCuentaEliminada(event) {
+    const data = event?.data || event?.payload || event;
+    const { cuenta_id } = data;
+    if (cuenta_id) {
+      this.cuentaNombres.delete(cuenta_id);
+    }
+  }
+
+  // ==========================================
+  // Reset: caja.cerrada / dia.iniciado
+  // ==========================================
+
+  async onCajaCerrada(event) {
+    this.cuentaNombres.clear();
+    this.historial = [];
+    this.internalMetrics.comandas_generadas = 0;
+    this.internalMetrics.reimpresiones = 0;
+    this.internalMetrics.errores = 0;
+
+    this.logger.info('impresion.reset.caja_cerrada', {
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  async onDiaIniciado(event) {
+    this.cuentaNombres.clear();
+    this.historial = [];
+
+    this.logger.info('impresion.reset.dia_iniciado', {
+      correlation_id: event?.metadata?.correlationId
+    });
   }
 
   // ==========================================

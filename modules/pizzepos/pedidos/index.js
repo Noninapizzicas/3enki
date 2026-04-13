@@ -161,6 +161,34 @@ class PedidosModule {
   }
 
   // ==========================================
+  // Reset: caja.cerrada / dia.iniciado
+  // ==========================================
+
+  async onCajaCerrada(event) {
+    const size = this.pedidos.size;
+    this.pedidos.clear();
+    this.pedidosPorCuenta.clear();
+
+    this.metrics?.gauge?.('pedido.activos.count', 0);
+    this.logger.info('pedidos.reset.caja_cerrada', {
+      pedidos_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  async onDiaIniciado(event) {
+    const size = this.pedidos.size;
+    this.pedidos.clear();
+    this.pedidosPorCuenta.clear();
+
+    this.metrics?.gauge?.('pedido.activos.count', 0);
+    this.logger.info('pedidos.reset.dia_iniciado', {
+      pedidos_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  // ==========================================
   // Bridge: Comandero → Pedidos
   // ==========================================
 
@@ -867,6 +895,7 @@ class PedidosModule {
    */
   detectarCanal(cuenta_id) {
     if (!cuenta_id) return null;
+    // Prefijos largos (legacy)
     if (cuenta_id.startsWith('llevadoo_')) return 'llevadoo';
     if (cuenta_id.startsWith('mesa_')) return 'mesa';
     if (cuenta_id.startsWith('llevar_')) return 'llevar';
@@ -874,6 +903,13 @@ class PedidosModule {
     if (cuenta_id.startsWith('whatsapp_') || cuenta_id.startsWith('wa_')) return 'whatsapp';
     if (cuenta_id.startsWith('glovo_')) return 'glovo';
     if (cuenta_id.startsWith('delivery_')) return 'delivery';
+    // Prefijos cortos (nuevos)
+    if (cuenta_id.startsWith('M_')) return 'mesa';
+    if (cuenta_id.startsWith('L_')) return 'llevar';
+    if (cuenta_id.startsWith('T_')) return 'telefono';
+    if (cuenta_id.startsWith('W_')) return 'whatsapp';
+    if (cuenta_id.startsWith('G_')) return 'glovo';
+    if (cuenta_id.startsWith('D_')) return 'llevadoo';
     return null;
   }
 }

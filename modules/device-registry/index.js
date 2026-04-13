@@ -147,10 +147,9 @@ class DeviceRegistryModule {
       await mqtt.subscribe('devices/+/+/lwt');
       await mqtt.subscribe('enki/+/status/+');
       await mqtt.subscribe('impresion/+/status/+');
-      await mqtt.subscribe('esp32/+/status');
 
       this.logger.info('device-registry.mqtt.subscribed', {
-        topics: ['devices/+/+/birth', 'devices/+/+/lwt', 'enki/+/status/+', 'impresion/+/status/+', 'esp32/+/status']
+        topics: ['devices/+/+/birth', 'devices/+/+/lwt', 'enki/+/status/+', 'impresion/+/status/+']
       });
     } catch (err) {
       this.logger.error('device-registry.mqtt.subscribe_error', { error: err.message });
@@ -198,12 +197,8 @@ class DeviceRegistryModule {
         return;
       }
 
-      // Status ESP32 genérico: esp32/{device_id}/status
-      const esp32Match = topic.match(/^esp32\/([^/]+)\/status$/);
-      if (esp32Match) {
-        this._handleStatus(null, esp32Match[1], payload, 'mqtt-native');
-        return;
-      }
+      // Legacy esp32/{device_id}/status topic removed — no firmware publishes to it.
+      // All ESP32 devices use enki/{project}/status/{device} or impresion/{project}/status/{device}.
     } catch (err) {
       this.logger.error('device-registry.mqtt.message_error', {
         topic,
@@ -665,7 +660,7 @@ class DeviceRegistryModule {
   }
 
   _inferType(data) {
-    if (data.printer_ready !== undefined || data.printer_name) return 'impresora-termica';
+    if (data.printer_ready !== undefined || data.printer_name) return 'print-proxy';
     if (data.temperature !== undefined || data.humidity !== undefined) return 'sensor';
     return 'unknown';
   }

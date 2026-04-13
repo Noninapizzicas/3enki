@@ -94,6 +94,16 @@
         "event": "cuenta.eliminada",
         "description": "Limpiar cache de ref_display al eliminar cuenta (housekeeping)",
         "handler": "onCuentaEliminada"
+      },
+      {
+        "event": "caja.cerrada",
+        "description": "Cierre de caja - limpiar pedidos activos y snapshot",
+        "handler": "onCajaCerrada"
+      },
+      {
+        "event": "dia.iniciado",
+        "description": "Nuevo día - limpiar estado de cocina",
+        "handler": "onDiaIniciado"
       }
     ]
   },

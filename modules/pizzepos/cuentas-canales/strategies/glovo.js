@@ -226,6 +226,7 @@ class GlovoStrategy {
 
       const pedido = {
         cuenta_id,
+        ref_display: cuenta.ref_display || null,
         glovo_order_id,
         numero_pedido,
         plataforma: 'glovo',
@@ -276,20 +277,17 @@ class GlovoStrategy {
         ...(item.ingredientes_base && { ingredientes_base: item.ingredientes_base })
       }));
 
-      await this.modulo.eventBus.publish('pedido.enviado_cocina', {
+      // Publicar comandero.enviar_cocina para que Pedidos cree el pedido formal
+      // y publique pedido.enviado_cocina con todos los campos (ref_display, project_id, etc.)
+      await this.modulo.eventBus.publish('comandero.enviar_cocina', {
         pedido_id,
         cuenta_id,
-        canal: 'glovo',
+        project_id: data.project_id || null,
+        ref_display: pedido.ref_display || null,
         items: cocinaItems,
+        total: total || 0,
         notas_generales: notas || '',
-        metadata: {
-          glovo_order_id,
-          cliente_nombre: clienteNombreLabel,
-          direccion_entrega: direccion_entrega || '',
-          requiere_confirmacion: true,
-          tiempo_estimado_entrega: tiempo_estimado_entrega || 45,
-          total: total || 0
-        }
+        created_at: new Date().toISOString()
       });
 
       this.modulo.logger.info('glovo.pedido_recibido', {

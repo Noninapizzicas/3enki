@@ -135,6 +135,20 @@ class CobrosModule {
   }
 
   // ==========================================
+  // Event Handlers: cuenta lifecycle (ref_display cache)
+  // ==========================================
+
+  async onCuentaCreada(event) {
+    const d = event?.data || event?.payload || event;
+    if (d.cuenta_id && d.ref_display) this.refDisplayCache.set(d.cuenta_id, d.ref_display);
+  }
+
+  async onCuentaActualizada(event) {
+    const d = event?.data || event?.payload || event;
+    if (d.cuenta_id && d.cambios?.ref_display) this.refDisplayCache.set(d.cuenta_id, d.cambios.ref_display);
+  }
+
+  // ==========================================
   // Event Handlers
   // ==========================================
 
@@ -143,6 +157,28 @@ class CobrosModule {
 
     this.logger.info('cobros.pedido_completado.received', {
       pedido_id: data.pedido_id,
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  async onCajaCerrada(event) {
+    const size = this.cobros.size;
+    this.cobros.clear();
+    this.refDisplayCache.clear();
+
+    this.logger.info('cobros.reset.caja_cerrada', {
+      cobros_limpiados: size,
+      correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  async onDiaIniciado(event) {
+    const size = this.cobros.size;
+    this.cobros.clear();
+    this.refDisplayCache.clear();
+
+    this.logger.info('cobros.reset.dia_iniciado', {
+      cobros_limpiados: size,
       correlation_id: event?.metadata?.correlationId
     });
   }
@@ -318,7 +354,7 @@ class CobrosModule {
     this.metrics.gauge('cobros.monto_total', this.internalMetrics.monto_total_cobrado);
 
     // cobro.procesado es el evento que cuentas escucha para marcar como cobrado
-    await this.publishCoboProcesado(cobro);
+    await this.publishCobroProcesado(cobro);
 
     // Abrir cajón de dinero para pagos en efectivo
     if (cobro.metodo_pago === 'efectivo') {
@@ -455,7 +491,7 @@ class CobrosModule {
     });
   }
 
-  async publishCoboProcesado(cobro) {
+  async publishCobroProcesado(cobro) {
     await this.eventBus.publish('cobro.procesado', {
       cobro_id: cobro.id,
       cuenta_id: cobro.cuenta_id,

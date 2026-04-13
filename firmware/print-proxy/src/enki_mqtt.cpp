@@ -45,7 +45,7 @@ static bool wifiWasConnected = false;
 #define MQTT_QUEUE_SIZE 8
 struct MqttQueueItem {
   char topic[80];
-  char payload[256];
+  char payload[512];  // ACK payloads con diagnostico pueden superar 256
   bool retain;
   bool used;
 };

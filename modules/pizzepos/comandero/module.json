@@ -8,6 +8,7 @@
     "events": [
       "comandero.item_agregado",
       "comandero.item_eliminado",
+      "comandero.item_actualizado",
       "comandero.enviar_cocina"
     ]
   },
@@ -23,11 +24,19 @@
         "description": "Item eliminado del buffer del comandero"
       },
       {
+        "event": "comandero.item_actualizado",
+        "description": "Cantidad o notas de item actualizado en el buffer"
+      },
+      {
         "event": "comandero.enviar_cocina",
         "description": "Comandero solicita enviar pedido a cocina — Pedidos recoge y crea pedido formal"
       }
     ],
     "subscribes": [
+      {
+        "event": "cuenta.creada",
+        "handler": "onCuentaCreada"
+      },
       {
         "event": "cuenta.actualizada",
         "handler": "onCuentaActualizada"

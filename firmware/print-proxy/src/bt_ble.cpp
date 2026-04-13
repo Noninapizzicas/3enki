@@ -114,11 +114,11 @@ void ble_disconnect() {
 }
 
 void ble_scan(JsonDocument& doc) {
-  Serial.println("[BLE] Escaneando (5s)...");
+  Serial.printf("[BLE] Escaneando (%ds)...\n", BLE_SCAN_SECONDS);
 
   NimBLEScan* scan = NimBLEDevice::getScan();
   scan->setActiveScan(true);
-  NimBLEScanResults results = scan->start(5);  // 5s, no 10 — suficiente para impresoras
+  NimBLEScanResults results = scan->start(BLE_SCAN_SECONDS);
 
   auto arr = doc.to<JsonArray>();
   for (int i = 0; i < results.getCount(); i++) {

@@ -685,7 +685,7 @@ void logic_on_message(const char* topic, JsonDocument& doc) {
     err["device_id"] = enki_device_id();
     err["job_id"]    = jobId;
     err["success"]   = false;
-    err["error"]     = "Missing 'data' field";
+    err["error_code"] = "missing_data";
     char buf[256];
     serializeJson(err, buf, sizeof(buf));
     enki_mqtt_publish(topicPrinted, buf);
@@ -704,7 +704,7 @@ void logic_on_message(const char* topic, JsonDocument& doc) {
     err["device_id"] = enki_device_id();
     err["job_id"]    = jobId;
     err["success"]   = false;
-    err["error"]     = "Payload too large";
+    err["error_code"] = "payload_too_large";
     char buf[256];
     serializeJson(err, buf, sizeof(buf));
     enki_mqtt_publish(topicPrinted, buf);
@@ -716,7 +716,7 @@ void logic_on_message(const char* topic, JsonDocument& doc) {
     err["device_id"] = enki_device_id();
     err["job_id"]    = jobId;
     err["success"]   = false;
-    err["error"]     = "Base64 decode error";
+    err["error_code"] = "base64_error";
     char buf[256];
     serializeJson(err, buf, sizeof(buf));
     enki_mqtt_publish(topicPrinted, buf);
@@ -730,7 +730,7 @@ void logic_on_message(const char* topic, JsonDocument& doc) {
     err["device_id"] = enki_device_id();
     err["job_id"]    = jobId;
     err["success"]   = false;
-    err["error"]     = "Queue full";
+    err["error_code"] = "queue_full";
     char buf[256];
     serializeJson(err, buf, sizeof(buf));
     enki_mqtt_publish(topicPrinted, buf);
@@ -746,7 +746,7 @@ void logic_status(JsonDocument& doc) {
   doc["error_count"]     = errorCount;
   doc["reconnect_count"] = reconnectCount;
   doc["queue_pending"]   = pqCount;
-  doc["free_heap"]       = ESP.getFreeHeap();
+  // free_heap ya lo pone base en mqttPublishStatus() — no duplicar
 
   // Salud preventiva
   doc["printer_alive"]        = printerAlive;       // ultimo heartbeat respondio

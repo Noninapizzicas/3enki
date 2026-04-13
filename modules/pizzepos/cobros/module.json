@@ -44,9 +44,29 @@
     ],
     "subscribes": [
       {
+        "event": "cuenta.creada",
+        "description": "Cachear ref_display para tickets de cobro",
+        "handler": "onCuentaCreada"
+      },
+      {
+        "event": "cuenta.actualizada",
+        "description": "Actualizar ref_display en cache",
+        "handler": "onCuentaActualizada"
+      },
+      {
         "event": "pedido.completado",
         "description": "Pedido completado - permitir cobro",
         "handler": "onPedidoCompletado"
+      },
+      {
+        "event": "caja.cerrada",
+        "description": "Cierre de caja - limpiar cobros del día",
+        "handler": "onCajaCerrada"
+      },
+      {
+        "event": "dia.iniciado",
+        "description": "Nuevo día - limpiar cobros stale",
+        "handler": "onDiaIniciado"
       }
     ]
   },

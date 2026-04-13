@@ -54,6 +54,11 @@
         "handler": "onMesaRenombrada"
       },
       {
+        "event": "cuenta.eliminada",
+        "description": "Limpiar cache de ref_display al eliminar cualquier tipo de cuenta",
+        "handler": "onCuentaEliminada"
+      },
+      {
         "event": "mesa.cerrada",
         "description": "Limpiar cache de nombre al cerrar mesa",
         "handler": "onMesaCerrada"
@@ -67,6 +72,16 @@
         "event": "cuenta.actualizada",
         "description": "Actualizar ref_display en cache cuando se renombra cualquier cuenta",
         "handler": "onCuentaActualizada"
+      },
+      {
+        "event": "caja.cerrada",
+        "description": "Cierre de caja - limpiar caches y historial",
+        "handler": "onCajaCerrada"
+      },
+      {
+        "event": "dia.iniciado",
+        "description": "Nuevo día - limpiar caches",
+        "handler": "onDiaIniciado"
       }
     ]
   },

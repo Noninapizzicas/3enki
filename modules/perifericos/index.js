@@ -570,8 +570,9 @@ class PerifericosModule {
    * Suscribe a topics MQTT de ESP32 para auto-registrar dispositivos.
    *
    * Escucha:
-   *   esp32/+/status           → ESP32 genéricos que publican su estado
-   *   periferico/+/status      → ESP32 proxy que publican como periférico
+   *   impresion/+/status/+     → ESP32 print-proxy status
+   *   enki/+/status/+          → ESP32 genéricos status
+   *   devices/+/+/birth        → Birth messages de cualquier ESP32
    *
    * Cuando un ESP32 se anuncia, se auto-registra en el registry con:
    *   nombre: esp32_device_id (ej: "esp32-cocina-01")
@@ -591,13 +592,11 @@ class PerifericosModule {
     mqtt.on('message', this._onMqttMessage);
 
     try {
-      await mqtt.subscribe('esp32/+/status');
-      await mqtt.subscribe('periferico/+/status');
       await mqtt.subscribe('impresion/+/status/+');
       await mqtt.subscribe('enki/+/status/+');
       await mqtt.subscribe('devices/+/+/birth');
       this.logger.info('perifericos.autodiscovery.iniciado', {
-        topics: ['esp32/+/status', 'periferico/+/status', 'impresion/+/status/+', 'enki/+/status/+', 'devices/+/+/birth']
+        topics: ['impresion/+/status/+', 'enki/+/status/+', 'devices/+/+/birth']
       });
     } catch (err) {
       this.logger.warn('perifericos.autodiscovery.subscribe_error', {
@@ -617,23 +616,20 @@ class PerifericosModule {
   /**
    * Procesa mensajes MQTT de descubrimiento.
    * Patterns:
-   *   esp32/{deviceId}/status              → { ip, firmware, capacidades?, tipo?, nombre? }
-   *   periferico/{deviceId}/status          → { online, capacidades?, tipo? }
    *   impresion/{projectId}/status/{deviceId} → { device_id, online, printer_ready, ip, ... }
+   *   enki/{projectId}/status/{deviceId}      → { device_id, online, ip, firmware, ... }
+   *   devices/{projectId}/{deviceId}/birth    → { type, firmware, ... }
    */
   async _handleDiscoveryMessage(topic, payload) {
     // Solo procesar topics de discovery
-    const esp32Match = topic.match(/^esp32\/([^/]+)\/status$/);
-    const perifMatch = topic.match(/^periferico\/([^/]+)\/status$/);
     const impresionMatch = topic.match(/^impresion\/([^/]+)\/status\/([^/]+)$/);
     const enkiMatch = topic.match(/^enki\/([^/]+)\/status\/([^/]+)$/);
     const birthMatch = topic.match(/^devices\/([^/]+)\/([^/]+)\/birth$/);
 
-    if (!esp32Match && !perifMatch && !impresionMatch && !enkiMatch && !birthMatch) return;
+    if (!impresionMatch && !enkiMatch && !birthMatch) return;
 
     const deviceId = (impresionMatch || enkiMatch) ? (impresionMatch || enkiMatch)[2]
-                   : birthMatch ? birthMatch[2]
-                   : (esp32Match || perifMatch)[1];
+                   : birthMatch[2];
     let data;
 
     try {
@@ -664,9 +660,7 @@ class PerifericosModule {
     const nombre = data.nombre || data.name || data.device_id || deviceId;
     const source = impresionMatch ? 'impresion/status'
                  : enkiMatch ? 'enki/status'
-                 : birthMatch ? 'devices/birth'
-                 : esp32Match ? 'esp32/status'
-                 : 'periferico/status';
+                 : 'devices/birth';
 
     this.logger.info('perifericos.autodiscovery.nuevo_dispositivo', {
       deviceId, nombre, tipo, capacidades, source

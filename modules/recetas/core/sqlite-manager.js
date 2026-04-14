@@ -15,6 +15,8 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
+const SearchRanker = require('./search-ranker');
+const SearchFilters = require('./search-filters');
 
 class SQLiteManager {
   constructor(projectId, basePath, logger) {
@@ -23,6 +25,8 @@ class SQLiteManager {
     this.logger = logger;
     this.db = null;
     this.dbPath = null;
+    this.ranker = new SearchRanker(logger);
+    this.filters = new SearchFilters(logger);
   }
 
   // ==========================================
@@ -572,94 +576,77 @@ class SQLiteManager {
   }
 
   /**
-   * Buscar recetas por criterios (40+ variables posibles)
+   * Buscar recetas por criterios (40+ variables posibles) con ranking
+   *
+   * Soporta:
+   * - Filtrado: nombre, ingredientes, dificultad, tiempo, coste, viabilidad, características, alérgenos, etc
+   * - Ranking: multi-factor scoring (nombre, ingredientes, coste, viabilidad, recency)
+   * - Sorting: por relevancia (default) o por campo específico
+   * - Paginación: limit y offset
    */
   async searchRecetas(projectId, criteria = {}) {
-    let sql = `SELECT * FROM receta_search_index WHERE proyecto_id = ?`;
-    const params = [projectId];
-
-    // Búsqueda por nombre (LIKE)
-    if (criteria.nombre) {
-      sql += ` AND nombre_lower LIKE ?`;
-      params.push(`%${criteria.nombre.toLowerCase()}%`);
-    }
-
-    // Búsqueda por ingrediente
-    if (criteria.ingredientes && Array.isArray(criteria.ingredientes)) {
-      for (const ing of criteria.ingredientes) {
-        sql += ` AND ingredientes_nombres LIKE ?`;
-        params.push(`%${ing}%`);
+    try {
+      // Validar criterios
+      const validation = this.filters.validateCriteria(criteria);
+      if (!validation.valid) {
+        this.logger.warn('search.invalid_criteria', { projectId, errors: validation.errors });
       }
-    }
 
-    // Excluir ingredientes
-    if (criteria.ingredientes_excluir && Array.isArray(criteria.ingredientes_excluir)) {
-      for (const ing of criteria.ingredientes_excluir) {
-        sql += ` AND ingredientes_nombres NOT LIKE ?`;
-        params.push(`%${ing}%`);
+      // Construir SQL con filtros
+      const { sql: baseSql, params } = this.filters.buildFilterSQL(projectId, criteria);
+
+      // Ejecutar búsqueda SIN ordenamiento (lo haremos con ranking)
+      const results = await this.all(baseSql, params);
+
+      if (results.length === 0) {
+        return [];
       }
-    }
 
-    // Dificultad
-    if (criteria.dificultad_min !== undefined) {
-      sql += ` AND dificultad_max >= ?`;
-      params.push(criteria.dificultad_min);
-    }
-    if (criteria.dificultad_max !== undefined) {
-      sql += ` AND dificultad_min <= ?`;
-      params.push(criteria.dificultad_max);
-    }
+      // Aplicar ranking si hay búsqueda por nombre o ingredientes
+      const shouldRank = criteria.nombre || (criteria.ingredientes && criteria.ingredientes.length > 0);
+      const ranked = shouldRank ? this.ranker.rankResults(results, criteria) : results;
 
-    // Tiempo de preparación
-    if (criteria.tiempo_min !== undefined) {
-      sql += ` AND tiempo_prep_max >= ?`;
-      params.push(criteria.tiempo_min);
-    }
-    if (criteria.tiempo_max !== undefined) {
-      sql += ` AND tiempo_prep_min <= ?`;
-      params.push(criteria.tiempo_max);
-    }
+      // Aplicar sorting personalizado si se especifica
+      let sorted = ranked;
+      if (criteria.sortBy || criteria.sortOrder) {
+        const orderSQL = this.filters.buildOrderSQL(criteria.sortBy, criteria.sortOrder);
+        // Nota: El sorting por relevancia ya está hecho por ranker
+        // Los otros sorts se aplicarían aquí si queremos ignorar ranking
+        if (criteria.sortBy && criteria.sortBy !== 'relevancia') {
+          // Re-sort por campo especificado (ignora ranking)
+          const fieldMap = {
+            'nombre': (a, b) => a.nombre.localeCompare(b.nombre),
+            'dificultad': (a, b) => a.dificultad_min - b.dificultad_min,
+            'tiempo': (a, b) => a.tiempo_prep_min - b.tiempo_prep_min,
+            'coste': (a, b) => a.coste_porcion_min - b.coste_porcion_min,
+            'viabilidad': (a, b) => {
+              const order = { 'alta': 0, 'media': 1, 'baja': 2 };
+              return (order[a.viabilidad] || 3) - (order[b.viabilidad] || 3);
+            },
+            'created_at': (a, b) => new Date(a.created_at) - new Date(b.created_at),
+            'updated_at': (a, b) => new Date(a.updated_at) - new Date(b.updated_at)
+          };
 
-    // Coste por porción
-    if (criteria.coste_min !== undefined) {
-      sql += ` AND coste_porcion_max >= ?`;
-      params.push(criteria.coste_min);
-    }
-    if (criteria.coste_max !== undefined) {
-      sql += ` AND coste_porcion_min <= ?`;
-      params.push(criteria.coste_max);
-    }
-
-    // Viabilidad
-    if (criteria.viabilidad) {
-      sql += ` AND viabilidad = ?`;
-      params.push(criteria.viabilidad);
-    }
-
-    // Características (vegetariano, sin_gluten, etc)
-    if (criteria.caracteristicas) {
-      for (const char of criteria.caracteristicas) {
-        sql += ` AND caracteristicas LIKE ?`;
-        params.push(`%${char}%`);
+          const compareFn = fieldMap[criteria.sortBy];
+          if (compareFn) {
+            sorted = [...ranked].sort(compareFn);
+            if (criteria.sortOrder && criteria.sortOrder.toLowerCase() === 'desc') {
+              sorted.reverse();
+            }
+          }
+        }
       }
+
+      // Aplicar offset y limit
+      const offset = criteria.offset || 0;
+      const limit = criteria.limit || 50;
+      const paginated = sorted.slice(offset, offset + limit);
+
+      return paginated;
+    } catch (err) {
+      this.logger.error('search.failed', { projectId, error: err.message });
+      throw err;
     }
-
-    // Alérgenos a excluir
-    if (criteria.alerge nos_excluir) {
-      for (const alg of criteria.alerge nos_excluir) {
-        sql += ` AND alerge nos_excluir NOT LIKE ?`;
-        params.push(`%${alg}%`);
-      }
-    }
-
-    sql += ` ORDER BY updated_at DESC`;
-
-    if (criteria.limit) {
-      sql += ` LIMIT ?`;
-      params.push(criteria.limit);
-    }
-
-    return this.all(sql, params);
   }
 
   // ==========================================

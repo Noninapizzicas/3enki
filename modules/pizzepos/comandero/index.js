@@ -31,7 +31,10 @@ class ComanderoModule {
     // Caché de productos (para resolver nombre/precio)
     this.productosCache = new Map();
 
-    // Referencia al módulo de tarifas
+    // Caché de productos por carta (carta_id → Map<producto_id, producto>)
+    this.cartasProductosCache = new Map();
+
+    // Referencia al módulo de tarifas (para resolverCarta)
     this._tarifasModule = null;
 
     // Persistencia del buffer (debounced)
@@ -79,6 +82,7 @@ class ComanderoModule {
 
     this.pedidos.clear();
     this.productosCache.clear();
+    this.cartasProductosCache.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -259,6 +263,31 @@ class ComanderoModule {
     });
   }
 
+  async onCartaActualizada(event) {
+    const data = event?.data || event?.payload || event;
+    const cartaId = data?.meta?.id;
+    const productos = data?.productos || [];
+
+    if (!cartaId || productos.length === 0) return;
+
+    const cartaCache = new Map();
+    for (const p of productos) {
+      if (p.id && p.precio !== undefined) {
+        cartaCache.set(p.id, {
+          nombre: p.nombre || p.id,
+          precio: p.precio,
+          categoria: p.categoria || null,
+          estaciones: p.estaciones || null
+        });
+      }
+    }
+
+    this.cartasProductosCache.set(cartaId, cartaCache);
+    this.logger.info('comandero.carta.cached', {
+      carta_id: cartaId, productos: cartaCache.size
+    });
+  }
+
   async onProductoActualizado(event) {
     const data = event?.data || event?.payload || event;
     const { id, nombre, precio, categoria } = data;
@@ -322,12 +351,9 @@ class ComanderoModule {
       this.logger.warn('comandero.producto.not_in_cache', { producto_id });
     }
 
-    // Aplicar tarifa por canal si menu-generator está disponible
+    // Resolver precio por canal: busca en la carta asignada al canal
     const canal = this._detectarCanalCuenta(cuenta_id);
-    const itemPrecio = this._aplicarTarifa(
-      { precio: precioBase, categoria: cached?.categoria, precio_fijo: cached?.precio_fijo },
-      canal
-    );
+    const itemPrecio = this._resolverPrecioCanal(producto_id, precioBase, canal);
 
     const item_id = crypto.randomUUID();
     const item = {
@@ -736,26 +762,46 @@ class ComanderoModule {
   }
 
   /**
-   * Aplica tarifa de canal al precio del producto.
-   * Accede lazy a menu-generator via moduleLoader.
-   * Si menu-generator no existe o no tiene tarifas, devuelve precio base.
+   * Resuelve el precio de un producto para un canal de venta.
+   *
+   * Nuevo modelo (v2): cada canal tiene su propia carta con precios finales.
+   * Tarifas.resolverCarta(canal) devuelve el carta_id del canal.
+   * Se busca el producto en la carta del canal → precio ya es el correcto.
+   *
+   * Cascada:
+   *   1. Carta del canal (via tarifas.resolverCarta) → precio de esa carta
+   *   2. Cache general de productos (catalogo.actualizado) → precio base
+   *   3. Precio pasado en la request → fallback
    */
-  _aplicarTarifa(producto, canal) {
-    if (!canal || canal === 'mesa') return producto.precio;
+  _resolverPrecioCanal(producto_id, precioBase, canal) {
+    if (!canal || canal === 'mesa') return precioBase;
 
     try {
+      // Lazy load tarifas
       if (!this._tarifasModule && this._moduleLoader) {
         const mod = this._moduleLoader.getModule?.('tarifas');
         this._tarifasModule = mod?.instance || null;
       }
-      if (this._tarifasModule?.resolverPrecio) {
-        return this._tarifasModule.resolverPrecio(producto, canal);
+
+      if (this._tarifasModule?.resolverCarta) {
+        const cartaId = this._tarifasModule.resolverCarta(canal);
+
+        if (cartaId) {
+          const cartaCache = this.cartasProductosCache.get(cartaId);
+          if (cartaCache) {
+            const producto = cartaCache.get(producto_id);
+            if (producto) {
+              return producto.precio;  // Precio final — ya incluye la tarifa del canal
+            }
+          }
+        }
       }
     } catch (err) {
-      this.logger?.debug('comandero.tarifa.fallback', { error: err.message });
+      this.logger?.debug('comandero.precio_canal.fallback', { error: err.message, canal });
     }
 
-    return producto.precio;
+    // Fallback: precio base (carta general o el pasado en la request)
+    return precioBase;
   }
 }
 

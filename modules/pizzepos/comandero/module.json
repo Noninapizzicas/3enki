@@ -60,6 +60,10 @@
       {
         "event": "producto.actualizado",
         "handler": "onProductoActualizado"
+      },
+      {
+        "event": "carta.actualizada",
+        "handler": "onCartaActualizada"
       }
     ]
   },

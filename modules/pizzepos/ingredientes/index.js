@@ -98,16 +98,8 @@ class IngredientesModule {
   // Event Subscriptions
   // ==========================================
 
-  async subscribeToEvents() {
-    await this.eventBus.subscribe('menu.generado', this.onMenuGenerado.bind(this));
-    await this.eventBus.subscribe('producto.creado', this.onProductoCreado.bind(this));
-    await this.eventBus.subscribe('project.activated', this.onProjectActivated.bind(this));
-    await this.eventBus.subscribe('ingrediente.actualizado', this.onIngredienteActualizadoExterno.bind(this));
-
-    this.logger.info('ingredientes.events.subscribed', {
-      events: ['menu.generado', 'producto.creado', 'project.activated', 'ingrediente.actualizado']
-    });
-  }
+  // Event subscriptions are auto-wired from module.json by the loader.
+  // Manual subscriptions removed — were duplicating auto-wired handlers.
 
   // ==========================================
   // Event Handlers
@@ -133,7 +125,7 @@ class IngredientesModule {
     }
   }
 
-  async onMenuGenerado(event) {
+  async onCartaActualizada(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
     const { ingredientes_catalogo, productos, source } = eventData;

@@ -28,9 +28,9 @@
     ],
     "subscribes": [
       {
-        "event": "menu.generado",
-        "description": "Menú generado - extraer ingredientes del catálogo",
-        "handler": "onMenuGenerado"
+        "event": "carta.actualizada",
+        "description": "Carta creada o modificada — extraer y sincronizar ingredientes",
+        "handler": "onCartaActualizada"
       },
       {
         "event": "producto.creado",

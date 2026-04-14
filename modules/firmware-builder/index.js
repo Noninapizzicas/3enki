@@ -144,8 +144,15 @@ class FirmwareBuilderModule {
       return { status: 429, error: `Máximo de builds concurrentes alcanzado (${this.config.max_concurrent_builds})` };
     }
 
+    // Validar board si se proporciona
+    if (board && !BOARDS[board]) {
+      const validBoards = Object.keys(BOARDS).join(', ');
+      return { status: 400, error: `Board '${board}' no soportado. Válidos: ${validBoards}` };
+    }
+
     const startTime = Date.now();
-    const buildEnv = driverInfo.buildEnv || board || driverInfo.board;
+    const effectiveBoard = board || driverInfo.board;
+    const buildEnv = driverInfo.buildEnv || effectiveBoard;
 
     // Si clean, primero limpiar y luego compilar (clean solo no compila)
     if (clean) {
@@ -155,16 +162,10 @@ class FirmwareBuilderModule {
     const args = ['run', '-d', driverInfo.path];
     if (board) args.push('-e', board);
 
-    this.logger.info('firmware.build.starting', { driver, board: board || driverInfo.board, clean: !!clean });
-    this.metrics.increment('firmware.build_started.total');
-    this.metrics.gauge('firmware.active_builds.count', this.activeBuilds.size + 1);
+    this.logger.info('firmware.build.starting', { driver, board: effectiveBoard, clean: !!clean });
 
-    await this.eventBus.publish('firmware.build_started', {
-      driver, board: board || driverInfo.board, timestamp: new Date().toISOString()
-    });
-
-    // Build asíncrono
-    const buildPromise = this._runBuild(driver, driverInfo.path, args, startTime, board || driverInfo.board);
+    // Build asíncrono — métricas se actualizan dentro de _runBuild
+    const buildPromise = this._runBuild(driver, driverInfo.path, args, startTime, effectiveBoard);
     buildPromise.catch(err => {
       this.logger.error('firmware.build.unhandled_error', { driver, error: err.message });
     });
@@ -257,6 +258,12 @@ class FirmwareBuilderModule {
 
       this.activeBuilds.set(driverName, buildInfo);
 
+      this.metrics.increment('firmware.build_started.total');
+      this.metrics.gauge('firmware.active_builds.count', this.activeBuilds.size);
+      this.eventBus.publish('firmware.build_started', {
+        driver: driverName, board, timestamp: buildInfo.started_at
+      }).catch(e => this.logger.error('firmware.build.publish_error', { error: e.message }));
+
       const proc = spawn(this.config.platformio_path, args, {
         cwd: driverPath,
         env: { ...process.env, PLATFORMIO_FORCE_COLOR: 'false' },
@@ -265,15 +272,20 @@ class FirmwareBuilderModule {
 
       buildInfo.process = proc;
 
+      const MAX_LOG_LINES = 500;
       proc.stdout.on('data', (chunk) => {
-        buildLog.push(...chunk.toString().split('\n').filter(l => l.trim()));
+        const lines = chunk.toString().split('\n').filter(l => l.trim());
+        buildLog.push(...lines);
+        if (buildLog.length > MAX_LOG_LINES) buildLog.splice(0, buildLog.length - MAX_LOG_LINES);
       });
 
       proc.stderr.on('data', (chunk) => {
-        buildLog.push(...chunk.toString().split('\n').filter(l => l.trim()));
+        const lines = chunk.toString().split('\n').filter(l => l.trim());
+        buildLog.push(...lines);
+        if (buildLog.length > MAX_LOG_LINES) buildLog.splice(0, buildLog.length - MAX_LOG_LINES);
       });
 
-      proc.on('close', async (code) => {
+      proc.on('close', (code) => {
         if (resolved) return;
         resolved = true;
 
@@ -282,12 +294,13 @@ class FirmwareBuilderModule {
         this.metrics.gauge('firmware.active_builds.count', this.activeBuilds.size);
 
         const driver = this.drivers.get(driverName);
+        const isTimeout = code === null;
 
         if (code === 0) {
           const binPath = path.join(driverPath, '.pio', 'build', buildEnv, 'firmware.bin');
           let binarySize = 0;
           try {
-            const stat = await fs.promises.stat(binPath);
+            const stat = fs.statSync(binPath);
             binarySize = stat.size;
           } catch (_) {}
 
@@ -305,20 +318,20 @@ class FirmwareBuilderModule {
             driver: driverName, duration_ms: duration, binary_size: binarySize
           });
 
-          await this.eventBus.publish('firmware.build_completed', {
+          this.eventBus.publish('firmware.build_completed', {
             driver: driverName,
             board,
             binary_path: binPath,
             binary_size: binarySize,
             duration_ms: duration,
-            // Pass metadata for firmware-manager auto-registration
             utility: driverInfo?.utility || '',
             description: driverInfo?.description || '',
             capabilities: driverInfo?.capabilities || []
-          });
+          }).catch(e => this.logger.error('firmware.build.publish_error', { error: e.message }));
 
           resolve({ success: true, binary_path: binPath, binary_size: binarySize, duration_ms: duration });
         } else {
+          const reason = isTimeout ? 'timeout' : 'compilation_error';
           const errorOutput = buildLog.slice(-30).join('\n');
 
           if (driver) {
@@ -330,22 +343,23 @@ class FirmwareBuilderModule {
           this.metrics.timing('firmware.build.duration', duration);
 
           this.logger.error('firmware.build.failed', {
-            driver: driverName, exit_code: code, duration_ms: duration
+            driver: driverName, exit_code: code, reason, duration_ms: duration
           });
 
-          await this.eventBus.publish('firmware.build_failed', {
+          this.eventBus.publish('firmware.build_failed', {
             driver: driverName,
             board,
-            error: errorOutput,
+            error: isTimeout ? `Build timeout (${this.config.build_timeout_ms}ms)` : errorOutput,
             exit_code: code,
+            reason,
             duration_ms: duration
-          });
+          }).catch(e => this.logger.error('firmware.build.publish_error', { error: e.message }));
 
-          resolve({ success: false, error: errorOutput, exit_code: code, duration_ms: duration });
+          resolve({ success: false, error: errorOutput, exit_code: code, reason, duration_ms: duration });
         }
       });
 
-      proc.on('error', async (err) => {
+      proc.on('error', (err) => {
         if (resolved) return;
         resolved = true;
 
@@ -362,13 +376,13 @@ class FirmwareBuilderModule {
 
         this.logger.error('firmware.build.spawn_error', { driver: driverName, error: err.message });
 
-        await this.eventBus.publish('firmware.build_failed', {
+        this.eventBus.publish('firmware.build_failed', {
           driver: driverName,
           board,
           error: `No se pudo ejecutar '${this.config.platformio_path}': ${err.message}`,
           exit_code: -1,
           duration_ms: duration
-        });
+        }).catch(e => this.logger.error('firmware.build.publish_error', { error: e.message }));
 
         resolve({ success: false, error: err.message, duration_ms: duration });
       });
@@ -386,11 +400,20 @@ class FirmwareBuilderModule {
       const proc = spawn(this.config.platformio_path, args, {
         cwd: driverPath,
         env: { ...process.env, PLATFORMIO_FORCE_COLOR: 'false' },
+        stdio: 'ignore',
         timeout: 60000
       });
 
-      proc.on('close', () => resolve());
-      proc.on('error', () => resolve());
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          this.logger.warn('firmware.clean.failed', { driverPath, exit_code: code });
+        }
+        resolve();
+      });
+      proc.on('error', (err) => {
+        this.logger.warn('firmware.clean.error', { driverPath, error: err.message });
+        resolve();
+      });
     });
   }
 

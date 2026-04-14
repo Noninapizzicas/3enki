@@ -5,14 +5,14 @@ export const menuGenerateModule: UIModule = {
   manifest: {
     id: 'menu-generate',
     name: 'Generar Carta',
-    version: '1.0.0',
+    version: '2.0.0',
     zone: 'work-bar',
     button: {
       id: 'menu-generate-btn',
       icon: '✨',
       label: 'Generar',
       action: { type: 'panel', panelId: 'menu-generate-panel' },
-      order: 4
+      order: 1
     },
     panels: [{
       id: 'menu-generate-panel',

@@ -1,383 +1,104 @@
 /**
- * Menu Generator Store - MQTT Request/Response + Real-time Events
+ * Menu Generator Store — Solo generación
  *
- * Generación de cartas desde texto usando IA:
- * - Generate via mqttRequest('menu', 'generate')
- * - List/Get via mqttRequest('menu', 'list'/'get')
- * - Real-time updates via carta.generada y menu.error
+ * Responsabilidad: disparar generación y mostrar progreso/resultado.
+ * NO gestiona cartas (eso es carta-manager).
  */
 
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import {
-  mqttRequest,
-  MqttTimeoutError,
-  MqttRequestError
-} from '$lib/ui-core/mqtt-request';
-import { updatePageStateBatch } from '$lib/stores/page-context';
+import { mqttRequest, MqttTimeoutError, MqttRequestError } from '$lib/ui-core/mqtt-request';
 import { getActiveProject } from '$lib/stores/workspace';
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
-export type CartaEstado = 'generando' | 'generada' | 'error';
+export type GenerationStep = 'idle' | 'extracting' | 'structuring' | 'done' | 'error';
 
-export interface Ingrediente {
-  nombre: string;
-  emoji?: string;
-}
-
-export interface Producto {
-  id: string;
-  nombre: string;
-  categoria: string;
-  precio: number;
-  ingredientes: Ingrediente[];
-}
-
-export interface Categoria {
-  id: string;
-  nombre: string;
-  orden: number;
-}
-
-export interface CartaMeta {
-  id: string;
-  nombre: string;
-  generado_desde: 'texto' | 'foto' | 'pdf';
-  created_at: string;
-}
-
-export interface Carta {
-  meta: CartaMeta;
-  categorias: Categoria[];
-  productos: Producto[];
-}
-
-export interface CartaResumen {
-  id: string;
-  nombre: string;
-  estado: CartaEstado;
-  productos?: number;
-  categorias?: number;
-  created_at: string;
-  error?: string;
-}
-
-export interface MenuGeneratorState {
-  cartas: CartaResumen[];
-  selectedCarta: Carta | null;
-  selectedId: string | null;
-  generating: boolean;
-  loading: boolean;
+export interface GenerationState {
+  step: GenerationStep;
+  nombre: string | null;
+  message: string | null;
   error: string | null;
-  activeTab: 'generar' | 'cartas' | 'detalle';
-  health: {
-    generando: number;
-    generadas: number;
-  };
+  result: GenerationResult | null;
 }
 
-interface GenerateResponse {
+export interface GenerationResult {
   carta_id: string;
-  correlation_id: string;
-  estado: string;
+  nombre: string;
+  productos: number;
+  categorias: number;
 }
-
-interface ListResponse {
-  cartas: CartaResumen[];
-  total: number;
-}
-
-// getCarta returns the carta object directly as response.data
-type GetResponse = Carta;
-
-interface HealthResponse {
-  status: string;
-  generando: number;
-  generadas: number;
-}
-
-// =============================================================================
-// INITIAL STATE
-// =============================================================================
-
-const initialState: MenuGeneratorState = {
-  cartas: [],
-  selectedCarta: null,
-  selectedId: null,
-  generating: false,
-  loading: false,
-  error: null,
-  activeTab: 'generar',
-  health: {
-    generando: 0,
-    generadas: 0
-  }
-};
 
 // =============================================================================
 // STORE
 // =============================================================================
 
-export const menuGeneratorStore = writable<MenuGeneratorState>(initialState);
+const initial: GenerationState = {
+  step: 'idle',
+  nombre: null,
+  message: null,
+  error: null,
+  result: null
+};
+
+export const generationStore = writable<GenerationState>(initial);
 
 // =============================================================================
 // ACTIONS
 // =============================================================================
 
 /**
- * Genera una carta desde texto
+ * Genera carta desde texto.
+ * El nombre es OBLIGATORIO — el UI debe pedirlo antes de llamar.
  */
-export async function generateMenu(texto: string, nombre?: string, provider?: string): Promise<boolean> {
-  menuGeneratorStore.update(s => ({ ...s, generating: true, error: null }));
-
-  try {
-    const data: Record<string, string> = { texto };
-    if (nombre) data.nombre = nombre;
-    if (provider && provider !== 'auto') data.provider = provider;
-
-    const response = await mqttRequest<GenerateResponse>('menu', 'generate', data, {
-      timeout: 30000
-    });
-
-    // Agregar carta en estado "generando" a la lista local
-    const nuevaCarta: CartaResumen = {
-      id: response.data.carta_id,
-      nombre: nombre || 'Carta sin nombre',
-      estado: 'generando',
-      created_at: new Date().toISOString()
-    };
-
-    menuGeneratorStore.update(s => ({
-      ...s,
-      generating: false,
-      cartas: [nuevaCarta, ...s.cartas],
-      activeTab: 'cartas'
-    }));
-
-    console.log('[MenuGenerator] Generando carta:', response.data.carta_id);
-    return true;
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    menuGeneratorStore.update(s => ({ ...s, generating: false, error: errorMessage }));
-    console.error('[MenuGenerator] Generate failed:', errorMessage);
-    return false;
-  }
-}
-
-/**
- * Carga la lista de cartas generadas
- */
-export async function loadCartas(): Promise<void> {
-  menuGeneratorStore.update(s => ({ ...s, loading: true, error: null }));
+export async function generateFromText(nombre: string, texto: string): Promise<boolean> {
+  generationStore.set({
+    step: 'structuring', nombre,
+    message: 'Estructurando carta con IA...', error: null, result: null
+  });
 
   try {
     const project = getActiveProject();
-    const response = await mqttRequest<ListResponse>('menu', 'list', {
-      project_id: project?.id
-    });
-
-    menuGeneratorStore.update(s => ({
-      ...s,
-      cartas: response.data.cartas || [],
-      loading: false,
-      error: null
-    }));
-
-    console.log('[MenuGenerator] Loaded:', response.data.total, 'cartas');
+    await mqttRequest('menu', 'generate', {
+      nombre, texto, project_id: project?.id
+    }, { timeout: 30000 });
+    return true;
   } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    menuGeneratorStore.update(s => ({ ...s, loading: false, error: errorMessage }));
-    console.error('[MenuGenerator] Load failed:', errorMessage);
+    generationStore.update(s => ({
+      ...s, step: 'error', error: getErrorMessage(error)
+    }));
+    return false;
   }
 }
 
 /**
- * Obtiene una carta completa por ID
+ * Genera carta desde archivo (PDF/imagen).
+ * Primero extrae texto (OCR), luego estructura.
  */
-export async function getCarta(id: string): Promise<Carta | null> {
-  menuGeneratorStore.update(s => ({ ...s, loading: true, error: null }));
+export async function generateFromFile(nombre: string, filePath: string): Promise<boolean> {
+  generationStore.set({
+    step: 'extracting', nombre,
+    message: 'Extrayendo texto del documento...', error: null, result: null
+  });
 
   try {
     const project = getActiveProject();
-    const response = await mqttRequest<GetResponse>('menu', 'get', { id, project_id: project?.id });
-
-    // response.data IS the carta object (meta, categorias, productos)
-    const carta = response.data as Carta;
-
-    menuGeneratorStore.update(s => ({
-      ...s,
-      selectedCarta: carta,
-      selectedId: id,
-      loading: false,
-      activeTab: 'detalle'
+    await mqttRequest('menu', 'generate', {
+      nombre, filePath, project_id: project?.id
+    }, { timeout: 120000 });
+    return true;
+  } catch (error) {
+    generationStore.update(s => ({
+      ...s, step: 'error', error: getErrorMessage(error)
     }));
-
-    return carta;
-  } catch (error) {
-    const errorMessage = getErrorMessage(error);
-    menuGeneratorStore.update(s => ({ ...s, loading: false, error: errorMessage }));
-    console.error('[MenuGenerator] Get failed:', errorMessage);
-    return null;
-  }
-}
-
-/**
- * Carga el estado de salud del módulo
- */
-export async function loadHealth(): Promise<void> {
-  try {
-    const response = await mqttRequest<HealthResponse>('menu', 'health');
-
-    menuGeneratorStore.update(s => ({
-      ...s,
-      health: {
-        generando: response.data.generando || 0,
-        generadas: response.data.generadas || 0
-      }
-    }));
-  } catch (error) {
-    console.error('[MenuGenerator] Health failed:', getErrorMessage(error));
-  }
-}
-
-/**
- * Renderiza una carta como HTML para previsualización/impresión
- * El panel html-preview se abre automáticamente vía initHtmlPreviewSubscriptions()
- */
-export async function renderCartaHtml(
-  cartaId: string,
-  plantillaId: string = 'a4-clasica'
-): Promise<void> {
-  const project = getActiveProject();
-  await mqttRequest('carta', 'render', { carta_id: cartaId, plantilla_id: plantillaId, project_id: project?.id });
-}
-
-// =============================================================================
-// EDIT ACTIONS (fuente de verdad — solo menu-generator modifica datos)
-// =============================================================================
-
-export async function updateProduct(
-  cartaId: string,
-  productoId: string,
-  changes: { nombre?: string; precio?: number; categoria?: string; ingredientes?: Ingrediente[] }
-): Promise<boolean> {
-  try {
-    await mqttRequest('menu', 'update-product', { carta_id: cartaId, producto_id: productoId, ...changes });
-    await getCarta(cartaId); // refresh
-    return true;
-  } catch (error) {
-    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
     return false;
   }
 }
 
-export async function addProduct(
-  cartaId: string,
-  producto: { nombre: string; categoria: string; precio: number; ingredientes?: Ingrediente[] }
-): Promise<boolean> {
-  try {
-    await mqttRequest('menu', 'add-product', { carta_id: cartaId, ...producto });
-    await getCarta(cartaId);
-    return true;
-  } catch (error) {
-    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
-    return false;
-  }
-}
-
-export async function removeProduct(cartaId: string, productoId: string): Promise<boolean> {
-  try {
-    await mqttRequest('menu', 'remove-product', { carta_id: cartaId, producto_id: productoId });
-    await getCarta(cartaId);
-    return true;
-  } catch (error) {
-    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
-    return false;
-  }
-}
-
-export async function updatePrices(
-  cartaId: string,
-  changes: { porcentaje?: number; categoria?: string; precios?: Record<string, number> }
-): Promise<boolean> {
-  try {
-    await mqttRequest('menu', 'update-prices', { carta_id: cartaId, ...changes });
-    await getCarta(cartaId);
-    return true;
-  } catch (error) {
-    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
-    return false;
-  }
-}
-
-export async function addCategory(cartaId: string, nombre: string): Promise<boolean> {
-  try {
-    await mqttRequest('menu', 'add-category', { carta_id: cartaId, nombre });
-    await getCarta(cartaId);
-    return true;
-  } catch (error) {
-    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
-    return false;
-  }
-}
-
-// =============================================================================
-// VERSION CONTROL
-// =============================================================================
-
-export interface CartaVersion {
-  file: string;
-  timestamp: string;
-  nombre: string;
-  productos: number;
-  categorias: number;
-  size_bytes: number;
-}
-
-export async function listVersions(cartaId: string): Promise<CartaVersion[]> {
-  try {
-    const res = await mqttRequest<{ carta_id: string; versions: CartaVersion[]; total: number }>(
-      'menu', 'list-versions', { carta_id: cartaId }
-    );
-    return res.data.versions || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function restoreVersion(cartaId: string, versionFile: string): Promise<boolean> {
-  try {
-    await mqttRequest('menu', 'restore-version', { carta_id: cartaId, version_file: versionFile });
-    await getCarta(cartaId);
-    return true;
-  } catch (error) {
-    menuGeneratorStore.update(s => ({ ...s, error: getErrorMessage(error) }));
-    return false;
-  }
-}
-
-// =============================================================================
-// UI ACTIONS
-// =============================================================================
-
-export function setActiveTab(tab: MenuGeneratorState['activeTab']): void {
-  menuGeneratorStore.update(s => ({ ...s, activeTab: tab }));
-}
-
-export function selectCarta(id: string | null): void {
-  menuGeneratorStore.update(s => ({
-    ...s,
-    selectedId: id,
-    selectedCarta: id ? s.selectedCarta : null,
-    activeTab: id ? 'detalle' : s.activeTab
-  }));
-}
-
-export function clearError(): void {
-  menuGeneratorStore.update(s => ({ ...s, error: null }));
+export function resetGeneration(): void {
+  generationStore.set(initial);
 }
 
 // =============================================================================
@@ -386,82 +107,61 @@ export function clearError(): void {
 
 let cleanupFns: (() => void)[] = [];
 
-/**
- * Inicializa suscripciones a eventos en tiempo real
- */
-export function initMenuGeneratorSubscriptions(): () => void {
-  // Limpiar suscripciones anteriores
+export function initGenerationSubscriptions(): () => void {
   cleanupFns.forEach(fn => fn());
   cleanupFns = [];
 
-  // Escuchar carta generada
+  // Progreso del pipeline
   cleanupFns.push(
-    mqttSubscribe('carta.generada', (_topic, payload) => {
-      const data = payload as { meta?: CartaMeta; categorias?: Categoria[]; productos?: Producto[] };
-      const cartaId = data?.meta?.id;
+    mqttSubscribe('menu.generation.progress', (_topic, payload) => {
+      const data = payload as { step?: string; message?: string; nombre?: string };
+      if (data?.step) {
+        generationStore.update(s => ({
+          ...s,
+          step: data.step as GenerationStep,
+          message: data.message || s.message,
+          nombre: data.nombre || s.nombre
+        }));
+      }
+    })
+  );
 
-      if (cartaId) {
-        console.log('[MenuGenerator] Carta generada:', cartaId);
+  // Error en pipeline
+  cleanupFns.push(
+    mqttSubscribe('menu.generation.failed', (_topic, payload) => {
+      const data = payload as { error?: string; nombre?: string };
+      generationStore.update(s => ({
+        ...s, step: 'error',
+        error: data?.error || 'Error desconocido en la generación'
+      }));
+    })
+  );
 
-        // Actualizar page context para que el chat sepa de la carta
-        updatePageStateBatch({
-          activeCarta: cartaId,
-          activeCartaNombre: data.meta?.nombre || '',
-          activeCartaProductos: data.productos?.length || 0,
-          pipelineStep: 'carta_generada'
+  // Carta generada (emitido por carta-manager cuando el structurer guarda)
+  cleanupFns.push(
+    mqttSubscribe('carta.actualizada', (_topic, payload) => {
+      const data = payload as { meta?: { id: string; nombre: string }; productos?: any[]; categorias?: any[] };
+      if (data?.meta?.id) {
+        generationStore.update(s => {
+          // Solo actualizar si estábamos generando
+          if (s.step === 'structuring' || s.step === 'extracting') {
+            return {
+              ...s,
+              step: 'done',
+              message: null,
+              result: {
+                carta_id: data.meta!.id,
+                nombre: data.meta!.nombre || s.nombre || '',
+                productos: data.productos?.length || 0,
+                categorias: data.categorias?.length || 0
+              }
+            };
+          }
+          return s;
         });
-
-        // Actualizar en la lista local
-        menuGeneratorStore.update(s => ({
-          ...s,
-          cartas: s.cartas.map(c =>
-            c.id === cartaId
-              ? {
-                  ...c,
-                  estado: 'generada' as CartaEstado,
-                  nombre: data.meta?.nombre || c.nombre,
-                  productos: data.productos?.length || 0,
-                  categorias: data.categorias?.length || 0
-                }
-              : c
-          ),
-          health: {
-            ...s.health,
-            generando: Math.max(0, s.health.generando - 1),
-            generadas: s.health.generadas + 1
-          }
-        }));
       }
     })
   );
-
-  // Escuchar errores de generación
-  cleanupFns.push(
-    mqttSubscribe('menu.error', (_topic, payload) => {
-      const data = payload as { carta_id?: string; error?: string };
-
-      if (data?.carta_id) {
-        console.log('[MenuGenerator] Error en carta:', data.carta_id, data.error);
-
-        menuGeneratorStore.update(s => ({
-          ...s,
-          cartas: s.cartas.map(c =>
-            c.id === data.carta_id
-              ? { ...c, estado: 'error' as CartaEstado, error: data.error }
-              : c
-          ),
-          health: {
-            ...s.health,
-            generando: Math.max(0, s.health.generando - 1)
-          }
-        }));
-      }
-    })
-  );
-
-  // Cargar datos iniciales
-  loadCartas();
-  loadHealth();
 
   return () => {
     cleanupFns.forEach(fn => fn());
@@ -470,47 +170,23 @@ export function initMenuGeneratorSubscriptions(): () => void {
 }
 
 // =============================================================================
+// DERIVED
+// =============================================================================
+
+export const generationStep = derived(generationStore, $s => $s.step);
+export const generationError = derived(generationStore, $s => $s.error);
+export const generationResult = derived(generationStore, $s => $s.result);
+export const isGenerating = derived(generationStore, $s =>
+  $s.step === 'extracting' || $s.step === 'structuring'
+);
+
+// =============================================================================
 // HELPERS
 // =============================================================================
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof MqttTimeoutError) {
-    return 'Timeout - el servidor no respondio';
-  }
-  if (error instanceof MqttRequestError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
+  if (error instanceof MqttTimeoutError) return 'Timeout — el servidor no respondió';
+  if (error instanceof MqttRequestError) return error.message;
+  if (error instanceof Error) return error.message;
   return 'Error desconocido';
 }
-
-// =============================================================================
-// DERIVED STORES
-// =============================================================================
-
-/** Cartas ordenadas por fecha (mas recientes primero) */
-export const sortedCartas = derived(menuGeneratorStore, $s =>
-  [...$s.cartas].sort((a, b) =>
-    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  )
-);
-
-/** Carta seleccionada completa */
-export const selectedCarta = derived(menuGeneratorStore, $s => $s.selectedCarta);
-
-/** Tab activa */
-export const activeTab = derived(menuGeneratorStore, $s => $s.activeTab);
-
-/** Health stats */
-export const menuHealth = derived(menuGeneratorStore, $s => $s.health);
-
-/** Loading state */
-export const menuLoading = derived(menuGeneratorStore, $s => $s.loading);
-
-/** Generating state */
-export const menuGenerating = derived(menuGeneratorStore, $s => $s.generating);
-
-/** Error */
-export const menuError = derived(menuGeneratorStore, $s => $s.error);

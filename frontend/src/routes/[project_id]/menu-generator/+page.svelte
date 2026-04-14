@@ -27,49 +27,23 @@
     setPageContext({
       route: '/menu-generator',
       title: 'Menu Generator',
-      description: 'Pipeline de creación de cartas de restaurante: PDF→Imagen→OCR→Generar carta estructurada con IA.',
-      instructions: `El usuario está en menu-generator para el proyecto "${project_id}". Este es el módulo DUEÑO de los datos de carta — aquí se crean, modifican y gestionan productos, precios, ingredientes y categorías.
+      description: 'Generar cartas de restaurante desde cualquier input y gestionarlas.',
+      instructions: `Proyecto "${project_id}". Dos módulos:
 
-Cuando el usuario dice "genera con eso", "usa el texto que acabo de escanear" o similar, usa el valor de ocrText del estado.
-Cuando menciona "la carta", "esa carta" o similar, se refiere a la activeCarta del estado (si existe).
+GENERAR (menu-generator) — SIEMPRE pedir nombre antes de generar:
+- menu.generate: genera carta desde texto o archivo (PDF/foto). REQUIERE nombre.
+  Si es archivo → extrae texto con Google Vision OCR automáticamente.
+  Si es texto → estructura directamente con IA.
 
-Tools de generación y gestión de datos:
-- menu.generate: genera carta desde texto (OCR, lista, JSON)
-- menu.save_carta: guarda carta completa a disco desde JSON
-- menu.list_cartas: lista cartas generadas
-- menu.get_carta: obtiene carta por ID
+GESTIONAR (carta-manager):
+- carta.save / carta.get / carta.list / carta.delete
+- carta.add_product / carta.remove_product / carta.update_product
+- carta.add_category / carta.update_prices
+- carta.search / carta.stats
+- carta.versions / carta.restore
 
-Tools de edición de productos:
-- menu.add_product: añadir producto a carta
-- menu.remove_product: quitar producto de carta
-- menu.update_product: actualizar nombre, precio, ingredientes, categoría
-- menu.update_prices: ajustar precios (porcentaje, por categoría, individuales)
-- menu.add_category: añadir categoría
-- menu.update_ingredient_prices: actualizar precios extra de ingredientes
-
-Tools de enriquecimiento:
-- menu.enrich_products: descripciones, emojis, tags con IA
-- menu.set_product_image: asignar imagen a producto
-- menu.set_category_image: asignar imagen/icono a categoría
-
-Tools de consulta:
-- menu.search_products: buscar productos por nombre o ingrediente
-- menu.stats: estadísticas de carta
-
-Control de versiones:
-- menu.list_versions: historial de versiones (max 50)
-- menu.restore_version: restaurar versión anterior
-
-Exportación:
-- menu.export_to_pos: sincronizar con POS
-- carta.render: renderizar HTML imprimible con plantilla
-
-Tarifas por canal de venta (módulo tarifas):
-- tarifas.set_canal: configurar multiplicador y/o recargo por canal (mesa, llevar, telefono, whatsapp, glovo, llevadoo)
-- tarifas.set_categoria: excepción de tarifa para una categoría en canal(es) (ej: bebidas sin recargo en delivery)
-- tarifas.get: ver configuración actual de tarifas
-- tarifas.preview: previsualizar precios de un producto o categoría en todos los canales
-- tarifas.set_precio_fijo: marcar productos como precio fijo (exentos de tarifas de canal — ideal para bebidas, menús, ofertas)`,
+TARIFAS:
+- tarifas.set_canal / tarifas.get / tarifas.preview / tarifas.set_precio_fijo`,
       state: {
         projectId: project_id
       }

@@ -1,0 +1,39 @@
+{
+  "id": "menu-enricher",
+  "name": "menu-enricher",
+  "description": "Enriquece productos de carta con descripciones atractivas, emojis, tags, clasificación de ingredientes y sugerencias de alérgenos",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "prompt_file": "prompts/menu-enricher-system.md",
+
+  "tools": [
+    "carta.get",
+    "carta.save"
+  ],
+
+  "provider": "auto",
+  "temperature": 0.7,
+  "max_tokens": 6000,
+
+  "context_enabled": false,
+  "timeout_ms": 120000,
+  "max_retries": 2,
+
+  "metadata": {
+    "type": "pipeline-agent",
+    "domain": "menu-generator",
+    "pipeline_role": "step-3-enrichment",
+    "author": "system",
+    "created_at": "2026-04-13",
+    "tags": ["menu", "enrichment", "copywriting", "ai", "marketing"]
+  },
+
+  "created_at": "2026-04-13T00:00:00.000Z",
+  "updated_at": "2026-04-13T00:00:00.000Z",
+  "stats": {
+    "executions": 0, "successes": 0, "failures": 0,
+    "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0,
+    "last_execution": null
+  }
+}

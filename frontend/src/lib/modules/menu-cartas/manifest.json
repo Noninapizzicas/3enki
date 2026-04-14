@@ -1,9 +1,9 @@
 {
   "id": "menu-cartas",
   "name": "Cartas",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "zone": "work-bar",
-  "order": 5,
+  "order": 2,
   "routes": ["/menu-generator"],
   "icon": "📋",
   "label": "Cartas"

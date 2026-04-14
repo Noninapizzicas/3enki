@@ -294,57 +294,67 @@ class FirmwareManagerModule {
       return;
     }
 
-    // Generar nombre y versión para el binario
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const fileName = `${driverName}-${timestamp}.bin`;
-    const version = this._timestampToVersion(timestamp);
-    const type = driverName;
+    try {
+      // Generar nombre y versión para el binario
+      const now = new Date();
+      const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const fileName = `${driverName}-${timestamp}.bin`;
+      const version = this._timestampToVersion(now.toISOString());
+      const type = driverName;
 
-    // Asegurar que el directorio binaries existe
-    const binariesDir = path.join(this.config.data_path, 'binaries');
-    await fs.promises.mkdir(binariesDir, { recursive: true });
+      // Asegurar que el directorio binaries existe
+      const binariesDir = path.join(this.config.data_path, 'binaries');
+      await fs.promises.mkdir(binariesDir, { recursive: true });
 
-    // Copiar binario
-    const destPath = path.join(binariesDir, fileName);
-    await fs.promises.copyFile(binary_path, destPath);
+      // Copiar binario
+      const destPath = path.join(binariesDir, fileName);
+      await fs.promises.copyFile(binary_path, destPath);
 
-    this.logger.info('firmware.auto_register.copied', {
-      driver: driverName, from: binary_path, to: destPath, size: binary_size
-    });
-
-    // Registrar en catálogo
-    const result = await this.handleRegister({
-      type,
-      version,
-      file: fileName,
-      changelog: `Build de driver ${driverName} (${board || 'esp32dev'})`,
-      // Pass metadata from builder
-      utility: data.utility || '',
-      description: data.description || '',
-      board: board || 'esp32dev',
-      capabilities: data.capabilities || []
-    });
-
-    if (result.status === 201) {
-      this.logger.info('firmware.auto_register.success', {
-        driver: driverName, type, version, file: fileName
+      this.logger.info('firmware.auto_register.copied', {
+        driver: driverName, from: binary_path, to: destPath, size: binary_size
       });
-    } else {
-      this.logger.warn('firmware.auto_register.failed', {
-        driver: driverName, error: result.error
+
+      // Registrar en catálogo
+      const result = await this.handleRegister({
+        type,
+        version,
+        file: fileName,
+        changelog: `Build de driver ${driverName} (${board || 'esp32dev'})`,
+        utility: data.utility || '',
+        description: data.description || '',
+        board: board || 'esp32dev',
+        capabilities: data.capabilities || []
+      });
+
+      if (result.status === 201) {
+        this.logger.info('firmware.auto_register.success', {
+          driver: driverName, type, version, file: fileName
+        });
+      } else {
+        this.logger.warn('firmware.auto_register.failed', {
+          driver: driverName, error: result.error
+        });
+      }
+    } catch (err) {
+      this.logger.error('firmware.auto_register.error', {
+        driver: driverName, error: err.message
       });
     }
   }
 
   /**
-   * Genera una versión semver a partir de un timestamp.
+   * Genera una versión a partir de un timestamp ISO.
    * Formato: YYYY.M.DDHHMM (ej: 2026.3.231045)
    */
   _timestampToVersion(timestamp) {
-    const now = new Date();
-    const major = now.getFullYear();
-    const minor = now.getMonth() + 1;
-    const patch = now.getDate() * 10000 + now.getHours() * 100 + now.getMinutes();
+    const d = timestamp ? new Date(timestamp) : new Date();
+    if (isNaN(d.getTime())) {
+      const now = new Date();
+      return `${now.getFullYear()}.${now.getMonth() + 1}.${now.getDate() * 10000 + now.getHours() * 100 + now.getMinutes()}`;
+    }
+    const major = d.getFullYear();
+    const minor = d.getMonth() + 1;
+    const patch = d.getDate() * 10000 + d.getHours() * 100 + d.getMinutes();
     return `${major}.${minor}.${patch}`;
   }
 
@@ -398,7 +408,13 @@ class FirmwareManagerModule {
       return { status: 400, error: 'version debe ser semver (ej: 1.2.3)' };
     }
 
-    const binPath = path.join(this.config.data_path, 'binaries', file);
+    // Prevenir path traversal
+    const safeFile = this._sanitizeFileName(file);
+    if (!safeFile) {
+      return { status: 400, error: 'Nombre de archivo inválido (sin rutas, solo nombre)' };
+    }
+
+    const binPath = path.join(this.config.data_path, 'binaries', safeFile);
 
     // Verificar que el archivo existe y calcular sha256
     let sha256, size;
@@ -443,7 +459,10 @@ class FirmwareManagerModule {
       min_version: min_version || null
     };
 
-    this.catalog[type].latest = version;
+    // Solo actualizar latest si la versión es más reciente
+    if (!this.catalog[type].latest || this._compareVersions(version, this.catalog[type].latest) >= 0) {
+      this.catalog[type].latest = version;
+    }
 
     this.metrics.increment('firmware.catalog_entries.total');
     this.metrics.timing('firmware.register.duration', Date.now() - startTime);
@@ -756,12 +775,33 @@ class FirmwareManagerModule {
   }
 
   /**
+   * Valida que un nombre de archivo no contenga path traversal.
+   * Solo permite nombres de archivo simples (sin /, \, ..).
+   */
+  _sanitizeFileName(file) {
+    if (!file || typeof file !== 'string') return null;
+    const basename = path.basename(file);
+    if (basename !== file || file.includes('..') || file.includes('\0')) return null;
+    return basename;
+  }
+
+  /**
    * HTTP handler: sirve binarios de firmware.
    * GET /firmware/:type/:version/:file
    */
   async handleServeBinary(req) {
     const { type, version, file } = req.params || req;
-    const binPath = path.join(this.config.data_path, 'binaries', file);
+
+    const safeFile = this._sanitizeFileName(file);
+    if (!safeFile) {
+      return { status: 400, error: 'Nombre de archivo inválido' };
+    }
+
+    const binPath = path.join(this.config.data_path, 'binaries', safeFile);
+    const binariesDir = path.resolve(this.config.data_path, 'binaries');
+    if (!path.resolve(binPath).startsWith(binariesDir)) {
+      return { status: 400, error: 'Ruta inválida' };
+    }
 
     this.metrics.increment('firmware.binary_served.total');
 
@@ -770,18 +810,19 @@ class FirmwareManagerModule {
 
       this.metrics.increment('firmware.binary_served.bytes', content.length);
 
+      const safeName = safeFile.replace(/["\r\n]/g, '_');
       return {
         status: 200,
         headers: {
           'Content-Type': 'application/octet-stream',
           'Content-Length': content.length,
-          'Content-Disposition': `attachment; filename="${file}"`
+          'Content-Disposition': `attachment; filename="${safeName}"`
         },
         body: content
       };
     } catch (err) {
       this.metrics.increment('firmware.binary_served.errors');
-      return { status: 404, error: `Firmware binary not found: ${file}` };
+      return { status: 404, error: `Firmware binary not found: ${safeFile}` };
     }
   }
 
@@ -792,7 +833,7 @@ class FirmwareManagerModule {
   _scheduleOtaTimeout(device_id) {
     this._clearOtaTimeout(device_id);
 
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       this._otaTimeoutTimers.delete(device_id);
       const pending = this.pendingOtas.get(device_id);
       if (!pending) return;
@@ -821,7 +862,9 @@ class FirmwareManagerModule {
         timeout_ms: this.config.ota_timeout_ms
       });
 
-      await this.eventBus.publish('firmware.ota_failed', logEntry);
+      this.eventBus.publish('firmware.ota_failed', logEntry).catch(err => {
+        this.logger.error('firmware.ota.timeout.publish_error', { device_id, error: err.message });
+      });
     }, this.config.ota_timeout_ms);
 
     this._otaTimeoutTimers.set(device_id, timer);

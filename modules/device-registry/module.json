@@ -45,6 +45,43 @@
     { "domain": "devices", "action": "stats", "handler": "handleStats" }
   ],
 
+  "tools": [
+    {
+      "name": "devices.list",
+      "description": "Lista todos los dispositivos registrados con su estado (online/offline), tipo, firmware, última conexión",
+      "handler": "handleList",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Filtrar por proyecto (opcional)" },
+          "type": { "type": "string", "description": "Filtrar por tipo de driver (ej: print-proxy)" },
+          "online_only": { "type": "boolean", "description": "Solo dispositivos online" }
+        }
+      }
+    },
+    {
+      "name": "devices.get",
+      "description": "Info detallada de un dispositivo: estado, firmware, IP, RSSI, uptime, capabilities",
+      "handler": "handleGet",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device_id": { "type": "string" }
+        },
+        "required": ["device_id"]
+      }
+    },
+    {
+      "name": "devices.stats",
+      "description": "Estadísticas del parque: total registrados, online, offline, por tipo",
+      "handler": "handleStats",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+
   "config": {
     "heartbeat_timeout_ms": 90000,
     "persist_interval_ms": 30000,

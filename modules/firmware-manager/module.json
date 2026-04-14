@@ -1,6 +1,6 @@
 {
   "name": "firmware-manager",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Registro de firmwares, versionado con checksums, y orquestación de OTA via device-shadow",
   "author": "Enki",
   "tier": "tier_3_core",
@@ -83,7 +83,10 @@
       "schema": { "$ref": "./schemas/firmware.json#/definitions/rollback_request" }
     },
     { "domain": "firmware", "action": "device-versions", "handler": "handleDeviceVersions" },
-    { "domain": "firmware", "action": "cleanup-otas", "handler": "handleCleanupOtas" }
+    { "domain": "firmware", "action": "cleanup-otas", "handler": "handleCleanupOtas" },
+    { "domain": "firmware", "action": "update-meta", "handler": "handleUpdateMeta" },
+    { "domain": "firmware", "action": "info", "handler": "handleGetInfo" },
+    { "domain": "firmware", "action": "list-by-project", "handler": "handleListByProject" }
   ],
 
   "apis": [
@@ -92,6 +95,105 @@
       "path": "/firmware/:type/:version/:file",
       "handler": "handleServeBinary",
       "description": "Sirve binarios de firmware para descarga por ESP32"
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "firmware.list",
+      "description": "Lista todos los tipos de firmware registrados con sus metadatos (utility, board, proyectos, versión latest)",
+      "handler": "handleList",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "firmware.info",
+      "description": "Info detallada de un tipo de firmware: todas las versiones, changelog, metadatos, checksums",
+      "handler": "handleGetInfo",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "description": "Tipo de firmware (ej: print-proxy)" }
+        },
+        "required": ["type"]
+      }
+    },
+    {
+      "name": "firmware.list_by_project",
+      "description": "Lista firmwares asociados a un proyecto específico",
+      "handler": "handleListByProject",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto" }
+        },
+        "required": ["project_id"]
+      }
+    },
+    {
+      "name": "firmware.register",
+      "description": "Registra un nuevo firmware en el catálogo. El binario debe existir en data/firmware/binaries/",
+      "handler": "handleRegister",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "description": "Tipo de firmware (ej: print-proxy)" },
+          "version": { "type": "string", "description": "Versión semver (ej: 3.4.0)" },
+          "file": { "type": "string", "description": "Nombre del archivo .bin" },
+          "changelog": { "type": "string", "description": "Descripción de cambios" },
+          "utility": { "type": "string", "description": "Para qué sirve este firmware" },
+          "board": { "type": "string", "description": "Board target (ej: esp32dev)" },
+          "capabilities": { "type": "array", "items": { "type": "string" }, "description": "Capacidades del firmware" },
+          "projects": { "type": "array", "items": { "type": "string" }, "description": "Proyectos asociados" }
+        },
+        "required": ["type", "version", "file"]
+      }
+    },
+    {
+      "name": "firmware.trigger_ota",
+      "description": "Dispara actualización OTA para un dispositivo. Escribe desired.firmware en device-shadow.",
+      "handler": "handleTriggerOta",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device_id": { "type": "string", "description": "ID del dispositivo" },
+          "type": { "type": "string", "description": "Tipo de firmware" },
+          "version": { "type": "string", "description": "Versión target (opcional, usa latest si no se indica)" },
+          "project_id": { "type": "string", "description": "ID del proyecto" }
+        },
+        "required": ["device_id", "type"]
+      }
+    },
+    {
+      "name": "firmware.ota_status",
+      "description": "Estado de OTAs pendientes y log reciente de actualizaciones",
+      "handler": "handleOtaStatus",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device_id": { "type": "string", "description": "Filtrar por dispositivo (opcional)" },
+          "limit": { "type": "number", "description": "Límite de entradas en el log (default 20)" }
+        }
+      }
+    },
+    {
+      "name": "firmware.update_meta",
+      "description": "Actualiza metadatos de un tipo de firmware: utility, description, board, capabilities, projects",
+      "handler": "handleUpdateMeta",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "description": "Tipo de firmware" },
+          "utility": { "type": "string", "description": "Para qué sirve" },
+          "description": { "type": "string", "description": "Descripción detallada" },
+          "board": { "type": "string", "description": "Board target" },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "projects": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["type"]
+      }
     }
   ],
 

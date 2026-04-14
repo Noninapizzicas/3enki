@@ -115,6 +115,75 @@
     }
   ],
 
+  "tools": [
+    {
+      "name": "flash.list_ports",
+      "description": "Detecta puertos serial conectados (USB) donde puede haber un ESP32",
+      "handler": "handleListPorts",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "flash.start",
+      "description": "Flashea un firmware.bin a un ESP32 conectado por USB. Asíncrono con eventos de progreso.",
+      "handler": "handleStart",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "port": { "type": "string", "description": "Puerto serial (ej: /dev/ttyUSB0)" },
+          "binary_path": { "type": "string", "description": "Ruta al archivo .bin" },
+          "baud": { "type": "number", "description": "Baud rate (default 460800)" }
+        },
+        "required": ["port", "binary_path"]
+      }
+    },
+    {
+      "name": "flash.status",
+      "description": "Estado de las operaciones de flash activas y puertos detectados",
+      "handler": "handleStatus",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "flash.history",
+      "description": "Historial de operaciones de flash realizadas",
+      "handler": "handleHistory",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "flash.monitor_start",
+      "description": "Inicia monitor serial en tiempo real en un puerto. Las líneas se publican como eventos flash.serial_output.",
+      "handler": "handleMonitorStart",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "port": { "type": "string", "description": "Puerto serial (ej: /dev/ttyUSB0)" },
+          "baud": { "type": "number", "description": "Baud rate (default 115200)" }
+        },
+        "required": ["port"]
+      }
+    },
+    {
+      "name": "flash.monitor_stop",
+      "description": "Detiene el monitor serial de un puerto",
+      "handler": "handleMonitorStop",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "port": { "type": "string", "description": "Puerto serial" }
+        },
+        "required": ["port"]
+      }
+    }
+  ],
+
   "config": {
     "esptool_path": "esptool",
     "platformio_path": "platformio",

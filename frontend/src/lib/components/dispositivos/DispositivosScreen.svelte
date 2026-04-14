@@ -13,6 +13,7 @@
   import FirmwareTab from './FirmwareTab.svelte';
   import GatewaysTab from './GatewaysTab.svelte';
   import HealthTab from './HealthTab.svelte';
+  import DeviceStatusButton from './DeviceStatusButton.svelte';
 
   let cleanupSubs: (() => void) | null = null;
 
@@ -63,6 +64,7 @@
       </div>
     </div>
     <div class="header-right">
+      <DeviceStatusButton />
       <span class="clock">{new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
     </div>
   </header>
@@ -149,7 +151,7 @@
     border-radius: 50%;
   }
   .dot-online { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.5); }
-  .header-right { display: flex; align-items: center; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
   .clock { font-size: 0.85rem; color: #666; font-variant-numeric: tabular-nums; }
 
   /* Tab Bar */

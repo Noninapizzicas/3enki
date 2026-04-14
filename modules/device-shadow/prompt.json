@@ -1,0 +1,25 @@
+{
+  "_type": "module_prompt",
+  "_module": "device-shadow",
+  "role": "Sincronización de estado dispositivo-servidor",
+  "intent": "Gestionar el estado desired/reported de cada dispositivo. Cuando el servidor quiere algo (ej: nueva versión firmware), escribe desired. Cuando el dispositivo reporta su estado, actualiza reported. El delta se computa automáticamente.",
+  "capabilities": [
+    "mantener estado reported (lo que el dispositivo tiene)",
+    "escribir estado desired (lo que queremos que tenga)",
+    "computar delta automáticamente (desired - reported)",
+    "publicar delta por MQTT para que el dispositivo lo aplique",
+    "detectar sincronización (delta vacío = synced)"
+  ],
+  "rules": [
+    "el delta se publica como MQTT retained en devices/{project}/{device}/state/delta",
+    "cuando reported == desired, publica shadow.synced",
+    "firmware-manager usa shadow para OTA: escribe desired.firmware",
+    "persiste en data/devices/shadows.json"
+  ],
+  "integrations": {
+    "listens_to": ["devices/+/+/state/reported (MQTT)", "shadow.set_desired"],
+    "emits": ["shadow.updated", "shadow.delta", "shadow.synced"],
+    "depends_on": ["device-registry"],
+    "consumed_by": ["firmware-manager", "device-health"]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "cartadigital-reviewer",
+  "name": "cartadigital-reviewer",
+  "description": "Revisa que la carta pública está completa y lista para el cliente: imágenes, descripciones, alérgenos, precios, información de ingredientes. Reporta lo que falta.",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "prompt_file": "prompts/cartadigital-reviewer-system.md",
+
+  "tools": [
+    "carta.get",
+    "carta.stats",
+    "cartadigital.get_config"
+  ],
+
+  "provider": "auto",
+  "temperature": 0.1,
+  "max_tokens": 4000,
+
+  "context_enabled": false,
+  "timeout_ms": 60000,
+  "max_retries": 1,
+
+  "metadata": {
+    "type": "domain-agent",
+    "domain": "carta-digital",
+    "tags": ["carta-digital", "review", "quality", "completeness"]
+  },
+
+  "created_at": "2026-04-14T00:00:00.000Z",
+  "updated_at": "2026-04-14T00:00:00.000Z",
+  "stats": { "executions": 0, "successes": 0, "failures": 0, "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0, "last_execution": null }
+}

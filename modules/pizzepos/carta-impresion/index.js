@@ -1,468 +1,250 @@
 /**
- * Carta Impresion v1.0.0
+ * Carta Impresión v2.0.0 — Generador de cartas impresas
  *
- * Renderiza cartas del restaurante en HTML listo para imprimir desde el navegador.
- * El LLM llama a las tools desde el chat; sin UI propia, sin llamadas AI.
+ * Genera versiones imprimibles de las cartas en HTML print-ready.
+ * El trabajo creativo lo hacen los agentes:
+ *   - impresion-architect: analiza la carta y decide layout (caras, columnas, formato)
+ *   - impresion-builder: genera el HTML+CSS según el guión del architect
  *
- * Tools:
- *   carta.render            — Genera HTML de una carta con la plantilla elegida
- *   carta.plantillas        — Lista plantillas disponibles (globales + proyecto)
- *   carta.plantilla_crear   — Crea plantilla personalizada para el proyecto
- *   carta.plantilla_eliminar— Elimina plantilla del proyecto
+ * Se apoya en carta-marketing para el perfil de marca (no duplica branding).
  *
  * Flujo:
- *   usuario pide imprimir → LLM llama carta.render(carta_id, plantilla_id)
- *   → lee carta del disco → aplica plantilla → guarda .html
- *   → devuelve ruta → usuario abre en navegador → Ctrl+P
- *
- * Plantillas built-in: templates/*.html (siempre disponibles)
- * Plantillas proyecto: storage/pizzepos/carta-templates/{id}.json + .html
- * HTML generados:      storage/pizzepos/cartas-html/{carta_id}_{plantilla_id}_{ts}.html
+ *   carta.actualizada → dispatch architect → architect decide layout
+ *   → builder genera HTML → guarda en disco → emite carta.impresion.lista
  */
 
-const path = require('path');
 const fs = require('fs').promises;
-
-// Plantillas built-in incluidas con el módulo
-const PLANTILLAS_GLOBALES = [
-  {
-    id: 'a4-clasica',
-    nombre: 'A4 Clásica',
-    descripcion: 'Carta completa en A4 vertical. Ideal para cartas con muchos productos y categorías.',
-    formato: 'A4',
-    orientacion: 'portrait',
-    global: true
-  },
-  {
-    id: 'a5-menu-dia',
-    nombre: 'A5 Menú del Día',
-    descripcion: 'Formato A5 compacto. Perfecto para menú del día o cartas cortas.',
-    formato: 'A5',
-    orientacion: 'portrait',
-    global: true
-  },
-  {
-    id: 'a4-cuadruple',
-    nombre: 'A4 Cuádruple (4 por hoja)',
-    descripcion: 'Cuatro cartas en un A4 para recortar. Óptimo para cartas muy cortas (hasta 2 categorías).',
-    formato: 'A4',
-    orientacion: 'portrait',
-    global: true
-  },
-  {
-    id: 'a4-diptico',
-    nombre: 'A4 Díptico',
-    descripcion: 'Dos páginas A5 en un A4 que se dobla por la mitad. Formato clásico de carta de restaurante.',
-    formato: 'A4',
-    orientacion: 'landscape',
-    global: true
-  },
-  {
-    id: 'a4-paisaje-5col',
-    nombre: 'A4 Apaisado 5 Columnas',
-    descripcion: 'A4 horizontal con 5 columnas CSS. Ideal para muchas categorías en una sola hoja.',
-    formato: 'A4',
-    orientacion: 'landscape',
-    global: true
-  }
-];
+const path = require('path');
 
 class CartaImpresionModule {
   constructor() {
     this.name = 'carta-impresion';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
+
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
 
-    // project_id → { featurePath, storagePath }
+    // Multi-tenant
     this.projectPaths = new Map();
 
-    // Cache de plantillas globales (HTML cargado en memoria)
-    this.globalTemplates = new Map();
-  }
+    // Cache de HTML generados (project_id:carta_id → { filePath, metadata })
+    this.htmlCache = new Map();
 
-  // ==========================================
-  // Lifecycle
-  // ==========================================
+    // Debounce: evitar regenerar por cada pequeño cambio
+    this.debounceTimers = new Map();
+    this.DEBOUNCE_MS = 5000;
+  }
 
   async onLoad(context) {
     this.eventBus = context.eventBus;
     this.logger = context.logger;
     this.metrics = context.metrics;
-
-    await this.loadGlobalTemplates();
-
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
 
   async onUnload() {
+    for (const timer of this.debounceTimers.values()) clearTimeout(timer);
+    this.debounceTimers.clear();
     this.projectPaths.clear();
-    this.globalTemplates.clear();
+    this.htmlCache.clear();
     this.logger.info('module.unloaded', { module: this.name });
   }
+
+  // ==========================================
+  // Project Lifecycle
+  // ==========================================
 
   async onProjectActivated(event) {
     const data = event.data || event;
     const { project_id, base_path, metadata } = data;
+    if (!project_id) return;
 
     const resolvedBase = (metadata?.is_system === true) ? process.cwd() : base_path;
     if (resolvedBase) {
-      this.projectPaths.set(project_id, {
-        featurePath: path.join(resolvedBase, 'storage', 'pizzepos'),
-        storagePath: path.join(resolvedBase, 'storage')
-      });
+      this.projectPaths.set(project_id, path.join(resolvedBase, 'storage', 'pizzepos'));
     }
-
     this.logger.info('carta-impresion.project.activated', { project_id });
   }
 
   async onProjectDeactivated(event) {
-    // No-op
+    // Keep state
   }
 
   // ==========================================
-  // Template Loading (globales desde disco)
+  // Listener: carta.actualizada → regenerar (debounced)
   // ==========================================
 
-  async loadGlobalTemplates() {
-    const templatesDir = path.join(__dirname, 'templates');
-    for (const plantilla of PLANTILLAS_GLOBALES) {
-      try {
-        const htmlPath = path.join(templatesDir, `${plantilla.id}.html`);
-        const html = await fs.readFile(htmlPath, 'utf-8');
-        this.globalTemplates.set(plantilla.id, html);
-      } catch (err) {
-        this.logger.warn('carta-impresion.template.load_failed', { id: plantilla.id, error: err.message });
-      }
+  async onCartaActualizada(event) {
+    const data = event?.data || event?.payload || event;
+    const projectId = data?.project_id;
+    const cartaId = data?.meta?.id;
+    if (!projectId || !cartaId) return;
+
+    const key = `${projectId}:${cartaId}`;
+
+    // Cancelar timer previo
+    if (this.debounceTimers.has(key)) {
+      clearTimeout(this.debounceTimers.get(key));
     }
-    this.logger.info('carta-impresion.templates.loaded', { count: this.globalTemplates.size });
-  }
 
-  // ==========================================
-  // Paths helpers
-  // ==========================================
+    // Programar regeneración tras DEBOUNCE_MS sin más cambios
+    const timer = setTimeout(() => {
+      this.debounceTimers.delete(key);
+      this.dispatchGeneracion(projectId, cartaId);
+    }, this.DEBOUNCE_MS);
 
-  getPaths(projectId) {
-    return this.projectPaths.get(projectId);
-  }
-
-  cartasDir(projectId) {
-    const p = this.getPaths(projectId);
-    return p ? path.join(p.featurePath, 'cartas') : null;
-  }
-
-  cartasHtmlDir(projectId) {
-    const p = this.getPaths(projectId);
-    return p ? path.join(p.featurePath, 'cartas-html') : null;
-  }
-
-  cartaTemplatesDir(projectId) {
-    const p = this.getPaths(projectId);
-    return p ? path.join(p.featurePath, 'carta-templates') : null;
-  }
-
-  // ==========================================
-  // UI Handlers — expuestos al frontend via MQTT
-  // ==========================================
-
-  async handleRender(data) {
-    const result = await this.toolRender({
-      carta_id: data?.carta_id,
-      plantilla_id: data?.plantilla_id || 'a4-clasica',
-      project_id: data?.project_id
+    this.debounceTimers.set(key, timer);
+    this.logger.debug('carta-impresion.regenerate.scheduled', {
+      project_id: projectId, carta_id: cartaId, debounce_ms: this.DEBOUNCE_MS
     });
-    if (result.error) {
-      throw { status: result.status || 400, code: 'RENDER_ERROR', message: result.error };
-    }
-    return result.data;
   }
 
-  // ==========================================
-  // Tools — expuestos al LLM via agentic loop
-  // ==========================================
-
-  async toolRender({ carta_id, plantilla_id = 'a4-clasica', project_id }) {
-    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
-
-    // 1. Leer la carta del disco (misma ruta que menu-generator guarda)
-    const cartaPath = path.join(this.cartasDir(project_id) || '', `${carta_id}.json`);
-    let carta;
-    try {
-      const raw = await fs.readFile(cartaPath, 'utf-8');
-      carta = JSON.parse(raw);
-    } catch (err) {
-      return { status: 404, error: `Carta "${carta_id}" no encontrada en disco. Asegúrate de que existe y está guardada.` };
-    }
-
-    // 2. Obtener HTML de la plantilla (global o del proyecto)
-    let templateHtml = this.globalTemplates.get(plantilla_id);
-
-    if (!templateHtml) {
-      // Buscar en plantillas del proyecto
-      const projectTemplate = await this.loadProjectTemplate(plantilla_id, project_id);
-      if (!projectTemplate) {
-        return { status: 404, error: `Plantilla "${plantilla_id}" no encontrada. Usa carta.plantillas para ver las disponibles.` };
-      }
-      templateHtml = projectTemplate.html;
-    }
-
-    // 3. Renderizar: sustituir marcadores + generar bloques de categorías/productos
-    const html = this.render(templateHtml, carta);
-
-    // 4. Guardar HTML generado en disco
-    const dir = this.cartasHtmlDir(project_id);
-    let htmlPath = null;
-    let relativePath = null;
-
-    if (dir) {
-      await fs.mkdir(dir, { recursive: true });
-      const filename = `${carta_id}_${plantilla_id}_${Date.now().toString(36)}.html`;
-      const absolutePath = path.join(dir, filename);
-      await fs.writeFile(absolutePath, html, 'utf-8');
-      htmlPath = absolutePath;
-
-      const paths = this.getPaths(project_id);
-      relativePath = '/' + path.relative(paths.storagePath, absolutePath).replace(/\\/g, '/');
-    }
-
-    this.metrics?.increment('carta.render.completed');
-    this.logger.info('carta.render.completed', { carta_id, plantilla_id, project_id, path: relativePath });
-
-    const cartaNombre = carta.meta?.nombre || 'Carta';
-    const filename = `${cartaNombre}_${plantilla_id}.html`.replace(/[^a-z0-9._-]/gi, '_');
-
-    await this.eventBus.publish('carta.html.generada', {
-      carta_id,
-      plantilla_id,
-      project_id,
-      html_path: relativePath,
-      // HTML completo incluido para que el frontend pueda mostrar preview inline
-      // sin necesidad de leer el fichero desde disco
-      html,
-      title: cartaNombre,
-      filename
+  async dispatchGeneracion(projectId, cartaId) {
+    this.logger.info('carta-impresion.generacion.iniciada', {
+      project_id: projectId, carta_id: cartaId
     });
 
-    return {
-      status: 200,
-      data: {
-        carta_id,
-        carta_nombre: cartaNombre,
-        plantilla_id,
-        html_path: relativePath,
-        productos: carta.productos?.length || 0,
-        categorias: carta.categorias?.length || 0,
-        message: `Carta "${cartaNombre}" renderizada. El preview se ha abierto en pantalla — usa el botón Imprimir para exportar a PDF.`
-      }
-    };
+    await this.eventBus.publish('agent.execute.request', {
+      agentName: 'impresion-architect',
+      context: {
+        project_id: projectId,
+        carta_id: cartaId
+      },
+      task: `Analiza la carta "${cartaId}" del proyecto "${projectId}" y decide el layout óptimo para impresión. Luego dispara al builder pasándole tu guión.`
+    });
+
+    this.metrics?.increment('carta-impresion.generacion.requested');
   }
 
-  async toolPlantillas({ project_id }) {
-    const globales = PLANTILLAS_GLOBALES.map(p => ({
-      ...p,
-      disponible: this.globalTemplates.has(p.id)
-    }));
+  // ==========================================
+  // Persistence
+  // ==========================================
 
-    let proyecto = [];
-    if (project_id) {
-      proyecto = await this.listProjectTemplates(project_id);
-    }
-
-    return {
-      status: 200,
-      data: {
-        globales,
-        proyecto,
-        total: globales.length + proyecto.length,
-        uso: 'Usa el campo "id" en carta.render como plantilla_id'
-      }
-    };
+  cartasImpresionDirFor(projectId) {
+    const basePath = this.projectPaths.get(projectId);
+    if (!basePath) return null;
+    return path.join(basePath, 'cartas-impresion');
   }
 
-  async toolPlantillaCrear({ nombre, html, formato = 'A4', descripcion = '', project_id }) {
-    if (!nombre) return { status: 400, error: 'Se requiere "nombre" para la plantilla' };
-    if (!html) return { status: 400, error: 'Se requiere "html" con el contenido de la plantilla' };
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
-
-    const id = `custom_${this.slugify(nombre)}_${Date.now().toString(36)}`;
-    const dir = this.cartaTemplatesDir(project_id);
-    if (!dir) return { status: 400, error: 'Proyecto sin paths configurados. ¿Está el proyecto activado?' };
+  async saveHtml(projectId, cartaId, html, metadata = {}) {
+    const dir = this.cartasImpresionDirFor(projectId);
+    if (!dir) throw new Error('No path for project');
 
     await fs.mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, `${cartaId}.html`);
+    await fs.writeFile(filePath, html, 'utf-8');
 
-    const meta = { id, nombre, formato, descripcion, global: false, created_at: new Date().toISOString() };
-
-    await fs.writeFile(path.join(dir, `${id}.json`), JSON.stringify(meta, null, 2), 'utf-8');
-    await fs.writeFile(path.join(dir, `${id}.html`), html, 'utf-8');
-
-    this.metrics?.increment('carta.plantilla.creada');
-    this.logger.info('carta.plantilla.creada', { id, nombre, project_id });
-
-    return {
-      status: 201,
-      data: { ...meta, message: `Plantilla "${nombre}" creada con ID "${id}". Úsala con carta.render(carta_id, "${id}")` }
+    const metaPath = path.join(dir, `${cartaId}.meta.json`);
+    const metaData = {
+      carta_id: cartaId,
+      project_id: projectId,
+      generado_at: new Date().toISOString(),
+      ...metadata
     };
+    await fs.writeFile(metaPath, JSON.stringify(metaData, null, 2), 'utf-8');
+
+    const key = `${projectId}:${cartaId}`;
+    this.htmlCache.set(key, { filePath, metadata: metaData });
+
+    await this.eventBus.publish('carta.impresion.lista', {
+      project_id: projectId,
+      carta_id: cartaId,
+      path: filePath,
+      metadata: metaData
+    });
+
+    this.metrics?.increment('carta-impresion.generacion.completada');
+    this.logger.info('carta-impresion.html.saved', {
+      project_id: projectId, carta_id: cartaId, path: filePath
+    });
+
+    return filePath;
   }
 
-  async toolPlantillaEliminar({ plantilla_id, project_id }) {
-    if (!plantilla_id) return { status: 400, error: 'Se requiere plantilla_id' };
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
-
-    if (PLANTILLAS_GLOBALES.find(p => p.id === plantilla_id)) {
-      return { status: 403, error: `"${plantilla_id}" es una plantilla global y no se puede eliminar` };
-    }
-
-    const dir = this.cartaTemplatesDir(project_id);
-    if (!dir) return { status: 400, error: 'Proyecto sin paths configurados' };
-
-    const jsonFile = path.join(dir, `${plantilla_id}.json`);
-    const htmlFile = path.join(dir, `${plantilla_id}.html`);
-
-    try {
-      await fs.unlink(jsonFile);
-    } catch (_) { /* ya no existía */ }
-
-    try {
-      await fs.unlink(htmlFile);
-    } catch (_) {
-      return { status: 404, error: `Plantilla "${plantilla_id}" no encontrada en el proyecto` };
-    }
-
-    this.metrics?.increment('carta.plantilla.eliminada');
-    this.logger.info('carta.plantilla.eliminada', { plantilla_id, project_id });
-
-    return { status: 200, data: { plantilla_id, message: `Plantilla "${plantilla_id}" eliminada` } };
-  }
-
-  // ==========================================
-  // Plantillas del proyecto — helpers
-  // ==========================================
-
-  async loadProjectTemplate(plantillaId, projectId) {
-    const dir = this.cartaTemplatesDir(projectId);
+  async loadHtml(projectId, cartaId) {
+    const dir = this.cartasImpresionDirFor(projectId);
     if (!dir) return null;
+
+    const filePath = path.join(dir, `${cartaId}.html`);
+    const metaPath = path.join(dir, `${cartaId}.meta.json`);
+
     try {
-      const meta = JSON.parse(await fs.readFile(path.join(dir, `${plantillaId}.json`), 'utf-8'));
-      const html = await fs.readFile(path.join(dir, `${plantillaId}.html`), 'utf-8');
-      return { ...meta, html };
+      const html = await fs.readFile(filePath, 'utf-8');
+      let metadata = null;
+      try {
+        metadata = JSON.parse(await fs.readFile(metaPath, 'utf-8'));
+      } catch (_) {}
+      return { html, filePath, metadata };
     } catch (_) {
       return null;
     }
   }
 
-  async listProjectTemplates(projectId) {
-    const dir = this.cartaTemplatesDir(projectId);
-    if (!dir) return [];
+  // ==========================================
+  // Tools
+  // ==========================================
+
+  async toolSaveHtml({ project_id, carta_id, html, layout, brand_applied }) {
+    if (!project_id || !carta_id || !html) {
+      return { status: 400, error: 'Se requiere project_id, carta_id y html' };
+    }
     try {
-      const files = await fs.readdir(dir);
-      const metas = [];
-      for (const file of files.filter(f => f.endsWith('.json'))) {
-        try {
-          const meta = JSON.parse(await fs.readFile(path.join(dir, file), 'utf-8'));
-          metas.push(meta);
-        } catch (_) { /* skip */ }
-      }
-      return metas;
-    } catch (_) {
-      return [];
+      const filePath = await this.saveHtml(project_id, carta_id, html, {
+        layout, brand_applied
+      });
+      return {
+        status: 200,
+        data: { path: filePath, message: `Carta imprimible guardada en ${filePath}` }
+      };
+    } catch (err) {
+      return { status: 500, error: err.message };
     }
   }
 
-  // ==========================================
-  // Motor de renderizado de plantillas
-  // ==========================================
+  async toolGet({ project_id, carta_id }) {
+    if (!project_id || !carta_id) {
+      return { status: 400, error: 'Se requiere project_id y carta_id' };
+    }
+    const result = await this.loadHtml(project_id, carta_id);
+    if (!result) {
+      return {
+        status: 404,
+        error: 'No hay versión imprimible todavía. Usa carta.impresion.generar para crearla.'
+      };
+    }
+    return { status: 200, data: result };
+  }
 
-  /**
-   * Sustituye marcadores en el HTML de la plantilla con datos reales de la carta.
-   *
-   * Marcadores disponibles:
-   *   {{nombre_carta}}      — nombre de la carta/restaurante
-   *   {{fecha}}             — fecha actual formateada (dd/mm/aaaa)
-   *   {{total_productos}}   — número total de productos
-   *   {{total_categorias}}  — número total de categorías
-   *   {{categorias_html}}   — bloque HTML completo de categorías + productos (generado)
-   */
-  render(templateHtml, carta) {
-    const fecha = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-    const vars = {
-      '{{nombre_carta}}': carta.meta?.nombre || 'Carta',
-      '{{fecha}}': fecha,
-      '{{total_productos}}': String(carta.productos?.length || 0),
-      '{{total_categorias}}': String(carta.categorias?.length || 0),
-      '{{categorias_html}}': this.renderCategoriasHtml(carta)
+  async toolGenerar({ project_id, carta_id }) {
+    if (!project_id || !carta_id) {
+      return { status: 400, error: 'Se requiere project_id y carta_id' };
+    }
+    await this.dispatchGeneracion(project_id, carta_id);
+    return {
+      status: 202,
+      data: { message: `Generación iniciada para carta "${carta_id}". Los agentes están trabajando.` }
     };
-
-    let html = templateHtml;
-    for (const [marker, value] of Object.entries(vars)) {
-      html = html.split(marker).join(value);
-    }
-    return html;
-  }
-
-  renderCategoriasHtml(carta) {
-    const categorias = carta.categorias || [];
-    const productos = carta.productos || [];
-
-    return categorias
-      .sort((a, b) => a.orden - b.orden)
-      .map(cat => {
-        const prods = productos.filter(p => p.categoria === cat.id);
-        if (prods.length === 0) return '';
-
-        const productosHtml = prods.map(p => {
-          const precio = p.precio > 0
-            ? `<span class="precio">${p.precio.toFixed(2).replace('.', ',')} €</span>`
-            : '';
-
-          const ingredientes = p.ingredientes?.length
-            ? `<span class="ingredientes">${p.ingredientes.map(i => `${i.emoji || ''} ${i.nombre}`.trim()).join(', ')}</span>`
-            : '';
-
-          return `
-        <div class="producto">
-          <div class="producto-header">
-            <span class="producto-nombre">${this.escapeHtml(p.nombre)}</span>
-            ${precio}
-          </div>
-          ${ingredientes ? `<div class="producto-ingredientes">${ingredientes}</div>` : ''}
-        </div>`.trim();
-        }).join('\n        ');
-
-        return `
-      <div class="categoria">
-        <h2 class="categoria-nombre">${this.escapeHtml(cat.nombre)}</h2>
-        <div class="categoria-productos">
-          ${productosHtml}
-        </div>
-      </div>`.trim();
-      })
-      .filter(Boolean)
-      .join('\n      ');
   }
 
   // ==========================================
-  // Utils
+  // UI Handlers
   // ==========================================
 
-  escapeHtml(str) {
-    if (!str) return '';
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  async handleGet(data) {
+    return (await this.toolGet(data)).data;
   }
 
-  slugify(text) {
-    if (!text) return 'sin_nombre';
-    return text.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      || 'sin_nombre';
+  async handleGenerar(data) {
+    return (await this.toolGenerar(data)).data;
+  }
+
+  async handleHealth() {
+    return {
+      status: 'healthy', module: this.name, version: this.version,
+      cartas_en_cache: this.htmlCache.size,
+      proyectos: this.projectPaths.size
+    };
   }
 }
 

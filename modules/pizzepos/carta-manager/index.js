@@ -174,26 +174,6 @@ class CartaManagerModule {
   }
 
   // ==========================================
-  // Event: recibir carta generada
-  // ==========================================
-
-  async onCartaGenerada(event) {
-    const data = event.data || event;
-    const { project_id } = data;
-    if (!project_id || !data.meta?.id) return;
-
-    const carta = this.normalizeCarta(data.meta.id, data);
-    const cartas = this.getCartas(project_id);
-    cartas.set(carta.meta.id, carta);
-    await this.saveCartaToDisk(carta, project_id);
-
-    this.logger.info('carta-manager.carta.received', {
-      carta_id: carta.meta.id, project_id,
-      productos: carta.productos.length, categorias: carta.categorias.length
-    });
-  }
-
-  // ==========================================
   // Tools — CRUD
   // ==========================================
 

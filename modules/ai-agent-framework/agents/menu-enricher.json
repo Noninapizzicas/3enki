@@ -9,8 +9,7 @@
 
   "tools": [
     "carta.get",
-    "carta.save",
-    "publish_event"
+    "carta.save"
   ],
 
   "provider": "auto",

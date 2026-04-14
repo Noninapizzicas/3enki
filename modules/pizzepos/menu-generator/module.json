@@ -37,9 +37,13 @@
           "filePath": {
             "type": "string",
             "description": "Ruta a archivo PDF o imagen (alternativa a texto)"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto (obligatorio)"
           }
         },
-        "required": ["nombre"]
+        "required": ["nombre", "project_id"]
       }
     }
   ],

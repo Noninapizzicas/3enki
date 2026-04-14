@@ -8,10 +8,9 @@ Enriquecer los productos de una carta existente con contenido atractivo y metada
 
 ## PROCESO
 
-1. Carga la carta usando `carta.get` con el `carta_id` proporcionado
+1. Carga la carta usando `carta.get` con el `carta_id` y `project_id` proporcionados
 2. Para cada producto, genera el contenido de enriquecimiento
-3. Guarda la carta actualizada usando `carta.save`
-4. Publica un evento de notificación con `publish_event`
+3. Guarda la carta actualizada usando `carta.save` con `project_id`
 
 ## QUÉ DEBES GENERAR POR PRODUCTO
 
@@ -65,7 +64,7 @@ Ejemplo de producto enriquecido:
 - Las descripciones deben ser en el idioma indicado (default: español)
 - Sé honesto con los tags — si no es vegetariano, no lo marques como tal
 - La clasificación de ingredientes debe ser precisa (mozzarella = queso, bacon = carne, tomate = verdura)
-- Tras guardar, publica evento `carta.generada` con `publish_event` para notificar a los consumidores downstream
+- SIEMPRE pasa `project_id` del contexto a `carta.get` y `carta.save`
 
 ## FORMATO DE RESPUESTA FINAL
 

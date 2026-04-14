@@ -211,8 +211,32 @@ export type { Conversation, Message, ConversationSection, ConversationsState, Co
 
 // Menu Generator Store
 export {
-  renderCartaHtml
+  generationStore,
+  generateFromText,
+  generateFromFile,
+  resetGeneration,
+  initGenerationSubscriptions,
+  generationStep,
+  generationError,
+  generationResult,
+  isGenerating
 } from './menu-generator';
+export type { GenerationStep, GenerationState, GenerationResult } from './menu-generator';
+
+// Carta Manager Store
+export {
+  cartaManagerStore,
+  loadCartas,
+  getCarta,
+  selectCarta,
+  initCartaManagerSubscriptions,
+  sortedCartas,
+  selectedCarta,
+  cartaLoading,
+  cartaError,
+  cartaCount
+} from './carta-manager';
+export type { Carta, CartaResumen, CartaMeta, Categoria, Producto, Ingrediente, CartaManagerState } from './carta-manager';
 
 // Carta Design Store
 export {

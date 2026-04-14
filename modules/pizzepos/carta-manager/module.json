@@ -11,8 +11,7 @@
     ],
     "subscribes": [
       { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "carta.generada", "handler": "onCartaGenerada" }
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
     ]
   },
 
@@ -27,7 +26,7 @@
       "name": "carta.save",
       "description": "Guarda carta a disco. Acepta carta_id (existente), carta (objeto completo), o nombre (nueva vacía).",
       "handler": "toolSave",
-      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" }, "nombre": { "type": "string" }, "carta": { "type": "object" } } }
+      "parameters": { "type": "object", "properties": { "carta_id": { "type": "string" }, "nombre": { "type": "string" }, "carta": { "type": "object" }, "project_id": { "type": "string", "description": "ID del proyecto (obligatorio)" } }, "required": ["project_id"] }
     },
     {
       "name": "carta.get",

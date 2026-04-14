@@ -110,10 +110,10 @@ class MenuGeneratorModule {
       agentName: 'menu-structurer',
       context: {
         texto,
-        projectId: project_id,
+        project_id,
         nombre
       },
-      task: `Estructura este texto de carta de restaurante en JSON. Nombre: "${nombre}". Guarda con carta.save.`
+      task: `Estructura este texto de carta de restaurante en JSON. Nombre: "${nombre}". Guarda con carta.save pasando project_id="${project_id}".`
     });
 
     this.logger.info('menu.generate.structuring', {

@@ -1,19 +1,13 @@
 {
   "name": "tarifas",
-  "version": "1.0.0",
-  "description": "Tarifas por canal de venta — precios diferenciados para mesa, llevar, delivery. Cascada: precio_fijo → categoría+canal → canal → precio base.",
+  "version": "2.0.0",
+  "description": "Asignación carta+canal + registro de variantes. Cada canal tiene su carta con precios finales escritos. Sin cálculos en runtime.",
   "author": "Pizzepos Team",
-
-  "provides": {
-    "events": ["tarifa.config.actualizada"]
-  },
+  "main": "index.js",
 
   "events": {
     "publishes": [
-      {
-        "event": "tarifa.config.actualizada",
-        "description": "Configuración de tarifas actualizada (canales, categorías, redondeo)"
-      }
+      { "event": "tarifas.config.actualizada", "description": "Config cambiada (asignación canal, variante registrada)" }
     ],
     "subscribes": [
       { "event": "project.activated", "handler": "onProjectActivated" },
@@ -22,17 +16,27 @@
   },
 
   "ui_handlers": [
-    { "domain": "tarifas", "action": "get", "handler": "handleGetTarifas" },
-    { "domain": "tarifas", "action": "set_canal", "handler": "handleSetTarifaCanal" },
-    { "domain": "tarifas", "action": "set_categoria", "handler": "handleSetTarifaCategoria" },
-    { "domain": "tarifas", "action": "preview", "handler": "handlePreviewPrecios" }
+    { "domain": "tarifas", "action": "get", "handler": "handleGet" },
+    { "domain": "tarifas", "action": "health", "handler": "handleHealth" }
   ],
 
   "tools": [
     {
-      "name": "tarifas.set_canal",
-      "description": "Configura la tarifa de un canal de venta. Multiplicador (ej: 1.15 = +15%) y/o recargo fijo (ej: 0.50€). Mesa siempre es precio de carta (1.0). Canales: mesa, llevar, telefono, whatsapp, glovo, llevadoo.",
-      "handler": "toolSetTarifaCanal",
+      "name": "tarifas.set_general",
+      "description": "Establece la carta general (la que usan los canales sin carta propia)",
+      "handler": "toolSetGeneral",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "carta_id": { "type": "string", "description": "ID de la carta general" }
+        },
+        "required": ["carta_id"]
+      }
+    },
+    {
+      "name": "tarifas.assign",
+      "description": "Asigna una carta a un canal. Si carta_id es null, el canal vuelve a usar la general. Canales: mesa, llevar, telefono, whatsapp, glovo, llevadoo.",
+      "handler": "toolAssign",
       "parameters": {
         "type": "object",
         "properties": {
@@ -41,118 +45,60 @@
             "enum": ["mesa", "llevar", "telefono", "whatsapp", "glovo", "llevadoo"],
             "description": "Canal de venta"
           },
-          "multiplicador": {
-            "type": "number",
-            "description": "Factor de precio (1.0=sin cambio, 1.15=+15%, 0.9=-10%)"
-          },
-          "recargo": {
-            "type": "number",
-            "description": "Recargo fijo en euros añadido a cada producto (ej: 0.50)"
+          "carta_id": {
+            "type": "string",
+            "description": "ID de carta a asignar (null = usar general)"
           }
         },
         "required": ["canal"]
       }
     },
     {
-      "name": "tarifas.set_categoria",
-      "description": "Configura una excepción de tarifa para una categoría en uno o varios canales. Ej: bebidas sin recargo en delivery. Si no se indica canales, aplica a todos los canales no-mesa.",
-      "handler": "toolSetTarifaCategoria",
+      "name": "tarifas.get",
+      "description": "Config actual: carta general + qué carta usa cada canal + variantes registradas",
+      "handler": "toolGet",
+      "parameters": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "tarifas.register_variant",
+      "description": "Registra una variante de carta con sus reglas y la asigna a canales. Las reglas describen cómo se creó (para que tarifas-sync pueda reproducir los cambios cuando la base cambie).",
+      "handler": "toolRegisterVariant",
       "parameters": {
         "type": "object",
         "properties": {
-          "categoria": {
-            "type": "string",
-            "description": "ID de la categoría (ej: bebidas, postres)"
-          },
+          "carta_id": { "type": "string", "description": "ID de la carta variante" },
+          "base_carta_id": { "type": "string", "description": "ID de la carta base de la que se derivó" },
+          "nombre": { "type": "string", "description": "Nombre descriptivo de la variante" },
           "canales": {
             "type": "array",
             "items": { "type": "string" },
-            "description": "Canales a los que aplicar esta excepción (ej: ['glovo','llevadoo']). Si no se indica, aplica a todos los no-mesa."
+            "description": "Canales que usan esta variante"
           },
-          "multiplicador": {
-            "type": "number",
-            "description": "Factor de precio para esta categoría en esos canales (1.0=precio carta)"
-          },
-          "recargo": {
-            "type": "number",
-            "description": "Recargo fijo para esta categoría en esos canales"
+          "reglas": {
+            "type": "object",
+            "description": "Reglas de la variante en lenguaje natural. Ej: { precio: '+15%', excluir_categorias: ['ensaladas'], descripcion: 'Carta delivery sin ensaladas' }"
           }
         },
-        "required": ["categoria"]
+        "required": ["carta_id", "base_carta_id"]
       }
     },
     {
-      "name": "tarifas.get",
-      "description": "Muestra la configuración actual de tarifas: reglas por canal, excepciones por categoría y redondeo.",
-      "handler": "toolGetTarifas",
-      "parameters": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
-      "name": "tarifas.preview",
-      "description": "Previsualiza los precios de un producto o categoría en todos los canales. No modifica nada — solo muestra cómo quedarían los precios con las tarifas actuales.",
-      "handler": "toolPreviewPrecios",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": {
-            "type": "string",
-            "description": "ID de la carta"
-          },
-          "producto_id": {
-            "type": "string",
-            "description": "ID de producto específico (opcional)"
-          },
-          "categoria": {
-            "type": "string",
-            "description": "Previsualizar todos los productos de esta categoría (opcional)"
-          }
-        },
-        "required": ["carta_id"]
-      }
-    },
-    {
-      "name": "tarifas.set_precio_fijo",
-      "description": "Marca productos como precio fijo — no se les aplican tarifas de canal. Ideal para bebidas, menús y ofertas que deben mantener el mismo precio en todos los canales.",
-      "handler": "toolSetPrecioFijo",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id": {
-            "type": "string",
-            "description": "ID de la carta"
-          },
-          "producto_ids": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "IDs de productos a marcar/desmarcar"
-          },
-          "precio_fijo": {
-            "type": "boolean",
-            "description": "true = precio fijo (exento de tarifas), false = sujeto a tarifas"
-          }
-        },
-        "required": ["carta_id", "producto_ids", "precio_fijo"]
-      }
+      "name": "tarifas.get_variants",
+      "description": "Lista las variantes registradas con sus reglas y canales asignados",
+      "handler": "toolGetVariants",
+      "parameters": { "type": "object", "properties": {} }
     }
   ],
 
-  "ui": {
-    "zone": "work-bar",
-    "icon": "💰",
-    "routes": ["/menu-generator", "/comandero"]
+  "agents": {
+    "description": "Los agentes crean y sincronizan variantes de carta",
+    "tarifas-creator": "Crea variante desde carta base: duplica, ajusta precios, filtra productos, renombra, registra",
+    "tarifas-sync": "Cuando la carta base cambia, evalúa cada variante y propaga cambios según reglas"
   },
 
   "observability": {
     "metrics": {
-      "counters": [
-        "tarifas.canal.updated",
-        "tarifas.categoria.updated",
-        "tarifas.precio_fijo.updated",
-        "tarifas.preview.requested"
-      ]
+      "counters": ["tarifas.assign.updated", "tarifas.variant.registered"]
     }
   }
 }

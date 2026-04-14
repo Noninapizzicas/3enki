@@ -101,15 +101,19 @@ class MenuGeneratorModule {
       });
     }
 
-    // Ahora tenemos texto — disparar agente structurer
+    // Ahora tenemos texto — invocar agente structurer directamente
     await this.eventBus.publish('menu.generation.progress', {
       project_id, nombre, step: 'structuring', message: 'Estructurando carta con IA...'
     });
 
-    await this.eventBus.publish('menu.text.request', {
-      texto,
-      projectId: project_id,
-      nombre
+    await this.eventBus.publish('agent.execute.request', {
+      agentName: 'menu-structurer',
+      context: {
+        texto,
+        projectId: project_id,
+        nombre
+      },
+      task: `Estructura este texto de carta de restaurante en JSON. Nombre: "${nombre}". Guarda con carta.save.`
     });
 
     this.logger.info('menu.generate.structuring', {

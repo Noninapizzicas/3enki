@@ -8,18 +8,15 @@
 
   import { onMount, onDestroy } from 'svelte';
   import {
-    menuGeneratorStore,
     sortedCartas,
     selectedCarta,
-    menuHealth,
-    menuLoading,
-    initMenuGeneratorSubscriptions,
+    cartaLoading,
+    cartaCount,
+    initCartaManagerSubscriptions,
     getCarta,
     selectCarta,
-    renderCartaHtml,
-    type CartaEstado,
     type Producto
-  } from '$lib/stores/menu-generator';
+  } from '$lib/stores/carta-manager';
   import { updatePageStateBatch } from '$lib/stores/page-context';
 
   export let panelId: string = '';
@@ -28,15 +25,14 @@
 
   // Vista: 'list' o 'detail'
   let view: 'list' | 'detail' = 'list';
-  let rendering: string | null = null;
 
   $: cartas = $sortedCartas;
   $: carta = $selectedCarta;
-  $: health = $menuHealth;
-  $: loading = $menuLoading;
+  $: total = $cartaCount;
+  $: loading = $cartaLoading;
 
   onMount(() => {
-    cleanup = initMenuGeneratorSubscriptions();
+    cleanup = initCartaManagerSubscriptions();
   });
 
   onDestroy(() => {
@@ -52,27 +48,6 @@
   function handleBack() {
     selectCarta(null);
     view = 'list';
-  }
-
-  async function handleRender(id: string) {
-    rendering = id;
-    try {
-      await renderCartaHtml(id);
-    } finally {
-      rendering = null;
-    }
-  }
-
-  function getEstadoIcon(estado: CartaEstado): string {
-    return ({ generando: '⏳', generada: '✅', error: '❌' })[estado] || '📄';
-  }
-
-  function getEstadoColor(estado: CartaEstado): string {
-    return ({
-      generando: 'var(--color-warning, #f59e0b)',
-      generada: 'var(--color-success, #22c55e)',
-      error: 'var(--color-error, #ef4444)'
-    })[estado] || 'var(--color-text)';
   }
 
   function formatDate(d: string): string {
@@ -98,10 +73,7 @@
       <span class="header-title">Cartas generadas</span>
     {/if}
     <div class="health-badges">
-      {#if health.generando > 0}
-        <span class="badge generating">⏳ {health.generando}</span>
-      {/if}
-      <span class="badge">{health.generadas} cartas</span>
+      <span class="badge">{total} cartas</span>
     </div>
   </div>
 
@@ -118,35 +90,19 @@
     {:else}
       <div class="cartas-list">
         {#each cartas as item (item.id)}
-          <div class="carta-item" class:error={item.estado === 'error'}>
-            <span class="carta-estado" style="color: {getEstadoColor(item.estado)}">
-              {getEstadoIcon(item.estado)}
-            </span>
+          <div class="carta-item">
+            <span class="carta-estado">📋</span>
             <div class="carta-info">
               <span class="carta-nombre">{item.nombre}</span>
               <span class="carta-meta">
-                {#if item.estado === 'generada'}
-                  {item.productos || 0} prod · {item.categorias || 0} cat
-                {:else if item.estado === 'error'}
-                  {item.error || 'Error'}
-                {:else}
-                  Generando...
-                {/if}
+                {item.productos || 0} prod · {item.categorias || 0} cat
               </span>
             </div>
             <div class="carta-actions">
               <span class="carta-fecha">{formatDate(item.created_at)}</span>
-              {#if item.estado === 'generada'}
-                <div class="action-buttons">
-                  <button class="btn-view" on:click={() => handleViewCarta(item.id)} title="Ver detalle">
-                    👁️
-                  </button>
-                  <button class="btn-view" on:click={() => handleRender(item.id)}
-                    title="Ver HTML / Imprimir" disabled={rendering === item.id}>
-                    {rendering === item.id ? '⏳' : '🖨️'}
-                  </button>
-                </div>
-              {/if}
+              <button class="btn-view" on:click={() => handleViewCarta(item.id)} title="Ver detalle">
+                👁️
+              </button>
             </div>
           </div>
         {/each}
@@ -159,7 +115,7 @@
       <div class="detalle-header">
         <h3 class="detalle-title">{carta.meta.nombre}</h3>
         <div class="detalle-meta">
-          <span class="meta-badge">{carta.meta.generado_desde}</span>
+          <span class="meta-badge">{carta.meta.source || 'agent'}</span>
           <span class="meta-date">{formatDate(carta.meta.created_at)}</span>
         </div>
       </div>
@@ -253,7 +209,6 @@
     background: rgba(255,255,255,0.05);
     border-radius: 0.25rem;
   }
-  .badge.generating { color: var(--color-warning, #f59e0b); background: rgba(245,158,11,0.1); }
 
   /* LISTA */
   .cartas-list {
@@ -274,7 +229,6 @@
     border-radius: 0.375rem;
   }
   .carta-item:hover { background: rgba(255,255,255,0.06); }
-  .carta-item.error { border-color: rgba(239,68,68,0.3); }
   .carta-estado { font-size: 0.9rem; flex-shrink: 0; }
   .carta-info { flex: 1; display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
   .carta-nombre { font-size: 0.8rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

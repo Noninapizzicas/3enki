@@ -139,7 +139,7 @@ export function initGenerationSubscriptions(): () => void {
 
   // Carta generada (emitido por carta-manager cuando el structurer guarda)
   cleanupFns.push(
-    mqttSubscribe('carta.generada', (_topic, payload) => {
+    mqttSubscribe('carta.actualizada', (_topic, payload) => {
       const data = payload as { meta?: { id: string; nombre: string }; productos?: any[]; categorias?: any[] };
       if (data?.meta?.id) {
         generationStore.update(s => {

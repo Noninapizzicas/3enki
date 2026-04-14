@@ -1,36 +1,45 @@
 /**
  * Modulo Menu Generator — ARCHIVADO
  *
- * Reemplazado por 5 micro-módulos:
- *   menu-pdf2img, menu-prepare, menu-ocr, menu-generate, menu-cartas
+ * Reemplazado por:
+ *   menu-generate (panel de generación)
+ *   menu-cartas (panel de listado, usa carta-manager store)
  *
- * Este archivo solo mantiene re-exports del store por compatibilidad.
- * El panel monolítico (MenuGeneratorPanel.svelte) se conserva como referencia.
+ * Este archivo re-exporta stores actuales por si algún componente legacy lo importa.
  */
 
-// Re-export store functions (backward compat)
+// Generation store
 export {
-  menuGeneratorStore,
-  sortedCartas,
-  selectedCarta,
-  activeTab,
-  menuHealth,
-  menuLoading,
-  menuGenerating,
-  menuError,
-  initMenuGeneratorSubscriptions,
-  generateMenu,
+  generationStore,
+  generateFromText,
+  generateFromFile,
+  resetGeneration,
+  initGenerationSubscriptions,
+  generationStep,
+  generationError,
+  generationResult,
+  isGenerating,
+  type GenerationStep,
+  type GenerationState,
+  type GenerationResult
+} from '$lib/stores/menu-generator';
+
+// Carta manager store
+export {
+  cartaManagerStore,
   loadCartas,
   getCarta,
-  loadHealth,
-  setActiveTab,
   selectCarta,
   clearError,
+  initCartaManagerSubscriptions,
+  sortedCartas,
+  selectedCarta,
+  cartaLoading,
+  cartaError,
+  cartaCount,
   type Carta,
   type CartaResumen,
-  type CartaEstado,
   type Producto,
   type Categoria,
-  type Ingrediente,
-  type MenuGeneratorState
-} from '$lib/stores/menu-generator';
+  type Ingrediente
+} from '$lib/stores/carta-manager';

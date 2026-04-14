@@ -332,7 +332,7 @@ class ComanderoModule {
 
     const { cuenta_id, producto_id, nombre, precio, cantidad, categoria, variaciones, notas,
             tipo, pizza_izquierda, pizza_derecha, ingredientes: metaIngredientes,
-            ingredientes_base } = data;
+            ingredientes_base, project_id } = data;
 
     // Obtener o crear buffer de pedido
     let pedido = this.pedidos.get(cuenta_id);
@@ -353,7 +353,7 @@ class ComanderoModule {
 
     // Resolver precio por canal: busca en la carta asignada al canal
     const canal = this._detectarCanalCuenta(cuenta_id);
-    const itemPrecio = this._resolverPrecioCanal(producto_id, precioBase, canal);
+    const itemPrecio = this._resolverPrecioCanal(producto_id, precioBase, canal, project_id);
 
     const item_id = crypto.randomUUID();
     const item = {
@@ -773,7 +773,7 @@ class ComanderoModule {
    *   2. Cache general de productos (catalogo.actualizado) → precio base
    *   3. Precio pasado en la request → fallback
    */
-  _resolverPrecioCanal(producto_id, precioBase, canal) {
+  _resolverPrecioCanal(producto_id, precioBase, canal, projectId) {
     if (!canal || canal === 'mesa') return precioBase;
 
     try {
@@ -784,7 +784,7 @@ class ComanderoModule {
       }
 
       if (this._tarifasModule?.resolverCarta) {
-        const cartaId = this._tarifasModule.resolverCarta(canal);
+        const cartaId = this._tarifasModule.resolverCarta(canal, projectId);
 
         if (cartaId) {
           const cartaCache = this.cartasProductosCache.get(cartaId);

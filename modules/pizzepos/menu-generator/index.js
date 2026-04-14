@@ -6,7 +6,7 @@
  *
  * Pipeline:
  *   Archivo → [PDF→render] → [sharp prepare] → [Google Vision OCR] → texto
- *   Texto → agente menu-structurer → carta JSON → carta.generada
+ *   Texto → agente menu-structurer → carta.save → carta.actualizada
  *
  * La extracción OCR es determinista (no usa LLM).
  * La estructuración la hace el agente menu-structurer (sí usa LLM).
@@ -17,7 +17,7 @@
 
 const path = require('path');
 const fs = require('fs').promises;
-const ServiceExecutor = require('../../core/service-executor');
+const ServiceExecutor = require('../../../core/service-executor');
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif'];
 const PDF_EXTENSIONS = ['.pdf'];

@@ -7,14 +7,14 @@ export const menuCartasModule: UIModule = {
   manifest: {
     id: 'menu-cartas',
     name: 'Cartas',
-    version: '1.0.0',
+    version: '2.0.0',
     zone: 'work-bar',
     button: {
       id: 'menu-cartas-btn',
       icon: '📋',
       label: 'Cartas',
       action: { type: 'panel', panelId: 'menu-cartas-panel' },
-      order: 5
+      order: 2
     },
     panels: [{
       id: 'menu-cartas-panel',

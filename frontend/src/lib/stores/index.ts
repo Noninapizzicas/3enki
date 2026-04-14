@@ -229,6 +229,7 @@ export {
   loadCartas,
   getCarta,
   selectCarta,
+  clearError as clearCartaError,
   initCartaManagerSubscriptions,
   sortedCartas,
   selectedCarta,

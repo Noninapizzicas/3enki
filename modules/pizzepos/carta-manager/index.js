@@ -2,8 +2,8 @@
  * Carta Manager v1.0.0 — Dueño de datos de cartas
  *
  * CRUD, persistencia, versionado, búsqueda, estadísticas.
- * Recibe cartas generadas por menu-generator (via evento carta.generada)
- * y las gestiona durante todo su ciclo de vida.
+ * Gestiona cartas durante todo su ciclo de vida.
+ * Los agentes (menu-structurer, tarifas-creator) guardan cartas via carta.save tool.
  *
  * Tools expuestos al LLM y agentes:
  *   carta.save         — Guardar carta (nueva o existente)

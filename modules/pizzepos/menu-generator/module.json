@@ -8,7 +8,8 @@
   "events": {
     "publishes": [
       { "event": "menu.generation.progress", "description": "Progreso del pipeline: extracting, structuring" },
-      { "event": "menu.generation.failed", "description": "Error en el pipeline de generación" }
+      { "event": "menu.generation.failed", "description": "Error en el pipeline de generación" },
+      { "event": "agent.execute.request", "description": "Invoca agente menu-structurer para estructurar carta" }
     ],
     "subscribes": []
   },

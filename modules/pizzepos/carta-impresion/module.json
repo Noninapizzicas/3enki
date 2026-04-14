@@ -1,113 +1,82 @@
 {
   "name": "carta-impresion",
-  "version": "1.0.0",
-  "description": "Renderiza cartas del restaurante en HTML listo para imprimir o exportar a PDF desde el navegador",
+  "version": "2.0.0",
+  "description": "Genera versiones imprimibles de cartas en HTML print-ready. Los agentes deciden layout y generan con criterio adaptado a cada carta y marca.",
   "author": "Pizzepos Team",
   "main": "index.js",
 
-  "provides": {
-    "events": ["carta.html.generada"]
-  },
-
   "events": {
     "publishes": [
-      {
-        "event": "carta.html.generada",
-        "description": "HTML de carta generado — incluye ruta al fichero para abrir en navegador"
-      }
+      { "event": "carta.impresion.lista", "description": "HTML imprimible generado y guardado" }
     ],
     "subscribes": [
       { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
+      { "event": "carta.actualizada", "handler": "onCartaActualizada" }
     ]
   },
 
   "ui_handlers": [
-    { "domain": "carta", "action": "render", "handler": "handleRender" }
+    { "domain": "carta-impresion", "action": "get", "handler": "handleGet" },
+    { "domain": "carta-impresion", "action": "generar", "handler": "handleGenerar" },
+    { "domain": "carta-impresion", "action": "health", "handler": "handleHealth" }
   ],
 
   "tools": [
     {
-      "name": "carta.render",
-      "description": "Genera un HTML listo para imprimir a partir de una carta del POS. El usuario abre el archivo en el navegador y usa Ctrl+P para imprimir o exportar a PDF. Devuelve la ruta del HTML generado.",
-      "handler": "toolRender",
+      "name": "impresion.get",
+      "description": "Obtiene la versión imprimible HTML de una carta si existe. Si no, devuelve 404.",
+      "handler": "toolGet",
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id": {
-            "type": "string",
-            "description": "ID de la carta a renderizar (ej: carta_m1abc23)"
-          },
-          "plantilla_id": {
-            "type": "string",
-            "description": "ID de la plantilla a usar. Si no se indica, usa 'a4-clasica'. Ver carta.plantillas para opciones disponibles."
-          }
+          "project_id": { "type": "string" },
+          "carta_id": { "type": "string" }
         },
-        "required": ["carta_id"]
+        "required": ["project_id", "carta_id"]
       }
     },
     {
-      "name": "carta.plantillas",
-      "description": "Lista las plantillas de impresión disponibles: las globales (incluidas con el sistema) y las del proyecto actual (personalizadas).",
-      "handler": "toolPlantillas",
-      "parameters": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
-      "name": "carta.plantilla_crear",
-      "description": "Crea una plantilla personalizada para el proyecto actual. Permite diseñar cartas con HTML y CSS propios.",
-      "handler": "toolPlantillaCrear",
+      "name": "impresion.generar",
+      "description": "Inicia la generación de la versión imprimible de una carta. Dispara al architect y builder.",
+      "handler": "toolGenerar",
       "parameters": {
         "type": "object",
         "properties": {
-          "nombre": {
-            "type": "string",
-            "description": "Nombre descriptivo de la plantilla (ej: 'Carta Verano 2026')"
-          },
-          "html": {
-            "type": "string",
-            "description": "Contenido HTML completo de la plantilla. Usar {{nombre_carta}}, {{categorias}}, {{productos}} como marcadores."
-          },
-          "formato": {
-            "type": "string",
-            "enum": ["A4", "A5", "A6"],
-            "description": "Tamaño de papel objetivo (default: A4)"
-          },
-          "descripcion": {
-            "type": "string",
-            "description": "Descripción breve del diseño y cuándo usarlo"
-          }
+          "project_id": { "type": "string" },
+          "carta_id": { "type": "string" }
         },
-        "required": ["nombre", "html"]
+        "required": ["project_id", "carta_id"]
       }
     },
     {
-      "name": "carta.plantilla_eliminar",
-      "description": "Elimina una plantilla personalizada del proyecto. Solo se pueden eliminar plantillas del proyecto, no las globales.",
-      "handler": "toolPlantillaEliminar",
+      "name": "impresion.save_html",
+      "description": "Guarda el HTML generado por el builder. Usado por el agente impresion-builder al terminar.",
+      "handler": "toolSaveHtml",
       "parameters": {
         "type": "object",
         "properties": {
-          "plantilla_id": {
-            "type": "string",
-            "description": "ID de la plantilla a eliminar"
-          }
+          "project_id": { "type": "string" },
+          "carta_id": { "type": "string" },
+          "html": { "type": "string", "description": "HTML completo print-ready" },
+          "layout": { "type": "object", "description": "Guión de maquetación del architect" },
+          "brand_applied": { "type": "object", "description": "Elementos de marca aplicados" }
         },
-        "required": ["plantilla_id"]
+        "required": ["project_id", "carta_id", "html"]
       }
     }
   ],
 
+  "agents": {
+    "impresion-architect": "Analiza la carta y decide layout óptimo (caras, columnas, formato, densidad)",
+    "impresion-builder": "Genera el HTML+CSS print-ready según el guión del architect y el perfil de marca"
+  },
+
   "observability": {
     "metrics": {
       "counters": [
-        "carta.render.requested",
-        "carta.render.completed",
-        "carta.render.errors",
-        "carta.plantilla.creada",
-        "carta.plantilla.eliminada"
+        "carta-impresion.generacion.requested",
+        "carta-impresion.generacion.completada"
       ]
     }
   }

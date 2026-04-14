@@ -1,0 +1,36 @@
+{
+  "id": "cartadigital-composer",
+  "name": "cartadigital-composer",
+  "description": "Compone la carta pública final uniendo datos de carta-manager, marketing y config de branding. Genera el paquete listo para servir o exportar como PWA.",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "prompt_file": "prompts/cartadigital-composer-system.md",
+
+  "tools": [
+    "carta.get",
+    "carta.list",
+    "cartadigital.get_config",
+    "cartadigital.set_carta_compuesta",
+    "marketing.get_perfil",
+    "tarifas.get"
+  ],
+
+  "provider": "auto",
+  "temperature": 0.1,
+  "max_tokens": 8000,
+
+  "context_enabled": false,
+  "timeout_ms": 60000,
+  "max_retries": 2,
+
+  "metadata": {
+    "type": "domain-agent",
+    "domain": "carta-digital",
+    "tags": ["carta-digital", "composer", "pwa", "public-menu"]
+  },
+
+  "created_at": "2026-04-14T00:00:00.000Z",
+  "updated_at": "2026-04-14T00:00:00.000Z",
+  "stats": { "executions": 0, "successes": 0, "failures": 0, "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0, "last_execution": null }
+}

@@ -22,12 +22,12 @@
 WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
 
-// Topics
-static char topicStatus[80];
-static char topicBirth[80];
-static char topicLwt[80];
-static char topicShadowDelta[80];
-static char topicShadowReported[80];
+// Topics — 128 bytes para soportar deviceId/projectId de hasta 31 chars
+static char topicStatus[128];
+static char topicBirth[128];
+static char topicLwt[128];
+static char topicShadowDelta[128];
+static char topicShadowReported[128];
 
 // Timers
 static unsigned long lastStatusMs    = 0;
@@ -44,7 +44,7 @@ static bool wifiWasConnected = false;
 
 #define MQTT_QUEUE_SIZE 8
 struct MqttQueueItem {
-  char topic[80];
+  char topic[128];
   char payload[512];  // ACK payloads con diagnostico pueden superar 256
   bool retain;
   bool used;

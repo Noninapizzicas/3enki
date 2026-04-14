@@ -49,4 +49,9 @@ void mqttPublishReported();
  */
 void mqttRebuildTopics();
 
+/**
+ * Publicar o encolar si desconectado. Usado internamente por enki_mqtt_publish().
+ */
+void mqttPublishOrQueue(const char* topic, const char* payload);
+
 #endif // ENKI_MQTT_H

@@ -8,12 +8,12 @@
  * La LÓGICA (driver) implementa el comportamiento específico del dispositivo.
  *
  * La LÓGICA implementa las funciones logic_*
- * La LÓGICA usa los servicios enki_*
+ * La LÓGICA usa los servicios enki_* (incluidos via enki_base.h)
  *
  * Para crear un nuevo tipo de dispositivo:
  *   1. Crea logic_mi_driver.cpp
- *   2. Implementa las 4 funciones logic_*
- *   3. Usa los servicios enki_* para comunicarte
+ *   2. Implementa las 5 funciones logic_*
+ *   3. Incluye enki_base.h para acceder a los servicios enki_*
  *   4. Compila con la BASE → firmware.bin
  *   5. Despliega por OTA
  */
@@ -21,7 +21,7 @@
 #include <ArduinoJson.h>
 
 // ─────────────────────────────────────────────
-// LA LÓGICA IMPLEMENTA ESTAS 4 FUNCIONES
+// LA LÓGICA IMPLEMENTA ESTAS 5 FUNCIONES
 // ─────────────────────────────────────────────
 
 /**
@@ -61,33 +61,8 @@ void logic_status(JsonDocument& doc);
 void logic_portal_status(JsonDocument& doc);
 
 // ─────────────────────────────────────────────
-// LA BASE EXPONE ESTOS SERVICIOS (enki_*)
+// SERVICIOS enki_* — incluir enki_base.h para usarlos
+// (No se redeclaran aquí para evitar divergencia de defaults)
 // ─────────────────────────────────────────────
-
-// --- MQTT ---
-void enki_mqtt_publish(const char* topic, const char* payload);
-bool enki_mqtt_subscribe(const char* topic);
-bool enki_mqtt_connected();
-
-// --- Identidad ---
-const char* enki_device_id();
-const char* enki_project_id();
-
-// --- Config custom del driver (NVS) ---
-// La lógica puede guardar/leer hasta 8 pares clave-valor string
-void        enki_config_set(const char* key, const char* value);
-const char* enki_config_get(const char* key, const char* defaultValue);
-void        enki_config_set_u16(const char* key, uint16_t value);
-uint16_t    enki_config_get_u16(const char* key, uint16_t defaultValue);
-
-// --- Utilidades ---
-void enki_led_blink(int times, int ms);
-void enki_led_on();
-void enki_led_off();
-void enki_request_restart();
-
-// --- Buffer compartido (para payloads grandes: ESC/POS, binarios) ---
-uint8_t* enki_buffer();
-size_t   enki_buffer_size();
 
 #endif // ENKI_LOGIC_H

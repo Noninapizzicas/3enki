@@ -82,9 +82,6 @@ void baseConfigSave() {
 // Servicios enki_* (contrato para la LÓGICA)
 // ============================================
 
-// Declarado en enki_mqtt.cpp
-extern void mqttPublishOrQueue(const char* topic, const char* payload);
-
 void enki_mqtt_publish(const char* topic, const char* payload) {
   mqttPublishOrQueue(topic, payload);
 }

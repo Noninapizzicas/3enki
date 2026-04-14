@@ -9,7 +9,8 @@
     "subscribes": [
       { "event": "project.activated", "handler": "onProjectActivated" },
       { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "carta.actualizada", "handler": "onCartaActualizada" }
+      { "event": "carta.actualizada", "handler": "onCartaActualizada" },
+      { "event": "tarifas.config.actualizada", "handler": "onTarifasActualizada" }
     ]
   },
 

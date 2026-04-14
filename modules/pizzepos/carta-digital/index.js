@@ -130,6 +130,30 @@ class CartaDigitalModule {
   }
 
   // ==========================================
+  // Listener: tarifas cambian → recomponer (qué carta usa cada canal cambió)
+  // ==========================================
+
+  async onTarifasActualizada(event) {
+    const data = event?.data || event?.payload || event;
+    const projectId = data?.project_id;
+    if (!projectId) return;
+
+    // Invalidar caché
+    this.cartaCompuestaCache.delete(projectId);
+
+    this.logger.info('carta-digital.tarifas_changed.invalidate', { project_id: projectId });
+
+    // Recomponer
+    await this.eventBus.publish('agent.execute.request', {
+      agentName: 'cartadigital-composer',
+      context: { project_id: projectId },
+      task: `Recomponer carta pública para proyecto "${projectId}". La asignación de cartas a canales ha cambiado.`
+    });
+
+    this.metrics?.increment('carta-digital.recompose.triggered');
+  }
+
+  // ==========================================
   // Config Persistence
   // ==========================================
 

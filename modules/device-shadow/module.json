@@ -36,6 +36,47 @@
     { "domain": "shadow", "action": "get-full", "handler": "handleGetFull" }
   ],
 
+  "tools": [
+    {
+      "name": "shadow.get_full",
+      "description": "Estado completo del shadow de un dispositivo: reported (lo que tiene), desired (lo que queremos), delta (diferencias)",
+      "handler": "handleGetFull",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device_id": { "type": "string" }
+        },
+        "required": ["device_id"]
+      }
+    },
+    {
+      "name": "shadow.set_desired",
+      "description": "Escribir estado deseado para un dispositivo. El delta se computa automáticamente y se envía por MQTT.",
+      "handler": "handleSetDesired",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device_id": { "type": "string" },
+          "project_id": { "type": "string" },
+          "state": { "type": "object", "description": "Estado deseado (ej: {firmware: {version: '3.5.0', url: '...'}})" }
+        },
+        "required": ["device_id", "state"]
+      }
+    },
+    {
+      "name": "shadow.get_delta",
+      "description": "Ver las diferencias entre lo deseado y lo reportado por el dispositivo",
+      "handler": "handleGetDelta",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device_id": { "type": "string" }
+        },
+        "required": ["device_id"]
+      }
+    }
+  ],
+
   "config": {
     "persist_interval_ms": 30000,
     "data_path": "./data/devices"

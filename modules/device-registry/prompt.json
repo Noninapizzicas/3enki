@@ -1,0 +1,25 @@
+{
+  "_type": "module_prompt",
+  "_module": "device-registry",
+  "role": "Inventario de dispositivos ESP32",
+  "intent": "Mantener el registro centralizado de todos los dispositivos: auto-descubrimiento via MQTT birth, tracking de estado online/offline, y consulta del parque.",
+  "capabilities": [
+    "auto-registrar dispositivos desde MQTT birth messages",
+    "detectar online/offline via heartbeat timeout (90s)",
+    "listar dispositivos por proyecto, tipo, o estado",
+    "consultar info detallada: firmware, IP, RSSI, capabilities",
+    "estadísticas del parque: total, online, offline, por tipo"
+  ],
+  "rules": [
+    "es la ÚNICA fuente de verdad sobre qué dispositivos existen",
+    "auto-descubre desde birth messages MQTT (retained)",
+    "si un dispositivo no manda status en 90s, se marca offline",
+    "persiste en data/devices/registry.json"
+  ],
+  "integrations": {
+    "listens_to": ["devices/+/+/birth (MQTT)", "devices/+/+/lwt (MQTT)", "enki/+/status/+ (MQTT)"],
+    "emits": ["device.registered", "device.unregistered", "device.online", "device.offline"],
+    "depends_on": [],
+    "consumed_by": ["device-shadow", "device-health", "firmware-manager"]
+  }
+}

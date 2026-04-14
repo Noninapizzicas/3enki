@@ -1,0 +1,26 @@
+{
+  "_type": "module_prompt",
+  "_module": "device-health",
+  "role": "Monitor de salud del parque de dispositivos",
+  "intent": "Monitorizar la salud de todos los dispositivos: detectar offline prolongado, reconnect loops, OTA fallidos. Generar alertas y reportes.",
+  "capabilities": [
+    "detectar offline prolongado (>5 min sin status)",
+    "detectar reconnect loops (>5 reconexiones en 30 min)",
+    "trackear historial OTA por dispositivo",
+    "calcular uptime % de 24h por dispositivo",
+    "generar alertas clasificadas por severidad",
+    "dashboard global del parque"
+  ],
+  "rules": [
+    "solo monitoriza, NO remedia — las acciones correctivas las decide el operador o el agente",
+    "alertas se acumulan (max 200) y se pueden filtrar por tipo/dispositivo",
+    "reportes periódicos cada 60 min",
+    "persiste en data/devices/health-history.json"
+  ],
+  "integrations": {
+    "listens_to": ["device.online", "device.offline", "firmware.ota_completed", "firmware.ota_failed"],
+    "emits": ["health.alert.offline", "health.alert.reconnect_loop", "health.alert.ota_failed", "health.report"],
+    "depends_on": ["device-registry"],
+    "consumed_by": ["device-ops agent"]
+  }
+}

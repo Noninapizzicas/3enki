@@ -101,6 +101,7 @@
       "firmware-builder",
       "esp32-flasher",
       "carta-manager",
+      "carta-marketing",
       "menu-generator",
       "tarifas",
       "recetas",

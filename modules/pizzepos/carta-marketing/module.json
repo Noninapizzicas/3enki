@@ -1,0 +1,88 @@
+{
+  "name": "carta-marketing",
+  "version": "1.0.0",
+  "description": "Equipo de marketing silencioso. Escucha cambios en cartas y automáticamente enriquece, pule y mejora según el perfil de marca del proyecto. Aprende con el tiempo.",
+  "author": "Pizzepos Team",
+  "main": "index.js",
+
+  "events": {
+    "subscribes": [
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
+      { "event": "carta.actualizada", "handler": "onCartaActualizada" }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "carta-marketing", "action": "perfil", "handler": "handleGetPerfil" },
+    { "domain": "carta-marketing", "action": "actividad", "handler": "handleGetActividad" },
+    { "domain": "carta-marketing", "action": "health", "handler": "handleHealth" }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing.get_perfil",
+      "description": "Obtiene el perfil de marca del proyecto: tono, idioma, público, colores, valores, prohibiciones",
+      "handler": "toolGetPerfil",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" }
+        },
+        "required": ["project_id"]
+      }
+    },
+    {
+      "name": "marketing.update_perfil",
+      "description": "Actualiza el perfil de marca del proyecto. Acepta cualquier campo: nombre, tono, idioma, publico, valores, colores, prohibido, referencia_visual, notas",
+      "handler": "toolUpdatePerfil",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "nombre": { "type": "string", "description": "Nombre del negocio" },
+          "tono": { "type": "string", "description": "Tono de comunicación (ej: cercano, formal, divertido)" },
+          "idioma": { "type": "string", "description": "Idioma principal (es, en, it, etc.)" },
+          "publico": { "type": "string", "description": "Público objetivo (ej: familias, jóvenes, turistas)" },
+          "valores": { "type": "string", "description": "Valores de marca (ej: producto fresco, tradición, innovación)" },
+          "colores": { "type": "object", "description": "Paleta de colores { primario, secundario, acento }" },
+          "prohibido": { "type": "string", "description": "Qué evitar (ej: anglicismos, tono pretencioso)" },
+          "referencia_visual": { "type": "string", "description": "Estilo visual de referencia (ej: trattoria moderna, minimalista)" }
+        },
+        "required": ["project_id"]
+      }
+    },
+    {
+      "name": "marketing.completar_onboarding",
+      "description": "Marca el onboarding como completado. A partir de aquí, marketing trabaja automáticamente en cada cambio de carta.",
+      "handler": "toolCompletarOnboarding",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" }
+        },
+        "required": ["project_id"]
+      }
+    },
+    {
+      "name": "marketing.actividad",
+      "description": "Muestra la actividad reciente de marketing: cartas procesadas, estado del perfil",
+      "handler": "toolGetActividad",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" }
+        },
+        "required": ["project_id"]
+      }
+    }
+  ],
+
+  "agents": {
+    "description": "Equipo de agentes especializados que trabajan automáticamente",
+    "marketing-onboarding": "Entrevista conversacional para construir perfil de marca",
+    "marketing-copywriter": "Descripciones, tono, lenguaje adaptado al proyecto",
+    "marketing-strategist": "Ingeniería de menú: productos estrella, orden, psicología de precios",
+    "marketing-brand-keeper": "Coherencia de marca entre cartas y variantes"
+  }
+}

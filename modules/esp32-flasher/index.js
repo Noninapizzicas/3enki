@@ -104,6 +104,25 @@ class ESP32FlasherModule {
     }
     this.activeMonitors.clear();
 
+    // Limpiar listener MQTT de debug
+    if (this._onDebugMessage) {
+      const mqtt = this.eventBus?.mqtt;
+      if (mqtt) {
+        mqtt.removeListener('message', this._onDebugMessage);
+        mqtt.unsubscribe('enki/+/debug/+').catch(() => {});
+      }
+      this._onDebugMessage = null;
+    }
+
+    // Resolver waiters pendientes de long-poll para que no cuelguen
+    for (const [, buf] of this.debugBuffers) {
+      for (const waiter of buf.waiters) {
+        waiter([]);
+      }
+      buf.waiters = [];
+    }
+    this.debugBuffers.clear();
+
     this.logger.info('module.unloaded', { module: this.name });
   }
 
@@ -192,6 +211,11 @@ class ESP32FlasherModule {
       return { status: 400, error: toolCheck.error };
     }
 
+    // Validar que el puerto parece un dispositivo serial
+    if (!/^(\/dev\/tty(USB|ACM|S|AMA)\d+|COM\d+)$/.test(port)) {
+      return { status: 400, error: `Puerto '${port}' no parece un dispositivo serial válido. Esperado: /dev/ttyUSB0, /dev/ttyACM0, COM3, etc.` };
+    }
+
     // Verificar que el puerto serial existe
     try {
       await fs.promises.access(port, fs.constants.R_OK | fs.constants.W_OK);
@@ -227,6 +251,27 @@ class ESP32FlasherModule {
       baud: flashBaud
     });
 
+    // Validar método y opciones ANTES de emitir flash.started
+    if (flashMethod === 'platformio') {
+      const pioDir = project_dir || this._findPlatformioRoot(binary_path);
+      if (!pioDir) {
+        this.activeFlashes.delete(flashId);
+        this.metrics.gauge('flash.active.count', this.activeFlashes.size);
+        return { status: 400, error: `No se encontró platformio.ini subiendo desde ${binary_path}. Verifica la ruta o usa el método esptool.` };
+      }
+      flashInfo._pioDir = pioDir;
+    } else if (flashMethod !== 'esptool') {
+      this.activeFlashes.delete(flashId);
+      this.metrics.gauge('flash.active.count', this.activeFlashes.size);
+      return { status: 400, error: `Método '${flashMethod}' no soportado. Usa: esptool, platformio` };
+    }
+
+    // Validar flash_mode y flash_freq (prevenir argument injection)
+    const validFlashModes = ['qio', 'qout', 'dio', 'dout'];
+    const validFlashFreqs = ['20m', '26m', '40m', '80m'];
+    const safeFlashMode = validFlashModes.includes(flash_mode) ? flash_mode : 'dio';
+    const safeFlashFreq = validFlashFreqs.includes(flash_freq) ? flash_freq : '80m';
+
     await this.eventBus.publish('flash.started', {
       flash_id: flashId,
       port,
@@ -240,23 +285,15 @@ class ESP32FlasherModule {
     if (flashMethod === 'esptool') {
       this._runEsptoolFlash(flashId, {
         port, binary_path, baud: flashBaud,
-        flash_mode: flash_mode || 'dio',
-        flash_freq: flash_freq || '80m',
+        flash_mode: safeFlashMode,
+        flash_freq: safeFlashFreq,
         erase_before: !!erase_before
       });
-    } else if (flashMethod === 'platformio') {
-      const pioDir = project_dir || this._findPlatformioRoot(binary_path);
-      if (!pioDir) {
-        this.activeFlashes.delete(flashId);
-        return { status: 400, error: `No se encontró platformio.ini subiendo desde ${binary_path}. Verifica la ruta o usa el método esptool.` };
-      }
+    } else {
       this._runPlatformioFlash(flashId, {
         port,
-        project_dir: pioDir
+        project_dir: flashInfo._pioDir
       });
-    } else {
-      this.activeFlashes.delete(flashId);
-      return { status: 400, error: `Método '${flashMethod}' no soportado. Usa: esptool, platformio` };
     }
 
     return {
@@ -358,6 +395,15 @@ class ESP32FlasherModule {
 
     this.logger.info('flash.cancelled', { flash_id, port: flash.port, duration_ms: duration });
 
+    this.eventBus.publish('flash.failed', {
+      flash_id,
+      port: flash.port,
+      method: flash.method,
+      error: 'cancelled',
+      exit_code: null,
+      duration_ms: duration
+    }).catch(() => {});
+
     return {
       status: 200,
       data: { flash_id, status: 'cancelled', duration_ms: duration }
@@ -430,6 +476,7 @@ class ESP32FlasherModule {
 
   /**
    * Envía datos al serial (para interactuar con el firmware en ejecución).
+   * Escribe directamente al puerto serial, no al stdin de cat.
    */
   async handleMonitorSend(data) {
     const { port, data: text } = data;
@@ -440,10 +487,11 @@ class ESP32FlasherModule {
     if (!monitor) return { status: 404, error: `No hay monitor activo en ${port}` };
 
     try {
-      monitor.process.stdin.write(text + '\n');
+      // Escribir directamente al puerto serial (no al stdin de cat)
+      await fs.promises.writeFile(port, text + '\n');
       return { status: 200, data: { port, sent: text } };
     } catch (err) {
-      return { status: 500, error: `Error enviando datos: ${err.message}` };
+      return { status: 500, error: `Error enviando datos al puerto ${port}: ${err.message}` };
     }
   }
 
@@ -937,12 +985,14 @@ class ESP32FlasherModule {
         buf.lines = buf.lines.slice(-500);
       }
 
-      // Resolver waiters del long-poll
-      const lines = buf.lines.splice(0);
-      for (const waiter of buf.waiters) {
-        waiter(lines);
+      // Resolver waiters del long-poll (enviar solo las líneas nuevas, no todo el buffer)
+      if (buf.waiters.length > 0) {
+        const newLines = data.lines.slice();
+        const waiters = buf.waiters.splice(0);
+        for (const waiter of waiters) {
+          waiter(newLines);
+        }
       }
-      buf.waiters = [];
 
       // Publicar como evento interno para la UI web
       this.eventBus.publish('flash.serial_output', {
@@ -1014,26 +1064,25 @@ class ESP32FlasherModule {
     }
 
     // Long-poll: esperar hasta 30s
-    let resolved = false;
+    await new Promise((resolve) => {
+      let done = false;
 
-    const promise = new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        const idx = buf.waiters.indexOf(resolve);
-        if (idx >= 0) buf.waiters.splice(idx, 1);
-        req.res.json({ lines: [], device });
-      }, 30000);
-
-      buf.waiters.push((lines) => {
-        if (resolved) return;
-        resolved = true;
+      const finish = (lines) => {
+        if (done) return;
+        done = true;
         clearTimeout(timer);
+        // Limpiar waiter del array
+        const idx = buf.waiters.indexOf(waiter);
+        if (idx >= 0) buf.waiters.splice(idx, 1);
         req.res.json({ lines, device });
-      });
-    });
+        resolve();
+      };
 
-    await promise;
+      const timer = setTimeout(() => finish([]), 30000);
+
+      const waiter = (lines) => finish(lines);
+      buf.waiters.push(waiter);
+    });
   }
 
   /**

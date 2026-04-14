@@ -1,0 +1,76 @@
+{
+  "id": "recipe-analyzer",
+  "name": "recipe-analyzer",
+  "description": "Análisis profundo de recetas: viabilidad, costes reales, alérgenos, tiempos, dificultad. Entrada: receta JSON estructurada. Salida: análisis completo.",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "prompt_file": "prompts/recipe-analyzer-system.md",
+
+  "tools": [
+    "recetas.ingredientes",
+    "recetas.obtener",
+    "recetas.calcular_costes"
+  ],
+
+  "provider": "auto",
+  "temperature": 0.2,
+  "max_tokens": 6000,
+
+  "context_enabled": true,
+  "timeout_ms": 180000,
+  "max_retries": 2,
+
+  "event_listener": {
+    "event": "receta.structuring.completed",
+    "context_mapping": {
+      "receta_id": "$.receta.id",
+      "projectId": "$.projectId",
+      "receta": "$.receta",
+      "ingestion_id": "$.ingestion_id",
+      "timestamp": "$.timestamp"
+    }
+  },
+
+  "publish_on_success": {
+    "event": "receta.analysis.completed",
+    "payload_template": {
+      "receta_id": "$.context.receta_id",
+      "projectId": "$.context.projectId",
+      "receta": "$.context.receta",
+      "analisis": "$.result.analisis",
+      "timestamp": "$.timestamp"
+    }
+  },
+
+  "publish_on_failure": {
+    "event": "receta.analysis.failed",
+    "payload_template": {
+      "receta_id": "$.context.receta_id",
+      "projectId": "$.context.projectId",
+      "error": "$.error.message",
+      "timestamp": "$.timestamp"
+    }
+  },
+
+  "metadata": {
+    "type": "pipeline-agent",
+    "domain": "recetas",
+    "pipeline_role": "step-3-analysis",
+    "author": "system",
+    "created_at": "2026-04-14",
+    "tags": ["recipe", "analysis", "viability", "cost-calculation", "allergen-detection"]
+  },
+
+  "created_at": "2026-04-14T00:00:00.000Z",
+  "updated_at": "2026-04-14T00:00:00.000Z",
+  "stats": {
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
+    "last_execution": null
+  }
+}

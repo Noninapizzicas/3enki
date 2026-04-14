@@ -19,7 +19,7 @@
     "subscribes": [
       { "event": "project.activated", "handler": "onProjectActivated" },
       { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "carta.generada", "handler": "onCartaGenerada" }
+      { "event": "carta.actualizada", "handler": "onCartaGenerada" }
     ]
   },
 

@@ -42,18 +42,8 @@
     ],
     "subscribes": [
       {
-        "event": "menu.generado",
-        "description": "Menú generado por IA - actualizar catálogo",
-        "handler": "onMenuGenerado"
-      },
-      {
-        "event": "menu.validado",
-        "description": "Menú validado - aplicar al catálogo activo",
-        "handler": "onMenuValidado"
-      },
-      {
-        "event": "carta.generada",
-        "description": "Carta modificada por menu-generator — auto-sync al catálogo",
+        "event": "carta.actualizada",
+        "description": "Carta creada o modificada — auto-sync al catálogo de productos",
         "handler": "onCartaGenerada"
       },
       {

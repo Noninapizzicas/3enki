@@ -91,7 +91,7 @@ class CategoriasModule {
   // Event Handlers
   // ==========================================
 
-  async onMenuGenerado(event) {
+  async onCartaActualizada(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
     const { project_id, categorias } = eventData;

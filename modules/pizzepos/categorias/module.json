@@ -35,9 +35,9 @@
     ],
     "subscribes": [
       {
-        "event": "menu.generado",
-        "description": "Menú generado - sincronizar categorías",
-        "handler": "onMenuGenerado"
+        "event": "carta.actualizada",
+        "description": "Carta creada o modificada — sincronizar categorías",
+        "handler": "onCartaActualizada"
       }
     ]
   },

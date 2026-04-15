@@ -107,7 +107,12 @@
       <div class="cartas-list">
         {#each cartas as c (c.id)}
           {@const isGen = generating.has(c.id)}
-          <button class="carta-row" on:click={() => handleView(c)}>
+          <div
+            class="carta-row"
+            role="button"
+            tabindex="0"
+            on:click={() => handleView(c)}
+            on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleView(c)}>
             <div class="carta-info">
               <span class="carta-name">{c.nombre}</span>
               <span class="carta-meta">{c.productos} prod · {c.categorias} cat</span>
@@ -121,7 +126,7 @@
                 {isGen ? '⏳' : '🔄'}
               </button>
             </div>
-          </button>
+          </div>
         {/each}
       </div>
     {/if}

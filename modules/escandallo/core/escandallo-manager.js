@@ -5,13 +5,15 @@
  * - Cálculo de coste: receta + ingredientes + precios = coste total + porción
  * - Persistencia simple (sin versionado complejo)
  * - Detección de alertas (ingrediente subió precio)
- * - Búsqueda por rango de coste
+ * - Búsqueda por rango de coste con filtros y ranking
  */
 
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
+const SearchFilters = require('./search-filters');
+const SearchRanker = require('./search-ranker');
 
 class EscandalloManager {
   constructor(projectId, basePath, logger) {
@@ -20,6 +22,10 @@ class EscandalloManager {
     this.logger = logger;
     this.db = null;
     this.dbPath = null;
+
+    // Search utilities
+    this.filters = new SearchFilters(logger);
+    this.ranker = new SearchRanker(logger);
   }
 
   // ==========================================
@@ -283,43 +289,112 @@ class EscandalloManager {
   // ==========================================
 
   /**
-   * Busca escandallos por criterios
+   * Busca escandallos por criterios (legacy method)
    */
   async search(criteria = {}) {
-    let sql = `SELECT * FROM escandallo WHERE proyecto_id = ?`;
-    const params = [this.projectId];
+    const searchCriteria = {
+      ...criteria,
+      proyecto_id: this.projectId
+    };
 
-    if (criteria.coste_min !== undefined) {
-      sql += ` AND coste_porcion >= ?`;
-      params.push(criteria.coste_min);
-    }
-    if (criteria.coste_max !== undefined) {
-      sql += ` AND coste_porcion <= ?`;
-      params.push(criteria.coste_max);
-    }
-
-    if (criteria.sin_precio === true) {
-      sql += ` AND notas IS NOT NULL`;
+    const validation = this.filters.validate(searchCriteria);
+    if (!validation.valid) {
+      this.logger.warn('escandallo.search.invalid_criteria', {
+        error: validation.error
+      });
+      return [];
     }
 
-    if (criteria.con_alerta === true) {
-      sql += ` AND id IN (SELECT DISTINCT escandallo_id FROM escandallo_alerts WHERE leida = 0)`;
+    const { sql, params } = this.filters.buildQuery(searchCriteria, {
+      sort: 'reciente',
+      limit: criteria.limit || 50
+    });
+
+    try {
+      const results = await this.all(sql, params);
+      return results || [];
+    } catch (err) {
+      this.logger.error('escandallo.search.error', {
+        error: err.message
+      });
+      return [];
     }
+  }
 
-    if (criteria.esta_semana === true) {
-      const semanaPasada = Date.now() - (7 * 24 * 60 * 60 * 1000);
-      sql += ` AND calculado_at >= ?`;
-      params.push(semanaPasada);
+  /**
+   * Busca y ordena escandallos por relevancia
+   */
+  async searchAndRank(criteria = {}, options = {}) {
+    try {
+      const searchCriteria = {
+        ...criteria,
+        proyecto_id: this.projectId
+      };
+
+      const validation = this.filters.validate(searchCriteria);
+      if (!validation.valid) {
+        this.logger.warn('escandallo.search_and_rank.invalid_criteria', {
+          error: validation.error
+        });
+        return {
+          results: [],
+          summary: { total: 0 },
+          error: validation.error
+        };
+      }
+
+      // Get results
+      const { sql, params } = this.filters.buildQuery(searchCriteria, {
+        limit: options.limit || 100,
+        offset: options.offset || 0
+      });
+
+      const results = await this.all(sql, params);
+
+      if (!results || results.length === 0) {
+        return {
+          results: [],
+          summary: { total: 0 }
+        };
+      }
+
+      // Rank results
+      const ranked = this.ranker.rank(results, options.rankBy || 'relevance');
+
+      return {
+        results: ranked,
+        summary: this.ranker.getSummary(ranked),
+        count: ranked.length
+      };
+    } catch (err) {
+      this.logger.error('escandallo.search_and_rank.error', {
+        error: err.message
+      });
+      return {
+        results: [],
+        summary: { total: 0 },
+        error: err.message
+      };
     }
+  }
 
-    sql += ` ORDER BY calculado_at DESC`;
+  /**
+   * Get top anomalies
+   */
+  async getTopAnomalies(limit = 10) {
+    try {
+      const results = await this.search({
+        proyecto_id: this.projectId,
+        limit: limit * 3 // Get more, then rank
+      });
 
-    if (criteria.limit) {
-      sql += ` LIMIT ?`;
-      params.push(criteria.limit);
+      return this.ranker.getTopAnomalies(results, limit);
+    } catch (err) {
+      this.logger.error('escandallo.get_top_anomalies.error', {
+        error: err.message
+      });
+      return [];
     }
-
-    return this.all(sql, params);
   }
 
   // ==========================================

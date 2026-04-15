@@ -186,8 +186,95 @@ class EscandalloModule {
       confirmation: false
     });
 
-    this.logger.info('escandallo.analyzer_tools.registered', {
-      tools_count: 3
+    // Tool 4: escandallo.buscar
+    this.moduleLoader.toolsRegistry.set('escandallo.buscar', {
+      name: 'escandallo.buscar',
+      description: 'Search escandallos by criteria: cost range, date range, alert presence, missing prices.',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: {
+            type: 'string',
+            description: 'Project ID for database access'
+          },
+          coste_min: {
+            type: 'number',
+            description: 'Minimum cost per portion (€)'
+          },
+          coste_max: {
+            type: 'number',
+            description: 'Maximum cost per portion (€)'
+          },
+          tiene_alerta: {
+            type: 'boolean',
+            description: 'Filter by alert presence (true=has alerts, false=no alerts)'
+          },
+          tiene_alerta_sin_leer: {
+            type: 'boolean',
+            description: 'Filter by unread alerts'
+          },
+          desde_fecha: {
+            type: 'integer',
+            description: 'Start date timestamp (milliseconds)'
+          },
+          hasta_fecha: {
+            type: 'integer',
+            description: 'End date timestamp (milliseconds)'
+          },
+          sin_precio: {
+            type: 'boolean',
+            description: 'Filter escandallos with missing prices'
+          },
+          limit: {
+            type: 'integer',
+            description: 'Max results to return (default: 50, max: 100)'
+          }
+        },
+        required: ['project_id']
+      },
+      handler: this.toolBuscar.bind(this),
+      module: 'escandallo',
+      confirmation: false
+    });
+
+    // Tool 5: escandallo.buscar_y_ordenar
+    this.moduleLoader.toolsRegistry.set('escandallo.buscar_y_ordenar', {
+      name: 'escandallo.buscar_y_ordenar',
+      description: 'Search escandallos with intelligent ranking by relevance, anomaly score, cost, or recency.',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: {
+            type: 'string',
+            description: 'Project ID for database access'
+          },
+          coste_min: {
+            type: 'number',
+            description: 'Minimum cost per portion (€)'
+          },
+          coste_max: {
+            type: 'number',
+            description: 'Maximum cost per portion (€)'
+          },
+          rankBy: {
+            type: 'string',
+            enum: ['relevance', 'cost', 'cost_desc', 'alerts', 'recent', 'old'],
+            description: 'Ranking strategy: relevance (anomalies/alerts), cost (low to high), cost_desc (high to low), alerts, recent, old'
+          },
+          limit: {
+            type: 'integer',
+            description: 'Max results (default: 50, max: 100)'
+          }
+        },
+        required: ['project_id']
+      },
+      handler: this.toolBuscarYOrdenar.bind(this),
+      module: 'escandallo',
+      confirmation: false
+    });
+
+    this.logger.info('escandallo.search_tools.registered', {
+      tools_count: 5
     });
   }
 
@@ -928,6 +1015,117 @@ class EscandalloModule {
       };
     } catch (err) {
       this.logger.error('escandallo.obtener_alertas.error', {
+        error: err.message
+      });
+      return {
+        error: err.message,
+        status: 500
+      };
+    }
+  }
+
+  // ==========================================
+  // Search Tools
+  // ==========================================
+
+  /**
+   * Tool: escandallo.buscar
+   * Search with filters
+   */
+  async toolBuscar(params) {
+    try {
+      const { project_id, coste_min, coste_max, tiene_alerta, tiene_alerta_sin_leer, desde_fecha, hasta_fecha, sin_precio, limit = 50 } = params;
+
+      if (!project_id) {
+        return {
+          error: 'Missing required parameter: project_id',
+          status: 400
+        };
+      }
+
+      // Limit max results
+      const safeLimit = Math.min(limit, 100);
+
+      const manager = await this.getManager(project_id);
+      const results = await manager.search({
+        coste_min,
+        coste_max,
+        tiene_alerta,
+        tiene_alerta_sin_leer,
+        desde_fecha,
+        hasta_fecha,
+        sin_precio,
+        limit: safeLimit
+      });
+
+      return {
+        status: 200,
+        data: {
+          results: results || [],
+          count: results ? results.length : 0,
+          filters_applied: {
+            coste_min,
+            coste_max,
+            tiene_alerta,
+            tiene_alerta_sin_leer,
+            desde_fecha,
+            hasta_fecha,
+            sin_precio
+          }
+        }
+      };
+    } catch (err) {
+      this.logger.error('escandallo.buscar.error', {
+        error: err.message
+      });
+      return {
+        error: err.message,
+        status: 500
+      };
+    }
+  }
+
+  /**
+   * Tool: escandallo.buscar_y_ordenar
+   * Search with intelligent ranking
+   */
+  async toolBuscarYOrdenar(params) {
+    try {
+      const { project_id, coste_min, coste_max, rankBy = 'relevance', limit = 50 } = params;
+
+      if (!project_id) {
+        return {
+          error: 'Missing required parameter: project_id',
+          status: 400
+        };
+      }
+
+      // Limit max results
+      const safeLimit = Math.min(limit, 100);
+
+      const manager = await this.getManager(project_id);
+      const searchResult = await manager.searchAndRank(
+        {
+          coste_min,
+          coste_max
+        },
+        {
+          rankBy,
+          limit: safeLimit
+        }
+      );
+
+      return {
+        status: 200,
+        data: {
+          results: searchResult.results || [],
+          summary: searchResult.summary,
+          count: searchResult.count || 0,
+          rankBy
+        }
+      };
+    } catch (err) {
+      this.logger.error('escandallo.buscar_y_ordenar.error', {
         error: err.message
       });
       return {

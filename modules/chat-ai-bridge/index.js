@@ -1,7 +1,6 @@
 const crypto = require('crypto');
 
 const { EVENTS } = require('../../core/constants');
-const MessageSanitizer = require('../../core/message-sanitizer');
 
 /**
  * Chat AI Bridge Module
@@ -611,23 +610,11 @@ class ChatAiBridgeModule {
       });
     });
 
-    // Sanitizar contenido de respuesta para evitar [object Object]
-    const sanitizedContent = MessageSanitizer.sanitizeMessage(aiResponse.content || '[No response]');
-
-    // Reportar problemas si se encuentran
-    if (sanitizedContent !== (aiResponse.content || '[No response]')) {
-      this.logger.warn('chat-ai-bridge.response-sanitized', {
-        request_id: requestId,
-        original_length: (aiResponse.content || '').length,
-        sanitized_length: sanitizedContent.length
-      });
-    }
-
     await this.eventBus.publish('session.save.request', {
       request_id: requestId,
       conversation_id,
       role: 'assistant',
-      content: sanitizedContent,
+      content: aiResponse.content || '[No response]',
       tokens: aiResponse.tokens,
       cost: aiResponse.cost,
       metadata: {
@@ -657,11 +644,8 @@ class ChatAiBridgeModule {
     this.pendingAIRequests.delete(request_id);
 
     if (success) {
-      // Sanitizar contenido para evitar [object Object]
-      const sanitizedContent = MessageSanitizer.sanitizeMessage(content || '');
-
       pending.resolve({
-        content: sanitizedContent,
+        content,
         tool_calls_executed: tool_calls_executed || [],
         tokens,
         cost,

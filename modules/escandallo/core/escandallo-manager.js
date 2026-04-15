@@ -404,6 +404,26 @@ class EscandalloManager {
   }
 
   /**
+   * Obtiene alertas para un escandallo específico
+   */
+  async getAlertas(escandalloId) {
+    try {
+      const alerts = await this.all(
+        `SELECT * FROM escandallo_alerts WHERE escandallo_id = ?
+         ORDER BY detectada_at DESC`,
+        [escandalloId]
+      );
+      return alerts || [];
+    } catch (err) {
+      this.logger.error('escandallo.get_alerts.error', {
+        escandallo_id: escandalloId,
+        error: err.message
+      });
+      return [];
+    }
+  }
+
+  /**
    * Marca alerta como leída
    */
   async markAlertAsRead(alertaId) {

@@ -1,0 +1,10 @@
+{
+  "id": "impresion-cartas",
+  "name": "Cartas Imprimibles",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 1,
+  "routes": ["/carta-impresion"],
+  "icon": "🖨️",
+  "label": "Imprimir"
+}

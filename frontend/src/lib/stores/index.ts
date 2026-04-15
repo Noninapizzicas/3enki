@@ -255,6 +255,37 @@ export {
 } from './carta-design';
 export type { DesignProfile, DesignMeta, CartaDesignState, CartaResumen } from './carta-design';
 
+// Carta Marketing Store
+export {
+  marketingStore,
+  loadPerfil,
+  loadActividad,
+  updatePerfil,
+  clearError as clearMarketingError,
+  perfil,
+  actividad,
+  marketingLoading,
+  marketingSaving,
+  marketingError,
+  onboardingCompletado
+} from './carta-marketing';
+export type { PerfilMarca, MarketingActividad, MarketingState } from './carta-marketing';
+
+// Carta Impresion Store
+export {
+  impresionStore,
+  loadImpresion,
+  generarImpresion,
+  selectCarta as selectCartaImpresion,
+  clearError as clearImpresionError,
+  initImpresionSubscriptions,
+  selectedImpresion,
+  impresionLoading,
+  impresionError,
+  generatingCartas
+} from './carta-impresion';
+export type { ImpresionMeta, ImpresionItem, ImpresionState } from './carta-impresion';
+
 // HTML Preview Store
 export {
   htmlPreviewStore,

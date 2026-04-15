@@ -1,0 +1,127 @@
+{
+  "name": "carta-scheduler",
+  "version": "1.0.0",
+  "description": "Programación de cambios de carta por canal. Conversacional via agente planner, detección de conflictos, confirmación previa antes de aplicar.",
+  "author": "Pizzepos Team",
+  "main": "index.js",
+
+  "events": {
+    "subscribes": [
+      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "carta-scheduler", "action": "reglas", "handler": "handleListarReglas" },
+    { "domain": "carta-scheduler", "action": "proximos", "handler": "handleProximosCambios" },
+    { "domain": "carta-scheduler", "action": "health", "handler": "handleHealth" }
+  ],
+
+  "tools": [
+    {
+      "name": "scheduler.crear_regla",
+      "description": "Crea una regla de programación de carta. La regla incluye cambios por canal (array de { canal, carta_id }) y un trigger (cron, datetime, interval). Después de crear, usar scheduler.detectar_conflictos si hay dudas.",
+      "handler": "toolCrearRegla",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "regla": {
+            "type": "object",
+            "description": "{ descripcion, cambios: [{canal, carta_id}], trigger: {type, ...}, activa }"
+          }
+        },
+        "required": ["project_id", "regla"]
+      }
+    },
+    {
+      "name": "scheduler.listar_reglas",
+      "description": "Lista todas las reglas de programación del proyecto",
+      "handler": "toolListarReglas",
+      "parameters": {
+        "type": "object",
+        "properties": { "project_id": { "type": "string" } },
+        "required": ["project_id"]
+      }
+    },
+    {
+      "name": "scheduler.eliminar_regla",
+      "description": "Elimina una regla y su job en el scheduler",
+      "handler": "toolEliminarRegla",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "regla_id": { "type": "string" }
+        },
+        "required": ["project_id", "regla_id"]
+      }
+    },
+    {
+      "name": "scheduler.detectar_conflictos",
+      "description": "Detecta si una nueva regla entra en conflicto con otras activas (mismo canal)",
+      "handler": "toolDetectarConflictos",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "nueva_regla": { "type": "object" }
+        },
+        "required": ["project_id", "nueva_regla"]
+      }
+    },
+    {
+      "name": "scheduler.proximos_cambios",
+      "description": "Lista cambios pendientes de confirmación (triggered pero esperando al usuario)",
+      "handler": "toolProximosCambios",
+      "parameters": {
+        "type": "object",
+        "properties": { "project_id": { "type": "string" } },
+        "required": ["project_id"]
+      }
+    },
+    {
+      "name": "scheduler.confirmar",
+      "description": "Usuario confirma un cambio pendiente. Aplica los cambios via tarifas.assign.",
+      "handler": "toolConfirmar",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "pendiente_id": { "type": "string" }
+        },
+        "required": ["project_id", "pendiente_id"]
+      }
+    },
+    {
+      "name": "scheduler.rechazar",
+      "description": "Usuario rechaza un cambio pendiente. No se aplica.",
+      "handler": "toolRechazar",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "pendiente_id": { "type": "string" },
+          "razon": { "type": "string" }
+        },
+        "required": ["project_id", "pendiente_id"]
+      }
+    }
+  ],
+
+  "agents": {
+    "scheduler-planner": "Conversa con el usuario para crear reglas de programación",
+    "scheduler-dispatcher": "Cuando un cambio se dispara, avisa al usuario y espera confirmación"
+  },
+
+  "observability": {
+    "metrics": {
+      "counters": [
+        "carta-scheduler.regla.triggered",
+        "carta-scheduler.pendiente.aplicado",
+        "carta-scheduler.pendiente.rechazado"
+      ]
+    }
+  }
+}

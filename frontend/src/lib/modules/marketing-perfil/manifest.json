@@ -1,0 +1,10 @@
+{
+  "id": "marketing-perfil",
+  "name": "Perfil de Marca",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 1,
+  "routes": ["/carta-marketing"],
+  "icon": "🎨",
+  "label": "Perfil"
+}

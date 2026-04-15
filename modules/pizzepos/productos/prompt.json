@@ -5,15 +5,16 @@
   "intent": "Mantener el catalogo de productos del POS: nombre, precio, categoria, ingredientes, imagen",
   "capabilities": [
     "almacenar productos con precio, categoria, ingredientes y alergenos",
-    "sincronizar desde menu.generado y carta.generada",
+    "sincronizar desde carta.actualizada (emitido por carta-manager)",
     "actualizar precios y disponibilidad"
   ],
   "domain_knowledge": {
     "producto": "nombre + precio + categoria + ingredientes[] + alergenos[] + imagen + disponible",
-    "sincronizacion": "cuando se genera un menu nuevo, los productos se crean/actualizan automaticamente"
+    "sincronizacion": "cuando carta-manager emite carta.actualizada, los productos se crean/actualizan automaticamente",
+    "fuente_de_verdad": "carta-manager es el dueño de los datos de cartas. productos solo los sincroniza al POS"
   },
   "integrations": {
-    "listens_to": ["menu.generado", "menu.validado", "carta.generada", "project.activated"],
-    "emits": ["producto.creado", "producto.actualizado"]
+    "listens_to": ["carta.actualizada", "project.activated"],
+    "emits": ["producto.creado", "producto.actualizado", "catalogo.actualizado"]
   }
 }

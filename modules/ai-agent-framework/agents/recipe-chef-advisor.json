@@ -1,0 +1,126 @@
+{
+  "id": "recipe-chef-advisor",
+  "name": "recipe-chef-advisor",
+  "description": "Expert chef advisor: valida técnicas culinarias, mejora recetas, sugiere optimizaciones, explica métodos de cocción.",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "prompt_file": "prompts/recipe-chef-advisor-system.md",
+
+  "tools": [
+    "recetas.obtener",
+    "recetas.actualizar",
+    "recetas.buscar",
+    "escandallo.calcular",
+    "recipe-chef-advisor.mejorar_receta",
+    "recipe-chef-advisor.validar_tecnica",
+    "recipe-chef-advisor.explicar_tecnica",
+    "recipe-chef-advisor.sugerir_relacionadas"
+  ],
+
+  "provider": "auto",
+  "temperature": 0.4,
+  "max_tokens": 3000,
+
+  "context_enabled": true,
+  "timeout_ms": 120000,
+  "max_retries": 1,
+
+  "event_listener": {
+    "event": "receta.estructurada",
+    "context_mapping": {
+      "receta_id": "$.receta_id",
+      "projectId": "$.projectId",
+      "receta": "$.receta",
+      "ingredientes": "$.ingredientes",
+      "tecnica": "$.tecnica",
+      "dificultad": "$.dificultad",
+      "timestamp": "$.timestamp"
+    }
+  },
+
+  "publish_on_success": {
+    "event": "receta.revision_culinaria",
+    "payload_template": {
+      "receta_id": "$.context.receta_id",
+      "projectId": "$.context.projectId",
+      "receta": "$.context.receta",
+      "validacion_tecnica": "$.result.validacion_tecnica",
+      "sugerencias_mejora": "$.result.sugerencias_mejora",
+      "analisis_sabores": "$.result.analisis_sabores",
+      "tecnicas_detalladas": "$.result.tecnicas_detalladas",
+      "recetas_relacionadas": "$.result.recetas_relacionadas",
+      "puntuacion_culinaria": "$.result.puntuacion_culinaria",
+      "alertas_culinárias": "$.result.alertas_culinárias",
+      "timestamp": "$.timestamp"
+    }
+  },
+
+  "publish_on_failure": {
+    "event": "receta.revision_culinaria.failed",
+    "payload_template": {
+      "receta_id": "$.context.receta_id",
+      "projectId": "$.context.projectId",
+      "error": "$.error.message",
+      "timestamp": "$.timestamp"
+    }
+  },
+
+  "metadata": {
+    "type": "quality-advisor-agent",
+    "domain": "recetas",
+    "pipeline_role": "chef-advisor",
+    "author": "system",
+    "created_at": "2026-04-15",
+    "specialization": "Técnicas culinarias, sabores, optimización, educación gastronómica",
+    "tags": ["chef", "técnicas", "sabores", "mejora", "validación", "gastronomía"]
+  },
+
+  "capabilities": {
+    "validacion_tecnica": {
+      "description": "Valida métodos de cocción, tiempos, proporciones, técnicas",
+      "enabled": true
+    },
+    "mejora_receta": {
+      "description": "Sugiere variantes técnicas, cambios de ingredientes, optimizaciones",
+      "enabled": true
+    },
+    "analisis_sabores": {
+      "description": "Analiza balance de sabores, compatibilidad, acoplamiento con otras recetas",
+      "enabled": true
+    },
+    "educacion_tecnica": {
+      "description": "Explica técnicas culinarias, métodos, trucos de chef",
+      "enabled": true
+    },
+    "sugerencias_relacionadas": {
+      "description": "Sugiere recetas complementarias, variantes, platos relacionados",
+      "enabled": true
+    },
+    "impacto_coste": {
+      "description": "Calcula impacto económico de cambios sugeridos",
+      "enabled": true
+    }
+  },
+
+  "configuration": {
+    "execution_mode": "automatic_on_event",
+    "auto_improve_enabled": true,
+    "suggest_related_recipes": true,
+    "calculate_cost_impact": true,
+    "explain_techniques": "on_request",
+    "min_confidence_threshold": 0.85
+  },
+
+  "created_at": "2026-04-15T00:00:00.000Z",
+  "updated_at": "2026-04-15T00:00:00.000Z",
+  "stats": {
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
+    "last_execution": null
+  }
+}

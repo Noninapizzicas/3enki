@@ -3,11 +3,9 @@
    * Pagina Carta Digital (scoped a proyecto)
    *
    * URL: /[project_id]/carta-digital
-   * Ej:  /peppone/carta-digital
    *
-   * Misma base que menu-generator (chat, work-bar, system-bar).
-   * La work-bar muestra los modulos de zona work-bar filtrados por ruta /carta-digital.
-   * Los paneles flotantes se abren desde ahi.
+   * Backoffice de la carta pública. Configura branding, compone la carta
+   * final (datos + marketing + ofertas), genera PWA.
    */
   import { onMount, onDestroy, getContext } from 'svelte';
   import { page } from '$app/stores';
@@ -22,28 +20,28 @@
     setPageContext({
       route: '/carta-digital',
       title: 'Carta Digital',
-      description: 'Gestión de carta digital del restaurante: configuración, preview, exportación y estadísticas.',
-      instructions: `El usuario está en la gestión de carta digital para el proyecto "${project_id}". Puede usar los paneles de la barra superior o pedirte las cosas por el chat.
+      description: 'Backoffice de la carta pública: branding, composición, ofertas, generación de PWA.',
+      instructions: `Proyecto "${project_id}". Aquí se configura y genera la carta pública que verá el cliente final.
 
-Carta digital es un CONSUMIDOR de datos — muestra la carta pero NO modifica productos, precios ni ingredientes.
-Si el usuario quiere cambiar datos de productos → derivar al módulo menu-generator.
+CARTA-DIGITAL NO MODIFICA DATOS DE CARTA. Para cambiar productos, precios o ingredientes → carta-manager (tools carta.*).
 
-Cuando el usuario dice "la carta", "mi carta digital" se refiere a la carta digital del proyecto activo.
-Cuando menciona "configurar", "tema", "colores", "WhatsApp" se refiere a la configuración visual de la carta digital (eso SÍ es de este módulo).
+Tools de este módulo:
+- cartadigital.get_config: ver configuración de branding
+- cartadigital.update_config: actualizar (WhatsApp, nombre negocio, colores, features)
+- cartadigital.get_carta_publica: obtener la carta compuesta (si existe en caché)
 
-Tools disponibles para esta página:
-- carta-digital.config: ver configuración actual (branding, WhatsApp, tema)
-- carta-digital.update-config: actualizar configuración visual (colores, nombre, WhatsApp)
-- carta-digital.carta-completa: ver carta completa enriquecida
-- carta-digital.ofertas: gestionar ofertas/combos (PROPIO de carta-digital)
-- carta-digital.create-oferta / update-oferta / delete-oferta: CRUD ofertas
-- carta-digital.resenas: ver reseñas de clientes
-- carta-digital.stats: estadísticas de uso (sesiones, pedidos)
-- carta-digital.funnel: análisis de conversión
-- carta-digital.export-static: exportar como web estática (GitHub Pages, Netlify)
+Agentes especializados disponibles via agent.execute.request:
+- cartadigital-composer: compone carta final uniendo datos + marketing + config
+- cartadigital-pwa-builder: genera paquete PWA (HTML + SW + manifest)
+- cartadigital-ofertas: gestiona ofertas y combos (crea, sugiere, valida)
+- cartadigital-reviewer: revisa completitud antes de publicar
 
-Para cambiar productos/precios/ingredientes → usar menu-generator:
-- menu.update_product, menu.add_product, menu.update_prices, etc.`,
+Si el usuario pide:
+- "Configura los colores" / "cambia el WhatsApp" → cartadigital.update_config
+- "Genera la PWA" / "exporta la carta" → dispara cartadigital-pwa-builder
+- "Crea una oferta" / "haz un combo" → dispara cartadigital-ofertas
+- "¿Está todo listo para publicar?" → dispara cartadigital-reviewer
+- "Cambia el precio de X" / "añade producto" → DERIVAR a carta-manager (carta.update_product, carta.update_prices, etc.)`,
       state: {
         projectId: project_id
       }

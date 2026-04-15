@@ -594,6 +594,8 @@ Fecha actual: {{date}}`,
       project_id: projectId,
       project_name: projectData?.name || 'Unknown Project',
       project_description: projectData?.description || '',
+      base_path: projectData?.base_path || null,
+      storage_path: projectData?.base_path ? `${projectData.base_path}/storage` : null,
       prompt_id: projectData?.prompt_id || null,
       provider: projectData?.provider || null,
       model: projectData?.model || null,
@@ -745,10 +747,15 @@ Fecha actual: {{date}}`,
     if ((this.config.includeProjectContext !== false) && projectContext?.project_name) {
       const projectSection = [];
       projectSection.push('## Project Context');
-      projectSection.push(`- **Project**: ${projectContext.project_name}`);
+      projectSection.push(`- **Project**: ${projectContext.project_name} (id: ${projectContext.project_id})`);
 
       if (projectContext.project_description) {
         projectSection.push(`- **Description**: ${projectContext.project_description}`);
+      }
+
+      if (projectContext.storage_path) {
+        projectSection.push(`- **Storage path**: ${projectContext.storage_path}`);
+        projectSection.push(`- **Rutas de archivos**: Al llamar tools con filePath, usa rutas RELATIVAS al storage (ej: "pizzepos/mi-carta.pdf"). El módulo resuelve contra el storage_path. NO pidas al usuario rutas absolutas.`);
       }
 
       if (projectContext.storage_info) {

@@ -785,23 +785,8 @@
       "_VENTAJAS": "Sin dependencias binarias. Ideal para preview y OCR de PDFs escaneados"
     },
     "pdf-parse.extract": {
-      "event": "local.pdf-parse.extract.request",
-      "description": "Extraer texto de PDF usando pdf-parse (simple)",
-      "input": {
-        "pdf": "base64 | path - PDF a procesar (soporta @/ para rutas globales)",
-        "maxPages": "number - Maximo de paginas (0 = todas, opcional)"
-      },
-      "output": {
-        "success": "boolean",
-        "data": {
-          "text": "string - Texto extraido",
-          "pages": "number - Numero de paginas",
-          "info": "object - Metadata (title, author, etc.)",
-          "textLength": "number - Longitud del texto"
-        },
-        "error": "string - Solo si success=false"
-      },
-      "_NOTA_ACCESO": "Acceder resultado via steps.ID.data.text (NO steps.ID.text)"
+      "_DEPRECATED": "ELIMINADO 2026-04-15. Provider retirado. Usar local.pdfjs.extract en su lugar.",
+      "_REEMPLAZO": "local.pdfjs.extract"
     },
     "pdfjs.extract": {
       "event": "local.pdfjs.extract.request",
@@ -1033,7 +1018,6 @@
     "dependencies": {
       "for_local_services": {
         "pdf": "pdfkit",
-        "pdf-parse": "pdf-parse (services/providers/local/pdf-parse)",
         "pdfjs": "pdfjs-dist (services/providers/local/pdfjs) + canvas (opcional para render)",
         "pdf-to-png": "pdf-to-png-converter (services/providers/local/pdf-to-png)",
         "csv": "csv-parser, csv-writer",

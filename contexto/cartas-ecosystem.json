@@ -179,12 +179,14 @@
   },
 
   "providers_PDF": {
-    "ADVERTENCIA_LLM": "Hay 4 providers relacionados con PDF. Para el pipeline de menu-generator, USAR SIEMPRE menu.generate — no llames directamente a providers PDF. El tool menu.generate orquesta todo internamente.",
-    "providers": {
-      "local.pdfjs": "PREFERIDO para menu-generator. Tiene render, info, extract. Usado internamente por menu-generator.",
-      "local.pdf-parse": "Extrae texto de PDFs digitales (no escaneados)",
-      "local.pdf-to-png": "DUPLICA funcionalidad de pdfjs.render — usado por facturas, NO para menu-generator",
-      "local.pdf": "Para CREAR PDFs (no lectura)"
+    "ADVERTENCIA_LLM": "Para el pipeline de menu-generator, USAR SIEMPRE menu.generate — no llames directamente a providers PDF. El tool menu.generate orquesta todo internamente.",
+    "providers_activos": {
+      "local.pdfjs": "PREFERIDO para menu-generator y lectura de PDFs. Tiene render, info, extract. Usado internamente por menu-generator.",
+      "local.pdf-to-png": "LEGACY de facturas. Duplica funcionalmente pdfjs.render. No usar en módulos nuevos — usar pdfjs.",
+      "local.pdf": "Para CREAR PDFs (única forma). Usado por pdf-viewer."
+    },
+    "providers_eliminados": {
+      "local.pdf-parse": "ELIMINADO 2026-04-15. Nadie lo usaba. Si necesitas extraer texto de un PDF digital, usa local.pdfjs.extract."
     },
     "regla": "Si el usuario sube un PDF o foto de carta, NO llamar a pdf_to_png_convert, pdfjs_render ni extract directamente. Llamar a menu.generate pasando filePath — el módulo orquesta todo."
   },

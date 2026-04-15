@@ -367,6 +367,12 @@ class CartaMarketingModule {
     return (await this.toolGetPerfil({ project_id: data?.project_id })).data;
   }
 
+  async handleUpdatePerfil(data) {
+    const result = await this.toolUpdatePerfil(data);
+    if (result.error) throw { status: result.status || 400, code: 'UPDATE_ERROR', message: result.error };
+    return result.data;
+  }
+
   async handleGetActividad(data) {
     return (await this.toolGetActividad({ project_id: data?.project_id })).data;
   }

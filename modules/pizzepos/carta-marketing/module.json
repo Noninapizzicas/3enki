@@ -15,6 +15,7 @@
 
   "ui_handlers": [
     { "domain": "carta-marketing", "action": "perfil", "handler": "handleGetPerfil" },
+    { "domain": "carta-marketing", "action": "update-perfil", "handler": "handleUpdatePerfil" },
     { "domain": "carta-marketing", "action": "actividad", "handler": "handleGetActividad" },
     { "domain": "carta-marketing", "action": "health", "handler": "handleHealth" }
   ],

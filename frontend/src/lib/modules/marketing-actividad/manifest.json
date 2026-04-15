@@ -1,0 +1,10 @@
+{
+  "id": "marketing-actividad",
+  "name": "Actividad",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 2,
+  "routes": ["/carta-marketing"],
+  "icon": "📊",
+  "label": "Actividad"
+}

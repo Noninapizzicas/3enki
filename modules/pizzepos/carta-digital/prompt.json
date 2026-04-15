@@ -1,37 +1,34 @@
 {
   "_type": "module_prompt",
   "_module": "pizzepos/carta-digital",
-  "role": "Carta digital para clientes",
-  "intent": "Carta del restaurante accesible por QR/web con pedidos via WhatsApp, ofertas, reseñas y analytics",
+  "role": "Backoffice de la carta pública",
+  "intent": "Configurar branding, componer la carta pública final (datos + marketing + ofertas + config) y generar la PWA exportable",
   "capabilities": [
-    "servir carta completa enriquecida (fotos, alérgenos, descripciones)",
-    "gestionar sesiones de clientes (mesa → QR → pedido)",
-    "registrar pedidos desde la carta digital",
-    "gestionar ofertas y promociones",
-    "recoger reseñas de clientes",
-    "analytics: funnel de conversión, productos vistos vs pedidos",
-    "exportar como web estática desplegable (GitHub Pages, Netlify)",
-    "chat AI via Cloudflare Worker"
+    "config de branding por proyecto (nombre, WhatsApp, colores, features)",
+    "orquestar la composición de la carta pública via agentes",
+    "servir la carta compuesta (cartadigital.get_carta_publica)",
+    "disparar generación de PWA via agente pwa-builder"
   ],
   "architecture": {
-    "rol": "CONSUMIDOR READ-ONLY de datos de menú",
-    "fuente_de_verdad": "menu-generator es el ÚNICO módulo que gestiona productos, precios, ingredientes y categorías",
-    "carta_digital_solo_lee": "Lee la carta JSON via carta-completa endpoint pero NUNCA modifica productos, precios ni ingredientes",
-    "datos_propios": "Gestiona sus propios datos: config (branding, WhatsApp), ofertas, reseñas, sesiones, funnel",
-    "si_el_usuario_quiere_cambiar_datos": "Derivar a menu-generator (menu.update_product, menu.add_product, etc.)",
-    "reactividad": "Escucha evento carta.generada para saber cuando menu-generator actualiza datos"
+    "rol": "BACKOFFICE de composición y generación",
+    "no_gestiona": "analytics, reseñas, sesiones, pedidos, media serving (cada cosa a su módulo futuro)",
+    "delega_en_agentes": {
+      "cartadigital-composer": "Compone carta final desde carta-manager + marketing + config",
+      "cartadigital-pwa-builder": "Genera paquete PWA (HTML + SW + manifest)",
+      "cartadigital-ofertas": "Gestiona ofertas y combos",
+      "cartadigital-reviewer": "Revisa completitud antes de publicar"
+    },
+    "reactividad": "Escucha carta.actualizada y tarifas.config.actualizada — invalida cache y recompone"
   },
   "rules": [
-    "NUNCA modificar productos, precios, ingredientes o categorías — eso es responsabilidad de menu-generator",
-    "la carta se carga desde el JSON de menu-generator (storage/pizzepos/cartas/) — nunca duplicar datos",
-    "los precios siempre vienen del catálogo — nunca hardcodear",
-    "reaccionar a evento carta.generada para mantenerse sincronizado",
-    "las fotos deben estar optimizadas para web (max 200KB)",
-    "el nombre del negocio, colores y branding vienen de config (update-config) — nunca hardcodear"
+    "NUNCA modificar productos, precios, ingredientes o categorías — eso es responsabilidad de carta-manager",
+    "la config de branding vive aquí (cartadigital.update_config) — pero los datos de carta vienen de carta-manager",
+    "los agentes hacen el trabajo creativo — este módulo solo orquesta",
+    "la carta compuesta está cacheada en memoria — se invalida en carta.actualizada o tarifas.config.actualizada"
   ],
   "integrations": {
-    "listens_to": ["project.activated", "carta.generada"],
-    "depends_on": ["pizzepos/menu-generator (carta JSON en disco)"],
-    "complementa": "carta-design (diseño impresión), carta-impresion (plantillas rápidas)"
+    "listens_to": ["project.activated", "carta.actualizada", "tarifas.config.actualizada"],
+    "depends_on": ["carta-manager (datos)", "carta-marketing (perfil de marca)", "tarifas (asignación canal→carta)"],
+    "complementa": "carta-impresion (versión imprimible), carta-design (diseño editorial)"
   }
 }

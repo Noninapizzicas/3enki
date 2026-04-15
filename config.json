@@ -102,6 +102,7 @@
       "esp32-flasher",
       "carta-manager",
       "carta-marketing",
+      "carta-scheduler",
       "menu-generator",
       "tarifas",
       "recetas",

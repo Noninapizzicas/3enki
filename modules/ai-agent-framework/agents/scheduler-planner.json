@@ -1,0 +1,37 @@
+{
+  "id": "scheduler-planner",
+  "name": "scheduler-planner",
+  "description": "Conversa con el usuario para programar cambios de carta. Interpreta lenguaje natural ('los lunes carta del día'), propone reglas, detecta conflictos y pregunta al usuario cuando hay dudas.",
+  "version": "1.0.0",
+  "enabled": true,
+
+  "prompt_file": "prompts/scheduler-planner-system.md",
+
+  "tools": [
+    "carta.list",
+    "tarifas.get",
+    "scheduler.crear_regla",
+    "scheduler.listar_reglas",
+    "scheduler.eliminar_regla",
+    "scheduler.detectar_conflictos"
+  ],
+
+  "provider": "auto",
+  "temperature": 0.3,
+  "max_tokens": 4000,
+
+  "context_enabled": true,
+  "context_window": 20,
+  "timeout_ms": 120000,
+  "max_retries": 1,
+
+  "metadata": {
+    "type": "domain-agent",
+    "domain": "carta-scheduler",
+    "tags": ["scheduler", "planner", "conversational", "scheduling"]
+  },
+
+  "created_at": "2026-04-14T00:00:00.000Z",
+  "updated_at": "2026-04-14T00:00:00.000Z",
+  "stats": { "executions": 0, "successes": 0, "failures": 0, "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0, "last_execution": null }
+}

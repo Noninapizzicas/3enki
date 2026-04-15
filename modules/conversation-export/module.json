@@ -1,0 +1,55 @@
+{
+  "name": "conversation-export",
+  "version": "1.0.0",
+  "description": "Endpoints HTTP públicos para exportar conversaciones completas (mensajes + tool calls + eventos de agentes + errores) en JSON optimizado para análisis por LLMs externos. Autenticación por token.",
+  "author": "Pizzepos Team",
+  "main": "index.js",
+
+  "events": {
+    "subscribes": []
+  },
+
+  "config": {
+    "token": null,
+    "_token_note": "Configurar token aquí o via ENV CONVERSATION_EXPORT_TOKEN. El token se pasa como ?token=... en las URLs de los endpoints."
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealth",
+      "description": "Health check. Indica si hay token configurado."
+    },
+    {
+      "method": "GET",
+      "path": "/sessions/:project_id",
+      "handler": "handleListSessions",
+      "description": "Lista las sesiones recientes de un proyecto. Query: ?token=X&limit=20"
+    },
+    {
+      "method": "GET",
+      "path": "/session/:session_id",
+      "handler": "handleGetSession",
+      "description": "Export completo de una sesión. Query: ?token=X&project_id=Y&verbose=true"
+    },
+    {
+      "method": "GET",
+      "path": "/latest/:project_id",
+      "handler": "handleGetLatest",
+      "description": "Export de la sesión más reciente de un proyecto. Query: ?token=X&verbose=true"
+    }
+  ],
+
+  "dependencies": [
+    "chat-session",
+    "database-manager"
+  ],
+
+  "tags": [
+    "export",
+    "debug",
+    "conversation",
+    "observability"
+  ]
+}

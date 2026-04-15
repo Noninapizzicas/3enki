@@ -57,6 +57,7 @@
       "prompt-composer",
       "scheduler",
       "project-manager",
+      "conversation-export",
       "system-inspector",
       "ai-gateway",
       "ai-agent-framework",

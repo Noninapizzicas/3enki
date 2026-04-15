@@ -1,12 +1,17 @@
 /**
- * Escandallo Module v1.0.0
+ * Escandallo Module v2.0.0
  *
- * Análisis de costes y escandallo de recetas.
- * Lee datos del módulo recetas (via eventos + acceso directo al storage).
+ * Análisis de costes de recetas basado en precios de mercado.
+ *
+ * Integrates EscandalloManager for cost calculations with market prices.
+ * Tools expose escandallo data for agents (analyzer, cost optimization, etc).
  *
  * Tools:
  *   escandallo.receta            — Escandallo completo de una receta
  *   escandallo.global            — Escandallo global de todas las recetas
+ *   escandallo.obtener           — Get full escandallo calculation (for analyzer agent)
+ *   escandallo.obtener_historico — Get historical calculations (for trend analysis)
+ *   escandallo.obtener_alertas   — Get price change alerts (for anomaly detection)
  *   escandallo.comparar_precios  — Compara mercado vs compra
  *   escandallo.simular_precio    — Simula precios de venta
  *   escandallo.ingrediente_impacto — Impacto de un ingrediente
@@ -16,31 +21,261 @@
 
 const path = require('path');
 const fs = require('fs').promises;
+const EscandalloManager = require('./core/escandallo-manager');
 
 class EscandalloModule {
   constructor() {
     this.name = 'escandallo';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
+    this.moduleLoader = null;
 
     // Cache: project_id → { recetas, ingredientes }
     this.cache = new Map();
     this.projectPaths = new Map();
+
+    // Manager: project_id → EscandalloManager instance
+    this.managers = new Map();
   }
 
   async onLoad(context) {
     this.eventBus = context.eventBus;
     this.logger = context.logger;
     this.metrics = context.metrics;
+    this.moduleLoader = context.moduleLoader;
+
+    // Register analyzer tools
+    this.registerAnalyzerTools();
+
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
 
   async onUnload() {
     this.cache.clear();
     this.projectPaths.clear();
+
+    // Close all managers
+    for (const [projectId, manager] of this.managers) {
+      try {
+        if (manager && typeof manager.close === 'function') {
+          await manager.close();
+        }
+      } catch (err) {
+        this.logger.error('escandallo.manager.close_failed', {
+          project_id: projectId,
+          error: err.message
+        });
+      }
+    }
+    this.managers.clear();
+
     this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // Manager initialization and caching
+  // ==========================================
+
+  /**
+   * Get or create EscandalloManager for a project
+   */
+  async getManager(projectId) {
+    if (!this.managers.has(projectId)) {
+      const dbPath = this.resolveDbPath(projectId);
+      const manager = new EscandalloManager(dbPath, this.logger);
+      await manager.initialize();
+      this.managers.set(projectId, manager);
+    }
+    return this.managers.get(projectId);
+  }
+
+  /**
+   * Resolve database path for a project
+   */
+  resolveDbPath(projectId) {
+    const paths = this.projectPaths.get(projectId);
+    if (!paths) {
+      throw new Error(`Project ${projectId} not registered. Path unknown.`);
+    }
+    return path.join(paths.storagePath, 'escandallo.db');
+  }
+
+  // ==========================================
+  // Tool registration (for analyzer agent)
+  // ==========================================
+
+  registerAnalyzerTools() {
+    if (!this.moduleLoader || !this.moduleLoader.toolsRegistry) {
+      this.logger.warn('escandallo.register_tools.no_module_loader');
+      return;
+    }
+
+    // Tool 1: escandallo.obtener
+    this.moduleLoader.toolsRegistry.set('escandallo.obtener', {
+      name: 'escandallo.obtener',
+      description: 'Get full escandallo calculation with cost breakdown. Used by analyzer agent to validate calculations.',
+      parameters: {
+        type: 'object',
+        properties: {
+          escandallo_id: {
+            type: 'string',
+            description: 'The escandallo ID (e.g., "esc_rec_pasta_1713090000")'
+          },
+          project_id: {
+            type: 'string',
+            description: 'Project ID for database access'
+          }
+        },
+        required: ['escandallo_id', 'project_id']
+      },
+      handler: this.toolObtenerEscandallo.bind(this),
+      module: 'escandallo',
+      confirmation: false
+    });
+
+    // Tool 2: escandallo.obtener_historico
+    this.moduleLoader.toolsRegistry.set('escandallo.obtener_historico', {
+      name: 'escandallo.obtener_historico',
+      description: 'Get historical escandallo calculations for a recipe to detect price trends and anomalies.',
+      parameters: {
+        type: 'object',
+        properties: {
+          receta_id: {
+            type: 'string',
+            description: 'The recipe ID to get history for'
+          },
+          project_id: {
+            type: 'string',
+            description: 'Project ID for database access'
+          },
+          limit: {
+            type: 'integer',
+            description: 'Number of historical records to retrieve (default: 5)',
+            default: 5
+          }
+        },
+        required: ['receta_id', 'project_id']
+      },
+      handler: this.toolObtenerHistorico.bind(this),
+      module: 'escandallo',
+      confirmation: false
+    });
+
+    // Tool 3: escandallo.obtener_alertas
+    this.moduleLoader.toolsRegistry.set('escandallo.obtener_alertas', {
+      name: 'escandallo.obtener_alertas',
+      description: 'Get price change alerts for an escandallo. Helps analyzer detect anomalies and significant price movements.',
+      parameters: {
+        type: 'object',
+        properties: {
+          escandallo_id: {
+            type: 'string',
+            description: 'The escandallo ID to get alerts for'
+          },
+          project_id: {
+            type: 'string',
+            description: 'Project ID for database access'
+          }
+        },
+        required: ['escandallo_id', 'project_id']
+      },
+      handler: this.toolObtenerAlertas.bind(this),
+      module: 'escandallo',
+      confirmation: false
+    });
+
+    // Tool 4: escandallo.buscar
+    this.moduleLoader.toolsRegistry.set('escandallo.buscar', {
+      name: 'escandallo.buscar',
+      description: 'Search escandallos by criteria: cost range, date range, alert presence, missing prices.',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: {
+            type: 'string',
+            description: 'Project ID for database access'
+          },
+          coste_min: {
+            type: 'number',
+            description: 'Minimum cost per portion (€)'
+          },
+          coste_max: {
+            type: 'number',
+            description: 'Maximum cost per portion (€)'
+          },
+          tiene_alerta: {
+            type: 'boolean',
+            description: 'Filter by alert presence (true=has alerts, false=no alerts)'
+          },
+          tiene_alerta_sin_leer: {
+            type: 'boolean',
+            description: 'Filter by unread alerts'
+          },
+          desde_fecha: {
+            type: 'integer',
+            description: 'Start date timestamp (milliseconds)'
+          },
+          hasta_fecha: {
+            type: 'integer',
+            description: 'End date timestamp (milliseconds)'
+          },
+          sin_precio: {
+            type: 'boolean',
+            description: 'Filter escandallos with missing prices'
+          },
+          limit: {
+            type: 'integer',
+            description: 'Max results to return (default: 50, max: 100)'
+          }
+        },
+        required: ['project_id']
+      },
+      handler: this.toolBuscar.bind(this),
+      module: 'escandallo',
+      confirmation: false
+    });
+
+    // Tool 5: escandallo.buscar_y_ordenar
+    this.moduleLoader.toolsRegistry.set('escandallo.buscar_y_ordenar', {
+      name: 'escandallo.buscar_y_ordenar',
+      description: 'Search escandallos with intelligent ranking by relevance, anomaly score, cost, or recency.',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: {
+            type: 'string',
+            description: 'Project ID for database access'
+          },
+          coste_min: {
+            type: 'number',
+            description: 'Minimum cost per portion (€)'
+          },
+          coste_max: {
+            type: 'number',
+            description: 'Maximum cost per portion (€)'
+          },
+          rankBy: {
+            type: 'string',
+            enum: ['relevance', 'cost', 'cost_desc', 'alerts', 'recent', 'old'],
+            description: 'Ranking strategy: relevance (anomalies/alerts), cost (low to high), cost_desc (high to low), alerts, recent, old'
+          },
+          limit: {
+            type: 'integer',
+            description: 'Max results (default: 50, max: 100)'
+          }
+        },
+        required: ['project_id']
+      },
+      handler: this.toolBuscarYOrdenar.bind(this),
+      module: 'escandallo',
+      confirmation: false
+    });
+
+    this.logger.info('escandallo.search_tools.registered', {
+      tools_count: 5
+    });
   }
 
   // ==========================================
@@ -662,6 +897,242 @@ class EscandalloModule {
     this.metrics?.increment('escandallo.ficha.generated');
 
     return { status: 200, data: ficha };
+  }
+
+  // ==========================================
+  // Analyzer Agent Tools
+  // ==========================================
+
+  /**
+   * Tool: escandallo.obtener
+   * Get complete escandallo calculation for analyzer validation
+   */
+  async toolObtenerEscandallo(params) {
+    try {
+      const { escandallo_id, project_id } = params;
+
+      if (!escandallo_id || !project_id) {
+        return {
+          error: 'Missing required parameters: escandallo_id, project_id',
+          status: 400
+        };
+      }
+
+      const manager = await this.getManager(project_id);
+      const escandallo = await manager.getEscandallo(escandallo_id);
+
+      if (!escandallo) {
+        return {
+          error: `Escandallo "${escandallo_id}" not found`,
+          status: 404
+        };
+      }
+
+      return {
+        status: 200,
+        data: escandallo
+      };
+    } catch (err) {
+      this.logger.error('escandallo.obtener.error', {
+        error: err.message
+      });
+      return {
+        error: err.message,
+        status: 500
+      };
+    }
+  }
+
+  /**
+   * Tool: escandallo.obtener_historico
+   * Get historical escandallo data for trend analysis
+   */
+  async toolObtenerHistorico(params) {
+    try {
+      const { receta_id, project_id, limit = 5 } = params;
+
+      if (!receta_id || !project_id) {
+        return {
+          error: 'Missing required parameters: receta_id, project_id',
+          status: 400
+        };
+      }
+
+      const manager = await this.getManager(project_id);
+      const history = await manager.getHistory(receta_id, limit);
+
+      if (!history || history.length === 0) {
+        return {
+          error: `No historical data found for recipe "${receta_id}"`,
+          status: 404
+        };
+      }
+
+      return {
+        status: 200,
+        data: {
+          receta_id,
+          historico: history,
+          total_records: history.length
+        }
+      };
+    } catch (err) {
+      this.logger.error('escandallo.obtener_historico.error', {
+        error: err.message
+      });
+      return {
+        error: err.message,
+        status: 500
+      };
+    }
+  }
+
+  /**
+   * Tool: escandallo.obtener_alertas
+   * Get price change alerts for an escandallo
+   */
+  async toolObtenerAlertas(params) {
+    try {
+      const { escandallo_id, project_id } = params;
+
+      if (!escandallo_id || !project_id) {
+        return {
+          error: 'Missing required parameters: escandallo_id, project_id',
+          status: 400
+        };
+      }
+
+      const manager = await this.getManager(project_id);
+      const alerts = await manager.getAlertas(escandallo_id);
+
+      return {
+        status: 200,
+        data: {
+          escandallo_id,
+          alertas: alerts || [],
+          total_alertas: alerts ? alerts.length : 0
+        }
+      };
+    } catch (err) {
+      this.logger.error('escandallo.obtener_alertas.error', {
+        error: err.message
+      });
+      return {
+        error: err.message,
+        status: 500
+      };
+    }
+  }
+
+  // ==========================================
+  // Search Tools
+  // ==========================================
+
+  /**
+   * Tool: escandallo.buscar
+   * Search with filters
+   */
+  async toolBuscar(params) {
+    try {
+      const { project_id, coste_min, coste_max, tiene_alerta, tiene_alerta_sin_leer, desde_fecha, hasta_fecha, sin_precio, limit = 50 } = params;
+
+      if (!project_id) {
+        return {
+          error: 'Missing required parameter: project_id',
+          status: 400
+        };
+      }
+
+      // Limit max results
+      const safeLimit = Math.min(limit, 100);
+
+      const manager = await this.getManager(project_id);
+      const results = await manager.search({
+        coste_min,
+        coste_max,
+        tiene_alerta,
+        tiene_alerta_sin_leer,
+        desde_fecha,
+        hasta_fecha,
+        sin_precio,
+        limit: safeLimit
+      });
+
+      return {
+        status: 200,
+        data: {
+          results: results || [],
+          count: results ? results.length : 0,
+          filters_applied: {
+            coste_min,
+            coste_max,
+            tiene_alerta,
+            tiene_alerta_sin_leer,
+            desde_fecha,
+            hasta_fecha,
+            sin_precio
+          }
+        }
+      };
+    } catch (err) {
+      this.logger.error('escandallo.buscar.error', {
+        error: err.message
+      });
+      return {
+        error: err.message,
+        status: 500
+      };
+    }
+  }
+
+  /**
+   * Tool: escandallo.buscar_y_ordenar
+   * Search with intelligent ranking
+   */
+  async toolBuscarYOrdenar(params) {
+    try {
+      const { project_id, coste_min, coste_max, rankBy = 'relevance', limit = 50 } = params;
+
+      if (!project_id) {
+        return {
+          error: 'Missing required parameter: project_id',
+          status: 400
+        };
+      }
+
+      // Limit max results
+      const safeLimit = Math.min(limit, 100);
+
+      const manager = await this.getManager(project_id);
+      const searchResult = await manager.searchAndRank(
+        {
+          coste_min,
+          coste_max
+        },
+        {
+          rankBy,
+          limit: safeLimit
+        }
+      );
+
+      return {
+        status: 200,
+        data: {
+          results: searchResult.results || [],
+          summary: searchResult.summary,
+          count: searchResult.count || 0,
+          rankBy
+        }
+      };
+    } catch (err) {
+      this.logger.error('escandallo.buscar_y_ordenar.error', {
+        error: err.message
+      });
+      return {
+        error: err.message,
+        status: 500
+      };
+    }
   }
 }
 

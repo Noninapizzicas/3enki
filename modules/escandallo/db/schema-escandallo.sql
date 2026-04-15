@@ -110,6 +110,37 @@ LEFT JOIN escandallo_alerts ea ON e.id = ea.escandallo_id
 GROUP BY e.id;
 
 -- ==========================================
+-- INGREDIENTE_PRECIOS_CACHE (búsqueda de precios)
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS ingrediente_precios_cache (
+  -- Identifiers
+  id TEXT PRIMARY KEY,
+  ingrediente_nombre TEXT NOT NULL,
+
+  -- Precio encontrado
+  precio REAL NOT NULL,
+  fuente TEXT NOT NULL,           -- mercadona_api, carrefour_scraping, google_images_ocr, historico
+  confianza TEXT,                 -- alta, media, baja
+
+  -- Validez
+  buscado_at INTEGER NOT NULL,    -- timestamp cuando se buscó
+  valido_hasta INTEGER NOT NULL,  -- timestamp cuando expira (24h)
+
+  -- Control
+  created_at INTEGER NOT NULL,
+
+  UNIQUE(ingrediente_nombre, buscado_at)
+);
+
+-- Índices para cache
+CREATE INDEX IF NOT EXISTS idx_precio_cache_ingrediente
+  ON ingrediente_precios_cache(ingrediente_nombre);
+
+CREATE INDEX IF NOT EXISTS idx_precio_cache_valido
+  ON ingrediente_precios_cache(valido_hasta);
+
+-- ==========================================
 -- PRAGMA: optimización
 -- ==========================================
 

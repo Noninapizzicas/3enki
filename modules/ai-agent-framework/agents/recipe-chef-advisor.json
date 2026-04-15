@@ -26,6 +26,8 @@
   "timeout_ms": 120000,
   "max_retries": 1,
 
+  "subscribes": ["receta.estructurada"],
+
   "event_listener": {
     "event": "receta.estructurada",
     "context_mapping": {

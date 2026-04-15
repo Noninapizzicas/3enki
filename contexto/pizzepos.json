@@ -4,6 +4,17 @@
   "_UPDATED": "2026-04-07",
   "_DESCRIPTION": "Vertical Pizzepos — Sistema POS completo para pizzería, integrado en event-core como módulos (15 módulos backend + frontend)",
 
+  "_DEPRECATED_SECTIONS_WARNING": {
+    "importante": "ATENCIÓN: Las secciones sobre menu-generator, carta-digital, carta-impresion, tarifas están OBSOLETAS (pre 2026-04).",
+    "leer_en_su_lugar": "contexto/cartas-ecosystem.json — arquitectura ACTUAL",
+    "que_cambió": [
+      "menu-generator v6: SOLO 1 tool (menu.generate). Todo lo demás es carta.*",
+      "carta-digital v2: backoffice slim, YA NO gestiona ofertas/reseñas/sesiones/analytics",
+      "tarifas v2: asignación canal→carta (sin cálculos de precio en runtime)",
+      "Eventos carta.generada, menu.generado, menu.validado OBSOLETOS — usar carta.actualizada"
+    ]
+  },
+
   "_CHANGELOG": {
     "6.0.0": {
       "fecha": "2026-04-07",

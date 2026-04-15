@@ -560,14 +560,10 @@
         "funciones": ["create", "parse"],
         "nota": "Wrapper de ExcelJS con soporte multi-sheet"
       },
-      "local.pdf-parse": {
-        "descripcion": "Extracción de texto de PDF",
-        "funciones": ["extract"],
-        "nota": "Detección smart de input (base64/path), magic bytes validation"
-      },
       "local.pdfjs": {
-        "descripcion": "Renderizado de PDF con PDF.js",
-        "funciones": ["render", "extract"]
+        "descripcion": "Renderizado, info y extracción de texto de PDF con PDF.js",
+        "funciones": ["render", "info", "extract"],
+        "nota": "Preferido para lectura de PDFs. Reemplazó a local.pdf-parse (eliminado 2026-04-15)"
       },
       "local.tesseract": {
         "descripcion": "OCR usando Tesseract",

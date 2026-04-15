@@ -1,0 +1,218 @@
+{
+  "_type": "architecture_overview",
+  "_title": "Ecosistema de Cartas — arquitectura 2026-04",
+  "_PRIORIDAD": "ALTA — leer ANTES que pizzepos.json o carta-digital.json. Estos tienen info obsoleta del menu-generator anterior.",
+  "_created": "2026-04-15",
+  "_replaces": [
+    "Secciones menu-generator y carta-digital de pizzepos.json (obsoletas)",
+    "carta-digital.json (obsoleto — carta-digital v2 es un backoffice, no gestiona sesiones/ofertas/reseñas/analytics)"
+  ],
+
+  "principio_arquitectonico": "Módulos mínimos (config + listener + dispatch). Los agentes hacen el trabajo creativo con criterio. Cada agente tiene tools acotados.",
+
+  "modulos_slim": {
+    "menu-generator": {
+      "version": "6.1.0",
+      "responsabilidad_unica": "Generar carta estructurada desde cualquier input (foto, PDF, texto, audio, dictado)",
+      "tools": ["menu.generate"],
+      "tool_spec": {
+        "menu.generate": "Genera carta. SIEMPRE requiere nombre. Acepta texto (OCR/dictado/lista) o filePath (PDF/imagen). Si es archivo → pipeline OCR (pdfjs → sharp → Google Vision) → texto. Luego dispara agente menu-structurer."
+      },
+      "NO_hace": ["CRUD de cartas", "versiones", "persistencia", "búsqueda", "enrichment directo"],
+      "flujo": "menu.generate → pipeline OCR (si archivo) → agent.execute.request(menu-structurer) → structurer llama carta.save → carta-manager guarda"
+    },
+
+    "carta-manager": {
+      "version": "1.0.0",
+      "responsabilidad_unica": "Dueño de datos de cartas: CRUD + persistencia + versionado (50 versiones)",
+      "tools": [
+        "carta.save", "carta.get", "carta.list", "carta.delete",
+        "carta.add_product", "carta.remove_product", "carta.update_product",
+        "carta.add_category", "carta.update_prices",
+        "carta.search", "carta.stats",
+        "carta.versions", "carta.restore"
+      ],
+      "emits": ["carta.actualizada"],
+      "storage": "data/projects/{project_id}/storage/pizzepos/cartas/{carta_id}.json",
+      "versions": "data/projects/{project_id}/storage/pizzepos/cartas/.versions/{carta_id}/{timestamp}.json"
+    },
+
+    "tarifas": {
+      "version": "2.0.0",
+      "responsabilidad_unica": "Asignación canal→carta + registro de variantes. CERO cálculos de precio en runtime.",
+      "tools": [
+        "tarifas.set_general", "tarifas.assign", "tarifas.get",
+        "tarifas.register_variant", "tarifas.get_variants"
+      ],
+      "modelo": "Cada canal tiene su propia carta con precios finales escritos. Si glovo quiere +15%, se crea una variante de la carta con esos precios.",
+      "emits": ["tarifas.config.actualizada"],
+      "canales_validos": ["mesa", "llevar", "telefono", "whatsapp", "glovo", "llevadoo"]
+    },
+
+    "carta-marketing": {
+      "version": "1.0.0",
+      "responsabilidad_unica": "Perfil de marca por proyecto + dispatch silencioso de agentes cuando cambia una carta",
+      "tools": [
+        "marketing.get_perfil", "marketing.update_perfil",
+        "marketing.completar_onboarding", "marketing.actividad"
+      ],
+      "listens_to": "carta.actualizada (con hash de loop prevention)",
+      "dispatcha": "copywriter, strategist, brand-keeper según qué necesita la carta"
+    },
+
+    "carta-digital": {
+      "version": "2.0.0",
+      "ADVERTENCIA": "v2 NO es el v1. Ahora es un BACKOFFICE minimo, NO gestiona sesiones, ofertas CRUD, reseñas, analytics, funnel ni media serving.",
+      "responsabilidad_unica": "Backoffice: config de branding + composición de carta pública + dispatch agentes",
+      "tools": [
+        "cartadigital.get_config", "cartadigital.update_config",
+        "cartadigital.get_carta_publica", "cartadigital.set_carta_compuesta"
+      ],
+      "listens_to": ["carta.actualizada", "tarifas.config.actualizada"],
+      "agentes": ["cartadigital-composer", "cartadigital-pwa-builder", "cartadigital-ofertas", "cartadigital-reviewer"]
+    },
+
+    "carta-impresion": {
+      "version": "2.0.0",
+      "responsabilidad_unica": "Generar versiones imprimibles de cartas (HTML print-ready)",
+      "tools": ["impresion.get", "impresion.generar", "impresion.save_html"],
+      "agentes": ["impresion-architect", "impresion-builder"],
+      "debounce_regen": "5s (evita regenerar en cada cambio pequeño)"
+    },
+
+    "carta-scheduler": {
+      "version": "1.0.0",
+      "responsabilidad_unica": "Programar cambios de carta por canal. Siempre pide confirmación antes de aplicar.",
+      "tools": [
+        "scheduler.crear_regla", "scheduler.listar_reglas", "scheduler.eliminar_regla",
+        "scheduler.detectar_conflictos", "scheduler.proximos_cambios",
+        "scheduler.confirmar", "scheduler.rechazar"
+      ],
+      "agentes": ["scheduler-planner", "scheduler-dispatcher"]
+    }
+  },
+
+  "agentes": {
+    "total": 17,
+    "menu": {
+      "menu-structurer": "Texto → carta JSON estructurada (via carta.save)",
+      "menu-enricher": "Descripciones, emojis, tags, clasificación ingredientes",
+      "menu-validator": "Auditoría de calidad y completitud"
+    },
+    "tarifas": {
+      "tarifas-creator": "Crea variantes: duplica carta base, ajusta precios/productos, renombra",
+      "tarifas-sync": "Cuando carta base cambia, propaga cambios a variantes con criterio"
+    },
+    "marketing": {
+      "marketing-onboarding": "Entrevista conversacional para construir perfil de marca",
+      "marketing-copywriter": "Descripciones adaptadas al tono de marca",
+      "marketing-strategist": "Ingeniería de menú: productos estrella, orden, tags",
+      "marketing-brand-keeper": "Coherencia de marca — revisión final"
+    },
+    "cartadigital": {
+      "cartadigital-composer": "Compone carta pública desde datos + marketing + config",
+      "cartadigital-pwa-builder": "Genera PWA (HTML + SW + manifest)",
+      "cartadigital-ofertas": "Gestiona ofertas y combos",
+      "cartadigital-reviewer": "Control de calidad antes de publicar"
+    },
+    "impresion": {
+      "impresion-architect": "Decide layout con criterio (caras, columnas, densidad)",
+      "impresion-builder": "Genera HTML+CSS print-ready adaptado a marca"
+    },
+    "scheduler": {
+      "scheduler-planner": "Conversacional: crea reglas de programación, detecta conflictos",
+      "scheduler-dispatcher": "Avisa al usuario cuando toca aplicar un cambio, espera confirmación"
+    }
+  },
+
+  "eventos_actuales": {
+    "publicos": {
+      "carta.actualizada": "carta-manager emite al guardar/modificar. Payload: { meta, categorias, productos, project_id }",
+      "tarifas.config.actualizada": "tarifas emite cuando cambia asignación canal→carta",
+      "menu.generation.progress": "menu-generator emite progreso del pipeline",
+      "menu.generation.failed": "menu-generator emite error del pipeline",
+      "carta.impresion.lista": "carta-impresion emite cuando HTML imprimible está listo",
+      "carta.impresion.request": "carta-scheduler emite para pedir regeneración",
+      "agent.execute.request": "varios módulos emiten para invocar agentes",
+      "agent.{name}.completed/failed": "ai-agent-framework emite al terminar"
+    },
+    "consumidores_carta_actualizada": [
+      "comandero (cache por carta_id)",
+      "carta-marketing (con loop prevention)",
+      "carta-digital (invalidar caché + dispatch composer)",
+      "carta-impresion (debounce 5s → regenerar)",
+      "productos (sync catalogo → emite catalogo.actualizado)",
+      "categorias (sync categorías)",
+      "ingredientes (sync ingredientes)",
+      "carta-design (log informativo)"
+    ],
+    "OBSOLETOS_NO_USAR": {
+      "carta.generada": "DEPRECATED — usar carta.actualizada",
+      "menu.generado": "DEPRECATED — no se emite. Los consumidores ahora escuchan carta.actualizada",
+      "menu.validado": "DEPRECATED — no se emite",
+      "tarifa.config.actualizada": "DEPRECATED (singular) — usar tarifas.config.actualizada (plural)"
+    }
+  },
+
+  "tools_OBSOLETOS_NO_LLAMAR": {
+    "descripcion": "Estas tools del menu-generator v4 anterior ya no existen. Si aparecen en contexto/pizzepos.json o contexto/carta-digital.json están obsoletas.",
+    "lista": [
+      "menu.save_carta (→ usar carta.save)",
+      "menu.get_carta (→ usar carta.get)",
+      "menu.list_cartas (→ usar carta.list)",
+      "menu.delete_carta (→ usar carta.delete)",
+      "menu.add_product (→ usar carta.add_product)",
+      "menu.remove_product (→ usar carta.remove_product)",
+      "menu.update_product (→ usar carta.update_product)",
+      "menu.update_prices (→ usar carta.update_prices)",
+      "menu.add_category (→ usar carta.add_category)",
+      "menu.search_products (→ usar carta.search)",
+      "menu.stats (→ usar carta.stats)",
+      "menu.list_versions (→ usar carta.versions)",
+      "menu.restore_version (→ usar carta.restore)",
+      "menu.enrich_products (→ disparar agente menu-enricher o marketing-copywriter)",
+      "menu.export_to_pos (→ no necesario, productos escucha carta.actualizada)",
+      "menu.set_product_image (→ futuro carta-marketing con agente)",
+      "menu.set_category_image (→ futuro carta-marketing con agente)",
+      "menu.update_ingredient_prices (→ usar carta.update_product para cada uno)"
+    ]
+  },
+
+  "providers_PDF": {
+    "ADVERTENCIA_LLM": "Para el pipeline de menu-generator, USAR SIEMPRE menu.generate — no llames directamente a providers PDF. El tool menu.generate orquesta todo internamente.",
+    "providers_activos": {
+      "local.pdfjs": "PREFERIDO para menu-generator y lectura de PDFs. Tiene render, info, extract. Usado internamente por menu-generator.",
+      "local.pdf-to-png": "LEGACY de facturas. Duplica funcionalmente pdfjs.render. No usar en módulos nuevos — usar pdfjs.",
+      "local.pdf": "Para CREAR PDFs (única forma). Usado por pdf-viewer."
+    },
+    "providers_eliminados": {
+      "local.pdf-parse": "ELIMINADO 2026-04-15. Nadie lo usaba. Si necesitas extraer texto de un PDF digital, usa local.pdfjs.extract."
+    },
+    "regla": "Si el usuario sube un PDF o foto de carta, NO llamar a pdf_to_png_convert, pdfjs_render ni extract directamente. Llamar a menu.generate pasando filePath — el módulo orquesta todo."
+  },
+
+  "errores_comunes_del_LLM": {
+    "1": "Llamar menu.save_carta en vez de carta.save (cambió el módulo dueño)",
+    "2": "Llamar pdf_to_png_convert o pdfjs_render directamente en vez de menu.generate con filePath",
+    "3": "Pensar que carta-digital tiene tools de ofertas/reseñas/sesiones (v2 es solo backoffice)",
+    "4": "Pedir al usuario la ruta absoluta del archivo — el base_path del proyecto activo ya está en el contexto",
+    "5": "Suscribirse a carta.generada o menu.generado (obsoletos — usar carta.actualizada)"
+  },
+
+  "cuando_usuario_sube_archivo": {
+    "flujo_correcto": [
+      "1. Usuario sube archivo PDF/foto al storage del proyecto",
+      "2. LLM confirma nombre de la carta",
+      "3. LLM llama menu.generate con nombre y filePath relativo al project storage",
+      "4. menu-generator resuelve filePath contra base_path del proyecto",
+      "5. Pipeline OCR determinista: pdfjs.render → sharp.prepare-ocr → google-vision.extract",
+      "6. Texto → agente menu-structurer → carta.save",
+      "7. carta-manager emite carta.actualizada → todos los consumidores reaccionan"
+    ],
+    "que_NO_hacer": [
+      "No preguntar 'dame la ruta absoluta' — usar ruta relativa al project storage",
+      "No llamar providers PDF directamente",
+      "No inventar fallbacks como 'pega el texto aquí' sin diagnosticar primero"
+    ]
+  }
+}

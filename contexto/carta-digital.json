@@ -1,6 +1,8 @@
 {
-  "descripcion": "Análisis completo del módulo carta-digital: backend, frontend UI, y estado actual",
+  "_DEPRECATED": "Este archivo describe carta-digital v1.1 (obsoleto). LEER EN SU LUGAR: contexto/cartas-ecosystem.json. La v2 es un backoffice slim y NO gestiona ofertas/reseñas/sesiones/analytics ni export directo.",
+  "descripcion": "Análisis completo del módulo carta-digital v1.1 — OBSOLETO desde 2026-04",
   "_updated": "2026-03-25",
+  "_replaced_by": "contexto/cartas-ecosystem.json (2026-04-15)",
 
   "resumen": "Carta web pública para clientes (QR/WhatsApp). Backend event-driven multi-tenant con 16 UI handlers y 17 APIs. Frontend SvelteKit con carrito client-side, variaciones, y checkout WhatsApp. Export estático PWA con chat AI via Cloudflare Worker.",
 

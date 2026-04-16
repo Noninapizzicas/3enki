@@ -82,16 +82,22 @@ class ConversationExportModule {
 
   checkToken(req) {
     if (!this.token) {
-      return { ok: false, status: 503, error: 'Token no configurado en el servidor' };
+      return { ok: false, err: { status: 503, message: 'Token no configurado en el servidor' } };
     }
     const provided = req.query?.token || req.headers?.['x-token'] || req.headers?.['authorization']?.replace(/^Bearer\s+/, '');
     if (!provided) {
-      return { ok: false, status: 401, error: 'Falta token. Usar ?token=... o header X-Token' };
+      return { ok: false, err: { status: 401, message: 'Falta token. Usar ?token=... o header X-Token' } };
     }
     if (provided !== this.token) {
-      return { ok: false, status: 403, error: 'Token inválido' };
+      return { ok: false, err: { status: 403, message: 'Token inválido' } };
     }
     return { ok: true };
+  }
+
+  throwHttp(err) {
+    const e = new Error(err.message);
+    e.statusCode = err.status;
+    throw e;
   }
 
   // ==========================================
@@ -100,100 +106,68 @@ class ConversationExportModule {
 
   /**
    * GET /modules/conversation-export/sessions/:project_id?token=X&limit=20
-   * Lista las sesiones recientes del proyecto con resumen.
    */
-  async handleListSessions(req) {
+  async handleListSessions(req, res) {
     const auth = this.checkToken(req);
-    if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+    if (!auth.ok) this.throwHttp(auth.err);
 
     const projectId = req.params?.project_id;
-    if (!projectId) return { status: 400, body: { error: 'project_id requerido' } };
+    if (!projectId) this.throwHttp({ status: 400, message: 'project_id requerido' });
 
     const limit = parseInt(req.query?.limit) || 20;
 
-    try {
-      const sessions = await this.loadSessionsFromChatSession(projectId, limit);
-      return {
-        status: 200,
-        body: {
-          project_id: projectId,
-          count: sessions.length,
-          sessions
-        }
-      };
-    } catch (err) {
-      this.logger.error('conversation-export.list_sessions.error', {
-        project_id: projectId, error: err.message
-      });
-      return { status: 500, body: { error: err.message } };
-    }
+    const sessions = await this.loadSessionsFromChatSession(projectId, limit);
+    return {
+      project_id: projectId,
+      count: sessions.length,
+      sessions
+    };
   }
 
   /**
    * GET /modules/conversation-export/session/:session_id?token=X&project_id=Y&verbose=true
-   * JSON completo de una sesión específica.
    */
-  async handleGetSession(req) {
+  async handleGetSession(req, res) {
     const auth = this.checkToken(req);
-    if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+    if (!auth.ok) this.throwHttp(auth.err);
 
     const sessionId = req.params?.session_id;
     const projectId = req.query?.project_id;
     const verbose = req.query?.verbose === 'true';
 
-    if (!sessionId) return { status: 400, body: { error: 'session_id requerido' } };
-    if (!projectId) return { status: 400, body: { error: 'project_id requerido (query param)' } };
+    if (!sessionId) this.throwHttp({ status: 400, message: 'session_id requerido' });
+    if (!projectId) this.throwHttp({ status: 400, message: 'project_id requerido (query param)' });
 
-    try {
-      const data = await this.buildSessionExport(projectId, sessionId, verbose);
-      return { status: 200, body: data };
-    } catch (err) {
-      this.logger.error('conversation-export.get_session.error', {
-        session_id: sessionId, error: err.message
-      });
-      return { status: 500, body: { error: err.message } };
-    }
+    return await this.buildSessionExport(projectId, sessionId, verbose);
   }
 
   /**
    * GET /modules/conversation-export/latest/:project_id?token=X&verbose=true
-   * La sesión más reciente del proyecto.
    */
-  async handleGetLatest(req) {
+  async handleGetLatest(req, res) {
     const auth = this.checkToken(req);
-    if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
+    if (!auth.ok) this.throwHttp(auth.err);
 
     const projectId = req.params?.project_id;
     const verbose = req.query?.verbose === 'true';
-    if (!projectId) return { status: 400, body: { error: 'project_id requerido' } };
+    if (!projectId) this.throwHttp({ status: 400, message: 'project_id requerido' });
 
-    try {
-      const sessions = await this.loadSessionsFromChatSession(projectId, 1);
-      if (sessions.length === 0) {
-        return { status: 404, body: { error: `Sin sesiones en proyecto "${projectId}"` } };
-      }
-      const data = await this.buildSessionExport(projectId, sessions[0].id, verbose);
-      return { status: 200, body: data };
-    } catch (err) {
-      this.logger.error('conversation-export.get_latest.error', {
-        project_id: projectId, error: err.message
-      });
-      return { status: 500, body: { error: err.message } };
+    const sessions = await this.loadSessionsFromChatSession(projectId, 1);
+    if (sessions.length === 0) {
+      this.throwHttp({ status: 404, message: `Sin sesiones en proyecto "${projectId}"` });
     }
+    return await this.buildSessionExport(projectId, sessions[0].id, verbose);
   }
 
   /**
-   * GET /modules/conversation-export/health?token=X
+   * GET /modules/conversation-export/health
    */
-  async handleHealth(req) {
+  async handleHealth(req, res) {
     return {
-      status: 200,
-      body: {
-        module: this.name,
-        version: this.version,
-        token_configured: !!this.token,
-        activity_buffer: this.activityBuffer.length
-      }
+      module: this.name,
+      version: this.version,
+      token_configured: !!this.token,
+      activity_buffer: this.activityBuffer.length
     };
   }
 

@@ -22,6 +22,7 @@
 const path = require('path');
 const fs = require('fs').promises;
 const EscandalloManager = require('./core/escandallo-manager');
+const EscandalloToolResultFormatter = require('./core/tool-result-formatter');
 
 class EscandalloModule {
   constructor() {
@@ -906,6 +907,9 @@ class EscandalloModule {
   /**
    * Tool: escandallo.obtener
    * Get complete escandallo calculation for analyzer validation
+   *
+   * INTEGRATED: EscandalloToolResultFormatter.formatSafely()
+   * Converts escandallo object → formatted string for AI consumption
    */
   async toolObtenerEscandallo(params) {
     try {
@@ -928,9 +932,12 @@ class EscandalloModule {
         };
       }
 
+      // Format escandallo object as readable string for AI
+      const formattedData = EscandalloToolResultFormatter.formatSafely(escandallo, 'obtener');
+
       return {
         status: 200,
-        data: escandallo
+        data: formattedData
       };
     } catch (err) {
       this.logger.error('escandallo.obtener.error', {
@@ -946,6 +953,8 @@ class EscandalloModule {
   /**
    * Tool: escandallo.obtener_historico
    * Get historical escandallo data for trend analysis
+   *
+   * INTEGRATED: Formats historical data as readable string for AI
    */
   async toolObtenerHistorico(params) {
     try {
@@ -968,13 +977,29 @@ class EscandalloModule {
         };
       }
 
+      // Format historical data as readable string for AI
+      const lines = [];
+      lines.push(`=== HISTÓRICO ESCANDALLO: ${receta_id} ===`);
+      lines.push(`Total registros: ${history.length}`);
+      lines.push('');
+
+      history.forEach((record, idx) => {
+        lines.push(`Registro ${idx + 1}:`);
+        lines.push(`  Fecha: ${record.timestamp ? new Date(record.timestamp).toLocaleString('es-ES') : 'desconocida'}`);
+        if (record.coste_porcion !== undefined) {
+          lines.push(`  Coste/porción: €${record.coste_porcion.toFixed(2)}`);
+        }
+        if (record.food_cost_porcentaje !== undefined) {
+          lines.push(`  Food Cost: ${record.food_cost_porcentaje.toFixed(1)}%`);
+        }
+        lines.push('');
+      });
+
+      const formattedData = lines.join('\n');
+
       return {
         status: 200,
-        data: {
-          receta_id,
-          historico: history,
-          total_records: history.length
-        }
+        data: formattedData
       };
     } catch (err) {
       this.logger.error('escandallo.obtener_historico.error', {
@@ -990,6 +1015,8 @@ class EscandalloModule {
   /**
    * Tool: escandallo.obtener_alertas
    * Get price change alerts for an escandallo
+   *
+   * INTEGRATED: Formats alerts as readable string for AI
    */
   async toolObtenerAlertas(params) {
     try {
@@ -1005,13 +1032,37 @@ class EscandalloModule {
       const manager = await this.getManager(project_id);
       const alerts = await manager.getAlertas(escandallo_id);
 
+      // Format alerts as readable string for AI
+      const lines = [];
+      lines.push(`=== ALERTAS: ${escandallo_id} ===`);
+
+      if (!alerts || alerts.length === 0) {
+        lines.push('Sin alertas activas');
+      } else {
+        lines.push(`Total alertas: ${alerts.length}`);
+        lines.push('');
+
+        alerts.forEach((alert, idx) => {
+          lines.push(`Alerta ${idx + 1}:`);
+          lines.push(`  Tipo: ${alert.tipo || 'desconocido'}`);
+          if (alert.descripcion) {
+            lines.push(`  Descripción: ${alert.descripcion}`);
+          }
+          if (alert.fecha) {
+            lines.push(`  Fecha: ${new Date(alert.fecha).toLocaleString('es-ES')}`);
+          }
+          if (alert.leida !== undefined) {
+            lines.push(`  Leída: ${alert.leida ? 'Sí' : 'No'}`);
+          }
+          lines.push('');
+        });
+      }
+
+      const formattedData = lines.join('\n');
+
       return {
         status: 200,
-        data: {
-          escandallo_id,
-          alertas: alerts || [],
-          total_alertas: alerts ? alerts.length : 0
-        }
+        data: formattedData
       };
     } catch (err) {
       this.logger.error('escandallo.obtener_alertas.error', {
@@ -1031,6 +1082,8 @@ class EscandalloModule {
   /**
    * Tool: escandallo.buscar
    * Search with filters
+   *
+   * INTEGRATED: Formats search results as readable string for AI
    */
   async toolBuscar(params) {
     try {
@@ -1058,21 +1111,36 @@ class EscandalloModule {
         limit: safeLimit
       });
 
+      // Format search results as readable string for AI
+      const lines = [];
+      lines.push('=== BÚSQUEDA DE ESCANDALLOS ===');
+      lines.push(`Resultados encontrados: ${results ? results.length : 0}`);
+      lines.push('');
+
+      if (!results || results.length === 0) {
+        lines.push('Sin resultados que coincidan con los criterios.');
+      } else {
+        results.slice(0, 10).forEach((result, idx) => {
+          lines.push(`${idx + 1}. ${result.nombre || 'Sin nombre'}`);
+          if (result.coste_porcion !== undefined) {
+            lines.push(`   Coste/porción: €${result.coste_porcion.toFixed(2)}`);
+          }
+          if (result.tiene_alerta) {
+            lines.push(`   ⚠️ Tiene alertas`);
+          }
+          lines.push('');
+        });
+
+        if (results.length > 10) {
+          lines.push(`... y ${results.length - 10} resultados más`);
+        }
+      }
+
+      const formattedData = lines.join('\n');
+
       return {
         status: 200,
-        data: {
-          results: results || [],
-          count: results ? results.length : 0,
-          filters_applied: {
-            coste_min,
-            coste_max,
-            tiene_alerta,
-            tiene_alerta_sin_leer,
-            desde_fecha,
-            hasta_fecha,
-            sin_precio
-          }
-        }
+        data: formattedData
       };
     } catch (err) {
       this.logger.error('escandallo.buscar.error', {
@@ -1088,6 +1156,8 @@ class EscandalloModule {
   /**
    * Tool: escandallo.buscar_y_ordenar
    * Search with intelligent ranking
+   *
+   * INTEGRATED: Formats ranked results as readable string for AI
    */
   async toolBuscarYOrdenar(params) {
     try {
@@ -1115,14 +1185,41 @@ class EscandalloModule {
         }
       );
 
+      // Format ranked results as readable string for AI
+      const lines = [];
+      lines.push('=== BÚSQUEDA ORDENADA DE ESCANDALLOS ===');
+      lines.push(`Criterio: ${rankBy}`);
+      lines.push(`Resultados: ${searchResult.count || 0}`);
+      if (searchResult.summary) {
+        lines.push(`Resumen: ${searchResult.summary}`);
+      }
+      lines.push('');
+
+      const results = searchResult.results || [];
+      if (results.length === 0) {
+        lines.push('Sin resultados.');
+      } else {
+        results.slice(0, 10).forEach((result, idx) => {
+          lines.push(`${idx + 1}. ${result.nombre || 'Sin nombre'}`);
+          if (result.coste_porcion !== undefined) {
+            lines.push(`   Coste: €${result.coste_porcion.toFixed(2)}`);
+          }
+          if (result.score !== undefined) {
+            lines.push(`   Score: ${result.score.toFixed(2)}`);
+          }
+          lines.push('');
+        });
+
+        if (results.length > 10) {
+          lines.push(`... y ${results.length - 10} resultados más`);
+        }
+      }
+
+      const formattedData = lines.join('\n');
+
       return {
         status: 200,
-        data: {
-          results: searchResult.results || [],
-          summary: searchResult.summary,
-          count: searchResult.count || 0,
-          rankBy
-        }
+        data: formattedData
       };
     } catch (err) {
       this.logger.error('escandallo.buscar_y_ordenar.error', {

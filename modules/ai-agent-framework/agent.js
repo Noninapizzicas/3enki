@@ -287,15 +287,21 @@ class Agent {
       });
     }
 
-    // Get tool definitions for native function calling
+    // Tools: if the agent has a whitelist, send full definitions. Otherwise,
+    // signal tools=true so ai-gateway loads all tools from moduleLoader.
     const tools = this.getToolDefinitions();
 
     // Call AI Gateway
+    // NOTE: execute_tools=true makes the gateway run the agentic loop:
+    // LLM → tool call → execute → feed result → LLM → ... (up to max_tool_iterations)
+    // This is what the chat UI uses, and is what agents need to actually do work.
     const startTime = Date.now();
 
     const response = await this.aiGateway.chatCompletion({
       messages,
       tools: tools.length > 0 ? tools : undefined,
+      execute_tools: tools.length > 0,
+      max_tool_iterations: 10,
       provider: this.provider,
       model: this.model,
       temperature: this.temperature,

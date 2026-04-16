@@ -335,12 +335,181 @@ class RecetasModule {
   }
 
   /**
-   * Handle: investigar_receta (OPCIÓN 2 - Fase 1)
+   * Extraer palabras clave de un nombre de receta
+   * "salsa oriental con patatas" → ["salsa", "oriental", "patatas"]
+   */
+  extractKeywords(text) {
+    if (!text) return [];
+    const stopwords = new Set(['con', 'de', 'la', 'el', 'y', 'o', 'a', 'al', 'del', 'los', 'las']);
+    const words = text
+      .toLowerCase()
+      .split(/[\s\-,]+/)
+      .filter(w => w.length > 2 && !stopwords.has(w));
+    return [...new Set(words)];
+  }
+
+  /**
+   * Búsqueda multi-criterio inteligente
+   * Realiza varias búsquedas y rankea por relevancia
+   */
+  async intelligentSearch(manager, projectId, nombreReceta, descripcion) {
+    const keywords = this.extractKeywords(nombreReceta);
+    const searches = [];
+
+    // Búsqueda 1: Nombre exacto (mayor relevancia)
+    searches.push({
+      criterios: { nombre: nombreReceta, limit: 10 },
+      weight: 100,
+      name: 'exact_name'
+    });
+
+    // Búsqueda 2: Palabras clave del nombre
+    if (keywords.length > 0) {
+      for (const keyword of keywords) {
+        searches.push({
+          criterios: { nombre: keyword, limit: 10 },
+          weight: 80,
+          name: 'keyword_name'
+        });
+      }
+    }
+
+    // Búsqueda 3: Por tipo de plato (si detectamos palabras como "salsa", "ensalada", "postre", etc)
+    const tiposPlato = {
+      'salsa': 'salsa',
+      'sopa': 'sopa',
+      'ensalada': 'ensalada',
+      'postre': 'postre',
+      'pasta': 'pasta',
+      'arroz': 'arroz',
+      'carne': 'carne',
+      'pescado': 'pescado',
+      'verdura': 'verdura',
+      'pan': 'pan'
+    };
+
+    for (const keyword of keywords) {
+      if (tiposPlato[keyword]) {
+        searches.push({
+          criterios: { tipos_plato: [tiposPlato[keyword]], limit: 10 },
+          weight: 60,
+          name: 'type_search'
+        });
+      }
+    }
+
+    // Búsqueda 4: Ingredientes clave
+    if (keywords.length > 0) {
+      searches.push({
+        criterios: { ingredientes: keywords.slice(0, 3), limit: 10 },
+        weight: 50,
+        name: 'ingredients_search'
+      });
+    }
+
+    // Ejecutar todas las búsquedas y recolectar resultados
+    const resultMap = new Map(); // receta_id → { receta, score }
+
+    for (const search of searches) {
+      try {
+        const results = await manager.searchRecetas(projectId, search.criterios);
+        if (results && results.length > 0) {
+          for (const receta of results) {
+            const existingEntry = resultMap.get(receta.id);
+            const newScore = search.weight;
+
+            // Calcular score adicional por coincidencia
+            let matchBonus = 0;
+            if (receta.nombre.toLowerCase() === nombreReceta.toLowerCase()) {
+              matchBonus = 50; // Coincidencia exacta
+            } else if (receta.nombre.toLowerCase().includes(nombreReceta.toLowerCase())) {
+              matchBonus = 30; // Coincidencia parcial
+            } else {
+              // Calcular similitud de Levenshtein simplificada
+              matchBonus = this.calculateSimilarity(nombreReceta.toLowerCase(), receta.nombre.toLowerCase()) * 25;
+            }
+
+            const totalScore = newScore + matchBonus;
+
+            if (!existingEntry || existingEntry.score < totalScore) {
+              resultMap.set(receta.id, {
+                receta,
+                score: totalScore,
+                matchedBy: search.name
+              });
+            }
+          }
+        }
+      } catch (err) {
+        this.logger.debug('recetas.investigar.search-error', {
+          search: search.name,
+          error: err.message
+        });
+      }
+    }
+
+    // Ordenar por score y retornar top 5
+    const ranked = Array.from(resultMap.values())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map(entry => ({
+        ...entry.receta,
+        _investigacion_score: entry.score,
+        _matched_by: entry.matchedBy
+      }));
+
+    return ranked;
+  }
+
+  /**
+   * Calcular similitud simple entre dos strings (0-1)
+   * Implementación simplificada de Levenshtein
+   */
+  calculateSimilarity(str1, str2) {
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+
+    if (longer.length === 0) return 1.0;
+
+    const editDistance = this.getEditDistance(longer, shorter);
+    return (longer.length - editDistance) / longer.length;
+  }
+
+  /**
+   * Calcular distancia de edición (Levenshtein)
+   */
+  getEditDistance(s1, s2) {
+    const costs = [];
+    for (let i = 0; i <= s1.length; i++) {
+      let lastValue = i;
+      for (let j = 0; j <= s2.length; j++) {
+        if (i === 0) {
+          costs[j] = j;
+        } else if (j > 0) {
+          let newValue = costs[j - 1];
+          if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+          }
+          costs[j - 1] = lastValue;
+          lastValue = newValue;
+        }
+      }
+      if (i > 0) costs[s2.length] = lastValue;
+    }
+    return costs[s2.length];
+  }
+
+  /**
+   * Handle: investigar_receta (OPCIÓN 2 - Fase 1 MEJORADA)
    *
-   * Orquesta la investigación de una receta:
-   * 1. Busca en BD local
-   * 2. Si existe → retorna con costos
-   * 3. Si no existe → estructura parcial con "needs_generation"
+   * Orquesta la investigación de una receta con búsqueda inteligente multi-criterio:
+   * 1. Búsqueda por nombre exacto
+   * 2. Búsqueda por palabras clave
+   * 3. Búsqueda por tipo de plato
+   * 4. Búsqueda por ingredientes
+   * 5. Rankea por relevancia
+   * 6. Si existe → retorna con costos
+   * 7. Si no existe → estructura parcial con "needs_generation"
    */
   async handleInvestigarReceta(request) {
     const { proyecto_id, nombre_receta, descripcion_opcional } = request;
@@ -359,14 +528,12 @@ class RecetasModule {
       this.logger.info('recetas.investigar.iniciado', {
         proyecto_id,
         nombre_receta,
-        tiene_descripcion: !!descripcion_opcional
+        tiene_descripcion: !!descripcion_opcional,
+        busqueda_inteligente: true
       });
 
-      // PASO 1: Buscar receta existente
-      const busqueda = await manager.searchRecetas(proyecto_id, {
-        nombre: nombre_receta,
-        limit: 5
-      });
+      // PASO 1: Búsqueda inteligente multi-criterio
+      const busqueda = await this.intelligentSearch(manager, proyecto_id, nombre_receta, descripcion_opcional);
 
       let resultado = {
         investigacion_id: `inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -380,47 +547,53 @@ class RecetasModule {
       if (busqueda && busqueda.length > 0) {
         // Encontró coincidencias
         const receta = busqueda[0];
+        const confidence = this.calculateConfidence(receta._investigacion_score);
 
         resultado.status = 'receta_encontrada';
-        resultado.confianza = 'alta';
+        resultado.confianza = confidence;
         resultado.receta = receta;
         resultado.ingredientes_pendientes = [];
         resultado.flags = [];
+        resultado.search_score = receta._investigacion_score;
+        resultado.matched_by = receta._matched_by;
 
-        // Intentar obtener costos
+        // Mostrar alternativas si hay varias coincidencias
+        if (busqueda.length > 1) {
+          resultado.alternativas = busqueda.slice(1, 4).map(r => ({
+            id: r.id,
+            nombre: r.nombre,
+            score: r._investigacion_score,
+            matched_by: r._matched_by
+          }));
+        }
+
+        // Obtener costos (reales o estimados)
         try {
-          // Simulación: en producción llamaría a escandallo real
-          if (receta.ingredientes && receta.ingredientes.length > 0) {
-            let coste_total = 0;
-            receta.ingredientes.forEach(ing => {
-              if (ing.precio_mercado_en_momento) {
-                coste_total += ing.precio_mercado_en_momento;
-              }
-            });
+          resultado.costes = await this.obtenerCostosReceta(receta, proyecto_id);
 
-            resultado.costes = {
-              coste_total,
-              coste_porcion: receta.porciones ? (coste_total / receta.porciones).toFixed(2) : coste_total,
-              food_cost_porcentaje: null,
-              detalles: receta.ingredientes.map(ing => ({
-                nombre: ing.nombre,
-                costo: ing.precio_mercado_en_momento || 0
-              }))
-            };
+          // Agregar advertencia si son estimados
+          if (resultado.costes.tipo === 'estimado') {
+            resultado.flags.push('costos_estimados_no_reales');
           }
         } catch (e) {
-          this.logger.debug('recetas.investigar.costos-error', { error: e.message });
+          this.logger.error('recetas.investigar.costos-error', {
+            receta_id: receta.id,
+            error: e.message
+          });
+          // Continuar sin costos si hay error
         }
 
         resultado.viabilidad = {
           estado: 'VIABLE',
-          razon: 'Receta encontrada en sistema',
-          confianza_alta: true
+          razon: `Receta encontrada (score: ${receta._investigacion_score.toFixed(1)})`,
+          confianza_alta: confidence === 'alta'
         };
 
         this.logger.info('recetas.investigar.encontrada', {
           proyecto_id,
-          receta_id: receta.id
+          receta_id: receta.id,
+          confidence,
+          search_score: receta._investigacion_score
         });
 
       } else {
@@ -444,12 +617,14 @@ class RecetasModule {
         resultado.flags = [
           'receta_no_existe',
           'requiere_generacion_fase_2',
-          'fase_1_completada'
+          'fase_1_completada',
+          'busqueda_inteligente_ejecutada'
         ];
 
         this.logger.info('recetas.investigar.no_encontrada', {
           proyecto_id,
-          nombre_receta
+          nombre_receta,
+          busqueda_inteligente: true
         });
       }
 
@@ -467,6 +642,92 @@ class RecetasModule {
         error: err.message
       });
       return { status: 500, error: err.message };
+    }
+  }
+
+  /**
+   * Calcular nivel de confianza basado en score
+   */
+  calculateConfidence(score) {
+    if (score >= 80) return 'alta';
+    if (score >= 50) return 'media';
+    return 'baja';
+  }
+
+  /**
+   * Intentar obtener costos reales de escandallo
+   * Si no existe escandallo, calcula estimado y marca como tal
+   */
+  async obtenerCostosReceta(receta, projectId) {
+    const costos = {
+      tipo: 'estimado', // 'real' o 'estimado'
+      coste_total: 0,
+      coste_porcion: 0,
+      food_cost_porcentaje: null,
+      detalles: []
+    };
+
+    try {
+      // PASO 1: Intentar obtener costos del escandallo si existen
+      // (En futuro, usar escandallo tool directamente)
+      // Para ahora, calcular basado en ingredientes
+
+      if (!receta.ingredientes || receta.ingredientes.length === 0) {
+        return costos; // Sin ingredientes
+      }
+
+      // PASO 2: Calcular costos basados en precios de ingredientes
+      let coste_total = 0;
+      const detalles = [];
+
+      for (const ing of receta.ingredientes) {
+        const precio = ing.precio_mercado_en_momento || ing.precio_mercado || 0;
+        coste_total += precio;
+
+        detalles.push({
+          nombre: ing.nombre,
+          cantidad: ing.cantidad,
+          unidad: ing.unidad,
+          precio_unitario: precio,
+          es_precio_real: !!ing.precio_mercado // true si es precio de mercado real
+        });
+      }
+
+      // PASO 3: Calcular por porción
+      const coste_porcion = receta.porciones && receta.porciones > 0
+        ? coste_total / receta.porciones
+        : coste_total;
+
+      // PASO 4: Determinar si es "real" o "estimado"
+      // Es "real" si todos los ingredientes tienen precio_mercado
+      const todosTienenPrecio = receta.ingredientes.every(
+        ing => ing.precio_mercado_en_momento || ing.precio_mercado
+      );
+
+      costos.tipo = todosTienenPrecio ? 'real' : 'estimado';
+      costos.coste_total = Math.round(coste_total * 100) / 100;
+      costos.coste_porcion = Math.round(coste_porcion * 100) / 100;
+      costos.detalles = detalles;
+      costos.fuente = todosTienenPrecio ? 'precios_mercado' : 'precios_parciales';
+
+      // PASO 5: Log para debugging
+      this.logger.debug('recetas.investigar.costos-calculados', {
+        receta_id: receta.id,
+        tipo: costos.tipo,
+        coste_total: costos.coste_total,
+        ingredientes_con_precio: detalles.filter(d => d.es_precio_real).length,
+        ingredientes_total: detalles.length
+      });
+
+      return costos;
+
+    } catch (err) {
+      this.logger.error('recetas.investigar.costos-error', {
+        receta_id: receta.id,
+        error: err.message
+      });
+      // Retornar objeto vacío pero válido
+      return costos;
     }
   }
 

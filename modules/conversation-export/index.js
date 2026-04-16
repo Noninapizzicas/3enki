@@ -232,12 +232,11 @@ class ConversationExportModule {
     if (!chatSession?.instance) throw new Error('chat-session no disponible');
 
     const instance = chatSession.instance;
+    // chat-session.getMessages(conversationId, inContextOnly=false, correlationId)
+    // NOTA: el primer arg es conversationId (session_id), NO project_id
     if (typeof instance.getMessages === 'function') {
-      return await instance.getMessages(projectId, sessionId);
-    }
-    if (typeof instance.toolObtener === 'function') {
-      const res = await instance.toolObtener({ project_id: projectId, conversation_id: sessionId });
-      return res?.data?.messages || res?.messages || [];
+      const messages = await instance.getMessages(sessionId, false);
+      return Array.isArray(messages) ? messages : (messages?.messages || []);
     }
 
     // Fallback a DB

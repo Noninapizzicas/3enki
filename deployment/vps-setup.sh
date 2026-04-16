@@ -150,7 +150,10 @@ chown caddy:caddy /var/log/caddy 2>/dev/null || true
 
 if [ "$MODE" = "domain" ]; then
     log "Configurando Caddy para ${DOMAIN} (HTTPS)..."
-    cp "${REPO_DIR}/deployment/caddy/Caddyfile.vps" /etc/caddy/Caddyfile
+    # Sustituir dominio hardcoded del template por el real
+    sed -e "s/pizzepos\.es/${DOMAIN}/g" -e "s/pizzepos\.log/${DOMAIN}.log/g" \
+        "${REPO_DIR}/deployment/caddy/Caddyfile.vps" > /etc/caddy/Caddyfile
+    log "Caddyfile configurado para ${DOMAIN}"
 else
     log "Configurando Caddy para ${SERVER_IP} (HTTP)..."
     cat > /etc/caddy/Caddyfile << CADDYCONF

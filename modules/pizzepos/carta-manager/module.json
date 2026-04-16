@@ -7,11 +7,20 @@
 
   "events": {
     "publishes": [
-      { "event": "carta.actualizada", "description": "Carta modificada (producto añadido/eliminado, precios cambiados, restaurada)" }
+      { "event": "carta.actualizada", "description": "Carta modificada (legacy — compatible con nuevos eventos .completada)" },
+      { "event": "carta.listada", "description": "Respuesta a carta.listar.solicitada" },
+      { "event": "carta.editada", "description": "Respuesta a carta.editar.solicitada" },
+      { "event": "carta.borrada", "description": "Respuesta a carta.borrar.solicitada" },
+      { "event": "carta.listar.fallida" },
+      { "event": "carta.editar.fallida" },
+      { "event": "carta.borrar.fallida" }
     ],
     "subscribes": [
       { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
+      { "event": "carta.listar.solicitada", "handler": "onCartaListarSolicitada" },
+      { "event": "carta.editar.solicitada", "handler": "onCartaEditarSolicitada" },
+      { "event": "carta.borrar.solicitada", "handler": "onCartaBorrarSolicitada" }
     ]
   },
 

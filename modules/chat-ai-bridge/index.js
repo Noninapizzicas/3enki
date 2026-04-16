@@ -179,9 +179,12 @@ class ChatAiBridgeModule {
       flowState.stage = 'building_ai_request';
       const aiMessages = this.buildAIMessages(prompt, context, content);
 
-      // Step 5: Call AI
+      // Step 5: Call AI (or intent-router agent if enabled)
       flowState.stage = 'calling_ai';
-      const aiResponse = await this.callAI(flowState, aiMessages);
+      const useIntentRouter = this.config.useIntentRouter !== false; // default ON
+      const aiResponse = useIntentRouter
+        ? await this.callIntentRouter(flowState, context)
+        : await this.callAI(flowState, aiMessages);
       flowState.aiResponse = aiResponse;
 
       // Step 6: Save assistant message
@@ -490,6 +493,83 @@ class ChatAiBridgeModule {
    * Step 4: Call AI via ai-gateway
    * Supports streaming: publishes chunks to MQTT conversation/{id}/message
    */
+  /**
+   * NEW PATH: Dispatch the intent-router agent instead of calling LLM directly.
+   * The agent has the agentic prompt, tools, and event catalog — it decides what to do.
+   * Returns a response compatible with what callAI returns (content, tokens, etc.).
+   */
+  async callIntentRouter(flowState, context) {
+    const { flowId, conversation_id, content, correlation_id, page_context } = flowState;
+    const project_id = context?.conversation?.project_id || null;
+
+    this.logger.info('chat-ai-bridge.intent_router.invoking', {
+      flowId, conversation_id, project_id
+    });
+
+    const agentName = 'intent-router';
+    const TIMEOUT_MS = (this.config.aiTimeoutWithTools || 180000) + 10000;
+
+    return new Promise(async (resolve, reject) => {
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        unsubCompleted?.();
+        unsubFailed?.();
+        reject(new Error(`intent-router timeout after ${TIMEOUT_MS / 1000}s`));
+      }, TIMEOUT_MS);
+
+      const unsubCompleted = await this.eventBus.subscribe(`agent.${agentName}.completed`, (event) => {
+        if (resolved) return;
+        const data = event?.data || event?.payload || event;
+        resolved = true;
+        clearTimeout(timer);
+        unsubCompleted?.();
+        unsubFailed?.();
+
+        // Normalize agent result to callAI-compatible shape
+        const result = data.result || {};
+        const responseText =
+          result.content ||
+          result.response ||
+          result.text ||
+          (typeof result === 'string' ? result : JSON.stringify(result));
+
+        resolve({
+          content: responseText,
+          tokens: result.tokens || 0,
+          cost: result.cost || 0,
+          tool_calls_executed: result.tools_used || [],
+          provider: 'intent-router',
+          model: agentName,
+          _agent_raw: result
+        });
+      });
+
+      const unsubFailed = await this.eventBus.subscribe(`agent.${agentName}.failed`, (event) => {
+        if (resolved) return;
+        const data = event?.data || event?.payload || event;
+        resolved = true;
+        clearTimeout(timer);
+        unsubCompleted?.();
+        unsubFailed?.();
+        reject(new Error(data.error || 'intent-router failed'));
+      });
+
+      await this.eventBus.publish('agent.execute.request', {
+        agentName,
+        context: {
+          user_message: content,
+          project_id,
+          conversation_id,
+          page_context: page_context || null,
+          correlation_id
+        },
+        task: content
+      });
+    });
+  }
+
   async callAI(flowState, messages) {
     const { flowId, conversation_id, use_tools, correlation_id } = flowState;
     const requestId = crypto.randomUUID();

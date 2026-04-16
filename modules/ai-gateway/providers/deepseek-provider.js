@@ -223,38 +223,61 @@ class DeepSeekProvider extends BaseProvider {
     const result = [];
 
     for (const tool of tools) {
+      // Normalize to OpenAI-style { type: 'function', function: { name, description, parameters } }
+      // Supports 3 incoming shapes:
+      //  a) { type: 'function', function: { name, ... } }  ← ya formateado
+      //  b) { name, description, parameters, ... }          ← flat (como vienen del toolsRegistry)
+      //  c) { function: { name, ... } } sin type           ← parcial
+      let normalized;
       if (tool.type === 'function' && tool.function?.name) {
-        const original = tool.function.name;
-        const sanitized = original.replace(/\./g, '_');
-
-        if (seen.has(sanitized)) {
-          // Duplicate after sanitization — skip this tool
-          if (this.logger) {
-            this.logger.warn('deepseek.tools.duplicate_after_sanitize', {
-              original,
-              sanitized,
-              kept: this._toolNameMap.get(sanitized) || sanitized
-            });
-          }
-          continue;
-        }
-
-        seen.add(sanitized);
-
-        if (sanitized !== original) {
-          this._toolNameMap.set(sanitized, original);
-        }
-
-        result.push({
-          ...tool,
+        normalized = tool;
+      } else if (tool.function?.name) {
+        normalized = { type: 'function', function: tool.function };
+      } else if (tool.name) {
+        normalized = {
+          type: 'function',
           function: {
-            ...tool.function,
-            name: sanitized
+            name: tool.name,
+            description: tool.description || '',
+            parameters: tool.parameters || { type: 'object', properties: {}, required: [] }
           }
-        });
+        };
       } else {
-        result.push(tool);
+        // Tool sin nombre — skip (evita 400 de DeepSeek)
+        if (this.logger) {
+          this.logger.warn('deepseek.tools.skipped_no_name', { tool: JSON.stringify(tool).slice(0, 200) });
+        }
+        continue;
       }
+
+      const original = normalized.function.name;
+      const sanitized = original.replace(/\./g, '_');
+
+      if (seen.has(sanitized)) {
+        // Duplicate after sanitization — skip this tool
+        if (this.logger) {
+          this.logger.warn('deepseek.tools.duplicate_after_sanitize', {
+            original,
+            sanitized,
+            kept: this._toolNameMap.get(sanitized) || sanitized
+          });
+        }
+        continue;
+      }
+
+      seen.add(sanitized);
+
+      if (sanitized !== original) {
+        this._toolNameMap.set(sanitized, original);
+      }
+
+      result.push({
+        ...normalized,
+        function: {
+          ...normalized.function,
+          name: sanitized
+        }
+      });
     }
 
     return result;

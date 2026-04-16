@@ -63,6 +63,46 @@ class ConversationExportModule {
       }
     });
 
+    // Suscribirse a eventos críticos con payload completo (errores, failures)
+    this.agentFailedUnsub = await this.eventBus.subscribe('agent.*.failed', (event) => {
+      const data = event?.data || event?.payload || event;
+      this.activityBuffer.push({
+        timestamp: new Date().toISOString(),
+        type: 'AGENT_FAILURE',
+        module: 'ai-agent-framework',
+        action: `agent.${data.agent_name || 'unknown'}.failed`,
+        outcome: 'failure',
+        ctx: {
+          agent_name: data.agent_name,
+          error: data.error,
+          pipelineId: data.pipelineId,
+          timestamp: data.timestamp
+        }
+      });
+      if (this.activityBuffer.length > this.MAX_BUFFER) {
+        this.activityBuffer.shift();
+      }
+    });
+
+    this.agentCompletedUnsub = await this.eventBus.subscribe('agent.*.completed', (event) => {
+      const data = event?.data || event?.payload || event;
+      this.activityBuffer.push({
+        timestamp: new Date().toISOString(),
+        type: 'AGENT_COMPLETED',
+        module: 'ai-agent-framework',
+        action: `agent.${data.agent_name || 'unknown'}.completed`,
+        outcome: 'success',
+        ctx: {
+          agent_name: data.agent_name,
+          result_summary: typeof data.result === 'string' ? data.result.slice(0, 500) : JSON.stringify(data.result).slice(0, 500),
+          pipelineId: data.pipelineId
+        }
+      });
+      if (this.activityBuffer.length > this.MAX_BUFFER) {
+        this.activityBuffer.shift();
+      }
+    });
+
     this.logger.info('module.loaded', {
       module: this.name,
       version: this.version,
@@ -72,6 +112,8 @@ class ConversationExportModule {
 
   async onUnload() {
     if (this.activityUnsub) await this.activityUnsub();
+    if (this.agentFailedUnsub) await this.agentFailedUnsub();
+    if (this.agentCompletedUnsub) await this.agentCompletedUnsub();
     this.activityBuffer = [];
     this.logger.info('module.unloaded', { module: this.name });
   }

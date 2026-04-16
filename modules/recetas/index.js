@@ -334,6 +334,142 @@ class RecetasModule {
     }
   }
 
+  /**
+   * Handle: investigar_receta (OPCIÓN 2 - Fase 1)
+   *
+   * Orquesta la investigación de una receta:
+   * 1. Busca en BD local
+   * 2. Si existe → retorna con costos
+   * 3. Si no existe → estructura parcial con "needs_generation"
+   */
+  async handleInvestigarReceta(request) {
+    const { proyecto_id, nombre_receta, descripcion_opcional } = request;
+
+    try {
+      // Validar proyecto
+      const manager = this.sqliteManagers.get(proyecto_id);
+      if (!manager) {
+        return { status: 400, error: 'Proyecto no activado' };
+      }
+
+      if (!nombre_receta || nombre_receta.trim() === '') {
+        return { status: 400, error: 'nombre_receta es requerido' };
+      }
+
+      this.logger.info('recetas.investigar.iniciado', {
+        proyecto_id,
+        nombre_receta,
+        tiene_descripcion: !!descripcion_opcional
+      });
+
+      // PASO 1: Buscar receta existente
+      const busqueda = await manager.searchRecetas(proyecto_id, {
+        nombre: nombre_receta,
+        limit: 5
+      });
+
+      let resultado = {
+        investigacion_id: `inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        proyecto_id,
+        nombre_buscado: nombre_receta,
+        descripcion_proporcionada: descripcion_opcional || null
+      };
+
+      // PASO 2: Evaluar resultados
+      if (busqueda && busqueda.length > 0) {
+        // Encontró coincidencias
+        const receta = busqueda[0];
+
+        resultado.status = 'receta_encontrada';
+        resultado.confianza = 'alta';
+        resultado.receta = receta;
+        resultado.ingredientes_pendientes = [];
+        resultado.flags = [];
+
+        // Intentar obtener costos
+        try {
+          // Simulación: en producción llamaría a escandallo real
+          if (receta.ingredientes && receta.ingredientes.length > 0) {
+            let coste_total = 0;
+            receta.ingredientes.forEach(ing => {
+              if (ing.precio_mercado_en_momento) {
+                coste_total += ing.precio_mercado_en_momento;
+              }
+            });
+
+            resultado.costes = {
+              coste_total,
+              coste_porcion: receta.porciones ? (coste_total / receta.porciones).toFixed(2) : coste_total,
+              food_cost_porcentaje: null,
+              detalles: receta.ingredientes.map(ing => ({
+                nombre: ing.nombre,
+                costo: ing.precio_mercado_en_momento || 0
+              }))
+            };
+          }
+        } catch (e) {
+          this.logger.debug('recetas.investigar.costos-error', { error: e.message });
+        }
+
+        resultado.viabilidad = {
+          estado: 'VIABLE',
+          razon: 'Receta encontrada en sistema',
+          confianza_alta: true
+        };
+
+        this.logger.info('recetas.investigar.encontrada', {
+          proyecto_id,
+          receta_id: receta.id
+        });
+
+      } else {
+        // No encontró - necesita generación (Fase 2)
+        resultado.status = 'needs_generation';
+        resultado.confianza = 'baja';
+        resultado.receta = {
+          nombre: nombre_receta,
+          descripcion: descripcion_opcional || '',
+          estado: 'borrador',
+          ingredientes: [],
+          elaboracion: [],
+          _estatus_investigacion: 'pendiente_generacion'
+        };
+        resultado.ingredientes_pendientes = [
+          {
+            razon: 'no_encontrada_en_bd',
+            sugerencia: 'Se requiere generación con Claude en Fase 2'
+          }
+        ];
+        resultado.flags = [
+          'receta_no_existe',
+          'requiere_generacion_fase_2',
+          'fase_1_completada'
+        ];
+
+        this.logger.info('recetas.investigar.no_encontrada', {
+          proyecto_id,
+          nombre_receta
+        });
+      }
+
+      this.metrics?.increment('receta.investigada');
+
+      return {
+        status: 200,
+        data: resultado
+      };
+
+    } catch (err) {
+      this.logger.error('recetas.investigar.failed', {
+        proyecto_id,
+        nombre_receta,
+        error: err.message
+      });
+      return { status: 500, error: err.message };
+    }
+  }
+
   // ==========================================
   // TOOLS: Para agentes IA
   // ==========================================
@@ -372,6 +508,10 @@ class RecetasModule {
 
   async toolEstadisticas(params) {
     return this.handleEstadisticas(params);
+  }
+
+  async toolInvestigarReceta(params) {
+    return this.handleInvestigarReceta(params);
   }
 
   // NOTE: toolAnalizar, toolCrear, toolActualizar no están aquí

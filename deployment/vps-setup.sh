@@ -222,6 +222,7 @@ Environment=NODE_ENV=production
 Environment=EVENT_CORE_PORT=3000
 Environment=EVENT_CORE_BROKER_PORT=1883
 Environment=EVENT_CORE_LOG_LEVEL=info
+Environment=CONVERSATION_EXPORT_TOKEN=nonina
 
 # Seguridad
 NoNewPrivileges=true

@@ -287,9 +287,11 @@ class Agent {
       });
     }
 
-    // Tools: if the agent has a whitelist, send full definitions. Otherwise,
-    // signal tools=true so ai-gateway loads all tools from moduleLoader.
+    // Tools: pasar `true` para que el ai-gateway cargue desde el moduleLoader
+    // (con sus handlers reales para el loop agentic execute_tools).
+    // Si pasamos el array de definiciones del agente, el gateway no tiene los handlers.
     const tools = this.getToolDefinitions();
+    const hasTools = tools.length > 0;
 
     // Call AI Gateway
     // NOTE: execute_tools=true makes the gateway run the agentic loop:
@@ -299,8 +301,8 @@ class Agent {
 
     const response = await this.aiGateway.chatCompletion({
       messages,
-      tools: tools.length > 0 ? tools : undefined,
-      execute_tools: tools.length > 0,
+      tools: hasTools ? true : undefined,    // boolean true → gateway loads from moduleLoader (with handlers)
+      execute_tools: hasTools,
       max_tool_iterations: 10,
       provider: this.provider,
       model: this.model,

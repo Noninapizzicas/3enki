@@ -9,9 +9,13 @@
     "publishes": [
       { "event": "menu.generation.progress", "description": "Progreso del pipeline: extracting, structuring" },
       { "event": "menu.generation.failed", "description": "Error en el pipeline de generación" },
-      { "event": "agent.execute.request", "description": "Invoca agente menu-structurer para estructurar carta" }
+      { "event": "agent.execute.request", "description": "Invoca agente menu-structurer para estructurar carta" },
+      { "event": "carta.generar.iniciada", "description": "Aceptada carta.generar.solicitada — pipeline en marcha" },
+      { "event": "carta.generar.fallida", "description": "Fallo al iniciar generación" }
     ],
-    "subscribes": []
+    "subscribes": [
+      { "event": "carta.generar.solicitada", "handler": "onCartaGenerarSolicitada" }
+    ]
   },
 
   "ui_handlers": [

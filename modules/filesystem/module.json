@@ -207,6 +207,9 @@
     "subscribes": [
       { "event": "project.activated", "handler": "onProjectActivated" },
       { "event": "project.deactivated", "handler": "onProjectDeactivated" },
+      { "event": "archivo.listar.solicitado", "handler": "onArchivoListarSolicitado" },
+      { "event": "archivo.leer.solicitado", "handler": "onArchivoLeerSolicitado" },
+      { "event": "archivo.borrar.solicitado", "handler": "onArchivoBorrarSolicitado" },
       { "event": "fs.read.request", "handler": "onReadRequest" },
       { "event": "fs.write.request", "handler": "onWriteRequest" },
       { "event": "fs.copy.request", "handler": "onCopyRequest" },

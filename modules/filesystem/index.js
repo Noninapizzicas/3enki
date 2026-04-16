@@ -57,6 +57,63 @@ class FilesystemModule {
   }
 
   // ==========================================
+  // Domain event handlers — responden a eventos canónicos
+  // Convención: <dominio>.<accion>.solicitado → .completado/.fallido
+  // ==========================================
+
+  async onArchivoListarSolicitado(event) {
+    const data = event.data || event.payload || event;
+    const { path: p = '/', project_id, request_id, correlation_id } = data;
+    try {
+      const result = await this.handleList({ path: p });
+      await this.eventBus.publish('archivo.listado', {
+        request_id, correlation_id, project_id,
+        path: p,
+        files: result.files || result.entries || result || []
+      });
+    } catch (err) {
+      await this.eventBus.publish('archivo.listar.fallido', {
+        request_id, correlation_id, project_id, path: p,
+        error: err.message
+      });
+    }
+  }
+
+  async onArchivoLeerSolicitado(event) {
+    const data = event.data || event.payload || event;
+    const { path: p, project_id, request_id, correlation_id } = data;
+    try {
+      const result = await this.handleRead({ path: p });
+      await this.eventBus.publish('archivo.leido', {
+        request_id, correlation_id, project_id,
+        path: p,
+        content: result.content || result
+      });
+    } catch (err) {
+      await this.eventBus.publish('archivo.leer.fallido', {
+        request_id, correlation_id, project_id, path: p,
+        error: err.message
+      });
+    }
+  }
+
+  async onArchivoBorrarSolicitado(event) {
+    const data = event.data || event.payload || event;
+    const { path: p, project_id, request_id, correlation_id } = data;
+    try {
+      await this.handleDelete({ path: p });
+      await this.eventBus.publish('archivo.borrado', {
+        request_id, correlation_id, project_id, path: p
+      });
+    } catch (err) {
+      await this.eventBus.publish('archivo.borrar.fallido', {
+        request_id, correlation_id, project_id, path: p,
+        error: err.message
+      });
+    }
+  }
+
+  // ==========================================
   // Project Context
   // ==========================================
 

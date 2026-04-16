@@ -294,6 +294,39 @@ class MenuGeneratorModule {
   async handleHealth() {
     return { status: 'healthy', module: this.name, version: this.version };
   }
+
+  // ==========================================
+  // Domain event handler — carta.generar.solicitada
+  // ==========================================
+
+  async onCartaGenerarSolicitada(event) {
+    const data = event.data || event.payload || event;
+    const { project_id, nombre, filePath, texto, request_id, correlation_id } = data;
+    try {
+      const result = await this.toolGenerate({ project_id, nombre, filePath, texto });
+      if (result.error) {
+        await this.eventBus.publish('carta.generar.fallida', {
+          request_id, correlation_id, project_id, nombre,
+          error: result.error
+        });
+        return;
+      }
+      // NOTA: la generación es asíncrona — el agente structurer termina después.
+      // Emitimos un evento de aceptación. El structurer publicará carta.generada cuando la carta
+      // se guarde vía carta.save → carta-manager emite carta.actualizada (ver eventos-dominio.json).
+      // Para cerrar el loop explícitamente, emitimos también carta.generar.iniciada.
+      await this.eventBus.publish('carta.generar.iniciada', {
+        request_id, correlation_id, project_id, nombre,
+        pipeline: result.data?.pipeline,
+        message: result.data?.message
+      });
+    } catch (err) {
+      await this.eventBus.publish('carta.generar.fallida', {
+        request_id, correlation_id, project_id, nombre,
+        error: err.message
+      });
+    }
+  }
 }
 
 module.exports = MenuGeneratorModule;

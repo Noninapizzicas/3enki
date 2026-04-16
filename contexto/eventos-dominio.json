@@ -1,0 +1,128 @@
+{
+  "_type": "event_catalog",
+  "_title": "Catálogo canónico de eventos de dominio",
+  "_version": "1.0",
+  "_created": "2026-04-16",
+  "_PRIORIDAD": "ALTA — fuente de verdad para eventos nuevos.",
+
+  "principio": "Cada módulo escucha SUS eventos y hace SU trabajo. Cuando termina, emite el evento de respuesta. El agente intent-router traduce lenguaje natural a estos eventos.",
+
+  "convencion_naming": {
+    "formato": "<dominio>.<accion>.<estado>",
+    "estados": {
+      "solicitado": "Alguien pide que se haga la acción",
+      "realizando": "Alguien la está haciendo (opcional, para progreso)",
+      "completada": "Terminó OK + datos",
+      "fallida": "Terminó mal + razón"
+    },
+    "forma_solicitado": "<dominio>.<accion>.solicitado[a]",
+    "forma_completado": "<dominio>.<accion>.completado[a] o variantes naturales (borrado, creado, editado...)",
+    "nota": "El estado completado/fallido puede tener forma natural: carta.borrada, carta.generada, archivo.leido. Lo importante es coherencia dentro del dominio."
+  },
+
+  "catalogo": {
+    "archivo": {
+      "listar": {
+        "solicitado": "archivo.listar.solicitado",
+        "payload_solicitado": "{ path, project_id, correlation_id, request_id }",
+        "completado": "archivo.listado",
+        "payload_completado": "{ path, files: [...], request_id, correlation_id }",
+        "fallido": "archivo.listar.fallido",
+        "responsable": "filesystem"
+      },
+      "leer": {
+        "solicitado": "archivo.leer.solicitado",
+        "payload_solicitado": "{ path, project_id, correlation_id, request_id }",
+        "completado": "archivo.leido",
+        "payload_completado": "{ path, content, request_id, correlation_id }",
+        "fallido": "archivo.leer.fallido",
+        "responsable": "filesystem"
+      },
+      "borrar": {
+        "solicitado": "archivo.borrar.solicitado",
+        "payload_solicitado": "{ path, project_id, correlation_id, request_id }",
+        "completado": "archivo.borrado",
+        "payload_completado": "{ path, request_id, correlation_id }",
+        "fallido": "archivo.borrar.fallido",
+        "responsable": "filesystem"
+      }
+    },
+
+    "carta": {
+      "generar": {
+        "solicitado": "carta.generar.solicitada",
+        "payload_solicitado": "{ project_id, nombre, filePath?, texto?, correlation_id, request_id }",
+        "completado": "carta.generada",
+        "payload_completado": "{ carta_id, project_id, meta, categorias, productos, request_id, correlation_id }",
+        "fallido": "carta.generar.fallida",
+        "responsable": "menu-generator (pipeline OCR + structurer)"
+      },
+      "listar": {
+        "solicitado": "carta.listar.solicitada",
+        "payload_solicitado": "{ project_id, correlation_id, request_id }",
+        "completado": "carta.listada",
+        "payload_completado": "{ project_id, cartas: [...], total, request_id, correlation_id }",
+        "responsable": "carta-manager"
+      },
+      "editar": {
+        "solicitado": "carta.editar.solicitada",
+        "payload_solicitado": "{ carta_id, project_id, cambios, correlation_id, request_id }",
+        "completado": "carta.editada",
+        "payload_completado": "{ carta_id, project_id, cambios_aplicados, request_id, correlation_id }",
+        "fallido": "carta.editar.fallida",
+        "responsable": "carta-manager",
+        "nota": "carta-manager ya emite carta.actualizada (evento legacy compatible)"
+      },
+      "borrar": {
+        "solicitado": "carta.borrar.solicitada",
+        "payload_solicitado": "{ carta_id, project_id, correlation_id, request_id }",
+        "completado": "carta.borrada",
+        "payload_completado": "{ carta_id, project_id, request_id, correlation_id }",
+        "fallido": "carta.borrar.fallida",
+        "responsable": "carta-manager"
+      },
+      "imprimir": {
+        "solicitado": "carta.imprimir.solicitada",
+        "payload_solicitado": "{ carta_id, project_id, formato?, correlation_id, request_id }",
+        "completado": "carta.impresa",
+        "payload_completado": "{ carta_id, html_path, pdf_path?, request_id, correlation_id }",
+        "fallido": "carta.imprimir.fallida",
+        "responsable": "carta-impresion (architect + builder agents)"
+      }
+    },
+
+    "programacion": {
+      "crear": {
+        "solicitado": "programacion.crear.solicitada",
+        "payload_solicitado": "{ project_id, regla, correlation_id, request_id }",
+        "completado": "programacion.creada",
+        "payload_completado": "{ regla_id, project_id, request_id, correlation_id }",
+        "fallido": "programacion.crear.fallida",
+        "responsable": "carta-scheduler"
+      }
+    }
+  },
+
+  "reglas_para_responsables": [
+    "Al recibir un evento .solicitado, SIEMPRE responder: o .completado o .fallido. No dejar colgado.",
+    "SIEMPRE incluir request_id y correlation_id en la respuesta para que intent-router pueda correlacionar.",
+    "Si la operación tarda >5s, emitir un evento .realizando intermedio con progreso.",
+    "Los eventos .fallida DEBEN incluir un campo error con mensaje humano legible."
+  ],
+
+  "reglas_para_intent_router": [
+    "Publicar evento .solicitado con request_id único (uuid).",
+    "Esperar .completada o .fallida con el mismo request_id.",
+    "Si pasados 30s no llega respuesta, reportar al usuario 'hay retraso'.",
+    "NO llamar tools del dominio (carta.save, etc.) directamente — publicar evento."
+  ],
+
+  "eventos_legacy_compatibles": {
+    "descripcion": "Eventos antiguos que siguen existiendo. En fase aditiva — módulos emiten ambos (nuevo + viejo).",
+    "mapeo": {
+      "carta.actualizada": "EQUIVALENTE a carta.editada (module carta-manager sigue emitiéndolo — NO quitar)",
+      "menu.generated": "EQUIVALENTE a carta.generada",
+      "carta.impresion.lista": "EQUIVALENTE a carta.impresa"
+    }
+  }
+}

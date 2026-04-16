@@ -89,6 +89,65 @@ class CartaManagerModule {
   }
 
   // ==========================================
+  // Domain event handlers (eventos canónicos .solicitado)
+  // ==========================================
+
+  async onCartaListarSolicitada(event) {
+    const data = event.data || event.payload || event;
+    const { project_id, request_id, correlation_id } = data;
+    try {
+      const result = await this.toolList({ project_id });
+      await this.eventBus.publish('carta.listada', {
+        request_id, correlation_id, project_id,
+        cartas: result?.data?.cartas || [],
+        total: result?.data?.total || 0
+      });
+    } catch (err) {
+      await this.eventBus.publish('carta.listar.fallida', {
+        request_id, correlation_id, project_id,
+        error: err.message
+      });
+    }
+  }
+
+  async onCartaEditarSolicitada(event) {
+    const data = event.data || event.payload || event;
+    const { carta_id, project_id, cambios, request_id, correlation_id } = data;
+    try {
+      // cambios: objeto con { producto_id?, nombre?, precio?, ingredientes?... } o lista de ops
+      // Por simplicidad: si llega {producto_id, ...rest}, llamar toolUpdateProduct
+      if (cambios?.producto_id) {
+        await this.toolUpdateProduct({ carta_id, project_id, ...cambios });
+      }
+      await this.eventBus.publish('carta.editada', {
+        request_id, correlation_id, project_id, carta_id,
+        cambios_aplicados: cambios
+      });
+    } catch (err) {
+      await this.eventBus.publish('carta.editar.fallida', {
+        request_id, correlation_id, project_id, carta_id,
+        error: err.message
+      });
+    }
+  }
+
+  async onCartaBorrarSolicitada(event) {
+    const data = event.data || event.payload || event;
+    const { carta_id, project_id, request_id, correlation_id } = data;
+    try {
+      await this.toolDelete({ carta_id, project_id });
+      await this.eventBus.publish('carta.borrada', {
+        request_id, correlation_id, project_id, carta_id
+      });
+    } catch (err) {
+      await this.eventBus.publish('carta.borrar.fallida', {
+        request_id, correlation_id, project_id, carta_id,
+        error: err.message
+      });
+    }
+  }
+
+  // ==========================================
   // Persistence
   // ==========================================
 

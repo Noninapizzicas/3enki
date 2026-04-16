@@ -755,8 +755,6 @@ Fecha actual: {{date}}`,
 
       if (projectContext.storage_path) {
         projectSection.push(`- **Storage path**: ${projectContext.storage_path}`);
-        projectSection.push(`- **Rutas de archivos**: Al llamar tools con filePath, usa rutas RELATIVAS al storage (ej: "pizzepos/mi-carta.pdf"). El módulo resuelve contra el storage_path. NO pidas al usuario rutas absolutas.`);
-        projectSection.push(`- **IMPORTANTE — Archivos subidos**: Si el usuario menciona que acaba de subir un archivo, NO le preguntes el nombre. Usa \`fs.list\` con path="${projectContext.storage_path}" para encontrarlo tú mismo. Busca recursivamente si hace falta con \`fs.search\`. Solo si no encuentras nada pregunta al usuario.`);
       }
 
       if (projectContext.storage_info) {

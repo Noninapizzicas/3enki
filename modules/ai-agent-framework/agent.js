@@ -167,8 +167,16 @@ class Agent {
    * Build context for execution
    */
   async buildContext(event) {
+    // Execution context from the caller (chat-ai-bridge, agent-manager, ...)
+    const callerContext = event?.payload?.context || event?.data?.context || {};
+    const task = event?.payload?.task || event?.data?.task || null;
+
     if (!this.context_enabled || !this.contextManager) {
-      return { messages: [] };
+      return {
+        messages: [],
+        ...callerContext,
+        task
+      };
     }
 
     const context = await this.contextManager.getContext(this.id);
@@ -176,7 +184,11 @@ class Agent {
     // Get last N messages
     const messages = context.messages.slice(-this.context_window);
 
-    return { messages };
+    return {
+      messages,
+      ...callerContext,
+      task
+    };
   }
 
   /**
@@ -252,16 +264,28 @@ class Agent {
     // Build messages array
     const messages = [];
 
-    // Add context messages
+    // 1. System prompt from the .md file (role: system, not user)
+    if (prompt && prompt.trim().length > 0) {
+      messages.push({
+        role: 'system',
+        content: prompt
+      });
+    }
+
+    // 2. Historical context messages (from contextManager)
     if (context.messages && context.messages.length > 0) {
       messages.push(...context.messages);
     }
 
-    // Add current prompt
-    messages.push({
-      role: 'user',
-      content: prompt
-    });
+    // 3. Current user message — comes from context.user_message or context.task
+    //    If agent was invoked with a real user message, use it. Otherwise use task.
+    const userTurn = context.user_message || context.task;
+    if (userTurn) {
+      messages.push({
+        role: 'user',
+        content: userTurn
+      });
+    }
 
     // Get tool definitions for native function calling
     const tools = this.getToolDefinitions();
@@ -450,6 +474,19 @@ class Agent {
   async updateContext(event, result) {
     if (!this.contextManager) return;
 
+    // Save user message first (so next turn has conversational history)
+    const userMessage = event?.payload?.context?.user_message ||
+                        event?.payload?.task ||
+                        event?.data?.context?.user_message;
+    if (userMessage) {
+      await this.contextManager.addMessage(this.id, {
+        role: 'user',
+        content: userMessage,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Save assistant response
     await this.contextManager.addMessage(this.id, {
       role: 'assistant',
       content: result.content,

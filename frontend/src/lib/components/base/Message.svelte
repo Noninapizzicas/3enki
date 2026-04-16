@@ -15,6 +15,7 @@
   import type { Message, Attachment } from '$lib/ui-core';
   import Chip from './Chip.svelte';
   import MarkdownRenderer from './MarkdownRenderer.svelte';
+  import RecipeInvestigationResult from '../recipes/RecipeInvestigationResult.svelte';
 
   export let message: Message;
   export let showContextToggle: boolean = true;
@@ -52,6 +53,33 @@
   $: hasAttachments = message.attachments && message.attachments.length > 0;
   $: inContext = message.in_context !== false; // Default true si undefined
   $: isManuallyToggled = message.manually_toggled === true;
+
+  // Detectar si el mensaje contiene resultado de investigación de receta
+  $: investigationData = (() => {
+    // 1. Primero, intentar de metadata
+    if (message.metadata?.investigation_result && typeof message.metadata.investigation_result === 'object') {
+      return message.metadata.investigation_result;
+    }
+
+    // 2. Si el contenido es una string que empieza con JSON para investigación
+    if (typeof message.content === 'string') {
+      try {
+        // Intentar parsear si parece JSON y contiene investigacion_id
+        const match = message.content.match(/^\{[\s\S]*?"investigacion_id"/);
+        if (match) {
+          const jsonStr = message.content.substring(0, message.content.indexOf('\n') > 0 ? message.content.indexOf('\n') : undefined);
+          const parsed = JSON.parse(jsonStr);
+          if (parsed.investigacion_id) {
+            return parsed;
+          }
+        }
+      } catch (e) {
+        // No es JSON o no es investigación
+      }
+    }
+
+    return null;
+  })();
 </script>
 
 <div
@@ -86,8 +114,16 @@
       {/if}
     </div>
 
-    <div class="content" class:content-markdown={message.role === 'assistant'}>
-      {#if message.role === 'assistant' && message.content}
+    <div class="content" class:content-markdown={message.role === 'assistant' && !investigationData}>
+      {#if investigationData}
+        <!-- Mostrar resultado de investigación -->
+        <RecipeInvestigationResult
+          data={investigationData}
+          on:save
+          on:edit
+          on:cancel
+        />
+      {:else if message.role === 'assistant' && message.content}
         <MarkdownRenderer content={message.content} />
       {:else}
         {message.content}

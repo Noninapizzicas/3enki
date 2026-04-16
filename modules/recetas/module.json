@@ -75,7 +75,8 @@
     { "domain": "recetas", "action": "revertir", "method": "handleRevertir" },
     { "domain": "recetas", "action": "ingredientes", "method": "handleIngredientes" },
     { "domain": "recetas", "action": "actualizar_precio", "method": "handleActualizarPrecio" },
-    { "domain": "recetas", "action": "estadisticas", "method": "handleEstadisticas" }
+    { "domain": "recetas", "action": "estadisticas", "method": "handleEstadisticas" },
+    { "domain": "recetas", "action": "investigar_receta", "method": "handleInvestigarReceta" }
   ],
 
   "ui_handlers": [

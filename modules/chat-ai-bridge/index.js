@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 
 const { EVENTS } = require('../../core/constants');
+const MessageSanitizer = require('../../core/message-sanitizer');
 
 /**
  * Chat AI Bridge Module
@@ -610,18 +611,44 @@ class ChatAiBridgeModule {
       });
     });
 
+    // Validar y sanificar contenido de respuesta
+    let responseContent = aiResponse.content || '[No response]';
+
+    // Validar que sea string
+    if (typeof responseContent !== 'string') {
+      this.logger.warn('chat-ai-bridge.non-string-content', {
+        requestId,
+        contentType: typeof responseContent,
+        contentValue: String(responseContent).substring(0, 50)
+      });
+      responseContent = String(responseContent);
+    }
+
+    // Sanificar [object Object]
+    const sanitized = MessageSanitizer.sanitizeMessage(responseContent);
+    const sanitizationIssues = MessageSanitizer.reportProblems(responseContent);
+
+    if (sanitizationIssues) {
+      this.logger.warn('chat-ai-bridge.serialization-detected', {
+        requestId,
+        issues: sanitizationIssues,
+        objectCount: sanitizationIssues.objectCount
+      });
+    }
+
     await this.eventBus.publish('session.save.request', {
       request_id: requestId,
       conversation_id,
       role: 'assistant',
-      content: aiResponse.content || '[No response]',
+      content: sanitized,
       tokens: aiResponse.tokens,
       cost: aiResponse.cost,
       metadata: {
         model: aiResponse.model,
         provider: aiResponse.provider,
         tool_calls_executed: aiResponse.tool_calls_executed,
-        iterations: aiResponse.iterations
+        iterations: aiResponse.iterations,
+        sanitized: sanitized !== responseContent
       },
       correlation_id
     });
@@ -644,8 +671,22 @@ class ChatAiBridgeModule {
     this.pendingAIRequests.delete(request_id);
 
     if (success) {
+      // Validar y sanificar contenido
+      let finalContent = content || '';
+
+      if (typeof finalContent !== 'string') {
+        this.logger.warn('chat-ai-bridge.ai-response-non-string', {
+          request_id,
+          contentType: typeof finalContent
+        });
+        finalContent = String(finalContent);
+      }
+
+      // Sanificar
+      const sanitizedContent = MessageSanitizer.sanitizeMessage(finalContent);
+
       pending.resolve({
-        content,
+        content: sanitizedContent,
         tool_calls_executed: tool_calls_executed || [],
         tokens,
         cost,

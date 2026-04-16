@@ -183,8 +183,21 @@
 
         <!-- Costes -->
         {#if data.costes}
-          <div class="subsection">
-            <h5>💰 Costes</h5>
+          <div class="subsection costs">
+            <div class="costs-header">
+              <h5>💰 Costes</h5>
+              <span class="cost-badge" class:estimated={data.costes.tipo === 'estimado'}>
+                {data.costes.tipo === 'real' ? '✓ Real' : '⚠️ Estimado'}
+              </span>
+            </div>
+
+            {#if data.costes.tipo === 'estimado'}
+              <p class="cost-warning">
+                Los costes mostrados son <strong>estimados</strong> basados en los precios de mercado de los ingredientes.
+                Algunos ingredientes pueden no tener precio verificado.
+              </p>
+            {/if}
+
             <div class="costs-grid">
               <div class="cost-item">
                 <span class="cost-label">Coste Total</span>
@@ -195,6 +208,27 @@
                 <span class="cost-value">€{data.costes.coste_porcion.toFixed(2)}</span>
               </div>
             </div>
+
+            {#if data.costes.detalles && data.costes.detalles.length > 0}
+              <div class="cost-breakdown">
+                <h6>Desglose</h6>
+                <div class="breakdown-items">
+                  {#each data.costes.detalles.slice(0, 5) as det}
+                    <div class="breakdown-item">
+                      <span class="det-name">{det.nombre}</span>
+                      <span class="det-qty">{det.cantidad}{det.unidad ? ` ${det.unidad}` : ''}</span>
+                      <span class="det-price">€{det.precio_unitario.toFixed(2)}</span>
+                      {#if !det.es_precio_real}
+                        <span class="det-flag" title="Precio parcial o estimado">⚠️</span>
+                      {/if}
+                    </div>
+                  {/each}
+                  {#if data.costes.detalles.length > 5}
+                    <div class="breakdown-more">... y {data.costes.detalles.length - 5} más</div>
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
         {/if}
 
@@ -455,17 +489,65 @@
     color: #28a745;
   }
 
+  .subsection.costs {
+    background: #f0f8ff;
+    padding: 0.75rem;
+    border-radius: 0.3rem;
+    border-left: 3px solid #007bff;
+  }
+
+  .costs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .costs-header h5 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #555;
+  }
+
+  .cost-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: #28a745;
+    color: white;
+    border-radius: 0.25rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .cost-badge.estimated {
+    background: #ffc107;
+    color: #333;
+  }
+
+  .cost-warning {
+    font-size: 0.85rem;
+    color: #666;
+    background: #fffaeb;
+    border: 1px solid #ffd666;
+    border-radius: 0.3rem;
+    padding: 0.5rem;
+    margin: 0.5rem 0;
+    line-height: 1.4;
+  }
+
   .costs-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
+    margin: 0.75rem 0;
   }
 
   .cost-item {
     display: flex;
     flex-direction: column;
     padding: 0.75rem;
-    background: #f0f8ff;
+    background: white;
     border-radius: 0.3rem;
     border-left: 3px solid #007bff;
   }
@@ -480,6 +562,59 @@
     font-size: 1.25rem;
     font-weight: 700;
     color: #007bff;
+  }
+
+  .cost-breakdown {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #ddd;
+  }
+
+  .cost-breakdown h6 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.85rem;
+    color: #666;
+  }
+
+  .breakdown-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .breakdown-item {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 0.3fr;
+    gap: 0.5rem;
+    padding: 0.4rem;
+    background: white;
+    border-radius: 0.2rem;
+    font-size: 0.85rem;
+    align-items: center;
+  }
+
+  .det-name {
+    color: #333;
+    font-weight: 500;
+  }
+
+  .det-qty,
+  .det-price {
+    color: #666;
+    text-align: right;
+  }
+
+  .det-flag {
+    color: #ffc107;
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  .breakdown-more {
+    padding: 0.4rem;
+    font-size: 0.8rem;
+    color: #999;
+    font-style: italic;
   }
 
   .viability {

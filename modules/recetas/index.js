@@ -567,29 +567,20 @@ class RecetasModule {
           }));
         }
 
-        // Intentar obtener costos
+        // Obtener costos (reales o estimados)
         try {
-          // Simulación: en producción llamaría a escandallo real
-          if (receta.ingredientes && receta.ingredientes.length > 0) {
-            let coste_total = 0;
-            receta.ingredientes.forEach(ing => {
-              if (ing.precio_mercado_en_momento) {
-                coste_total += ing.precio_mercado_en_momento;
-              }
-            });
+          resultado.costes = await this.obtenerCostosReceta(receta, proyecto_id);
 
-            resultado.costes = {
-              coste_total,
-              coste_porcion: receta.porciones ? (coste_total / receta.porciones).toFixed(2) : coste_total,
-              food_cost_porcentaje: null,
-              detalles: receta.ingredientes.map(ing => ({
-                nombre: ing.nombre,
-                costo: ing.precio_mercado_en_momento || 0
-              }))
-            };
+          // Agregar advertencia si son estimados
+          if (resultado.costes.tipo === 'estimado') {
+            resultado.flags.push('costos_estimados_no_reales');
           }
         } catch (e) {
-          this.logger.debug('recetas.investigar.costos-error', { error: e.message });
+          this.logger.error('recetas.investigar.costos-error', {
+            receta_id: receta.id,
+            error: e.message
+          });
+          // Continuar sin costos si hay error
         }
 
         resultado.viabilidad = {
@@ -661,6 +652,83 @@ class RecetasModule {
     if (score >= 80) return 'alta';
     if (score >= 50) return 'media';
     return 'baja';
+  }
+
+  /**
+   * Intentar obtener costos reales de escandallo
+   * Si no existe escandallo, calcula estimado y marca como tal
+   */
+  async obtenerCostosReceta(receta, projectId) {
+    const costos = {
+      tipo: 'estimado', // 'real' o 'estimado'
+      coste_total: 0,
+      coste_porcion: 0,
+      food_cost_porcentaje: null,
+      detalles: []
+    };
+
+    try {
+      // PASO 1: Intentar obtener costos del escandallo si existen
+      // (En futuro, usar escandallo tool directamente)
+      // Para ahora, calcular basado en ingredientes
+
+      if (!receta.ingredientes || receta.ingredientes.length === 0) {
+        return costos; // Sin ingredientes
+      }
+
+      // PASO 2: Calcular costos basados en precios de ingredientes
+      let coste_total = 0;
+      const detalles = [];
+
+      for (const ing of receta.ingredientes) {
+        const precio = ing.precio_mercado_en_momento || ing.precio_mercado || 0;
+        coste_total += precio;
+
+        detalles.push({
+          nombre: ing.nombre,
+          cantidad: ing.cantidad,
+          unidad: ing.unidad,
+          precio_unitario: precio,
+          es_precio_real: !!ing.precio_mercado // true si es precio de mercado real
+        });
+      }
+
+      // PASO 3: Calcular por porción
+      const coste_porcion = receta.porciones && receta.porciones > 0
+        ? coste_total / receta.porciones
+        : coste_total;
+
+      // PASO 4: Determinar si es "real" o "estimado"
+      // Es "real" si todos los ingredientes tienen precio_mercado
+      const todosTienenPrecio = receta.ingredientes.every(
+        ing => ing.precio_mercado_en_momento || ing.precio_mercado
+      );
+
+      costos.tipo = todosTienenPrecio ? 'real' : 'estimado';
+      costos.coste_total = Math.round(coste_total * 100) / 100;
+      costos.coste_porcion = Math.round(coste_porcion * 100) / 100;
+      costos.detalles = detalles;
+      costos.fuente = todosTienenPrecio ? 'precios_mercado' : 'precios_parciales';
+
+      // PASO 5: Log para debugging
+      this.logger.debug('recetas.investigar.costos-calculados', {
+        receta_id: receta.id,
+        tipo: costos.tipo,
+        coste_total: costos.coste_total,
+        ingredientes_con_precio: detalles.filter(d => d.es_precio_real).length,
+        ingredientes_total: detalles.length
+      });
+
+      return costos;
+
+    } catch (err) {
+      this.logger.error('recetas.investigar.costos-error', {
+        receta_id: receta.id,
+        error: err.message
+      });
+      // Retornar objeto vacío pero válido
+      return costos;
+    }
   }
 
   // ==========================================

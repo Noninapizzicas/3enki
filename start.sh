@@ -176,6 +176,9 @@ start_backend() {
     export MQTT_PORT=$mqtt_port
     export NODE_ENV=${NODE_ENV:-development}
 
+    # Token para conversation-export (endpoint HTTP de trace de conversaciones)
+    export CONVERSATION_EXPORT_TOKEN=${CONVERSATION_EXPORT_TOKEN:-nonina}
+
     # Iniciar backend
     cd "$SCRIPT_DIR"
     nohup node index.js > "$LOG_DIR/backend.log" 2>&1 &

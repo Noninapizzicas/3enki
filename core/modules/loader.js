@@ -21,6 +21,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const IntentRegistry = require('./intent-registry');
 
 class ModuleLoader {
   /**
@@ -56,6 +57,12 @@ class ModuleLoader {
      * Map: toolName -> { name, description, parameters, handler, module, confirmation }
      */
     this.toolsRegistry = new Map();
+
+    /**
+     * Intent Registry — construido desde los campos "intents" de cada module.json
+     * Permite al Conversation Router hacer matching sin LLM para casos claros
+     */
+    this.intentRegistry = new IntentRegistry(this.logger);
   }
 
   /**
@@ -362,6 +369,11 @@ class ModuleLoader {
         this.registerToolsForAI(moduleName, manifest.tools, instance);
       }
 
+      // Register intents for Conversation Router if defined in manifest
+      if (manifest.intents && Array.isArray(manifest.intents)) {
+        this.intentRegistry.register(moduleName, manifest.intents);
+      }
+
       // Auto-wire UI handlers from manifest
       const uiRegistrations = this.wireUIHandlers(manifest, instance);
 
@@ -451,6 +463,9 @@ class ModuleLoader {
       if (this.registry) {
         this.registry.unregister(moduleName);
       }
+
+      // Unregister intents
+      this.intentRegistry.unregister(moduleName);
 
       // Unregister tools for AI
       this.unregisterToolsForAI(moduleName);

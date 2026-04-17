@@ -37,6 +37,9 @@ class ConversationExportModule {
     this.activityBuffer = [];
     this.MAX_BUFFER = 1000;
     this.activityUnsub = null;
+
+    // Para consultas DB via eventos
+    this.pendingDbRequests = new Map();
   }
 
   async onLoad(context) {
@@ -63,20 +66,41 @@ class ConversationExportModule {
       }
     });
 
-    // Suscribirse a eventos críticos con payload completo (errores, failures)
-    this.agentFailedUnsub = await this.eventBus.subscribe('agent.*.failed', (event) => {
+    // Capturar completions/failures de agentes — agent-bridge emite estos eventos canónicos
+    // (ya incluyen conversation_id, a diferencia de los agent.{name}.completed del framework)
+    this.agentFailedUnsub = this.eventBus.subscribe('agent.failed', (event) => {
       const data = event?.data || event?.payload || event;
       this.activityBuffer.push({
         timestamp: new Date().toISOString(),
         type: 'AGENT_FAILURE',
-        module: 'ai-agent-framework',
+        module: 'agent-bridge',
         action: `agent.${data.agent_name || 'unknown'}.failed`,
         outcome: 'failure',
+        conversation_id: data.conversation_id || null,
         ctx: {
           agent_name: data.agent_name,
           error: data.error,
-          pipelineId: data.pipelineId,
-          timestamp: data.timestamp
+          pipelineId: data.pipelineId
+        }
+      });
+      if (this.activityBuffer.length > this.MAX_BUFFER) this.activityBuffer.shift();
+    });
+
+    this.agentCompletedUnsub = this.eventBus.subscribe('agent.completed', (event) => {
+      const data = event?.data || event?.payload || event;
+      this.activityBuffer.push({
+        timestamp: new Date().toISOString(),
+        type: 'AGENT_COMPLETED',
+        module: 'agent-bridge',
+        action: `agent.${data.agent_name || 'unknown'}.completed`,
+        outcome: 'success',
+        conversation_id: data.conversation_id || null,
+        ctx: {
+          agent_name: data.agent_name,
+          result_summary: typeof data.result === 'string'
+            ? data.result.slice(0, 500)
+            : JSON.stringify(data.result).slice(0, 500),
+          pipelineId: data.pipelineId
         }
       });
       if (this.activityBuffer.length > this.MAX_BUFFER) {
@@ -84,23 +108,9 @@ class ConversationExportModule {
       }
     });
 
-    this.agentCompletedUnsub = await this.eventBus.subscribe('agent.*.completed', (event) => {
-      const data = event?.data || event?.payload || event;
-      this.activityBuffer.push({
-        timestamp: new Date().toISOString(),
-        type: 'AGENT_COMPLETED',
-        module: 'ai-agent-framework',
-        action: `agent.${data.agent_name || 'unknown'}.completed`,
-        outcome: 'success',
-        ctx: {
-          agent_name: data.agent_name,
-          result_summary: typeof data.result === 'string' ? data.result.slice(0, 500) : JSON.stringify(data.result).slice(0, 500),
-          pipelineId: data.pipelineId
-        }
-      });
-      if (this.activityBuffer.length > this.MAX_BUFFER) {
-        this.activityBuffer.shift();
-      }
+    // Respuestas de DB para queries directas
+    this.dbResponseUnsub = this.eventBus.subscribe('db.query.response', (event) => {
+      this._onDbQueryResponse(event);
     });
 
     this.logger.info('module.loaded', {
@@ -114,6 +124,9 @@ class ConversationExportModule {
     if (this.activityUnsub) await this.activityUnsub();
     if (this.agentFailedUnsub) await this.agentFailedUnsub();
     if (this.agentCompletedUnsub) await this.agentCompletedUnsub();
+    if (this.dbResponseUnsub) await this.dbResponseUnsub();
+    for (const [, req] of this.pendingDbRequests.entries()) clearTimeout(req.timeout);
+    this.pendingDbRequests.clear();
     this.activityBuffer = [];
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -347,51 +360,132 @@ class ConversationExportModule {
   }
 
   // ==========================================
+  // DB directa — para agent_executions y metadata
+  // ==========================================
+
+  _onDbQueryResponse(event) {
+    const data = event?.data || event;
+    const { request_id, success, data: rows, error } = data;
+    const pending = this.pendingDbRequests.get(request_id);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.pendingDbRequests.delete(request_id);
+    if (success) pending.resolve(rows || []);
+    else pending.reject(new Error(error || 'DB query failed'));
+  }
+
+  async _queryDB(projectId, query, params = []) {
+    const crypto = require('crypto');
+    const requestId = crypto.randomUUID();
+    const timeout = this.config.db_timeout_ms || 8000;
+
+    const promise = new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingDbRequests.delete(requestId);
+        reject(new Error('DB query timeout'));
+      }, timeout);
+      this.pendingDbRequests.set(requestId, { resolve, reject, timeout: timeoutId });
+    });
+
+    await this.eventBus.publish('db.query.request', {
+      project_id: projectId,
+      query,
+      params,
+      read_only: true,
+      request_id: requestId
+    });
+
+    return promise;
+  }
+
+  /**
+   * Carga ejecuciones de agentes para una conversación desde agent_executions.
+   * La tabla la crea agent-bridge. Si no existe, devuelve [].
+   */
+  async loadAgentExecutionsForSession(projectId, sessionId) {
+    try {
+      const rows = await this._queryDB(projectId,
+        `SELECT id, agent_name, task, status, started_at, completed_at, result, error
+         FROM agent_executions
+         WHERE conversation_id = ?
+         ORDER BY started_at ASC`,
+        [sessionId]
+      );
+
+      return (rows || []).map(row => ({
+        ...row,
+        result: row.result ? (() => { try { return JSON.parse(row.result); } catch (_) { return row.result; } })() : null
+      }));
+    } catch (_) {
+      // La tabla puede no existir si agent-bridge no ha ejecutado aún
+      return [];
+    }
+  }
+
+  /**
+   * Lee el metadata de la conversación para obtener el estado actual.
+   */
+  async loadConversationMetadata(projectId, sessionId) {
+    try {
+      const rows = await this._queryDB(projectId,
+        `SELECT metadata FROM conversations WHERE id = ? LIMIT 1`,
+        [sessionId]
+      );
+      if (!rows || rows.length === 0) return null;
+      const raw = rows[0]?.metadata;
+      if (!raw) return null;
+      return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ==========================================
   // Build export JSON
   // ==========================================
 
   async buildSessionExport(projectId, sessionId, verbose = false) {
-    // 1. Mensajes
-    const messages = await this.loadMessagesFromChatSession(projectId, sessionId);
+    // Cargar todo en paralelo
+    const [messages, agentExecutions, conversationMeta] = await Promise.all([
+      this.loadMessagesFromChatSession(projectId, sessionId),
+      this.loadAgentExecutionsForSession(projectId, sessionId),
+      this.loadConversationMetadata(projectId, sessionId)
+    ]);
 
-    // 2. Ventana temporal para buscar eventos relacionados
+    // Ventana temporal para buscar eventos relacionados
     let timeWindow = null;
     if (messages.length > 0) {
       const first = messages[0].created_at || messages[0].timestamp;
       const last = messages[messages.length - 1].created_at || messages[messages.length - 1].timestamp;
       if (first && last) {
         timeWindow = {
-          start: new Date(first).getTime() - 60000,  // 1min antes
-          end: new Date(last).getTime() + 300000     // 5min después
+          start: new Date(first).getTime() - 60000,
+          end: new Date(last).getTime() + 300000
         };
       }
     }
 
-    // 3. Logs del sistema en esa ventana
     const systemLogs = await this.loadLogsForSession(sessionId, timeWindow);
-
-    // 4. Activity buffer en memoria
     const activity = this.filterActivityBuffer(timeWindow);
 
-    // 5. Normalizar y mezclar cronológicamente
-    const timeline = this.buildTimeline(messages, systemLogs, activity, verbose);
-
-    // 6. Summary
-    const summary = this.buildSummary(messages, timeline);
+    const timeline = this.buildTimeline(messages, systemLogs, activity, agentExecutions, verbose);
+    const summary = this.buildSummary(messages, timeline, agentExecutions, conversationMeta);
 
     return {
-      _format: 'conversation-export-v1',
+      _format: 'conversation-export-v2',
       _generated_at: new Date().toISOString(),
-      _hint_llm: 'Este JSON es la transcripción cronológica completa de una conversación. Timeline contiene mensajes + tool calls + eventos agent + errores en orden temporal.',
+      _hint_llm: 'Transcripción cronológica completa. timeline = mensajes + tool calls + ejecuciones de agentes + errores. agent_executions = historial SQLite de cada agente.',
       project_id: projectId,
       session_id: sessionId,
+      conversation_state: conversationMeta?.state || 'unknown',
       summary,
       timeline,
+      agent_executions: agentExecutions.length > 0 ? agentExecutions : undefined,
       messages_raw: verbose ? messages : undefined
     };
   }
 
-  buildTimeline(messages, systemLogs, activity, verbose) {
+  buildTimeline(messages, systemLogs, activity, agentExecutions = [], verbose) {
     const items = [];
 
     // Mensajes
@@ -419,6 +513,26 @@ class ConversationExportModule {
         action: a.action,
         outcome: a.outcome,
         ...(a.ctx && { ctx: a.ctx })
+      });
+    }
+
+    // Ejecuciones de agentes desde SQLite (fuente de verdad, no efímera)
+    for (const exec of agentExecutions) {
+      items.push({
+        _type: 'agent_execution',
+        ts: exec.started_at,
+        agent_name: exec.agent_name,
+        task: exec.task,
+        status: exec.status,
+        started_at: exec.started_at,
+        completed_at: exec.completed_at,
+        duration_ms: exec.started_at && exec.completed_at
+          ? new Date(exec.completed_at).getTime() - new Date(exec.started_at).getTime()
+          : null,
+        result_summary: exec.result
+          ? (typeof exec.result === 'string' ? exec.result.slice(0, 300) : JSON.stringify(exec.result).slice(0, 300))
+          : null,
+        error: exec.error || null
       });
     }
 
@@ -459,15 +573,20 @@ class ConversationExportModule {
     return 'internal_log';
   }
 
-  buildSummary(messages, timeline) {
+  buildSummary(messages, timeline, agentExecutions = [], conversationMeta = null) {
     const counts = {
       messages: messages.length,
       user_messages: messages.filter(m => m.role === 'user').length,
       assistant_messages: messages.filter(m => m.role === 'assistant').length,
       tool_calls: timeline.filter(i => i._type === 'tool_call').length,
-      agent_events: timeline.filter(i => i._type === 'agent_event').length,
+      agent_executions: agentExecutions.length,
+      agent_completed: agentExecutions.filter(e => e.status === 'completed').length,
+      agent_failed: agentExecutions.filter(e => e.status === 'failed').length,
       errors: timeline.filter(i => i._type === 'error').length
     };
+
+    const conversation_state = conversationMeta?.state || 'unknown';
+    const active_agent = conversationMeta?.active_agent || null;
 
     const tokens = messages.reduce((sum, m) => sum + (m.tokens || 0), 0);
     const cost = messages.reduce((sum, m) => sum + (m.cost || 0), 0);
@@ -479,6 +598,8 @@ class ConversationExportModule {
       counts,
       tokens,
       cost,
+      conversation_state,
+      active_agent,
       started_at: firstMsg?.created_at || firstMsg?.timestamp,
       ended_at: lastMsg?.created_at || lastMsg?.timestamp,
       duration_ms: firstMsg && lastMsg

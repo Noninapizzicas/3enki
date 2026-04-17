@@ -61,6 +61,7 @@ class ChatAiBridgeModule {
     this.eventBus = context.eventBus;
     this.uiHandler = context.uiHandler;
     this.config = context.moduleConfig || {};
+    this.moduleLoader = context.moduleLoader || null;
 
     this.logger.info('chat-ai-bridge.loading', {
       module: this.name,
@@ -167,6 +168,13 @@ class ChatAiBridgeModule {
       const userMessage = await this.saveUserMessage(flowState);
       flowState.userMessageId = userMessage?.id;
 
+      // Step 1.5: Route — decide path before spending resources on context/prompt
+      const routingDecision = this._route(content, conversation_id);
+      if (routingDecision.path === 'forward_agent' || routingDecision.path === 'agent') {
+        await this._handleAgentPath(flowState, routingDecision);
+        return;
+      }
+
       // Step 2: Load conversation context
       flowState.stage = 'loading_context';
       const context = await this.loadConversationContext(flowState);
@@ -180,12 +188,9 @@ class ChatAiBridgeModule {
       flowState.stage = 'building_ai_request';
       const aiMessages = this.buildAIMessages(prompt, context, content);
 
-      // Step 5: Call AI (or intent-router agent if enabled)
+      // Step 5: Call AI
       flowState.stage = 'calling_ai';
-      const useIntentRouter = this.config.useIntentRouter !== false; // default ON
-      const aiResponse = useIntentRouter
-        ? await this.callIntentRouter(flowState, context)
-        : await this.callAI(flowState, aiMessages);
+      const aiResponse = await this.callAI(flowState, aiMessages);
       flowState.aiResponse = aiResponse;
 
       // Step 6: Save assistant message
@@ -490,85 +495,185 @@ class ChatAiBridgeModule {
     return Math.ceil(text.length / 4);
   }
 
+  // ==========================================
+  // Routing — Capas 2 y 3 de conversation-routing
+  // ==========================================
+
+  _route(message, conversationId) {
+    const router = this.moduleLoader?.getModule('conversation-router')?.instance;
+    if (!router) return { path: 'llm', reason: 'no_router' };
+    return router.route(message, conversationId);
+  }
+
   /**
-   * Step 4: Call AI via ai-gateway
-   * Supports streaming: publishes chunks to MQTT conversation/{id}/message
+   * Gestiona los paths async: agent (dispatch nuevo) y forward_agent (reenvío).
+   * Completa el flowState publicando la respuesta de ACK al frontend.
    */
-  /**
-   * NEW PATH: Dispatch the intent-router agent instead of calling LLM directly.
-   * The agent has the agentic prompt, tools, and event catalog — it decides what to do.
-   * Returns a response compatible with what callAI returns (content, tokens, etc.).
-   */
-  async callIntentRouter(flowState, context) {
-    const { flowId, conversation_id, content, correlation_id, page_context } = flowState;
-    const project_id = context?.conversation?.project_id || null;
+  async _handleAgentPath(flowState, decision) {
+    const { flowId, conversation_id, content, correlation_id } = flowState;
 
-    this.logger.info('chat-ai-bridge.intent_router.invoking', {
-      flowId, conversation_id, project_id
-    });
-
-    const agentName = 'intent-router';
-    const TIMEOUT_MS = (this.config.aiTimeoutWithTools || 180000) + 10000;
-
-    return new Promise(async (resolve, reject) => {
-      let resolved = false;
-      const timer = setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        unsubCompleted?.();
-        unsubFailed?.();
-        reject(new Error(`intent-router timeout after ${TIMEOUT_MS / 1000}s`));
-      }, TIMEOUT_MS);
-
-      const unsubCompleted = await this.eventBus.subscribe(`agent.${agentName}.completed`, (event) => {
-        if (resolved) return;
-        const data = event?.data || event?.payload || event;
-        resolved = true;
-        clearTimeout(timer);
-        unsubCompleted?.();
-        unsubFailed?.();
-
-        // Normalize agent result to callAI-compatible shape
-        const result = data.result || {};
-        const responseText =
-          result.content ||
-          result.response ||
-          result.text ||
-          (typeof result === 'string' ? result : JSON.stringify(result));
-
-        resolve({
-          content: responseText,
-          tokens: result.tokens || 0,
-          cost: result.cost || 0,
-          tool_calls_executed: result.tools_used || [],
-          provider: 'intent-router',
-          model: agentName,
-          _agent_raw: result
-        });
-      });
-
-      const unsubFailed = await this.eventBus.subscribe(`agent.${agentName}.failed`, (event) => {
-        if (resolved) return;
-        const data = event?.data || event?.payload || event;
-        resolved = true;
-        clearTimeout(timer);
-        unsubCompleted?.();
-        unsubFailed?.();
-        reject(new Error(data.error || 'intent-router failed'));
-      });
-
-      await this.eventBus.publish('agent.execute.request', {
-        agentName,
-        context: {
-          user_message: content,
-          project_id,
+    try {
+      if (decision.path === 'forward_agent') {
+        // Reenviar mensaje del usuario al agente activo
+        await this.eventBus.publish('agent.user_reply', {
           conversation_id,
-          page_context: page_context || null,
+          agent_name: decision.agent_name,
+          content,
+          project_id: this.activeProjectId,
           correlation_id
-        },
-        task: content
+        });
+
+        this.logger.info('chat-ai-bridge.forward_agent', {
+          flowId, conversation_id, agent: decision.agent_name
+        });
+
+        // No hay respuesta inmediata — llegará vía agent.completed o agent.question
+        await this.eventBus.publish('chat.send.response', {
+          request_id: flowId,
+          success: true,
+          user_message: { id: flowState.userMessageId },
+          assistant_message: null,
+          pending: true,
+          correlation_id
+        });
+        return;
+      }
+
+      if (decision.path === 'agent') {
+        // Marcar conversación como esperando agente
+        const chatSession = this.moduleLoader?.getModule('chat-session')?.instance;
+        if (chatSession) {
+          await chatSession.setConversationState(conversation_id, 'awaiting_agent', {
+            agent_name: decision.agent,
+            started_at: new Date().toISOString()
+          });
+        }
+
+        // Lanzar agente
+        await this.eventBus.publish('agent.execute', {
+          agent_name: decision.agent,
+          task: content,
+          project_id: this.activeProjectId,
+          conversation_id,
+          params: {}
+        });
+
+        this.logger.info('chat-ai-bridge.agent_dispatched', {
+          flowId, conversation_id, agent: decision.agent
+        });
+
+        // ACK inmediato al usuario
+        const ackMessage = await this.saveAssistantMessage(flowState, {
+          content: 'Procesando tu solicitud, te aviso cuando esté listo.',
+          tokens: 0, cost: 0,
+          metadata: { type: 'agent_ack', agent: decision.agent }
+        });
+
+        await this.eventBus.publish('chat.send.response', {
+          request_id: flowId,
+          success: true,
+          user_message: { id: flowState.userMessageId },
+          assistant_message: ackMessage,
+          tokens_used: 0, cost: 0, tools_executed: [],
+          duration: Date.now() - flowState.startTime,
+          correlation_id
+        });
+      }
+
+    } catch (error) {
+      this.logger.error('chat-ai-bridge.agent_path.error', {
+        flowId, path: decision.path, error: error.message
+      });
+      await this.eventBus.publish('chat.send.response', {
+        request_id: flowId, success: false,
+        error: error.message, correlation_id
+      });
+    } finally {
+      this.activeRequests.delete(flowId);
+    }
+  }
+
+  /**
+   * Recibe el resultado de un agente y lo persiste como mensaje assistant.
+   * Evento: agent.completed — payload: { conversation_id, result, domain }
+   */
+  async onAgentCompleted(event) {
+    const data = event.data || event;
+    const { conversation_id, result, domain } = data;
+    if (!conversation_id) return;
+
+    const chatSession = this.moduleLoader?.getModule('chat-session')?.instance;
+
+    // Resetear estado de conversación
+    if (chatSession) {
+      await chatSession.setConversationState(conversation_id, 'idle').catch(() => {});
+    }
+
+    const rawContent = typeof result === 'string' ? result
+      : result?.content || result?.response || result?.text || JSON.stringify(result);
+
+    const sanitized = MessageSanitizer.sanitizeMessage(rawContent);
+
+    // Guardar como mensaje assistant
+    const requestId = crypto.randomUUID();
+    const timeout = this.config.requestTimeout || 10000;
+
+    const savePromise = new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingSessionRequests.delete(requestId);
+        resolve({ id: null });
+      }, timeout);
+      this.pendingSessionRequests.set(requestId, {
+        resolve, reject: resolve, timeout: timeoutId, type: 'agent_result', flowId: null
       });
     });
+
+    await this.eventBus.publish('session.save.request', {
+      request_id: requestId,
+      conversation_id,
+      role: 'assistant',
+      content: sanitized,
+      tokens: result?.tokens || 0,
+      cost: result?.cost || 0,
+      metadata: { domain, type: 'agent_result' }
+    });
+
+    const savedMessage = await savePromise;
+
+    // Publicar al frontend via MQTT
+    const mqttClient = this.uiHandler?.mqtt;
+    if (mqttClient && savedMessage?.id) {
+      mqttClient.publish(`conversation/${conversation_id}/message`, JSON.stringify({
+        id: savedMessage.id,
+        role: 'assistant',
+        content: sanitized,
+        streaming: false,
+        timestamp: new Date().toISOString()
+      }), { qos: 1 });
+    }
+
+    this.logger.info('chat-ai-bridge.agent_completed', { conversation_id, domain });
+  }
+
+  /**
+   * El agente hace una pregunta al usuario.
+   * Evento: agent.question — payload: { conversation_id, question, options?, timeout_ms? }
+   */
+  async onAgentQuestion(event) {
+    const data = event.data || event;
+    const { conversation_id, question, options } = data;
+    if (!conversation_id || !question) return;
+
+    const mqttClient = this.uiHandler?.mqtt;
+    if (mqttClient) {
+      mqttClient.publish(`conversation/${conversation_id}/agent_question`, JSON.stringify({
+        question,
+        options: options || null,
+        timestamp: new Date().toISOString()
+      }), { qos: 1 });
+    }
+
+    this.logger.info('chat-ai-bridge.agent_question', { conversation_id });
   }
 
   async callAI(flowState, messages) {

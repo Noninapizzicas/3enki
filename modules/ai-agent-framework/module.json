@@ -95,7 +95,7 @@
       "ttl_minutes": 1440
     },
     "execution": {
-      "timeout_ms": 60000,
+      "timeout_ms": 180000,
       "max_retries": 3
     },
     "tools": {

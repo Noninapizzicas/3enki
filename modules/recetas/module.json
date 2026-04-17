@@ -5,6 +5,78 @@
   "author": "Event Core Team",
   "main": "index.js",
 
+  "intents": [
+    {
+      "keywords": ["listar recetas", "ver recetas", "mis recetas", "qué recetas tengo", "todas las recetas"],
+      "action": "tool_call",
+      "tool": "recetas.listar",
+      "description": "Listar el catálogo de recetas del proyecto"
+    },
+    {
+      "keywords": ["buscar receta", "busca receta", "receta de", "receta con", "recetas con", "recetas de"],
+      "action": "tool_call",
+      "tool": "recetas.buscar",
+      "description": "Buscar recetas por nombre, ingrediente o criterio"
+    },
+    {
+      "keywords": ["ver receta", "detalle receta", "abre receta", "muéstrame la receta", "información de la receta"],
+      "action": "tool_call",
+      "tool": "recetas.obtener",
+      "description": "Ver detalle completo de una receta"
+    },
+    {
+      "keywords": ["crear receta", "nueva receta", "añadir receta", "guardar receta"],
+      "action": "tool_call",
+      "tool": "recetas.crear",
+      "description": "Crear receta manualmente"
+    },
+    {
+      "keywords": ["actualizar receta", "modificar receta", "cambiar receta", "editar receta"],
+      "action": "tool_call",
+      "tool": "recetas.actualizar",
+      "description": "Modificar una receta existente"
+    },
+    {
+      "keywords": ["historial receta", "versiones receta", "cambios receta", "revertir receta"],
+      "action": "tool_call",
+      "tool": "recetas.historial",
+      "description": "Ver historial de versiones de una receta"
+    },
+    {
+      "keywords": ["ingredientes", "catálogo ingredientes", "precios ingredientes", "lista ingredientes"],
+      "action": "tool_call",
+      "tool": "recetas.ingredientes",
+      "description": "Ver catálogo de ingredientes con precios"
+    },
+    {
+      "keywords": ["estadísticas recetas", "resumen recetas", "cuántas recetas"],
+      "action": "tool_call",
+      "tool": "recetas.estadisticas",
+      "description": "Estadísticas del catálogo de recetas"
+    },
+    {
+      "keywords": ["investiga receta", "investiga la receta", "busca información sobre", "cómo se hace", "receta de cocina"],
+      "action": "agent",
+      "agent": "recetas-investigator",
+      "multi_turn": true,
+      "description": "Investigar una receta: ingredientes, cantidades, precios estimados. Requiere confirmación antes de guardar."
+    },
+    {
+      "keywords": ["analiza receta", "análisis profundo", "analiza en profundidad", "viabilidad técnica"],
+      "action": "agent",
+      "agent": "recetas-analyzer",
+      "multi_turn": false,
+      "description": "Análisis profundo de una receta: costes reales, dificultad, alérgenos, puntos débiles"
+    },
+    {
+      "keywords": ["importar receta", "ingestar receta", "receta desde url", "receta desde pdf", "procesar receta"],
+      "action": "agent",
+      "agent": "recetas-ingestion",
+      "multi_turn": false,
+      "description": "Importar receta desde URL, PDF o imagen"
+    }
+  ],
+
   "provides": {
     "events": [
       "receta.ingestion.started",

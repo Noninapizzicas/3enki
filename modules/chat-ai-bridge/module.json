@@ -21,6 +21,8 @@
       { "event": "project.activated", "handler": "onProjectActivated" },
       { "event": "project.deactivated", "handler": "onProjectDeactivated" },
       { "event": "agent.completed", "handler": "onAgentCompleted" },
+      { "event": "agent.failed", "handler": "onAgentFailed" },
+      { "event": "agent.progress", "handler": "onAgentProgress" },
       { "event": "agent.question", "handler": "onAgentQuestion" }
     ]
   },

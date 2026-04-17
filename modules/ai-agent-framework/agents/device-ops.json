@@ -45,7 +45,7 @@
   "context_enabled": true,
   "context_window": 30,
   "enabled": true,
-  "timeout_ms": 60000,
+  "timeout_ms": 120000,
   "max_retries": 2,
   "metadata": {
     "type": "operations-agent",

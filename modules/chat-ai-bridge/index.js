@@ -675,6 +675,25 @@ class ChatAiBridgeModule {
   }
 
   /**
+   * Paso intermedio del agente — reenvía al frontend para actualizar el banner.
+   * Evento: agent.progress — payload: { conversation_id, agent_name, step, message }
+   */
+  async onAgentProgress(event) {
+    const data = event.data || event;
+    const { conversation_id, message } = data;
+    if (!conversation_id || !message) return;
+
+    const mqttClient = this.uiHandler?.mqtt;
+    if (mqttClient) {
+      mqttClient.publish(`conversation/${conversation_id}/agent_status`, JSON.stringify({
+        status: 'working',
+        message,
+        timestamp: new Date().toISOString()
+      }), { qos: 0 });
+    }
+  }
+
+  /**
    * El agente falló. Limpia el estado y notifica al frontend.
    * Evento: agent.failed — payload: { conversation_id, error, agent_name }
    */

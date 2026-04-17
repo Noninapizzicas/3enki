@@ -70,6 +70,7 @@ export {
   toolStatus,
   agentWorking,
   agentWorkingName,
+  agentWorkingStep,
   sendMessage,
   addMessage,
   endStreaming,

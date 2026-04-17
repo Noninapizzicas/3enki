@@ -56,6 +56,7 @@ class AgentBridgeModule {
       clearTimeout(entry.timer);
       try { entry.unsubCompleted?.(); } catch (_) {}
       try { entry.unsubFailed?.(); } catch (_) {}
+      try { entry.unsubProgress?.(); } catch (_) {}
     }
     this.inFlight.clear();
     this.logger.info('agent-bridge.unloaded', { module: this.name });
@@ -105,12 +106,27 @@ class AgentBridgeModule {
       await this._onFail(pipelineId, d.error || 'agent failed', projectId);
     });
 
+    const unsubProgress = this.eventBus.subscribe(`agent.${agent_name}.progress`, (e) => {
+      const d = e.data || e;
+      if (d.pipelineId !== pipelineId) return;
+      const entry = this.inFlight.get(pipelineId);
+      if (!entry) return;
+      this.eventBus.publish('agent.progress', {
+        conversation_id: entry.conversation_id,
+        agent_name: d.agent_name,
+        step: d.step,
+        message: d.message,
+        pipelineId,
+        timestamp: d.timestamp
+      });
+    });
+
     const timer = timeoutMs > 0
       ? setTimeout(() => this._onTimeout(pipelineId, agent_name, projectId), timeoutMs)
       : null;
 
     this.inFlight.set(pipelineId, {
-      conversation_id, agent_name, unsubCompleted, unsubFailed, timer, projectId
+      conversation_id, agent_name, unsubCompleted, unsubFailed, unsubProgress, timer, projectId
     });
 
     // Reenviar al framework con el payload correcto
@@ -158,6 +174,7 @@ class AgentBridgeModule {
     clearTimeout(entry.timer);
     entry.unsubCompleted?.();
     entry.unsubFailed?.();
+    entry.unsubProgress?.();
     this.inFlight.delete(pipelineId);
 
     if (projectId) {
@@ -186,6 +203,7 @@ class AgentBridgeModule {
     clearTimeout(entry.timer);
     entry.unsubCompleted?.();
     entry.unsubFailed?.();
+    entry.unsubProgress?.();
     this.inFlight.delete(pipelineId);
 
     if (projectId) {

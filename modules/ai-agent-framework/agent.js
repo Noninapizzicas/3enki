@@ -141,18 +141,23 @@ class Agent {
    * Execute agent logic (must be implemented by subclass or uses default)
    */
   async execute(event) {
-    // Default implementation: render prompt + call AI + optionally use tools
+    const pipelineId = event?.payload?.pipelineId;
 
     // 1. Build context
+    this.emitProgress('context', 'Preparando contexto...', pipelineId);
     const context = await this.buildContext(event);
 
     // 2. Render prompt
+    this.emitProgress('prompt', 'Cargando instrucciones...', pipelineId);
     const prompt = await this.renderPrompt(event, context);
 
-    // 3. Call AI
+    // 3. Call AI (aquí ocurre el loop agentic con herramientas)
+    const hasTools = this.tools && this.tools.length > 0;
+    this.emitProgress('ai', hasTools ? 'Analizando y usando herramientas...' : 'Analizando...', pipelineId);
     const aiResponse = await this.callAI(prompt, context);
 
-    // 4. Process tools if needed
+    // 4. Post-process
+    this.emitProgress('result', 'Generando respuesta...', pipelineId);
     const result = await this.processTools(aiResponse, event, context);
 
     // 5. Update context
@@ -161,6 +166,20 @@ class Agent {
     }
 
     return result;
+  }
+
+  /**
+   * Emitir evento de progreso — el agent-bridge lo recoge y lo envía al frontend.
+   */
+  emitProgress(step, message, pipelineId) {
+    if (!this.eventBus || !pipelineId) return;
+    this.eventBus.publish(`agent.${this.name}.progress`, {
+      agent_name: this.name,
+      step,
+      message,
+      pipelineId,
+      timestamp: new Date().toISOString()
+    });
   }
 
   /**

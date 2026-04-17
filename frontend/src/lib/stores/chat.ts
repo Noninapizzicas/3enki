@@ -30,6 +30,7 @@ export const streamingMessageId = writable<string | null>(null);
 export const toolStatus = writable<{ name: string; status: string } | null>(null);
 export const agentWorking = writable<boolean>(false);
 export const agentWorkingName = writable<string | null>(null);
+export const agentWorkingStep = writable<string | null>(null);
 
 // ============================================================================
 // STORES DERIVADOS
@@ -318,6 +319,7 @@ export function clearConversation(): void {
   streamingMessageId.set(null);
   agentWorking.set(false);
   agentWorkingName.set(null);
+  agentWorkingStep.set(null);
 }
 
 /**
@@ -434,16 +436,18 @@ export function initChatSubscriptions(): () => void {
     streamingMessageId.set(null);
   }));
 
-  // Estado del agente — working/idle
+  // Estado del agente — working/idle + paso actual
   unsubs.push(subscribe('conversation/+/agent_status', (topic, payload) => {
     if (!isActiveConversation(topic)) return;
-    const data = payload as { status: string; agent?: string };
+    const data = payload as { status: string; agent?: string; message?: string };
     if (data.status === 'working') {
       agentWorking.set(true);
-      agentWorkingName.set(data.agent || null);
+      if (data.agent) agentWorkingName.set(data.agent);
+      if (data.message) agentWorkingStep.set(data.message);
     } else {
       agentWorking.set(false);
       agentWorkingName.set(null);
+      agentWorkingStep.set(null);
     }
   }));
 

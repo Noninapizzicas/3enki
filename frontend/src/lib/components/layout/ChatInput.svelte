@@ -10,7 +10,7 @@
    */
 
   import { hasAttachments } from '$lib/stores/attachments';
-  import { sendMessage, isStreaming, stopGeneration, agentWorking, agentWorkingName } from '$lib/stores';
+  import { sendMessage, isStreaming, stopGeneration, agentWorking, agentWorkingName, agentWorkingStep } from '$lib/stores';
 
   let inputValue = '';
   let textareaEl: HTMLTextAreaElement;
@@ -60,7 +60,14 @@
 {#if $agentWorking}
   <div class="agent-banner">
     <span class="agent-banner-dot"></span>
-    Agente trabajando{$agentWorkingName ? ` (${$agentWorkingName})` : ''}… la respuesta aparecerá aquí cuando esté lista
+    <span class="agent-banner-text">
+      {#if $agentWorkingStep}
+        {$agentWorkingStep}
+      {:else}
+        Agente{$agentWorkingName ? ` (${$agentWorkingName})` : ''} trabajando…
+      {/if}
+    </span>
+    <span class="agent-banner-hint">La respuesta aparecerá aquí</span>
   </div>
 {/if}
 <div class="chat-input">
@@ -113,6 +120,16 @@
     border-top: 1px solid rgba(251, 191, 36, 0.25);
     font-size: 0.75rem;
     color: #fbbf24;
+  }
+
+  .agent-banner-text {
+    flex: 1;
+  }
+
+  .agent-banner-hint {
+    font-size: 0.7rem;
+    opacity: 0.6;
+    white-space: nowrap;
   }
 
   .agent-banner-dot {

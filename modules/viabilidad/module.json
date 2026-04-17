@@ -5,6 +5,52 @@
   "author": "Event Core Team",
   "main": "index.js",
 
+  "intents": [
+    {
+      "keywords": ["viabilidad", "estudio de viabilidad", "es viable", "puedo montar", "análisis del negocio"],
+      "action": "tool_call",
+      "tool": "viabilidad.estudio",
+      "description": "Generar estudio de viabilidad completo del negocio"
+    },
+    {
+      "keywords": ["punto de equilibrio", "break even", "cuánto tengo que vender", "para no perder", "mínimo para cubrir"],
+      "action": "tool_call",
+      "tool": "viabilidad.punto_equilibrio",
+      "description": "Calcular punto de equilibrio del negocio"
+    },
+    {
+      "keywords": ["escenario", "qué pasa si", "simular negocio", "escenario optimista", "escenario conservador"],
+      "action": "tool_call",
+      "tool": "viabilidad.escenario",
+      "description": "Calcular un escenario de negocio"
+    },
+    {
+      "keywords": ["comparar escenarios", "varios escenarios", "escenario vs escenario"],
+      "action": "tool_call",
+      "tool": "viabilidad.comparar_escenarios",
+      "description": "Comparar múltiples escenarios de negocio"
+    },
+    {
+      "keywords": ["proyección", "proyectar", "previsión a meses", "proyección anual", "a 12 meses", "a 6 meses"],
+      "action": "tool_call",
+      "tool": "viabilidad.proyeccion",
+      "description": "Proyección financiera a meses vista"
+    },
+    {
+      "keywords": ["guardar configuración negocio", "guardar gastos fijos", "configurar negocio"],
+      "action": "tool_call",
+      "tool": "viabilidad.guardar_config",
+      "description": "Guardar configuración del negocio para futuros cálculos"
+    },
+    {
+      "keywords": ["analiza la viabilidad completa", "estudio financiero completo", "dime si el negocio es rentable"],
+      "action": "agent",
+      "agent": "viabilidad-receta-analyzer",
+      "multi_turn": false,
+      "description": "Análisis profundo de viabilidad con cruce de datos de recetas y escandallo"
+    }
+  ],
+
   "provides": {
     "events": ["viabilidad.estudio.generado", "viabilidad.escenario.calculado"]
   },

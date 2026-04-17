@@ -5,6 +5,64 @@
   "author": "Event Core Team",
   "main": "index.js",
 
+  "intents": [
+    {
+      "keywords": ["cuánto cuesta", "coste de", "coste receta", "escandallo de", "escandallo receta"],
+      "action": "tool_call",
+      "tool": "escandallo.receta",
+      "description": "Calcular el escandallo completo de una receta"
+    },
+    {
+      "keywords": ["food cost", "margen", "rentabilidad", "a qué precio vender", "precio de venta"],
+      "action": "tool_call",
+      "tool": "escandallo.receta",
+      "description": "Calcular food cost y margen de una receta dado un precio de venta"
+    },
+    {
+      "keywords": ["simular precio", "simula precios", "si lo vendo a", "qué pasa si precio"],
+      "action": "tool_call",
+      "tool": "escandallo.simular_precio",
+      "description": "Simular diferentes precios de venta y su impacto en margen"
+    },
+    {
+      "keywords": ["comparar precios", "mercado vs compra", "diferencia precios", "precios reales vs estimados"],
+      "action": "tool_call",
+      "tool": "escandallo.comparar_precios",
+      "description": "Comparar precios de mercado estimados con precios de compra reales de facturas"
+    },
+    {
+      "keywords": ["impacto ingrediente", "qué pasa si sube", "si sube el precio de", "impacto subida"],
+      "action": "tool_call",
+      "tool": "escandallo.ingrediente_impacto",
+      "description": "Analizar el impacto de una subida de precio de un ingrediente"
+    },
+    {
+      "keywords": ["optimizar costes", "reducir costes", "cómo abaratar", "sugerencias coste"],
+      "action": "tool_call",
+      "tool": "escandallo.optimizar",
+      "description": "Sugerencias de optimización de costes del menú"
+    },
+    {
+      "keywords": ["ficha técnica", "generar ficha", "ficha receta"],
+      "action": "tool_call",
+      "tool": "escandallo.ficha_tecnica",
+      "description": "Generar ficha técnica profesional de una receta"
+    },
+    {
+      "keywords": ["escandallo global", "resumen costes", "costes del menú", "todas las recetas costes"],
+      "action": "tool_call",
+      "tool": "escandallo.global",
+      "description": "Escandallo global de todas las recetas del proyecto"
+    },
+    {
+      "keywords": ["optimiza el menú completo", "analiza todos los costes", "revisión completa de costes"],
+      "action": "agent",
+      "agent": "escandallo-optimizer",
+      "multi_turn": false,
+      "description": "Análisis completo de costes del menú con recomendaciones de optimización"
+    }
+  ],
+
   "provides": {
     "events": ["escandallo.calculado", "escandallo.alerta", "escandallo.comparativa"]
   },

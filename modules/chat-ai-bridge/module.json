@@ -19,7 +19,9 @@
       { "event": "prompt.compose.response", "handler": "onPromptComposeResponse" },
       { "event": "session.context.load.response", "handler": "onSessionContextResponse" },
       { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
+      { "event": "agent.completed", "handler": "onAgentCompleted" },
+      { "event": "agent.question", "handler": "onAgentQuestion" }
     ]
   },
 

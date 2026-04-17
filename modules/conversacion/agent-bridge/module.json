@@ -1,0 +1,46 @@
+{
+  "name": "agent-bridge",
+  "version": "1.0.0",
+  "description": "Capa de traducción entre el contrato de eventos de conversación (agent.execute) y el ai-agent-framework (agent.execute.request). Añade conversation_id al ciclo de vida del agente y persiste ejecuciones en SQLite.",
+  "author": "Event Core Team",
+  "main": "index.js",
+
+  "events": {
+    "subscribes": [
+      { "event": "agent.execute",      "handler": "onAgentExecute" },
+      { "event": "agent.user_reply",   "handler": "onAgentUserReply" },
+      { "event": "project.activated",  "handler": "onProjectActivated" },
+      { "event": "project.deactivated","handler": "onProjectDeactivated" }
+    ],
+    "publishes": [
+      {
+        "event": "agent.execute.request",
+        "description": "Forwarded al ai-agent-framework con payload camelCase + pipelineId"
+      },
+      {
+        "event": "agent.completed",
+        "description": "Emitido cuando agent.{name}.completed llega. Añade conversation_id."
+      },
+      {
+        "event": "agent.failed",
+        "description": "Emitido cuando agent.{name}.failed llega. Añade conversation_id."
+      }
+    ]
+  },
+
+  "observability": {
+    "metrics": {
+      "counters": [
+        "agent_bridge.dispatched",
+        "agent_bridge.completed",
+        "agent_bridge.failed",
+        "agent_bridge.timeout"
+      ]
+    }
+  },
+
+  "config": {
+    "execution_timeout_ms": 300000,
+    "db_timeout_ms": 10000
+  }
+}

@@ -374,6 +374,34 @@
         },
         "required": ["proyecto_id"]
       }
+    },
+    {
+      "name": "recetas.investigar_receta",
+      "description": "Investigar receta: búsqueda inteligente por nombre/descripción con búsqueda multi-criterio estratificada. Retorna receta encontrada o sugerencias para generación. Incluye costos reales/estimados con transparencia total.",
+      "handler": "toolInvestigarReceta",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "proyecto_id": {
+            "type": "string",
+            "description": "ID del proyecto"
+          },
+          "nombre_receta": {
+            "type": "string",
+            "description": "Nombre o descripción de la receta a buscar (ej: 'salsa oriental' o 'bocadillo de pollo')"
+          },
+          "descripcion": {
+            "type": "string",
+            "description": "Descripción adicional para refinar búsqueda (opcional, ej: 'con pechuga asada, para acompañar patatas')"
+          },
+          "limit_alternativas": {
+            "type": "number",
+            "default": 3,
+            "description": "Número máximo de alternativas a retornar"
+          }
+        },
+        "required": ["proyecto_id", "nombre_receta"]
+      }
     }
   ],
 

@@ -716,6 +716,39 @@ class ChatAiBridgeModule {
       });
     }
 
+    // Extract investigation_result if investigar_receta was called
+    let investigationResult = null;
+    if (aiResponse.tool_calls_executed && Array.isArray(aiResponse.tool_calls_executed)) {
+      for (const toolCall of aiResponse.tool_calls_executed) {
+        if (toolCall.tool_name === 'recetas.investigar_receta' && toolCall.result) {
+          // Extract the investigation result object
+          const result = toolCall.result;
+          if (result.investigacion_id) {
+            investigationResult = result;
+            break;
+          }
+        }
+      }
+    }
+
+    const messageMetadata = {
+      model: aiResponse.model,
+      provider: aiResponse.provider,
+      tool_calls_executed: aiResponse.tool_calls_executed,
+      iterations: aiResponse.iterations,
+      sanitized: sanitized !== responseContent
+    };
+
+    // Add investigation_result if found
+    if (investigationResult) {
+      messageMetadata.investigation_result = investigationResult;
+      this.logger.info('chat-ai-bridge.investigation-result-extracted', {
+        requestId,
+        investigacion_id: investigationResult.investigacion_id,
+        status: investigationResult.status
+      });
+    }
+
     await this.eventBus.publish('session.save.request', {
       request_id: requestId,
       conversation_id,
@@ -723,13 +756,7 @@ class ChatAiBridgeModule {
       content: sanitized,
       tokens: aiResponse.tokens,
       cost: aiResponse.cost,
-      metadata: {
-        model: aiResponse.model,
-        provider: aiResponse.provider,
-        tool_calls_executed: aiResponse.tool_calls_executed,
-        iterations: aiResponse.iterations,
-        sanitized: sanitized !== responseContent
-      },
+      metadata: messageMetadata,
       correlation_id
     });
 

@@ -1,0 +1,24 @@
+{
+  "_type": "architecture_index",
+  "_version": "1.0.0",
+  "_date": "2026-04-17",
+
+  "_AI_INSTRUCTIONS": {
+    "IMPORTANTE": "Este directorio es diferente de contexto/. Lee esto primero.",
+    "diferencia_con_contexto": {
+      "contexto/": "Describe el estado ACTUAL del sistema. Se queda obsoleto cuando el código cambia. Fuente de verdad para saber qué existe hoy.",
+      "arquitectura/": "Describe DECISIONES DE DISEÑO hacia las que se construye. No caduca cuando el código cambia. Fuente de verdad para saber hacia dónde va el sistema."
+    },
+    "cuando_leer_contexto": "Cuando necesitas saber qué módulos existen, qué eventos se emiten, qué providers hay, cómo funciona algo hoy.",
+    "cuando_leer_arquitectura": "Cuando necesitas saber cómo debe funcionar algo, qué patrón seguir, qué decisión ya está tomada y no hay que reconsiderar.",
+    "conflicto_entre_ambos": "Si contexto/ y arquitectura/ parecen contradecirse, arquitectura/ gana — describe el target, contexto/ puede estar desactualizado."
+  },
+
+  "archivos": [
+    {
+      "file": "conversation-routing.json",
+      "descripcion": "Arquitectura del punto de convergencia entre chat y agentes. Las tres premisas, las cinco capas, la máquina de estados de conversación y el contrato de eventos.",
+      "cuando": "Cuando se trabaje en chat-ai-bridge, routing de mensajes, intent registry, agent-manager, o cualquier módulo que decida qué hacer con un mensaje de usuario."
+    }
+  ]
+}

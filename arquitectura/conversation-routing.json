@@ -1,0 +1,198 @@
+{
+  "_type": "architecture_decision",
+  "_name": "conversation-routing",
+  "_version": "1.0.0",
+  "_date": "2026-04-17",
+  "_status": "approved",
+  "_description": "Arquitectura del punto de convergencia entre chat y agentes. Define cómo un mensaje de usuario se enruta hacia una respuesta directa (tool call) o hacia un agente async, y cómo el resultado vuelve a la conversación.",
+
+  "_AI_INSTRUCTIONS": {
+    "IMPORTANT": "Este archivo define la arquitectura TARGET del sistema de routing. NO refleja el estado actual del código — refleja la decisión de diseño hacia la que se construye.",
+    "cuando_usar": "Cuando se trabaje en chat-ai-bridge, conversation-routing, intent-registry, agent-manager, o cualquier módulo que tome decisiones sobre qué hace con un mensaje de usuario.",
+    "relacion_con_modulos": "Los módulos recetas/escandallo/viabilidad ya implementan la mitad de esta arquitectura (tools declaradas en module.json, estado en SQLite). Lo que falta es la capa de routing."
+  },
+
+  "problema_que_resuelve": {
+    "descripcion": "El sistema nació chat-first: la conversación era el registro canónico de todo. Al añadir agentes apareció una contradicción: el agente ejecuta pipelines, llama tools, produce estado — y nada de eso vive en el historial de chat. Chat y agente no tenían punto de encuentro limpio.",
+    "consecuencia_sin_esta_arquitectura": [
+      "El agente no sabe a qué conversación reportar",
+      "El chat no sabe si hay un agente trabajando",
+      "El segundo mensaje del usuario podría re-iniciar clasificación cuando debería ir al agente que espera",
+      "El activityBuffer (efímero, en RAM) es el único registro de lo que hizo el agente"
+    ]
+  },
+
+  "premises": [
+    {
+      "id": 1,
+      "premise": "La conversación tiene estado",
+      "detail": "No es solo un historial de mensajes. Sabe en qué modo está. El estado determina cómo se enruta el siguiente mensaje del usuario.",
+      "implementation": "chat-session.conversations.metadata.state — tres valores: idle, processing, awaiting_agent"
+    },
+    {
+      "id": 2,
+      "premise": "Los módulos se registran solos",
+      "detail": "El sistema aprende las capacidades de cada módulo leyendo su module.json al arrancar. No hay configuración central ni registro manual.",
+      "implementation": "Intent Registry construido en memoria al arrancar, leyendo el campo 'intents' de cada module.json"
+    },
+    {
+      "id": 3,
+      "premise": "conversation_id es el único hilo",
+      "detail": "Es el único dato que conecta el chat con el agente que trabaja para él. El agente no sabe que existe el chat. El chat no sabe cómo trabaja el agente.",
+      "implementation": "Todos los eventos del agente llevan conversation_id. El router correlaciona por este ID."
+    }
+  ],
+
+  "layers": {
+    "1_intent_registry": {
+      "nombre": "Intent Registry",
+      "responsabilidad": "Mapa de intención → acción. Construido al arrancar desde module.json de todos los módulos.",
+      "cuando_se_construye": "Al arrancar el sistema, después de cargar todos los módulos",
+      "llm_needed": false,
+      "module_json_declaration": {
+        "campo": "intents",
+        "estructura": [
+          {
+            "keywords": ["receta", "cocinar", "ingredientes"],
+            "action": "tool_call",
+            "tool": "recetas.buscar"
+          },
+          {
+            "keywords": ["investiga", "analiza en profundidad"],
+            "action": "agent",
+            "agent": "recetas-investigator",
+            "multi_turn": true
+          }
+        ]
+      }
+    },
+    "2_conversation_router": {
+      "nombre": "Conversation Router",
+      "responsabilidad": "Enrutar el mensaje según el estado de la conversación. No tiene lógica de dominio.",
+      "llm_needed": false,
+      "logica": {
+        "si_awaiting_agent": "Reenviar al agente activo usando conversation_id como clave. No pasar a Intent Matcher.",
+        "si_idle_o_processing": "Pasar a Intent Matcher (Capa 3)"
+      },
+      "por_que_importa": "Resuelve el problema multi-turno. Sin esta capa, el segundo mensaje de un diálogo con el agente reiniciaría la clasificación."
+    },
+    "3_intent_matcher": {
+      "nombre": "Intent Matcher",
+      "responsabilidad": "Traducir el mensaje a una intención concreta usando el Intent Registry.",
+      "llm_needed": "solo_si_ambiguo",
+      "logica": {
+        "alta_confianza": "Emite el evento de dominio directamente",
+        "baja_confianza": "LLM clasifica con structured output. Modelo pequeño y rápido.",
+        "sin_match": "Tratado como chat genérico — el LLM responde directamente sin agente"
+      }
+    },
+    "4_execution": {
+      "nombre": "Execution",
+      "responsabilidad": "Ejecutar la acción según el tipo decidido por el matcher.",
+      "modos": {
+        "tool_call": {
+          "cuando": "Tarea simple, respuesta rápida esperada",
+          "como": "LLM con tools del dominio, síncrono",
+          "estado_conversacion": "processing → idle"
+        },
+        "agent": {
+          "cuando": "Tarea compleja, pipeline largo, posible multi-turno",
+          "como": "Emite agent.execute. El agente corre de forma independiente.",
+          "estado_conversacion": "processing → awaiting_agent",
+          "registro": "El agente guarda su ejecución en SQLite propio (no activityBuffer)"
+        }
+      }
+    },
+    "5_response": {
+      "nombre": "Response",
+      "responsabilidad": "Recibir el resultado (tool o agente) y añadirlo a la conversación.",
+      "llm_needed": false,
+      "acciones": [
+        "Añadir resultado a chat-session como mensaje del assistant",
+        "Cambiar estado de conversación a idle"
+      ]
+    }
+  },
+
+  "conversation_state_machine": {
+    "states": {
+      "idle": "Esperando mensaje del usuario",
+      "processing": "Tool call síncrono en curso",
+      "awaiting_agent": {
+        "descripcion": "Agente async activo, esperando su completion",
+        "metadata_adicional": ["agent_name", "agent_started_at"]
+      }
+    },
+    "transitions": [
+      { "from": "idle", "trigger": "user_message", "to": "processing" },
+      { "from": "processing", "trigger": "tool_call_complete", "to": "idle" },
+      { "from": "processing", "trigger": "agent_execute", "to": "awaiting_agent" },
+      { "from": "awaiting_agent", "trigger": "user_message", "action": "forward_to_agent", "to": "awaiting_agent" },
+      { "from": "awaiting_agent", "trigger": "agent_completed", "to": "idle" },
+      { "from": "awaiting_agent", "trigger": "agent_interrupt", "to": "idle" }
+    ],
+    "storage": "chat-session.conversations.metadata.state"
+  },
+
+  "event_contracts": {
+    "agent_execute": {
+      "event": "agent.execute",
+      "emitter": "Conversation Router (Capa 2/4)",
+      "subscriber": "agent-manager o el módulo-agente específico",
+      "payload": {
+        "agent_name": "string — nombre del agente a lanzar",
+        "task": "string — descripción de la tarea en lenguaje natural",
+        "project_id": "string",
+        "conversation_id": "string — el hilo de correlación",
+        "params": "object — parámetros específicos del dominio (opcional)"
+      }
+    },
+    "agent_question": {
+      "event": "agent.question",
+      "emitter": "El agente (cuando necesita input del usuario)",
+      "subscriber": "chat-session / UI",
+      "payload": {
+        "conversation_id": "string",
+        "question": "string",
+        "options": "string[] — opcional, para elección múltiple",
+        "timeout_ms": "number — default 300000 (5 min)"
+      }
+    },
+    "agent_completed": {
+      "event": "agent.completed",
+      "emitter": "El agente",
+      "subscriber": "Capa 5 (Response)",
+      "payload": {
+        "conversation_id": "string",
+        "result": "string | object — resultado para mostrar al usuario",
+        "domain": "string — módulo que ejecutó (recetas, escandallo, etc.)"
+      }
+    },
+    "agent_interrupt": {
+      "event": "agent.interrupt",
+      "emitter": "Conversation Router o timeout",
+      "subscriber": "El agente activo",
+      "payload": {
+        "conversation_id": "string",
+        "reason": "user | timeout | error"
+      }
+    }
+  },
+
+  "constraints": [
+    "El router NO contiene lógica de dominio",
+    "El agente NO sabe que existe el chat — solo conoce conversation_id",
+    "El chat-session NO sabe cómo trabaja el agente — solo recibe mensajes",
+    "El LLM NO está en el camino crítico para intenciones claras",
+    "El estado del agente vive en SQLite del módulo, NO en el activityBuffer"
+  ],
+
+  "lo_que_escala_solo": "Añadir un módulo nuevo con sus intents declarados en module.json es suficiente para que el router lo conozca. Cero cambios en el resto del sistema.",
+
+  "relacion_con_modulos_existentes": {
+    "recetas_escandallo_viabilidad": "Ya implementan la mitad de esta arquitectura. Tools declaradas en module.json (base del Intent Registry), estado propio en SQLite. No necesitan cambiar.",
+    "chat_session": "Necesita añadir el campo state a conversations.metadata",
+    "chat_ai_bridge": "Se convierte en Conversation Router — thin dispatcher sin lógica de negocio",
+    "agent_manager": "Recibe agent.execute, gestiona el ciclo de vida del agente, persiste ejecuciones"
+  }
+}

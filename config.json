@@ -66,6 +66,7 @@
       "bot-manager",
       "chat-ai-bridge",
       "chat-session",
+      "conversacion",
       "code-executor",
       "cuentas",
       "cuentas-canales",

@@ -68,6 +68,8 @@ export {
   userMessages,
   assistantMessages,
   toolStatus,
+  agentWorking,
+  agentWorkingName,
   sendMessage,
   addMessage,
   endStreaming,

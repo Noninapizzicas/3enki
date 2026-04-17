@@ -83,7 +83,7 @@ class AgentBridgeModule {
     const pipelineId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
     const projectId = project_id || this.activeProjectId;
-    const timeoutMs = this.config.execution_timeout_ms || 300000;
+    const timeoutMs = this.config.execution_timeout_ms || 0; // 0 = sin límite
 
     // Persistir inicio de ejecución (no bloquea el dispatch)
     if (projectId) {
@@ -105,9 +105,9 @@ class AgentBridgeModule {
       await this._onFail(pipelineId, d.error || 'agent failed', projectId);
     });
 
-    const timer = setTimeout(() => {
-      this._onTimeout(pipelineId, agent_name, projectId);
-    }, timeoutMs);
+    const timer = timeoutMs > 0
+      ? setTimeout(() => this._onTimeout(pipelineId, agent_name, projectId), timeoutMs)
+      : null;
 
     this.inFlight.set(pipelineId, {
       conversation_id, agent_name, unsubCompleted, unsubFailed, timer, projectId

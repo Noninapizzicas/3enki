@@ -562,9 +562,19 @@ class ChatAiBridgeModule {
           flowId, conversation_id, agent: decision.agent
         });
 
+        // Notificar frontend: agente trabajando (muestra indicador persistente)
+        const mqttClientDispatch = this.uiHandler?.mqtt;
+        if (mqttClientDispatch) {
+          mqttClientDispatch.publish(`conversation/${conversation_id}/agent_status`, JSON.stringify({
+            status: 'working',
+            agent: decision.agent,
+            timestamp: new Date().toISOString()
+          }), { qos: 1 });
+        }
+
         // ACK inmediato al usuario
         const ackMessage = await this.saveAssistantMessage(flowState, {
-          content: 'Procesando tu solicitud, te aviso cuando esté listo.',
+          content: `Entendido, el agente está trabajando en tu solicitud. Te aviso aquí mismo cuando tenga la respuesta lista.`,
           tokens: 0, cost: 0,
           metadata: { type: 'agent_ack', agent: decision.agent }
         });
@@ -642,17 +652,82 @@ class ChatAiBridgeModule {
 
     // Publicar al frontend via MQTT
     const mqttClient = this.uiHandler?.mqtt;
-    if (mqttClient && savedMessage?.id) {
-      mqttClient.publish(`conversation/${conversation_id}/message`, JSON.stringify({
-        id: savedMessage.id,
-        role: 'assistant',
-        content: sanitized,
-        streaming: false,
+    if (mqttClient) {
+      // 1. Señal: agente terminó (quita el indicador de "trabajando")
+      mqttClient.publish(`conversation/${conversation_id}/agent_status`, JSON.stringify({
+        status: 'idle',
         timestamp: new Date().toISOString()
       }), { qos: 1 });
+
+      // 2. Mensaje de resultado en el chat
+      if (savedMessage?.id) {
+        mqttClient.publish(`conversation/${conversation_id}/message`, JSON.stringify({
+          id: savedMessage.id,
+          role: 'assistant',
+          content: sanitized,
+          streaming: false,
+          timestamp: new Date().toISOString()
+        }), { qos: 1 });
+      }
     }
 
     this.logger.info('chat-ai-bridge.agent_completed', { conversation_id, domain });
+  }
+
+  /**
+   * El agente falló. Limpia el estado y notifica al frontend.
+   * Evento: agent.failed — payload: { conversation_id, error, agent_name }
+   */
+  async onAgentFailed(event) {
+    const data = event.data || event;
+    const { conversation_id, error, agent_name } = data;
+    if (!conversation_id) return;
+
+    const chatSession = this.moduleLoader?.getModule('chat-session')?.instance;
+    if (chatSession) {
+      await chatSession.setConversationState(conversation_id, 'idle').catch(() => {});
+    }
+
+    const mqttClient = this.uiHandler?.mqtt;
+    if (mqttClient) {
+      // Limpiar indicador de trabajo
+      mqttClient.publish(`conversation/${conversation_id}/agent_status`, JSON.stringify({
+        status: 'idle',
+        timestamp: new Date().toISOString()
+      }), { qos: 1 });
+
+      // Notificar error en el chat
+      const errorRequestId = crypto.randomUUID();
+      const timeout = this.config.requestTimeout || 10000;
+      const savePromise = new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+          this.pendingSessionRequests.delete(errorRequestId);
+          resolve({ id: null });
+        }, timeout);
+        this.pendingSessionRequests.set(errorRequestId, {
+          resolve, reject: resolve, timeout: timeoutId, type: 'agent_error', flowId: null
+        });
+      });
+      await this.eventBus.publish('session.save.request', {
+        request_id: errorRequestId,
+        conversation_id,
+        role: 'assistant',
+        content: `Lo siento, hubo un problema procesando tu solicitud. Por favor, intenta de nuevo.`,
+        metadata: { type: 'agent_error', agent: agent_name, error }
+      });
+      const savedMsg = await savePromise;
+      if (savedMsg?.id) {
+        mqttClient.publish(`conversation/${conversation_id}/message`, JSON.stringify({
+          id: savedMsg.id,
+          role: 'assistant',
+          content: `Lo siento, hubo un problema procesando tu solicitud. Por favor, intenta de nuevo.`,
+          streaming: false,
+          timestamp: new Date().toISOString()
+        }), { qos: 1 });
+      }
+    }
+
+    this.logger.warn('chat-ai-bridge.agent_failed', { conversation_id, agent_name, error });
   }
 
   /**

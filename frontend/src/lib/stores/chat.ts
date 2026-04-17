@@ -28,6 +28,8 @@ export const conversationId = writable<string | null>(null);
 export const isStreaming = writable<boolean>(false);
 export const streamingMessageId = writable<string | null>(null);
 export const toolStatus = writable<{ name: string; status: string } | null>(null);
+export const agentWorking = writable<boolean>(false);
+export const agentWorkingName = writable<string | null>(null);
 
 // ============================================================================
 // STORES DERIVADOS
@@ -314,6 +316,8 @@ export function clearConversation(): void {
   messages.set([]);
   isStreaming.set(false);
   streamingMessageId.set(null);
+  agentWorking.set(false);
+  agentWorkingName.set(null);
 }
 
 /**
@@ -428,6 +432,19 @@ export function initChatSubscriptions(): () => void {
       return msgs;
     });
     streamingMessageId.set(null);
+  }));
+
+  // Estado del agente — working/idle
+  unsubs.push(subscribe('conversation/+/agent_status', (topic, payload) => {
+    if (!isActiveConversation(topic)) return;
+    const data = payload as { status: string; agent?: string };
+    if (data.status === 'working') {
+      agentWorking.set(true);
+      agentWorkingName.set(data.agent || null);
+    } else {
+      agentWorking.set(false);
+      agentWorkingName.set(null);
+    }
   }));
 
   // Conversación cargada

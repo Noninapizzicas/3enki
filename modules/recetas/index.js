@@ -739,6 +739,26 @@ class RecetasModule {
     return this.handleIngestar(params);
   }
 
+  // Emitido por el LLM cuando detecta una receta nueva en la conversación
+  async onRecetaCrear(event) {
+    const data = event.data || event;
+    const { proyecto_id, nombre, ingredientes, notas } = data;
+    if (!proyecto_id || !ingredientes) return;
+    const input = notas
+      ? `${nombre || 'Receta'}: ${ingredientes}. ${notas}`
+      : `${nombre || 'Receta'}: ${ingredientes}`;
+    await this.handleIngestar({ proyecto_id, input, tipo: 'texto', fuente_referencia: 'chat' });
+  }
+
+  // Tool que el LLM llama desde el chat (fire-and-forget)
+  async toolCrearDesdeChat(params) {
+    const { nombre, ingredientes, proyecto_id, notas } = params;
+    // Lanzar sin await — el LLM continúa la conversación
+    this.eventBus.publish('receta.crear', { proyecto_id, nombre, ingredientes, notas })
+      .catch(() => {});
+    return { status: 'ok', message: `Guardando receta "${nombre}"…` };
+  }
+
   async toolBuscar(params) {
     return this.handleBuscar(params);
   }

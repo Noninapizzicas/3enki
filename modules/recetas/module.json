@@ -130,7 +130,8 @@
     "subscribes": [
       { "event": "project.activated", "handler": "onProjectActivated" },
       { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "factura.procesada", "handler": "onFacturaProcesada" }
+      { "event": "factura.procesada", "handler": "onFacturaProcesada" },
+      { "event": "receta.crear", "handler": "onRecetaCrear" }
     ]
   },
 
@@ -433,6 +434,21 @@
           "fuente": { "type": "string", "description": "Fuente del precio (ej: mercadona.es)" }
         },
         "required": ["ingrediente_id", "proyecto_id", "precio_mercado"]
+      }
+    },
+    {
+      "name": "recetas.crear_desde_chat",
+      "description": "Guarda una receta nueva mencionada en la conversación. Llámala en cuanto el usuario proporcione ingredientes y nombre, aunque la conversación continúe. Fire-and-forget: no bloquea la respuesta.",
+      "handler": "toolCrearDesdeChat",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "nombre": { "type": "string", "description": "Nombre de la receta" },
+          "ingredientes": { "type": "string", "description": "Ingredientes tal como los mencionó el usuario" },
+          "proyecto_id": { "type": "string", "description": "ID del proyecto activo" },
+          "notas": { "type": "string", "description": "Notas adicionales opcionales (cantidades, método)" }
+        },
+        "required": ["nombre", "ingredientes", "proyecto_id"]
       }
     },
     {

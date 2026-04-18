@@ -258,7 +258,7 @@ class RecetasModule {
 
       const result = await manager.revertVersion(receta_id, target_version, proyecto_id);
 
-      await this.eventBus.publish('receta.versión.revertida', {
+      await this.eventBus.publish('receta.revertida', {
         receta_id,
         proyecto_id,
         revertida_a_version: target_version,
@@ -747,7 +747,10 @@ class RecetasModule {
     const input = notas
       ? `${nombre || 'Receta'}: ${ingredientes}. ${notas}`
       : `${nombre || 'Receta'}: ${ingredientes}`;
-    await this.handleIngestar({ proyecto_id, input, tipo: 'texto', fuente_referencia: 'chat' });
+    const result = await this.handleIngestar({ proyecto_id, input, tipo: 'texto', fuente_referencia: 'chat' });
+    if (result.status === 200) {
+      await this.eventBus.publish('receta.creada', { proyecto_id, nombre, resultado: result.data });
+    }
   }
 
   // Tool que el LLM llama desde el chat (fire-and-forget)

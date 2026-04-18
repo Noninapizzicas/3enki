@@ -130,7 +130,7 @@ class AgentBridgeModule {
     });
 
     // Reenviar al framework con el payload correcto
-    await this.eventBus.publish('agent.execute.request', {
+    await this.eventBus.publish('agent.execute', {
       agentName: agent_name,
       context: {
         conversation_id,

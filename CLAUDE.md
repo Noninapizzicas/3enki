@@ -81,3 +81,23 @@ Con este paradigma:
 4. ¿Estoy mezclando dominio con infraestructura?
 
 Si la respuesta a (1) o (4) es sí — para. Refactoriza el diseño antes de escribir código.
+
+---
+
+## Antes de tocar un módulo, mapea sus eventos
+
+Para cualquier módulo nuevo o a refactorizar, responde primero estas dos preguntas:
+
+**¿Qué eventos emite?** — cada acción del dominio es un evento con nombre claro: `receta.creada`, `pedido.recibido`, `cobro.procesado`
+
+**¿Qué eventos escucha?** — y qué hace cuando los recibe
+
+Ese mapa revela:
+- Lo que falta implementar
+- Lo que está duplicado
+- Lo que está mal conectado
+- Qué otros módulos se benefician añadiendo un listener (sin tocar el emisor)
+
+El mapa va en `arquitectura/<modulo>.json` antes de escribir código.
+Sin mapa, no se toca el módulo.
+

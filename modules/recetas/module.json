@@ -26,9 +26,8 @@
     },
     {
       "keywords": ["crear receta", "nueva receta", "añadir receta", "guardar receta", "guárdala", "la puedes guardar", "guarda esto", "guarda la", "añade esta receta", "guárdame", "guarda esta"],
-      "action": "agent",
-      "agent": "recipe-structurer",
-      "multi_turn": false,
+      "action": "tool_call",
+      "tool": "recetas.ingestar",
       "description": "Guardar receta nueva desde conversación"
     },
     {

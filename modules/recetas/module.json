@@ -25,10 +25,11 @@
       "description": "Ver detalle completo de una receta"
     },
     {
-      "keywords": ["crear receta", "nueva receta", "añadir receta", "guardar receta"],
-      "action": "tool_call",
-      "tool": "recetas.crear",
-      "description": "Crear receta manualmente"
+      "keywords": ["crear receta", "nueva receta", "añadir receta", "guardar receta", "guárdala", "la puedes guardar", "guarda esto", "guarda la", "añade esta receta", "guárdame", "guarda esta"],
+      "action": "agent",
+      "agent": "recipe-structurer",
+      "multi_turn": false,
+      "description": "Guardar receta nueva desde conversación"
     },
     {
       "keywords": ["actualizar receta", "modificar receta", "cambiar receta", "editar receta"],

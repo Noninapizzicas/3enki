@@ -35,12 +35,17 @@ await manager.guardar(receta);
 ```
 Recetas no sabe de SQLite. No debería saber.
 
-**BIEN — recetas emite, quien sabe persiste:**
+**BIEN — recetas emite con su schema, quien sabe persiste:**
 ```js
 // recetas/index.js
-this.eventBus.publish('receta.crear', { proyecto_id, datos });
+this.eventBus.publish('receta.crear', {
+  proyecto_id,
+  schema: 'receta',
+  datos: { nombre, ingredientes, ... }
+});
 // Fin. Recetas no sabe qué pasa después.
 ```
+Recetas conoce su schema — es su dominio. El receptor recibe el objeto y lo persiste sin saber qué es una receta. El emisor sabe **qué**. El receptor sabe **cómo**.
 
 ---
 

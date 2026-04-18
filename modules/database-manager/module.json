@@ -61,6 +61,11 @@
         "event": "db.schema.init.request",
         "description": "Handle schema initialization requests from other modules",
         "handler": "onSchemaInitRequest"
+      },
+      {
+        "event": "db.persist.request",
+        "description": "insert/update/delete sin SQL — cualquier dominio lo emite",
+        "handler": "onPersistRequest"
       }
     ]
   },

@@ -255,6 +255,52 @@ class DatabaseManagerModule {
     }
   }
 
+  async onPersistRequest(event) {
+    const { project_id, table, operation, data, where, request_id } = event.data || event;
+
+    if (!project_id || !table || !operation || !data) {
+      await this.eventBus.publish('db.persist.response', {
+        request_id, success: false, error: 'missing required fields'
+      });
+      return;
+    }
+
+    try {
+      const db = await this.getDatabase(project_id);
+      let query, params;
+
+      if (operation === 'insert') {
+        const cols = Object.keys(data);
+        const placeholders = cols.map(() => '?').join(', ');
+        query = `INSERT OR REPLACE INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`;
+        params = Object.values(data);
+      } else if (operation === 'update') {
+        const sets = Object.keys(data).map(k => `${k} = ?`).join(', ');
+        const wheres = Object.keys(where || {}).map(k => `${k} = ?`).join(' AND ');
+        query = `UPDATE ${table} SET ${sets}${wheres ? ` WHERE ${wheres}` : ''}`;
+        params = [...Object.values(data), ...Object.values(where || {})];
+      } else if (operation === 'delete') {
+        const wheres = Object.keys(where || {}).map(k => `${k} = ?`).join(' AND ');
+        query = `DELETE FROM ${table}${wheres ? ` WHERE ${wheres}` : ''}`;
+        params = Object.values(where || {});
+      } else {
+        throw new Error(`unknown operation: ${operation}`);
+      }
+
+      const stmt = db.prepare(query);
+      stmt.bind(params);
+      stmt.step();
+      stmt.free();
+
+      if (this.config.autoSave !== false) await this._saveDatabase(project_id, db);
+
+      await this.eventBus.publish('db.persist.response', { request_id, success: true, table, operation });
+    } catch (err) {
+      this.logger.error('db.persist.failed', { project_id, table, operation, error: err.message });
+      await this.eventBus.publish('db.persist.response', { request_id, success: false, error: err.message });
+    }
+  }
+
   async onSchemaInitRequest(event) {
     // Debug: log raw event structure
     this.logger.info('schema.init.request.raw', {

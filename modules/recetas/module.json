@@ -130,7 +130,6 @@
     "subscribes": [
       { "event": "project.activated",   "handler": "onProjectActivated" },
       { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "factura.procesada",   "handler": "onFacturaProcesada" },
       { "event": "receta.crear",        "handler": "onRecetaCrear" },
       { "event": "receta.actualizar",   "handler": "onRecetaActualizar" },
       { "event": "receta.borrar",       "handler": "onRecetaBorrar" },

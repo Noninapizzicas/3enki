@@ -128,10 +128,17 @@
       }
     ],
     "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.activated",   "handler": "onProjectActivated" },
       { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "factura.procesada", "handler": "onFacturaProcesada" },
-      { "event": "receta.crear", "handler": "onRecetaCrear" }
+      { "event": "factura.procesada",   "handler": "onFacturaProcesada" },
+      { "event": "receta.crear",        "handler": "onRecetaCrear" },
+      { "event": "receta.actualizar",   "handler": "onRecetaActualizar" },
+      { "event": "receta.borrar",       "handler": "onRecetaBorrar" },
+      { "event": "receta.buscar",       "handler": "onRecetaBuscar" },
+      { "event": "receta.obtener",      "handler": "onRecetaObtener" },
+      { "event": "receta.listar",       "handler": "onRecetaListar" },
+      { "event": "receta.ingestar",     "handler": "onRecetaIngestar" },
+      { "event": "receta.investigar",   "handler": "onRecetaInvestigar" }
     ]
   },
 

@@ -759,6 +759,70 @@ class RecetasModule {
     return { status: 'ok', message: `Guardando receta "${nombre}"…` };
   }
 
+  async onRecetaActualizar(event) {
+    const { proyecto_id, id, cambios } = event.data || event;
+    const result = await this.handleActualizar({ proyecto_id, receta_id: id, ...cambios });
+    if (result.status === 200) {
+      await this.eventBus.publish('receta.actualizada', { proyecto_id, id, datos: result.data });
+    }
+  }
+
+  async onRecetaBorrar(event) {
+    const { proyecto_id, id } = event.data || event;
+    const result = await this.handleEliminar({ proyecto_id, receta_id: id });
+    if (result.status === 200) {
+      await this.eventBus.publish('receta.borrada', { proyecto_id, id });
+    }
+  }
+
+  async onRecetaBuscar(event) {
+    const { proyecto_id, request_id, ...criteria } = event.data || event;
+    const result = await this.handleBuscar({ proyecto_id, ...criteria });
+    await this.eventBus.publish('receta.buscada', {
+      proyecto_id, request_id,
+      resultados: result.data?.recetas || [],
+      error: result.error || null
+    });
+  }
+
+  async onRecetaObtener(event) {
+    const { proyecto_id, id, request_id } = event.data || event;
+    const result = await this.handleObtener({ proyecto_id, receta_id: id });
+    await this.eventBus.publish('receta.obtenida', {
+      proyecto_id, request_id,
+      datos: result.data || null,
+      error: result.error || null
+    });
+  }
+
+  async onRecetaListar(event) {
+    const { proyecto_id, request_id, estado, limit } = event.data || event;
+    const result = await this.handleListar({ proyecto_id, estado, limit });
+    await this.eventBus.publish('receta.listada', {
+      proyecto_id, request_id,
+      items: result.data?.recetas || [],
+      error: result.error || null
+    });
+  }
+
+  async onRecetaIngestar(event) {
+    const { proyecto_id, input, tipo, fuente_referencia } = event.data || event;
+    const result = await this.handleIngestar({ proyecto_id, input, tipo, fuente_referencia });
+    if (result.status === 200) {
+      await this.eventBus.publish('receta.ingestada', { proyecto_id, resultado: result.data });
+    }
+  }
+
+  async onRecetaInvestigar(event) {
+    const { proyecto_id, request_id, query } = event.data || event;
+    const result = await this.handleInvestigarReceta({ proyecto_id, query });
+    await this.eventBus.publish('receta.investigada', {
+      proyecto_id, request_id,
+      resultado: result.data || null,
+      error: result.error || null
+    });
+  }
+
   async toolBuscar(params) {
     return this.handleBuscar(params);
   }

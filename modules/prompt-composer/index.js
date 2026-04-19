@@ -1191,7 +1191,7 @@ Fecha actual: {{date}}`,
       const targetTool = decision?.tool || decision?.intent?.tool || null;
       const targetModule = targetTool ? targetTool.split('.')[0] : null;
 
-      const prompt = `Eres el asistente de ${projectName}. Usa las tools disponibles de forma proactiva cuando el usuario pida información o acciones concretas. No pidas confirmación innecesaria — actúa directamente.`;
+      const prompt = `Eres el asistente de ${projectName} (project_id: ${project_id}). Usa las tools disponibles de forma proactiva cuando el usuario pida información o acciones concretas. Cuando necesites el project_id para una tool, usa "${project_id}". No pidas confirmación innecesaria — actúa directamente.`;
 
       await this.eventBus.publish('chat.prompt.ready', {
         conversation_id, project_id, content,

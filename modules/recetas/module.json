@@ -13,7 +13,7 @@
       "description": "Listar el catálogo de recetas del proyecto"
     },
     {
-      "keywords": ["buscar receta", "busca receta", "receta de", "receta con", "recetas con", "recetas de"],
+      "keywords": ["buscar receta", "busca receta", "receta de", "receta con", "recetas con", "recetas de", "necesito recetas", "necesito una receta", "dame recetas", "quiero recetas"],
       "action": "tool_call",
       "tool": "recetas.buscar",
       "description": "Buscar recetas por nombre, ingrediente o criterio"

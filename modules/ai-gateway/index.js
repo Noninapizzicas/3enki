@@ -237,13 +237,18 @@ class AIGatewayModule {
   // Event Handler: chat.prompt.ready — nuevo flujo event-driven
   async onChatPromptReady(event) {
     const data = event.data || event;
-    const { conversation_id, project_id, content, prompt, messages } = data;
+    const { conversation_id, project_id, content, prompt, messages, target_module } = data;
     if (!conversation_id || !content) return;
 
-    // Historial: usar mensajes previos si los hay, si no solo el mensaje actual
     const history = Array.isArray(messages) && messages.length > 0
       ? messages
       : [{ role: 'user', content }];
+
+    // Filtrar tools al módulo relevante si lo conocemos
+    const allTools = this.getAvailableTools();
+    const tools = target_module
+      ? allTools.filter(t => (t.function?.name || t.name || '').startsWith(target_module + '.'))
+      : allTools;
 
     await this.onAIChatRequest({
       data: {
@@ -252,7 +257,7 @@ class AIGatewayModule {
           ...(prompt ? [{ role: 'system', content: prompt }] : []),
           ...history
         ],
-        tools: true,
+        tools: tools.length > 0 ? tools : true,
         execute_tools: true,
         project_id,
         conversation_id,

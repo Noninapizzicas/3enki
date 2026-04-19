@@ -128,16 +128,25 @@
       }
     ],
     "subscribes": [
-      { "event": "project.activated",   "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "receta.crear",        "handler": "onRecetaCrear" },
-      { "event": "receta.actualizar",   "handler": "onRecetaActualizar" },
-      { "event": "receta.borrar",       "handler": "onRecetaBorrar" },
-      { "event": "receta.buscar",       "handler": "onRecetaBuscar" },
-      { "event": "receta.obtener",      "handler": "onRecetaObtener" },
-      { "event": "receta.listar",       "handler": "onRecetaListar" },
-      { "event": "receta.ingestar",     "handler": "onRecetaIngestar" },
-      { "event": "receta.investigar",   "handler": "onRecetaInvestigar" }
+      { "event": "project.activated",        "handler": "onProjectActivated" },
+      { "event": "project.deactivated",      "handler": "onProjectDeactivated" },
+      { "event": "receta.crear",             "handler": "onRecetaCrear" },
+      { "event": "receta.actualizar",        "handler": "onRecetaActualizar" },
+      { "event": "receta.borrar",            "handler": "onRecetaBorrar" },
+      { "event": "receta.buscar",            "handler": "onRecetaBuscar" },
+      { "event": "receta.obtener",           "handler": "onRecetaObtener" },
+      { "event": "receta.listar",            "handler": "onRecetaListar" },
+      { "event": "receta.ingestar",          "handler": "onRecetaIngestar" },
+      { "event": "receta.investigar",        "handler": "onRecetaInvestigar" },
+      { "event": "recetas.buscar",           "handler": "onToolBuscar" },
+      { "event": "recetas.listar",           "handler": "onToolListar" },
+      { "event": "recetas.obtener",          "handler": "onToolObtener" },
+      { "event": "recetas.ingestar",         "handler": "onToolIngestar" },
+      { "event": "recetas.historial",        "handler": "onToolHistorial" },
+      { "event": "recetas.estadisticas",     "handler": "onToolEstadisticas" },
+      { "event": "recetas.ingredientes",     "handler": "onToolIngredientes" },
+      { "event": "recetas.actualizar_precio","handler": "onToolActualizarPrecio" },
+      { "event": "recetas.crear_desde_chat", "handler": "onToolCrearDesdeChat" }
     ]
   },
 

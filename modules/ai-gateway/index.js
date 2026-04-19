@@ -237,15 +237,20 @@ class AIGatewayModule {
   // Event Handler: chat.prompt.ready — nuevo flujo event-driven
   async onChatPromptReady(event) {
     const data = event.data || event;
-    const { conversation_id, project_id, content, prompt } = data;
+    const { conversation_id, project_id, content, prompt, messages } = data;
     if (!conversation_id || !content) return;
+
+    // Historial: usar mensajes previos si los hay, si no solo el mensaje actual
+    const history = Array.isArray(messages) && messages.length > 0
+      ? messages
+      : [{ role: 'user', content }];
 
     await this.onAIChatRequest({
       data: {
         request_id: require('crypto').randomUUID(),
         messages: [
           ...(prompt ? [{ role: 'system', content: prompt }] : []),
-          { role: 'user', content }
+          ...history
         ],
         tools: true,
         execute_tools: true,
@@ -1466,85 +1471,61 @@ class AIGatewayModule {
    * @returns {Array} Results for each tool call
    */
   async executeToolCalls(toolCalls, context = {}) {
-    if (!this.moduleLoader || !toolCalls || !Array.isArray(toolCalls)) {
-      return [];
-    }
+    if (!toolCalls || !Array.isArray(toolCalls)) return [];
 
     const results = [];
 
     for (const call of toolCalls) {
       const { id, name: rawName, arguments: args } = call;
-
-      // Normalize tool name: convert dots to underscores for provider tools
-      // DeepSeek may return "gmail.send" but we register as "gmail_send"
       const name = this.normalizeToolName(rawName);
 
+      const enrichedArgs = {
+        ...args,
+        ...(context.projectId && !args.project_id ? { project_id: context.projectId } : {}),
+        ...(context.conversationId && !args.conversation_id ? { conversation_id: context.conversationId } : {})
+      };
+
       try {
-        // Check if tool requires confirmation
-        if (this.moduleLoader.toolRequiresConfirmation(name)) {
-          this.logger.info('ai-gateway.tool.requires_confirmation', {
-            tool: name,
-            call_id: id
-          });
+        this.logger.info('ai-gateway.tool.executing', { tool: name, call_id: id });
 
-          // Return pending confirmation status
-          results.push({
-            tool_call_id: id,
-            name,
-            status: 'pending_confirmation',
-            requires_confirmation: true
-          });
-          continue;
-        }
+        const result = await this._executeToolViaEvent(name, enrichedArgs);
 
-        // Execute tool via moduleLoader
-        this.logger.info('ai-gateway.tool.executing', {
-          tool: name,
-          call_id: id,
-          correlation_id: context.correlationId
-        });
-
-        // Inject context fields (project_id, conversation_id) into tool args
-        // so multi-tenant tools receive them automatically
-        const enrichedArgs = {
-          ...args,
-          ...(context.projectId && !args.project_id ? { project_id: context.projectId } : {}),
-          ...(context.conversationId && !args.conversation_id ? { conversation_id: context.conversationId } : {})
-        };
-
-        const result = await this.moduleLoader.executeTool(name, enrichedArgs);
-
-        results.push({
-          tool_call_id: id,
-          name,
-          status: 'success',
-          result: result?.data || result
-        });
-
-        this.logger.info('ai-gateway.tool.executed', {
-          tool: name,
-          call_id: id,
-          status: result?.status || 200
-        });
+        results.push({ tool_call_id: id, name, status: 'success', result });
+        this.logger.info('ai-gateway.tool.executed', { tool: name, call_id: id });
 
       } catch (error) {
-        this.logger.error('ai-gateway.tool.error', {
-          tool: name,
-          call_id: id,
-          error: error.message
-        });
-
-        results.push({
-          tool_call_id: id,
-          name,
-          status: 'error',
-          result: `Error executing ${name}: ${error.message}`,
-          error: error.message
-        });
+        this.logger.error('ai-gateway.tool.error', { tool: name, call_id: id, error: error.message });
+        results.push({ tool_call_id: id, name, status: 'error', result: `Error: ${error.message}`, error: error.message });
       }
     }
 
     return results;
+  }
+
+  // Emite el evento del tool y espera su respuesta por request_id
+  async _executeToolViaEvent(toolName, args, timeoutMs = 15000) {
+    const crypto = require('crypto');
+    const request_id = crypto.randomUUID();
+    const responseEvent = `${toolName}.response`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        unsub();
+        reject(new Error(`Tool timeout: ${toolName}`));
+      }, timeoutMs);
+
+      let unsub;
+      this.eventBus.subscribe(responseEvent, (event) => {
+        const data = event.data || event;
+        if (data.request_id !== request_id) return;
+        unsub();
+        clearTimeout(timeout);
+        if (data.error) reject(new Error(data.error));
+        else resolve(data.result);
+      }).then(fn => { unsub = fn; });
+
+      this.eventBus.publish(toolName, { request_id, ...args });
+    });
   }
 
   /**

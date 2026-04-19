@@ -913,10 +913,15 @@ class ChatSessionModule {
         role: 'user', content, user_id
       });
 
+      // Cargar historial reciente para que el AI tenga contexto
+      const history = await this.getMessages(conversation_id, true).catch(() => []);
+      const messages = (history || []).map(m => ({ role: m.role, content: m.content }));
+
       await this.eventBus.publish('chat.message.saved', {
         conversation_id, project_id,
         message_id: savedMessage?.id,
-        content
+        content,
+        messages
       });
     } catch (err) {
       this.logger?.error('chat-session.send.failed', { conversation_id, error: err.message });

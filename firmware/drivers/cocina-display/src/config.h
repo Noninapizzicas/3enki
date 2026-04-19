@@ -2,42 +2,54 @@
 #define CONFIG_H
 
 // ============================================
-// DRIVER: Cocina Display — Kiosk web para pedidos
+// DRIVER: Cocina Display
 // ============================================
-// ESP32-P4 + pantalla 10.1" 800x1280 MIPI-DSI
-// Carga la URL /cocina del VPS y muestra pedidos.
+// Board:   Guition JC8012P4A1
+// SoC:     ESP32-P4 (main) + ESP32-C6 (WiFi/BLE)
+// Display: ILI9881C MIPI-DSI 800×1280 (4 lanes)
+// Touch:   GT911 I2C (capacitivo)
 // ============================================
 
 // --- Driver identity ---
 #define DRIVER_TYPE             "cocina-display"
-#define FIRMWARE_VERSION        "1.0.0"
+#define FIRMWARE_VERSION        "1.1.0"
 
-// --- Display ---
+// --- Display (ILI9881C via MIPI-DSI) ---
 #define DISPLAY_WIDTH           800
 #define DISPLAY_HEIGHT          1280
 #define DISPLAY_ROTATION        0       // 0=portrait, 1=landscape
 
-// --- Kiosk ---
-// URL base del servidor. El portal web permite configurarla.
-// La URL completa será: KIOSK_URL_BASE + "/" + projectId + "/cocina"
-#define DEFAULT_KIOSK_URL       ""
-#define KIOSK_RELOAD_INTERVAL   0       // 0 = no auto-reload, N = reload cada N ms
+// MIPI-DSI bus
+#define MIPI_DSI_NUM_DATA_LANES 2
+#define MIPI_DSI_LANE_BITRATE   1000    // Mbps por lane
+#define MIPI_DPI_CLK_MHZ        80      // DPI pixel clock
 
-// --- LED (puede no existir en ESP32-P4 boards) ---
-#define LED_PIN                 -1      // -1 = no LED
+// MIPI-DSI video timing (ILI9881C típico para 800×1280)
+#define MIPI_HSYNC_BACK_PORCH   40
+#define MIPI_HSYNC_PULSE_WIDTH  4
+#define MIPI_HSYNC_FRONT_PORCH  40
+#define MIPI_VSYNC_BACK_PORCH   16
+#define MIPI_VSYNC_PULSE_WIDTH  4
+#define MIPI_VSYNC_FRONT_PORCH  16
 
-// --- Backlight ---
-#define BACKLIGHT_PIN           45      // GPIO para retroiluminación
+// --- Backlight (PWM) ---
+#define BACKLIGHT_PIN           26      // Guition JC8012P4A1 backlight GPIO
 #define BACKLIGHT_BRIGHTNESS    255     // 0-255
-#define BACKLIGHT_DIM_AFTER_MS  0       // 0 = no atenuar, N = atenuar tras N ms inactividad
+#define BACKLIGHT_DIM_AFTER_MS  0       // 0 = no atenuar, N = ms inactividad
+#define BACKLIGHT_LEDC_CHANNEL  0
+#define BACKLIGHT_LEDC_FREQ     5000    // Hz
 
-// --- Touch ---
+// --- Touch (GT911 via I2C) ---
 #define TOUCH_SDA               8
 #define TOUCH_SCL               9
 #define TOUCH_INT               3
-#define TOUCH_RST               -1
+#define TOUCH_RST               -1      // -1 si no hay RST dedicado
+#define TOUCH_I2C_ADDR          0x5D    // GT911: 0x5D o 0x14
 
-// --- Status interval más largo (pantalla no necesita reportar cada 30s) ---
+// --- LED (no hay LED en JC8012P4A1) ---
+#define LED_PIN                 -1
+
+// --- Status interval ---
 #define STATUS_INTERVAL_MS      60000   // cada 60s
 
 #endif // CONFIG_H

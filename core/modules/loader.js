@@ -915,27 +915,19 @@ class ModuleLoader {
    */
   registerToolsForAI(moduleName, tools, instance) {
     for (const tool of tools) {
+      // Registrar siempre el schema para que el LLM conozca la tool.
+      // La ejecución va por eventos — el handler es opcional.
       const handlerName = tool.handler || tool.name.split('.')[1];
-      const handler = instance[handlerName];
-
-      if (typeof handler !== 'function') {
-        if (this.logger) {
-          this.logger.warn('module.tool.handler.missing', {
-            module: moduleName,
-            tool: tool.name,
-            expected_handler: handlerName
-          });
-        }
-        continue;
-      }
+      const handler = instance?.[handlerName];
 
       this.toolsRegistry.set(tool.name, {
         name: tool.name,
         description: tool.description || `${moduleName} ${tool.name}`,
         parameters: tool.parameters || {},
-        handler: handler.bind(instance),
+        handler: typeof handler === 'function' ? handler.bind(instance) : null,
         module: moduleName,
-        confirmation: tool.confirmation || false
+        confirmation: tool.confirmation || false,
+        event_based: true  // ejecución siempre via evento
       });
 
       if (this.logger) {

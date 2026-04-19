@@ -237,15 +237,20 @@ class AIGatewayModule {
   // Event Handler: chat.prompt.ready — nuevo flujo event-driven
   async onChatPromptReady(event) {
     const data = event.data || event;
-    const { conversation_id, project_id, content, prompt } = data;
+    const { conversation_id, project_id, content, prompt, messages } = data;
     if (!conversation_id || !content) return;
+
+    // Historial: usar mensajes previos si los hay, si no solo el mensaje actual
+    const history = Array.isArray(messages) && messages.length > 0
+      ? messages
+      : [{ role: 'user', content }];
 
     await this.onAIChatRequest({
       data: {
         request_id: require('crypto').randomUUID(),
         messages: [
           ...(prompt ? [{ role: 'system', content: prompt }] : []),
-          { role: 'user', content }
+          ...history
         ],
         tools: true,
         execute_tools: true,

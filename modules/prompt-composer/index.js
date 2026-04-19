@@ -1179,7 +1179,7 @@ Fecha actual: {{date}}`,
 
   async onChatMessageRouted(event) {
     const data = event.data || event;
-    const { conversation_id, content, project_id, path, decision } = data;
+    const { conversation_id, content, project_id, path, decision, messages } = data;
     if (!conversation_id || !content) return;
     if (path === 'agent' || path === 'forward_agent') return; // agent-bridge lo maneja
 
@@ -1189,7 +1189,7 @@ Fecha actual: {{date}}`,
 
       await this.eventBus.publish('chat.prompt.ready', {
         conversation_id, project_id, content,
-        prompt, decision
+        prompt, decision, messages
       });
     } catch (err) {
       this.logger?.error('prompt-composer.routed.failed', { conversation_id, error: err.message });

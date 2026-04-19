@@ -234,7 +234,6 @@ class AIGatewayModule {
     }
   }
 
-  /**
   // Event Handler: chat.prompt.ready — nuevo flujo event-driven
   async onChatPromptReady(event) {
     const data = event.data || event;

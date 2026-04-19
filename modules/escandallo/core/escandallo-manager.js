@@ -142,7 +142,7 @@ class EscandalloManager {
    * @returns {Promise<{coste_total, coste_porcion, notas, snapshot}>}
    */
   async calculateEscandallo(recetaId, receta, preciosMercado) {
-    let costeTot al = 0;
+    let costeTotal = 0;
     let notas = [];
     const snapshot = {};
 

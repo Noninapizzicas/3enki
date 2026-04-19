@@ -330,7 +330,16 @@ class DatabaseManagerModule {
 
     try {
       const db = await this.getDatabase(project_id);
-      await this._exec(db, schema);
+      // Ejecutar statements uno a uno para ignorar los que ya existen
+      const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
+      for (const stmt of statements) {
+        await this._exec(db, stmt + ';').catch(err => {
+          // Ignorar errores de tabla/índice ya existente
+          if (!err.message.includes('already exists') && !err.message.includes('more than one primary key')) {
+            throw err;
+          }
+        });
+      }
       await this.saveDatabase(project_id);
 
       this.logger.info('schema.init.request.success', {

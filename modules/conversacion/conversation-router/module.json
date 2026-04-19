@@ -12,7 +12,9 @@
         "description": "Decisión de enrutamiento tomada para un mensaje. Payload: { conversation_id, path, tool?, agent?, module?, confidence?, level?, reason? }"
       }
     ],
-    "subscribes": []
+    "subscribes": [
+      { "event": "chat.message.saved", "handler": "onChatMessageSaved" }
+    ]
   },
 
   "observability": {

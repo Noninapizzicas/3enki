@@ -16,7 +16,8 @@
       { "event": "prompt.list.response", "handler": "onPromptManagerListResponse" },
       { "event": "context.full.response", "handler": "onInheritedContextResponse" },
       { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
+      { "event": "chat.message.routed", "handler": "onChatMessageRouted" }
     ]
   },
 

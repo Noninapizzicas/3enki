@@ -235,10 +235,29 @@ class AIGatewayModule {
   }
 
   /**
-   * Event Handler: ai.chat.request
-   * Handler principal para conversation-manager
-   * Publica ai.chat.response con el resultado
-   */
+  // Event Handler: chat.prompt.ready — nuevo flujo event-driven
+  async onChatPromptReady(event) {
+    const data = event.data || event;
+    const { conversation_id, project_id, content, prompt } = data;
+    if (!conversation_id || !content) return;
+
+    await this.onAIChatRequest({
+      data: {
+        request_id: require('crypto').randomUUID(),
+        messages: [
+          ...(prompt ? [{ role: 'system', content: prompt }] : []),
+          { role: 'user', content }
+        ],
+        tools: true,
+        execute_tools: true,
+        project_id,
+        conversation_id,
+        stream: true
+      }
+    });
+  }
+
+  // Event Handler: ai.chat.request — handler principal
   async onAIChatRequest(event) {
     // EventEnvelope uses .data, legacy uses .payload
     const {
@@ -321,8 +340,9 @@ class AIGatewayModule {
       }
 
       // Publicar respuesta exitosa
-      await this.eventBus.publish(EVENTS.AI.CHAT_RESPONSE, {
+      const responsePayload = {
         request_id,
+        conversation_id: event.data?.conversation_id || null,
         success: result.status === 200,
         message: result.data?.content,
         content: result.data?.content,
@@ -334,7 +354,14 @@ class AIGatewayModule {
         model: result.data?.model,
         provider: result.data?.provider || requestedProvider,
         error: result.status !== 200 ? result.data?.message : null
-      }, { correlationId });
+      };
+
+      await this.eventBus.publish(EVENTS.AI.CHAT_RESPONSE, responsePayload, { correlationId });
+
+      // Nuevo flujo event-driven: emitir chat.ai.response para chat-session y mqtt
+      if (responsePayload.conversation_id) {
+        await this.eventBus.publish('chat.ai.response', responsePayload).catch(() => {});
+      }
 
       endTimer?.({
         success: result.status === 200,

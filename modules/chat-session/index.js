@@ -925,23 +925,27 @@ class ChatSessionModule {
 
   async onChatAiResponse(event) {
     const data = event.data || event;
-    const { conversation_id, content, tokens, cost, model, tool_calls_executed } = data;
+    const { conversation_id, content, tokens, cost, model, provider, tool_calls_executed, agent_name } = data;
     if (!conversation_id || !content) return;
+
+    const source = agent_name
+      ? { type: 'agent', name: agent_name }
+      : { type: 'llm', provider: provider || 'unknown', model: model || 'unknown' };
 
     try {
       const saved = await this.saveMessage(conversation_id, {
         role: 'assistant', content, tokens, cost,
-        metadata: { model, tool_calls_executed }
+        metadata: { model, provider, tool_calls_executed, source }
       });
       await this.setConversationState(conversation_id, 'idle');
 
-      // Publicar al frontend vía MQTT
       const mqtt = this.uiHandler?.mqtt;
       if (mqtt) {
         mqtt.publish(`conversation/${conversation_id}/message`, JSON.stringify({
           id: saved?.id || null,
           role: 'assistant',
           content,
+          source,
           streaming: false,
           timestamp: new Date().toISOString()
         }), { qos: 1 });

@@ -929,11 +929,23 @@ class ChatSessionModule {
     if (!conversation_id || !content) return;
 
     try {
-      await this.saveMessage(conversation_id, {
+      const saved = await this.saveMessage(conversation_id, {
         role: 'assistant', content, tokens, cost,
         metadata: { model, tool_calls_executed }
       });
       await this.setConversationState(conversation_id, 'idle');
+
+      // Publicar al frontend vía MQTT
+      const mqtt = this.uiHandler?.mqtt;
+      if (mqtt) {
+        mqtt.publish(`conversation/${conversation_id}/message`, JSON.stringify({
+          id: saved?.id || null,
+          role: 'assistant',
+          content,
+          streaming: false,
+          timestamp: new Date().toISOString()
+        }), { qos: 1 });
+      }
     } catch (err) {
       this.logger?.error('chat-session.ai-response.failed', { conversation_id, error: err.message });
     }

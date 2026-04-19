@@ -13,7 +13,6 @@
       "session.context.load.request"
     ],
     "subscribes": [
-      { "event": "chat.send.request", "handler": "onChatSendRequest" },
       { "event": "ai.chat.response", "handler": "onAIChatResponse" },
       { "event": "session.save.response", "handler": "onSessionSaveResponse" },
       { "event": "prompt.compose.response", "handler": "onPromptComposeResponse" },

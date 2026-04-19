@@ -1181,15 +1181,22 @@ Fecha actual: {{date}}`,
     const data = event.data || event;
     const { conversation_id, content, project_id, path, decision, messages } = data;
     if (!conversation_id || !content) return;
-    if (path === 'agent' || path === 'forward_agent') return; // agent-bridge lo maneja
+    if (path === 'agent' || path === 'forward_agent') return;
 
     try {
       const projectContext = await this.loadProjectContext(project_id, false, crypto.randomUUID());
-      const prompt = this.composeSystemPrompt({ system_prompt: null }, projectContext, true);
+      const projectName = projectContext?.project_name || 'este proyecto';
+
+      // Determinar módulo relevante desde la decisión del router
+      const targetTool = decision?.tool || decision?.intent?.tool || null;
+      const targetModule = targetTool ? targetTool.split('.')[0] : null;
+
+      const prompt = `Eres el asistente de ${projectName}. Usa las tools disponibles de forma proactiva cuando el usuario pida información o acciones concretas. No pidas confirmación innecesaria — actúa directamente.`;
 
       await this.eventBus.publish('chat.prompt.ready', {
         conversation_id, project_id, content,
-        prompt, decision, messages
+        prompt, decision, messages,
+        target_module: targetModule
       });
     } catch (err) {
       this.logger?.error('prompt-composer.routed.failed', { conversation_id, error: err.message });

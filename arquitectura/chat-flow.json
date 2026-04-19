@@ -1,0 +1,81 @@
+{
+  "_type": "architecture_decision",
+  "_name": "chat-flow",
+  "_version": "1.0.0",
+  "_date": "2026-04-18",
+  "_status": "target",
+  "_description": "Flujo de conversación event-driven puro. Elimina chat-ai-bridge como orquestador central. Cada módulo escucha un evento y emite el siguiente.",
+
+  "problema": "chat-ai-bridge orquesta 7 pasos internamente. Viola el paradigma — mezcla responsabilidades y crea una dependencia central frágil.",
+
+  "flujo_target": [
+    {
+      "paso": 1,
+      "evento": "chat.message.received",
+      "emite": "UI / MQTT handler",
+      "payload": ["conversation_id", "content", "project_id"],
+      "escucha": "chat-session"
+    },
+    {
+      "paso": 2,
+      "evento": "chat.message.saved",
+      "emite": "chat-session (después de guardar el mensaje del usuario)",
+      "payload": ["conversation_id", "message_id", "content", "project_id"],
+      "escucha": "conversation-router"
+    },
+    {
+      "paso": 3,
+      "evento": "chat.message.routed",
+      "emite": "conversation-router",
+      "payload": ["conversation_id", "content", "path", "decision"],
+      "escucha": {
+        "si_path_llm_o_tool_call": "prompt-composer",
+        "si_path_agent": "agent-bridge",
+        "si_path_forward_agent": "agent-bridge"
+      }
+    },
+    {
+      "paso": 4,
+      "evento": "chat.prompt.ready",
+      "emite": "prompt-composer",
+      "payload": ["conversation_id", "messages", "tools", "project_id"],
+      "escucha": "ai-gateway"
+    },
+    {
+      "paso": 5,
+      "evento": "chat.ai.response",
+      "emite": "ai-gateway",
+      "payload": ["conversation_id", "content", "tool_calls_executed", "tokens", "model"],
+      "escucha": ["chat-session", "mqtt-handler"]
+    },
+    {
+      "paso": 6a,
+      "evento": "chat.response.saved",
+      "emite": "chat-session (después de guardar respuesta del asistente)",
+      "payload": ["conversation_id", "message_id"],
+      "escucha": "nadie — fin del flujo"
+    },
+    {
+      "paso": "6b",
+      "evento": "chat.ai.response",
+      "emite": "ai-gateway",
+      "nota": "mqtt-handler escucha este mismo evento y publica al frontend vía MQTT en paralelo con chat-session"
+    }
+  ],
+
+  "modulos_afectados": {
+    "chat-ai-bridge": "ELIMINAR — sus responsabilidades se distribuyen",
+    "chat-session": "AÑADIR listener chat.message.received + emitir chat.message.saved y chat.response.saved",
+    "conversation-router": "AÑADIR listener chat.message.saved + emitir chat.message.routed",
+    "prompt-composer": "AÑADIR listener chat.message.routed + emitir chat.prompt.ready",
+    "ai-gateway": "AÑADIR listener chat.prompt.ready + emitir chat.ai.response",
+    "agent-bridge": "CAMBIAR listener: chat.message.routed (path=agent) en vez de agent.execute desde chat-ai-bridge"
+  },
+
+  "ventajas": [
+    "Ningún módulo orquesta — la cadena se propaga sola",
+    "Cada módulo es reemplazable sin tocar los demás",
+    "Se puede insertar un módulo nuevo en cualquier punto de la cadena",
+    "Trazabilidad total por eventos"
+  ]
+}

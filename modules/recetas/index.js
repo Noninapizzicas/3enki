@@ -824,8 +824,31 @@ class RecetasModule {
     return this.handleInvestigarReceta(params);
   }
 
-  // NOTE: toolAnalizar, toolCrear, toolActualizar no están aquí
-  // — son responsabilidad de agentes especializados que escuchan eventos
+  // ==========================================
+  // TOOL EVENT HANDLERS — paradigma event-driven
+  // AI emite recetas.buscar → recetas responde recetas.buscar.response
+  // ==========================================
+
+  async _toolResponse(toolName, event, handlerFn) {
+    const data = event.data || event;
+    const { request_id, ...params } = data;
+    try {
+      const result = await handlerFn(params);
+      await this.eventBus.publish(`${toolName}.response`, { request_id, result });
+    } catch (err) {
+      await this.eventBus.publish(`${toolName}.response`, { request_id, error: err.message });
+    }
+  }
+
+  async onToolBuscar(event)          { return this._toolResponse('recetas.buscar',            event, p => this.handleBuscar(p)); }
+  async onToolListar(event)          { return this._toolResponse('recetas.listar',             event, p => this.handleListar(p)); }
+  async onToolObtener(event)         { return this._toolResponse('recetas.obtener',            event, p => this.handleObtener(p)); }
+  async onToolIngestar(event)        { return this._toolResponse('recetas.ingestar',           event, p => this.handleIngestar(p)); }
+  async onToolHistorial(event)       { return this._toolResponse('recetas.historial',          event, p => this.handleHistorial(p)); }
+  async onToolEstadisticas(event)    { return this._toolResponse('recetas.estadisticas',       event, p => this.handleEstadisticas(p)); }
+  async onToolIngredientes(event)    { return this._toolResponse('recetas.ingredientes',       event, p => this.handleIngredientes(p)); }
+  async onToolActualizarPrecio(event){ return this._toolResponse('recetas.actualizar_precio',  event, p => this.handleActualizarPrecio(p)); }
+  async onToolCrearDesdeChat(event)  { return this._toolResponse('recetas.crear_desde_chat',   event, p => this.handleIngestar(p)); }
 }
 
 module.exports = RecetasModule;

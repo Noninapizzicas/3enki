@@ -1201,33 +1201,14 @@ class ChatAiBridgeModule {
         convId = createResponse.conversation?.id;
       }
 
-      // Execute chat flow via internal event (triggers onChatSendRequest)
+      // Fire-and-forget: emitir evento y retornar inmediatamente.
+      // El flujo continúa en cadena de eventos:
+      // chat-session → conversation-router → prompt-composer → ai-gateway → chat-session (MQTT)
       const requestId = crypto.randomUUID();
-      const responsePromise = new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          this.pendingChatRequests.delete(requestId);
-          reject(new Error('Chat request timeout'));
-        }, (this.config.aiTimeoutWithTools || 180000) + 30000);
-        this.pendingChatRequests.set(requestId, { resolve, reject, timeout });
-      });
-
-      const unsubResponse = await this.eventBus.subscribe('chat.send.response', (event) => {
-        const eventData = event.data || event;
-        if (eventData.request_id === requestId) {
-          const pending = this.pendingChatRequests.get(requestId);
-          if (pending) {
-            clearTimeout(pending.timeout);
-            this.pendingChatRequests.delete(requestId);
-            if (eventData.success) pending.resolve(eventData);
-            else pending.reject(new Error(eventData.error || 'Chat request failed'));
-          }
-          unsubResponse();
-        }
-      });
-
       await this.eventBus.publish('chat.send.request', {
         request_id: requestId,
         conversation_id: convId,
+        project_id: projectId,
         content,
         attachments: attachments || [],
         use_tools: true,
@@ -1235,15 +1216,9 @@ class ChatAiBridgeModule {
         correlation_id: correlationId
       });
 
-      const result = await responsePromise;
-
       return {
         conversationId: convId,
-        user_message: result.user_message,
-        assistant_message: result.assistant_message,
-        tokens_used: result.tokens_used,
-        cost: result.cost,
-        duration: result.duration
+        status: 'processing'
       };
 
     } catch (error) {

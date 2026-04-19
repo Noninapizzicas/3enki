@@ -1,0 +1,60 @@
+{
+  "module": "conversacion/agent-bridge",
+  "role": "Capa de correlación entre conversation-routing y ai-agent-framework. Añade conversation_id al ciclo de vida del agente y persiste ejecuciones.",
+  "paradigma": "event relay + correlation tracking",
+
+  "emite": [
+    {
+      "evento": "agent.execute.request",
+      "cuando": "Recibe agent.execute — reenvía al ai-agent-framework con formato camelCase",
+      "payload": "{ agentName, context: { conversation_id, project_id, ...params }, task, pipelineId }"
+    },
+    {
+      "evento": "agent.completed",
+      "cuando": "agent.{name}.completed llega y el pipelineId coincide",
+      "payload": "{ conversation_id, result, agent_name, pipelineId }"
+    },
+    {
+      "evento": "agent.failed",
+      "cuando": "agent.{name}.failed llega o timeout",
+      "payload": "{ conversation_id, error, agent_name, pipelineId }"
+    },
+    {
+      "evento": "agent.progress",
+      "cuando": "agent.{name}.progress llega",
+      "payload": "{ conversation_id, agent_name, step, message, pipelineId }"
+    },
+    {
+      "evento": "db.query.request",
+      "cuando": "Persiste ejecución en SQLite via ExecutionStore",
+      "payload": "{ project_id, query, params, request_id }"
+    }
+  ],
+
+  "escucha": [
+    {
+      "evento": "agent.execute",
+      "hace": "Genera pipelineId; persiste inicio; suscribe dinámicamente a agent.{name}.completed/failed; reenvía a agent.execute.request"
+    },
+    {
+      "evento": "agent.user_reply",
+      "hace": "Log — inyección mid-execution no implementada aún"
+    },
+    {
+      "evento": "db.query.response",
+      "hace": "Resuelve promesa pendiente en ExecutionStore"
+    },
+    {
+      "evento": "project.activated / deactivated",
+      "hace": "Cachea project_id activo"
+    }
+  ],
+
+  "no_hace": [
+    "Ejecutar el agente (lo hace ai-agent-framework)",
+    "Publicar a MQTT (lo hace chat-session)",
+    "Acceder a SQLite directamente (usa db.query.request)"
+  ],
+
+  "nota": "Las suscripciones a agent.{name}.completed/failed son dinámicas y se crean/destruyen por ejecución. El filtro por pipelineId evita colisiones entre ejecuciones paralelas."
+}

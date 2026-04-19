@@ -7,10 +7,11 @@
 
   "events": {
     "subscribes": [
-      { "event": "agent.execute",      "handler": "onAgentExecute" },
-      { "event": "agent.user_reply",   "handler": "onAgentUserReply" },
-      { "event": "project.activated",  "handler": "onProjectActivated" },
-      { "event": "project.deactivated","handler": "onProjectDeactivated" }
+      { "event": "agent.execute",       "handler": "onAgentExecute" },
+      { "event": "agent.user_reply",    "handler": "onAgentUserReply" },
+      { "event": "db.query.response",   "handler": "onDbQueryResponse" },
+      { "event": "project.activated",   "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
     ],
     "publishes": [
       {

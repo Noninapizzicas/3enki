@@ -44,9 +44,6 @@ class AgentBridgeModule {
       dbTimeout: this.config.db_timeout_ms || 10000
     });
 
-    // Conectar respuestas de DB al store
-    this.eventBus.subscribe('db.query.response', (e) => this.store.onDbQueryResponse(e));
-
     this.logger.info('agent-bridge.loaded', { module: this.name });
   }
 
@@ -130,7 +127,7 @@ class AgentBridgeModule {
     });
 
     // Reenviar al framework con el payload correcto
-    await this.eventBus.publish('agent.execute', {
+    await this.eventBus.publish('agent.execute.request', {
       agentName: agent_name,
       context: {
         conversation_id,
@@ -233,6 +230,10 @@ class AgentBridgeModule {
   // ==========================================
   // Project lifecycle
   // ==========================================
+
+  onDbQueryResponse(event) {
+    return this.store.onDbQueryResponse(event);
+  }
 
   async onProjectActivated(event) {
     const data = event.data || event;

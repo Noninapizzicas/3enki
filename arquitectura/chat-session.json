@@ -1,0 +1,71 @@
+{
+  "module": "chat-session",
+  "role": "Persistencia de conversaciones y mensajes + entrega MQTT al frontend.",
+  "paradigma": "event-driven persistence + MQTT delivery",
+
+  "emite": [
+    {
+      "evento": "chat.message.saved",
+      "cuando": "Mensaje del usuario guardado",
+      "payload": "{ conversation_id, project_id, message_id, content, messages[] }"
+    },
+    {
+      "evento": "session.created",
+      "cuando": "Nueva conversación creada",
+      "payload": "{ conversation_id, project_id, ... }"
+    },
+    {
+      "evento": "session.create.response",
+      "cuando": "Respuesta a session.create.request",
+      "payload": "{ request_id, success, conversation }"
+    },
+    {
+      "evento": "db.query.request",
+      "cuando": "Necesita leer/escribir en SQLite — nunca accede directamente",
+      "payload": "{ project_id, query, params, read_only, request_id }"
+    }
+  ],
+
+  "escucha": [
+    {
+      "evento": "chat.send.request",
+      "hace": "Guarda el mensaje del usuario; carga historial; emite chat.message.saved"
+    },
+    {
+      "evento": "chat.ai.response",
+      "hace": "Guarda mensaje del asistente; publica a MQTT conversation/{id}/message con source attribution"
+    },
+    {
+      "evento": "agent.completed",
+      "hace": "Guarda el resultado del agente como mensaje assistant; publica a MQTT"
+    },
+    {
+      "evento": "agent.failed",
+      "hace": "Publica error a MQTT conversation/{id}/agent_status"
+    },
+    {
+      "evento": "agent.progress",
+      "hace": "Publica progreso a MQTT conversation/{id}/agent_status"
+    },
+    {
+      "evento": "db.query.response",
+      "hace": "Resuelve la promesa pendiente de queryDatabase()"
+    },
+    {
+      "evento": "project.activated / deactivated",
+      "hace": "Cachea project_id activo"
+    }
+  ],
+
+  "mqtt_publica": [
+    "conversation/{conversation_id}/message — respuesta del LLM o agente",
+    "conversation/{conversation_id}/agent_status — progreso/fallo del agente"
+  ],
+
+  "no_hace": [
+    "Llamar directamente a SQLite",
+    "Construir prompts",
+    "Llamar al LLM",
+    "Enrutar mensajes"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "module": "chat-ai-bridge",
+  "role": "Adaptador MQTT → eventos. Punto de entrada del frontend al sistema de conversación.",
+  "paradigma": "thin adapter — fire-and-forget",
+
+  "emite": [
+    {
+      "evento": "chat.send.request",
+      "cuando": "Frontend envía un mensaje",
+      "payload": "{ request_id, conversation_id, project_id, content, attachments, use_tools, page_context, correlation_id }"
+    },
+    {
+      "evento": "session.create.request",
+      "cuando": "No hay conversation_id activo — crea una nueva conversación antes de emitir chat.send.request",
+      "payload": "{ request_id, project_id, correlation_id }"
+    }
+  ],
+
+  "escucha": [
+    {
+      "evento": "project.activated",
+      "hace": "Cachea el project_id activo para usarlo en handleConversationSend"
+    },
+    {
+      "evento": "project.deactivated",
+      "hace": "Limpia el project_id cacheado"
+    },
+    {
+      "evento": "session.create.response",
+      "hace": "Respuesta inline (await) para crear conversación — no es una suscripción permanente sino un await puntual"
+    }
+  ],
+
+  "no_hace": [
+    "Guardar mensajes (lo hace chat-session)",
+    "Construir prompts (lo hace prompt-composer)",
+    "Llamar al LLM (lo hace ai-gateway)",
+    "Publicar respuestas MQTT de AI (lo hace chat-session)",
+    "Gestionar estado del agente (lo hace chat-session)"
+  ],
+
+  "flujo": "frontend → MQTT → handleConversationSend → chat.send.request → [chat-session toma el control]"
+}

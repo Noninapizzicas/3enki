@@ -114,7 +114,8 @@ class AIAgentFrameworkModule {
         },
         required: ['agent_name', 'context', 'task']
       },
-      handler: this.invokeAgentToolHandler.bind(this),
+      handler: null,
+      event_based: true,
       module: 'ai-agent-framework',
       confirmation: false
     };
@@ -188,6 +189,72 @@ class AIAgentFrameworkModule {
         agent_name,
         task: task?.slice(0, 80)
       });
+    });
+  }
+
+  /**
+   * Handle invoke_agent tool call from ai-gateway (event-based pattern).
+   * ai-gateway emits `invoke_agent { request_id, agent_name, context, task }`
+   * We run the agent and emit `invoke_agent.response { request_id, result|error }`
+   */
+  async onInvokeAgentTool(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, agent_name, context = {}, task = '' } = data;
+
+    const agent = Array.from(this.agents.values()).find(a => a.name === agent_name);
+    if (!agent) {
+      return this.eventBus.publish('invoke_agent.response', {
+        request_id, error: `Agente "${agent_name}" no encontrado`
+      });
+    }
+    if (!agent.enabled) {
+      return this.eventBus.publish('invoke_agent.response', {
+        request_id, error: `Agente "${agent_name}" está deshabilitado`
+      });
+    }
+
+    const TIMEOUT_MS = (agent.config?.timeout_ms || agent.timeout_ms || 120000) + 10000;
+    let resolved = false;
+    let unsubCompleted, unsubFailed;
+
+    const timer = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      unsubCompleted?.();
+      unsubFailed?.();
+      this.eventBus.publish('invoke_agent.response', {
+        request_id, error: `Timeout esperando agente ${agent_name} (${TIMEOUT_MS}ms)`
+      });
+    }, TIMEOUT_MS);
+
+    unsubCompleted = await this.eventBus.subscribe(`agent.${agent_name}.completed`, (e) => {
+      if (resolved) return;
+      const d = e?.data || e?.payload || e;
+      resolved = true;
+      clearTimeout(timer);
+      unsubCompleted?.();
+      unsubFailed?.();
+      this.eventBus.publish('invoke_agent.response', {
+        request_id, result: { success: true, agent: agent_name, result: d.result }
+      });
+    });
+
+    unsubFailed = await this.eventBus.subscribe(`agent.${agent_name}.failed`, (e) => {
+      if (resolved) return;
+      const d = e?.data || e?.payload || e;
+      resolved = true;
+      clearTimeout(timer);
+      unsubCompleted?.();
+      unsubFailed?.();
+      this.eventBus.publish('invoke_agent.response', {
+        request_id, error: d.error || 'agent failed'
+      });
+    });
+
+    await this.eventBus.publish('agent.execute.request', { agentName: agent_name, context, task });
+
+    this.logger.info('ai-agent-framework.invoke_agent.dispatched', {
+      agent_name, task: task?.slice(0, 80)
     });
   }
 

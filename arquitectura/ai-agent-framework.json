@@ -1,0 +1,58 @@
+{
+  "module": "ai-agent-framework",
+  "role": "Ejecuta agentes IA especializados. Registry de agentes, gestión de contexto, tool calling.",
+  "paradigma": "event-driven execution — recibe request, emite response",
+
+  "emite": [
+    {
+      "evento": "agent.{name}.completed",
+      "cuando": "Agente termina con éxito",
+      "payload": "{ agent_id, agent_name, result, pipelineId, timestamp }"
+    },
+    {
+      "evento": "agent.{name}.failed",
+      "cuando": "Agente falla o no existe",
+      "payload": "{ agent_id, agent_name, error, pipelineId, timestamp }"
+    },
+    {
+      "evento": "invoke_agent.response",
+      "cuando": "Respuesta al tool call invoke_agent del LLM",
+      "payload": "{ request_id, result } | { request_id, error }"
+    },
+    {
+      "evento": "agent.invoke.response",
+      "cuando": "Respuesta a agent.invoke.request (inter-módulo sincrónico)",
+      "payload": "{ request_id, success, data } | { request_id, success, error }"
+    }
+  ],
+
+  "escucha": [
+    {
+      "evento": "agent.execute.request",
+      "hace": "Ejecuta el agente por nombre; emite agent.{name}.completed o agent.{name}.failed"
+    },
+    {
+      "evento": "invoke_agent",
+      "hace": "Tool call del LLM — ejecuta el agente y emite invoke_agent.response { request_id, result }"
+    },
+    {
+      "evento": "agent.invoke.request",
+      "hace": "Request/response sincrónico para otros módulos que necesitan resultado inline"
+    }
+  ],
+
+  "herramientas_expone": [
+    {
+      "nombre": "invoke_agent",
+      "tipo": "event_based",
+      "descripcion": "Permite al LLM invocar cualquier agente especialista. El LLM llama la tool → ai-gateway emite invoke_agent → ai-agent-framework ejecuta → emite invoke_agent.response"
+    }
+  ],
+
+  "no_hace": [
+    "Publicar a MQTT",
+    "Persistir conversaciones",
+    "Gestionar el flujo de chat",
+    "Llamar directamente a ai-gateway (los agentes SÍ pueden usar el LLM para sus tareas internas)"
+  ]
+}

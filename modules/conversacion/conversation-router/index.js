@@ -64,6 +64,20 @@ class ConversationRouterModule {
 
     return decision;
   }
+
+  async onChatMessageSaved(event) {
+    const data = event.data || event;
+    const { conversation_id, content, project_id, message_id } = data;
+    if (!conversation_id || !content) return;
+
+    const decision = this.route(content, conversation_id);
+
+    await this.eventBus.publish('chat.message.routed', {
+      conversation_id, content, project_id, message_id,
+      path: decision.path,
+      decision
+    });
+  }
 }
 
 module.exports = ConversationRouterModule;

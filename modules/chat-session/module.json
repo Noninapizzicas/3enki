@@ -24,7 +24,9 @@
       { "event": "session.save.request", "handler": "onSaveRequest" },
       { "event": "session.context.load.request", "handler": "onContextLoadRequest" },
       { "event": "session.context.toggle.request", "handler": "onToggleContextRequest" },
-      { "event": "session.context.stats.request", "handler": "onContextStatsRequest" }
+      { "event": "session.context.stats.request", "handler": "onContextStatsRequest" },
+      { "event": "chat.send.request", "handler": "onChatSendRequest" },
+      { "event": "chat.ai.response", "handler": "onChatAiResponse" }
     ]
   },
 

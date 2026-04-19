@@ -1177,6 +1177,25 @@ Fecha actual: {{date}}`,
     }
   }
 
+  async onChatMessageRouted(event) {
+    const data = event.data || event;
+    const { conversation_id, content, project_id, path, decision } = data;
+    if (!conversation_id || !content) return;
+    if (path === 'agent' || path === 'forward_agent') return; // agent-bridge lo maneja
+
+    try {
+      const projectContext = await this.loadProjectContext(project_id, false, crypto.randomUUID());
+      const prompt = this.composeSystemPrompt({ system_prompt: null }, projectContext, true);
+
+      await this.eventBus.publish('chat.prompt.ready', {
+        conversation_id, project_id, content,
+        prompt, decision
+      });
+    } catch (err) {
+      this.logger?.error('prompt-composer.routed.failed', { conversation_id, error: err.message });
+    }
+  }
+
   async handleListTemplates(req, context) {
     const correlationId = context?.correlationId || crypto.randomUUID();
 

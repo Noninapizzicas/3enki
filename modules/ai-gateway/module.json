@@ -26,6 +26,10 @@
     {
       "event": "credential.resolve.response",
       "handler": "onCredentialResponse"
+    },
+    {
+      "event": "chat.prompt.ready",
+      "handler": "onChatPromptReady"
     }
   ],
   "apis": [

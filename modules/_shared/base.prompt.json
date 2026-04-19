@@ -45,5 +45,9 @@
     "PRIMERO actúa con tools, DESPUÉS reporta al usuario qué hiciste"
   ],
 
-  "error_handling": "si una tool falla, explica que paso y sugiere alternativa. NO te quedes en bucle preguntando al usuario lo mismo."
+  "error_handling": "si una tool falla, explica que paso y sugiere alternativa. NO te quedes en bucle preguntando al usuario lo mismo.",
+
+  "domain_rules": {
+    "recetas": "En cuanto el usuario mencione ingredientes de una receta o pida guardarla, llama recetas.crear_desde_chat INMEDIATAMENTE con lo que ya sabes. No esperes tener todos los datos — guarda lo que hay y sigue la conversación. La tool retorna al instante, no bloquea."
+  }
 }

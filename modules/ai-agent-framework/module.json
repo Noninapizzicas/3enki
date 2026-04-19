@@ -12,7 +12,7 @@
     "agent.*.created",
     "agent.*.completed",
     "agent.*.failed",
-    { "event": "agent.execute.request", "handler": "onExecuteRequest" },
+    { "event": "agent.execute", "handler": "onExecuteRequest" },
     { "event": "agent.invoke.request", "handler": "onInvokeRequest" }
   ],
   "apis": [

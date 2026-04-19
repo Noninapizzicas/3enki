@@ -25,10 +25,10 @@
       "description": "Ver detalle completo de una receta"
     },
     {
-      "keywords": ["crear receta", "nueva receta", "añadir receta", "guardar receta"],
+      "keywords": ["crear receta", "nueva receta", "añadir receta", "guardar receta", "guárdala", "la puedes guardar", "guarda esto", "guarda la", "añade esta receta", "guárdame", "guarda esta"],
       "action": "tool_call",
-      "tool": "recetas.crear",
-      "description": "Crear receta manualmente"
+      "tool": "recetas.ingestar",
+      "description": "Guardar receta nueva desde conversación"
     },
     {
       "keywords": ["actualizar receta", "modificar receta", "cambiar receta", "editar receta"],
@@ -128,9 +128,16 @@
       }
     ],
     "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
+      { "event": "project.activated",   "handler": "onProjectActivated" },
       { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "factura.procesada", "handler": "onFacturaProcesada" }
+      { "event": "receta.crear",        "handler": "onRecetaCrear" },
+      { "event": "receta.actualizar",   "handler": "onRecetaActualizar" },
+      { "event": "receta.borrar",       "handler": "onRecetaBorrar" },
+      { "event": "receta.buscar",       "handler": "onRecetaBuscar" },
+      { "event": "receta.obtener",      "handler": "onRecetaObtener" },
+      { "event": "receta.listar",       "handler": "onRecetaListar" },
+      { "event": "receta.ingestar",     "handler": "onRecetaIngestar" },
+      { "event": "receta.investigar",   "handler": "onRecetaInvestigar" }
     ]
   },
 
@@ -436,6 +443,21 @@
       }
     },
     {
+      "name": "recetas.crear_desde_chat",
+      "description": "Guarda una receta nueva mencionada en la conversación. Llámala en cuanto el usuario proporcione ingredientes y nombre, aunque la conversación continúe. Fire-and-forget: no bloquea la respuesta.",
+      "handler": "toolCrearDesdeChat",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "nombre": { "type": "string", "description": "Nombre de la receta" },
+          "ingredientes": { "type": "string", "description": "Ingredientes tal como los mencionó el usuario" },
+          "proyecto_id": { "type": "string", "description": "ID del proyecto activo" },
+          "notas": { "type": "string", "description": "Notas adicionales opcionales (cantidades, método)" }
+        },
+        "required": ["nombre", "ingredientes", "proyecto_id"]
+      }
+    },
+    {
       "name": "recetas.estadisticas",
       "description": "Estadísticas del proyecto: total recetas, ingredientes, costes promedio, etc.",
       "handler": "toolEstadisticas",
@@ -445,6 +467,34 @@
           "proyecto_id": { "type": "string" }
         },
         "required": ["proyecto_id"]
+      }
+    },
+    {
+      "name": "recetas.investigar_receta",
+      "description": "Investigar receta: búsqueda inteligente por nombre/descripción con búsqueda multi-criterio estratificada. Retorna receta encontrada o sugerencias para generación. Incluye costos reales/estimados con transparencia total.",
+      "handler": "toolInvestigarReceta",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "proyecto_id": {
+            "type": "string",
+            "description": "ID del proyecto"
+          },
+          "nombre_receta": {
+            "type": "string",
+            "description": "Nombre o descripción de la receta a buscar (ej: 'salsa oriental' o 'bocadillo de pollo')"
+          },
+          "descripcion": {
+            "type": "string",
+            "description": "Descripción adicional para refinar búsqueda (opcional, ej: 'con pechuga asada, para acompañar patatas')"
+          },
+          "limit_alternativas": {
+            "type": "number",
+            "default": 3,
+            "description": "Número máximo de alternativas a retornar"
+          }
+        },
+        "required": ["proyecto_id", "nombre_receta"]
       }
     }
   ],

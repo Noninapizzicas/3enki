@@ -903,6 +903,42 @@ class ChatSessionModule {
     }
   }
 
+  async onChatSendRequest(event) {
+    const data = event.data || event;
+    const { conversation_id, content, project_id, user_id } = data;
+    if (!conversation_id || !content) return;
+
+    try {
+      const savedMessage = await this.saveMessage(conversation_id, {
+        role: 'user', content, user_id
+      });
+
+      await this.eventBus.publish('chat.message.saved', {
+        conversation_id, project_id,
+        message_id: savedMessage?.id,
+        content
+      });
+    } catch (err) {
+      this.logger?.error('chat-session.send.failed', { conversation_id, error: err.message });
+    }
+  }
+
+  async onChatAiResponse(event) {
+    const data = event.data || event;
+    const { conversation_id, content, tokens, cost, model, tool_calls_executed } = data;
+    if (!conversation_id || !content) return;
+
+    try {
+      await this.saveMessage(conversation_id, {
+        role: 'assistant', content, tokens, cost,
+        metadata: { model, tool_calls_executed }
+      });
+      await this.setConversationState(conversation_id, 'idle');
+    } catch (err) {
+      this.logger?.error('chat-session.ai-response.failed', { conversation_id, error: err.message });
+    }
+  }
+
   async onContextLoadRequest(event) {
     const data = event.data || event.payload || event;
     const { request_id, conversation_id, correlation_id } = data;

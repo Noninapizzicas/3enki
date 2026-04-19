@@ -1,6 +1,6 @@
 /**
  * Database Manager Module
- * SQLite database management using sql.js (JavaScript-only)
+ * SQLite database management using sqlite3 native
  *
  * Follows event-driven architecture - NO HTTP internal calls
  */
@@ -8,7 +8,7 @@
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
-const initSqlJs = require('sql.js');
+const sqlite3 = require('sqlite3').verbose();
 
 const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constants');
 
@@ -20,7 +20,6 @@ class DatabaseManagerModule {
     // State
     this.databases = new Map(); // projectId -> db instance
     this.projectPaths = new Map(); // projectId -> { basePath, slug } cache
-    this.SQL = null;
     this.projectsPath = null;
 
     // Special projects that use legacy path structure
@@ -59,9 +58,6 @@ class DatabaseManagerModule {
       this.config.projectsPath || './data/projects'
     );
 
-    // Initialize sql.js
-    await this.initializeSqlJs();
-
     // Create projects directory
     await this.ensureProjectsDirectory();
 
@@ -85,15 +81,10 @@ class DatabaseManagerModule {
 
     // Close all database connections
     for (const [projectId, db] of this.databases.entries()) {
-      try {
-        db.close();
-        this.logger.info('db.closed', { project_id: projectId });
-      } catch (error) {
-        this.logger.error('db.close.error', {
-          project_id: projectId,
-          error: error?.message || String(error)
-        });
-      }
+      await new Promise(resolve => db.close(err => {
+        if (err) this.logger.error('db.close.error', { project_id: projectId, error: err.message });
+        resolve();
+      }));
     }
 
     this.databases.clear();
@@ -105,19 +96,24 @@ class DatabaseManagerModule {
   // Initialization Helpers
   // ==========================================
 
-  async initializeSqlJs() {
-    try {
-      this.SQL = await initSqlJs();
-      this.logger.info('sql.js.initialized', {
-        version: this.SQL.version || 'unknown'
+  _all(db, query, params = []) {
+    return new Promise((resolve, reject) => {
+      db.all(query, params, (err, rows) => err ? reject(err) : resolve(rows || []));
+    });
+  }
+
+  _run(db, query, params = []) {
+    return new Promise((resolve, reject) => {
+      db.run(query, params, function(err) {
+        err ? reject(err) : resolve({ changes: this.changes, lastID: this.lastID });
       });
-    } catch (error) {
-      this.logger.error('sql.js.init.failed', {
-        error: error?.message || String(error),
-        stack: error?.stack
-      });
-      throw error;
-    }
+    });
+  }
+
+  _exec(db, sql) {
+    return new Promise((resolve, reject) => {
+      db.exec(sql, err => err ? reject(err) : resolve());
+    });
   }
 
   async ensureProjectsDirectory() {
@@ -180,17 +176,8 @@ class DatabaseManagerModule {
 
     try {
       const db = await this.getDatabase(project_id);
-      const results = [];
 
-      const stmt = db.prepare(query);
-      if (params.length > 0) {
-        stmt.bind(params);
-      }
-
-      while (stmt.step()) {
-        results.push(stmt.getAsObject());
-      }
-      stmt.free();
+      const results = await this._all(db, query, params);
 
       if (!read_only && this.config.autoSave !== false) {
         await this.saveDatabase(project_id);
@@ -252,6 +239,49 @@ class DatabaseManagerModule {
         errorMsg,
         correlation_id
       );
+    }
+  }
+
+  async onPersistRequest(event) {
+    const { project_id, table, operation, data, where, request_id } = event.data || event;
+
+    if (!project_id || !table || !operation || !data) {
+      await this.eventBus.publish('db.persist.response', {
+        request_id, success: false, error: 'missing required fields'
+      });
+      return;
+    }
+
+    try {
+      const db = await this.getDatabase(project_id);
+      let query, params;
+
+      if (operation === 'insert') {
+        const cols = Object.keys(data);
+        const placeholders = cols.map(() => '?').join(', ');
+        query = `INSERT OR REPLACE INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`;
+        params = Object.values(data);
+      } else if (operation === 'update') {
+        const sets = Object.keys(data).map(k => `${k} = ?`).join(', ');
+        const wheres = Object.keys(where || {}).map(k => `${k} = ?`).join(' AND ');
+        query = `UPDATE ${table} SET ${sets}${wheres ? ` WHERE ${wheres}` : ''}`;
+        params = [...Object.values(data), ...Object.values(where || {})];
+      } else if (operation === 'delete') {
+        const wheres = Object.keys(where || {}).map(k => `${k} = ?`).join(' AND ');
+        query = `DELETE FROM ${table}${wheres ? ` WHERE ${wheres}` : ''}`;
+        params = Object.values(where || {});
+      } else {
+        throw new Error(`unknown operation: ${operation}`);
+      }
+
+      await this._run(db, query, params);
+
+      if (this.config.autoSave !== false) await this._saveDatabase(project_id, db);
+
+      await this.eventBus.publish('db.persist.response', { request_id, success: true, table, operation });
+    } catch (err) {
+      this.logger.error('db.persist.failed', { project_id, table, operation, error: err.message });
+      await this.eventBus.publish('db.persist.response', { request_id, success: false, error: err.message });
     }
   }
 
@@ -454,17 +484,8 @@ class DatabaseManagerModule {
 
     try {
       const db = await this.getDatabase(projectId);
-      const results = [];
 
-      const stmt = db.prepare(query);
-      if (params.length > 0) {
-        stmt.bind(params);
-      }
-
-      while (stmt.step()) {
-        results.push(stmt.getAsObject());
-      }
-      stmt.free();
+      const results = await this._all(db, query, params);
 
       if (!read_only && this.config.autoSave !== false) {
         await this.saveDatabase(projectId);
@@ -533,15 +554,9 @@ class DatabaseManagerModule {
     try {
       const db = await this.getDatabase(projectId);
 
-      const stmt = db.prepare(
+      const tables = await this._all(db,
         "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
       );
-      const tables = [];
-
-      while (stmt.step()) {
-        tables.push(stmt.getAsObject());
-      }
-      stmt.free();
 
       this.logger.info('schema.retrieved', {
         project_id: projectId,
@@ -589,7 +604,7 @@ class DatabaseManagerModule {
 
     try {
       const db = await this.getDatabase(projectId);
-      db.exec(schema);
+      await this._exec(db, schema);
       await this.saveDatabase(projectId);
 
       // Metrics
@@ -728,16 +743,10 @@ class DatabaseManagerModule {
     try {
       const db = await this.getDatabase(projectId);
 
-      const stmt = db.prepare(
+      const rows = await this._all(db,
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
       );
-      const tables = [];
-
-      while (stmt.step()) {
-        const row = stmt.getAsObject();
-        tables.push(row.name);
-      }
-      stmt.free();
+      const tables = rows.map(row => row.name);
 
       this.logger.info('tables.listed', {
         project_id: projectId,
@@ -856,17 +865,8 @@ class DatabaseManagerModule {
 
     try {
       const db = await this.getDatabase(projectId);
-      const results = [];
 
-      const stmt = db.prepare(query);
-      if (params.length > 0) {
-        stmt.bind(params);
-      }
-
-      while (stmt.step()) {
-        results.push(stmt.getAsObject());
-      }
-      stmt.free();
+      const results = await this._all(db, query, params);
 
       const duration = Date.now() - startTime;
 
@@ -922,16 +922,10 @@ class DatabaseManagerModule {
     try {
       const db = await this.getDatabase(projectId);
 
-      const stmt = db.prepare(
+      const rows = await this._all(db,
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
       );
-      const tables = [];
-
-      while (stmt.step()) {
-        const row = stmt.getAsObject();
-        tables.push(row.name);
-      }
-      stmt.free();
+      const tables = rows.map(row => row.name);
 
       this.logger.info('tool.tables.success', {
         project_id: projectId,
@@ -994,20 +988,14 @@ class DatabaseManagerModule {
       const db = await this.getDatabase(projectId);
 
       // Get table info (columns)
-      const stmt = db.prepare(`PRAGMA table_info("${tableName}")`);
-      const columns = [];
-
-      while (stmt.step()) {
-        const row = stmt.getAsObject();
-        columns.push({
-          name: row.name,
-          type: row.type,
-          notnull: row.notnull === 1,
-          default_value: row.dflt_value,
-          primary_key: row.pk === 1
-        });
-      }
-      stmt.free();
+      const columnRows = await this._all(db, `PRAGMA table_info("${tableName}")`);
+      const columns = columnRows.map(row => ({
+        name: row.name,
+        type: row.type,
+        notnull: row.notnull === 1,
+        default_value: row.dflt_value,
+        primary_key: row.pk === 1
+      }));
 
       if (columns.length === 0) {
         return {
@@ -1022,44 +1010,28 @@ class DatabaseManagerModule {
       }
 
       // Get foreign keys
-      const fkStmt = db.prepare(`PRAGMA foreign_key_list("${tableName}")`);
-      const foreignKeys = [];
-
-      while (fkStmt.step()) {
-        const row = fkStmt.getAsObject();
-        foreignKeys.push({
-          column: row.from,
-          references_table: row.table,
-          references_column: row.to,
-          on_update: row.on_update,
-          on_delete: row.on_delete
-        });
-      }
-      fkStmt.free();
+      const fkRows = await this._all(db, `PRAGMA foreign_key_list("${tableName}")`);
+      const foreignKeys = fkRows.map(row => ({
+        column: row.from,
+        references_table: row.table,
+        references_column: row.to,
+        on_update: row.on_update,
+        on_delete: row.on_delete
+      }));
 
       // Get indexes
-      const idxStmt = db.prepare(`PRAGMA index_list("${tableName}")`);
-      const indexes = [];
-
-      while (idxStmt.step()) {
-        const row = idxStmt.getAsObject();
-        indexes.push({
-          name: row.name,
-          unique: row.unique === 1
-        });
-      }
-      idxStmt.free();
+      const idxRows = await this._all(db, `PRAGMA index_list("${tableName}")`);
+      const indexes = idxRows.map(row => ({
+        name: row.name,
+        unique: row.unique === 1
+      }));
 
       // Get CREATE TABLE statement
-      const sqlStmt = db.prepare(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      const sqlRows = await this._all(db,
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+        [tableName]
       );
-      sqlStmt.bind([tableName]);
-      let createStatement = null;
-      if (sqlStmt.step()) {
-        createStatement = sqlStmt.getAsObject().sql;
-      }
-      sqlStmt.free();
+      const createStatement = sqlRows.length > 0 ? sqlRows[0].sql : null;
 
       this.logger.info('tool.schema.success', {
         project_id: projectId,
@@ -1142,28 +1114,12 @@ class DatabaseManagerModule {
     try {
       const db = await this.getDatabase(projectId);
 
-      // For modifying queries, use run() to get changes count
-      const stmt = db.prepare(query);
-      if (params.length > 0) {
-        stmt.bind(params);
-      }
-      stmt.step();
-      stmt.free();
-
-      // Get number of affected rows
-      const changesStmt = db.prepare('SELECT changes() as affected_rows');
-      changesStmt.step();
-      const affectedRows = changesStmt.getAsObject().affected_rows;
-      changesStmt.free();
+      // For modifying queries, use _run() to get changes count
+      const runResult = await this._run(db, query, params);
+      const affectedRows = runResult.changes;
 
       // Get last insert rowid for INSERT statements
-      let lastInsertId = null;
-      if (normalizedQuery.startsWith('INSERT')) {
-        const lastIdStmt = db.prepare('SELECT last_insert_rowid() as last_id');
-        lastIdStmt.step();
-        lastInsertId = lastIdStmt.getAsObject().last_id;
-        lastIdStmt.free();
-      }
+      const lastInsertId = normalizedQuery.startsWith('INSERT') ? runResult.lastID : null;
 
       // Auto-save
       if (this.config.autoSave !== false) {
@@ -1242,10 +1198,10 @@ class DatabaseManagerModule {
     // Query system database for project info
     try {
       const systemDb = await this.getDatabase('system');
-      const result = systemDb.exec(`SELECT base_path, name FROM projects WHERE id = ?`, [projectId]);
+      const result = await this._all(systemDb, `SELECT base_path, name FROM projects WHERE id = ?`, [projectId]);
 
-      if (result.length > 0 && result[0].values.length > 0) {
-        const [basePath, name] = result[0].values[0];
+      if (result.length > 0) {
+        const { base_path: basePath, name } = result[0];
 
         if (basePath) {
           // Create slug from name for db filename
@@ -1290,95 +1246,41 @@ class DatabaseManagerModule {
       return this.databases.get(projectId);
     }
 
-    const startTime = Date.now();
     const { projectDir, dbPath, isSystem } = await this.resolveDatabasePath(projectId);
     const dbDir = path.dirname(dbPath);
 
-    this.logger.info('db.loading', {
-      project_id: projectId,
-      db_path: dbPath,
-      is_system: isSystem
-    });
+    this.logger.info('db.loading', { project_id: projectId, db_path: dbPath, is_system: isSystem });
 
-    try {
-      let db;
-
-      if (fsSync.existsSync(dbPath)) {
-        const fileBuffer = await fs.readFile(dbPath);
-        db = new this.SQL.Database(fileBuffer);
-        this.logger.info('db.loaded.existing', { project_id: projectId });
-      } else {
-        // Create db directory if needed
-        if (!fsSync.existsSync(dbDir)) {
-          await fs.mkdir(dbDir, { recursive: true });
-        }
-        db = new this.SQL.Database();
-
-        // Publish event
-        await this.eventBus.publish('db.created', {
-          project_id: projectId,
-          created_at: new Date().toISOString()
-        });
-
-        this.logger.info('db.created.new', { project_id: projectId, db_path: dbPath });
-      }
-
-      this.databases.set(projectId, db);
-
-      const duration = Date.now() - startTime;
-
-      return db;
-    } catch (error) {
-      this.logger.error('db.load.error', {
-        project_id: projectId,
-        error: error?.message || String(error)
-      });
-      throw error;
+    if (!fsSync.existsSync(dbDir)) {
+      await fs.mkdir(dbDir, { recursive: true });
     }
+
+    const isNew = !fsSync.existsSync(dbPath);
+
+    return new Promise((resolve, reject) => {
+      const db = new sqlite3.Database(dbPath, (err) => {
+        if (err) {
+          this.logger.error('db.load.error', { project_id: projectId, error: err.message });
+          return reject(err);
+        }
+        this.databases.set(projectId, db);
+        if (isNew) {
+          this.eventBus.publish('db.created', {
+            project_id: projectId,
+            created_at: new Date().toISOString()
+          }).catch(() => {});
+          this.logger.info('db.created.new', { project_id: projectId, db_path: dbPath });
+        } else {
+          this.logger.info('db.loaded.existing', { project_id: projectId });
+        }
+        resolve(db);
+      });
+    });
   }
 
   async saveDatabase(projectId) {
-    if (!this.databases.has(projectId)) {
-      this.logger.warn('db.save.not_loaded', { project_id: projectId });
-      return false;
-    }
-
-    const startTime = Date.now();
-    const db = this.databases.get(projectId);
-    const { dbPath } = await this.resolveDatabasePath(projectId);
-    const dbDir = path.dirname(dbPath);
-
-    try {
-      if (!fsSync.existsSync(dbDir)) {
-        await fs.mkdir(dbDir, { recursive: true });
-      }
-
-      const data = db.export();
-      const buffer = Buffer.from(data);
-      await fs.writeFile(dbPath, buffer);
-
-      const duration = Date.now() - startTime;
-
-      this.logger.info('db.saved', {
-        project_id: projectId,
-        duration
-      });
-
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.saved.total');
-    // → Counter extracted from events
-      // REMOVED: this.metrics.timing('db.save.duration', duration);
-
-      return true;
-    } catch (error) {
-      this.logger.error('db.save.error', {
-        project_id: projectId,
-        error: error?.message || String(error)
-      });
-
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.save.errors');
-    // → Counter extracted from events
-      throw error;
-    }
+    // sqlite3 escribe directamente a disco — no se necesita export manual
+    return true;
   }
 
   // ==========================================

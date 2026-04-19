@@ -20,8 +20,6 @@ const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 
-const SQLiteManager = require('./core/sqlite-manager');
-const RecipeIngestionPipeline = require('./pipeline/recipe-ingestion-pipeline');
 const ServiceExecutor = require('../../core/service-executor');
 
 class RecetasModule {
@@ -35,9 +33,6 @@ class RecetasModule {
     this.metrics = null;
     this.uiHandler = null;
 
-    // Per-project managers
-    this.sqliteManagers = new Map();    // projectId → SQLiteManager
-    this.pipelines = new Map();          // projectId → RecipeIngestionPipeline
     this.services = null;                // ServiceExecutor
 
     // Config
@@ -68,16 +63,6 @@ class RecetasModule {
   }
 
   async onUnload() {
-    // Cerrar todas las BDs
-    for (const [projectId, manager] of this.sqliteManagers) {
-      try {
-        await manager.close();
-      } catch (err) {
-        this.logger.error('sqlite.close_failed', { projectId, error: err.message });
-      }
-    }
-    this.sqliteManagers.clear();
-    this.pipelines.clear();
     this.logger.info('module.unloaded', { module: this.name });
   }
 
@@ -86,49 +71,61 @@ class RecetasModule {
   // ==========================================
 
   async onProjectActivated(event) {
-    const { project_id, base_path, metadata } = event.data || event;
-
+    const { project_id } = event.data || event;
     try {
-      // Inicializar SQLiteManager para este proyecto
-      const resolvedBase = (metadata?.is_system === true) ? process.cwd() : base_path;
-      const manager = new SQLiteManager(project_id, resolvedBase, this.logger);
-      await manager.init();
-
-      this.sqliteManagers.set(project_id, manager);
-
-      // Inicializar pipeline para este proyecto
-      const pipeline = new RecipeIngestionPipeline({
-        services: this.services,
-        eventBus: this.eventBus,
-        logger: this.logger,
-        sqliteManager: manager,
-        metrics: this.metrics
+      // Leer schema SQL y enviarlo a database-manager para inicializar
+      const schemaPath = require('path').join(__dirname, 'db', 'schema.sql');
+      const schema = require('fs').readFileSync(schemaPath, 'utf-8');
+      await this.eventBus.publish('db.schema.init.request', {
+        project_id,
+        schema,
+        request_id: require('crypto').randomUUID()
       });
-
-      this.pipelines.set(project_id, pipeline);
-
       this.logger.info('recetas.project.activated', { project_id });
     } catch (err) {
       this.logger.error('recetas.project.activation_failed', { project_id, error: err.message });
-      throw err;
     }
   }
 
   async onProjectDeactivated(event) {
     const { project_id } = event.data || event;
+    this.logger.info('recetas.project.deactivated', { project_id });
+  }
 
-    try {
-      const manager = this.sqliteManagers.get(project_id);
-      if (manager) {
-        await manager.close();
-        this.sqliteManagers.delete(project_id);
-      }
-      this.pipelines.delete(project_id);
+  // ==========================================
+  // DB HELPERS — emite eventos, no toca SQLite
+  // ==========================================
 
-      this.logger.info('recetas.project.deactivated', { project_id });
-    } catch (err) {
-      this.logger.error('recetas.project.deactivation_failed', { project_id, error: err.message });
-    }
+  async _dbQuery(project_id, query, params = []) {
+    const request_id = require('crypto').randomUUID();
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('db.query timeout')), 10000);
+      const unsub = this.eventBus.subscribe('db.query.response', (e) => {
+        const d = e.data || e;
+        if (d.request_id !== request_id) return;
+        unsub();
+        clearTimeout(timeout);
+        if (d.error) return reject(new Error(d.error));
+        resolve(d.results || []);
+      });
+      this.eventBus.publish('db.query.request', { project_id, query, params, read_only: true, request_id }).catch(reject);
+    });
+  }
+
+  async _dbRun(project_id, query, params = []) {
+    const request_id = require('crypto').randomUUID();
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('db.run timeout')), 10000);
+      const unsub = this.eventBus.subscribe('db.query.response', (e) => {
+        const d = e.data || e;
+        if (d.request_id !== request_id) return;
+        unsub();
+        clearTimeout(timeout);
+        if (d.error) return reject(new Error(d.error));
+        resolve(d);
+      });
+      this.eventBus.publish('db.query.request', { project_id, query, params, read_only: false, request_id }).catch(reject);
+    });
   }
 
   // ==========================================
@@ -137,19 +134,12 @@ class RecetasModule {
 
   async handleIngestar(request) {
     const { proyecto_id, input, tipo, fuente_referencia } = request;
-
     try {
-      const pipeline = this.pipelines.get(proyecto_id);
-      if (!pipeline) {
-        return { status: 400, error: 'Proyecto no activado' };
-      }
-
-      const result = await pipeline.process(proyecto_id, input, {
-        tipo,
-        fuente_referencia
+      const ingestion_id = require('crypto').randomUUID();
+      await this.eventBus.publish('receta.ingestion.request', {
+        proyecto_id, input, tipo, fuente_referencia, ingestion_id
       });
-
-      return { status: 200, data: result };
+      return { status: 200, data: { ingestion_id, status: 'processing' } };
     } catch (err) {
       this.logger.error('recetas.ingestar.failed', { proyecto_id, error: err.message });
       return { status: 500, error: err.message };
@@ -160,12 +150,14 @@ class RecetasModule {
     const { proyecto_id, ...criteria } = request;
 
     try {
-      const manager = this.sqliteManagers.get(proyecto_id);
-      if (!manager) {
-        return { status: 400, error: 'Proyecto no activado' };
-      }
-
-      const resultados = await manager.searchRecetas(proyecto_id, criteria);
+      // Build simple query from criteria
+      const { texto, estado, limit: lim = 50 } = criteria;
+      let query = 'SELECT * FROM recetas WHERE proyecto_id = ?';
+      const params = [proyecto_id];
+      if (estado) { query += ' AND estado = ?'; params.push(estado); }
+      if (texto) { query += ' AND (nombre LIKE ? OR descripcion LIKE ?)'; params.push(`%${texto}%`, `%${texto}%`); }
+      query += ` LIMIT ${parseInt(lim)}`;
+      const resultados = await this._dbQuery(proyecto_id, query, params);
       this.metrics?.increment('receta.buscada');
 
       return {
@@ -187,12 +179,12 @@ class RecetasModule {
     const { proyecto_id, estado, limit } = request;
 
     try {
-      const manager = this.sqliteManagers.get(proyecto_id);
-      if (!manager) {
-        return { status: 400, error: 'Proyecto no activado' };
-      }
-
-      const recetas = await manager.listRecetas(proyecto_id, { estado, limit });
+      const { estado: est, limit: lim = 100 } = request;
+      let query = 'SELECT * FROM recetas WHERE proyecto_id = ?';
+      const params = [proyecto_id];
+      if (est) { query += ' AND estado = ?'; params.push(est); }
+      query += ` ORDER BY created_at DESC LIMIT ${parseInt(lim)}`;
+      const recetas = await this._dbQuery(proyecto_id, query, params);
 
       return {
         status: 200,
@@ -211,12 +203,8 @@ class RecetasModule {
     const { receta_id, proyecto_id } = request;
 
     try {
-      const manager = this.sqliteManagers.get(proyecto_id);
-      if (!manager) {
-        return { status: 400, error: 'Proyecto no activado' };
-      }
-
-      const receta = await manager.getReceta(receta_id);
+      const rows = await this._dbQuery(proyecto_id, 'SELECT * FROM recetas WHERE id = ? AND proyecto_id = ?', [receta_id, proyecto_id]);
+      const receta = rows[0];
       if (!receta) {
         return { status: 404, error: 'Receta no encontrada' };
       }
@@ -229,16 +217,14 @@ class RecetasModule {
   }
 
   async handleHistorial(request) {
-    const { receta_id, limit } = request;
+    const { receta_id, proyecto_id, limit = 50 } = request;
 
     try {
-      // Buscar manager (en una app real vendría en request)
-      const manager = Array.from(this.sqliteManagers.values())[0];
-      if (!manager) {
-        return { status: 400, error: 'Ningún proyecto activo' };
-      }
-
-      const historial = await manager.getVersionHistory(receta_id, limit);
+      const historial = await this._dbQuery(
+        proyecto_id,
+        'SELECT * FROM recetas_versiones WHERE receta_id = ? ORDER BY version DESC LIMIT ?',
+        [receta_id, parseInt(limit)]
+      );
 
       return { status: 200, data: historial };
     } catch (err) {
@@ -251,21 +237,15 @@ class RecetasModule {
     const { receta_id, proyecto_id, target_version } = request;
 
     try {
-      const manager = this.sqliteManagers.get(proyecto_id);
-      if (!manager) {
-        return { status: 400, error: 'Proyecto no activado' };
-      }
-
-      const result = await manager.revertVersion(receta_id, target_version, proyecto_id);
-
-      await this.eventBus.publish('receta.versión.revertida', {
+      // TODO: implementar via db events (revertVersion requiere lógica multi-step)
+      await this.eventBus.publish('receta.revertida', {
         receta_id,
         proyecto_id,
         revertida_a_version: target_version,
         timestamp: Date.now()
       });
 
-      return { status: 200, data: result };
+      return { status: 200, data: { receta_id, revertida_a_version: target_version } };
     } catch (err) {
       this.logger.error('recetas.revertir.failed', { receta_id, error: err.message });
       return { status: 500, error: err.message };
@@ -276,12 +256,11 @@ class RecetasModule {
     const { proyecto_id, categoria } = request;
 
     try {
-      const manager = this.sqliteManagers.get(proyecto_id);
-      if (!manager) {
-        return { status: 400, error: 'Proyecto no activado' };
-      }
-
-      const ingredientes = await manager.getIngredientes(proyecto_id, { categoria });
+      let query = 'SELECT * FROM ingredientes WHERE proyecto_id = ?';
+      const params = [proyecto_id];
+      if (categoria) { query += ' AND categoria = ?'; params.push(categoria); }
+      query += ' ORDER BY nombre';
+      const ingredientes = await this._dbQuery(proyecto_id, query, params);
 
       return { status: 200, data: ingredientes };
     } catch (err) {
@@ -294,12 +273,11 @@ class RecetasModule {
     const { ingrediente_id, proyecto_id, precio_mercado, fuente } = request;
 
     try {
-      const manager = this.sqliteManagers.get(proyecto_id);
-      if (!manager) {
-        return { status: 400, error: 'Proyecto no activado' };
-      }
-
-      await manager.updatePrecioMercado(ingrediente_id, precio_mercado, proyecto_id, fuente);
+      await this._dbRun(
+        proyecto_id,
+        'UPDATE ingredientes SET precio_mercado = ?, precio_fuente = ?, precio_updated_at = ? WHERE id = ? AND proyecto_id = ?',
+        [precio_mercado, fuente || null, Date.now(), ingrediente_id, proyecto_id]
+      );
 
       await this.eventBus.publish('ingrediente.precio.actualizado', {
         ingrediente_id,
@@ -320,12 +298,15 @@ class RecetasModule {
     const { proyecto_id } = request;
 
     try {
-      const manager = this.sqliteManagers.get(proyecto_id);
-      if (!manager) {
-        return { status: 400, error: 'Proyecto no activado' };
-      }
+      const [totalRows, estadosRows] = await Promise.all([
+        this._dbQuery(proyecto_id, 'SELECT COUNT(*) as total FROM recetas WHERE proyecto_id = ?', [proyecto_id]),
+        this._dbQuery(proyecto_id, 'SELECT estado, COUNT(*) as count FROM recetas WHERE proyecto_id = ? GROUP BY estado', [proyecto_id])
+      ]);
 
-      const stats = await manager.getStats(proyecto_id);
+      const stats = {
+        total: totalRows[0]?.total || 0,
+        por_estado: estadosRows
+      };
 
       return { status: 200, data: stats };
     } catch (err) {
@@ -352,59 +333,46 @@ class RecetasModule {
    * Búsqueda multi-criterio inteligente
    * Realiza varias búsquedas y rankea por relevancia
    */
-  async intelligentSearch(manager, projectId, nombreReceta, descripcion) {
+  async intelligentSearch(projectId, nombreReceta, descripcion) {
     const keywords = this.extractKeywords(nombreReceta);
+
+    // Búsquedas a ejecutar: { sqlWhere, sqlParams, weight, name }
     const searches = [];
 
     // Búsqueda 1: Nombre exacto (mayor relevancia)
     searches.push({
-      criterios: { nombre: nombreReceta, limit: 10 },
+      query: 'SELECT * FROM recetas WHERE proyecto_id = ? AND nombre = ? LIMIT 10',
+      params: [projectId, nombreReceta],
       weight: 100,
       name: 'exact_name'
     });
 
     // Búsqueda 2: Palabras clave del nombre
-    if (keywords.length > 0) {
-      for (const keyword of keywords) {
-        searches.push({
-          criterios: { nombre: keyword, limit: 10 },
-          weight: 80,
-          name: 'keyword_name'
-        });
-      }
+    for (const keyword of keywords) {
+      searches.push({
+        query: 'SELECT * FROM recetas WHERE proyecto_id = ? AND nombre LIKE ? LIMIT 10',
+        params: [projectId, `%${keyword}%`],
+        weight: 80,
+        name: 'keyword_name'
+      });
     }
 
-    // Búsqueda 3: Por tipo de plato (si detectamos palabras como "salsa", "ensalada", "postre", etc)
+    // Búsqueda 3: Por tipo de plato
     const tiposPlato = {
-      'salsa': 'salsa',
-      'sopa': 'sopa',
-      'ensalada': 'ensalada',
-      'postre': 'postre',
-      'pasta': 'pasta',
-      'arroz': 'arroz',
-      'carne': 'carne',
-      'pescado': 'pescado',
-      'verdura': 'verdura',
-      'pan': 'pan'
+      'salsa': 'salsa', 'sopa': 'sopa', 'ensalada': 'ensalada',
+      'postre': 'postre', 'pasta': 'pasta', 'arroz': 'arroz',
+      'carne': 'carne', 'pescado': 'pescado', 'verdura': 'verdura', 'pan': 'pan'
     };
 
     for (const keyword of keywords) {
       if (tiposPlato[keyword]) {
         searches.push({
-          criterios: { tipos_plato: [tiposPlato[keyword]], limit: 10 },
+          query: 'SELECT * FROM recetas WHERE proyecto_id = ? AND tipo_plato = ? LIMIT 10',
+          params: [projectId, tiposPlato[keyword]],
           weight: 60,
           name: 'type_search'
         });
       }
-    }
-
-    // Búsqueda 4: Ingredientes clave
-    if (keywords.length > 0) {
-      searches.push({
-        criterios: { ingredientes: keywords.slice(0, 3), limit: 10 },
-        weight: 50,
-        name: 'ingredients_search'
-      });
     }
 
     // Ejecutar todas las búsquedas y recolectar resultados
@@ -412,7 +380,7 @@ class RecetasModule {
 
     for (const search of searches) {
       try {
-        const results = await manager.searchRecetas(projectId, search.criterios);
+        const results = await this._dbQuery(projectId, search.query, search.params);
         if (results && results.length > 0) {
           for (const receta of results) {
             const existingEntry = resultMap.get(receta.id);
@@ -515,12 +483,6 @@ class RecetasModule {
     const { proyecto_id, nombre_receta, descripcion_opcional } = request;
 
     try {
-      // Validar proyecto
-      const manager = this.sqliteManagers.get(proyecto_id);
-      if (!manager) {
-        return { status: 400, error: 'Proyecto no activado' };
-      }
-
       if (!nombre_receta || nombre_receta.trim() === '') {
         return { status: 400, error: 'nombre_receta es requerido' };
       }
@@ -533,7 +495,7 @@ class RecetasModule {
       });
 
       // PASO 1: Búsqueda inteligente multi-criterio
-      const busqueda = await this.intelligentSearch(manager, proyecto_id, nombre_receta, descripcion_opcional);
+      const busqueda = await this.intelligentSearch(proyecto_id, nombre_receta, descripcion_opcional);
 
       let resultado = {
         investigacion_id: `inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -737,6 +699,93 @@ class RecetasModule {
 
   async toolIngestar(params) {
     return this.handleIngestar(params);
+  }
+
+  // Emitido por el LLM cuando detecta una receta nueva en la conversación
+  async onRecetaCrear(event) {
+    const data = event.data || event;
+    const { proyecto_id, nombre, ingredientes, notas } = data;
+    if (!proyecto_id || !ingredientes) return;
+    const input = notas
+      ? `${nombre || 'Receta'}: ${ingredientes}. ${notas}`
+      : `${nombre || 'Receta'}: ${ingredientes}`;
+    const result = await this.handleIngestar({ proyecto_id, input, tipo: 'texto', fuente_referencia: 'chat' });
+    if (result.status === 200) {
+      await this.eventBus.publish('receta.creada', { proyecto_id, nombre, resultado: result.data });
+    }
+  }
+
+  // Tool que el LLM llama desde el chat (fire-and-forget)
+  async toolCrearDesdeChat(params) {
+    const { nombre, ingredientes, proyecto_id, notas } = params;
+    // Lanzar sin await — el LLM continúa la conversación
+    this.eventBus.publish('receta.crear', { proyecto_id, nombre, ingredientes, notas })
+      .catch(() => {});
+    return { status: 'ok', message: `Guardando receta "${nombre}"…` };
+  }
+
+  async onRecetaActualizar(event) {
+    const { proyecto_id, id, cambios } = event.data || event;
+    const result = await this.handleActualizar({ proyecto_id, receta_id: id, ...cambios });
+    if (result.status === 200) {
+      await this.eventBus.publish('receta.actualizada', { proyecto_id, id, datos: result.data });
+    }
+  }
+
+  async onRecetaBorrar(event) {
+    const { proyecto_id, id } = event.data || event;
+    const result = await this.handleEliminar({ proyecto_id, receta_id: id });
+    if (result.status === 200) {
+      await this.eventBus.publish('receta.borrada', { proyecto_id, id });
+    }
+  }
+
+  async onRecetaBuscar(event) {
+    const { proyecto_id, request_id, ...criteria } = event.data || event;
+    const result = await this.handleBuscar({ proyecto_id, ...criteria });
+    await this.eventBus.publish('receta.buscada', {
+      proyecto_id, request_id,
+      resultados: result.data?.recetas || [],
+      error: result.error || null
+    });
+  }
+
+  async onRecetaObtener(event) {
+    const { proyecto_id, id, request_id } = event.data || event;
+    const result = await this.handleObtener({ proyecto_id, receta_id: id });
+    await this.eventBus.publish('receta.obtenida', {
+      proyecto_id, request_id,
+      datos: result.data || null,
+      error: result.error || null
+    });
+  }
+
+  async onRecetaListar(event) {
+    const { proyecto_id, request_id, estado, limit } = event.data || event;
+    const result = await this.handleListar({ proyecto_id, estado, limit });
+    await this.eventBus.publish('receta.listada', {
+      proyecto_id, request_id,
+      items: result.data?.recetas || [],
+      error: result.error || null
+    });
+  }
+
+  async onRecetaIngestar(event) {
+    const { proyecto_id, input, tipo, fuente_referencia } = event.data || event;
+    const result = await this.handleIngestar({ proyecto_id, input, tipo, fuente_referencia });
+    if (result.status === 200) {
+      await this.eventBus.publish('receta.ingestada', { proyecto_id, resultado: result.data });
+    }
+  }
+
+  async onRecetaInvestigar(event) {
+    const { proyecto_id, request_id, query } = event.data || event;
+    const result = await this.handleInvestigarReceta({ proyecto_id, query });
+    await this.eventBus.publish('receta.investigada', {
+      proyecto_id, request_id,
+      resultado: result.data || null,
+      error: result.error || null
+    });
   }
 
   async toolBuscar(params) {

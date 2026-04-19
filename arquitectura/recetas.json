@@ -1,0 +1,53 @@
+{
+  "_type": "module_event_map",
+  "_module": "recetas",
+  "_version": "1.0.0",
+  "_date": "2026-04-18",
+  "_status": "target",
+  "_description": "Mapa de eventos del módulo recetas. Define qué emite y qué escucha. Estado TARGET — hacia el que se refactoriza.",
+
+  "responsabilidad": "Dominio de recetas: estructura, versiones, búsqueda. No sabe de SQLite, filesystem ni otros módulos.",
+
+  "emite": [
+    { "evento": "receta.creada",              "payload": ["proyecto_id", "id", "datos"],           "quien_escucha": ["database-manager", "escandallo"] },
+    { "evento": "receta.actualizada",         "payload": ["proyecto_id", "id", "cambios"],          "quien_escucha": ["database-manager", "escandallo"] },
+    { "evento": "receta.borrada",             "payload": ["proyecto_id", "id"],                     "quien_escucha": ["database-manager", "escandallo", "viabilidad"] },
+    { "evento": "receta.duplicada",           "payload": ["proyecto_id", "id_original", "id_copia"],"quien_escucha": ["database-manager"] },
+    { "evento": "receta.versionada",          "payload": ["proyecto_id", "id", "version"],          "quien_escucha": ["database-manager"] },
+    { "evento": "receta.revertida",           "payload": ["proyecto_id", "id", "version"],          "quien_escucha": ["database-manager"] },
+    { "evento": "receta.ingestada",           "payload": ["proyecto_id", "input", "tipo"],          "quien_escucha": ["pipeline: recipe-structurer"] },
+    { "evento": "receta.mejorada",            "payload": ["proyecto_id", "id", "datos"],            "quien_escucha": ["database-manager"] },
+    { "evento": "receta.simplificada",        "payload": ["proyecto_id", "id", "datos"],            "quien_escucha": ["database-manager"] },
+    { "evento": "receta.escalada",            "payload": ["proyecto_id", "id", "factor", "resultado"], "quien_escucha": ["chat-ai-bridge"] },
+    { "evento": "receta.coste.calculado",     "payload": ["proyecto_id", "id", "coste"],            "quien_escucha": ["viabilidad", "chat-ai-bridge"] },
+    { "evento": "receta.viabilidad.calculada","payload": ["proyecto_id", "id", "analisis"],         "quien_escucha": ["viabilidad", "chat-ai-bridge"] },
+    { "evento": "receta.asignada.carta",      "payload": ["proyecto_id", "id", "carta_id"],         "quien_escucha": ["carta-digital", "menu-generator"] },
+    { "evento": "receta.alergenos.calculados","payload": ["proyecto_id", "id", "alergenos"],        "quien_escucha": ["carta-digital", "chat-ai-bridge"] },
+    { "evento": "receta.exportada",           "payload": ["proyecto_id", "id", "formato", "path"],  "quien_escucha": ["filesystem"] },
+    { "evento": "receta.buscada",             "payload": ["proyecto_id", "request_id", "resultados"], "quien_escucha": ["chat-ai-bridge"] },
+    { "evento": "receta.obtenida",            "payload": ["proyecto_id", "request_id", "datos"],    "quien_escucha": ["chat-ai-bridge"] },
+    { "evento": "receta.listada",             "payload": ["proyecto_id", "request_id", "items"],    "quien_escucha": ["chat-ai-bridge"] },
+    { "evento": "receta.investigada",         "payload": ["proyecto_id", "request_id", "resultado"],"quien_escucha": ["chat-ai-bridge"] }
+  ],
+
+  "escucha": [
+    { "evento": "project.activated",   "accion": "inicializa contexto del proyecto" },
+    { "evento": "project.deactivated", "accion": "limpia contexto del proyecto" },
+    { "evento": "receta.crear",        "accion": "valida y emite receta.creada" },
+    { "evento": "receta.actualizar",   "accion": "valida y emite receta.actualizada" },
+    { "evento": "receta.borrar",       "accion": "valida y emite receta.borrada" },
+    { "evento": "receta.buscar",       "accion": "ejecuta búsqueda y emite receta.buscada" },
+    { "evento": "receta.obtener",      "accion": "obtiene por id y emite receta.obtenida" },
+    { "evento": "receta.listar",       "accion": "lista y emite receta.listada" },
+    { "evento": "receta.ingestar",     "accion": "inicia pipeline y emite receta.ingestada" },
+    { "evento": "receta.investigar",   "accion": "lanza agente y emite receta.investigada" },
+    { "evento": "factura.procesada",   "accion": "extrae recetas de facturas de proveedores" }
+  ],
+
+  "no_hace": [
+    "No toca SQLite directamente",
+    "No instancia SQLiteManager ni pipelines",
+    "No llama a database-manager, filesystem ni ningún módulo directamente",
+    "No sabe dónde se persiste ni cómo"
+  ]
+}

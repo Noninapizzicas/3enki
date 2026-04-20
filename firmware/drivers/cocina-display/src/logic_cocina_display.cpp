@@ -22,8 +22,10 @@
 
 #include "enki_logic.h"
 #include "enki_base.h"
+#include "enki_wifi.h"
 #include "display_driver.h"
 #include "ui_cocina.h"
+#include <WiFi.h>
 #include <lvgl.h>
 #include <time.h>
 

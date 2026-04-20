@@ -431,7 +431,7 @@ void ui_show_config_panel(const UiDeviceConfig& current, UiConfigApplyCb on_appl
     lv_obj_set_width(row, lv_pct(100));
     lv_obj_set_height(row, 80);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_gap_column(row, 16, 0);
+    lv_obj_set_style_pad_column(row, 16, 0);
     lv_obj_set_style_pad_all(row, 0, 0);
     lv_obj_set_style_border_width(row, 0, 0);
     _bg(row, C_OVERLAY);
@@ -464,7 +464,7 @@ void ui_show_config_panel(const UiDeviceConfig& current, UiConfigApplyCb on_appl
     lv_obj_set_width(btn_row, lv_pct(100));
     lv_obj_set_height(btn_row, 60);
     lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_gap_column(btn_row, 16, 0);
+    lv_obj_set_style_pad_column(btn_row, 16, 0);
     lv_obj_set_style_pad_all(btn_row, 0, 0);
     lv_obj_set_style_border_width(btn_row, 0, 0);
     _bg(btn_row, C_OVERLAY);

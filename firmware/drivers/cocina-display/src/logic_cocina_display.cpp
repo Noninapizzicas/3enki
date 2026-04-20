@@ -28,6 +28,7 @@
 #include <WiFi.h>
 #include <lvgl.h>
 #include <time.h>
+#include <freertos/portmacro.h>
 
 // ─── Topics ──────────────────────────────────────────────────────────────────
 
@@ -76,11 +77,12 @@ static char _topicList[96]        = "";
 
 struct PendingAction {
     enum Type : uint8_t { NONE = 0, PREPARE_ITEM = 1, MARK_READY = 2 };
-    volatile Type type;
+    Type type;
     char pedido_id[48];
     char item_id[48];
 };
 static PendingAction _pending = { PendingAction::NONE, {}, {} };
+static portMUX_TYPE  _pendingMux = portMUX_INITIALIZER_UNLOCKED;
 
 // ─── Device ID único ──────────────────────────────────────────────────────────
 
@@ -131,11 +133,11 @@ static void _register_device() {
     enki_mqtt_subscribe(_topicReg);
 
     // Construir array JSON de filtros
-    char fj[128] = "[]";
+    char fj[256] = "[]";
     if (_deviceFiltros[0]) {
         char tmp[64];
         strlcpy(tmp, _deviceFiltros, sizeof(tmp));
-        char arr[128] = "[";
+        char arr[256] = "[";
         char* ctx = nullptr;
         char* tok = strtok_r(tmp, ",", &ctx);
         bool first = true;
@@ -202,16 +204,22 @@ static void _do_mark_ready(const char* pedido_id) {
 // ─── Callbacks de touch (llamados desde LVGL task, Core 0) ───────────────────
 
 static void _on_item_tap(const char* pedido_id, const char* item_id) {
-    if (_pending.type != PendingAction::NONE) return;
-    strlcpy((char*)_pending.pedido_id, pedido_id, sizeof(_pending.pedido_id));
-    strlcpy((char*)_pending.item_id,   item_id,   sizeof(_pending.item_id));
-    _pending.type = PendingAction::PREPARE_ITEM;
+    portENTER_CRITICAL(&_pendingMux);
+    if (_pending.type == PendingAction::NONE) {
+        strlcpy(_pending.pedido_id, pedido_id, sizeof(_pending.pedido_id));
+        strlcpy(_pending.item_id,   item_id,   sizeof(_pending.item_id));
+        _pending.type = PendingAction::PREPARE_ITEM;
+    }
+    portEXIT_CRITICAL(&_pendingMux);
 }
 
 static void _on_header_tap(const char* pedido_id) {
-    if (_pending.type != PendingAction::NONE) return;
-    strlcpy((char*)_pending.pedido_id, pedido_id, sizeof(_pending.pedido_id));
-    _pending.type = PendingAction::MARK_READY;
+    portENTER_CRITICAL(&_pendingMux);
+    if (_pending.type == PendingAction::NONE) {
+        strlcpy(_pending.pedido_id, pedido_id, sizeof(_pending.pedido_id));
+        _pending.type = PendingAction::MARK_READY;
+    }
+    portEXIT_CRITICAL(&_pendingMux);
 }
 
 // ─── Config panel callback ────────────────────────────────────────────────────
@@ -447,12 +455,17 @@ void logic_loop() {
     }
 
     // Procesar acción táctil pendiente (vino de Core 0) en Core 1
-    if (_pending.type != PendingAction::NONE && mqttNow) {
-        PendingAction::Type t = _pending.type;
-        char pid[48], iid[48];
-        strlcpy(pid, (const char*)_pending.pedido_id, sizeof(pid));
-        strlcpy(iid, (const char*)_pending.item_id,   sizeof(iid));
-        _pending.type = PendingAction::NONE;
+    {
+        PendingAction::Type t = PendingAction::NONE;
+        char pid[48] = "", iid[48] = "";
+        portENTER_CRITICAL(&_pendingMux);
+        if (_pending.type != PendingAction::NONE && mqttNow) {
+            t = _pending.type;
+            strlcpy(pid, _pending.pedido_id, sizeof(pid));
+            strlcpy(iid, _pending.item_id,   sizeof(iid));
+            _pending.type = PendingAction::NONE;
+        }
+        portEXIT_CRITICAL(&_pendingMux);
         if      (t == PendingAction::PREPARE_ITEM) _do_prepare_item(pid, iid);
         else if (t == PendingAction::MARK_READY)   _do_mark_ready(pid);
     }

@@ -469,8 +469,7 @@ class PromptEngine {
       content,
       prompt: systemPrompt,
       messages: history,
-      decision,
-      target_module: moduleName || undefined
+      decision: { ...decision, module: moduleName || decision?.module || null }
     });
 
     this.logger.debug('prompt-engine.ready', { conversation_id, module: moduleName });

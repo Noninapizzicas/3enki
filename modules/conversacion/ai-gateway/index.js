@@ -237,7 +237,8 @@ class AIGatewayModule {
   // Event Handler: chat.prompt.ready — nuevo flujo event-driven
   async onChatPromptReady(event) {
     const data = event.data || event;
-    const { conversation_id, project_id, content, prompt, messages, target_module } = data;
+    const { conversation_id, project_id, content, prompt, messages, decision } = data;
+    const target_module = decision?.module || null;
     if (!conversation_id || !content) return;
 
     const history = Array.isArray(messages) && messages.length > 0

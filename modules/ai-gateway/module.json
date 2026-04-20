@@ -22,6 +22,10 @@
       "handler": "onChatPromptReady"
     },
     {
+      "event": "ai.chat.request",
+      "handler": "onAIChatRequest"
+    },
+    {
       "event": "credential.resolve.response",
       "handler": "onCredentialResponse"
     }

@@ -52,6 +52,6 @@
 
   "config": {
     "dbTimeout": 10000,
-    "compositionTimeout": 10000
+    "compositionTimeout": 2000
   }
 }

@@ -56,6 +56,6 @@
   "config": {
     "maxHistory": 40,
     "modulesDir": null,
-    "contextTimeout": 3000
+    "contextTimeout": 4000
   }
 }

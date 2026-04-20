@@ -2,11 +2,10 @@
 /**
  * display_driver.h — Guition JC8012P4A1
  *
- * ILI9881C (MIPI-DSI 800×1280) + GT911 (I2C touch)
+ * JD9365 (MIPI-DSI 800×1280) + GSL3680 (I2C touch, pendiente)
  *
- * Inicializa LVGL, panel MIPI-DSI y touch en display_driver_init().
- * Si el hardware falla, LVGL se crea con un display virtual
- * para poder depurar la lógica MQTT sin pantalla conectada.
+ * Inicializa LVGL, panel MIPI-DSI y backlight.
+ * Arranca tarea FreeRTOS de LVGL en Core 0.
  */
 
 #include <Arduino.h>

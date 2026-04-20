@@ -5,29 +5,8 @@
   "author": "Event Core Team",
   "main": "index.js",
 
-  "provides": {
-    "events": ["prompt.compose.response", "prompt.module.response", "prompt.list.response"]
-  },
-
-  "events": {
-    "subscribes": [
-      {
-        "event": "prompt.compose.request",
-        "description": "Compone messages array completo para enviar al LLM",
-        "handler": "onComposeRequest"
-      },
-      {
-        "event": "prompt.module.request",
-        "description": "Obtiene el prompt.json de un modulo especifico",
-        "handler": "onModulePromptRequest"
-      },
-      {
-        "event": "prompt.list.request",
-        "description": "Lista todos los modulos que tienen prompt.json",
-        "handler": "onListRequest"
-      }
-    ]
-  },
+  "publishes": [],
+  "subscribes": [],
 
   "apis": [
     {

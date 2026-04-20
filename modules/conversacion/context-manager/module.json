@@ -13,10 +13,14 @@
       { "event": "chat.message.enriched", "description": "chat.message.routed enriched with project context" }
     ],
     "subscribes": [
-      { "event": "chat.message.routed", "description": "Enrich with project context before prompt build", "handler": "onChatMessageRouted" },
-      { "event": "context.request", "description": "Request/response for other modules", "handler": "onContextRequest" },
-      { "event": "db.query.response", "description": "Database query responses", "handler": "onDbQueryResponse" },
-      { "event": "composition.response", "description": "Responses from composition-manager", "handler": "onCompositionResponse" }
+      { "event": "chat.message.routed",   "handler": "onChatMessageRouted" },
+      { "event": "context.request",        "handler": "onContextRequest" },
+      { "event": "project.list.response",  "handler": "onProjectListResponse" },
+      { "event": "project.created",        "handler": "onProjectCreated" },
+      { "event": "project.updated",        "handler": "onProjectUpdated" },
+      { "event": "project.deleted",        "handler": "onProjectDeleted" },
+      { "event": "db.query.response",      "handler": "onDbQueryResponse" },
+      { "event": "composition.response",   "handler": "onCompositionResponse" }
     ]
   },
 

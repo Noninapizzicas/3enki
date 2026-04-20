@@ -1,300 +1,384 @@
 /**
- * logic_cocina_display.cpp — Driver lógico: cocina display ESP32-P4
- *
- * Flujo:
- *   1. logic_setup()  → init display + LVGL UI + MQTT subs + pedir lista activa
- *   2. logic_loop()   → LVGL timer handler + NTP clock + watchdog pedidos
- *   3. logic_on_message() → parsear eventos cocina, actualizar estado + UI
+ * logic_cocina_display.cpp — Driver lógico cocina display (ESP32-P4)
  *
  * MQTT subscriptions:
- *   core/+/events/cocina/#          — eventos en tiempo real
- *   core/+/events/periferico/display — display push events
- *   ui/response/{reqId}             — respuesta a list-active (temporal)
+ *   core/+/events/cocina/#               item_preparando, item_preparado, item_avanzado, pedido_listo
+ *   core/+/events/pedido/enviado_cocina   nuevo pedido
+ *   core/+/events/pedido/cancelado        pedido cancelado
  *
- * La URL /cocina se construye automáticamente: http://{mqttHost}/{projectId}/cocina
+ * MQTT requests (ui/request/cocina/*):
+ *   register-device  → registrarse con nombre, estación, color asignado
+ *   list-active      → cargar pedidos activos al arrancar
+ *   prepare-item     → tap en item (pendiente→preparando / preparando→avanza)
+ *   mark-ready       → tap en header (todo el pedido → listo)
+ *
+ * Persistencia (NVS namespace "cocina"):
+ *   dev_id     → device_id único, generado una vez
+ *   dev_nombre → nombre del dispositivo (ej. "COCINA-1")
+ *   dev_tipo   → tipo_estacion: "general" | "horno"
+ *   dev_filtros→ familias separadas por coma
+ *   dev_color  → color hex asignado por el backend
  */
 
 #include "enki_logic.h"
 #include "enki_base.h"
-#include "enki_portal.h"
 #include "display_driver.h"
 #include "ui_cocina.h"
 #include <lvgl.h>
 #include <time.h>
 
-// ─── Constantes ──────────────────────────────────────────────────────────────
+// ─── Topics ──────────────────────────────────────────────────────────────────
 
-#define MAX_ORDERS        16
-#define MAX_ITEMS         8
-#define LIST_REQUEST_INTERVAL_MS  (5 * 60 * 1000)  // Re-pedir lista cada 5 min
-#define CLOCK_UPDATE_MS   30000
-#define NTP_SYNC_INTERVAL_MS (6 * 60 * 60 * 1000)  // Re-sync NTP cada 6h
+#define TOPIC_COCINA           "core/+/events/cocina/#"
+#define TOPIC_PEDIDO_NUEVO     "core/+/events/pedido/enviado_cocina"
+#define TOPIC_PEDIDO_CANCELADO "core/+/events/pedido/cancelado"
 
-// Topics del EventBus de Enki:
-//   cocina.item_preparando → core/{coreId}/events/cocina/item_preparando
-#define TOPIC_COCINA_SUB    "core/+/events/cocina/#"
-#define TOPIC_DISPLAY_SUB   "core/+/events/periferico/display"
-#define TOPIC_LIST_REQUEST  "ui/request/cocina/list-active"
+// ─── NVS keys ────────────────────────────────────────────────────────────────
 
-// ─── Estado ──────────────────────────────────────────────────────────────────
+#define NVS_DEVICE_ID   "dev_id"
+#define NVS_NOMBRE      "dev_nombre"
+#define NVS_TIPO        "dev_tipo"
+#define NVS_FILTROS     "dev_filtros"
+#define NVS_COLOR       "dev_color"
 
-static bool    _displayReady    = false;
-static bool    _lvglReady       = false;
-static uint32_t _bootMs         = 0;
-static uint32_t _lastRequestMs  = 0;
-static uint32_t _lastClockMs    = 0;
-static uint32_t _lastNtpMs      = 0;
-static char    _reqId[48]       = "";
-static char    _topicResponse[80] = "";
+// ─── Intervalos ──────────────────────────────────────────────────────────────
+
+#define LIST_INTERVAL_MS   (5UL * 60 * 1000)
+#define CLOCK_INTERVAL_MS  30000UL
+#define NTP_INTERVAL_MS    (6UL * 60 * 60 * 1000)
+
+// ─── Estado del dispositivo ───────────────────────────────────────────────────
+
+static char    _deviceId[48]      = "";
+static char    _deviceNombre[32]  = "COCINA";
+static char    _deviceTipo[16]    = "general";
+static char    _deviceFiltros[64] = "";
+static char    _deviceColor[8]    = "#94a3b8";
+
+// ─── Estado de sesión ────────────────────────────────────────────────────────
+
+static bool     _lvglReady        = false;
+static uint32_t _bootMs           = 0;
+static uint32_t _lastListMs       = 0;
+static uint32_t _lastClockMs      = 0;
+static uint32_t _lastNtpMs        = 0;
+static bool     _mqttWasConnected = false;
+static bool     _registered       = false;
+
+// Request/response pendientes
+static char _reqId[64]            = "";
+static char _topicReg[96]         = "";
+static char _topicList[96]        = "";
+
+// ─── Acción táctil (Core 0 LVGL → Core 1 loop) ────────────────────────────────
+
+struct PendingAction {
+    enum Type : uint8_t { NONE = 0, PREPARE_ITEM = 1, MARK_READY = 2 };
+    volatile Type type;
+    char pedido_id[48];
+    char item_id[48];
+};
+static PendingAction _pending = { PendingAction::NONE, {}, {} };
+
+// ─── Device ID único ──────────────────────────────────────────────────────────
+
+static void _init_device_id() {
+    const char* saved = enki_config_get(NVS_DEVICE_ID, "");
+    if (strlen(saved) > 6) {
+        strlcpy(_deviceId, saved, sizeof(_deviceId));
+        return;
+    }
+    uint32_t mac = (uint32_t)(ESP.getEfuseMac() >> 16);
+    snprintf(_deviceId, sizeof(_deviceId), "disp_%06x", mac);
+    enki_config_set(NVS_DEVICE_ID, _deviceId);
+    Serial.printf("[COCINA] Device ID: %s\n", _deviceId);
+}
+
+// ─── Config NVS ───────────────────────────────────────────────────────────────
+
+static void _load_config() {
+    strlcpy(_deviceNombre,  enki_config_get(NVS_NOMBRE,  "COCINA"),   sizeof(_deviceNombre));
+    strlcpy(_deviceTipo,    enki_config_get(NVS_TIPO,    "general"),  sizeof(_deviceTipo));
+    strlcpy(_deviceFiltros, enki_config_get(NVS_FILTROS, ""),          sizeof(_deviceFiltros));
+    strlcpy(_deviceColor,   enki_config_get(NVS_COLOR,   "#94a3b8"),  sizeof(_deviceColor));
+}
+
+static void _save_config() {
+    enki_config_set(NVS_NOMBRE,  _deviceNombre);
+    enki_config_set(NVS_TIPO,    _deviceTipo);
+    enki_config_set(NVS_FILTROS, _deviceFiltros);
+}
 
 // ─── MQTT helpers ─────────────────────────────────────────────────────────────
 
-/**
- * Enviar petición a cocina/list-active.
- * Subscribimos al topic de respuesta con un ID único.
- */
-static void requestActiveOrders() {
-    // ID único por dispositivo + timestamp
-    snprintf(_reqId, sizeof(_reqId), "%s-%lu",
-        enki_device_id(), (unsigned long)millis());
-
-    // Subscribir antes de publicar para no perder la respuesta
-    snprintf(_topicResponse, sizeof(_topicResponse), "ui/response/%s", _reqId);
-    enki_mqtt_subscribe(_topicResponse);
-
-    // Publicar request
-    char payload[128];
-    snprintf(payload, sizeof(payload),
-        "{\"request_id\":\"%s\",\"data\":{}}", _reqId);
-    enki_mqtt_publish(TOPIC_LIST_REQUEST, payload);
-
-    _lastRequestMs = millis();
-    Serial.printf("[COCINA] Solicitando lista activa (reqId=%s)\n", _reqId);
+static void _new_req_id() {
+    snprintf(_reqId, sizeof(_reqId), "%s-%lu", _deviceId, (unsigned long)millis());
 }
 
-// ─── Construcción de UiPedido desde JSON ─────────────────────────────────────
+static void _subscribe_topics() {
+    enki_mqtt_subscribe(TOPIC_COCINA);
+    enki_mqtt_subscribe(TOPIC_PEDIDO_NUEVO);
+    enki_mqtt_subscribe(TOPIC_PEDIDO_CANCELADO);
+    if (_topicReg[0])  enki_mqtt_subscribe(_topicReg);
+    if (_topicList[0]) enki_mqtt_subscribe(_topicList);
+}
 
-static UiItemEstado parseItemEstado(const char* s) {
-    if (!s) return UI_ITEM_PENDIENTE;
+static void _register_device() {
+    _new_req_id();
+    snprintf(_topicReg, sizeof(_topicReg), "ui/response/%s", _reqId);
+    enki_mqtt_subscribe(_topicReg);
+
+    // Construir array JSON de filtros
+    char fj[128] = "[]";
+    if (_deviceFiltros[0]) {
+        char tmp[64];
+        strlcpy(tmp, _deviceFiltros, sizeof(tmp));
+        char arr[128] = "[";
+        char* ctx = nullptr;
+        char* tok = strtok_r(tmp, ",", &ctx);
+        bool first = true;
+        while (tok) {
+            while (*tok == ' ') tok++;  // trim
+            if (*tok) {
+                if (!first) strlcat(arr, ",", sizeof(arr));
+                char q[32];
+                snprintf(q, sizeof(q), "\"%s\"", tok);
+                strlcat(arr, q, sizeof(arr));
+                first = false;
+            }
+            tok = strtok_r(nullptr, ",", &ctx);
+        }
+        strlcat(arr, "]", sizeof(arr));
+        strlcpy(fj, arr, sizeof(fj));
+    }
+
+    char payload[512];
+    snprintf(payload, sizeof(payload),
+        "{\"request_id\":\"%s\",\"data\":{"
+        "\"device_id\":\"%s\","
+        "\"nombre\":\"%s\","
+        "\"estacion\":\"%s\","
+        "\"tipo_estacion\":\"%s\","
+        "\"filtros\":{\"familias\":%s}}}",
+        _reqId, _deviceId, _deviceNombre,
+        _deviceNombre, _deviceTipo, fj);
+
+    enki_mqtt_publish("ui/request/cocina/register-device", payload);
+    Serial.printf("[COCINA] register-device → %s tipo=%s\n", _deviceId, _deviceTipo);
+}
+
+static void _request_list_active() {
+    _new_req_id();
+    snprintf(_topicList, sizeof(_topicList), "ui/response/%s", _reqId);
+    enki_mqtt_subscribe(_topicList);
+
+    char payload[128];
+    snprintf(payload, sizeof(payload), "{\"request_id\":\"%s\",\"data\":{}}", _reqId);
+    enki_mqtt_publish("ui/request/cocina/list-active", payload);
+    _lastListMs = millis();
+    Serial.println("[COCINA] list-active solicitado");
+}
+
+static void _do_prepare_item(const char* pedido_id, const char* item_id) {
+    char payload[256];
+    snprintf(payload, sizeof(payload),
+        "{\"data\":{\"item_id\":\"%s\",\"device_id\":\"%s\"}}",
+        item_id, _deviceId);
+    enki_mqtt_publish("ui/request/cocina/prepare-item", payload);
+    Serial.printf("[COCINA] prepare-item %s\n", item_id);
+}
+
+static void _do_mark_ready(const char* pedido_id) {
+    char payload[192];
+    snprintf(payload, sizeof(payload),
+        "{\"data\":{\"pedido_id\":\"%s\",\"device_id\":\"%s\"}}",
+        pedido_id, _deviceId);
+    enki_mqtt_publish("ui/request/cocina/mark-ready", payload);
+    Serial.printf("[COCINA] mark-ready %s\n", pedido_id);
+}
+
+// ─── Callbacks de touch (llamados desde LVGL task, Core 0) ───────────────────
+
+static void _on_item_tap(const char* pedido_id, const char* item_id) {
+    if (_pending.type != PendingAction::NONE) return;
+    strlcpy((char*)_pending.pedido_id, pedido_id, sizeof(_pending.pedido_id));
+    strlcpy((char*)_pending.item_id,   item_id,   sizeof(_pending.item_id));
+    _pending.type = PendingAction::PREPARE_ITEM;
+}
+
+static void _on_header_tap(const char* pedido_id) {
+    if (_pending.type != PendingAction::NONE) return;
+    strlcpy((char*)_pending.pedido_id, pedido_id, sizeof(_pending.pedido_id));
+    _pending.type = PendingAction::MARK_READY;
+}
+
+// ─── Config panel callback ────────────────────────────────────────────────────
+
+static void _on_config_apply(const UiDeviceConfig& cfg) {
+    strlcpy(_deviceNombre,  cfg.nombre,        sizeof(_deviceNombre));
+    strlcpy(_deviceTipo,    cfg.tipo_estacion, sizeof(_deviceTipo));
+    strlcpy(_deviceFiltros, cfg.filtros,       sizeof(_deviceFiltros));
+    _save_config();
+    if (enki_mqtt_connected()) _register_device();
+    Serial.printf("[COCINA] Config aplicada: tipo=%s\n", _deviceTipo);
+}
+
+// ─── Parser de datos de pedido ────────────────────────────────────────────────
+
+static UiItemEstado _parse_estado(const char* s) {
+    if (!s || !*s)              return UI_ITEM_PENDIENTE;
     if (strcmp(s, "preparando") == 0) return UI_ITEM_PREPARANDO;
     if (strcmp(s, "listo")      == 0) return UI_ITEM_LISTO;
     return UI_ITEM_PENDIENTE;
 }
 
-/**
- * Extraer un UiPedido de un objeto JSON con la estructura de PedidoCocina.
- * Retorna false si faltan campos obligatorios.
- */
-static bool pedidoFromJson(JsonObjectConst obj, UiPedido& out) {
-    const char* id = obj["pedido_id"];
-    if (!id || !*id) return false;
+static bool _pedido_from_json(JsonObjectConst obj, UiPedido& out) {
+    const char* id = obj["pedido_id"] | "";
+    if (!*id) return false;
 
     memset(&out, 0, sizeof(out));
-    strlcpy(out.pedido_id,    id,                             sizeof(out.pedido_id));
-    strlcpy(out.ref_display,  obj["ref_display"]  | "",       sizeof(out.ref_display));
-    strlcpy(out.canal,        obj["canal"]        | "",       sizeof(out.canal));
+    strlcpy(out.pedido_id,        id,                                  sizeof(out.pedido_id));
+    strlcpy(out.cuenta_id,        obj["cuenta_id"]        | "",        sizeof(out.cuenta_id));
+    strlcpy(out.canal,            obj["canal"]            | "",        sizeof(out.canal));
+    strlcpy(out.notas_generales,  obj["notas_generales"]  | "",        sizeof(out.notas_generales));
 
-    // Si ref_display vacío, usar nombre_cuenta
-    if (!out.ref_display[0] && obj["nombre_cuenta"].is<const char*>()) {
-        strlcpy(out.ref_display, obj["nombre_cuenta"] | "", sizeof(out.ref_display));
-    }
+    // ref_display: nombre_cuenta > ref_display > cuenta_id
+    const char* ref = obj["nombre_cuenta"] | obj["ref_display"] | obj["cuenta_id"] | id;
+    strlcpy(out.ref_display, ref, sizeof(out.ref_display));
 
-    // Items
     JsonArrayConst items = obj["items"].as<JsonArrayConst>();
-    out.item_count = 0;
-    for (JsonObjectConst item : items) {
+    for (JsonObjectConst it : items) {
         if (out.item_count >= UI_MAX_ITEMS) break;
-        UiItem& ui_item = out.items[out.item_count];
-        strlcpy(ui_item.nombre, item["nombre"] | "?", sizeof(ui_item.nombre));
-        ui_item.cantidad = item["cantidad"] | 1;
-        ui_item.estado   = parseItemEstado(item["estado"] | "pendiente");
+        UiItem& ui = out.items[out.item_count];
+
+        strlcpy(ui.item_id, it["item_id"] | "", sizeof(ui.item_id));
+        strlcpy(ui.nombre,  it["nombre"]  | "?", sizeof(ui.nombre));
+        strlcpy(ui.notas,   it["notas"]   | "",  sizeof(ui.notas));
+        ui.cantidad = it["cantidad"] | 1;
+        ui.pase     = it["pase"]     | 0;
+        ui.estado   = _parse_estado(it["estado"] | "pendiente");
+
+        // Variaciones: quitar
+        JsonArrayConst quitar = it["variaciones"]["ingredientes_quitar"].as<JsonArrayConst>();
+        char qbuf[UI_MAX_VAR_LEN] = "";
+        for (const char* q : quitar) {
+            if (qbuf[0]) strlcat(qbuf, ", ", sizeof(qbuf));
+            strlcat(qbuf, q, sizeof(qbuf));
+        }
+        strlcpy(ui.quitar, qbuf, sizeof(ui.quitar));
+
         out.item_count++;
     }
 
     out.estado      = UI_PEDIDO_ACTIVO;
-    out.received_ms = millis();  // Aproximación — no tenemos el timestamp real
+    out.received_ms = millis();
     out.used        = true;
     return true;
 }
 
-// ─── Handlers de mensajes MQTT ────────────────────────────────────────────────
+// ─── Handlers de mensajes ─────────────────────────────────────────────────────
 
-static void handleListActive(JsonDocument& doc) {
-    // Estructura: { status: 200, data: { pedidos: [...] } }
-    // o directamente: { pedidos: [...] }
+static void _handle_register_response(JsonDocument& doc) {
+    const char* color = doc["data"]["color"] | "";
+    if (*color) {
+        strlcpy(_deviceColor, color, sizeof(_deviceColor));
+        enki_config_set(NVS_COLOR, _deviceColor);
+        if (_lvglReady) {
+            lv_lock();
+            ui_set_device_color(_deviceColor);
+            lv_unlock();
+        }
+        Serial.printf("[COCINA] Color asignado: %s\n", _deviceColor);
+    }
+    _registered = true;
+    _topicReg[0] = '\0';
+
+    // Con el device registrado, pedir lista activa
+    _request_list_active();
+}
+
+static void _handle_list_active(JsonDocument& doc) {
     JsonArrayConst arr;
+    if      (doc["data"]["pedidos"].is<JsonArrayConst>()) arr = doc["data"]["pedidos"].as<JsonArrayConst>();
+    else if (doc["pedidos"].is<JsonArrayConst>())         arr = doc["pedidos"].as<JsonArrayConst>();
+    else if (doc["data"].is<JsonArrayConst>())            arr = doc["data"].as<JsonArrayConst>();
+    else { Serial.println("[COCINA] list-active: formato inesperado"); return; }
 
-    if (doc["data"]["pedidos"].is<JsonArrayConst>()) {
-        arr = doc["data"]["pedidos"].as<JsonArrayConst>();
-    } else if (doc["pedidos"].is<JsonArrayConst>()) {
-        arr = doc["pedidos"].as<JsonArrayConst>();
-    } else if (doc["data"].is<JsonArrayConst>()) {
-        arr = doc["data"].as<JsonArrayConst>();
-    } else {
-        Serial.println("[COCINA] list-active: formato inesperado");
-        return;
-    }
+    if (_lvglReady) { lv_lock(); ui_clear_orders(); lv_unlock(); }
 
-    if (_lvglReady) {
-        lv_lock();
-        ui_clear_orders();
-        lv_unlock();
-    }
-
-    int count = 0;
+    int n = 0;
     for (JsonObjectConst obj : arr) {
         UiPedido p;
-        if (pedidoFromJson(obj, p)) {
-            if (_lvglReady) {
-                lv_lock();
-                ui_add_order(p);
-                lv_unlock();
-            }
-            count++;
+        if (_pedido_from_json(obj, p)) {
+            if (_lvglReady) { lv_lock(); ui_add_order(p); lv_unlock(); }
+            n++;
         }
     }
-    Serial.printf("[COCINA] list-active: %d pedidos activos\n", count);
+    _topicList[0] = '\0';
+    Serial.printf("[COCINA] list-active: %d pedidos activos\n", n);
 }
 
-static void handleItemPreparando(JsonDocument& doc) {
-    const char* pedido_id  = doc["pedido_id"] | "";
-    const char* nombre     = doc["nombre"]    | "";
-    if (!*pedido_id || !*nombre) return;
-
-    if (_lvglReady) {
-        lv_lock();
-        ui_update_item(pedido_id, nombre, UI_ITEM_PREPARANDO);
-        lv_unlock();
-    }
-
-    Serial.printf("[COCINA] %s — item preparando: %s\n", pedido_id, nombre);
+static void _handle_pedido_nuevo(JsonDocument& doc) {
+    JsonObjectConst data = doc["data"].as<JsonObjectConst>();
+    UiPedido p;
+    if (!_pedido_from_json(data, p)) return;
+    if (_lvglReady) { lv_lock(); ui_add_order(p); lv_unlock(); }
+    Serial.printf("[COCINA] Nuevo pedido: %s (%s)\n", p.ref_display, p.pedido_id);
 }
 
-static void handleItemPreparado(JsonDocument& doc) {
-    const char* pedido_id = doc["pedido_id"] | "";
-    const char* nombre    = doc["nombre"]    | "";
-    if (!*pedido_id || !*nombre) return;
-
-    if (_lvglReady) {
-        lv_lock();
-        ui_update_item(pedido_id, nombre, UI_ITEM_LISTO);
-        lv_unlock();
-    }
-
-    Serial.printf("[COCINA] %s — item listo: %s\n", pedido_id, nombre);
+static void _handle_item_preparando(JsonDocument& doc) {
+    JsonObjectConst d = doc["data"].as<JsonObjectConst>();
+    const char* pid   = d["pedido_id"]    | "";
+    const char* iid   = d["item_id"]      | "";
+    const char* color = d["device_color"] | "";
+    if (!*pid || !*iid) return;
+    if (_lvglReady) { lv_lock(); ui_update_item_by_id(pid, iid, UI_ITEM_PREPARANDO, color); lv_unlock(); }
 }
 
-static void handlePedidoListo(JsonDocument& doc) {
-    const char* pedido_id  = doc["pedido_id"]  | "";
-    const char* ref        = doc["ref_display"] | doc["cuenta_id"] | "";
-    if (!*pedido_id) return;
-
-    if (_lvglReady) {
-        lv_lock();
-        ui_order_listo(pedido_id);
-        lv_unlock();
-    }
-
-    Serial.printf("[COCINA] PEDIDO LISTO: %s (%s)\n", ref, pedido_id);
+static void _handle_item_preparado(JsonDocument& doc) {
+    JsonObjectConst d = doc["data"].as<JsonObjectConst>();
+    const char* pid = d["pedido_id"] | "";
+    const char* iid = d["item_id"]   | "";
+    if (!*pid || !*iid) return;
+    if (_lvglReady) { lv_lock(); ui_update_item_by_id(pid, iid, UI_ITEM_LISTO); lv_unlock(); }
 }
 
-/**
- * Eventos de display push (periferico.display):
- * { "destino": "display-cocina", "data": { "accion": "nuevo_pedido|pedido_listo|actualizar", ... } }
- */
-static void handlePerifericoDisplay(JsonDocument& doc) {
-    const char* destino = doc["destino"] | "";
-    if (strcmp(destino, "display-cocina") != 0) return;  // no es para nosotros
-
-    JsonObjectConst data     = doc["data"].as<JsonObjectConst>();
-    const char*     accion   = data["accion"] | "";
-    JsonObjectConst contenido = data["contenido"].as<JsonObjectConst>();
-
-    if (strcmp(accion, "nuevo_pedido") == 0) {
-        // { pedido_id, cuenta_id, nombre_cuenta, canal, items[{nombre,cantidad,categoria}], items_count }
-        UiPedido p;
-        memset(&p, 0, sizeof(p));
-
-        strlcpy(p.pedido_id,   contenido["pedido_id"]    | "", sizeof(p.pedido_id));
-        strlcpy(p.ref_display, contenido["nombre_cuenta"] | contenido["cuenta_id"] | "",
-                sizeof(p.ref_display));
-        strlcpy(p.canal,       contenido["canal"]         | "", sizeof(p.canal));
-        p.received_ms = millis();
-        p.used = true;
-        p.estado = UI_PEDIDO_ACTIVO;
-
-        JsonArrayConst items = contenido["items"].as<JsonArrayConst>();
-        for (JsonObjectConst item : items) {
-            if (p.item_count >= UI_MAX_ITEMS) break;
-            strlcpy(p.items[p.item_count].nombre,
-                    item["nombre"] | "?", sizeof(p.items[0].nombre));
-            p.items[p.item_count].cantidad = item["cantidad"] | 1;
-            p.items[p.item_count].estado   = UI_ITEM_PENDIENTE;
-            p.item_count++;
-        }
-
-        if (_lvglReady && *p.pedido_id) {
-            lv_lock();
-            ui_add_order(p);
-            lv_unlock();
-        }
-
-    } else if (strcmp(accion, "pedido_listo") == 0) {
-        const char* pedido_id = contenido["pedido_id"] | "";
-        if (*pedido_id && _lvglReady) {
-            lv_lock();
-            ui_order_listo(pedido_id);
-            lv_unlock();
-        }
-
-    } else if (strcmp(accion, "actualizar") == 0) {
-        // Refrescar lista completa
-        if (enki_mqtt_connected()) requestActiveOrders();
-    }
+static void _handle_item_avanzado(JsonDocument& doc) {
+    // Item pasa a la siguiente estación — reset a pendiente (o preparando si auto_preparar)
+    JsonObjectConst d  = doc["data"].as<JsonObjectConst>();
+    const char* pid    = d["pedido_id"] | "";
+    const char* iid    = d["item_id"]   | "";
+    const char* estado = d["estado"]    | "pendiente";
+    if (!*pid || !*iid) return;
+    // Limpiar device_color al avanzar de estación
+    if (_lvglReady) { lv_lock(); ui_update_item_by_id(pid, iid, _parse_estado(estado), ""); lv_unlock(); }
 }
 
-// ─── Ruteo de mensajes por topic ──────────────────────────────────────────────
-
-/**
- * Extraer el nombre del evento del topic.
- * "core/core-001/events/cocina/item_preparando" → "item_preparando"
- * "core/core-001/events/cocina/pedido_listo"    → "pedido_listo"
- */
-static const char* extractEventName(const char* topic) {
-    // Buscar la 4ª '/'
-    int slashes = 0;
-    const char* p = topic;
-    while (*p) {
-        if (*p == '/') {
-            slashes++;
-            if (slashes == 4) return p + 1;
-        }
-        p++;
-    }
-    return nullptr;
+static void _handle_pedido_listo(JsonDocument& doc) {
+    const char* pid = doc["data"]["pedido_id"] | "";
+    if (!*pid) return;
+    if (_lvglReady) { lv_lock(); ui_order_listo(pid); lv_unlock(); }
+    Serial.printf("[COCINA] Pedido listo: %s\n", pid);
 }
 
-static bool isTopicMatch(const char* topic, const char* prefix, size_t prefixLen) {
-    return strncmp(topic, prefix, prefixLen) == 0;
-}
-
-// ─── Portal endpoint ──────────────────────────────────────────────────────────
-
-static void _handlePortalDisplay() {
-    char buf[256];
-    snprintf(buf, sizeof(buf),
-        "{\"display_ready\":%s,\"lvgl_ready\":%s}",
-        _displayReady ? "true" : "false",
-        _lvglReady ? "true" : "false");
-    webServer.send(200, "application/json", buf);
+static void _handle_pedido_cancelado(JsonDocument& doc) {
+    const char* pid = doc["data"]["pedido_id"] | "";
+    if (!*pid) return;
+    if (_lvglReady) { lv_lock(); ui_remove_order(pid); lv_unlock(); }
+    Serial.printf("[COCINA] Pedido cancelado: %s\n", pid);
 }
 
 // ─── Contrato BASE + LÓGICA ───────────────────────────────────────────────────
 
 void logic_setup() {
     _bootMs = millis();
+    _pending.type = PendingAction::NONE;
 
-    // 1. Display LVGL
+    // 1. Device config desde NVS
+    _init_device_id();
+    _load_config();
+
+    // 2. Display + LVGL
     _lvglReady = display_driver_init();
     display_set_backlight(BACKLIGHT_BRIGHTNESS);
 
@@ -303,103 +387,127 @@ void logic_setup() {
         ui_init();
         ui_set_wifi(false);
         ui_set_mqtt(false);
+        ui_set_device_color(_deviceColor);
+        ui_set_item_tap_cb(_on_item_tap);
+        ui_set_header_tap_cb(_on_header_tap);
+        UiDeviceConfig cfg;
+        strlcpy(cfg.nombre,        _deviceNombre,  sizeof(cfg.nombre));
+        strlcpy(cfg.tipo_estacion, _deviceTipo,    sizeof(cfg.tipo_estacion));
+        strlcpy(cfg.filtros,       _deviceFiltros, sizeof(cfg.filtros));
+        ui_set_config(cfg, _on_config_apply);
         lv_unlock();
-        display_lvgl_task_start();  // LVGL corre en Core 0 a partir de aquí
+        display_lvgl_task_start();
     }
 
-    // 2. NTP (usa el host MQTT como servidor de red de referencia)
+    // 3. NTP
     configTime(0, 0, "pool.ntp.org", "time.cloudflare.com");
     _lastNtpMs = millis();
 
-    // 3. Portal endpoints
-    webServer.on("/api/display", HTTP_GET, _handlePortalDisplay);
-
-    // 4. Suscribir a topics de cocina
-    enki_mqtt_subscribe(TOPIC_COCINA_SUB);
-    enki_mqtt_subscribe(TOPIC_DISPLAY_SUB);
-
-    // 5. Pedir lista de pedidos activos
+    // 4. MQTT — si ya conectado al arrancar
     if (enki_mqtt_connected()) {
-        requestActiveOrders();
+        _subscribe_topics();
+        _register_device();  // list-active se pide en la respuesta del register
     }
 
     if (_lvglReady) {
         lv_lock();
+        ui_set_wifi(WiFi.status() == WL_CONNECTED);
         ui_set_mqtt(enki_mqtt_connected());
         lv_unlock();
     }
 
-    Serial.printf("[COCINA-DISPLAY] Listo — LVGL=%s panel=%s\n",
-        _lvglReady   ? "OK" : "stub",
-        _displayReady ? "OK" : "stub");
+    Serial.printf("[COCINA] Listo — device=%s tipo=%s\n", _deviceId, _deviceTipo);
 }
 
 void logic_loop() {
     uint32_t now = millis();
+    bool wifiNow = (WiFi.status() == WL_CONNECTED);
+    bool mqttNow = enki_mqtt_connected();
 
-    // Reloj cada 30s — actualiza un label LVGL, necesita lock
-    if (_lvglReady && now - _lastClockMs > CLOCK_UPDATE_MS) {
+    // Detectar reconexión MQTT → re-suscribir y registrar de nuevo
+    if (mqttNow && !_mqttWasConnected) {
+        _subscribe_topics();
+        _register_device();
+        Serial.println("[COCINA] MQTT reconectado — re-suscrito + re-registered");
+    }
+    _mqttWasConnected = mqttNow;
+
+    // Indicadores de conectividad
+    if (_lvglReady) {
+        static bool lw = false, lm = false;
+        if (wifiNow != lw || mqttNow != lm) {
+            lv_lock();
+            ui_set_wifi(wifiNow);
+            ui_set_mqtt(mqttNow);
+            lv_unlock();
+            lw = wifiNow; lm = mqttNow;
+        }
+    }
+
+    // Procesar acción táctil pendiente (vino de Core 0) en Core 1
+    if (_pending.type != PendingAction::NONE && mqttNow) {
+        PendingAction::Type t = _pending.type;
+        char pid[48], iid[48];
+        strlcpy(pid, (const char*)_pending.pedido_id, sizeof(pid));
+        strlcpy(iid, (const char*)_pending.item_id,   sizeof(iid));
+        _pending.type = PendingAction::NONE;
+        if      (t == PendingAction::PREPARE_ITEM) _do_prepare_item(pid, iid);
+        else if (t == PendingAction::MARK_READY)   _do_mark_ready(pid);
+    }
+
+    // Reloj cada 30s
+    if (_lvglReady && now - _lastClockMs > CLOCK_INTERVAL_MS) {
         lv_lock();
         ui_tick_clock();
         lv_unlock();
         _lastClockMs = now;
     }
 
-    // Pedir lista activa periódicamente (recovery tras reconexión)
-    if (enki_mqtt_connected() &&
-        now - _lastRequestMs > LIST_REQUEST_INTERVAL_MS) {
-        requestActiveOrders();
+    // Re-pedir lista activa periódicamente
+    if (mqttNow && _registered && now - _lastListMs > LIST_INTERVAL_MS) {
+        _request_list_active();
     }
 
     // Re-sync NTP
-    if (now - _lastNtpMs > NTP_SYNC_INTERVAL_MS) {
+    if (now - _lastNtpMs > NTP_INTERVAL_MS) {
         configTime(0, 0, "pool.ntp.org");
         _lastNtpMs = now;
     }
 }
 
 void logic_on_message(const char* topic, JsonDocument& doc) {
-    // ── Respuesta a list-active ─────────────────────────────────────────────
-    if (_topicResponse[0] && strcmp(topic, _topicResponse) == 0) {
-        handleListActive(doc);
-        // Unsuscribir del topic temporal
-        // (PubSubClient no tiene unsubscribe en la API de enki, así que simplemente
-        // ignoraremos futuros mensajes comparando con el reqId)
-        _topicResponse[0] = '\0';
-        return;
-    }
+    // Respuestas a requests
+    if (_topicReg[0]  && strcmp(topic, _topicReg)  == 0) { _handle_register_response(doc); return; }
+    if (_topicList[0] && strcmp(topic, _topicList) == 0) { _handle_list_active(doc);        return; }
 
-    // ── Evento periferico.display ───────────────────────────────────────────
-    // topic: core/+/events/periferico/display
-    if (strstr(topic, "/events/periferico/display")) {
-        handlePerifericoDisplay(doc);
-        return;
-    }
+    // Nuevo pedido
+    if (strstr(topic, "/events/pedido/enviado_cocina")) { _handle_pedido_nuevo(doc);     return; }
 
-    // ── Eventos cocina/* ────────────────────────────────────────────────────
-    // topic: core/{coreId}/events/cocina/{event_name}
+    // Pedido cancelado
+    if (strstr(topic, "/events/pedido/cancelado"))     { _handle_pedido_cancelado(doc); return; }
+
+    // Eventos cocina/* — extraer nombre del evento (última sección del topic)
     if (!strstr(topic, "/events/cocina/")) return;
+    const char* ev = strrchr(topic, '/');
+    if (!ev) return;
+    ev++;
 
-    const char* eventName = extractEventName(topic);
-    if (!eventName) return;
-
-    if (strcmp(eventName, "item_preparando") == 0) {
-        handleItemPreparando(doc);
-    } else if (strcmp(eventName, "item_preparado") == 0) {
-        handleItemPreparado(doc);
-    } else if (strcmp(eventName, "pedido_listo") == 0) {
-        handlePedidoListo(doc);
-    }
-    // item_avanzado, device_registered, etc. → ignorar (no afectan la UI de display)
+    if      (strcmp(ev, "item_preparando") == 0) _handle_item_preparando(doc);
+    else if (strcmp(ev, "item_preparado")  == 0) _handle_item_preparado(doc);
+    else if (strcmp(ev, "item_avanzado")   == 0) _handle_item_avanzado(doc);
+    else if (strcmp(ev, "pedido_listo")    == 0) _handle_pedido_listo(doc);
 }
 
 void logic_status(JsonDocument& doc) {
-    doc["display_ready"] = _displayReady;
+    doc["device_id"]     = _deviceId;
+    doc["device_nombre"] = _deviceNombre;
+    doc["tipo_estacion"] = _deviceTipo;
+    doc["registered"]    = _registered;
     doc["lvgl_ready"]    = _lvglReady;
-    doc["uptime_min"]    = (millis() - _bootMs) / 60000;
 }
 
 void logic_portal_status(JsonDocument& doc) {
-    doc["display"] = _displayReady;
-    doc["lvgl"]    = _lvglReady;
+    doc["device_id"]     = _deviceId;
+    doc["tipo_estacion"] = _deviceTipo;
+    doc["registered"]    = _registered;
 }

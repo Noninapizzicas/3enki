@@ -1,19 +1,22 @@
 {
   "name": "conversation-router",
   "version": "1.0.0",
-  "description": "Enrutador de mensajes de usuario. Capa 2-3 de la arquitectura conversation-routing: decide si el mensaje va a un agente activo, a un tool call, o al LLM. No tiene lógica de dominio.",
+  "description": "Enrutador de mensajes de usuario. Capa 2-3 de la arquitectura conversation-routing: decide si el mensaje va a un agente activo, a un tool call, o al LLM. Sin dependencias directas de otros módulos.",
   "author": "Event Core Team",
   "main": "index.js",
 
   "events": {
     "publishes": [
       {
-        "event": "conversation.routed",
-        "description": "Decisión de enrutamiento tomada para un mensaje. Payload: { conversation_id, path, tool?, agent?, module?, confidence?, level?, reason? }"
+        "event": "chat.message.routed",
+        "description": "Decisión de enrutamiento. Payload: { conversation_id, content, project_id, message_id, messages, path, decision }"
       }
     ],
     "subscribes": [
-      { "event": "chat.message.saved", "handler": "onChatMessageSaved" }
+      { "event": "chat.message.saved",  "handler": "onChatMessageSaved" },
+      { "event": "agent.execute",       "handler": "onAgentExecute" },
+      { "event": "agent.completed",     "handler": "onAgentCompleted" },
+      { "event": "agent.failed",        "handler": "onAgentFailed" }
     ]
   },
 

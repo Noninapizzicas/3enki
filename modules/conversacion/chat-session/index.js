@@ -470,89 +470,6 @@ class ChatSessionModule {
   // Conversation State Machine
   // ==========================================
 
-  /**
-   * Devuelve el estado actual de la conversación.
-   * Estados posibles: 'idle' | 'processing' | 'awaiting_agent'
-   *
-   * @param {string} conversationId
-   * @returns {'idle'|'processing'|'awaiting_agent'|null}
-   */
-  getConversationState(conversationId) {
-    const conv = this.conversations.get(conversationId);
-    if (!conv) return null;
-    return conv.metadata?.state || 'idle';
-  }
-
-  /**
-   * Transiciona el estado de la conversación y persiste en DB.
-   *
-   * @param {string} conversationId
-   * @param {'idle'|'processing'|'awaiting_agent'} newState
-   * @param {Object} [agentInfo] - Requerido cuando newState === 'awaiting_agent'
-   * @param {string} agentInfo.agent_name
-   */
-  async setConversationState(conversationId, newState, agentInfo = null) {
-    const VALID_STATES = ['idle', 'processing', 'awaiting_agent'];
-    if (!VALID_STATES.includes(newState)) {
-      throw new Error(`Estado inválido: ${newState}. Válidos: ${VALID_STATES.join(', ')}`);
-    }
-
-    const conv = this.conversations.get(conversationId);
-    if (!conv) {
-      throw new Error(`Conversation not found: ${conversationId}`);
-    }
-
-    const now = new Date().toISOString();
-    const updatedMetadata = {
-      ...conv.metadata,
-      state: newState,
-      active_agent: newState === 'awaiting_agent'
-        ? { agent_name: agentInfo?.agent_name, started_at: now }
-        : null
-    };
-
-    await this.queryDatabase(conv.project_id,
-      'UPDATE conversations SET metadata = ?, updated_at = ? WHERE id = ?',
-      [JSON.stringify(updatedMetadata), now, conversationId],
-      false
-    );
-
-    conv.metadata = updatedMetadata;
-    conv.updated_at = now;
-    this.conversations.set(conversationId, conv);
-
-    this.logger.info('conversation.state.changed', {
-      conversation_id: conversationId,
-      state: newState,
-      agent: agentInfo?.agent_name || null
-    });
-
-    return conv;
-  }
-
-  /**
-   * Comprueba si la conversación está esperando respuesta de un agente.
-   * El Conversation Router usa esto para saber si reenviar al agente activo.
-   *
-   * @param {string} conversationId
-   * @returns {boolean}
-   */
-  isAwaitingAgent(conversationId) {
-    return this.getConversationState(conversationId) === 'awaiting_agent';
-  }
-
-  /**
-   * Devuelve la info del agente activo si la conversación está en awaiting_agent.
-   *
-   * @param {string} conversationId
-   * @returns {{ agent_name, started_at } | null}
-   */
-  getActiveAgent(conversationId) {
-    const conv = this.conversations.get(conversationId);
-    if (!conv || conv.metadata?.state !== 'awaiting_agent') return null;
-    return conv.metadata?.active_agent || null;
-  }
-
   async deleteConversation(conversationId, correlationId) {
     let conversation = this.conversations.get(conversationId);
     if (!conversation) {
@@ -942,21 +859,66 @@ class ChatSessionModule {
         role: 'assistant', content, tokens, cost,
         metadata: { model, provider, tool_calls_executed, source }
       });
-      await this.setConversationState(conversation_id, 'idle');
-
-      const mqtt = this.uiHandler?.mqtt;
-      if (mqtt) {
-        mqtt.publish(`conversation/${conversation_id}/message`, JSON.stringify({
-          id: saved?.id || null,
-          role: 'assistant',
-          content,
-          source,
-          streaming: false,
-          timestamp: new Date().toISOString()
-        }), { qos: 1 });
-      }
+      await this.eventBus.publish('chat.assistant.saved', {
+        conversation_id,
+        message_id: saved?.id || null,
+        role: 'assistant',
+        content,
+        source
+      });
     } catch (err) {
       this.logger?.error('chat-session.ai-response.failed', { conversation_id, error: err.message });
+    }
+  }
+
+  async onAgentCompleted(event) {
+    const data = event.data || event;
+    const { conversation_id, result, agent_name } = data;
+    if (!conversation_id) return;
+
+    const rawContent = typeof result === 'string' ? result
+      : result?.content || result?.response || result?.text || JSON.stringify(result);
+
+    try {
+      const saved = await this.saveMessage(conversation_id, {
+        role: 'assistant',
+        content: rawContent,
+        metadata: { type: 'agent_result', agent: agent_name, source: { type: 'agent', name: agent_name } }
+      });
+      await this.eventBus.publish('chat.assistant.saved', {
+        conversation_id,
+        message_id: saved?.id || null,
+        role: 'assistant',
+        content: rawContent,
+        source: { type: 'agent', name: agent_name }
+      });
+    } catch (err) {
+      this.logger?.error('chat-session.agent-completed.failed', { conversation_id, error: err.message });
+    }
+  }
+
+  async onAgentFailed(event) {
+    const data = event.data || event;
+    const { conversation_id, error, agent_name } = data;
+    if (!conversation_id) return;
+
+    const content = 'Lo siento, hubo un problema procesando tu solicitud. Por favor, intenta de nuevo.';
+
+    try {
+      const saved = await this.saveMessage(conversation_id, {
+        role: 'assistant',
+        content,
+        metadata: { type: 'agent_error', agent: agent_name, error }
+      });
+      await this.eventBus.publish('chat.assistant.saved', {
+        conversation_id,
+        message_id: saved?.id || null,
+        role: 'assistant',
+        content,
+        source: { type: 'agent', name: agent_name }
+      });
+    } catch (err) {
+      this.logger?.error('chat-session.agent-failed.failed', { conversation_id, error: err.message });
     }
   }
 

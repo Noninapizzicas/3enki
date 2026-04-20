@@ -80,12 +80,6 @@ class AIAgentFrameworkModule {
     });
   }
 
-  /**
-   * Register the `invoke_agent` tool in the global toolsRegistry.
-   * This is the bridge between the conversational chat and the specialized agents:
-   * the LLM sees this tool, gets the list of available agents in the description,
-   * and can dispatch any of them via agent.execute.request.
-   */
   registerInvokeAgentTool(moduleLoader) {
     const enabledAgents = Array.from(this.agents.values()).filter(a => a.enabled);
     const agentDescriptions = enabledAgents
@@ -114,7 +108,8 @@ class AIAgentFrameworkModule {
         },
         required: ['agent_name', 'context', 'task']
       },
-      handler: this.invokeAgentToolHandler.bind(this),
+      handler: null,
+      event_based: true,
       module: 'ai-agent-framework',
       confirmation: false
     };
@@ -126,68 +121,68 @@ class AIAgentFrameworkModule {
   }
 
   /**
-   * Handler invoked when the LLM calls invoke_agent.
-   * Publishes agent.execute.request and waits for completion via agent.{name}.completed.
+   * Handle invoke_agent tool call from ai-gateway (event-based pattern).
+   * ai-gateway emits `invoke_agent { request_id, agent_name, context, task }`
+   * We run the agent and emit `invoke_agent.response { request_id, result|error }`
    */
-  async invokeAgentToolHandler(args) {
-    const { agent_name, context = {}, task = '' } = args;
-
-    if (!agent_name) {
-      return { success: false, error: 'agent_name es obligatorio' };
-    }
+  async onInvokeAgentTool(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, agent_name, context = {}, task = '' } = data;
 
     const agent = Array.from(this.agents.values()).find(a => a.name === agent_name);
     if (!agent) {
-      return { success: false, error: `Agente "${agent_name}" no encontrado` };
+      return this.eventBus.publish('invoke_agent.response', {
+        request_id, error: `Agente "${agent_name}" no encontrado`
+      });
     }
     if (!agent.enabled) {
-      return { success: false, error: `Agente "${agent_name}" está deshabilitado` };
+      return this.eventBus.publish('invoke_agent.response', {
+        request_id, error: `Agente "${agent_name}" está deshabilitado`
+      });
     }
 
-    // Wait for agent.{name}.completed or .failed
     const TIMEOUT_MS = (agent.config?.timeout_ms || agent.timeout_ms || 120000) + 10000;
+    let resolved = false;
+    let unsubCompleted, unsubFailed;
 
-    return new Promise(async (resolve) => {
-      let resolved = false;
-      const timer = setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        unsubCompleted?.();
-        unsubFailed?.();
-        resolve({ success: false, error: `Timeout esperando agente ${agent_name} (${TIMEOUT_MS}ms)` });
-      }, TIMEOUT_MS);
-
-      const unsubCompleted = await this.eventBus.subscribe(`agent.${agent_name}.completed`, (event) => {
-        if (resolved) return;
-        const data = event?.data || event?.payload || event;
-        resolved = true;
-        clearTimeout(timer);
-        unsubCompleted?.();
-        unsubFailed?.();
-        resolve({ success: true, agent: agent_name, result: data.result });
+    const timer = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      unsubCompleted?.();
+      unsubFailed?.();
+      this.eventBus.publish('invoke_agent.response', {
+        request_id, error: `Timeout esperando agente ${agent_name} (${TIMEOUT_MS}ms)`
       });
+    }, TIMEOUT_MS);
 
-      const unsubFailed = await this.eventBus.subscribe(`agent.${agent_name}.failed`, (event) => {
-        if (resolved) return;
-        const data = event?.data || event?.payload || event;
-        resolved = true;
-        clearTimeout(timer);
-        unsubCompleted?.();
-        unsubFailed?.();
-        resolve({ success: false, agent: agent_name, error: data.error });
+    unsubCompleted = await this.eventBus.subscribe(`agent.${agent_name}.completed`, (e) => {
+      if (resolved) return;
+      const d = e?.data || e?.payload || e;
+      resolved = true;
+      clearTimeout(timer);
+      unsubCompleted?.();
+      unsubFailed?.();
+      this.eventBus.publish('invoke_agent.response', {
+        request_id, result: { success: true, agent: agent_name, result: d.result }
       });
+    });
 
-      // Fire the agent
-      await this.eventBus.publish('agent.execute.request', {
-        agentName: agent_name,
-        context,
-        task
+    unsubFailed = await this.eventBus.subscribe(`agent.${agent_name}.failed`, (e) => {
+      if (resolved) return;
+      const d = e?.data || e?.payload || e;
+      resolved = true;
+      clearTimeout(timer);
+      unsubCompleted?.();
+      unsubFailed?.();
+      this.eventBus.publish('invoke_agent.response', {
+        request_id, error: d.error || 'agent failed'
       });
+    });
 
-      this.logger.info('ai-agent-framework.invoke_agent.dispatched', {
-        agent_name,
-        task: task?.slice(0, 80)
-      });
+    await this.eventBus.publish('agent.execute.request', { agentName: agent_name, context, task });
+
+    this.logger.info('ai-agent-framework.invoke_agent.dispatched', {
+      agent_name, task: task?.slice(0, 80)
     });
   }
 

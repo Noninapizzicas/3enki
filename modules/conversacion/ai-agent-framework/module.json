@@ -8,12 +8,16 @@
     "context-management",
     "tool-calling"
   ],
+  "publishes": [
+    "agent.{name}.completed",
+    "agent.{name}.failed",
+    "agent.execute.request",
+    "invoke_agent.response"
+  ],
   "subscribes": [
-    "agent.*.created",
-    "agent.*.completed",
-    "agent.*.failed",
-    { "event": "agent.execute", "handler": "onExecuteRequest" },
-    { "event": "agent.invoke.request", "handler": "onInvokeRequest" }
+    { "event": "agent.execute.request", "handler": "onExecuteRequest" },
+    { "event": "agent.invoke.request",  "handler": "onInvokeRequest" },
+    { "event": "invoke_agent",          "handler": "onInvokeAgentTool" }
   ],
   "apis": [
     {

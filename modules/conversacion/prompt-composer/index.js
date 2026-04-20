@@ -25,9 +25,7 @@ class PromptComposerModule {
     // Pending requests tracking
     this.pendingProjectRequests = new Map();
     this.pendingStorageRequests = new Map();
-    this.pendingComposeRequests = new Map();
     this.pendingPromptManagerRequests = new Map();
-    this.pendingInheritedContextRequests = new Map(); // Phase 5
 
     // Template cache (local defaults)
     this.templates = new Map();
@@ -39,7 +37,6 @@ class PromptComposerModule {
 
     // Project context cache: avoids RPC per turn (keyed by projectId)
     this._projectContextCache = new Map();
-    this._inheritedContextCache = new Map();
     this.PROJECT_CACHE_TTL = 300000; // 5 minutes
 
     // Active project tracking (event-driven invalidation)
@@ -79,7 +76,7 @@ class PromptComposerModule {
     this.logger.info('prompt-composer.unloading', { module: this.name });
 
     // Clear pending requests
-    for (const pending of [this.pendingProjectRequests, this.pendingStorageRequests, this.pendingComposeRequests, this.pendingPromptManagerRequests]) {
+    for (const pending of [this.pendingProjectRequests, this.pendingStorageRequests, this.pendingPromptManagerRequests]) {
       for (const [, req] of pending.entries()) {
         if (req.timeout) clearTimeout(req.timeout);
         if (req.reject) req.reject(new Error('Module unloading'));
@@ -174,116 +171,6 @@ Fecha actual: {{date}}`,
   // Event Handlers
   // ==========================================
 
-  async onComposeRequest(event) {
-    const data = event.data || event.payload || event;
-    const {
-      request_id,
-      conversation,
-      project_id,
-      base_prompt,
-      prompt_name,
-      include_tools,
-      include_storage,
-      include_inherited_context, // Phase 5: include context from related projects
-      page_context, // Page Context: route-aware context from frontend
-      tools,
-      correlation_id
-    } = data;
-
-    try {
-      this.logger.debug('prompt-composer.compose.request', {
-        request_id,
-        project_id: project_id || conversation?.project_id,
-        prompt_name,
-        include_inherited_context,
-        correlation_id
-      });
-
-      const projectId = project_id || conversation?.project_id;
-
-      // Load project context
-      const projectContext = await this.loadProjectContext(projectId, include_storage, correlation_id);
-
-      // Load inherited context (Phase 5) - from related projects
-      let inheritedContext = null;
-      if (include_inherited_context !== false && projectId) {
-        inheritedContext = await this.loadInheritedContext(projectId, correlation_id);
-      }
-
-      // Determine base prompt: from prompt_name (prompt-manager) or base_prompt or conversation
-      let effectiveBasePrompt = base_prompt || conversation?.system_prompt;
-
-      // Auto-select system-admin template for system projects
-      if (!effectiveBasePrompt && projectContext?.metadata?.is_system === true) {
-        const systemTemplate = this.templates.get('system-admin');
-        if (systemTemplate) {
-          effectiveBasePrompt = systemTemplate.prompt;
-          this.logger.debug('prompt-composer.system_project.auto_template', {
-            template: 'system-admin',
-            project_id: projectId
-          });
-        }
-      }
-
-      // Try to load from prompt-manager:
-      // Priority: explicit prompt_name > project's prompt_id > default prompt name
-      const resolvedPromptRef = prompt_name
-        || projectContext?.prompt_id
-        || this.config.defaultPromptName;
-
-      if (resolvedPromptRef || (this.config.usePromptManager !== false && !effectiveBasePrompt)) {
-        const managedPrompt = await this.loadPromptFromManager(
-          resolvedPromptRef,
-          projectContext,
-          correlation_id
-        );
-        if (managedPrompt) {
-          effectiveBasePrompt = managedPrompt;
-        }
-      }
-
-      // Load tools info for system prompt (so the AI knows its capabilities)
-      let effectiveTools = tools || null;
-      if (include_tools && !effectiveTools && this.moduleLoader) {
-        effectiveTools = this.moduleLoader.getToolsForAI();
-      }
-
-      // Compose the prompt (with inherited context and page context if available)
-      const composedPrompt = this.composeSystemPrompt(
-        { system_prompt: effectiveBasePrompt },
-        projectContext,
-        effectiveTools,
-        inheritedContext, // Phase 5
-        page_context || null // Page Context
-      );
-
-      // Publish response
-      await this.eventBus.publish('prompt.compose.response', {
-        request_id,
-        success: true,
-        prompt: composedPrompt,
-        context: projectContext,
-        inherited_context: inheritedContext, // Phase 5
-        prompt_source: prompt_name ? 'prompt-manager' : (base_prompt ? 'provided' : 'default'),
-        correlation_id
-      });
-
-    } catch (error) {
-      this.logger.error('prompt-composer.compose.error', {
-        request_id,
-        error: error.message,
-        stack: error.stack
-      });
-
-      await this.eventBus.publish('prompt.compose.response', {
-        request_id,
-        success: false,
-        error: error.message,
-        correlation_id
-      });
-    }
-  }
-
   async onProjectGetResponse(event) {
     const eventData = event.data || event;
     const { request_id, success, project } = eventData;
@@ -354,33 +241,12 @@ Fecha actual: {{date}}`,
   }
 
   /**
-   * Handle inherited context response from project-manager (Phase 5)
-   */
-  async onInheritedContextResponse(event) {
-    const eventData = event.data || event;
-    const { request_id, success, context, error } = eventData;
-
-    const pending = this.pendingInheritedContextRequests.get(request_id);
-    if (!pending) return;
-
-    clearTimeout(pending.timeout);
-    this.pendingInheritedContextRequests.delete(request_id);
-
-    if (success && context) {
-      pending.resolve(context);
-    } else {
-      pending.resolve(null); // Return null on failure (optional feature)
-    }
-  }
-
-  /**
    * Handle project activation — invalidate caches for the activated project
    */
   onProjectActivated(event) {
     const data = event.data || event;
     this.activeProjectId = data.project_id;
     this._projectContextCache.delete(data.project_id);
-    this._inheritedContextCache.delete(data.project_id);
   }
 
   /**
@@ -617,78 +483,6 @@ Fecha actual: {{date}}`,
     return context;
   }
 
-  /**
-   * Load inherited context from project-manager (Phase 5)
-   * Gets system info, dependencies, related projects, and shared context
-   *
-   * @param {string} projectId - Project ID
-   * @param {string} correlationId - Correlation ID for tracing
-   * @returns {Object|null} Inherited context or null if not available
-   */
-  async loadInheritedContext(projectId, correlationId) {
-    if (!projectId) {
-      return null;
-    }
-
-    // Check cache first — inherited context changes even less frequently
-    const cached = this._inheritedContextCache.get(projectId);
-    if (cached !== undefined && (Date.now() - (cached?._ts || 0) < this.PROJECT_CACHE_TTL)) {
-      this.logger.debug('prompt-composer.inherited_context.cache_hit', { projectId });
-      return cached;
-    }
-
-    // Skip if inherited context is disabled in config
-    if (this.config.includeInheritedContext === false) {
-      return null;
-    }
-
-    this.logger.debug('prompt-composer.inherited_context.loading', { correlationId, projectId });
-
-    const requestId = crypto.randomUUID();
-    const timeout = this.config.requestTimeout || 10000;
-
-    // Request inherited context from project-manager via event
-    const contextPromise = new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingInheritedContextRequests.delete(requestId);
-        resolve(null); // Don't fail, just return null
-      }, timeout);
-
-      this.pendingInheritedContextRequests.set(requestId, { resolve, reject, timeout: timeoutId });
-    });
-
-    await this.eventBus.publish('context.full.request', {
-      request_id: requestId,
-      project_id: projectId,
-      correlation_id: correlationId
-    });
-
-    try {
-      const inheritedContext = await contextPromise;
-      if (inheritedContext) {
-        inheritedContext._ts = Date.now();
-        this.logger.debug('prompt-composer.inherited_context.loaded', {
-          correlationId,
-          projectId,
-          hasSystem: !!inheritedContext.system,
-          dependencyCount: inheritedContext.dependencies?.length || 0,
-          relatedCount: inheritedContext.relatedProjects?.length || 0,
-          sharedContextCount: inheritedContext.sharedContext?.length || 0
-        });
-      }
-      // Cache (even null — avoids RPC when project has no relations)
-      this._inheritedContextCache.set(projectId, inheritedContext);
-      return inheritedContext;
-    } catch (error) {
-      this.logger.warn('prompt-composer.inherited_context.failed', {
-        correlationId,
-        projectId,
-        error: error.message
-      });
-      return null;
-    }
-  }
-
   // ==========================================
   // Core Logic: Prompt Composition
   // ==========================================
@@ -700,11 +494,10 @@ Fecha actual: {{date}}`,
    * @param {Object} conversation - Conversation object with system_prompt
    * @param {Object} projectContext - Project context from loadProjectContext
    * @param {Array} tools - Formatted tools array (optional)
-   * @param {Object} inheritedContext - Inherited context from related projects (optional, Phase 5)
    * @param {Object} pageContext - Page context from frontend (optional) { route, title, description, instructions, state }
    * @returns {string} Composed system prompt
    */
-  composeSystemPrompt(conversation, projectContext, tools, inheritedContext = null, pageContext = null) {
+  composeSystemPrompt(conversation, projectContext, tools, pageContext = null) {
     // Start with conversation's system prompt or default
     let basePrompt = conversation?.system_prompt ||
       this.config.defaultSystemPrompt ||
@@ -719,17 +512,7 @@ Fecha actual: {{date}}`,
       storage_size: this.formatBytes(projectContext?.storage_info?.total_size),
       date: new Date().toLocaleDateString(),
       datetime: new Date().toISOString(),
-      conversation_title: conversation?.title || 'Conversation',
-      // Inherited context variables (Phase 5)
-      system_name: inheritedContext?.system?.name || '',
-      related_projects_count: inheritedContext?.relatedProjects?.length || 0,
-      inherited_context_count: inheritedContext?.inheritedContextCount || 0,
-      // Parent chain variables
-      parent_name: inheritedContext?.parentChain?.[0]?.name || '',
-      root_project_name: inheritedContext?.parentChain?.length > 0
-        ? inheritedContext.parentChain[inheritedContext.parentChain.length - 1].name
-        : '',
-      hierarchy_depth: inheritedContext?.parentChain?.length || 0
+      conversation_title: conversation?.title || 'Conversation'
     };
 
     // Substitute template variables {{variable_name}}
@@ -762,14 +545,6 @@ Fecha actual: {{date}}`,
       }
 
       sections.push(projectSection.join('\n'));
-    }
-
-    // Add inherited context section (Phase 5) - from related projects
-    if ((this.config.includeInheritedContext !== false) && inheritedContext) {
-      const inheritedSection = this.buildInheritedContextSection(inheritedContext);
-      if (inheritedSection) {
-        sections.push(inheritedSection);
-      }
     }
 
     // Add page context section if available (route-aware context from frontend)
@@ -810,91 +585,6 @@ Fecha actual: {{date}}`,
 
     // Combine all sections
     return sections.join('\n\n');
-  }
-
-  /**
-   * Build the inherited context section for system prompt (Phase 5)
-   * Includes: system info, dependencies, related projects, shared context
-   *
-   * @param {Object} inheritedContext - Context from getFullProjectContext()
-   * @returns {string|null} Formatted section or null if empty
-   */
-  buildInheritedContextSection(inheritedContext) {
-    if (!inheritedContext) return null;
-
-    const lines = [];
-    let hasContent = false;
-
-    // Parent project hierarchy (root → immediate parent)
-    if (inheritedContext.parentChain?.length > 0) {
-      hasContent = true;
-      const chain = [...inheritedContext.parentChain].reverse(); // root first
-      lines.push('## Project Hierarchy');
-      lines.push('This project inherits context from:');
-      for (let i = 0; i < chain.length; i++) {
-        const parent = chain[i];
-        const indent = '  '.repeat(i);
-        const tag = i === 0 ? ' (root)' : '';
-        const desc = parent.description ? `: ${parent.description}` : '';
-        lines.push(`${indent}- **${parent.name}**${tag}${desc}`);
-      }
-      lines.push('');
-    }
-
-    // System membership
-    if (inheritedContext.system) {
-      hasContent = true;
-      lines.push('## System Context');
-      lines.push(`This project is part of **${inheritedContext.system.name}**${inheritedContext.system.description ? `: ${inheritedContext.system.description}` : ''}`);
-
-      if (inheritedContext.system.role) {
-        lines.push(`- **Role in system**: ${inheritedContext.system.role}`);
-      }
-
-      if (inheritedContext.system.siblingProjects?.length > 0) {
-        lines.push(`- **Sibling projects**: ${inheritedContext.system.siblingProjects.map(p => p.name).join(', ')}`);
-      }
-      lines.push('');
-    }
-
-    // Dependencies
-    if (inheritedContext.dependencies?.length > 0) {
-      hasContent = true;
-      lines.push('## Dependencies');
-      lines.push('This project depends on:');
-      for (const dep of inheritedContext.dependencies) {
-        const desc = dep.description ? ` - ${dep.description}` : '';
-        lines.push(`- **${dep.projectName}** (${dep.type})${desc}`);
-      }
-      lines.push('');
-    }
-
-    // Related projects
-    if (inheritedContext.relatedProjects?.length > 0) {
-      hasContent = true;
-      lines.push('## Related Projects');
-      for (const rel of inheritedContext.relatedProjects) {
-        const linkInfo = rel.links?.map(l => l.linkType).join(', ') || 'related';
-        lines.push(`- **${rel.name}** (${linkInfo})`);
-      }
-      lines.push('');
-    }
-
-    // Shared/imported context (knowledge from other projects)
-    if (inheritedContext.sharedContext?.length > 0) {
-      hasContent = true;
-      lines.push('## Inherited Knowledge');
-      lines.push('Context imported from related projects:');
-      for (const ctx of inheritedContext.sharedContext) {
-        const reason = ctx.reason ? `: ${ctx.reason}` : '';
-        lines.push(`- From **${ctx.fromProject}**${reason}`);
-      }
-      lines.push('');
-    }
-
-    if (!hasContent) return null;
-
-    return lines.join('\n').trim();
   }
 
   /**

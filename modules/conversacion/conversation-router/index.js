@@ -1,5 +1,3 @@
-const ConversationRouter = require('./core/router');
-
 class ConversationRouterModule {
   constructor() {
     this.name = 'conversation-router';
@@ -7,62 +5,121 @@ class ConversationRouterModule {
 
     this.logger = null;
     this.eventBus = null;
-    this.moduleLoader = null;
-    this.router = null;
+    this.intentRegistry = null;
+
+    // conversation_id → { agent_name, started_at }
+    // Actualizado por eventos — sin dependencia de chat-session
+    this.awaitingAgents = new Map();
   }
 
   async onLoad(context) {
     this.logger = context.logger;
-    this.eventBus = context.eventBus || null;
-    this.moduleLoader = context.moduleLoader || null;
-
-    const intentRegistry = this.moduleLoader?.intentRegistry || null;
-
-    // chat-session puede estar cargado antes o después.
-    // Si no está disponible ahora, se resuelve de forma lazy en route().
-    const chatSession = this.moduleLoader?.getModule('chat-session')?.instance || null;
-
-    this.router = new ConversationRouter({ intentRegistry, chatSession, logger: this.logger });
+    this.eventBus = context.eventBus;
+    this.intentRegistry = context.moduleLoader?.intentRegistry || null;
 
     this.logger.info('conversation-router.loaded', {
       module: this.name,
-      intents_registered: intentRegistry?.getStats()?.total || 0,
-      chat_session_available: !!chatSession
+      intents_registered: this.intentRegistry?.getStats()?.total || 0
     });
   }
 
   async onUnload() {
-    this.router = null;
+    this.awaitingAgents.clear();
     this.logger?.info('conversation-router.unloaded', { module: this.name });
   }
 
-  /**
-   * Enruta un mensaje de usuario.
-   *
-   * @param {string} message - Texto del usuario
-   * @param {string} conversationId - ID de la conversación activa
-   * @returns {object} Decisión: { path, tool?, agent?, module?, confidence?, level?, reason? }
-   */
-  route(message, conversationId) {
-    if (!this.router) {
-      return { path: 'llm', candidates: [], reason: 'router_not_ready' };
+  // ==========================================
+  // Estado de agentes activos (via eventos)
+  // ==========================================
+
+  onAgentExecute(event) {
+    const { conversation_id, agent_name } = event.data || event;
+    if (conversation_id) {
+      this.awaitingAgents.set(conversation_id, {
+        agent_name: agent_name || null,
+        started_at: new Date().toISOString()
+      });
+      this.logger.debug('router.agent.awaiting', { conversation_id, agent_name });
+    }
+  }
+
+  onAgentCompleted(event) {
+    const { conversation_id } = event.data || event;
+    if (conversation_id) {
+      this.awaitingAgents.delete(conversation_id);
+      this.logger.debug('router.agent.cleared', { conversation_id, reason: 'completed' });
+    }
+  }
+
+  onAgentFailed(event) {
+    const { conversation_id } = event.data || event;
+    if (conversation_id) {
+      this.awaitingAgents.delete(conversation_id);
+      this.logger.debug('router.agent.cleared', { conversation_id, reason: 'failed' });
+    }
+  }
+
+  // ==========================================
+  // Routing
+  // ==========================================
+
+  route(message, conversation_id) {
+    // Capa 2: ¿Hay agente esperando respuesta en esta conversación?
+    const awaiting = this.awaitingAgents.get(conversation_id);
+    if (awaiting) {
+      this.logger.debug('router.forward_agent', { conversation_id, agent: awaiting.agent_name });
+      return {
+        path: 'forward_agent',
+        agent_name: awaiting.agent_name,
+        started_at: awaiting.started_at,
+        conversation_id
+      };
     }
 
-    // Resolución lazy de chat-session si no estaba disponible en onLoad
-    if (!this.router.chatSession && this.moduleLoader) {
-      this.router.chatSession = this.moduleLoader.getModule('chat-session')?.instance || null;
+    // Capa 3: Intent matching
+    if (!this.intentRegistry) {
+      return { path: 'llm', candidates: [], reason: 'no_intent_registry' };
     }
 
-    const decision = this.router.route(message, conversationId);
+    const match = this.intentRegistry.match(message);
 
-    if (this.eventBus) {
-      this.eventBus.publish('conversation.routed', {
-        conversation_id: conversationId,
-        ...decision
-      }).catch(() => {});
+    if (!match) {
+      return { path: 'llm', candidates: [], reason: 'no_match' };
     }
 
-    return decision;
+    if (match.level === 'low') {
+      return {
+        path: 'llm',
+        candidates: this.intentRegistry.matchAll(message).slice(0, 5),
+        reason: 'low_confidence',
+        best: match
+      };
+    }
+
+    const { intent } = match;
+
+    if (intent.action === 'tool_call') {
+      return {
+        path: 'tool_call',
+        tool: intent.tool,
+        module: intent.module,
+        confidence: match.confidence,
+        level: match.level
+      };
+    }
+
+    if (intent.action === 'agent') {
+      return {
+        path: 'agent',
+        agent: intent.agent,
+        module: intent.module,
+        multi_turn: intent.multi_turn || false,
+        confidence: match.confidence,
+        level: match.level
+      };
+    }
+
+    return { path: 'llm', candidates: [match], reason: 'unknown_action' };
   }
 
   async onChatMessageSaved(event) {

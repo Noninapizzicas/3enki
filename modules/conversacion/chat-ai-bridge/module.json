@@ -1,0 +1,41 @@
+{
+  "name": "chat-ai-bridge",
+  "version": "1.0.0",
+  "description": "Adaptador MQTT/REST → eventos. Recibe mensajes del frontend, resuelve proyecto y conversación, emite chat.send.request y retorna inmediatamente.",
+  "author": "Event Core Team",
+
+  "events": {
+    "publishes": [
+      "chat.send.request",
+      "session.create.request",
+      "project.active.request"
+    ],
+    "subscribes": [
+      { "event": "project.activated",   "handler": "onProjectActivated" },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+    ]
+  },
+
+  "ui_handlers": [
+    { "domain": "conversation", "action": "send", "handler": "handleConversationSend" }
+  ],
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/send",
+      "handler": "handleSendMessage",
+      "description": "Enviar mensaje (fire-and-forget)"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check"
+    }
+  ],
+
+  "config": {
+    "requestTimeout": 10000
+  }
+}

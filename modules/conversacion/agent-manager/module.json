@@ -11,22 +11,19 @@
     "context-building"
   ],
 
-  "events": {
-    "subscribes": [
-      { "event": "bot.file.stored", "handler": "onBotFileStored" },
-      { "event": "bot.message.received", "handler": "onBotMessageReceived" },
-      { "event": "bot.command.received", "handler": "onBotCommandReceived" },
-      "agent.*.completed",
-      "agent.*.failed"
-    ],
-    "publishes": [
-      "agent.execute.request",
-      "pipeline.started",
-      "pipeline.step.completed",
-      "pipeline.completed",
-      "pipeline.failed"
-    ]
-  },
+  "publishes": [
+    "agent.execute.request",
+    "pipeline.started",
+    "pipeline.step.completed",
+    "pipeline.completed",
+    "pipeline.failed"
+  ],
+  "subscribes": [
+    { "event": "bot.file.stored",      "handler": "onBotFileStored" },
+    { "event": "bot.message.received", "handler": "onBotMessageReceived" },
+    { "event": "bot.command.received", "handler": "onBotCommandReceived" }
+  ],
+  "wildcards": ["agent.*.completed", "agent.*.failed"],
 
   "config": {
     "triggersPath": "./data/agent-manager/triggers",

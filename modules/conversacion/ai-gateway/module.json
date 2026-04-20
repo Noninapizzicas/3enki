@@ -11,25 +11,23 @@
     "function-calling"
   ],
   "publishes": [
+    "chat.ai.response",
     "ai.chat.response",
+    "ai.chat.chunk",
     "ai.completion.completed"
   ],
   "subscribes": [
+    {
+      "event": "chat.prompt.ready",
+      "handler": "onChatPromptReady"
+    },
     {
       "event": "ai.chat.request",
       "handler": "onAIChatRequest"
     },
     {
-      "event": "ai.request",
-      "handler": "onAIRequestCreated"
-    },
-    {
       "event": "credential.resolve.response",
       "handler": "onCredentialResponse"
-    },
-    {
-      "event": "chat.prompt.ready",
-      "handler": "onChatPromptReady"
     }
   ],
   "apis": [

@@ -44,9 +44,6 @@ class AgentBridgeModule {
       dbTimeout: this.config.db_timeout_ms || 10000
     });
 
-    // Conectar respuestas de DB al store
-    this.eventBus.subscribe('db.query.response', (e) => this.store.onDbQueryResponse(e));
-
     this.logger.info('agent-bridge.loaded', { module: this.name });
   }
 
@@ -94,19 +91,19 @@ class AgentBridgeModule {
     }
 
     // Suscripción dinámica al agente específico, filtrada por pipelineId
-    const unsubCompleted = this.eventBus.subscribe(`agent.${agent_name}.completed`, async (e) => {
+    const unsubCompleted = await this.eventBus.subscribe(`agent.${agent_name}.completed`, async (e) => {
       const d = e.data || e;
       if (d.pipelineId !== pipelineId) return;
       await this._onComplete(pipelineId, d.result, projectId);
     });
 
-    const unsubFailed = this.eventBus.subscribe(`agent.${agent_name}.failed`, async (e) => {
+    const unsubFailed = await this.eventBus.subscribe(`agent.${agent_name}.failed`, async (e) => {
       const d = e.data || e;
       if (d.pipelineId !== pipelineId) return;
       await this._onFail(pipelineId, d.error || 'agent failed', projectId);
     });
 
-    const unsubProgress = this.eventBus.subscribe(`agent.${agent_name}.progress`, (e) => {
+    const unsubProgress = await this.eventBus.subscribe(`agent.${agent_name}.progress`, (e) => {
       const d = e.data || e;
       if (d.pipelineId !== pipelineId) return;
       const entry = this.inFlight.get(pipelineId);
@@ -130,7 +127,7 @@ class AgentBridgeModule {
     });
 
     // Reenviar al framework con el payload correcto
-    await this.eventBus.publish('agent.execute', {
+    await this.eventBus.publish('agent.execute.request', {
       agentName: agent_name,
       context: {
         conversation_id,
@@ -145,22 +142,6 @@ class AgentBridgeModule {
       pipelineId, conversation_id, agent_name,
       task: task?.slice(0, 80)
     });
-  }
-
-  /**
-   * Mensaje del usuario mientras hay un agente activo.
-   * El agente actual no soporta inyección de mensajes mid-execution —
-   * se guarda en log para cuando el agente complete y pregunte.
-   */
-  async onAgentUserReply(event) {
-    const data = event.data || event;
-    const { conversation_id, agent_name, content } = data;
-
-    this.logger.info('agent-bridge.user_reply.received', {
-      conversation_id, agent_name,
-      note: 'mid-execution injection not yet supported'
-    });
-    // TODO: cuando agent.question esté implementado, enrutar aquí la respuesta del usuario
   }
 
   // ==========================================
@@ -233,6 +214,10 @@ class AgentBridgeModule {
   // ==========================================
   // Project lifecycle
   // ==========================================
+
+  onDbQueryResponse(event) {
+    return this.store.onDbQueryResponse(event);
+  }
 
   async onProjectActivated(event) {
     const data = event.data || event;

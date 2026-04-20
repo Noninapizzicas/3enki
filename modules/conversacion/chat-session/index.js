@@ -822,7 +822,7 @@ class ChatSessionModule {
 
   async onChatSendRequest(event) {
     const data = event.data || event;
-    const { conversation_id, content, project_id, user_id, page_context, attachments } = data;
+    const { conversation_id, content, project_id, user_id, page_context, attachments, request_id } = data;
     if (!conversation_id || !content) return;
 
     try {
@@ -839,6 +839,7 @@ class ChatSessionModule {
 
       await this.eventBus.publish('chat.message.saved', {
         conversation_id, project_id,
+        request_id: request_id || null,
         message_id: savedMessage?.id,
         content,
         messages,

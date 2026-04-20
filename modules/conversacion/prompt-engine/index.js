@@ -440,7 +440,7 @@ class PromptEngine {
 
   async onChatMessageEnriched(event) {
     const data = event.data || event;
-    const { path, conversation_id, content, project_id, message_id, messages, decision, context } = data;
+    const { path, conversation_id, content, project_id, message_id, messages, decision, context, request_id } = data;
 
     if (path !== 'llm') return;
 
@@ -465,6 +465,7 @@ class PromptEngine {
     await this.eventBus.publish('chat.prompt.ready', {
       conversation_id,
       project_id,
+      request_id: request_id || null,
       message_id,
       content,
       prompt: systemPrompt,

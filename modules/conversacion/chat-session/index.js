@@ -822,10 +822,15 @@ class ChatSessionModule {
 
   async onChatSendRequest(event) {
     const data = event.data || event;
-    const { conversation_id, content, project_id, user_id, page_context, attachments, request_id } = data;
-    if (!conversation_id || !content) return;
+    let { conversation_id, content, project_id, user_id, page_context, attachments, request_id } = data;
+    if (!content || !project_id) return;
 
     try {
+      if (!conversation_id) {
+        const conv = await this.createConversation(project_id, user_id, {}, request_id);
+        conversation_id = conv.id;
+      }
+
       const savedMessage = await this.saveMessage(conversation_id, {
         role: 'user', content, user_id, attachments: attachments || []
       });

@@ -272,12 +272,14 @@ static bool _init_panel() {
 
 // ─── GT911 touch (via Arduino Wire) ──────────────────────────────────────────
 
+static uint8_t _gt911_addr = TOUCH_I2C_ADDR;
+
 static bool _gt911_read_reg(uint16_t reg, uint8_t* buf, size_t len) {
-    Wire.beginTransmission(TOUCH_I2C_ADDR);
+    Wire.beginTransmission(_gt911_addr);
     Wire.write((uint8_t)(reg >> 8));
     Wire.write((uint8_t)(reg & 0xFF));
     if (Wire.endTransmission() != 0) return false;
-    size_t got = Wire.requestFrom((uint8_t)TOUCH_I2C_ADDR, (uint8_t)len);
+    size_t got = Wire.requestFrom(_gt911_addr, (uint8_t)len);
     for (size_t i = 0; i < got && i < len; i++) {
         buf[i] = Wire.read();
     }
@@ -285,26 +287,63 @@ static bool _gt911_read_reg(uint16_t reg, uint8_t* buf, size_t len) {
 }
 
 static void _gt911_write_reg(uint16_t reg, uint8_t val) {
-    Wire.beginTransmission(TOUCH_I2C_ADDR);
+    Wire.beginTransmission(_gt911_addr);
     Wire.write((uint8_t)(reg >> 8));
     Wire.write((uint8_t)(reg & 0xFF));
     Wire.write(val);
     Wire.endTransmission();
 }
 
-static bool _init_touch() {
-    Wire.begin(TOUCH_SDA, TOUCH_SCL, 400000);
+static bool _gt911_reset_sequence() {
+    // GT911 selecciona su dirección I2C según el estado de INT durante reset:
+    //   INT=LOW  al soltar RST → 0x5D
+    //   INT=HIGH al soltar RST → 0x14
+    // Si no hay RST, forzamos INT=LOW brevemente antes de I2C init
+    if (TOUCH_INT >= 0) {
+        pinMode(TOUCH_INT, OUTPUT);
+        digitalWrite(TOUCH_INT, LOW);
+        delay(10);
+        if (TOUCH_RST >= 0) {
+            pinMode(TOUCH_RST, OUTPUT);
+            digitalWrite(TOUCH_RST, LOW);
+            delay(20);
+            digitalWrite(TOUCH_RST, HIGH);
+            delay(100);
+        } else {
+            delay(50);
+        }
+        pinMode(TOUCH_INT, INPUT);
+    }
+    return true;
+}
 
-    // Check GT911 product ID (register 0x8140, expect "911\0")
-    uint8_t id[4] = {};
-    if (!_gt911_read_reg(0x8140, id, 4)) {
-        Serial.println("[TOUCH] GT911 no responde");
-        return false;
+static bool _init_touch() {
+    _gt911_reset_sequence();
+    Wire.begin(TOUCH_SDA, TOUCH_SCL, 400000);
+    delay(50);
+
+    // Probar ambas direcciones GT911
+    uint8_t addrs[] = {0x5D, 0x14};
+    for (uint8_t addr : addrs) {
+        _gt911_addr = addr;
+        uint8_t id[4] = {};
+        if (_gt911_read_reg(0x8140, id, 4)) {
+            Serial.printf("[TOUCH] GT911 ID: %c%c%c%c — addr=0x%02X SDA=%d SCL=%d\n",
+                id[0], id[1], id[2], id[3], addr, TOUCH_SDA, TOUCH_SCL);
+            if (id[0] == '9' && id[1] == '1' && id[2] == '1') return true;
+        }
     }
 
-    Serial.printf("[TOUCH] GT911 ID: %c%c%c%c — SDA=%d SCL=%d\n",
-        id[0], id[1], id[2], id[3], TOUCH_SDA, TOUCH_SCL);
-    return (id[0] == '9' && id[1] == '1' && id[2] == '1');
+    // I2C scan para depurar
+    Serial.print("[TOUCH] GT911 no encontrado. I2C scan: ");
+    for (uint8_t a = 1; a < 127; a++) {
+        Wire.beginTransmission(a);
+        if (Wire.endTransmission() == 0) {
+            Serial.printf("0x%02X ", a);
+        }
+    }
+    Serial.println();
+    return false;
 }
 
 static bool _gt911_touch_pressed = false;

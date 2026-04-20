@@ -16,6 +16,7 @@
 
 #include "enki_logic.h"
 #include "enki_base.h"
+#include "enki_portal.h"
 #include "display_driver.h"
 #include "ui_cocina.h"
 #include <lvgl.h>
@@ -256,6 +257,17 @@ static bool isTopicMatch(const char* topic, const char* prefix, size_t prefixLen
     return strncmp(topic, prefix, prefixLen) == 0;
 }
 
+// ─── Portal endpoint ──────────────────────────────────────────────────────────
+
+static void _handlePortalDisplay() {
+    char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"display_ready\":%s,\"lvgl_ready\":%s}",
+        _displayReady ? "true" : "false",
+        _lvglReady ? "true" : "false");
+    webServer.send(200, "application/json", buf);
+}
+
 // ─── Contrato BASE + LÓGICA ───────────────────────────────────────────────────
 
 void logic_setup() {
@@ -276,14 +288,7 @@ void logic_setup() {
     _lastNtpMs = millis();
 
     // 3. Portal endpoints
-    webServer.on("/api/display", HTTP_GET, []() {
-        char buf[256];
-        snprintf(buf, sizeof(buf),
-            "{\"display_ready\":%s,\"lvgl_ready\":%s,\"orders\":0}",
-            _displayReady ? "true" : "false",
-            _lvglReady ? "true" : "false");
-        webServer.send(200, "application/json", buf);
-    });
+    webServer.on("/api/display", HTTP_GET, _handlePortalDisplay);
 
     // 4. Suscribir a topics de cocina
     enki_mqtt_subscribe(TOPIC_COCINA_SUB);

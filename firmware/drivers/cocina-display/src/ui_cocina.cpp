@@ -6,6 +6,7 @@
  */
 
 #include "ui_cocina.h"
+#include "config.h"
 
 // ─── Paleta de colores ───────────────────────────────────────────────────────
 

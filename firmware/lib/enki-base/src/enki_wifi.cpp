@@ -17,15 +17,16 @@
 #include <esp_task_wdt.h>
 #include <esp_wifi.h>
 
-// Coexistencia WiFi/BT — el header varia segun version ESP-IDF
-#if __has_include(<esp_coexist.h>)
-  #include <esp_coexist.h>
-#elif __has_include("esp_coexist.h")
-  #include "esp_coexist.h"
-#else
-  // Declaracion directa si el header no esta disponible
-  typedef enum { ESP_COEX_PREFER_WIFI = 0, ESP_COEX_PREFER_BT, ESP_COEX_PREFER_BALANCE } esp_coex_prefer_t;
-  extern "C" int esp_coex_preference_set(esp_coex_prefer_t prefer);
+// Coexistencia WiFi/BT — no disponible en ESP32-P4 (WiFi corre en co-procesador C6)
+#if !defined(CONFIG_IDF_TARGET_ESP32P4)
+  #if __has_include(<esp_coexist.h>)
+    #include <esp_coexist.h>
+  #elif __has_include("esp_coexist.h")
+    #include "esp_coexist.h"
+  #else
+    typedef enum { ESP_COEX_PREFER_WIFI = 0, ESP_COEX_PREFER_BT, ESP_COEX_PREFER_BALANCE } esp_coex_prefer_t;
+    extern "C" int esp_coex_preference_set(esp_coex_prefer_t prefer);
+  #endif
 #endif
 
 DNSServer dnsServer;
@@ -130,8 +131,10 @@ bool wifiSetup() {
   WiFi.onEvent(onWiFiEvent);    // deteccion instantanea de desconexion
 
   // Coexistencia WiFi/BT: WiFi no duerme + prioridad WiFi por defecto
-  esp_wifi_set_ps(WIFI_PS_NONE);                     // WiFi siempre activo — timeslots garantizados
-  esp_coex_preference_set(ESP_COEX_PREFER_WIFI);     // WiFi prioritario (SPP lo cambia durante impresion)
+  esp_wifi_set_ps(WIFI_PS_NONE);
+#if !defined(CONFIG_IDF_TARGET_ESP32P4)
+  esp_coex_preference_set(ESP_COEX_PREFER_WIFI);
+#endif
 
   bool hasNetworks = false;
   for (int i = 0; i < WIFI_MAX_NETWORKS; i++) {

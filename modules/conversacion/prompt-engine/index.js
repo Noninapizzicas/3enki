@@ -37,15 +37,24 @@ class PromptEngine {
     this.config = context.moduleConfig || {};
 
     this._modulesDir = this.config.modulesDir || path.join(__dirname, '..');
+    this._listRequestId = null;
+
     this._loadBasePrompt();
     this._scanModulePrompts();
 
-    // Event subscriptions are auto-wired by the module loader from module.json
+    // Request DB prompts from prompt-manager — they override filesystem on name match
+    this._requestDbPrompts();
 
     this.logger.info('prompt-engine.loaded', {
       modules: this._prompts.size,
       hasBase: !!this._basePrompt
     });
+  }
+
+  _requestDbPrompts() {
+    const { randomUUID } = require('crypto');
+    this._listRequestId = randomUUID();
+    this.eventBus.publish('prompt.list.request', { request_id: this._listRequestId }).catch(() => {});
   }
 
   async onUnload() {
@@ -360,6 +369,74 @@ class PromptEngine {
       hasBasePrompt: !!this._basePrompt,
       modules: this.getLoadedModules()
     };
+  }
+
+  // ==========================================
+  // Sync from prompt-manager (DB overrides filesystem)
+  // ==========================================
+
+  onPromptListResponse(event) {
+    const data = event.data || event;
+    if (data.request_id !== this._listRequestId) return;
+    this._listRequestId = null;
+
+    const prompts = data.data?.prompts || data.prompts || [];
+    let merged = 0;
+    for (const p of prompts) {
+      if (!p.name || !p.content) continue;
+      let parsed;
+      try { parsed = JSON.parse(p.content); } catch { continue; }
+      parsed._module = p.name;
+      parsed._source = 'db';
+      parsed._id = p.id;
+      this._prompts.set(p.name, parsed);
+      merged++;
+    }
+    if (merged > 0) {
+      this.logger.info('prompt-engine.db_merged', { count: merged });
+    }
+  }
+
+  onPromptCreated(event) { this._requestDbPrompts(); }
+  onPromptUpdated(event) { this._requestDbPrompts(); }
+
+  onPromptDeleted(event) {
+    const data = event.data || event;
+    // Remove DB override for this ID — reload filesystem fallback by name
+    for (const [name, p] of this._prompts.entries()) {
+      if (p._source === 'db' && (p._id === data.id || p.id === data.id)) {
+        this._prompts.delete(name);
+        this.reloadModule(name);
+        break;
+      }
+    }
+  }
+
+  // ==========================================
+  // Pipeline: chat.message.routed → chat.prompt.ready
+  // ==========================================
+
+  async onChatMessageRouted(event) {
+    const data = event.data || event;
+    const { path, conversation_id, content, project_id, message_id, messages, decision } = data;
+
+    if (path !== 'llm') return;
+
+    const moduleName = decision?.module || null;
+    const systemPrompt = this.buildSystemPrompt(moduleName);
+    const history = Array.isArray(messages) ? messages : [];
+
+    await this.eventBus.publish('chat.prompt.ready', {
+      conversation_id,
+      project_id,
+      message_id,
+      content,
+      prompt: systemPrompt,
+      messages: history,
+      decision
+    });
+
+    this.logger.debug('prompt-engine.ready', { conversation_id, module: moduleName });
   }
 }
 

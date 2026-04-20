@@ -92,6 +92,20 @@ class ExecutionStore {
     });
   }
 
+  async getRunningExecutions(projectId) {
+    try {
+      await this.ensureSchema(projectId);
+      return await this._query(projectId,
+        `SELECT id, conversation_id, agent_name, task, started_at
+         FROM agent_executions WHERE status = 'running' ORDER BY started_at ASC`,
+        [], true
+      );
+    } catch (err) {
+      this.logger?.warn('agent-bridge.store.recovery_failed', { projectId, error: err.message });
+      return [];
+    }
+  }
+
   // ==========================================
   // Helpers
   // ==========================================

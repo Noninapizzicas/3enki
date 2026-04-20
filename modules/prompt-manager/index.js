@@ -1668,7 +1668,8 @@ class PromptManagerModule {
       slot_type: p.slot_type,
       tags: p.tags,
       level: p.level || 'GLOBAL',
-      current_version: p.current_version
+      current_version: p.current_version,
+      content: p.content || null
     }));
 
     await this.eventBus.publish('prompt.list.response', {

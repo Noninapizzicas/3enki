@@ -43,6 +43,17 @@ class ConversationRouterModule {
     }
   }
 
+  onAgentActive(event) {
+    const { conversation_id, agent_name } = event.data || event;
+    if (conversation_id) {
+      this.awaitingAgents.set(conversation_id, {
+        agent_name: agent_name || null,
+        started_at: new Date().toISOString()
+      });
+      this.logger.info('router.agent.recovered', { conversation_id, agent_name });
+    }
+  }
+
   onAgentCompleted(event) {
     const { conversation_id } = event.data || event;
     if (conversation_id) {

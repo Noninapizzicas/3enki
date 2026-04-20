@@ -867,32 +867,6 @@ Fecha actual: {{date}}`,
     }
   }
 
-  async onChatMessageRouted(event) {
-    const data = event.data || event;
-    const { conversation_id, content, project_id, path, decision, messages } = data;
-    if (!conversation_id || !content) return;
-    if (path === 'agent' || path === 'forward_agent') return;
-
-    try {
-      const projectContext = await this.loadProjectContext(project_id, false, crypto.randomUUID());
-      const projectName = projectContext?.project_name || 'este proyecto';
-
-      // Determinar módulo relevante desde la decisión del router
-      const targetTool = decision?.tool || decision?.intent?.tool || null;
-      const targetModule = targetTool ? targetTool.split('.')[0] : null;
-
-      const prompt = `Eres el asistente de ${projectName} (project_id: ${project_id}). Usa las tools disponibles de forma proactiva cuando el usuario pida información o acciones concretas. Cuando necesites el project_id para una tool, usa "${project_id}". No pidas confirmación innecesaria — actúa directamente.`;
-
-      await this.eventBus.publish('chat.prompt.ready', {
-        conversation_id, project_id, content,
-        prompt, decision, messages,
-        target_module: targetModule
-      });
-    } catch (err) {
-      this.logger?.error('prompt-composer.routed.failed', { conversation_id, error: err.message });
-    }
-  }
-
   async handleListTemplates(req, context) {
     const correlationId = context?.correlationId || crypto.randomUUID();
 

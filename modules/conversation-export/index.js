@@ -29,7 +29,6 @@ class ConversationExportModule {
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
-    this.moduleLoader = null;
     this.config = null;
     this.token = null;
 
@@ -46,7 +45,6 @@ class ConversationExportModule {
     this.eventBus = context.eventBus;
     this.logger = context.logger;
     this.metrics = context.metrics;
-    this.moduleLoader = context.moduleLoader;
     this.config = context.moduleConfig || {};
 
     // Token — obligatorio
@@ -230,82 +228,23 @@ class ConversationExportModule {
   // Data sources
   // ==========================================
 
-  /**
-   * Usa chat-session via moduleLoader para listar sesiones.
-   * chat-session tiene un método listConversations(project_id, limit).
-   */
   async loadSessionsFromChatSession(projectId, limit = 20) {
-    const chatSession = this.moduleLoader?.getModule?.('chat-session');
-    if (!chatSession?.instance) {
-      throw new Error('chat-session module no disponible');
-    }
-
-    // Intentar varios métodos posibles
-    const instance = chatSession.instance;
-    if (typeof instance.listConversations === 'function') {
-      const res = await instance.listConversations(projectId, limit);
-      return Array.isArray(res) ? res : (res?.data || res?.conversations || []);
-    }
-    if (typeof instance.toolListar === 'function') {
-      const res = await instance.toolListar({ project_id: projectId, limit });
-      return res?.data?.conversations || res?.conversations || [];
-    }
-    if (typeof instance.toolList === 'function') {
-      const res = await instance.toolList({ project_id: projectId, limit });
-      return res?.data?.conversations || res?.conversations || [];
-    }
-
-    // Fallback: leer directo via database-manager
-    return await this.loadSessionsFromDB(projectId, limit);
-  }
-
-  async loadSessionsFromDB(projectId, limit = 20) {
-    const dbManager = this.moduleLoader?.getModule?.('database-manager');
-    if (!dbManager?.instance) throw new Error('database-manager no disponible');
-
-    const instance = dbManager.instance;
-    if (typeof instance.query !== 'function' && typeof instance.toolQuery !== 'function') {
-      throw new Error('database-manager sin método query');
-    }
-
-    const queryFn = instance.query || ((args) => instance.toolQuery(args));
-    const result = await queryFn.call(instance, {
-      project_id: projectId,
-      db: 'chat',
-      sql: `SELECT id, project_id, title, created_at, updated_at, message_count
-            FROM conversations
-            ORDER BY updated_at DESC
-            LIMIT ?`,
-      params: [limit]
-    });
-
-    return result?.data?.rows || result?.rows || [];
+    const rows = await this._queryDB(projectId,
+      `SELECT id, project_id, title, created_at, updated_at, message_count
+       FROM conversations
+       ORDER BY updated_at DESC
+       LIMIT ?`,
+      [limit]
+    );
+    return rows || [];
   }
 
   async loadMessagesFromChatSession(projectId, sessionId) {
-    const chatSession = this.moduleLoader?.getModule?.('chat-session');
-    if (!chatSession?.instance) throw new Error('chat-session no disponible');
-
-    const instance = chatSession.instance;
-    // chat-session.getMessages(conversationId, inContextOnly=false, correlationId)
-    // NOTA: el primer arg es conversationId (session_id), NO project_id
-    if (typeof instance.getMessages === 'function') {
-      const messages = await instance.getMessages(sessionId, false);
-      return Array.isArray(messages) ? messages : (messages?.messages || []);
-    }
-
-    // Fallback a DB
-    const dbManager = this.moduleLoader?.getModule?.('database-manager');
-    if (!dbManager?.instance) return [];
-
-    const queryFn = dbManager.instance.query || ((args) => dbManager.instance.toolQuery(args));
-    const result = await queryFn.call(dbManager.instance, {
-      project_id: projectId,
-      db: 'chat',
-      sql: `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`,
-      params: [sessionId]
-    });
-    return result?.data?.rows || result?.rows || [];
+    const rows = await this._queryDB(projectId,
+      `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`,
+      [sessionId]
+    );
+    return rows || [];
   }
 
   /**

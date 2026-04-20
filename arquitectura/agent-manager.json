@@ -1,0 +1,39 @@
+{
+  "module": "agent-manager",
+  "version": "1.0.0",
+  "description": "Orquestación de agentes. Recibe eventos de bot, encuentra triggers coincidentes, construye contexto, publica agent.execute.request. Gestiona pipelines multi-agente.",
+
+  "domain": "Trigger matching + context building + pipeline orchestration",
+
+  "paradigm_status": "LIMPIO — solo emite eventos, no llama módulos directamente",
+
+  "events": {
+    "publishes": [
+      { "event": "agent.execute.request", "when": "Trigger matched para agente único o pipeline step" },
+      { "event": "pipeline.started",       "when": "Inicia un pipeline multi-agente" },
+      { "event": "pipeline.step.completed","when": "Un agente del pipeline completó su paso" },
+      { "event": "pipeline.completed",     "when": "Todos los pasos del pipeline completados" },
+      { "event": "pipeline.failed",        "when": "Un paso falló o timeout" }
+    ],
+    "subscribes": [
+      { "event": "bot.file.stored",      "handler": "onBotFileStored",      "action": "Busca triggers para archivos de bot" },
+      { "event": "bot.message.received", "handler": "onBotMessageReceived", "action": "Busca triggers para mensajes de bot" },
+      { "event": "bot.command.received", "handler": "onBotCommandReceived", "action": "Busca triggers para comandos de bot" },
+      { "event": "agent.*.completed",    "handler": "onAgentCompleted",     "action": "Avanza pipeline al siguiente paso" },
+      { "event": "agent.*.failed",       "handler": "onAgentFailed",        "action": "Falla el pipeline activo" }
+    ]
+  },
+
+  "note_wildcards": "agent.*.completed y agent.*.failed se suscriben manualmente en onLoad() — el loader no puede autowire wildcards",
+
+  "consumers": {
+    "agent.execute.request": "ai-agent-framework.onExecuteRequest",
+    "pipeline.*": "monitoring / futuro dashboard"
+  },
+
+  "internal_services": {
+    "TriggerRegistry": "Carga triggers de disco, matchea por eventType",
+    "ContextBuilder": "Construye contexto para el agente a partir del evento y template",
+    "PipelineExecutor": "Coordina secuencias de agentes vía eventos"
+  }
+}

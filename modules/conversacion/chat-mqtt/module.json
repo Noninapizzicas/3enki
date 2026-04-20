@@ -1,0 +1,18 @@
+{
+  "name": "chat-mqtt",
+  "version": "1.0.0",
+  "description": "Entrega MQTT al frontend. Escucha eventos del sistema y publica a los topics MQTT del canal de conversación. No persiste nada.",
+  "author": "Event Core Team",
+  "main": "index.js",
+
+  "events": {
+    "publishes": [],
+    "subscribes": [
+      { "event": "chat.assistant.saved", "handler": "onChatAssistantSaved" },
+      { "event": "agent.progress",       "handler": "onAgentProgress" },
+      { "event": "agent.completed",      "handler": "onAgentCompleted" },
+      { "event": "agent.failed",         "handler": "onAgentFailed" },
+      { "event": "agent.question",       "handler": "onAgentQuestion" }
+    ]
+  }
+}

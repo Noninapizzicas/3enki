@@ -944,19 +944,70 @@ class ChatSessionModule {
       });
       await this.setConversationState(conversation_id, 'idle');
 
-      const mqtt = this.uiHandler?.mqtt;
-      if (mqtt) {
-        mqtt.publish(`conversation/${conversation_id}/message`, JSON.stringify({
-          id: saved?.id || null,
-          role: 'assistant',
-          content,
-          source,
-          streaming: false,
-          timestamp: new Date().toISOString()
-        }), { qos: 1 });
-      }
+      await this.eventBus.publish('chat.assistant.saved', {
+        conversation_id,
+        message_id: saved?.id || null,
+        role: 'assistant',
+        content,
+        source
+      });
     } catch (err) {
       this.logger?.error('chat-session.ai-response.failed', { conversation_id, error: err.message });
+    }
+  }
+
+  async onAgentCompleted(event) {
+    const data = event.data || event;
+    const { conversation_id, result, agent_name } = data;
+    if (!conversation_id) return;
+
+    const rawContent = typeof result === 'string' ? result
+      : result?.content || result?.response || result?.text || JSON.stringify(result);
+
+    try {
+      const saved = await this.saveMessage(conversation_id, {
+        role: 'assistant',
+        content: rawContent,
+        metadata: { type: 'agent_result', agent: agent_name, source: { type: 'agent', name: agent_name } }
+      });
+      await this.setConversationState(conversation_id, 'idle');
+
+      await this.eventBus.publish('chat.assistant.saved', {
+        conversation_id,
+        message_id: saved?.id || null,
+        role: 'assistant',
+        content: rawContent,
+        source: { type: 'agent', name: agent_name }
+      });
+    } catch (err) {
+      this.logger?.error('chat-session.agent-completed.failed', { conversation_id, error: err.message });
+    }
+  }
+
+  async onAgentFailed(event) {
+    const data = event.data || event;
+    const { conversation_id, error, agent_name } = data;
+    if (!conversation_id) return;
+
+    const content = 'Lo siento, hubo un problema procesando tu solicitud. Por favor, intenta de nuevo.';
+
+    try {
+      const saved = await this.saveMessage(conversation_id, {
+        role: 'assistant',
+        content,
+        metadata: { type: 'agent_error', agent: agent_name, error }
+      });
+      await this.setConversationState(conversation_id, 'idle');
+
+      await this.eventBus.publish('chat.assistant.saved', {
+        conversation_id,
+        message_id: saved?.id || null,
+        role: 'assistant',
+        content,
+        source: { type: 'agent', name: agent_name }
+      });
+    } catch (err) {
+      this.logger?.error('chat-session.agent-failed.failed', { conversation_id, error: err.message });
     }
   }
 

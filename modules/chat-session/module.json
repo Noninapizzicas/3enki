@@ -9,7 +9,9 @@
       "session.created",
       "session.updated",
       "session.deleted",
-      "session.message.saved"
+      "session.message.saved",
+      "chat.message.saved",
+      "chat.assistant.saved"
     ],
     "subscribes": [
       { "event": "db.query.response", "handler": "onDbQueryResponse" },
@@ -25,8 +27,10 @@
       { "event": "session.context.load.request", "handler": "onContextLoadRequest" },
       { "event": "session.context.toggle.request", "handler": "onToggleContextRequest" },
       { "event": "session.context.stats.request", "handler": "onContextStatsRequest" },
-      { "event": "chat.send.request", "handler": "onChatSendRequest" },
-      { "event": "chat.ai.response", "handler": "onChatAiResponse" }
+      { "event": "chat.send.request",  "handler": "onChatSendRequest" },
+      { "event": "chat.ai.response",   "handler": "onChatAiResponse" },
+      { "event": "agent.completed",    "handler": "onAgentCompleted" },
+      { "event": "agent.failed",       "handler": "onAgentFailed" }
     ]
   },
 

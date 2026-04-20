@@ -822,7 +822,7 @@ class ChatSessionModule {
 
   async onChatSendRequest(event) {
     const data = event.data || event;
-    const { conversation_id, content, project_id, user_id } = data;
+    const { conversation_id, content, project_id, user_id, page_context } = data;
     if (!conversation_id || !content) return;
 
     try {
@@ -830,7 +830,6 @@ class ChatSessionModule {
         role: 'user', content, user_id
       });
 
-      // Cargar historial reciente para que el AI tenga contexto
       const history = await this.getMessages(conversation_id, true).catch(() => []);
       const messages = (history || []).map(m => ({ role: m.role, content: m.content }));
 
@@ -838,7 +837,8 @@ class ChatSessionModule {
         conversation_id, project_id,
         message_id: savedMessage?.id,
         content,
-        messages
+        messages,
+        page_context: page_context || null
       });
     } catch (err) {
       this.logger?.error('chat-session.send.failed', { conversation_id, error: err.message });

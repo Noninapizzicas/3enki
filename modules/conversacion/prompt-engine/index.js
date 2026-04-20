@@ -440,11 +440,12 @@ class PromptEngine {
 
   async onChatMessageEnriched(event) {
     const data = event.data || event;
-    const { path, conversation_id, content, project_id, message_id, messages, decision, context } = data;
+    const { path, conversation_id, content, project_id, message_id, messages, decision, context, page_context } = data;
 
     if (path !== 'llm') return;
 
-    const moduleName = decision?.module || null;
+    const moduleName = decision?.module
+      || (page_context?.route ? this.resolveRouteToModule(page_context.route) : null);
     const runtimeContext = {};
     if (project_id) runtimeContext.project_id = project_id;
     if (conversation_id) runtimeContext.conversation_id = conversation_id;
@@ -455,6 +456,8 @@ class PromptEngine {
       if (context.dependencies?.length) runtimeContext.dependencies = context.dependencies;
       if (context.system) runtimeContext.system = context.system;
     }
+
+    if (page_context?.route) runtimeContext.page = page_context.route;
 
     const systemPrompt = this.buildSystemPrompt(moduleName, runtimeContext);
     const history = Array.isArray(messages) ? messages : [];

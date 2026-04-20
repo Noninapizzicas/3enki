@@ -1,0 +1,66 @@
+{
+  "module": "ai-gateway",
+  "version": "1.0.0",
+  "description": "Motor LLM unificado. Recibe prompt compuesto, elige proveedor, ejecuta bucle agente con tools, emite respuesta.",
+
+  "domain": "LLM execution — selección de proveedor, bucle agente, ejecución de tools",
+
+  "events": {
+    "publishes": [
+      {
+        "event": "chat.ai.response",
+        "when": "Completada una respuesta LLM desde el pipeline chat.prompt.ready",
+        "payload": ["request_id", "conversation_id", "content", "tool_calls", "tokens", "cost", "provider", "model"]
+      },
+      {
+        "event": "ai.chat.response",
+        "when": "Respuesta LLM vía cualquier path (legacy — mantenido para compatibilidad)",
+        "payload": ["request_id", "conversation_id", "content", "success", "error"]
+      },
+      {
+        "event": "ai.chat.chunk",
+        "when": "Chunk de streaming SSE durante generación de texto",
+        "payload": ["request_id", "delta", "done", "tool"]
+      },
+      {
+        "event": "ai.completion.completed",
+        "when": "Completion registrado para analytics",
+        "payload": ["provider", "model", "tokens_used", "latency_ms", "cost"]
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "chat.prompt.ready",
+        "handler": "onChatPromptReady",
+        "action": "Inicia ejecución LLM con el prompt compuesto — entrada del pipeline conversacional"
+      },
+      {
+        "event": "credential.resolve.response",
+        "handler": "onCredentialResponse",
+        "action": "Recibe API key resuelta del credential-manager para autenticar proveedores"
+      }
+    ]
+  },
+
+  "internal_events": {
+    "emits": ["credential.resolve.request"],
+    "note": "Emite para resolver credenciales de proveedores vía credential-manager"
+  },
+
+  "tool_execution": {
+    "pattern": "event-based via _executeToolViaEvent",
+    "emits": "{toolName} event con request_id",
+    "awaits": "{toolName}.response con matching request_id",
+    "note": "Correcto — fire-and-wait dentro del bucle agente"
+  },
+
+  "pipeline_position": "chat.prompt.ready → [ai-gateway] → chat.ai.response",
+
+  "providers": ["deepseek", "anthropic", "openai", "groq", "gemini", "ollama", "claude-cli"],
+
+  "consumers": {
+    "chat.ai.response": "chat-session — guarda mensaje y emite chat.assistant.saved",
+    "ai.chat.chunk": "chat-mqtt — entrega streaming al frontend vía MQTT",
+    "ai.completion.completed": "analytics / monitoring"
+  }
+}

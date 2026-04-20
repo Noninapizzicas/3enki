@@ -4,16 +4,16 @@
   "description": "Persistencia de conversaciones y mensajes con gestión de contexto FIFO",
   "author": "Event Core Team",
 
-  "events": {
-    "publishes": [
-      "session.created",
-      "session.updated",
-      "session.deleted",
-      "session.message.saved",
-      "chat.message.saved",
-      "chat.assistant.saved"
-    ],
-    "subscribes": [
+  "publishes": [
+    "session.created",
+    "session.updated",
+    "session.deleted",
+    "session.message.saved",
+    "session.project.ready",
+    "chat.message.saved",
+    "chat.assistant.saved"
+  ],
+  "subscribes": [
       { "event": "db.query.response", "handler": "onDbQueryResponse" },
       { "event": "project.activated", "handler": "onProjectActivated" },
       { "event": "project.deactivated", "handler": "onProjectDeactivated" },
@@ -31,8 +31,7 @@
       { "event": "chat.ai.response",   "handler": "onChatAiResponse" },
       { "event": "agent.completed",    "handler": "onAgentCompleted" },
       { "event": "agent.failed",       "handler": "onAgentFailed" }
-    ]
-  },
+  ],
 
   "ui_handlers": [
     { "domain": "conversation", "action": "load", "handler": "handleConversationLoad" },

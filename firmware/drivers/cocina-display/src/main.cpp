@@ -29,12 +29,7 @@ void setup() {
   Serial.println("  Arquitectura BASE + LOGICA");
   Serial.println("========================================\n");
 
-  // Watchdog (ESP-IDF 5.x API)
-  esp_task_wdt_config_t wdt_cfg = {};
-  wdt_cfg.timeout_ms = (uint32_t)WDT_TIMEOUT_SEC * 1000;
-  wdt_cfg.trigger_panic = true;
-  wdt_cfg.idle_core_mask = (1 << 0);
-  esp_task_wdt_init(&wdt_cfg);
+  // WDT: Arduino 3.x ya lo inicializa. Solo añadir la tarea actual.
   esp_task_wdt_add(NULL);
 
   // 1. Config NVS

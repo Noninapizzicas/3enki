@@ -235,6 +235,20 @@ class AIGatewayModule {
     }
   }
 
+  onCredentialSaved(event) {
+    const { provider, level, identifier } = event.data || event;
+    if (!provider) return;
+    // Invalidate all cache entries for this provider
+    for (const key of this.credentialCache.keys()) {
+      if (key.startsWith(provider.toLowerCase() + ':')) this.credentialCache.delete(key);
+    }
+    this.logger.debug('ai-gateway.credential.cache.invalidated', { provider, level, identifier });
+  }
+
+  onCredentialDeleted(event) {
+    this.onCredentialSaved(event);
+  }
+
   // Event Handler: chat.prompt.ready — nuevo flujo event-driven
   _resolveAttachments(messages) {
     const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' };

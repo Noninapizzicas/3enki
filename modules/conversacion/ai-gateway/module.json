@@ -16,18 +16,12 @@
     "ai.completion.completed"
   ],
   "subscribes": [
-    {
-      "event": "chat.prompt.ready",
-      "handler": "onChatPromptReady"
-    },
-    {
-      "event": "ai.chat.request",
-      "handler": "onAIChatRequest"
-    },
-    {
-      "event": "credential.resolve.response",
-      "handler": "onCredentialResponse"
-    }
+    { "event": "chat.prompt.ready",         "handler": "onChatPromptReady" },
+    { "event": "ai.chat.request",            "handler": "onAIChatRequest" },
+    { "event": "credential.resolve.response","handler": "onCredentialResponse" },
+    { "event": "credential.saved",           "handler": "onCredentialSaved" },
+    { "event": "credential.updated",         "handler": "onCredentialSaved" },
+    { "event": "credential.deleted",         "handler": "onCredentialDeleted" }
   ],
   "apis": [
     {

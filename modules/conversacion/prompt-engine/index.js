@@ -232,12 +232,33 @@ class PromptEngine {
     // 2. Module prompt (the specific role)
     sections.push(JSON.stringify(modulePrompt, null, 2));
 
-    // 3. Runtime context (injected live data, if any)
+    // 3. Active context as plain text — LLM must use these IDs in tool calls
+    const contextText = this._buildContextText(runtimeContext);
+    if (contextText) sections.push(contextText);
+
+    // 4. Runtime context JSON (full structured data)
     if (runtimeContext && Object.keys(runtimeContext).length > 0) {
       sections.push(JSON.stringify({ _runtime: runtimeContext }, null, 2));
     }
 
     return sections.join('\n\n---\n\n');
+  }
+
+  _buildContextText(runtimeContext) {
+    if (!runtimeContext.project_id) return null;
+    const lines = [
+      'CONTEXTO ACTIVO — usa estos valores directamente en las tools. No los pidas al usuario.',
+    ];
+    const name = runtimeContext.project?.name;
+    if (name) lines.push(`Proyecto: ${name}`);
+    lines.push(`project_id: ${runtimeContext.project_id}`);
+    if (runtimeContext.conversation_id) {
+      lines.push(`conversation_id: ${runtimeContext.conversation_id}`);
+    }
+    if (runtimeContext.dependencies?.length) {
+      lines.push(`Dependencias: ${runtimeContext.dependencies.map(d => d.name || d.id).join(', ')}`);
+    }
+    return lines.join('\n');
   }
 
   /**
@@ -308,6 +329,8 @@ class PromptEngine {
   _formatBase(runtimeContext) {
     if (!this._basePrompt) return '';
     const sections = [JSON.stringify(this._basePrompt, null, 2)];
+    const contextText = this._buildContextText(runtimeContext);
+    if (contextText) sections.push(contextText);
     if (runtimeContext && Object.keys(runtimeContext).length > 0) {
       sections.push(JSON.stringify({ _runtime: runtimeContext }, null, 2));
     }

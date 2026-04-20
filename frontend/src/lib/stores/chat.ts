@@ -117,6 +117,7 @@ export async function sendMessage(content: string): Promise<void> {
       cost?: number;
     }>('conversation', 'send', {
       conversationId: convId,
+      projectId: get(activeProjectId),
       content: userMessage.content,
       attachments: currentAttachments.map(a => ({
         type: a.type,

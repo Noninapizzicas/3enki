@@ -200,10 +200,11 @@ class AgentManagerModule {
       botName: context.source?.botName
     });
 
-    await this.eventBus.publish('agent.execute.request', {
-      agentName,
-      context,
-      task
+    await this.eventBus.publish('agent.execute', {
+      agent_name: agentName,
+      conversation_id: context.conversation_id || null,
+      task,
+      params: context
     });
   }
 

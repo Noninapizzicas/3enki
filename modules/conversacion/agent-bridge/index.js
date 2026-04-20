@@ -63,34 +63,56 @@ class AgentBridgeModule {
   // Handlers de eventos de conversación
   // ==========================================
 
-  /**
-   * Recibe agent.execute y lo reenvía al framework con correlación.
-   * Payload esperado: { conversation_id, agent_name, task, project_id?, params? }
-   */
   async onAgentExecute(event) {
-    const data = event.data || event;
-    const { conversation_id, agent_name, task, project_id, params } = data;
+    return this._executeAgent(event.data || event);
+  }
 
-    if (!conversation_id || !agent_name) {
-      this.logger.warn('agent-bridge.execute.invalid', {
-        reason: 'missing conversation_id or agent_name', data
+  async onChatMessageRouted(event) {
+    const data = event.data || event;
+    const { path, conversation_id, content, project_id, decision } = data;
+
+    if (path === 'forward_agent') {
+      let pipelineId = null;
+      let entry = null;
+      for (const [pid, e] of this.inFlight.entries()) {
+        if (e.conversation_id === conversation_id) { pipelineId = pid; entry = e; break; }
+      }
+      if (!entry) {
+        this.logger.warn('agent-bridge.forward.no_inflight', { conversation_id });
+        return;
+      }
+      await this.eventBus.publish('agent.user_reply', {
+        conversation_id, agent_name: entry.agent_name, pipelineId, content,
+        project_id: project_id || entry.projectId
       });
+      this.logger.debug('agent-bridge.forward', { conversation_id, agent_name: entry.agent_name });
+      return;
+    }
+
+    if (path === 'agent' && decision?.agent) {
+      return this._executeAgent({
+        conversation_id, agent_name: decision.agent, task: content, project_id
+      });
+    }
+  }
+
+  async _executeAgent({ conversation_id, agent_name, task, project_id, params }) {
+    if (!agent_name) {
+      this.logger.warn('agent-bridge.execute.invalid', { reason: 'missing agent_name' });
       return;
     }
 
     const pipelineId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
     const projectId = project_id || this.activeProjectId;
-    const timeoutMs = this.config.execution_timeout_ms || 0; // 0 = sin límite
+    const timeoutMs = this.config.execution_timeout_ms || 0;
 
-    // Persistir inicio de ejecución (no bloquea el dispatch)
     if (projectId) {
       this.store.insertExecution(projectId, {
         id: pipelineId, conversation_id, agent_name, task, started_at: startedAt
       });
     }
 
-    // Suscripción dinámica al agente específico, filtrada por pipelineId
     const unsubCompleted = await this.eventBus.subscribe(`agent.${agent_name}.completed`, async (e) => {
       const d = e.data || e;
       if (d.pipelineId !== pipelineId) return;
@@ -126,21 +148,15 @@ class AgentBridgeModule {
       conversation_id, agent_name, unsubCompleted, unsubFailed, unsubProgress, timer, projectId
     });
 
-    // Reenviar al framework con el payload correcto
     await this.eventBus.publish('agent.execute.request', {
       agentName: agent_name,
-      context: {
-        conversation_id,
-        project_id: projectId,
-        ...(params || {})
-      },
+      context: { conversation_id, project_id: projectId, ...(params || {}) },
       task,
       pipelineId
     });
 
     this.logger.info('agent-bridge.dispatched', {
-      pipelineId, conversation_id, agent_name,
-      task: task?.slice(0, 80)
+      pipelineId, conversation_id, agent_name, task: task?.slice(0, 80)
     });
   }
 
@@ -221,7 +237,48 @@ class AgentBridgeModule {
 
   async onProjectActivated(event) {
     const data = event.data || event;
-    if (data.project_id) this.activeProjectId = data.project_id;
+    const projectId = data.project_id;
+    if (!projectId) return;
+    this.activeProjectId = projectId;
+
+    const running = await this.store.getRunningExecutions(projectId);
+    if (running.length === 0) return;
+
+    this.logger.info('agent-bridge.recovery', { projectId, count: running.length });
+
+    for (const row of running) {
+      const { id: pipelineId, conversation_id, agent_name } = row;
+
+      const unsubCompleted = await this.eventBus.subscribe(`agent.${agent_name}.completed`, async (e) => {
+        const d = e.data || e;
+        if (d.pipelineId !== pipelineId) return;
+        await this._onComplete(pipelineId, d.result, projectId);
+      });
+      const unsubFailed = await this.eventBus.subscribe(`agent.${agent_name}.failed`, async (e) => {
+        const d = e.data || e;
+        if (d.pipelineId !== pipelineId) return;
+        await this._onFail(pipelineId, d.error || 'agent failed', projectId);
+      });
+      const unsubProgress = await this.eventBus.subscribe(`agent.${agent_name}.progress`, (e) => {
+        const d = e.data || e;
+        if (d.pipelineId !== pipelineId) return;
+        const entry = this.inFlight.get(pipelineId);
+        if (!entry) return;
+        this.eventBus.publish('agent.progress', {
+          conversation_id: entry.conversation_id,
+          agent_name: d.agent_name,
+          step: d.step, message: d.message, pipelineId, timestamp: d.timestamp
+        });
+      });
+
+      this.inFlight.set(pipelineId, {
+        conversation_id, agent_name, unsubCompleted, unsubFailed, unsubProgress, timer: null, projectId
+      });
+
+      if (conversation_id) {
+        await this.eventBus.publish('agent.active', { conversation_id, agent_name, pipelineId });
+      }
+    }
   }
 
   async onProjectDeactivated(event) {

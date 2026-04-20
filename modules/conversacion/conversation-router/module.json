@@ -5,20 +5,17 @@
   "author": "Event Core Team",
   "main": "index.js",
 
-  "events": {
-    "publishes": [
-      {
-        "event": "chat.message.routed",
-        "description": "Decisión de enrutamiento. Payload: { conversation_id, content, project_id, message_id, messages, path, decision }"
-      }
-    ],
-    "subscribes": [
-      { "event": "chat.message.saved",  "handler": "onChatMessageSaved" },
-      { "event": "agent.execute",       "handler": "onAgentExecute" },
-      { "event": "agent.completed",     "handler": "onAgentCompleted" },
-      { "event": "agent.failed",        "handler": "onAgentFailed" }
-    ]
-  },
+  "publishes": [
+    "chat.message.routed"
+  ],
+
+  "subscribes": [
+    { "event": "chat.message.saved",  "handler": "onChatMessageSaved" },
+    { "event": "agent.execute",       "handler": "onAgentExecute" },
+    { "event": "agent.active",        "handler": "onAgentActive" },
+    { "event": "agent.completed",     "handler": "onAgentCompleted" },
+    { "event": "agent.failed",        "handler": "onAgentFailed" }
+  ],
 
   "observability": {
     "metrics": {

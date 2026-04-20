@@ -5,28 +5,22 @@
   "author": "Event Core Team",
   "main": "index.js",
 
-  "events": {
-    "subscribes": [
-      { "event": "agent.execute",       "handler": "onAgentExecute" },
-      { "event": "db.query.response",   "handler": "onDbQueryResponse" },
-      { "event": "project.activated",   "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
-    ],
-    "publishes": [
-      {
-        "event": "agent.execute.request",
-        "description": "Forwarded al ai-agent-framework con payload camelCase + pipelineId"
-      },
-      {
-        "event": "agent.completed",
-        "description": "Emitido cuando agent.{name}.completed llega. Añade conversation_id."
-      },
-      {
-        "event": "agent.failed",
-        "description": "Emitido cuando agent.{name}.failed llega. Añade conversation_id."
-      }
-    ]
-  },
+  "subscribes": [
+    { "event": "agent.execute",        "handler": "onAgentExecute" },
+    { "event": "chat.message.routed",  "handler": "onChatMessageRouted" },
+    { "event": "db.query.response",    "handler": "onDbQueryResponse" },
+    { "event": "project.activated",    "handler": "onProjectActivated" },
+    { "event": "project.deactivated",  "handler": "onProjectDeactivated" }
+  ],
+
+  "publishes": [
+    "agent.execute.request",
+    "agent.completed",
+    "agent.failed",
+    "agent.progress",
+    "agent.user_reply",
+    "agent.active"
+  ],
 
   "observability": {
     "metrics": {

@@ -388,6 +388,7 @@ class PromptEngine {
       try { parsed = JSON.parse(p.content); } catch { continue; }
       parsed._module = p.name;
       parsed._source = 'db';
+      parsed._id = p.id;
       this._prompts.set(p.name, parsed);
       merged++;
     }

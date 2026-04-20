@@ -148,6 +148,10 @@ class AgentBridgeModule {
       conversation_id, agent_name, unsubCompleted, unsubFailed, unsubProgress, timer, projectId
     });
 
+    if (conversation_id) {
+      await this.eventBus.publish('agent.active', { conversation_id, agent_name, pipelineId });
+    }
+
     await this.eventBus.publish('agent.execute.request', {
       agentName: agent_name,
       context: { conversation_id, project_id: projectId, ...(params || {}) },

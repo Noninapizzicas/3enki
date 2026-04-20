@@ -72,6 +72,9 @@ void setup() {
 void loop() {
   _wdt_feed();
 
+  // LVGL siempre corre — el display funciona con o sin WiFi
+  logic_loop();
+
   if (portalMode) {
     dnsServer.processNextRequest();
     webServer.handleClient();
@@ -90,6 +93,4 @@ void loop() {
   mqttHandleReconnect();
   mqttPublishStatus();
   otaHandle();
-
-  logic_loop();
 }

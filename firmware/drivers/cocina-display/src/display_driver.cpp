@@ -279,7 +279,6 @@ static bool _init_panel() {
     }
 
     esp_lcd_panel_init(_panel);
-    esp_lcd_panel_mirror(_panel, true, true);
 
     Serial.printf("[DISPLAY] JD9365 OK — %dx%d MIPI-DSI %d lanes %d Mbps\n",
         DISPLAY_WIDTH, DISPLAY_HEIGHT, MIPI_DSI_NUM_DATA_LANES, MIPI_DSI_LANE_BITRATE);

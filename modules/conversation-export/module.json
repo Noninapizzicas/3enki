@@ -5,9 +5,12 @@
   "author": "Pizzepos Team",
   "main": "index.js",
 
-  "events": {
-    "subscribes": []
-  },
+  "subscribes": [
+    { "event": "db.query.response", "handler": "_onDbQueryResponse" },
+    { "event": "activity.logged",   "handler": null },
+    { "event": "agent.failed",      "handler": null },
+    { "event": "agent.completed",   "handler": null }
+  ],
 
   "config": {
     "token": null,
@@ -42,7 +45,6 @@
   ],
 
   "dependencies": [
-    "chat-session",
     "database-manager"
   ],
 

@@ -496,29 +496,24 @@ class ContextManagerModule {
     }
   }
 
-  /**
-   * Backward-compatible handler for prompt-composer's context.full.request
-   * Maintains the exact same interface: request_id, project_id → context.full.response
-   */
-  async onContextFullRequest(event) {
-    const eventData = event.data || event;
-    const { request_id, project_id, correlation_id } = eventData;
+  async onChatMessageRouted(event) {
+    const data = event.data || event;
+    const { project_id } = data;
 
-    if (!request_id) return;
-    const cid = correlation_id || crypto.randomUUID();
-
-    try {
-      const fullContext = await this.getFullEntityContext(project_id, cid);
-
-      await this.eventBus.publish('context.full.response', {
-        request_id, success: true, context: fullContext, correlation_id: cid
-      });
-    } catch (error) {
-      this.logger.warn('context-manager.full.request.failed', { error: error.message });
-      await this.eventBus.publish('context.full.response', {
-        request_id, success: false, context: null, error: error.message, correlation_id: cid
-      });
+    if (!project_id) {
+      await this.eventBus.publish('chat.message.enriched', { ...data, context: null });
+      return;
     }
+
+    const cid = crypto.randomUUID();
+    let context = null;
+    try {
+      context = await this.getFullEntityContext(project_id, cid);
+    } catch (error) {
+      this.logger.warn('context-manager.enrich.failed', { project_id, error: error.message });
+    }
+
+    await this.eventBus.publish('chat.message.enriched', { ...data, context });
   }
 
   // ==================== UI Handlers ====================

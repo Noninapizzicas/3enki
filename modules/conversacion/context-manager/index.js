@@ -24,19 +24,22 @@ class ContextManagerModule {
 
     this.pendingDbRequests = new Map();
     this.pendingCompositionRequests = new Map();
+    this._projectCache = new Map(); // id → { name, description, parent_project_id }
   }
 
   async onLoad(core) {
     this.logger = core.logger;
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
-
-    // Load config from loader-injected moduleConfig
     this.config = core.moduleConfig || {};
 
     this.logger.info('context-manager.loading');
 
     await this.initializeSchema();
+
+    // Populate project cache from project-manager
+    const reqId = crypto.randomUUID();
+    this.eventBus.publish('project.list.request', { request_id: reqId }).catch(() => {});
 
     this.logger.info('context-manager.loaded');
   }
@@ -233,75 +236,65 @@ class ContextManagerModule {
    * Resolve entity IDs to names/descriptions by querying the projects table.
    * Returns Map<entityId, { name, description }>.
    */
-  async resolveEntityNames(entityIds, correlationId) {
-    if (!entityIds || entityIds.length === 0) return new Map();
-    const unique = [...new Set(entityIds)];
-    const placeholders = unique.map(() => '?').join(',');
-    try {
-      const rows = await this.queryDatabase(
-        `SELECT id, name, description FROM projects WHERE id IN (${placeholders})`,
-        unique, true, correlationId
-      );
-      const map = new Map();
-      for (const row of rows) {
-        map.set(row.id, { name: row.name, description: row.description });
-      }
-      return map;
-    } catch (err) {
-      this.logger.warn('context-manager.resolve-names.failed', { error: err.message });
-      return new Map();
+  // ==================== Project Cache ====================
+
+  onProjectListResponse(event) {
+    const data = event.data || event;
+    const projects = data.projects || data.data?.projects || [];
+    for (const p of projects) {
+      if (p.id) this._projectCache.set(p.id, { name: p.name, description: p.description, parent_project_id: p.parent_project_id || null });
     }
+  }
+
+  onProjectCreated(event) {
+    const data = event.data || event;
+    if (data.project_id) this._projectCache.set(data.project_id, { name: data.name, description: data.description, parent_project_id: data.parent_project_id || null });
+  }
+
+  onProjectUpdated(event) {
+    const data = event.data || event;
+    if (!data.project_id) return;
+    const existing = this._projectCache.get(data.project_id) || {};
+    this._projectCache.set(data.project_id, {
+      name: data.name ?? existing.name,
+      description: data.description ?? existing.description,
+      parent_project_id: data.parent_project_id ?? existing.parent_project_id ?? null
+    });
+  }
+
+  onProjectDeleted(event) {
+    const data = event.data || event;
+    if (data.project_id) this._projectCache.delete(data.project_id);
+  }
+
+  resolveEntityNames(entityIds) {
+    const map = new Map();
+    for (const id of entityIds) {
+      const cached = this._projectCache.get(id);
+      if (cached) map.set(id, { name: cached.name, description: cached.description });
+    }
+    return map;
   }
 
   // ==================== Parent Chain Resolution ====================
 
-  /**
-   * Walk up parent_project_id chain to build project hierarchy.
-   * Returns [{id, name, description, metadata}, ...] from immediate parent to root.
-   */
-  async getParentChain(entityId, correlationId) {
+  getParentChain(entityId) {
     const chain = [];
     const visited = new Set();
-    const MAX_DEPTH = 10;
     let currentId = entityId;
 
-    while (currentId && chain.length < MAX_DEPTH) {
+    while (currentId && chain.length < 10) {
       if (visited.has(currentId)) break;
       visited.add(currentId);
 
-      try {
-        const rows = await this.queryDatabase(
-          'SELECT id, name, description, parent_project_id, metadata FROM projects WHERE id = ?',
-          [currentId], true, correlationId
-        );
-        if (rows.length === 0) break;
+      const entry = this._projectCache.get(currentId);
+      if (!entry?.parent_project_id) break;
 
-        const row = rows[0];
-        if (!row.parent_project_id) break;
+      const parent = this._projectCache.get(entry.parent_project_id);
+      if (!parent) break;
 
-        // Fetch parent
-        const parentRows = await this.queryDatabase(
-          'SELECT id, name, description, parent_project_id, metadata FROM projects WHERE id = ?',
-          [row.parent_project_id], true, correlationId
-        );
-        if (parentRows.length === 0) break;
-
-        const parent = parentRows[0];
-        let metadata = {};
-        try { metadata = parent.metadata ? JSON.parse(parent.metadata) : {}; } catch (_) {}
-
-        chain.push({
-          id: parent.id,
-          name: parent.name,
-          description: parent.description,
-          metadata
-        });
-
-        currentId = parent.id;
-      } catch (err) {
-        this.logger.warn('context-manager.parent-chain.error', { entityId: currentId, error: err.message });
-        break;
-      }
+      chain.push({ id: entry.parent_project_id, name: parent.name, description: parent.description });
+      currentId = entry.parent_project_id;
     }
 
     return chain;
@@ -329,7 +322,7 @@ class ContextManagerModule {
         if (m.entityId !== entityId) idsToResolve.add(m.entityId);
       }
     }
-    const names = await this.resolveEntityNames([...idsToResolve], correlationId);
+    const names = this.resolveEntityNames([...idsToResolve]);
 
     const sourceMap = new Map();
 
@@ -384,14 +377,15 @@ class ContextManagerModule {
     const sharedContext = await this.getSharedContext(entityId, correlationId);
 
     // Fetch relationship data from composition-manager + parent chain in parallel
-    const [deps, related, systemInfo, parentChain] = await Promise.all([
+    const [deps, related, systemInfo] = await Promise.all([
       this.requestComposition('deps.get', { entity_id: entityId }).catch(() => []),
       this.requestComposition('related.get', { entity_id: entityId }).catch(() => []),
-      this.requestComposition('entity.system', { entity_id: entityId }).catch(() => null),
-      this.getParentChain(entityId, correlationId).catch(() => [])
+      this.requestComposition('entity.system', { entity_id: entityId }).catch(() => null)
     ]);
 
-    // Collect all entity IDs that need name resolution
+    const parentChain = this.getParentChain(entityId);
+
+    // Resolve names from local cache — no DB queries
     const idsToResolve = new Set([entityId]);
     if (systemInfo?.members) {
       for (const m of systemInfo.members) idsToResolve.add(m.entityId);
@@ -399,7 +393,7 @@ class ContextManagerModule {
     for (const d of (deps || [])) idsToResolve.add(d.dependsOnId);
     for (const r of (related || [])) idsToResolve.add(r.id);
     for (const s of sharedContext) idsToResolve.add(s.fromEntityId);
-    const names = await this.resolveEntityNames([...idsToResolve], correlationId);
+    const names = this.resolveEntityNames([...idsToResolve]);
 
     const entityInfo = names.get(entityId) || {};
 

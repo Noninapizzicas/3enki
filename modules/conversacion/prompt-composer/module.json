@@ -4,21 +4,18 @@
   "description": "Composición de system prompts con contexto de proyecto, integración con prompt-manager para templates persistidos",
   "author": "Event Core Team",
 
-  "events": {
-    "publishes": [
-      "chat.prompt.ready",
-      "prompt.context.loaded"
-    ],
-    "subscribes": [
-      { "event": "chat.message.routed",   "handler": "onChatMessageRouted" },
-      { "event": "project.get.response",  "handler": "onProjectGetResponse" },
-      { "event": "storage.info.response", "handler": "onStorageInfoResponse" },
-      { "event": "prompt.get.response",   "handler": "onPromptManagerGetResponse" },
-      { "event": "prompt.list.response",  "handler": "onPromptManagerListResponse" },
-      { "event": "project.activated",     "handler": "onProjectActivated" },
-      { "event": "project.deactivated",   "handler": "onProjectDeactivated" }
-    ]
-  },
+  "publishes": [
+    "prompt.context.loaded"
+  ],
+
+  "subscribes": [
+    { "event": "project.get.response",  "handler": "onProjectGetResponse" },
+    { "event": "storage.info.response", "handler": "onStorageInfoResponse" },
+    { "event": "prompt.get.response",   "handler": "onPromptManagerGetResponse" },
+    { "event": "prompt.list.response",  "handler": "onPromptManagerListResponse" },
+    { "event": "project.activated",     "handler": "onProjectActivated" },
+    { "event": "project.deactivated",   "handler": "onProjectDeactivated" }
+  ],
 
   "ui_handlers": [
     { "domain": "prompt", "action": "compose", "handler": "handleUICompose" },

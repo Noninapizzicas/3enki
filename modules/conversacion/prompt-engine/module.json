@@ -1,31 +1,36 @@
 {
   "name": "prompt-engine",
-  "version": "1.0.0",
-  "description": "Motor de prompts hibrido: lee prompt.json de cada modulo, concatena con base prompt, entrega al LLM. Reemplaza la complejidad de prompt-composer + prompt-manager.",
+  "version": "1.1.0",
+  "description": "Motor de prompts JSON: lee prompt.json de cada módulo, concatena con base prompt, publica chat.prompt.ready. Reemplaza prompt-composer + prompt-manager en el pipeline.",
   "author": "Event Core Team",
   "main": "index.js",
 
-  "publishes": [],
-  "subscribes": [],
+  "subscribes": [
+    { "event": "chat.message.routed", "handler": "onChatMessageRouted" }
+  ],
+
+  "publishes": [
+    "chat.prompt.ready"
+  ],
 
   "apis": [
     {
       "method": "GET",
       "path": "/prompts",
       "handler": "handleListPrompts",
-      "description": "Lista modulos con prompt.json cargado"
+      "description": "Lista módulos con prompt.json cargado"
     },
     {
       "method": "GET",
       "path": "/prompts/:moduleName",
       "handler": "handleGetPrompt",
-      "description": "Obtiene el prompt.json de un modulo"
+      "description": "Obtiene el prompt.json de un módulo"
     },
     {
       "method": "POST",
       "path": "/prompts/:moduleName/reload",
       "handler": "handleReloadPrompt",
-      "description": "Recarga el prompt.json de un modulo desde disco"
+      "description": "Recarga el prompt.json de un módulo desde disco"
     },
     {
       "method": "POST",

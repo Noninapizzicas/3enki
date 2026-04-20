@@ -361,6 +361,33 @@ class PromptEngine {
       modules: this.getLoadedModules()
     };
   }
+
+  // ==========================================
+  // Pipeline: chat.message.routed → chat.prompt.ready
+  // ==========================================
+
+  async onChatMessageRouted(event) {
+    const data = event.data || event;
+    const { path, conversation_id, content, project_id, message_id, messages, decision } = data;
+
+    if (path !== 'llm') return;
+
+    const moduleName = decision?.module || null;
+    const systemPrompt = this.buildSystemPrompt(moduleName);
+    const history = Array.isArray(messages) ? messages : [];
+
+    await this.eventBus.publish('chat.prompt.ready', {
+      conversation_id,
+      project_id,
+      message_id,
+      content,
+      prompt: systemPrompt,
+      messages: history,
+      decision
+    });
+
+    this.logger.debug('prompt-engine.ready', { conversation_id, module: moduleName });
+  }
 }
 
 module.exports = PromptEngine;

@@ -6,7 +6,7 @@ const GroqProvider = require('./providers/groq-provider');
 const GeminiProvider = require('./providers/gemini-provider');
 const ClaudeCliProvider = require('./providers/claude-cli-provider');
 
-const { EVENTS } = require('../../core/constants');
+const { EVENTS } = require('../../../core/constants');
 
 /**
  * AI Gateway Module

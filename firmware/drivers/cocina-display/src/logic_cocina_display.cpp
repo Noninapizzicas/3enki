@@ -135,13 +135,21 @@ static void handleListActive(JsonDocument& doc) {
         return;
     }
 
-    if (_lvglReady) ui_clear_orders();
+    if (_lvglReady) {
+        lv_lock();
+        ui_clear_orders();
+        lv_unlock();
+    }
 
     int count = 0;
     for (JsonObjectConst obj : arr) {
         UiPedido p;
         if (pedidoFromJson(obj, p)) {
-            if (_lvglReady) ui_add_order(p);
+            if (_lvglReady) {
+                lv_lock();
+                ui_add_order(p);
+                lv_unlock();
+            }
             count++;
         }
     }
@@ -153,8 +161,11 @@ static void handleItemPreparando(JsonDocument& doc) {
     const char* nombre     = doc["nombre"]    | "";
     if (!*pedido_id || !*nombre) return;
 
-    if (_lvglReady)
+    if (_lvglReady) {
+        lv_lock();
         ui_update_item(pedido_id, nombre, UI_ITEM_PREPARANDO);
+        lv_unlock();
+    }
 
     Serial.printf("[COCINA] %s — item preparando: %s\n", pedido_id, nombre);
 }
@@ -164,8 +175,11 @@ static void handleItemPreparado(JsonDocument& doc) {
     const char* nombre    = doc["nombre"]    | "";
     if (!*pedido_id || !*nombre) return;
 
-    if (_lvglReady)
+    if (_lvglReady) {
+        lv_lock();
         ui_update_item(pedido_id, nombre, UI_ITEM_LISTO);
+        lv_unlock();
+    }
 
     Serial.printf("[COCINA] %s — item listo: %s\n", pedido_id, nombre);
 }
@@ -175,8 +189,11 @@ static void handlePedidoListo(JsonDocument& doc) {
     const char* ref        = doc["ref_display"] | doc["cuenta_id"] | "";
     if (!*pedido_id) return;
 
-    if (_lvglReady)
+    if (_lvglReady) {
+        lv_lock();
         ui_order_listo(pedido_id);
+        lv_unlock();
+    }
 
     Serial.printf("[COCINA] PEDIDO LISTO: %s (%s)\n", ref, pedido_id);
 }
@@ -217,13 +234,17 @@ static void handlePerifericoDisplay(JsonDocument& doc) {
         }
 
         if (_lvglReady && *p.pedido_id) {
+            lv_lock();
             ui_add_order(p);
+            lv_unlock();
         }
 
     } else if (strcmp(accion, "pedido_listo") == 0) {
         const char* pedido_id = contenido["pedido_id"] | "";
         if (*pedido_id && _lvglReady) {
+            lv_lock();
             ui_order_listo(pedido_id);
+            lv_unlock();
         }
 
     } else if (strcmp(accion, "actualizar") == 0) {
@@ -278,9 +299,12 @@ void logic_setup() {
     display_set_backlight(BACKLIGHT_BRIGHTNESS);
 
     if (_lvglReady) {
+        lv_lock();
         ui_init();
         ui_set_wifi(false);
         ui_set_mqtt(false);
+        lv_unlock();
+        display_lvgl_task_start();  // LVGL corre en Core 0 a partir de aquí
     }
 
     // 2. NTP (usa el host MQTT como servidor de red de referencia)
@@ -300,7 +324,9 @@ void logic_setup() {
     }
 
     if (_lvglReady) {
+        lv_lock();
         ui_set_mqtt(enki_mqtt_connected());
+        lv_unlock();
     }
 
     Serial.printf("[COCINA-DISPLAY] Listo — LVGL=%s panel=%s\n",
@@ -311,16 +337,12 @@ void logic_setup() {
 void logic_loop() {
     uint32_t now = millis();
 
-    // LVGL
-    if (_lvglReady) {
-        display_driver_tick();
-        lv_timer_handler();
-
-        // Reloj cada 30s
-        if (now - _lastClockMs > CLOCK_UPDATE_MS) {
-            ui_tick_clock();
-            _lastClockMs = now;
-        }
+    // Reloj cada 30s — actualiza un label LVGL, necesita lock
+    if (_lvglReady && now - _lastClockMs > CLOCK_UPDATE_MS) {
+        lv_lock();
+        ui_tick_clock();
+        lv_unlock();
+        _lastClockMs = now;
     }
 
     // Pedir lista activa periódicamente (recovery tras reconexión)

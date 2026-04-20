@@ -343,6 +343,25 @@ bool display_driver_init() {
     return true;
 }
 
-void display_driver_tick() {
-    // Sin touch por ahora (GSL3680 necesita firmware blob)
+// ─── Tarea FreeRTOS de LVGL (Core 0) ────────────────────────────────────────
+
+static void _lvgl_task(void*) {
+    for (;;) {
+        lv_lock();
+        uint32_t ms_until_next = lv_timer_handler();
+        lv_unlock();
+        vTaskDelay(pdMS_TO_TICKS(ms_until_next < 1 ? 1 : ms_until_next > 10 ? 10 : ms_until_next));
+    }
+}
+
+void display_lvgl_task_start() {
+    xTaskCreatePinnedToCore(
+        _lvgl_task, "lvgl",
+        16384,      // stack bytes
+        nullptr,
+        5,          // prioridad (>loop que corre en 1)
+        nullptr,
+        0           // Core 0
+    );
+    Serial.println("[DISPLAY] LVGL task pinned to Core 0");
 }

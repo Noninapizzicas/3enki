@@ -22,16 +22,20 @@
 
 // MIPI-DSI bus
 #define MIPI_DSI_NUM_DATA_LANES 2
-#define MIPI_DSI_LANE_BITRATE   1000    // Mbps por lane
-#define MIPI_DPI_CLK_MHZ        60      // DPI pixel clock
+#define MIPI_DSI_LANE_BITRATE   1500    // Mbps por lane
+#define MIPI_DPI_CLK_MHZ        80      // DPI pixel clock
 
-// MIPI-DSI video timing (JD9365 — del demo oficial Guition)
+// MIPI-DSI video timing (JD9365 — del driver oficial Espressif)
 #define MIPI_HSYNC_BACK_PORCH   20
 #define MIPI_HSYNC_PULSE_WIDTH  20
 #define MIPI_HSYNC_FRONT_PORCH  40
-#define MIPI_VSYNC_BACK_PORCH   4
-#define MIPI_VSYNC_PULSE_WIDTH  8
-#define MIPI_VSYNC_FRONT_PORCH  20
+#define MIPI_VSYNC_BACK_PORCH   12
+#define MIPI_VSYNC_PULSE_WIDTH  4
+#define MIPI_VSYNC_FRONT_PORCH  30
+
+// MIPI DSI PHY LDO (necesario para alimentar el D-PHY)
+#define MIPI_DSI_PHY_LDO_CHAN       3
+#define MIPI_DSI_PHY_LDO_VOLTAGE_MV 2500
 
 // LCD Reset
 #define LCD_RST_PIN             27

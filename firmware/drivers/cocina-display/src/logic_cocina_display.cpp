@@ -1,200 +1,378 @@
 /**
- * LOGICA: Cocina Display — Kiosk web para pantalla de cocina
+ * logic_cocina_display.cpp — Driver lógico: cocina display ESP32-P4
  *
- * Estrategia:
- *   1. Inicializar display MIPI-DSI con LVGL
- *   2. Mostrar splash screen mientras conecta
- *   3. Cuando WiFi+MQTT OK → cargar URL /cocina en webview
- *   4. El webview carga la misma UI SvelteKit que usan tablets/desktop
- *   5. Touch events se forwardean al webview
- *   6. MQTT se usa solo para status/OTA (la web tiene su propio MQTT WS)
+ * Flujo:
+ *   1. logic_setup()  → init display + LVGL UI + MQTT subs + pedir lista activa
+ *   2. logic_loop()   → LVGL timer handler + NTP clock + watchdog pedidos
+ *   3. logic_on_message() → parsear eventos cocina, actualizar estado + UI
  *
- * TODO (implementación progresiva):
- *   - [ ] Inicialización LVGL + driver MIPI-DSI para el panel específico
- *   - [ ] Framebuffer rendering del webview (requiere esp-idf web renderer)
- *   - [ ] Touch I2C driver (GT911/FT5x06 según panel)
- *   - [ ] Backlight PWM control
- *   - [ ] Kiosk watchdog (reload si la página no responde)
+ * MQTT subscriptions:
+ *   core/+/events/cocina/#          — eventos en tiempo real
+ *   core/+/events/periferico/display — display push events
+ *   ui/response/{reqId}             — respuesta a list-active (temporal)
  *
- * NOTA: El rendering web en ESP32-P4 es experimental.
- * Alternativa pragmática: usar el ESP32-P4 con LVGL nativo
- * recibiendo datos por MQTT en vez de cargar la web.
- * Esta decisión se toma cuando se tenga el hardware.
+ * La URL /cocina se construye automáticamente: http://{mqttHost}/{projectId}/cocina
  */
 
 #include "enki_logic.h"
 #include "enki_base.h"
+#include "display_driver.h"
+#include "ui_cocina.h"
+#include <lvgl.h>
+#include <time.h>
 
-// ============================================
-// Estado del driver
-// ============================================
+// ─── Constantes ──────────────────────────────────────────────────────────────
 
-static char kioskUrl[256] = "";
-static bool displayReady = false;
-static bool kioskLoaded = false;
-static uint32_t lastTouchMs = 0;
-static uint32_t bootMs = 0;
+#define MAX_ORDERS        16
+#define MAX_ITEMS         8
+#define LIST_REQUEST_INTERVAL_MS  (5 * 60 * 1000)  // Re-pedir lista cada 5 min
+#define CLOCK_UPDATE_MS   30000
+#define NTP_SYNC_INTERVAL_MS (6 * 60 * 60 * 1000)  // Re-sync NTP cada 6h
 
-// ============================================
-// Config NVS
-// ============================================
+// Topics del EventBus de Enki:
+//   cocina.item_preparando → core/{coreId}/events/cocina/item_preparando
+#define TOPIC_COCINA_SUB    "core/+/events/cocina/#"
+#define TOPIC_DISPLAY_SUB   "core/+/events/periferico/display"
+#define TOPIC_LIST_REQUEST  "ui/request/cocina/list-active"
 
-static void loadDriverConfig() {
-  const char* url = enki_config_get("kioskUrl", DEFAULT_KIOSK_URL);
-  strlcpy(kioskUrl, url, sizeof(kioskUrl));
+// ─── Estado ──────────────────────────────────────────────────────────────────
 
-  Serial.printf("[DISPLAY] kioskUrl=%s\n", kioskUrl);
-}
+static bool    _displayReady    = false;
+static bool    _lvglReady       = false;
+static uint32_t _bootMs         = 0;
+static uint32_t _lastRequestMs  = 0;
+static uint32_t _lastClockMs    = 0;
+static uint32_t _lastNtpMs      = 0;
+static char    _reqId[48]       = "";
+static char    _topicResponse[80] = "";
 
-static void saveDriverConfig() {
-  enki_config_set("kioskUrl", kioskUrl);
-}
-
-// ============================================
-// Display initialization (stub — hardware-dependent)
-// ============================================
-
-/**
- * Inicializar el display MIPI-DSI.
- * Depende del panel específico (ILI9881C, ST7701S, etc.)
- * y del board (ESP32-P4-Function-EV o custom).
- *
- * TODO: implementar cuando se tenga el hardware.
- */
-static bool initDisplay() {
-  Serial.printf("[DISPLAY] Inicializando %dx%d...\n", DISPLAY_WIDTH, DISPLAY_HEIGHT);
-
-  // TODO: LVGL init
-  // lv_init();
-  // lv_display_t *disp = lv_display_create(DISPLAY_WIDTH, DISPLAY_HEIGHT);
-  // ... MIPI-DSI driver, framebuffer, etc.
-
-  // TODO: Backlight
-  // if (BACKLIGHT_PIN >= 0) {
-  //   ledcSetup(0, 5000, 8);
-  //   ledcAttachPin(BACKLIGHT_PIN, 0);
-  //   ledcWrite(0, BACKLIGHT_BRIGHTNESS);
-  // }
-
-  Serial.println("[DISPLAY] Stub — display no inicializado (sin hardware)");
-  return false;
-}
+// ─── MQTT helpers ─────────────────────────────────────────────────────────────
 
 /**
- * Inicializar touch I2C.
- * TODO: implementar para GT911 o FT5x06 según panel.
+ * Enviar petición a cocina/list-active.
+ * Subscribimos al topic de respuesta con un ID único.
  */
-static bool initTouch() {
-  Serial.printf("[TOUCH] SDA=%d SCL=%d INT=%d\n", TOUCH_SDA, TOUCH_SCL, TOUCH_INT);
+static void requestActiveOrders() {
+    // ID único por dispositivo + timestamp
+    snprintf(_reqId, sizeof(_reqId), "%s-%lu",
+        enki_device_id(), (unsigned long)millis());
 
-  // TODO: Wire.begin(TOUCH_SDA, TOUCH_SCL);
-  // TODO: GT911 or FT5x06 init
+    // Subscribir antes de publicar para no perder la respuesta
+    snprintf(_topicResponse, sizeof(_topicResponse), "ui/response/%s", _reqId);
+    enki_mqtt_subscribe(_topicResponse);
 
-  Serial.println("[TOUCH] Stub — touch no inicializado (sin hardware)");
-  return false;
+    // Publicar request
+    char payload[128];
+    snprintf(payload, sizeof(payload),
+        "{\"request_id\":\"%s\",\"data\":{}}", _reqId);
+    enki_mqtt_publish(TOPIC_LIST_REQUEST, payload);
+
+    _lastRequestMs = millis();
+    Serial.printf("[COCINA] Solicitando lista activa (reqId=%s)\n", _reqId);
 }
 
-// ============================================
-// Kiosk URL builder
-// ============================================
+// ─── Construcción de UiPedido desde JSON ─────────────────────────────────────
 
-static void buildKioskUrl() {
-  // Si hay URL configurada manualmente, usarla
-  if (strlen(kioskUrl) > 0) return;
-
-  // Auto-construir: http://mqttHost:5173/projectId/cocina
-  if (strlen(baseCfg.mqttHost) > 0 && strlen(baseCfg.projectId) > 0) {
-    snprintf(kioskUrl, sizeof(kioskUrl), "http://%s/%s/cocina",
-      baseCfg.mqttHost, baseCfg.projectId);
-    Serial.printf("[KIOSK] URL auto-construida: %s\n", kioskUrl);
-  }
+static UiItemEstado parseItemEstado(const char* s) {
+    if (!s) return UI_ITEM_PENDIENTE;
+    if (strcmp(s, "preparando") == 0) return UI_ITEM_PREPARANDO;
+    if (strcmp(s, "listo")      == 0) return UI_ITEM_LISTO;
+    return UI_ITEM_PENDIENTE;
 }
 
-// ============================================
-// Portal web — endpoints del driver
-// ============================================
+/**
+ * Extraer un UiPedido de un objeto JSON con la estructura de PedidoCocina.
+ * Retorna false si faltan campos obligatorios.
+ */
+static bool pedidoFromJson(JsonObjectConst obj, UiPedido& out) {
+    const char* id = obj["pedido_id"];
+    if (!id || !*id) return false;
 
-static void handleGetDriverConfig() {
-  JsonDocument doc;
-  doc["kiosk_url"] = kioskUrl;
-  doc["display_ready"] = displayReady;
-  doc["kiosk_loaded"] = kioskLoaded;
-  doc["display_width"] = DISPLAY_WIDTH;
-  doc["display_height"] = DISPLAY_HEIGHT;
+    memset(&out, 0, sizeof(out));
+    strlcpy(out.pedido_id,    id,                             sizeof(out.pedido_id));
+    strlcpy(out.ref_display,  obj["ref_display"]  | "",       sizeof(out.ref_display));
+    strlcpy(out.canal,        obj["canal"]        | "",       sizeof(out.canal));
 
-  char buf[512];
-  serializeJson(doc, buf, sizeof(buf));
-  webServer.send(200, "application/json", buf);
+    // Si ref_display vacío, usar nombre_cuenta
+    if (!out.ref_display[0] && obj["nombre_cuenta"].is<const char*>()) {
+        strlcpy(out.ref_display, obj["nombre_cuenta"] | "", sizeof(out.ref_display));
+    }
+
+    // Items
+    JsonArrayConst items = obj["items"].as<JsonArrayConst>();
+    out.item_count = 0;
+    for (JsonObjectConst item : items) {
+        if (out.item_count >= UI_MAX_ITEMS) break;
+        UiItem& ui_item = out.items[out.item_count];
+        strlcpy(ui_item.nombre, item["nombre"] | "?", sizeof(ui_item.nombre));
+        ui_item.cantidad = item["cantidad"] | 1;
+        ui_item.estado   = parseItemEstado(item["estado"] | "pendiente");
+        out.item_count++;
+    }
+
+    out.estado      = UI_PEDIDO_ACTIVO;
+    out.received_ms = millis();  // Aproximación — no tenemos el timestamp real
+    out.used        = true;
+    return true;
 }
 
-static void handlePostDriverConfig() {
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, webServer.arg("plain"));
-  if (err) {
-    webServer.send(400, "application/json", "{\"ok\":false,\"error\":\"JSON invalido\"}");
-    return;
-  }
+// ─── Handlers de mensajes MQTT ────────────────────────────────────────────────
 
-  if (doc["kiosk_url"].is<const char*>()) {
-    strlcpy(kioskUrl, doc["kiosk_url"], sizeof(kioskUrl));
-  }
+static void handleListActive(JsonDocument& doc) {
+    // Estructura: { status: 200, data: { pedidos: [...] } }
+    // o directamente: { pedidos: [...] }
+    JsonArrayConst arr;
 
-  saveDriverConfig();
-  webServer.send(200, "application/json", "{\"ok\":true}");
+    if (doc["data"]["pedidos"].is<JsonArrayConst>()) {
+        arr = doc["data"]["pedidos"].as<JsonArrayConst>();
+    } else if (doc["pedidos"].is<JsonArrayConst>()) {
+        arr = doc["pedidos"].as<JsonArrayConst>();
+    } else if (doc["data"].is<JsonArrayConst>()) {
+        arr = doc["data"].as<JsonArrayConst>();
+    } else {
+        Serial.println("[COCINA] list-active: formato inesperado");
+        return;
+    }
+
+    if (_lvglReady) ui_clear_orders();
+
+    int count = 0;
+    for (JsonObjectConst obj : arr) {
+        UiPedido p;
+        if (pedidoFromJson(obj, p)) {
+            if (_lvglReady) ui_add_order(p);
+            count++;
+        }
+    }
+    Serial.printf("[COCINA] list-active: %d pedidos activos\n", count);
 }
 
-// ============================================
-// Contrato: las 5 funciones que la BASE llama
-// ============================================
+static void handleItemPreparando(JsonDocument& doc) {
+    const char* pedido_id  = doc["pedido_id"] | "";
+    const char* nombre     = doc["nombre"]    | "";
+    if (!*pedido_id || !*nombre) return;
+
+    if (_lvglReady)
+        ui_update_item(pedido_id, nombre, UI_ITEM_PREPARANDO);
+
+    Serial.printf("[COCINA] %s — item preparando: %s\n", pedido_id, nombre);
+}
+
+static void handleItemPreparado(JsonDocument& doc) {
+    const char* pedido_id = doc["pedido_id"] | "";
+    const char* nombre    = doc["nombre"]    | "";
+    if (!*pedido_id || !*nombre) return;
+
+    if (_lvglReady)
+        ui_update_item(pedido_id, nombre, UI_ITEM_LISTO);
+
+    Serial.printf("[COCINA] %s — item listo: %s\n", pedido_id, nombre);
+}
+
+static void handlePedidoListo(JsonDocument& doc) {
+    const char* pedido_id  = doc["pedido_id"]  | "";
+    const char* ref        = doc["ref_display"] | doc["cuenta_id"] | "";
+    if (!*pedido_id) return;
+
+    if (_lvglReady)
+        ui_order_listo(pedido_id);
+
+    Serial.printf("[COCINA] PEDIDO LISTO: %s (%s)\n", ref, pedido_id);
+}
+
+/**
+ * Eventos de display push (periferico.display):
+ * { "destino": "display-cocina", "data": { "accion": "nuevo_pedido|pedido_listo|actualizar", ... } }
+ */
+static void handlePerifericoDisplay(JsonDocument& doc) {
+    const char* destino = doc["destino"] | "";
+    if (strcmp(destino, "display-cocina") != 0) return;  // no es para nosotros
+
+    JsonObjectConst data     = doc["data"].as<JsonObjectConst>();
+    const char*     accion   = data["accion"] | "";
+    JsonObjectConst contenido = data["contenido"].as<JsonObjectConst>();
+
+    if (strcmp(accion, "nuevo_pedido") == 0) {
+        // { pedido_id, cuenta_id, nombre_cuenta, canal, items[{nombre,cantidad,categoria}], items_count }
+        UiPedido p;
+        memset(&p, 0, sizeof(p));
+
+        strlcpy(p.pedido_id,   contenido["pedido_id"]    | "", sizeof(p.pedido_id));
+        strlcpy(p.ref_display, contenido["nombre_cuenta"] | contenido["cuenta_id"] | "",
+                sizeof(p.ref_display));
+        strlcpy(p.canal,       contenido["canal"]         | "", sizeof(p.canal));
+        p.received_ms = millis();
+        p.used = true;
+        p.estado = UI_PEDIDO_ACTIVO;
+
+        JsonArrayConst items = contenido["items"].as<JsonArrayConst>();
+        for (JsonObjectConst item : items) {
+            if (p.item_count >= UI_MAX_ITEMS) break;
+            strlcpy(p.items[p.item_count].nombre,
+                    item["nombre"] | "?", sizeof(p.items[0].nombre));
+            p.items[p.item_count].cantidad = item["cantidad"] | 1;
+            p.items[p.item_count].estado   = UI_ITEM_PENDIENTE;
+            p.item_count++;
+        }
+
+        if (_lvglReady && *p.pedido_id) {
+            ui_add_order(p);
+        }
+
+    } else if (strcmp(accion, "pedido_listo") == 0) {
+        const char* pedido_id = contenido["pedido_id"] | "";
+        if (*pedido_id && _lvglReady) {
+            ui_order_listo(pedido_id);
+        }
+
+    } else if (strcmp(accion, "actualizar") == 0) {
+        // Refrescar lista completa
+        if (enki_mqtt_connected()) requestActiveOrders();
+    }
+}
+
+// ─── Ruteo de mensajes por topic ──────────────────────────────────────────────
+
+/**
+ * Extraer el nombre del evento del topic.
+ * "core/core-001/events/cocina/item_preparando" → "item_preparando"
+ * "core/core-001/events/cocina/pedido_listo"    → "pedido_listo"
+ */
+static const char* extractEventName(const char* topic) {
+    // Buscar la 4ª '/'
+    int slashes = 0;
+    const char* p = topic;
+    while (*p) {
+        if (*p == '/') {
+            slashes++;
+            if (slashes == 4) return p + 1;
+        }
+        p++;
+    }
+    return nullptr;
+}
+
+static bool isTopicMatch(const char* topic, const char* prefix, size_t prefixLen) {
+    return strncmp(topic, prefix, prefixLen) == 0;
+}
+
+// ─── Contrato BASE + LÓGICA ───────────────────────────────────────────────────
 
 void logic_setup() {
-  bootMs = millis();
+    _bootMs = millis();
 
-  // 1. Config NVS
-  loadDriverConfig();
+    // 1. Display LVGL
+    _lvglReady = display_driver_init();
+    display_set_backlight(BACKLIGHT_BRIGHTNESS);
 
-  // 2. Auto-construir URL si no hay
-  buildKioskUrl();
+    if (_lvglReady) {
+        ui_init();
+        ui_set_wifi(false);
+        ui_set_mqtt(false);
+    }
 
-  // 3. Inicializar display
-  displayReady = initDisplay();
+    // 2. NTP (usa el host MQTT como servidor de red de referencia)
+    configTime(0, 0, "pool.ntp.org", "time.cloudflare.com");
+    _lastNtpMs = millis();
 
-  // 4. Inicializar touch
-  initTouch();
+    // 3. Portal endpoints
+    webServer.on("/api/display", HTTP_GET, []() {
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+            "{\"display_ready\":%s,\"lvgl_ready\":%s,\"orders\":0}",
+            _displayReady ? "true" : "false",
+            _lvglReady ? "true" : "false");
+        webServer.send(200, "application/json", buf);
+    });
 
-  // 5. Endpoints portal
-  webServer.on("/api/display", HTTP_GET,  handleGetDriverConfig);
-  webServer.on("/api/display", HTTP_POST, handlePostDriverConfig);
+    // 4. Suscribir a topics de cocina
+    enki_mqtt_subscribe(TOPIC_COCINA_SUB);
+    enki_mqtt_subscribe(TOPIC_DISPLAY_SUB);
 
-  // 6. NO suscribirse a topics de pedidos — el webview tiene su propio MQTT WS
-  // Solo MQTT para status/OTA (gestionado por la BASE)
+    // 5. Pedir lista de pedidos activos
+    if (enki_mqtt_connected()) {
+        requestActiveOrders();
+    }
 
-  Serial.printf("[KIOSK] URL: %s\n", strlen(kioskUrl) > 0 ? kioskUrl : "(no configurada)");
-  Serial.printf("[DISPLAY] Heap libre: %d\n", ESP.getFreeHeap());
+    if (_lvglReady) {
+        ui_set_mqtt(enki_mqtt_connected());
+    }
+
+    Serial.printf("[COCINA-DISPLAY] Listo — LVGL=%s panel=%s\n",
+        _lvglReady   ? "OK" : "stub",
+        _displayReady ? "OK" : "stub");
 }
 
 void logic_loop() {
-  // TODO: lv_timer_handler() para LVGL
-  // TODO: touch polling
-  // TODO: kiosk watchdog (reload si no responde)
-  // TODO: backlight dimming por inactividad
+    uint32_t now = millis();
+
+    // LVGL
+    if (_lvglReady) {
+        display_driver_tick();
+        lv_timer_handler();
+
+        // Reloj cada 30s
+        if (now - _lastClockMs > CLOCK_UPDATE_MS) {
+            ui_tick_clock();
+            _lastClockMs = now;
+        }
+    }
+
+    // Pedir lista activa periódicamente (recovery tras reconexión)
+    if (enki_mqtt_connected() &&
+        now - _lastRequestMs > LIST_REQUEST_INTERVAL_MS) {
+        requestActiveOrders();
+    }
+
+    // Re-sync NTP
+    if (now - _lastNtpMs > NTP_SYNC_INTERVAL_MS) {
+        configTime(0, 0, "pool.ntp.org");
+        _lastNtpMs = now;
+    }
 }
 
 void logic_on_message(const char* topic, JsonDocument& doc) {
-  // No procesamos mensajes MQTT directamente.
-  // La UI web del kiosk tiene su propia conexión MQTT via WebSocket.
-  // Este handler solo se usaría si implementamos UI nativa LVGL.
+    // ── Respuesta a list-active ─────────────────────────────────────────────
+    if (_topicResponse[0] && strcmp(topic, _topicResponse) == 0) {
+        handleListActive(doc);
+        // Unsuscribir del topic temporal
+        // (PubSubClient no tiene unsubscribe en la API de enki, así que simplemente
+        // ignoraremos futuros mensajes comparando con el reqId)
+        _topicResponse[0] = '\0';
+        return;
+    }
+
+    // ── Evento periferico.display ───────────────────────────────────────────
+    // topic: core/+/events/periferico/display
+    if (strstr(topic, "/events/periferico/display")) {
+        handlePerifericoDisplay(doc);
+        return;
+    }
+
+    // ── Eventos cocina/* ────────────────────────────────────────────────────
+    // topic: core/{coreId}/events/cocina/{event_name}
+    if (!strstr(topic, "/events/cocina/")) return;
+
+    const char* eventName = extractEventName(topic);
+    if (!eventName) return;
+
+    if (strcmp(eventName, "item_preparando") == 0) {
+        handleItemPreparando(doc);
+    } else if (strcmp(eventName, "item_preparado") == 0) {
+        handleItemPreparado(doc);
+    } else if (strcmp(eventName, "pedido_listo") == 0) {
+        handlePedidoListo(doc);
+    }
+    // item_avanzado, device_registered, etc. → ignorar (no afectan la UI de display)
 }
 
 void logic_status(JsonDocument& doc) {
-  doc["display_ready"] = displayReady;
-  doc["kiosk_loaded"]  = kioskLoaded;
-  doc["kiosk_url"]     = kioskUrl;
-  doc["display"]       = DISPLAY_WIDTH;
-  doc["uptime_min"]    = (millis() - bootMs) / 60000;
+    doc["display_ready"] = _displayReady;
+    doc["lvgl_ready"]    = _lvglReady;
+    doc["uptime_min"]    = (millis() - _bootMs) / 60000;
 }
 
 void logic_portal_status(JsonDocument& doc) {
-  doc["display"] = displayReady;
-  doc["kiosk"]   = kioskLoaded;
+    doc["display"] = _displayReady;
+    doc["lvgl"]    = _lvglReady;
 }

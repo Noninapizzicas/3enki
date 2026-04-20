@@ -3,21 +3,9 @@
  *
  * Arquitectura BASE + LÓGICA
  *
- * BASE (librería compartida enki-base):
- *   enki_base    — Config NVS + servicios enki_*
- *   enki_wifi    — WiFi multi-red + reconexión
- *   enki_mqtt    — MQTT + cola offline + birth/LWT
- *   enki_ota     — OTA via shadow
- *   enki_portal  — Portal web de configuración
- *
- * LÓGICA: Cocina Display
- *   - Inicializa display MIPI-DSI + touch
- *   - Muestra pantalla de estado mientras conecta WiFi/MQTT
- *   - Una vez conectado, carga la URL /cocina del VPS
- *   - Mantiene kiosk mode (no se puede salir de la página)
- *   - Reporta status: WiFi RSSI, heap, display state
- *
- * Hardware: ESP32-P4 + 10.1" 800x1280
+ * Board:  Guition JC8012P4A1 (ESP32-P4 + ESP32-C6)
+ * Panel:  ILI9881C MIPI-DSI 800×1280
+ * Touch:  GT911 I2C
  */
 
 #include "enki_base.h"
@@ -37,7 +25,7 @@ void setup() {
   if (LED_PIN >= 0) pinMode(LED_PIN, OUTPUT);
 
   Serial.println("\n========================================");
-  Serial.println("  Enki ESP32 — Cocina Display v1.0");
+  Serial.println("  Enki ESP32 — Cocina Display v1.1");
   Serial.println("  Arquitectura BASE + LOGICA");
   Serial.println("========================================\n");
 

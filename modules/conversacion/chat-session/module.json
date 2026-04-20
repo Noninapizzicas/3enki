@@ -28,7 +28,7 @@
       { "event": "session.context.toggle.request", "handler": "onToggleContextRequest" },
       { "event": "session.context.stats.request", "handler": "onContextStatsRequest" },
       { "event": "chat.send.request",  "handler": "onChatSendRequest" },
-      { "event": "chat.ai.response",   "handler": "onChatAiResponse" },
+      { "event": "ai.chat.response",   "handler": "onChatAiResponse" },
       { "event": "agent.completed",    "handler": "onAgentCompleted" },
       { "event": "agent.failed",       "handler": "onAgentFailed" }
   ],

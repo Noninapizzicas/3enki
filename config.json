@@ -91,7 +91,7 @@
       "carta-impresion",
       "channel-manager",
       "composition-manager",
-      "context-manager",
+      "conversacion/context-manager",
       "facturas",
       "impresion",
       "perifericos",

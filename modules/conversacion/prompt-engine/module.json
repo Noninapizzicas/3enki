@@ -6,11 +6,11 @@
   "main": "index.js",
 
   "subscribes": [
-    { "event": "chat.message.routed",  "handler": "onChatMessageRouted" },
-    { "event": "prompt.list.response", "handler": "onPromptListResponse" },
-    { "event": "prompt.created",       "handler": "onPromptCreated" },
-    { "event": "prompt.updated",       "handler": "onPromptUpdated" },
-    { "event": "prompt.deleted",       "handler": "onPromptDeleted" }
+    { "event": "chat.message.enriched",  "handler": "onChatMessageEnriched" },
+    { "event": "prompt.list.response",   "handler": "onPromptListResponse" },
+    { "event": "prompt.created",         "handler": "onPromptCreated" },
+    { "event": "prompt.updated",         "handler": "onPromptUpdated" },
+    { "event": "prompt.deleted",         "handler": "onPromptDeleted" }
   ],
 
   "publishes": [

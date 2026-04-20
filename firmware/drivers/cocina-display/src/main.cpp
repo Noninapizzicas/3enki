@@ -16,6 +16,13 @@
 
 static unsigned long portalStartMs = 0;
 
+// En ESP32-P4 Arduino 3.x, el WDT se gestiona diferente — no añadir/resetear manualmente
+static inline void _wdt_feed() {
+    if (esp_task_wdt_status(NULL) == ESP_OK) {
+        esp_task_wdt_reset();
+    }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -27,15 +34,15 @@ void setup() {
   Serial.flush();
 
   Serial.println("[SETUP] 1/5 Config NVS...");
-  esp_task_wdt_reset();
+  _wdt_feed();
   baseConfigLoad();
 
   Serial.println("[SETUP] 2/5 WiFi...");
-  esp_task_wdt_reset();
+  _wdt_feed();
   wifiSetup();
 
   Serial.println("[SETUP] 3/5 Portal web...");
-  esp_task_wdt_reset();
+  _wdt_feed();
   portalSetup();
   webServer.begin();
 
@@ -46,7 +53,7 @@ void setup() {
     Serial.printf("[WEB] Portal en http://%s/\n", WiFi.localIP().toString().c_str());
 
     Serial.println("[SETUP] 4/5 MQTT...");
-    esp_task_wdt_reset();
+    _wdt_feed();
     if (baseCfg.configured) {
       mqttSetup();
       mqtt.setServer(baseCfg.mqttHost, baseCfg.mqttPort);
@@ -55,7 +62,7 @@ void setup() {
   }
 
   Serial.println("[SETUP] 5/5 Display + LVGL...");
-  esp_task_wdt_reset();
+  _wdt_feed();
   logic_setup();
 
   Serial.println("[READY] Cocina Display operativo\n");
@@ -63,7 +70,7 @@ void setup() {
 }
 
 void loop() {
-  esp_task_wdt_reset();
+  _wdt_feed();
 
   if (portalMode) {
     dnsServer.processNextRequest();
@@ -83,6 +90,5 @@ void loop() {
   mqttHandleReconnect();
   mqttPublishStatus();
   otaHandle();
-
-  logic_loop();
+  logic_loop();  // MQTT periódico + NTP — LVGL corre en tarea dedicada (Core 0)
 }

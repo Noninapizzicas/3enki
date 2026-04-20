@@ -229,12 +229,33 @@ class PromptEngine {
     // 2. Module prompt (the specific role)
     sections.push(JSON.stringify(modulePrompt, null, 2));
 
-    // 3. Runtime context (injected live data, if any)
+    // 3. Active context as plain text — LLM must use these IDs in tool calls
+    const contextText = this._buildContextText(runtimeContext);
+    if (contextText) sections.push(contextText);
+
+    // 4. Runtime context JSON (full structured data)
     if (runtimeContext && Object.keys(runtimeContext).length > 0) {
       sections.push(JSON.stringify({ _runtime: runtimeContext }, null, 2));
     }
 
     return sections.join('\n\n---\n\n');
+  }
+
+  _buildContextText(runtimeContext) {
+    if (!runtimeContext.project_id) return null;
+    const lines = [
+      'CONTEXTO ACTIVO — usa estos valores directamente en las tools. No los pidas al usuario.',
+    ];
+    const name = runtimeContext.project?.name;
+    if (name) lines.push(`Proyecto: ${name}`);
+    lines.push(`project_id: ${runtimeContext.project_id}`);
+    if (runtimeContext.conversation_id) {
+      lines.push(`conversation_id: ${runtimeContext.conversation_id}`);
+    }
+    if (runtimeContext.dependencies?.length) {
+      lines.push(`Dependencias: ${runtimeContext.dependencies.map(d => d.name || d.id).join(', ')}`);
+    }
+    return lines.join('\n');
   }
 
   /**
@@ -305,6 +326,8 @@ class PromptEngine {
   _formatBase(runtimeContext) {
     if (!this._basePrompt) return '';
     const sections = [JSON.stringify(this._basePrompt, null, 2)];
+    const contextText = this._buildContextText(runtimeContext);
+    if (contextText) sections.push(contextText);
     if (runtimeContext && Object.keys(runtimeContext).length > 0) {
       sections.push(JSON.stringify({ _runtime: runtimeContext }, null, 2));
     }
@@ -402,7 +425,6 @@ class PromptEngine {
 
   onPromptDeleted(event) {
     const data = event.data || event;
-    // Remove DB override for this ID — reload filesystem fallback by name
     for (const [name, p] of this._prompts.entries()) {
       if (p._source === 'db' && (p._id === data.id || p.id === data.id)) {
         this._prompts.delete(name);
@@ -413,17 +435,28 @@ class PromptEngine {
   }
 
   // ==========================================
-  // Pipeline: chat.message.routed → chat.prompt.ready
+  // Pipeline: chat.message.enriched → chat.prompt.ready
   // ==========================================
 
-  async onChatMessageRouted(event) {
+  async onChatMessageEnriched(event) {
     const data = event.data || event;
-    const { path, conversation_id, content, project_id, message_id, messages, decision } = data;
+    const { path, conversation_id, content, project_id, message_id, messages, decision, context } = data;
 
     if (path !== 'llm') return;
 
     const moduleName = decision?.module || null;
-    const systemPrompt = this.buildSystemPrompt(moduleName);
+    const runtimeContext = {};
+    if (project_id) runtimeContext.project_id = project_id;
+    if (conversation_id) runtimeContext.conversation_id = conversation_id;
+
+    if (context) {
+      if (context.project) runtimeContext.project = context.project;
+      if (context.parentChain?.length) runtimeContext.parent_projects = context.parentChain;
+      if (context.dependencies?.length) runtimeContext.dependencies = context.dependencies;
+      if (context.system) runtimeContext.system = context.system;
+    }
+
+    const systemPrompt = this.buildSystemPrompt(moduleName, runtimeContext);
     const history = Array.isArray(messages) ? messages : [];
 
     await this.eventBus.publish('chat.prompt.ready', {

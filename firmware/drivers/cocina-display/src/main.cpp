@@ -1,10 +1,8 @@
 /**
- * Enki ESP32 Firmware — Cocina Display (Kiosk Web)
- *
- * Arquitectura BASE + LÓGICA
+ * Enki ESP32 Firmware — Cocina Display
  *
  * Board:  Guition JC8012P4A1 (ESP32-P4 + ESP32-C6)
- * Panel:  ILI9881C MIPI-DSI 800×1280
+ * Panel:  ILI9881C MIPI-DSI 800x1280
  * Touch:  GT911 I2C
  */
 
@@ -20,25 +18,24 @@ static unsigned long portalStartMs = 0;
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
-
-  if (LED_PIN >= 0) pinMode(LED_PIN, OUTPUT);
+  delay(1000);
 
   Serial.println("\n========================================");
-  Serial.println("  Enki ESP32 — Cocina Display v1.1");
-  Serial.println("  Arquitectura BASE + LOGICA");
+  Serial.println("  Enki ESP32 — Cocina Display v1.2");
+  Serial.println("  Guition JC8012P4A1");
   Serial.println("========================================\n");
+  Serial.flush();
 
-  // WDT: Arduino 3.x ya lo inicializa. Solo añadir la tarea actual.
-  esp_task_wdt_add(NULL);
-
-  // 1. Config NVS
+  Serial.println("[SETUP] 1/5 Config NVS...");
+  esp_task_wdt_reset();
   baseConfigLoad();
 
-  // 2. WiFi
+  Serial.println("[SETUP] 2/5 WiFi...");
+  esp_task_wdt_reset();
   wifiSetup();
 
-  // 3. Portal web
+  Serial.println("[SETUP] 3/5 Portal web...");
+  esp_task_wdt_reset();
   portalSetup();
   webServer.begin();
 
@@ -48,7 +45,8 @@ void setup() {
   } else {
     Serial.printf("[WEB] Portal en http://%s/\n", WiFi.localIP().toString().c_str());
 
-    // 4. MQTT
+    Serial.println("[SETUP] 4/5 MQTT...");
+    esp_task_wdt_reset();
     if (baseCfg.configured) {
       mqttSetup();
       mqtt.setServer(baseCfg.mqttHost, baseCfg.mqttPort);
@@ -56,10 +54,12 @@ void setup() {
     }
   }
 
-  // 5. Inicializar la LÓGICA (display + kiosk)
+  Serial.println("[SETUP] 5/5 Display + LVGL...");
+  esp_task_wdt_reset();
   logic_setup();
 
   Serial.println("[READY] Cocina Display operativo\n");
+  Serial.flush();
 }
 
 void loop() {
@@ -84,6 +84,5 @@ void loop() {
   mqttPublishStatus();
   otaHandle();
 
-  // LÓGICA: actualizar display, procesar touch
   logic_loop();
 }

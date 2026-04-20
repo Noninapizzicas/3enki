@@ -16,8 +16,8 @@
 /** Inicializar LVGL + MIPI-DSI + GT911. Retorna true si LVGL está listo. */
 bool display_driver_init();
 
-/** Llamar en cada iteración de loop() para LVGL. */
-void display_driver_tick();
+/** Arrancar tarea FreeRTOS de LVGL (Core 0). Llamar después de display_driver_init() y ui_init(). */
+void display_lvgl_task_start();
 
 /** Ajustar brillo PWM (0=off, 255=máximo). */
 void display_set_backlight(uint8_t brightness);

@@ -119,7 +119,7 @@
 #define LV_SHADOW_CACHE_SIZE 0
 #define LV_CIRCLE_CACHE_SIZE 4
 
-/* OS — sin RTOS, loop manual */
-#define LV_USE_OS LV_OS_NONE
+/* OS — FreeRTOS: lv_lock()/lv_unlock() protege acceso desde múltiples tareas */
+#define LV_USE_OS LV_OS_FREERTOS
 
 #endif /* LV_CONF_H */

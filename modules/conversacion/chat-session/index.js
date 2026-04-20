@@ -18,7 +18,7 @@
 
 const crypto = require('crypto');
 
-const { EVENTS } = require('../../core/constants');
+const { EVENTS } = require('../../../core/constants');
 
 class ChatSessionModule {
   constructor() {

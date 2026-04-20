@@ -1,7 +1,7 @@
 const Agent = require('./agent');
 const ContextManager = require('./context-manager');
 const ToolManager = require('./tool-manager');
-const ServiceExecutor = require('../../core/service-executor');
+const ServiceExecutor = require('../../../core/service-executor');
 const fs = require('fs').promises;
 const path = require('path');
 

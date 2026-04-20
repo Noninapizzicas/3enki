@@ -423,7 +423,10 @@ class PromptEngine {
     if (path !== 'llm') return;
 
     const moduleName = decision?.module || null;
-    const systemPrompt = this.buildSystemPrompt(moduleName);
+    const runtimeContext = {};
+    if (project_id) runtimeContext.project_id = project_id;
+    if (conversation_id) runtimeContext.conversation_id = conversation_id;
+    const systemPrompt = this.buildSystemPrompt(moduleName, runtimeContext);
     const history = Array.isArray(messages) ? messages : [];
 
     await this.eventBus.publish('chat.prompt.ready', {

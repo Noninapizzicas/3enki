@@ -366,11 +366,6 @@ class AIGatewayModule {
 
       await this.eventBus.publish(EVENTS.AI.CHAT_RESPONSE, responsePayload, { correlationId });
 
-      // Nuevo flujo event-driven: emitir chat.ai.response para chat-session y mqtt
-      if (responsePayload.conversation_id) {
-        await this.eventBus.publish('chat.ai.response', responsePayload).catch(() => {});
-      }
-
       endTimer?.({
         success: result.status === 200,
         provider: result.data?.provider,

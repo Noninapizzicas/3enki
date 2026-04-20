@@ -25,6 +25,9 @@ class PromptEngine {
     // Cache: moduleName → parsed prompt.json
     this._prompts = new Map();
     this._basePrompt = null;
+
+    // Pending context.full.request promises
+    this._pendingContextRequests = new Map();
   }
 
   // ==========================================
@@ -400,6 +403,41 @@ class PromptEngine {
   onPromptCreated(event) { this._requestDbPrompts(); }
   onPromptUpdated(event) { this._requestDbPrompts(); }
 
+  // ==========================================
+  // Context enrichment — context-manager integration
+  // ==========================================
+
+  async _requestFullContext(projectId) {
+    const { randomUUID } = require('crypto');
+    const requestId = randomUUID();
+    const timeout = this.config.contextTimeout || 3000;
+
+    const promise = new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this._pendingContextRequests.delete(requestId);
+        resolve(null);
+      }, timeout);
+      this._pendingContextRequests.set(requestId, { resolve, timeout: timeoutId });
+    });
+
+    await this.eventBus.publish('context.full.request', {
+      request_id: requestId,
+      project_id: projectId
+    });
+
+    return promise;
+  }
+
+  onContextFullResponse(event) {
+    const data = event.data || event;
+    const { request_id, success, context } = data;
+    const pending = this._pendingContextRequests.get(request_id);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this._pendingContextRequests.delete(request_id);
+    pending.resolve(success ? context : null);
+  }
+
   onPromptDeleted(event) {
     const data = event.data || event;
     // Remove DB override for this ID — reload filesystem fallback by name
@@ -426,6 +464,17 @@ class PromptEngine {
     const runtimeContext = {};
     if (project_id) runtimeContext.project_id = project_id;
     if (conversation_id) runtimeContext.conversation_id = conversation_id;
+
+    if (project_id) {
+      const fullContext = await this._requestFullContext(project_id);
+      if (fullContext) {
+        if (fullContext.project) runtimeContext.project = fullContext.project;
+        if (fullContext.parentChain?.length) runtimeContext.parent_projects = fullContext.parentChain;
+        if (fullContext.dependencies?.length) runtimeContext.dependencies = fullContext.dependencies;
+        if (fullContext.system) runtimeContext.system = fullContext.system;
+      }
+    }
+
     const systemPrompt = this.buildSystemPrompt(moduleName, runtimeContext);
     const history = Array.isArray(messages) ? messages : [];
 

@@ -135,7 +135,7 @@ class ConversationRouterModule {
 
   async onChatMessageSaved(event) {
     const data = event.data || event;
-    const { conversation_id, content, project_id, message_id, messages, page_context } = data;
+    const { conversation_id, content, project_id, message_id, messages, page_context, request_id } = data;
     if (!conversation_id || !content) return;
 
     const decision = this.route(content, conversation_id);
@@ -143,6 +143,7 @@ class ConversationRouterModule {
 
     await this.eventBus.publish('chat.message.routed', {
       conversation_id, content, project_id, message_id, messages,
+      request_id: request_id || null,
       path: decision.path,
       decision
     });

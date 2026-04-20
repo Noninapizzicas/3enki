@@ -267,7 +267,7 @@ class AIGatewayModule {
 
   async onChatPromptReady(event) {
     const data = event.data || event;
-    const { conversation_id, project_id, content, prompt, messages, decision } = data;
+    const { conversation_id, project_id, content, prompt, messages, decision, request_id } = data;
     const target_module = decision?.module || null;
     if (!conversation_id || !content) return;
 
@@ -284,7 +284,7 @@ class AIGatewayModule {
 
     await this.onAIChatRequest({
       data: {
-        request_id: require('crypto').randomUUID(),
+        request_id: request_id || require('crypto').randomUUID(),
         messages: [
           ...(prompt ? [{ role: 'system', content: prompt }] : []),
           ...history

@@ -107,7 +107,6 @@ class ChatAiBridgeModule {
       project_id: projectId,
       content,
       attachments: attachments || [],
-      use_tools: true,
       page_context: pageContext || null,
       correlation_id: correlationId
     });
@@ -140,7 +139,6 @@ class ChatAiBridgeModule {
       conversation_id,
       project_id: projectId,
       content,
-      use_tools: true,
       correlation_id: correlationId
     });
 

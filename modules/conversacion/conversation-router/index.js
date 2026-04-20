@@ -139,10 +139,10 @@ class ConversationRouterModule {
     if (!conversation_id || !content) return;
 
     const decision = this.route(content, conversation_id);
+    if (page_context?.route) decision.page_route = page_context.route;
 
     await this.eventBus.publish('chat.message.routed', {
       conversation_id, content, project_id, message_id, messages,
-      page_context: page_context || null,
       path: decision.path,
       decision
     });

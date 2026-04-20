@@ -7,10 +7,16 @@
 #ifndef LV_CONF_H
 #define LV_CONF_H
 
+/* Guard para evitar que #include <stdint.h> rompa el preprocesamiento de .S (assembly) */
+#ifndef __ASSEMBLER__
 #include <stdint.h>
+#endif
 
 /* Color depth: 16 = RGB565, 24 = RGB888 */
 #define LV_COLOR_DEPTH 16
+
+/* Desactivar optimizaciones ARM ASM (estamos en RISC-V) */
+#define LV_USE_DRAW_SW_ASM  LV_DRAW_SW_ASM_NONE
 
 /* Swap bytes in RGB565 (1 si el panel espera big-endian) */
 #define LV_COLOR_16_SWAP 0
@@ -69,7 +75,7 @@
 #define LV_USE_SWITCH   0
 #define LV_USE_TEXTAREA 0
 #define LV_USE_TABLE    0
-#define LV_USE_ARC      0
+#define LV_USE_ARC      1
 #define LV_USE_BAR      0
 #define LV_USE_CHART    0
 #define LV_USE_CALENDAR 0

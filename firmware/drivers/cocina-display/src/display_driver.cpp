@@ -1,33 +1,30 @@
 /**
  * display_driver.cpp — Guition JC8012P4A1
  *
- * ILI9881C (MIPI-DSI 800×1280) + GT911 (I2C touch)
+ * ILI9881C (MIPI-DSI) + GT911 (I2C touch via Wire)
  *
- * Usa las APIs de esp_lcd (parte de ESP-IDF 5.3+, accesible desde Arduino-ESP32 3.x).
- * Los componentes esp_lcd_ili9881c y esp_lcd_touch_gt911 se añaden via
- * idf_component.yml en la raíz del driver.
- *
- * Si el hardware no inicia (panel desconectado, I2C sin respuesta),
- * LVGL se crea con un display virtual para depurar la lógica MQTT.
+ * Usa las APIs base de esp_lcd (sin componentes IDF externos).
+ * El init del ILI9881C se envía como comandos DBI raw.
+ * El GT911 se lee via Arduino Wire.
  */
 
 #include "display_driver.h"
+#include <Wire.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_mipi_dsi.h>
-#include <esp_lcd_ili9881c.h>
-#include <esp_lcd_touch_gt911.h>
+#include <esp_lcd_panel_io.h>
 #include <driver/ledc.h>
-#include <driver/i2c_master.h>
 #include <esp_heap_caps.h>
 
 // ─── Handles ─────────────────────────────────────────────────────────────────
 
-static esp_lcd_panel_handle_t    _panel       = nullptr;
-static esp_lcd_touch_handle_t    _touch       = nullptr;
-static esp_lcd_dsi_bus_handle_t  _dsi_bus     = nullptr;
-static lv_display_t*             _lv_disp     = nullptr;
-static lv_indev_t*               _lv_indev    = nullptr;
-static bool                      _hw_ready    = false;
+static esp_lcd_panel_handle_t    _panel   = nullptr;
+static esp_lcd_panel_io_handle_t _dbi_io  = nullptr;
+static esp_lcd_dsi_bus_handle_t  _dsi_bus = nullptr;
+static lv_display_t*             _lv_disp = nullptr;
+static lv_indev_t*               _lv_indev = nullptr;
+static bool                      _hw_ready = false;
+static bool                      _touch_ok = false;
 
 static void* _buf1 = nullptr;
 static void* _buf2 = nullptr;
@@ -61,7 +58,158 @@ void display_set_backlight(uint8_t brightness) {
     ledc_update_duty(LEDC_LOW_SPEED_MODE, (ledc_channel_t)BACKLIGHT_LEDC_CHANNEL);
 }
 
-// ─── MIPI-DSI bus + ILI9881C panel ───────────────────────────────────────────
+// ─── ILI9881C init commands (raw DBI) ────────────────────────────────────────
+
+static void _dbi_cmd(uint8_t cmd, const uint8_t* data, size_t len) {
+    esp_lcd_panel_io_tx_param(_dbi_io, cmd, data, len);
+}
+
+static void _ili9881c_init() {
+    // CMD2 Page 3 — panel settings
+    _dbi_cmd(0xFF, (const uint8_t[]){0x98, 0x81, 0x03}, 3);
+    _dbi_cmd(0x01, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x02, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x03, (const uint8_t[]){0x53}, 1);
+    _dbi_cmd(0x04, (const uint8_t[]){0x53}, 1);
+    _dbi_cmd(0x05, (const uint8_t[]){0x13}, 1);
+    _dbi_cmd(0x06, (const uint8_t[]){0x04}, 1);
+    _dbi_cmd(0x07, (const uint8_t[]){0x02}, 1);
+    _dbi_cmd(0x08, (const uint8_t[]){0x02}, 1);
+    _dbi_cmd(0x09, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x0A, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x0B, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x0C, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x0D, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x0E, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x0F, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x10, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x11, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x12, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x13, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x14, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x15, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x16, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x17, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x18, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x19, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x1A, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x1B, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x1C, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x1D, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x1E, (const uint8_t[]){0xC0}, 1);
+    _dbi_cmd(0x1F, (const uint8_t[]){0x80}, 1);
+    _dbi_cmd(0x20, (const uint8_t[]){0x04}, 1);
+    _dbi_cmd(0x21, (const uint8_t[]){0x0B}, 1);
+    _dbi_cmd(0x22, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x23, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x24, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x25, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x26, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x27, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x28, (const uint8_t[]){0x33}, 1);
+    _dbi_cmd(0x29, (const uint8_t[]){0x03}, 1);
+    _dbi_cmd(0x2A, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x2B, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x2C, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x2D, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x2E, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x2F, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x30, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x31, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x32, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x33, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x34, (const uint8_t[]){0x04}, 1);
+    _dbi_cmd(0x35, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x36, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x37, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x38, (const uint8_t[]){0x01}, 1);
+    _dbi_cmd(0x39, (const uint8_t[]){0x01}, 1);
+    _dbi_cmd(0x3A, (const uint8_t[]){0x40}, 1);
+    _dbi_cmd(0x3B, (const uint8_t[]){0x40}, 1);
+    _dbi_cmd(0x3C, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x3D, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x3E, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x3F, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x40, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x41, (const uint8_t[]){0x88}, 1);
+    _dbi_cmd(0x42, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x43, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x44, (const uint8_t[]){0x00}, 1);
+
+    // CMD2 Page 4 — gamma
+    _dbi_cmd(0xFF, (const uint8_t[]){0x98, 0x81, 0x04}, 3);
+    _dbi_cmd(0x6C, (const uint8_t[]){0x15}, 1);
+    _dbi_cmd(0x6E, (const uint8_t[]){0x2A}, 1);
+    _dbi_cmd(0x6F, (const uint8_t[]){0x33}, 1);
+    _dbi_cmd(0x8D, (const uint8_t[]){0x1B}, 1);
+    _dbi_cmd(0x87, (const uint8_t[]){0xBA}, 1);
+    _dbi_cmd(0x26, (const uint8_t[]){0x76}, 1);
+    _dbi_cmd(0xB2, (const uint8_t[]){0xD1}, 1);
+
+    // CMD2 Page 1 — power
+    _dbi_cmd(0xFF, (const uint8_t[]){0x98, 0x81, 0x01}, 3);
+    _dbi_cmd(0x22, (const uint8_t[]){0x0A}, 1);
+    _dbi_cmd(0x31, (const uint8_t[]){0x00}, 1);
+    _dbi_cmd(0x53, (const uint8_t[]){0x78}, 1);
+    _dbi_cmd(0x55, (const uint8_t[]){0x78}, 1);
+    _dbi_cmd(0x50, (const uint8_t[]){0xA8}, 1);
+    _dbi_cmd(0x51, (const uint8_t[]){0xA8}, 1);
+    _dbi_cmd(0x60, (const uint8_t[]){0x14}, 1);
+    _dbi_cmd(0xA0, (const uint8_t[]){0x08}, 1);
+    _dbi_cmd(0xA1, (const uint8_t[]){0x1A}, 1);
+    _dbi_cmd(0xA2, (const uint8_t[]){0x27}, 1);
+    _dbi_cmd(0xA3, (const uint8_t[]){0x15}, 1);
+    _dbi_cmd(0xA4, (const uint8_t[]){0x17}, 1);
+    _dbi_cmd(0xA5, (const uint8_t[]){0x2A}, 1);
+    _dbi_cmd(0xA6, (const uint8_t[]){0x1E}, 1);
+    _dbi_cmd(0xA7, (const uint8_t[]){0x1F}, 1);
+    _dbi_cmd(0xA8, (const uint8_t[]){0x8B}, 1);
+    _dbi_cmd(0xA9, (const uint8_t[]){0x1B}, 1);
+    _dbi_cmd(0xAA, (const uint8_t[]){0x27}, 1);
+    _dbi_cmd(0xAB, (const uint8_t[]){0x78}, 1);
+    _dbi_cmd(0xAC, (const uint8_t[]){0x18}, 1);
+    _dbi_cmd(0xAD, (const uint8_t[]){0x18}, 1);
+    _dbi_cmd(0xAE, (const uint8_t[]){0x4C}, 1);
+    _dbi_cmd(0xAF, (const uint8_t[]){0x21}, 1);
+    _dbi_cmd(0xB0, (const uint8_t[]){0x27}, 1);
+    _dbi_cmd(0xB1, (const uint8_t[]){0x54}, 1);
+    _dbi_cmd(0xB2, (const uint8_t[]){0x67}, 1);
+    _dbi_cmd(0xB3, (const uint8_t[]){0x39}, 1);
+    _dbi_cmd(0xC0, (const uint8_t[]){0x08}, 1);
+    _dbi_cmd(0xC1, (const uint8_t[]){0x1A}, 1);
+    _dbi_cmd(0xC2, (const uint8_t[]){0x27}, 1);
+    _dbi_cmd(0xC3, (const uint8_t[]){0x15}, 1);
+    _dbi_cmd(0xC4, (const uint8_t[]){0x17}, 1);
+    _dbi_cmd(0xC5, (const uint8_t[]){0x2A}, 1);
+    _dbi_cmd(0xC6, (const uint8_t[]){0x1E}, 1);
+    _dbi_cmd(0xC7, (const uint8_t[]){0x1F}, 1);
+    _dbi_cmd(0xC8, (const uint8_t[]){0x8B}, 1);
+    _dbi_cmd(0xC9, (const uint8_t[]){0x1B}, 1);
+    _dbi_cmd(0xCA, (const uint8_t[]){0x27}, 1);
+    _dbi_cmd(0xCB, (const uint8_t[]){0x78}, 1);
+    _dbi_cmd(0xCC, (const uint8_t[]){0x18}, 1);
+    _dbi_cmd(0xCD, (const uint8_t[]){0x18}, 1);
+    _dbi_cmd(0xCE, (const uint8_t[]){0x4C}, 1);
+    _dbi_cmd(0xCF, (const uint8_t[]){0x21}, 1);
+    _dbi_cmd(0xD0, (const uint8_t[]){0x27}, 1);
+    _dbi_cmd(0xD1, (const uint8_t[]){0x54}, 1);
+    _dbi_cmd(0xD2, (const uint8_t[]){0x67}, 1);
+    _dbi_cmd(0xD3, (const uint8_t[]){0x39}, 1);
+
+    // CMD2 Page 0 — normal mode
+    _dbi_cmd(0xFF, (const uint8_t[]){0x98, 0x81, 0x00}, 3);
+    _dbi_cmd(0x35, (const uint8_t[]){0x00}, 1);  // TE on
+
+    // Sleep Out
+    _dbi_cmd(0x11, nullptr, 0);
+    delay(120);
+
+    // Display On
+    _dbi_cmd(0x29, nullptr, 0);
+    delay(20);
+}
+
+// ─── MIPI-DSI + DPI panel ────────────────────────────────────────────────────
 
 static bool _init_panel() {
     // 1. MIPI-DSI bus
@@ -77,20 +225,23 @@ static bool _init_panel() {
         return false;
     }
 
-    // 2. DBI command interface (envía init commands al panel)
+    // 2. DBI command interface
     esp_lcd_dbi_io_config_t dbi_cfg = {};
     dbi_cfg.virtual_channel = 0;
     dbi_cfg.lcd_cmd_bits    = 8;
     dbi_cfg.lcd_param_bits  = 8;
 
-    esp_lcd_panel_io_handle_t io_handle = nullptr;
-    ret = esp_lcd_new_panel_io_dbi(_dsi_bus, &dbi_cfg, &io_handle);
+    ret = esp_lcd_new_panel_io_dbi(_dsi_bus, &dbi_cfg, &_dbi_io);
     if (ret != ESP_OK) {
-        Serial.printf("[DISPLAY] Panel IO error: 0x%x\n", ret);
+        Serial.printf("[DISPLAY] DBI IO error: 0x%x\n", ret);
         return false;
     }
 
-    // 3. DPI video timing (pixel stream al panel)
+    // 3. Send ILI9881C vendor init sequence
+    _ili9881c_init();
+    Serial.println("[DISPLAY] ILI9881C init commands sent");
+
+    // 4. DPI video panel
     esp_lcd_dpi_panel_config_t dpi_cfg = {};
     dpi_cfg.virtual_channel          = 0;
     dpi_cfg.dpi_clk_src              = MIPI_DSI_DPI_CLK_SRC_DEFAULT;
@@ -106,84 +257,79 @@ static bool _init_panel() {
     dpi_cfg.video_timing.vsync_pulse_width = MIPI_VSYNC_PULSE_WIDTH;
     dpi_cfg.video_timing.vsync_front_porch = MIPI_VSYNC_FRONT_PORCH;
 
-    // 4. ILI9881C vendor config
-    ili9881c_vendor_config_t vendor_cfg = {};
-    vendor_cfg.mipi_config.dsi_bus    = _dsi_bus;
-    vendor_cfg.mipi_config.dpi_config = &dpi_cfg;
-
-    esp_lcd_panel_dev_config_t panel_cfg = {};
-    panel_cfg.reset_gpio_num  = -1;
-    panel_cfg.rgb_ele_order   = LCD_RGB_ELEMENT_ORDER_RGB;
-    panel_cfg.bits_per_pixel  = 16;
-    panel_cfg.vendor_config   = &vendor_cfg;
-
-    ret = esp_lcd_new_panel_ili9881c(io_handle, &panel_cfg, &_panel);
+    ret = esp_lcd_new_panel_dpi(_dsi_bus, &dpi_cfg, &_panel);
     if (ret != ESP_OK) {
-        Serial.printf("[DISPLAY] ILI9881C error: 0x%x\n", ret);
+        Serial.printf("[DISPLAY] DPI panel error: 0x%x\n", ret);
         return false;
     }
 
-    esp_lcd_panel_reset(_panel);
     esp_lcd_panel_init(_panel);
-    esp_lcd_panel_disp_on_off(_panel, true);
 
     Serial.printf("[DISPLAY] ILI9881C OK — %dx%d MIPI-DSI %d lanes\n",
         DISPLAY_WIDTH, DISPLAY_HEIGHT, MIPI_DSI_NUM_DATA_LANES);
     return true;
 }
 
-// ─── GT911 touch (I2C) ──────────────────────────────────────────────────────
+// ─── GT911 touch (via Arduino Wire) ──────────────────────────────────────────
+
+static bool _gt911_read_reg(uint16_t reg, uint8_t* buf, size_t len) {
+    Wire.beginTransmission(TOUCH_I2C_ADDR);
+    Wire.write((uint8_t)(reg >> 8));
+    Wire.write((uint8_t)(reg & 0xFF));
+    if (Wire.endTransmission() != 0) return false;
+    size_t got = Wire.requestFrom((uint8_t)TOUCH_I2C_ADDR, (uint8_t)len);
+    for (size_t i = 0; i < got && i < len; i++) {
+        buf[i] = Wire.read();
+    }
+    return got == len;
+}
+
+static void _gt911_write_reg(uint16_t reg, uint8_t val) {
+    Wire.beginTransmission(TOUCH_I2C_ADDR);
+    Wire.write((uint8_t)(reg >> 8));
+    Wire.write((uint8_t)(reg & 0xFF));
+    Wire.write(val);
+    Wire.endTransmission();
+}
 
 static bool _init_touch() {
-    // I2C master bus
-    i2c_master_bus_config_t i2c_bus_cfg = {};
-    i2c_bus_cfg.i2c_port     = I2C_NUM_0;
-    i2c_bus_cfg.sda_io_num   = (gpio_num_t)TOUCH_SDA;
-    i2c_bus_cfg.scl_io_num   = (gpio_num_t)TOUCH_SCL;
-    i2c_bus_cfg.clk_source   = I2C_CLK_SRC_DEFAULT;
-    i2c_bus_cfg.flags.enable_internal_pullup = true;
+    Wire.begin(TOUCH_SDA, TOUCH_SCL, 400000);
 
-    i2c_master_bus_handle_t i2c_bus = nullptr;
-    esp_err_t ret = i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus);
-    if (ret != ESP_OK) {
-        Serial.printf("[TOUCH] I2C bus error: 0x%x\n", ret);
+    // Check GT911 product ID (register 0x8140, expect "911\0")
+    uint8_t id[4] = {};
+    if (!_gt911_read_reg(0x8140, id, 4)) {
+        Serial.println("[TOUCH] GT911 no responde");
         return false;
     }
 
-    // Panel IO I2C para GT911 (inicialización explícita, sin macro C99)
-    esp_lcd_panel_io_i2c_config_t tp_io_cfg = {};
-    tp_io_cfg.dev_addr        = TOUCH_I2C_ADDR;
-    tp_io_cfg.control_phase_bytes = 1;
-    tp_io_cfg.dc_bit_offset   = 0;
-    tp_io_cfg.lcd_cmd_bits    = 16;
-    tp_io_cfg.lcd_param_bits  = 0;
-    tp_io_cfg.flags.disable_control_phase = 1;
+    Serial.printf("[TOUCH] GT911 ID: %c%c%c%c — SDA=%d SCL=%d\n",
+        id[0], id[1], id[2], id[3], TOUCH_SDA, TOUCH_SCL);
+    return (id[0] == '9' && id[1] == '1' && id[2] == '1');
+}
 
-    esp_lcd_panel_io_handle_t tp_io = nullptr;
-    ret = esp_lcd_new_panel_io_i2c(i2c_bus, &tp_io_cfg, &tp_io);
-    if (ret != ESP_OK) {
-        Serial.printf("[TOUCH] Panel IO I2C error: 0x%x\n", ret);
-        return false;
+static bool _gt911_touch_pressed = false;
+static int16_t _gt911_x = 0, _gt911_y = 0;
+
+static void _gt911_poll() {
+    _gt911_touch_pressed = false;
+
+    uint8_t status = 0;
+    if (!_gt911_read_reg(0x814E, &status, 1)) return;
+
+    uint8_t points = status & 0x0F;
+    bool ready = status & 0x80;
+
+    if (ready && points > 0) {
+        uint8_t data[4];
+        if (_gt911_read_reg(0x8150, data, 4)) {
+            _gt911_x = (int16_t)(data[0] | (data[1] << 8));
+            _gt911_y = (int16_t)(data[2] | (data[3] << 8));
+            _gt911_touch_pressed = true;
+        }
     }
 
-    // Touch config
-    esp_lcd_touch_config_t touch_cfg = {};
-    touch_cfg.x_max         = DISPLAY_WIDTH;
-    touch_cfg.y_max         = DISPLAY_HEIGHT;
-    touch_cfg.rst_gpio_num  = (gpio_num_t)TOUCH_RST;
-    touch_cfg.int_gpio_num  = (gpio_num_t)TOUCH_INT;
-    touch_cfg.levels.reset     = 0;
-    touch_cfg.levels.interrupt = 0;
-
-    ret = esp_lcd_touch_new_i2c_gt911(tp_io, &touch_cfg, &_touch);
-    if (ret != ESP_OK) {
-        Serial.printf("[TOUCH] GT911 error: 0x%x\n", ret);
-        return false;
-    }
-
-    Serial.printf("[TOUCH] GT911 OK — addr=0x%02X SDA=%d SCL=%d INT=%d\n",
-        TOUCH_I2C_ADDR, TOUCH_SDA, TOUCH_SCL, TOUCH_INT);
-    return true;
+    // Clear status
+    if (ready) _gt911_write_reg(0x814E, 0);
 }
 
 // ─── LVGL callbacks ──────────────────────────────────────────────────────────
@@ -199,21 +345,16 @@ static void _flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map
 }
 
 static void _touch_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
-    if (!_touch) {
+    if (!_touch_ok) {
         data->state = LV_INDEV_STATE_RELEASED;
         return;
     }
 
-    esp_lcd_touch_read_data(_touch);
+    _gt911_poll();
 
-    uint16_t x = 0, y = 0, strength = 0;
-    uint8_t  count = 1;
-    bool pressed = esp_lcd_touch_get_coordinates(_touch,
-        &x, &y, &strength, &count, 1);
-
-    if (pressed && count > 0) {
-        data->point.x = (int32_t)x;
-        data->point.y = (int32_t)y;
+    if (_gt911_touch_pressed) {
+        data->point.x = _gt911_x;
+        data->point.y = _gt911_y;
         data->state   = LV_INDEV_STATE_PRESSED;
     } else {
         data->state   = LV_INDEV_STATE_RELEASED;
@@ -229,15 +370,15 @@ bool display_driver_init() {
     lv_init();
     lv_tick_set_cb([]() -> uint32_t { return (uint32_t)millis(); });
 
-    // 2. Backlight off hasta panel ready
+    // 2. Backlight off
     _backlight_init();
     display_set_backlight(0);
 
-    // 3. Panel MIPI-DSI
+    // 3. Panel MIPI-DSI + ILI9881C init
     bool panelOk = _init_panel();
 
     // 4. Touch GT911
-    bool touchOk = _init_touch();
+    _touch_ok = _init_touch();
 
     // 5. Buffers LVGL en PSRAM
     const size_t buf_size = DISPLAY_WIDTH * (DISPLAY_HEIGHT / 10) * sizeof(lv_color_t);
@@ -249,18 +390,18 @@ bool display_driver_init() {
         return false;
     }
 
-    // 6. Display LVGL
+    // 6. LVGL display
     _lv_disp = lv_display_create(DISPLAY_WIDTH, DISPLAY_HEIGHT);
     lv_display_set_flush_cb(_lv_disp, _flush_cb);
     lv_display_set_buffers(_lv_disp, _buf1, _buf2, buf_size,
         LV_DISPLAY_RENDER_MODE_PARTIAL);
 
-    // 7. Touch indev
+    // 7. LVGL touch indev
     _lv_indev = lv_indev_create();
     lv_indev_set_type(_lv_indev, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(_lv_indev, _touch_read_cb);
 
-    // 8. Backlight on
+    // 8. Backlight on si panel OK
     if (panelOk) {
         display_set_backlight(BACKLIGHT_BRIGHTNESS);
     }
@@ -268,12 +409,12 @@ bool display_driver_init() {
     _hw_ready = panelOk;
     Serial.printf("[DISPLAY] LVGL %d.%d — panel=%s touch=%s — %d KB buf\n",
         LVGL_VERSION_MAJOR, LVGL_VERSION_MINOR,
-        panelOk ? "OK" : "FAIL", touchOk ? "OK" : "FAIL",
+        panelOk ? "OK" : "FAIL", _touch_ok ? "OK" : "FAIL",
         (int)(buf_size * 2 / 1024));
 
     return true;
 }
 
 void display_driver_tick() {
-    // Touch polling via LVGL callback — no extra work needed
+    // Touch polling happens inside LVGL callback
 }

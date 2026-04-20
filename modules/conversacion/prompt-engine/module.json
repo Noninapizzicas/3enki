@@ -6,16 +6,18 @@
   "main": "index.js",
 
   "subscribes": [
-    { "event": "chat.message.routed",  "handler": "onChatMessageRouted" },
-    { "event": "prompt.list.response", "handler": "onPromptListResponse" },
-    { "event": "prompt.created",       "handler": "onPromptCreated" },
-    { "event": "prompt.updated",       "handler": "onPromptUpdated" },
-    { "event": "prompt.deleted",       "handler": "onPromptDeleted" }
+    { "event": "chat.message.routed",    "handler": "onChatMessageRouted" },
+    { "event": "prompt.list.response",   "handler": "onPromptListResponse" },
+    { "event": "prompt.created",         "handler": "onPromptCreated" },
+    { "event": "prompt.updated",         "handler": "onPromptUpdated" },
+    { "event": "prompt.deleted",         "handler": "onPromptDeleted" },
+    { "event": "context.full.response",  "handler": "onContextFullResponse" }
   ],
 
   "publishes": [
     "chat.prompt.ready",
-    "prompt.list.request"
+    "prompt.list.request",
+    "context.full.request"
   ],
 
   "apis": [
@@ -53,6 +55,7 @@
 
   "config": {
     "maxHistory": 40,
-    "modulesDir": null
+    "modulesDir": null,
+    "contextTimeout": 3000
   }
 }

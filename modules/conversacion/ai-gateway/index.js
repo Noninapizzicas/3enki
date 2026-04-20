@@ -1,3 +1,4 @@
+const fs = require('fs');
 const DeepSeekProvider = require('./providers/deepseek-provider');
 const AnthropicProvider = require('./providers/anthropic-provider');
 const OpenAIProvider = require('./providers/openai-provider');
@@ -235,17 +236,47 @@ class AIGatewayModule {
   }
 
   // Event Handler: chat.prompt.ready — nuevo flujo event-driven
+  _resolveAttachments(messages) {
+    const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' };
+    return messages.map(msg => {
+      if (!msg.attachments?.length) return msg;
+      const { attachments, ...rest } = msg;
+      let content = rest.content || '';
+      let image_base64 = null;
+      let image_type = null;
+
+      for (const att of attachments) {
+        if (!att.path) continue;
+        try {
+          if (att.type === 'image') {
+            const ext = att.name?.split('.').pop()?.toLowerCase() || 'jpeg';
+            image_base64 = fs.readFileSync(att.path).toString('base64');
+            image_type = MIME[ext] || 'image/jpeg';
+          } else {
+            const text = fs.readFileSync(att.path, 'utf8');
+            content = content ? `${content}\n\n[${att.name}]\n${text}` : `[${att.name}]\n${text}`;
+          }
+        } catch { /* archivo no accesible — continuar sin él */ }
+      }
+
+      return image_base64
+        ? { ...rest, content, image_base64, image_type }
+        : { ...rest, content };
+    });
+  }
+
   async onChatPromptReady(event) {
     const data = event.data || event;
     const { conversation_id, project_id, content, prompt, messages, decision } = data;
     const target_module = decision?.module || null;
     if (!conversation_id || !content) return;
 
-    const history = Array.isArray(messages) && messages.length > 0
+    const rawHistory = Array.isArray(messages) && messages.length > 0
       ? messages
       : [{ role: 'user', content }];
 
-    // Filtrar tools al módulo relevante si lo conocemos
+    const history = this._resolveAttachments(rawHistory);
+
     const allTools = this.getAvailableTools();
     const tools = target_module
       ? allTools.filter(t => (t.function?.name || t.name || '').startsWith(target_module + '.'))

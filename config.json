@@ -54,7 +54,6 @@
       "plugin-manager",
       "prompt-manager",
       "prompt-engine",
-      "prompt-composer",
       "scheduler",
       "project-manager",
       "conversation-export",

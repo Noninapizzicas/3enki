@@ -822,7 +822,7 @@ class ChatSessionModule {
 
   async onChatSendRequest(event) {
     const data = event.data || event;
-    const { conversation_id, content, project_id, user_id } = data;
+    const { conversation_id, content, project_id, user_id, page, prompt, page_context } = data;
     if (!conversation_id || !content) return;
 
     try {
@@ -838,7 +838,10 @@ class ChatSessionModule {
         conversation_id, project_id,
         message_id: savedMessage?.id,
         content,
-        messages
+        messages,
+        page: page || null,
+        prompt: prompt || null,
+        page_context: page_context || null
       });
     } catch (err) {
       this.logger?.error('chat-session.send.failed', { conversation_id, error: err.message });

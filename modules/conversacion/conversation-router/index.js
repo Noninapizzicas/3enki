@@ -135,13 +135,15 @@ class ConversationRouterModule {
 
   async onChatMessageSaved(event) {
     const data = event.data || event;
-    const { conversation_id, content, project_id, message_id, messages } = data;
+    const { conversation_id, content } = data;
     if (!conversation_id || !content) return;
 
     const decision = this.route(content, conversation_id);
 
+    // Preserva todo el payload (page, prompt, page_context, messages, etc.)
+    // y añade path + decision. Así no se pierde nada aguas abajo.
     await this.eventBus.publish('chat.message.routed', {
-      conversation_id, content, project_id, message_id, messages,
+      ...data,
       path: decision.path,
       decision
     });

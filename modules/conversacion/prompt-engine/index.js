@@ -440,11 +440,13 @@ class PromptEngine {
 
   async onChatMessageEnriched(event) {
     const data = event.data || event;
-    const { path, conversation_id, content, project_id, message_id, messages, decision, context } = data;
+    const {
+      path, conversation_id, content, project_id, message_id, messages,
+      decision, context, page, prompt: customPromptId
+    } = data;
 
     if (path !== 'llm') return;
 
-    const moduleName = decision?.module || null;
     const runtimeContext = {};
     if (project_id) runtimeContext.project_id = project_id;
     if (conversation_id) runtimeContext.conversation_id = conversation_id;
@@ -456,7 +458,29 @@ class PromptEngine {
       if (context.system) runtimeContext.system = context.system;
     }
 
-    const systemPrompt = this.buildSystemPrompt(moduleName, runtimeContext);
+    // Prioridad del prompt:
+    //   1. customPromptId (del usuario, vía UI) → resolver contra cache de prompt-manager
+    //   2. page → resolver a módulo y usar su prompt.json (prompt de la faceta)
+    //   3. fallback → base prompt
+    let systemPrompt = null;
+    let source = null;
+
+    if (customPromptId) {
+      const customPrompt = this._getPromptById(customPromptId);
+      if (customPrompt) {
+        systemPrompt = this._formatCustomPrompt(customPrompt, runtimeContext);
+        source = 'user';
+      } else {
+        this.logger.warn('prompt-engine.custom.not_found', { id: customPromptId });
+      }
+    }
+
+    if (!systemPrompt) {
+      const moduleName = (page ? this.resolveRouteToModule(page) : null) || decision?.module || null;
+      systemPrompt = this.buildSystemPrompt(moduleName, runtimeContext);
+      source = moduleName ? 'page' : 'base';
+    }
+
     const history = Array.isArray(messages) ? messages : [];
 
     await this.eventBus.publish('chat.prompt.ready', {
@@ -469,7 +493,37 @@ class PromptEngine {
       decision
     });
 
-    this.logger.debug('prompt-engine.ready', { conversation_id, module: moduleName });
+    this.logger.debug('prompt-engine.ready', { conversation_id, source, page });
+  }
+
+  /**
+   * Busca un prompt en cache por ID (tanto FS como DB).
+   * Los prompts de prompt-manager traen _id y _source='db' (ver onPromptListResponse).
+   */
+  _getPromptById(id) {
+    if (!id) return null;
+    for (const p of this._prompts.values()) {
+      if (p._id === id || p.id === id) return p;
+    }
+    return null;
+  }
+
+  /**
+   * Formatea un prompt custom igual que los de faceta:
+   * base + custom + runtimeContext.
+   */
+  _formatCustomPrompt(customPrompt, runtimeContext) {
+    const sections = [];
+    if (this._basePrompt) {
+      sections.push(JSON.stringify(this._basePrompt, null, 2));
+    }
+    sections.push(JSON.stringify(customPrompt, null, 2));
+    const contextText = this._buildContextText(runtimeContext);
+    if (contextText) sections.push(contextText);
+    if (runtimeContext && Object.keys(runtimeContext).length > 0) {
+      sections.push(JSON.stringify({ _runtime: runtimeContext }, null, 2));
+    }
+    return sections.join('\n\n---\n\n');
   }
 }
 

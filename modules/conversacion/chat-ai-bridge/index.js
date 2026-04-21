@@ -1,15 +1,25 @@
 const crypto = require('crypto');
 
+/**
+ * ChatAiBridge — puerta de entrada del frontend al pipeline de chat.
+ *
+ * Contrato: el frontend es la ÚNICA fuente de verdad del scope de la conexión.
+ * En cada mensaje envía (project_id, conversation_id, page, content). El backend
+ * no cachea activeProjectId ni pregunta por él vía eventos — lee del payload.
+ *
+ * Responsabilidades mínimas:
+ *   1. Validar que los tres campos de scope vienen en el payload
+ *   2. Si no hay conversation_id, crear una via session.create.request
+ *   3. Emitir chat.send.request con todo el scope dentro
+ */
 class ChatAiBridgeModule {
   constructor() {
     this.name = 'chat-ai-bridge';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
     this.logger = null;
     this.eventBus = null;
     this.config = null;
-
-    this.activeProjectId = null;
   }
 
   async onLoad(context) {
@@ -17,7 +27,7 @@ class ChatAiBridgeModule {
     this.eventBus = context.eventBus;
     this.config = context.moduleConfig || {};
 
-    this.logger.info('chat-ai-bridge.loaded', { module: this.name });
+    this.logger.info('chat-ai-bridge.loaded', { module: this.name, version: this.version });
   }
 
   async onUnload() {
@@ -25,40 +35,8 @@ class ChatAiBridgeModule {
   }
 
   // ==========================================
-  // Project lifecycle
+  // Helper: crear conversación si no hay (event-driven request/response)
   // ==========================================
-
-  onProjectActivated(event) {
-    const { project_id } = event.data || event;
-    if (project_id) this.activeProjectId = project_id;
-  }
-
-  onProjectDeactivated(event) {
-    const { project_id } = event.data || event;
-    if (this.activeProjectId === project_id) this.activeProjectId = null;
-  }
-
-  // ==========================================
-  // Helpers
-  // ==========================================
-
-  async _getProjectId(correlationId) {
-    if (this.activeProjectId) return this.activeProjectId;
-
-    const requestId = crypto.randomUUID();
-    return new Promise(async (resolve) => {
-      const timeout = setTimeout(() => { unsub(); resolve(null); }, 5000);
-      const unsub = await this.eventBus.subscribe('project.active.response', (event) => {
-        const d = event.data || event;
-        if (d.request_id !== requestId) return;
-        clearTimeout(timeout);
-        unsub();
-        if (d.active_project_id) this.activeProjectId = d.active_project_id;
-        resolve(d.active_project_id || null);
-      });
-      await this.eventBus.publish('project.active.request', { request_id: requestId, correlation_id: correlationId });
-    });
-  }
 
   async _ensureConversation(projectId, conversationId, correlationId) {
     if (conversationId) return conversationId;
@@ -87,24 +65,30 @@ class ChatAiBridgeModule {
   // ==========================================
 
   async handleConversationSend(data, request) {
-    const { conversationId, content, attachments, pageContext } = data;
+    const {
+      project_id,
+      conversationId,
+      page,
+      content,
+      attachments,
+      pageContext
+    } = data;
     const correlationId = request?.correlationId || crypto.randomUUID();
 
+    if (!project_id) {
+      throw { status: 400, code: 'NO_PROJECT', message: 'project_id is required' };
+    }
     if (!content?.trim()) {
       throw { status: 400, code: 'VALIDATION_ERROR', message: 'Content is required' };
     }
 
-    const projectId = await this._getProjectId(correlationId);
-    if (!projectId) {
-      throw { status: 400, code: 'NO_PROJECT', message: 'No active project' };
-    }
-
-    const convId = await this._ensureConversation(projectId, conversationId, correlationId);
+    const convId = await this._ensureConversation(project_id, conversationId, correlationId);
 
     await this.eventBus.publish('chat.send.request', {
       request_id: crypto.randomUUID(),
+      project_id,
       conversation_id: convId,
-      project_id: projectId,
+      page: page || null,
       content,
       attachments: attachments || [],
       use_tools: true,
@@ -121,8 +105,11 @@ class ChatAiBridgeModule {
 
   async handleSendMessage(req, context) {
     const correlationId = context?.correlationId || crypto.randomUUID();
-    const { conversation_id, content } = req.body || {};
+    const { project_id, conversation_id, page, content } = req.body || {};
 
+    if (!project_id) {
+      return { status: 400, data: { success: false, error: 'project_id is required' } };
+    }
     if (!conversation_id) {
       return { status: 400, data: { success: false, error: 'conversation_id is required' } };
     }
@@ -130,15 +117,11 @@ class ChatAiBridgeModule {
       return { status: 400, data: { success: false, error: 'content is required' } };
     }
 
-    const projectId = await this._getProjectId(correlationId);
-    if (!projectId) {
-      return { status: 400, data: { success: false, error: 'No active project' } };
-    }
-
     await this.eventBus.publish('chat.send.request', {
       request_id: crypto.randomUUID(),
+      project_id,
       conversation_id,
-      project_id: projectId,
+      page: page || null,
       content,
       use_tools: true,
       correlation_id: correlationId
@@ -157,8 +140,7 @@ class ChatAiBridgeModule {
       data: {
         status: 'ok',
         module: this.name,
-        version: this.version,
-        active_project: this.activeProjectId || null
+        version: this.version
       }
     };
   }

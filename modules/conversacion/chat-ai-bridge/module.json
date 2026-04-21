@@ -1,19 +1,15 @@
 {
   "name": "chat-ai-bridge",
-  "version": "1.0.0",
-  "description": "Adaptador MQTT/REST → eventos. Recibe mensajes del frontend, resuelve proyecto y conversación, emite chat.send.request y retorna inmediatamente.",
+  "version": "2.0.0",
+  "description": "Puerta de entrada del frontend al pipeline de chat. Valida el scope (project_id, conversation_id, page) que viene en el payload, asegura conversación si falta, y emite chat.send.request. Sin cache, sin RPC: el frontend es la única fuente de verdad del scope.",
   "author": "Event Core Team",
 
   "events": {
     "publishes": [
       "chat.send.request",
-      "session.create.request",
-      "project.active.request"
+      "session.create.request"
     ],
-    "subscribes": [
-      { "event": "project.activated",   "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
-    ]
+    "subscribes": []
   },
 
   "ui_handlers": [
@@ -25,7 +21,7 @@
       "method": "POST",
       "path": "/send",
       "handler": "handleSendMessage",
-      "description": "Enviar mensaje (fire-and-forget)"
+      "description": "Enviar mensaje (fire-and-forget). Requiere project_id, conversation_id y content en el body."
     },
     {
       "method": "GET",

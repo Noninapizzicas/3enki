@@ -109,6 +109,15 @@ export async function sendMessage(content: string): Promise<void> {
     const currentProvider = get(activeProvider);
     const currentModel = get(activeModel);
 
+    // Scope de la conexión: proyecto + conversación + página (los tres siempre).
+    // El backend NO adivina ni cachea — lee del payload.
+    const currentProjectId = get(activeProjectId);
+    if (!currentProjectId) {
+      isStreaming.set(false);
+      notifyError('No hay proyecto activo');
+      return;
+    }
+
     const response = await mqttRequest<{
       conversationId: string;
       user_message: Message;
@@ -116,7 +125,9 @@ export async function sendMessage(content: string): Promise<void> {
       tokens_used?: number;
       cost?: number;
     }>('conversation', 'send', {
+      project_id: currentProjectId,
       conversationId: convId,
+      page: currentPageContext?.route || null,
       content: userMessage.content,
       attachments: currentAttachments.map(a => ({
         type: a.type,

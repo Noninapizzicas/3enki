@@ -48,6 +48,7 @@ static volatile uint8_t wifiLostReason = 0;
 static void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
   switch (event) {
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+      if (portalMode) break;
       wifiLostReason = info.wifi_sta_disconnected.reason;
       wifiLostFlag = true;
       Serial.printf("[WiFi] Desconectado (reason: %d)\n", wifiLostReason);
@@ -108,18 +109,19 @@ static bool wifiConnectMulti() {
 void wifiStartPortal() {
   portalMode = true;
   reconnActive = false;
+  WiFi.setAutoReconnect(false);
 
   String apName = String(WIFI_AP_NAME_PREFIX) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
 
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
-  // ESP32-P4 + ESP-Hosted (C6): el modo AP puro falla si el driver WiFi ya está iniciado.
-  // Secuencia correcta: stop → set_mode(APSTA) → start → softAP.
-  // APSTA mantiene el transporte SDIO P4↔C6 activo mientras expone el AP.
+  // ESP32-P4 + ESP-Hosted: stop WiFi, set AP puro, restart.
+  // APSTA inunda el canal RPC con reconexiones STA → crash.
+  // Con esp_wifi_stop() previo, pure AP funciona sin problemas.
   WiFi.disconnect(false);
   delay(100);
   esp_wifi_stop();
   delay(300);
-  esp_wifi_set_mode(WIFI_MODE_APSTA);
+  esp_wifi_set_mode(WIFI_MODE_AP);
   esp_wifi_start();
   delay(500);
 #else
@@ -134,7 +136,7 @@ void wifiStartPortal() {
     dnsServer.start(53, "*", ip);
     Serial.printf("[WiFi] Portal listo — SSID: %s  http://%s/\n", apName.c_str(), ip.toString().c_str());
   } else {
-    Serial.printf("[WiFi] Portal AP no disponible (ok=%d IP=%s) — acceso vía STA cuando conecte\n",
+    Serial.printf("[WiFi] Portal AP no disponible (ok=%d IP=%s)\n",
                   (int)ok, ip.toString().c_str());
   }
 }

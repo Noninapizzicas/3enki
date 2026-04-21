@@ -114,14 +114,14 @@ void wifiStartPortal() {
   String apName = String(WIFI_AP_NAME_PREFIX) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
 
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
-  // ESP32-P4 + ESP-Hosted: stop WiFi, set AP puro, restart.
-  // APSTA inunda el canal RPC con reconexiones STA → crash.
-  // Con esp_wifi_stop() previo, pure AP funciona sin problemas.
+  // ESP32-P4 + ESP-Hosted: usa APSTA pero con STA desconectada.
+  // Pure AP (WIFI_MODE_AP) también funciona pero no permite scan desde el portal.
+  // APSTA + setAutoReconnect(false) + disconnect = AP activo, STA silenciosa.
   WiFi.disconnect(false);
   delay(100);
   esp_wifi_stop();
   delay(300);
-  esp_wifi_set_mode(WIFI_MODE_AP);
+  esp_wifi_set_mode(WIFI_MODE_APSTA);
   esp_wifi_start();
   delay(500);
 #else

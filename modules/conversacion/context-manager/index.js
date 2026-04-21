@@ -37,9 +37,12 @@ class ContextManagerModule {
 
     await this.initializeSchema();
 
-    // Populate project cache from project-manager
-    const reqId = crypto.randomUUID();
-    this.eventBus.publish('project.list.request', { request_id: reqId }).catch(() => {});
+    // Populate project cache from project-manager — retry after 2s in case project-manager loads after us
+    const requestCache = () => {
+      this.eventBus.publish('project.list.request', { request_id: crypto.randomUUID() }).catch(() => {});
+    };
+    requestCache();
+    setTimeout(requestCache, 2000);
 
     this.logger.info('context-manager.loaded');
   }
@@ -499,10 +502,20 @@ class ContextManagerModule {
       return;
     }
 
+    // Inject minimal project info from cache immediately — always available even if getFullEntityContext fails
+    const cached = this._projectCache.get(project_id);
+    const baseContext = cached
+      ? { project: { id: project_id, name: cached.name, description: cached.description } }
+      : { project: { id: project_id } };
+
     const cid = crypto.randomUUID();
-    let context = null;
+    let context = baseContext;
     try {
       context = await this.getFullEntityContext(project_id, cid);
+      // Ensure project name is preserved even if getFullEntityContext returns incomplete data
+      if (context && cached && !context.project?.name) {
+        context.project = { ...context.project, name: cached.name, description: cached.description };
+      }
     } catch (error) {
       this.logger.warn('context-manager.enrich.failed', { project_id, error: error.message });
     }

@@ -80,7 +80,9 @@ static bool wifiTryConnect(int idx) {
   while (WiFi.status() != WL_CONNECTED && (millis() - start) < WIFI_CONNECT_TIMEOUT) {
     delay(250);
     Serial.print(".");
+#if !defined(CONFIG_IDF_TARGET_ESP32P4)
     esp_task_wdt_reset();
+#endif
   }
   Serial.println();
 
@@ -114,15 +116,15 @@ void wifiStartPortal() {
   String apName = String(WIFI_AP_NAME_PREFIX) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
 
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
-  // ESP32-P4 + ESP-Hosted: usa APSTA pero con STA desconectada.
-  // Pure AP (WIFI_MODE_AP) también funciona pero no permite scan desde el portal.
-  // APSTA + setAutoReconnect(false) + disconnect = AP activo, STA silenciosa.
+  // ESP32-P4 + ESP-Hosted:
+  // esp_wifi_set_mode() falla si WiFi está corriendo (transport locked).
+  // Paramos WiFi primero → Arduino mode() puede cambiar modo limpiamente.
+  // mode(APSTA) crea el AP netif + event handler que softAP necesita.
   WiFi.disconnect(false);
   delay(100);
   esp_wifi_stop();
   delay(300);
-  esp_wifi_set_mode(WIFI_MODE_APSTA);
-  esp_wifi_start();
+  WiFi.mode(WIFI_AP_STA);
   delay(500);
 #else
   WiFi.disconnect(true);

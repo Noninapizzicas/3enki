@@ -109,23 +109,45 @@ void wifiStartPortal() {
   portalMode = true;
   reconnActive = false;
 
+  String apName = String(WIFI_AP_NAME_PREFIX) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
+
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+  // ESP32-P4 + ESP-Hosted (C6): el modo AP puro falla si el driver WiFi ya está iniciado.
+  // Secuencia correcta: stop → set_mode(APSTA) → start → softAP.
+  // APSTA mantiene el transporte SDIO P4↔C6 activo mientras expone el AP.
+  WiFi.disconnect(false);
+  delay(100);
+  esp_wifi_stop();
+  delay(300);
+  esp_wifi_set_mode(WIFI_MODE_APSTA);
+  esp_wifi_start();
+  delay(500);
+#else
   WiFi.disconnect(true);
   WiFi.mode(WIFI_AP);
+#endif
 
-  String apName = String(WIFI_AP_NAME_PREFIX) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
-  WiFi.softAP(apName.c_str());
+  bool ok = WiFi.softAP(apName.c_str());
+  IPAddress ip = WiFi.softAPIP();
 
-  dnsServer.start(53, "*", WiFi.softAPIP());
-
-  Serial.printf("[WiFi] Portal cautivo — SSID: %s  IP: %s\n",
-    apName.c_str(), WiFi.softAPIP().toString().c_str());
+  if (ok && ip != IPAddress(0, 0, 0, 0)) {
+    dnsServer.start(53, "*", ip);
+    Serial.printf("[WiFi] Portal listo — SSID: %s  http://%s/\n", apName.c_str(), ip.toString().c_str());
+  } else {
+    Serial.printf("[WiFi] Portal AP no disponible (ok=%d IP=%s) — acceso vía STA cuando conecte\n",
+                  (int)ok, ip.toString().c_str());
+  }
 }
 
 // ── Setup (boot) ────────────────────────────────
 
 bool wifiSetup() {
-  // Configurar driver WiFi UNA vez
+  // En ESP32-P4 (ESP-Hosted), el framework inicializa el transporte SDIO antes de setup().
+  // Llamar WiFi.mode() en ese punto genera "Transport already initialized" y puede fallar.
+  // El modo STA ya está activo por defecto, así que lo omitimos en P4.
+#if !defined(CONFIG_IDF_TARGET_ESP32P4)
   WiFi.mode(WIFI_STA);
+#endif
   WiFi.persistent(false);       // no guardar creds en flash (las gestionamos nosotros via NVS)
   WiFi.setAutoReconnect(true);  // el driver reintenta con la ultima red automaticamente
   WiFi.onEvent(onWiFiEvent);    // deteccion instantanea de desconexion

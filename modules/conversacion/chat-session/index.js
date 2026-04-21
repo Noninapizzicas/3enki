@@ -183,9 +183,9 @@ class ChatSessionModule {
       `, [], false, correlationId);
 
       this.initializedProjects.add(projectId);
-      this.logger.info({ correlationId, projectId }, 'Schema initialized');
+      this.logger.info('chat-session.schema.initialized', { correlationId, projectId });
     } catch (error) {
-      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to initialize schema');
+      this.logger.error('chat-session.schema.init.failed', { correlationId, projectId, error: error.message });
       throw error;
     }
   }

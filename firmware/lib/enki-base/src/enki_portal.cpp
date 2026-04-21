@@ -8,7 +8,6 @@
 #include "enki_mqtt.h"
 #include "enki_logic.h"
 #include "portal.h"
-#include <esp_wifi.h>
 
 WebServer webServer(PORTAL_PORT);
 
@@ -128,16 +127,6 @@ static void handleGetStatus() {
 
 static void handleWifiScan() {
   Serial.println("[WiFi] Escaneando redes...");
-
-#if defined(CONFIG_IDF_TARGET_ESP32P4)
-  // En P4/AP puro: activar STA temporalmente para escanear, luego volver a AP
-  esp_wifi_stop();
-  delay(100);
-  esp_wifi_set_mode(WIFI_MODE_APSTA);
-  esp_wifi_start();
-  delay(300);
-#endif
-
   int n = WiFi.scanNetworks(false, false, false, 300);
 
   JsonDocument doc;
@@ -158,18 +147,6 @@ static void handleWifiScan() {
     }
     WiFi.scanDelete();
   }
-
-#if defined(CONFIG_IDF_TARGET_ESP32P4)
-  // Volver a AP puro — sin STA no hay reconexiones espurias
-  WiFi.setAutoReconnect(false);
-  WiFi.disconnect(false);
-  delay(100);
-  esp_wifi_stop();
-  delay(100);
-  esp_wifi_set_mode(WIFI_MODE_AP);
-  esp_wifi_start();
-  delay(200);
-#endif
 
   char buf[1024];
   serializeJson(doc, buf, sizeof(buf));

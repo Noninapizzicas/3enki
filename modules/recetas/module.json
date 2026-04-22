@@ -146,7 +146,11 @@
       { "event": "recetas.estadisticas",     "handler": "onToolEstadisticas" },
       { "event": "recetas.ingredientes",     "handler": "onToolIngredientes" },
       { "event": "recetas.actualizar_precio","handler": "onToolActualizarPrecio" },
-      { "event": "recetas.crear_desde_chat", "handler": "onToolCrearDesdeChat" }
+      { "event": "recetas.crear_desde_chat", "handler": "onToolCrearDesdeChat" },
+      { "event": "recetas.crear",            "handler": "onToolCrear" },
+      { "event": "recetas.analizar",         "handler": "onToolAnalizar" },
+      { "event": "recetas.actualizar",       "handler": "onToolActualizar" },
+      { "event": "recetas.eliminar",         "handler": "onToolEliminar" }
     ]
   },
 

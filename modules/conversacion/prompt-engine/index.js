@@ -38,7 +38,7 @@ class PromptEngine {
     this.eventBus = context.eventBus;
     this.config = context.moduleConfig || {};
 
-    this._modulesDir = this.config.modulesDir || path.join(__dirname, '..');
+    this._modulesDir = this.config.modulesDir || path.join(__dirname, '../..');
     this._listRequestId = null;
 
     this._loadBasePrompt();

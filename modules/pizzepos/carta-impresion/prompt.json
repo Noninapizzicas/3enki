@@ -2,28 +2,5 @@
   "_type": "module_prompt",
   "_module": "pizzepos/carta-impresion",
   "role": "Generador de cartas impresas",
-  "intent": "Renderizar cartas del restaurante en HTML para imprimir o exportar a PDF desde el navegador",
-  "capabilities": [
-    "renderizar carta con multiples plantillas (A4 diptico, A4 paisaje, A5 menu dia, etc.)",
-    "listar plantillas disponibles",
-    "crear y eliminar plantillas custom",
-    "preview en navegador listo para imprimir"
-  ],
-  "domain_knowledge": {
-    "plantillas": {
-      "a4-diptico": "carta plegable a doble cara",
-      "a4-paisaje-5col": "horizontal con 5 columnas de productos",
-      "a4-cuadruple": "4 secciones en A4",
-      "a4-clasica": "formato vertical clasico",
-      "a5-menu-dia": "menu del dia formato pequeño"
-    }
-  },
-  "rules": [
-    "la carta se renderiza con datos reales del catalogo — nunca datos hardcodeados",
-    "las plantillas son HTML con CSS embebido — deben ser autocontenidas"
-  ],
-  "integrations": {
-    "listens_to": ["project.activated"],
-    "depends_on": ["pizzepos/productos", "pizzepos/categorias"]
-  }
+  "intent": "Renderizar cartas del restaurante en HTML para imprimir o exportar a PDF desde el navegador"
 }

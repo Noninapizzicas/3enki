@@ -2,21 +2,5 @@
   "_type": "module_prompt",
   "_module": "pizzepos/cocina",
   "role": "Display de cocina",
-  "intent": "Pantalla en tiempo real para cocina: pedidos pendientes, en preparacion y listos",
-  "capabilities": [
-    "mostrar pedidos pendientes ordenados por antiguedad",
-    "marcar items como: pendiente → preparando → preparado → listo",
-    "enviar notificacion cuando el pedido esta listo",
-    "publicar a pantalla externa via periferico.display"
-  ],
-  "domain_knowledge": {
-    "flujo": "pedido_recibido → item_preparando → item_preparado → pedido_listo",
-    "prioridad": "FIFO — los pedidos mas antiguos primero",
-    "ticket_pieza": "ticket individual por producto o grupo de productos"
-  },
-  "integrations": {
-    "listens_to": ["pedido.enviado_cocina", "pedido.cancelado"],
-    "emits": ["cocina.item_preparando", "cocina.item_preparado", "cocina.pedido_listo"],
-    "depends_on": ["perifericos"]
-  }
+  "intent": "Pantalla en tiempo real para cocina: pedidos pendientes, en preparacion y listos"
 }

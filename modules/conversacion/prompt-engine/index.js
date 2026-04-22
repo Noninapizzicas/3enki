@@ -22,8 +22,10 @@ class PromptEngine {
     this.eventBus = null;
     this.config = null;
 
-    // Cache: moduleName → parsed prompt.json
+    // Cache: moduleName → parsed prompt.json (persona: role, intent)
     this._prompts = new Map();
+    // Cache: moduleName → parsed context.json (domain: capabilities, knowledge, workflow)
+    this._contexts = new Map();
     this._basePrompt = null;
   }
 
@@ -59,6 +61,7 @@ class PromptEngine {
 
   async onUnload() {
     this._prompts.clear();
+    this._contexts.clear();
     this._basePrompt = null;
   }
 
@@ -99,7 +102,15 @@ class PromptEngine {
       const fullPath = path.join(dir, entry.name);
       const moduleName = prefix ? `${prefix}/${entry.name}` : entry.name;
       const promptPath = path.join(fullPath, 'prompt.json');
+      const contextPath = path.join(fullPath, 'context.json');
       const moduleJsonPath = path.join(fullPath, 'module.json');
+
+      // Load context.json (domain knowledge — always injected, never replaced by custom prompt)
+      try {
+        const context = JSON.parse(fs.readFileSync(contextPath, 'utf8'));
+        context._module = moduleName;
+        this._contexts.set(moduleName, context);
+      } catch { /* no context.json = ok, module uses prompt.json only */ }
 
       try {
         // Try prompt.json first (explicit, hand-crafted)
@@ -216,8 +227,10 @@ class PromptEngine {
    * @returns {string} Complete system prompt ready for the LLM
    */
   buildSystemPrompt(moduleName, runtimeContext = {}) {
-    const modulePrompt = this._prompts.get(moduleName);
-    if (!modulePrompt) return this._formatBase(runtimeContext);
+    const modulePrompt = moduleName ? this._prompts.get(moduleName) : null;
+    const moduleContext = moduleName ? this._contexts.get(moduleName) : null;
+
+    if (!modulePrompt && !moduleContext) return this._formatBase(runtimeContext);
 
     const sections = [];
 
@@ -226,14 +239,21 @@ class PromptEngine {
       sections.push(JSON.stringify(this._basePrompt, null, 2));
     }
 
-    // 2. Module prompt (the specific role)
-    sections.push(JSON.stringify(modulePrompt, null, 2));
+    // 2. Module context (capabilities, domain knowledge, workflow — always present)
+    if (moduleContext) {
+      sections.push(JSON.stringify(moduleContext, null, 2));
+    }
 
-    // 3. Active context as plain text — LLM must use these IDs in tool calls
+    // 3. Module prompt (role, intent — replaceable by custom prompt)
+    if (modulePrompt) {
+      sections.push(JSON.stringify(modulePrompt, null, 2));
+    }
+
+    // 4. Active context as plain text — LLM must use these IDs in tool calls
     const contextText = this._buildContextText(runtimeContext);
     if (contextText) sections.push(contextText);
 
-    // 4. Runtime context JSON (full structured data)
+    // 5. Runtime context JSON (full structured data)
     if (runtimeContext && Object.keys(runtimeContext).length > 0) {
       sections.push(JSON.stringify({ _runtime: runtimeContext }, null, 2));
     }
@@ -342,7 +362,15 @@ class PromptEngine {
     // Supports nested modules: 'pizzepos/menu-generator' → modules/pizzepos/menu-generator/prompt.json
     const modulePath = path.join(this._modulesDir, ...moduleName.split('/'));
     const promptPath = path.join(modulePath, 'prompt.json');
+    const contextPath = path.join(modulePath, 'context.json');
     const moduleJsonPath = path.join(modulePath, 'module.json');
+
+    // Reload context.json if exists
+    try {
+      const context = JSON.parse(fs.readFileSync(contextPath, 'utf8'));
+      context._module = moduleName;
+      this._contexts.set(moduleName, context);
+    } catch { this._contexts.delete(moduleName); }
 
     try {
       const prompt = JSON.parse(fs.readFileSync(promptPath, 'utf8'));
@@ -458,9 +486,12 @@ class PromptEngine {
       if (context.system) runtimeContext.system = context.system;
     }
 
+    // Módulo activo: se resuelve siempre primero — necesario para contexto Y tools
+    const moduleName = (page ? this.resolveRouteToModule(page) : null) || decision?.module || null;
+
     // Prioridad del prompt:
-    //   1. customPromptId (del usuario, vía UI) → resolver contra cache de prompt-manager
-    //   2. page → resolver a módulo y usar su prompt.json (prompt de la faceta)
+    //   1. customPromptId (del usuario, vía UI) → reemplaza la persona, mantiene el contexto del módulo
+    //   2. page → resolver a módulo y usar su prompt.json + context.json
     //   3. fallback → base prompt
     let systemPrompt = null;
     let source = null;
@@ -468,7 +499,7 @@ class PromptEngine {
     if (customPromptId) {
       const customPrompt = this._getPromptById(customPromptId);
       if (customPrompt) {
-        systemPrompt = this._formatCustomPrompt(customPrompt, runtimeContext);
+        systemPrompt = this._formatCustomPrompt(customPrompt, runtimeContext, moduleName);
         source = 'user';
       } else {
         this.logger.warn('prompt-engine.custom.not_found', { id: customPromptId });
@@ -476,7 +507,6 @@ class PromptEngine {
     }
 
     if (!systemPrompt) {
-      const moduleName = (page ? this.resolveRouteToModule(page) : null) || decision?.module || null;
       systemPrompt = this.buildSystemPrompt(moduleName, runtimeContext);
       source = moduleName ? 'page' : 'base';
     }
@@ -513,11 +543,17 @@ class PromptEngine {
    * Formatea un prompt custom igual que los de faceta:
    * base + custom + runtimeContext.
    */
-  _formatCustomPrompt(customPrompt, runtimeContext) {
+  _formatCustomPrompt(customPrompt, runtimeContext, moduleName) {
     const sections = [];
     if (this._basePrompt) {
       sections.push(JSON.stringify(this._basePrompt, null, 2));
     }
+    // Module context always present — custom prompt changes the role, not the domain
+    const moduleContext = moduleName ? this._contexts.get(moduleName) : null;
+    if (moduleContext) {
+      sections.push(JSON.stringify(moduleContext, null, 2));
+    }
+    // Custom replaces the module's role/persona (prompt.json), not its context
     sections.push(JSON.stringify(customPrompt, null, 2));
     const contextText = this._buildContextText(runtimeContext);
     if (contextText) sections.push(contextText);

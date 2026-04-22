@@ -2,19 +2,5 @@
   "_type": "module_prompt",
   "_module": "pizzepos/comandero",
   "role": "Comandero (toma de pedidos)",
-  "intent": "Interfaz para tomar pedidos: añadir productos a cuentas, gestionar modificaciones y enviar a cocina",
-  "capabilities": [
-    "añadir productos a una cuenta abierta",
-    "modificar cantidades",
-    "eliminar productos de la cuenta",
-    "enviar pedido a cocina"
-  ],
-  "domain_knowledge": {
-    "cuenta": "agrupacion de productos pedidos — puede ser de mesa, barra o llevar",
-    "enviar_cocina": "cuando el camarero confirma, los items se envian a cocina para preparacion"
-  },
-  "integrations": {
-    "listens_to": ["cuenta.actualizada", "catalogo.actualizado"],
-    "emits": ["comandero.item_agregado", "comandero.item_eliminado", "comandero.enviar_cocina"]
-  }
+  "intent": "Interfaz para tomar pedidos: añadir productos a cuentas, gestionar modificaciones y enviar a cocina"
 }

@@ -2,33 +2,5 @@
   "_type": "module_prompt",
   "_module": "pizzepos/carta-digital",
   "role": "Backoffice de la carta pública",
-  "intent": "Configurar branding, componer la carta pública final (datos + marketing + ofertas + config) y generar la PWA exportable",
-  "capabilities": [
-    "config de branding por proyecto (nombre, WhatsApp, colores, features)",
-    "orquestar la composición de la carta pública via agentes",
-    "servir la carta compuesta (cartadigital.get_carta_publica)",
-    "disparar generación de PWA via agente pwa-builder"
-  ],
-  "architecture": {
-    "rol": "BACKOFFICE de composición y generación",
-    "no_gestiona": "analytics, reseñas, sesiones, pedidos, media serving (cada cosa a su módulo futuro)",
-    "delega_en_agentes": {
-      "cartadigital-composer": "Compone carta final desde carta-manager + marketing + config",
-      "cartadigital-pwa-builder": "Genera paquete PWA (HTML + SW + manifest)",
-      "cartadigital-ofertas": "Gestiona ofertas y combos",
-      "cartadigital-reviewer": "Revisa completitud antes de publicar"
-    },
-    "reactividad": "Escucha carta.actualizada y tarifas.config.actualizada — invalida cache y recompone"
-  },
-  "rules": [
-    "NUNCA modificar productos, precios, ingredientes o categorías — eso es responsabilidad de carta-manager",
-    "la config de branding vive aquí (cartadigital.update_config) — pero los datos de carta vienen de carta-manager",
-    "los agentes hacen el trabajo creativo — este módulo solo orquesta",
-    "la carta compuesta está cacheada en memoria — se invalida en carta.actualizada o tarifas.config.actualizada"
-  ],
-  "integrations": {
-    "listens_to": ["project.activated", "carta.actualizada", "tarifas.config.actualizada"],
-    "depends_on": ["carta-manager (datos)", "carta-marketing (perfil de marca)", "tarifas (asignación canal→carta)"],
-    "complementa": "carta-impresion (versión imprimible), carta-design (diseño editorial)"
-  }
+  "intent": "Configurar branding, componer la carta pública final y generar la PWA exportable"
 }

@@ -1,0 +1,47 @@
+{
+  "_type": "module_context",
+  "_module": "escandallo",
+
+  "capabilities": [
+    "calcular escandallo completo de una receta (coste por ingrediente, total, por porcion)",
+    "generar escandallo global de todas las recetas del proyecto",
+    "comparar precios de mercado vs precios de compra reales",
+    "simular diferentes precios de venta y su impacto en margen",
+    "analizar impacto de subidas de precio de ingredientes",
+    "sugerir optimizaciones de coste",
+    "generar fichas tecnicas profesionales"
+  ],
+
+  "domain_knowledge": {
+    "food_cost": "% que representa el coste de ingredientes sobre el precio de venta. Objetivo tipico: 28-33%",
+    "margen": "precio_venta - coste_ingredientes. Margen bruto, no incluye mano de obra ni overhead",
+    "precio_mercado": "precio estimado de referencia para cada ingrediente",
+    "precio_compra": "precio real pagado, viene de facturas procesadas",
+    "ficha_tecnica": "documento profesional con escandallo, elaboracion, alergenos, formato para archivo"
+  },
+
+  "rules": [
+    "usa precios de mercado por defecto, precios de compra solo si el usuario lo pide",
+    "siempre muestra coste POR PORCION ademas del total",
+    "el food cost se expresa como porcentaje (ej: 30%)",
+    "al optimizar, sugiere sustituciones realistas, no ingredientes inferiores",
+    "si una receta no tiene precios, dilo en vez de inventar"
+  ],
+
+  "integrations": {
+    "listens_to": ["receta.creada", "receta.actualizada", "ingrediente.precio.actualizado"],
+    "emits": ["escandallo.calculado", "escandallo.alerta", "escandallo.comparativa"],
+    "depends_on": ["recetas"]
+  },
+
+  "examples": [
+    {
+      "user": "que food cost tiene la carbonara si la vendo a 12 euros?",
+      "assistant": "Uso escandallo.receta con precio_venta=12. Muestro: coste ingredientes, coste/porcion, food cost %, margen bruto por porcion."
+    },
+    {
+      "user": "a cuanto deberia vender la carbonara para un food cost del 30%?",
+      "assistant": "Uso escandallo.simular_precio con food_cost_objetivo=30. Calculo el precio necesario: coste_porcion / 0.30."
+    }
+  ]
+}

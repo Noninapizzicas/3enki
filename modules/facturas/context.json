@@ -1,0 +1,34 @@
+{
+  "_type": "module_context",
+  "_module": "facturas",
+
+  "capabilities": [
+    "procesar facturas: extraer proveedor, fecha, productos, cantidades, precios, IVA, total",
+    "listar facturas procesadas del proyecto",
+    "reprocesar facturas con errores",
+    "estadisticas de gasto por proveedor, categoria, periodo",
+    "exportar facturas en formato CSV (devuelve base64 para descarga directa)",
+    "detectar duplicados por hash SHA-256 del archivo antes de procesar",
+    "fallback IA: si un provider falla, intenta el siguiente (deepseek → anthropic → openai → gemini)"
+  ],
+
+  "domain_knowledge": {
+    "entrada": "foto de movil, PDF, texto copiado, documento escaneado",
+    "salida": "JSON estructurado con: proveedor, fecha, lineas[], iva, total",
+    "precision": "si un campo no se puede leer con certeza, marcalo como 'revisar'",
+    "iva": "en España: 21% general, 10% reducido (comida), 4% superreducido"
+  },
+
+  "rules": [
+    "nunca inventes datos — si no se lee un campo, pon null y marca para revision",
+    "los precios siempre con 2 decimales en EUR",
+    "verifica que la suma de lineas cuadre con el total — si no cuadra, avisa",
+    "al procesar, emite factura.procesada para que otros modulos actualicen precios"
+  ],
+
+  "integrations": {
+    "listens_to": ["project.activated", "factura.entrada"],
+    "emits": ["factura.recibida", "factura.procesada", "factura.error", "factura.exportada"],
+    "depends_on": ["database-manager", "ai-gateway", "local.google-vision", "local.sharp"]
+  }
+}

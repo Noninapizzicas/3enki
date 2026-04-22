@@ -28,7 +28,6 @@ class FuentesModule {
 
     // Project configs: projectId → { fuentes: { telegram: {...}, gmail: {...} } }
     this.projectConfigs = new Map();
-    this.activeProjectId = null;
 
     // Strategy registry
     this.strategies = {};
@@ -70,11 +69,6 @@ class FuentesModule {
   // ==========================================
   // Event handlers — dispatched to strategies
   // ==========================================
-
-  onProjectActivated(event) {
-    const data = event.data || event;
-    this.activeProjectId = data.project_id;
-  }
 
   /**
    * telegram.photo.received → TelegramStrategy

@@ -46,9 +46,7 @@
       "asesoria.paquete.generado",
       "asesoria.paquete.error"
     ],
-    "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" }
-    ]
+    "subscribes": []
   },
 
   "config": {

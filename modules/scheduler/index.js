@@ -42,7 +42,6 @@ class SchedulerModule {
     this.maxExecutionHistory = 100;
 
     // Active project tracking
-    this.activeProjectId = null;
 
     // Stats
     this.stats = {
@@ -173,29 +172,6 @@ class SchedulerModule {
 
     this.logger.debug('scheduler.event-triggers.subscribed', {
       topics: Array.from(topics)
-    });
-  }
-
-  // ==================== PROJECT LIFECYCLE ====================
-
-  /**
-   * Handle project.activated event
-   * Stores the active project ID so job executions can include project context.
-   */
-  async onProjectActivated(event) {
-    const data = event.data || event;
-    const { project_id, name } = data;
-
-    if (!project_id) return;
-
-    this.activeProjectId = project_id;
-
-    const projectJobs = this.jobManager.getByProject(project_id);
-
-    this.logger.info('scheduler.project.activated', {
-      project_id,
-      project_name: name,
-      projectJobs: projectJobs.length
     });
   }
 

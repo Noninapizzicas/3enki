@@ -18,7 +18,6 @@
       "factura.entrada"
     ],
     "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
       { "event": "telegram.photo.received", "handler": "onTelegramPhoto" },
       { "event": "telegram.document.received", "handler": "onTelegramDocument" }
     ]

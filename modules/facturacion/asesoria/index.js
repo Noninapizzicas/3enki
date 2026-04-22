@@ -49,7 +49,6 @@ class AsesoriaModule {
     this.services = null;
 
     // Active project
-    this.activeProjectId = null;
 
     // Config (from module.json)
     this.config = {
@@ -78,15 +77,6 @@ class AsesoriaModule {
 
   async onUnload() {
     this.logger.info('asesoria.unloaded');
-  }
-
-  // ==========================================
-  // Event handlers
-  // ==========================================
-
-  onProjectActivated(event) {
-    const data = event.data || event;
-    this.activeProjectId = data.project_id;
   }
 
   // ==========================================

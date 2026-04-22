@@ -68,7 +68,6 @@
       "factura.exportada"
     ],
     "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
       { "event": "factura.entrada", "handler": "onFacturaEntrada" }
     ]
   },

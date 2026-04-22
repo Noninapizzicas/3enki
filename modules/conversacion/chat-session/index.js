@@ -511,10 +511,10 @@ class ChatSessionModule {
   // Message Operations
   // ==========================================
 
-  async saveMessage(conversationId, message, correlationId) {
+  async saveMessage(conversationId, message, correlationId, projectId) {
     let conversation = this.conversations.get(conversationId);
     if (!conversation) {
-      conversation = await this.getConversation(conversationId, correlationId);
+      conversation = await this.getConversation(conversationId, correlationId, projectId);
       if (!conversation) {
         throw new Error(`Conversation not found: ${conversationId}`);
       }
@@ -579,11 +579,11 @@ class ChatSessionModule {
     return savedMessage;
   }
 
-  async getMessages(conversationId, inContextOnly = false, correlationId) {
+  async getMessages(conversationId, inContextOnly = false, correlationId, projectId) {
     let conversation = this.conversations.get(conversationId);
     if (!conversation) {
       // Try to load from DB before giving up
-      conversation = await this.getConversation(conversationId, correlationId);
+      conversation = await this.getConversation(conversationId, correlationId, projectId);
       if (!conversation) {
         throw new Error(`Conversation not found: ${conversationId}`);
       }
@@ -822,16 +822,19 @@ class ChatSessionModule {
 
   async onChatSendRequest(event) {
     const data = event.data || event;
-    const { conversation_id, content, project_id, user_id, page, prompt } = data;
+    const { conversation_id, content, project_id, user_id, page, prompt, correlation_id } = data;
     if (!conversation_id || !content) return;
 
     try {
-      const savedMessage = await this.saveMessage(conversation_id, {
-        role: 'user', content, user_id
-      });
+      const savedMessage = await this.saveMessage(
+        conversation_id,
+        { role: 'user', content, user_id },
+        correlation_id,
+        project_id
+      );
 
       // Cargar historial reciente para que el AI tenga contexto
-      const history = await this.getMessages(conversation_id, true).catch(() => []);
+      const history = await this.getMessages(conversation_id, true, correlation_id, project_id).catch(() => []);
       const messages = (history || []).map(m => ({ role: m.role, content: m.content }));
 
       await this.eventBus.publish('chat.message.saved', {
@@ -849,7 +852,7 @@ class ChatSessionModule {
 
   async onChatAiResponse(event) {
     const data = event.data || event;
-    const { conversation_id, content, tokens, cost, model, provider, tool_calls_executed, agent_name } = data;
+    const { conversation_id, content, tokens, cost, model, provider, tool_calls_executed, agent_name, project_id, correlation_id } = data;
     if (!conversation_id || !content) return;
 
     const source = agent_name
@@ -857,10 +860,15 @@ class ChatSessionModule {
       : { type: 'llm', provider: provider || 'unknown', model: model || 'unknown' };
 
     try {
-      const saved = await this.saveMessage(conversation_id, {
-        role: 'assistant', content, tokens, cost,
-        metadata: { model, provider, tool_calls_executed, source }
-      });
+      const saved = await this.saveMessage(
+        conversation_id,
+        {
+          role: 'assistant', content, tokens, cost,
+          metadata: { model, provider, tool_calls_executed, source }
+        },
+        correlation_id,
+        project_id
+      );
       await this.eventBus.publish('chat.assistant.saved', {
         conversation_id,
         message_id: saved?.id || null,
@@ -875,18 +883,23 @@ class ChatSessionModule {
 
   async onAgentCompleted(event) {
     const data = event.data || event;
-    const { conversation_id, result, agent_name } = data;
+    const { conversation_id, result, agent_name, project_id, correlation_id } = data;
     if (!conversation_id) return;
 
     const rawContent = typeof result === 'string' ? result
       : result?.content || result?.response || result?.text || JSON.stringify(result);
 
     try {
-      const saved = await this.saveMessage(conversation_id, {
-        role: 'assistant',
-        content: rawContent,
-        metadata: { type: 'agent_result', agent: agent_name, source: { type: 'agent', name: agent_name } }
-      });
+      const saved = await this.saveMessage(
+        conversation_id,
+        {
+          role: 'assistant',
+          content: rawContent,
+          metadata: { type: 'agent_result', agent: agent_name, source: { type: 'agent', name: agent_name } }
+        },
+        correlation_id,
+        project_id
+      );
       await this.eventBus.publish('chat.assistant.saved', {
         conversation_id,
         message_id: saved?.id || null,
@@ -901,17 +914,22 @@ class ChatSessionModule {
 
   async onAgentFailed(event) {
     const data = event.data || event;
-    const { conversation_id, error, agent_name } = data;
+    const { conversation_id, error, agent_name, project_id, correlation_id } = data;
     if (!conversation_id) return;
 
     const content = 'Lo siento, hubo un problema procesando tu solicitud. Por favor, intenta de nuevo.';
 
     try {
-      const saved = await this.saveMessage(conversation_id, {
-        role: 'assistant',
-        content,
-        metadata: { type: 'agent_error', agent: agent_name, error }
-      });
+      const saved = await this.saveMessage(
+        conversation_id,
+        {
+          role: 'assistant',
+          content,
+          metadata: { type: 'agent_error', agent: agent_name, error }
+        },
+        correlation_id,
+        project_id
+      );
       await this.eventBus.publish('chat.assistant.saved', {
         conversation_id,
         message_id: saved?.id || null,

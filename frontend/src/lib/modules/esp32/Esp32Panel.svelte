@@ -12,7 +12,6 @@
     esp32Store, activeTab, initEsp32, initEsp32Subscriptions,
     setTab, type TabId
   } from '$lib/stores/esp32';
-  import { updatePageState } from '$lib/stores/page-context';
 
   import DevTab from '$lib/components/esp32/DevTab.svelte';
   import FirmwareTab from '$lib/components/esp32/FirmwareTab.svelte';
@@ -34,19 +33,8 @@
   $: activeFlashCount = $esp32Store.activeFlashes.length;
   $: otaPendingCount = $esp32Store.otaPending.length;
 
-  // Sync state to page context for the AI
-  $: updatePageState('esp32', {
-    drivers: driverCount,
-    ports: portCount,
-    monitoring: isMonitoring,
-    flashing: activeFlashCount,
-    otaPending: otaPendingCount
-  });
-  $: updatePageState('activeTab', $activeTab);
-
   function handleSetTab(tab: TabId) {
     setTab(tab);
-    updatePageState('activeTab', tab);
   }
 
   onMount(async () => {

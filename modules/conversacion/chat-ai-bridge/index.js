@@ -70,8 +70,7 @@ class ChatAiBridgeModule {
       conversationId,
       page,
       content,
-      attachments,
-      pageContext
+      attachments
     } = data;
     const correlationId = request?.correlationId || crypto.randomUUID();
 
@@ -92,7 +91,6 @@ class ChatAiBridgeModule {
       content,
       attachments: attachments || [],
       use_tools: true,
-      page_context: pageContext || null,
       correlation_id: correlationId
     });
 

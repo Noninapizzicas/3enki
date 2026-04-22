@@ -8,7 +8,6 @@
 
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
   import { FilePicker } from '$lib/components/base';
-  import { updatePageStateBatch } from '$lib/stores/page-context';
 
   export let panelId: string = '';
 
@@ -50,10 +49,6 @@
 
       resultImage = res.data?.image || '';
       resultPath = res.data?.path || '';
-
-      if (resultPath) {
-        updatePageStateBatch({ renderedImage: resultPath, pipelineStep: 'pdf_rendered' });
-      }
     } catch (err: any) {
       error = err.message || 'Error al convertir';
     } finally {

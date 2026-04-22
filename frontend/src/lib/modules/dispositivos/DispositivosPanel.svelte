@@ -11,7 +11,6 @@
     initDispositivos, initDispositivosSubscriptions,
     setTab, type TabId
   } from '$lib/stores/dispositivos';
-  import { updatePageState } from '$lib/stores/page-context';
 
   import FleetTab from '$lib/components/dispositivos/FleetTab.svelte';
   import ImpresorasTab from '$lib/components/dispositivos/ImpresorasTab.svelte';
@@ -39,13 +38,8 @@
   $: totalCount = $dispositivosStore.devices.length;
   $: alertCount = $healthAlerts.length;
 
-  // Sync state to page context for the AI
-  $: updatePageState('devices', { online: onlineCount, total: totalCount, alerts: alertCount });
-  $: updatePageState('activeTab', $activeTab);
-
   function handleSetTab(tab: TabId) {
     setTab(tab);
-    updatePageState('activeTab', tab);
   }
 
   onMount(async () => {

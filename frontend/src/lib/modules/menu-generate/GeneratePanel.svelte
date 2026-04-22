@@ -21,7 +21,6 @@
     resetGeneration,
     initGenerationSubscriptions
   } from '$lib/stores/menu-generator';
-  import { updatePageStateBatch } from '$lib/stores/page-context';
 
   export let panelId: string = '';
 
@@ -47,11 +46,6 @@
 
   async function handleGenerate() {
     if (!nombre.trim()) return;
-
-    updatePageStateBatch({
-      pipelineStep: 'generating',
-      generatingNombre: nombre.trim()
-    });
 
     if (inputMode === 'file' && filePath.trim()) {
       await generateFromFile(nombre.trim(), filePath.trim());

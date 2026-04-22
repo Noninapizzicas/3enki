@@ -397,6 +397,8 @@ class AIGatewayModule {
       const responsePayload = {
         request_id,
         conversation_id: event.data?.conversation_id || null,
+        project_id: project_id || null,
+        correlation_id: correlationId,
         success: result.status === 200,
         message: result.data?.content,
         content: result.data?.content,

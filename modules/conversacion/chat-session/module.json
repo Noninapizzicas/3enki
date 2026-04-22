@@ -15,8 +15,6 @@
   ],
   "subscribes": [
       { "event": "db.query.response", "handler": "onDbQueryResponse" },
-      { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
       { "event": "session.create.request", "handler": "onCreateRequest" },
       { "event": "session.list.request", "handler": "onListRequest" },
       { "event": "session.get.request", "handler": "onGetRequest" },

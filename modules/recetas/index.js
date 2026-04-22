@@ -849,6 +849,67 @@ class RecetasModule {
   async onToolIngredientes(event)    { return this._toolResponse('recetas.ingredientes',       event, p => this.handleIngredientes(p)); }
   async onToolActualizarPrecio(event){ return this._toolResponse('recetas.actualizar_precio',  event, p => this.handleActualizarPrecio(p)); }
   async onToolCrearDesdeChat(event)  { return this._toolResponse('recetas.crear_desde_chat',   event, p => this.handleIngestar(p)); }
+
+  async onToolCrear(event) {
+    return this._toolResponse('recetas.crear', event, async (p) => {
+      const { proyecto_id, nombre, descripcion, ingredientes, instrucciones, ...rest } = p;
+      const input = JSON.stringify({ nombre, descripcion, ingredientes, instrucciones, ...rest });
+      return this.handleIngestar({ proyecto_id, input, tipo: 'json', fuente_referencia: 'chat' });
+    });
+  }
+
+  async onToolAnalizar(event) {
+    return this._toolResponse('recetas.analizar', event, async (p) => {
+      const { proyecto_id, receta_id } = p;
+      // Obtener nombre de la receta para investigar
+      const row = await this.handleObtener({ proyecto_id, receta_id });
+      const nombre = row?.data?.nombre || receta_id;
+      return this.handleInvestigarReceta({ proyecto_id, nombre_receta: nombre });
+    });
+  }
+
+  async onToolActualizar(event) {
+    return this._toolResponse('recetas.actualizar', event, p => this.handleActualizar(p));
+  }
+
+  async onToolEliminar(event) {
+    return this._toolResponse('recetas.eliminar', event, p => this.handleEliminar(p));
+  }
+
+  async handleActualizar({ proyecto_id, receta_id, cambios = {} }) {
+    try {
+      const { nombre, descripcion, estado } = cambios;
+      const sets = [];
+      const params = [];
+      if (nombre) { sets.push('nombre = ?'); params.push(nombre); }
+      if (descripcion !== undefined) { sets.push('descripcion = ?'); params.push(descripcion); }
+      if (estado) { sets.push('estado = ?'); params.push(estado); }
+      if (sets.length === 0) return { status: 400, error: 'No hay campos para actualizar' };
+      sets.push('updated_at = ?');
+      params.push(Date.now(), receta_id, proyecto_id);
+      await this._dbRun(proyecto_id,
+        `UPDATE recetas SET ${sets.join(', ')} WHERE id = ? AND proyecto_id = ?`,
+        params
+      );
+      return { status: 200, data: { updated: true, receta_id } };
+    } catch (err) {
+      this.logger.error('recetas.actualizar.failed', { receta_id, error: err.message });
+      return { status: 500, error: err.message };
+    }
+  }
+
+  async handleEliminar({ proyecto_id, receta_id }) {
+    try {
+      await this._dbRun(proyecto_id,
+        'UPDATE recetas SET estado = ?, updated_at = ? WHERE id = ? AND proyecto_id = ?',
+        ['archivada', Date.now(), receta_id, proyecto_id]
+      );
+      return { status: 200, data: { eliminada: true, receta_id } };
+    } catch (err) {
+      this.logger.error('recetas.eliminar.failed', { receta_id, error: err.message });
+      return { status: 500, error: err.message };
+    }
+  }
 }
 
 module.exports = RecetasModule;

@@ -32,6 +32,10 @@
 DNSServer dnsServer;
 bool      portalMode = false;
 
+static bool           _portalEnabled    = true;
+
+void wifiSetPortalEnabled(bool enabled) { _portalEnabled = enabled; }
+
 // Estado de reconexion non-blocking
 static int8_t        reconnTryingIdx   = -1;
 static unsigned long  reconnStartMs    = 0;
@@ -175,7 +179,7 @@ bool wifiSetup() {
     return true;
   }
 
-  wifiStartPortal();
+  if (_portalEnabled) wifiStartPortal();
   return false;
 }
 
@@ -249,8 +253,15 @@ void wifiHandleReconnect() {
   Serial.printf("[WiFi] Ciclo %d/%d fallido\n", reconnFailCycles, WIFI_MAX_FAILURES);
 
   if (reconnFailCycles >= WIFI_MAX_FAILURES) {
-    Serial.println("[WiFi] Max fallos — abriendo portal");
-    wifiStartPortal();
+    if (_portalEnabled) {
+      Serial.println("[WiFi] Max fallos — abriendo portal");
+      wifiStartPortal();
+    } else {
+      Serial.println("[WiFi] Max fallos — reintentando (portal desactivado)");
+      reconnTryingIdx = -1;
+      reconnFailCycles = 0;
+      reconnActive = false;
+    }
     return;
   }
 

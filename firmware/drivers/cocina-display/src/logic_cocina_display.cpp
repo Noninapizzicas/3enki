@@ -25,6 +25,7 @@
 #include "enki_wifi.h"
 #include "display_driver.h"
 #include "ui_cocina.h"
+#include "ui_setup.h"
 #include <WiFi.h>
 #include <lvgl.h>
 #include <time.h>
@@ -73,10 +74,15 @@ static char _reqId[64]            = "";
 static char _topicReg[96]         = "";
 static char _topicList[96]        = "";
 
-// ─── Acción táctil (Core 0 LVGL → Core 1 loop) ────────────────────────────────
+// ─── Pantalla activa ──────────────────────────────────────────────────────────
+
+enum AppScreen : uint8_t { SCREEN_SETUP = 0, SCREEN_COCINA = 1 };
+static AppScreen _activeScreen = SCREEN_SETUP;
+
+// ─── Acción táctil + setup (Core 0 LVGL → Core 1 loop) ───────────────────────
 
 struct PendingAction {
-    enum Type : uint8_t { NONE = 0, PREPARE_ITEM = 1, MARK_READY = 2 };
+    enum Type : uint8_t { NONE = 0, PREPARE_ITEM = 1, MARK_READY = 2, SCAN_WIFI = 3 };
     Type type;
     char pedido_id[48];
     char item_id[48];
@@ -219,6 +225,15 @@ static void _on_header_tap(const char* pedido_id) {
         strlcpy(_pending.pedido_id, pedido_id, sizeof(_pending.pedido_id));
         _pending.type = PendingAction::MARK_READY;
     }
+    portEXIT_CRITICAL(&_pendingMux);
+}
+
+// ─── Setup: scan WiFi callback (Core 0 → Core 1) ─────────────────────────────
+
+static void _on_scan_trigger() {
+    portENTER_CRITICAL(&_pendingMux);
+    if (_pending.type == PendingAction::NONE)
+        _pending.type = PendingAction::SCAN_WIFI;
     portEXIT_CRITICAL(&_pendingMux);
 }
 
@@ -392,49 +407,101 @@ void logic_setup() {
     _lvglReady = display_driver_init();
     display_set_backlight(BACKLIGHT_BRIGHTNESS);
 
-    if (_lvglReady) {
-        lv_lock();
-        ui_init();
-        ui_set_wifi(false);
-        ui_set_mqtt(false);
-        ui_set_device_color(_deviceColor);
-        ui_set_item_tap_cb(_on_item_tap);
-        ui_set_header_tap_cb(_on_header_tap);
-        UiDeviceConfig cfg;
-        strlcpy(cfg.nombre,        _deviceNombre,  sizeof(cfg.nombre));
-        strlcpy(cfg.tipo_estacion, _deviceTipo,    sizeof(cfg.tipo_estacion));
-        strlcpy(cfg.filtros,       _deviceFiltros, sizeof(cfg.filtros));
-        ui_set_config(cfg, _on_config_apply);
-        lv_unlock();
-        display_lvgl_task_start();
+    if (!_lvglReady) {
+        Serial.println("[COCINA] Display no disponible");
+        return;
     }
 
-    // 3. NTP
+    // 3. Elegir pantalla: setup si no configurado, cocina si sí
+    if (!baseCfg.configured) {
+        _activeScreen = SCREEN_SETUP;
+        lv_lock();
+        ui_setup_create(_on_scan_trigger);
+        ui_setup_populate();
+        ui_setup_load();
+        lv_unlock();
+        display_lvgl_task_start();
+        Serial.println("[COCINA] Pantalla: SETUP (no configurado)");
+        return;
+    }
+
+    _activeScreen = SCREEN_COCINA;
+    lv_lock();
+    ui_init();
+    ui_set_wifi(false);
+    ui_set_mqtt(false);
+    ui_set_device_color(_deviceColor);
+    ui_set_item_tap_cb(_on_item_tap);
+    ui_set_header_tap_cb(_on_header_tap);
+    UiDeviceConfig cfg;
+    strlcpy(cfg.nombre,        _deviceNombre,  sizeof(cfg.nombre));
+    strlcpy(cfg.tipo_estacion, _deviceTipo,    sizeof(cfg.tipo_estacion));
+    strlcpy(cfg.filtros,       _deviceFiltros, sizeof(cfg.filtros));
+    ui_set_config(cfg, _on_config_apply);
+    lv_unlock();
+    display_lvgl_task_start();
+
+    // 4. NTP
     configTime(0, 0, "pool.ntp.org", "time.cloudflare.com");
     _lastNtpMs = millis();
 
-    // 4. MQTT — si ya conectado al arrancar
+    // 5. MQTT — si ya conectado al arrancar
     if (enki_mqtt_connected()) {
         _subscribe_topics();
-        _register_device();  // list-active se pide en la respuesta del register
+        _register_device();
     }
 
-    if (_lvglReady) {
-        lv_lock();
-        ui_set_wifi(WiFi.status() == WL_CONNECTED);
-        ui_set_mqtt(enki_mqtt_connected());
-        lv_unlock();
-    }
+    lv_lock();
+    ui_set_wifi(WiFi.status() == WL_CONNECTED);
+    ui_set_mqtt(enki_mqtt_connected());
+    lv_unlock();
 
     Serial.printf("[COCINA] Listo — device=%s tipo=%s\n", _deviceId, _deviceTipo);
 }
 
 void logic_loop() {
     uint32_t now = millis();
+
+    // ── Pantalla setup: solo procesar scan WiFi ───────────────────────────────
+    if (_activeScreen == SCREEN_SETUP) {
+        PendingAction::Type t = PendingAction::NONE;
+        portENTER_CRITICAL(&_pendingMux);
+        if (_pending.type == PendingAction::SCAN_WIFI) {
+            t = PendingAction::SCAN_WIFI;
+            _pending.type = PendingAction::NONE;
+        }
+        portEXIT_CRITICAL(&_pendingMux);
+
+        if (t == PendingAction::SCAN_WIFI && _lvglReady) {
+            lv_lock();
+            ui_setup_scan_start();
+            lv_unlock();
+
+            int n = WiFi.scanNetworks(false, false, false, 500);
+            UiSetupScanResult results[UI_SETUP_MAX_SCAN];
+            int count = 0;
+            if (n > 0) {
+                for (int i = 0; i < n && count < UI_SETUP_MAX_SCAN; i++) {
+                    strlcpy(results[count].ssid, WiFi.SSID(i).c_str(), sizeof(results[count].ssid));
+                    results[count].rssi = (int8_t)WiFi.RSSI(i);
+                    results[count].open = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
+                    count++;
+                }
+                WiFi.scanDelete();
+            }
+
+            lv_lock();
+            ui_setup_scan_results(results, count);
+            lv_unlock();
+            Serial.printf("[SETUP] Scan: %d redes\n", count);
+        }
+        return;
+    }
+
+    // ── Pantalla cocina ───────────────────────────────────────────────────────
     bool wifiNow = (WiFi.status() == WL_CONNECTED);
     bool mqttNow = enki_mqtt_connected();
 
-    // Detectar reconexión MQTT → re-suscribir y registrar de nuevo
     if (mqttNow && !_mqttWasConnected) {
         _subscribe_topics();
         _register_device();
@@ -442,7 +509,6 @@ void logic_loop() {
     }
     _mqttWasConnected = mqttNow;
 
-    // Indicadores de conectividad
     if (_lvglReady) {
         static bool lw = false, lm = false;
         if (wifiNow != lw || mqttNow != lm) {
@@ -454,7 +520,6 @@ void logic_loop() {
         }
     }
 
-    // Procesar acción táctil pendiente (vino de Core 0) en Core 1
     {
         PendingAction::Type t = PendingAction::NONE;
         char pid[48] = "", iid[48] = "";
@@ -470,7 +535,6 @@ void logic_loop() {
         else if (t == PendingAction::MARK_READY)   _do_mark_ready(pid);
     }
 
-    // Reloj cada 30s
     if (_lvglReady && now - _lastClockMs > CLOCK_INTERVAL_MS) {
         lv_lock();
         ui_tick_clock();
@@ -478,12 +542,10 @@ void logic_loop() {
         _lastClockMs = now;
     }
 
-    // Re-pedir lista activa periódicamente
     if (mqttNow && _registered && now - _lastListMs > LIST_INTERVAL_MS) {
         _request_list_active();
     }
 
-    // Re-sync NTP
     if (now - _lastNtpMs > NTP_INTERVAL_MS) {
         configTime(0, 0, "pool.ntp.org");
         _lastNtpMs = now;

@@ -64,7 +64,7 @@
 
 /* Widgets utilizados */
 #define LV_USE_LABEL    1
-#define LV_USE_BTN      0
+#define LV_USE_BUTTON   1
 #define LV_USE_BTNMATRIX 0
 #define LV_USE_CHECKBOX 0
 #define LV_USE_DROPDOWN 0
@@ -73,7 +73,7 @@
 #define LV_USE_ROLLER   0
 #define LV_USE_SLIDER   0
 #define LV_USE_SWITCH   0
-#define LV_USE_TEXTAREA 0
+#define LV_USE_TEXTAREA 1
 #define LV_USE_TABLE    0
 #define LV_USE_ARC      1
 #define LV_USE_BAR      0
@@ -81,7 +81,7 @@
 #define LV_USE_CALENDAR 0
 #define LV_USE_COLORWHEEL 0
 #define LV_USE_IMGBTN   0
-#define LV_USE_KEYBOARD 0
+#define LV_USE_KEYBOARD 1
 #define LV_USE_LED      0
 #define LV_USE_LIST     1
 #define LV_USE_MENU     0

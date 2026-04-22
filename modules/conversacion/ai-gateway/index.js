@@ -296,6 +296,15 @@ class AIGatewayModule {
       ? allTools.filter(t => (t.function?.name || t.name || '').startsWith(target_module + '.'))
       : allTools;
 
+    this.logger.info('ai-gateway.tools.filtered', {
+      conversation_id,
+      project_id,
+      target_module,
+      all_tools_count: allTools.length,
+      filtered_tools_count: tools.length,
+      decision_keys: decision ? Object.keys(decision) : []
+    });
+
     await this.onAIChatRequest({
       data: {
         request_id: request_id || require('crypto').randomUUID(),
@@ -447,12 +456,15 @@ class AIGatewayModule {
         correlation_id: correlationId
       });
 
-      // Publicar error
+      // Publicar error — incluir scope para que chat-session pueda guardar mensaje de error
       await this.eventBus.publish(EVENTS.AI.CHAT_RESPONSE, {
         request_id,
+        conversation_id: event.data?.conversation_id || null,
+        project_id: event.data?.project_id || null,
+        correlation_id: correlationId,
         success: false,
         message: null,
-        content: null,
+        content: `Error del LLM: ${error.message}`,
         tool_calls: null,
         tokens: 0,
         cost: 0,

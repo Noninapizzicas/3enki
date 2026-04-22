@@ -9,8 +9,7 @@
     { "event": "agent.execute",        "handler": "onAgentExecute" },
     { "event": "chat.message.routed",  "handler": "onChatMessageRouted" },
     { "event": "db.query.response",    "handler": "onDbQueryResponse" },
-    { "event": "project.activated",    "handler": "onProjectActivated" },
-    { "event": "project.deactivated",  "handler": "onProjectDeactivated" }
+    { "event": "project.activated",    "handler": "onProjectActivated" }
   ],
 
   "publishes": [

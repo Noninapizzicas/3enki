@@ -40,7 +40,6 @@ class FacturasModule {
     this.services = null;
 
     // Active project tracking
-    this.activeProjectId = null;
 
     // Module config (from module.json, overridable)
     this.config = {
@@ -109,12 +108,6 @@ class FacturasModule {
   // ==========================================
   // Event Handlers
   // ==========================================
-
-  onProjectActivated(event) {
-    const data = event.data || event;
-    this.activeProjectId = data.project_id;
-    this.logger.debug('facturas.project.activated', { project_id: data.project_id });
-  }
 
   /**
    * Reacciona a factura.entrada (emitido por fuentes: telegram, gmail, manual, etc.)

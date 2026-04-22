@@ -25,7 +25,6 @@ class AgentBridgeModule {
     this.logger = null;
     this.eventBus = null;
     this.config = null;
-    this.activeProjectId = null;
 
     // pipelineId → { conversation_id, agent_name, unsubCompleted, unsubFailed, timer, projectId }
     this.inFlight = new Map();
@@ -101,10 +100,14 @@ class AgentBridgeModule {
       this.logger.warn('agent-bridge.execute.invalid', { reason: 'missing agent_name' });
       return;
     }
+    if (!project_id) {
+      this.logger.warn('agent-bridge.execute.missing_project_id', { conversation_id, agent_name });
+      return;
+    }
 
     const pipelineId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
-    const projectId = project_id || this.activeProjectId;
+    const projectId = project_id;
     const timeoutMs = this.config.execution_timeout_ms || 0;
 
     if (projectId) {
@@ -240,10 +243,12 @@ class AgentBridgeModule {
   }
 
   async onProjectActivated(event) {
+    // Único propósito: recuperar ejecuciones de agentes que quedaron en vuelo
+    // tras un reinicio del backend. NO cacheamos project_id — éste viene en el
+    // payload de cada mensaje.
     const data = event.data || event;
     const projectId = data.project_id;
     if (!projectId) return;
-    this.activeProjectId = projectId;
 
     const running = await this.store.getRunningExecutions(projectId);
     if (running.length === 0) return;
@@ -283,11 +288,6 @@ class AgentBridgeModule {
         await this.eventBus.publish('agent.active', { conversation_id, agent_name, pipelineId });
       }
     }
-  }
-
-  async onProjectDeactivated(event) {
-    const data = event.data || event;
-    if (this.activeProjectId === data.project_id) this.activeProjectId = null;
   }
 
   // ==========================================

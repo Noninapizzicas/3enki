@@ -34,7 +34,6 @@ class ChatSessionModule {
     // In-memory cache
     this.conversations = new Map(); // conversationId -> conversation
     this.initializedProjects = new Set(); // Track projects with initialized schema
-    this.activeProjectId = null; // Cached from project.activated event
 
     // Pending requests (for request/response pattern)
     this.pendingDbRequests = new Map();
@@ -326,18 +325,18 @@ class ChatSessionModule {
       return this.conversations.get(conversationId);
     }
 
-    // Not in cache - query DB using provided projectId or activeProjectId
-    const projId = projectId || this.activeProjectId;
-    if (!projId) {
-      this.logger.warn({ correlationId, conversationId }, 'Conversation not in cache and no activeProjectId');
+    // Not in cache — projectId is required to know which DB to query.
+    // El frontend envía project_id en cada mensaje; si no llegó es bug aguas arriba.
+    if (!projectId) {
+      this.logger.warn({ correlationId, conversationId }, 'chat-session.getConversation.missing_project_id');
       return null;
     }
 
-    this.logger.info({ correlationId, conversationId, projectId: projId }, 'Conversation cache miss - querying DB');
+    this.logger.info({ correlationId, conversationId, projectId }, 'Conversation cache miss - querying DB');
 
     try {
-      await this.ensureProjectSchema(projId, correlationId);
-      const rows = await this.queryDatabase(projId,
+      await this.ensureProjectSchema(projectId, correlationId);
+      const rows = await this.queryDatabase(projectId,
         'SELECT * FROM conversations WHERE id = ? LIMIT 1',
         [conversationId],
         true,
@@ -352,7 +351,7 @@ class ChatSessionModule {
       const row = rows[0];
       const conversation = {
         id: row.id,
-        project_id: row.project_id || projId,
+        project_id: row.project_id || projectId,
         user_id: row.user_id,
         title: row.title,
         system_prompt: row.system_prompt,
@@ -1100,143 +1099,6 @@ class ChatSessionModule {
   }
 
   // ==========================================
-  // Helper: Get Active Project
-  // ==========================================
-
-  /**
-   * Get active project ID.
-   * Uses cached value from project.activated event when available.
-   * Falls back to RPC query if cache is empty (e.g., module loaded after project was activated).
-   */
-  async getActiveProjectId(correlationId) {
-    // Fast path: return cached value
-    if (this.activeProjectId) {
-      return this.activeProjectId;
-    }
-
-    // Slow path: RPC fallback
-    this.logger.debug('chat-session.getActiveProjectId.rpc_fallback', { correlationId });
-
-    const requestId = crypto.randomUUID();
-
-    return new Promise(async (resolve, reject) => {
-      const timeout = setTimeout(() => {
-        unsub();
-        resolve(null);
-      }, 5000);
-
-      const unsub = await this.eventBus.subscribe(EVENTS.PROJECT.ACTIVE_RESPONSE, (event) => {
-        const data = event.data || event;
-        if (data.request_id === requestId) {
-          clearTimeout(timeout);
-          unsub();
-          const projectId = data.active_project_id || null;
-          if (projectId) {
-            this.activeProjectId = projectId;
-          }
-          resolve(projectId);
-        }
-      });
-
-      await this.eventBus.publish(EVENTS.PROJECT.ACTIVE_REQUEST, {
-        request_id: requestId,
-        correlation_id: correlationId
-      });
-    });
-  }
-
-  // ==========================================
-  // Project Lifecycle Handlers
-  // ==========================================
-
-  /**
-   * Handle project.activated event
-   * Pre-loads conversations for the activated project so they're ready in cache.
-   * Emits session.project.ready with the last conversation for this project.
-   */
-  async onProjectActivated(event) {
-    const data = event.data || event;
-    const { project_id, name } = data;
-    const correlationId = crypto.randomUUID();
-
-    if (!project_id) return;
-
-    // Cache active project ID for fast lookup
-    this.activeProjectId = project_id;
-
-    this.logger.info('chat-session.project.activated', { correlationId, project_id, name });
-
-    try {
-      // Ensure project schema exists
-      await this.ensureProjectSchema(project_id, correlationId);
-
-      // Pre-load recent conversations into cache
-      const conversations = await this.listConversations(project_id, 20, correlationId);
-
-      // Find the most recent conversation (already sorted by updated_at DESC)
-      const lastConversation = conversations.length > 0 ? conversations[0] : null;
-
-      // Emit event so UI/other modules know sessions are ready
-      await this.eventBus.publish('session.project.ready', {
-        project_id,
-        project_name: name,
-        conversation_count: conversations.length,
-        last_conversation_id: lastConversation?.id || null,
-        last_conversation_title: lastConversation?.title || null,
-        correlation_id: correlationId
-      });
-
-      this.logger.info('chat-session.project.conversations.loaded', {
-        correlationId,
-        project_id,
-        count: conversations.length,
-        lastConversationId: lastConversation?.id || null
-      });
-    } catch (error) {
-      this.logger.warn('chat-session.project.activated.error', {
-        correlationId,
-        project_id,
-        error: error.message
-      });
-      // Non-fatal: project activation should not fail because of session loading
-    }
-  }
-
-  /**
-   * Handle project.deactivated event
-   * Clears cached conversations for the deactivated project to free memory.
-   */
-  async onProjectDeactivated(event) {
-    const data = event.data || event;
-    const { project_id } = data;
-
-    if (!project_id) return;
-
-    // Clear cached active project ID
-    if (this.activeProjectId === project_id) {
-      this.activeProjectId = null;
-    }
-
-    this.logger.info('chat-session.project.deactivated', { project_id });
-
-    // Clear conversations belonging to this project from cache
-    let cleared = 0;
-    for (const [convId, conv] of this.conversations.entries()) {
-      if (conv.project_id === project_id) {
-        this.conversations.delete(convId);
-        cleared++;
-      }
-    }
-
-    if (cleared > 0) {
-      this.logger.debug('chat-session.project.cache.cleared', {
-        project_id,
-        conversations_cleared: cleared
-      });
-    }
-  }
-
-  // ==========================================
   // UI Handlers: conversation.* (frontend facing, camelCase)
   // ==========================================
 
@@ -1265,17 +1127,13 @@ class ChatSessionModule {
     const { projectId, title, system_prompt, model, provider, temperature, max_tokens, context_window } = data;
     const correlationId = request?.correlationId || crypto.randomUUID();
 
-    try {
-      let projId = projectId;
-      if (!projId) {
-        projId = await this.getActiveProjectId(correlationId);
-        if (!projId) {
-          throw { status: 400, code: 'NO_PROJECT', message: 'No active project' };
-        }
-      }
+    if (!projectId) {
+      throw { status: 400, code: 'NO_PROJECT', message: 'projectId is required' };
+    }
 
+    try {
       const options = { title, system_prompt, model, provider, temperature, max_tokens, context_window };
-      const conversation = await this.createConversation(projId, null, options, correlationId);
+      const conversation = await this.createConversation(projectId, null, options, correlationId);
       return { conversation };
     } catch (error) {
       if (error.status) throw error;
@@ -1287,16 +1145,12 @@ class ChatSessionModule {
     const { projectId, limit } = data;
     const correlationId = request?.correlationId || crypto.randomUUID();
 
-    try {
-      let projId = projectId;
-      if (!projId) {
-        projId = await this.getActiveProjectId(correlationId);
-        if (!projId) {
-          return { conversations: [], total: 0 };
-        }
-      }
+    if (!projectId) {
+      throw { status: 400, code: 'NO_PROJECT', message: 'projectId is required' };
+    }
 
-      const conversations = await this.listConversations(projId, limit || 20, correlationId);
+    try {
+      const conversations = await this.listConversations(projectId, limit || 20, correlationId);
       return {
         conversations,
         total: conversations.length

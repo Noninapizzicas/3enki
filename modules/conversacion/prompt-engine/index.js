@@ -38,7 +38,7 @@ class PromptEngine {
     this.eventBus = context.eventBus;
     this.config = context.moduleConfig || {};
 
-    this._modulesDir = this.config.modulesDir || path.join(__dirname, '..');
+    this._modulesDir = this.config.modulesDir || path.join(__dirname, '../..');
     this._listRequestId = null;
 
     this._loadBasePrompt();
@@ -488,6 +488,14 @@ class PromptEngine {
 
     // Módulo activo: se resuelve siempre primero — necesario para contexto Y tools
     const moduleName = (page ? this.resolveRouteToModule(page) : null) || decision?.module || null;
+
+    this.logger.info('prompt-engine.module.resolved', {
+      conversation_id,
+      page: page || null,
+      resolved_module: moduleName,
+      decision_module: decision?.module || null,
+      has_custom_prompt: !!customPromptId
+    });
 
     // Prioridad del prompt:
     //   1. customPromptId (del usuario, vía UI) → reemplaza la persona, mantiene el contexto del módulo

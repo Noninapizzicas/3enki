@@ -518,7 +518,12 @@ class ProjectManagerModule {
     this.projects.set(projectId, project);
 
     await this.eventBus.publish(EVENTS.PROJECT.UPDATED, {
-      project_id: projectId, updated_fields: updatedFields, updated_at: now
+      project_id: projectId,
+      name: project.name,
+      description: project.description,
+      parent_project_id: project.parent_project_id || null,
+      updated_fields: updatedFields,
+      updated_at: now
     });
 
     return project;

@@ -331,7 +331,9 @@ class ServiceRegistry {
 
       fs.writeFileSync(this.registryFile, JSON.stringify(data, null, 2), 'utf8');
     } catch (error) {
-      console.error('[ServiceRegistry] Failed to save registry:', error.message);
+      if (error.code !== 'EROFS' && error.code !== 'EACCES') {
+        console.error('[ServiceRegistry] Failed to save registry:', error.message);
+      }
     }
   }
 

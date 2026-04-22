@@ -2,8 +2,8 @@
  * Enki ESP32 Firmware — Cocina Display
  *
  * Board:  Guition JC8012P4A1 (ESP32-P4 + ESP32-C6)
- * Panel:  ILI9881C MIPI-DSI 800x1280
- * Touch:  GT911 I2C
+ * Panel:  JD9365 MIPI-DSI 800x1280
+ * Touch:  GSL3680 I2C (pendiente)
  */
 
 #include "enki_base.h"

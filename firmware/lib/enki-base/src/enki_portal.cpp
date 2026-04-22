@@ -132,19 +132,21 @@ static void handleWifiScan() {
   JsonDocument doc;
   auto arr = doc.to<JsonArray>();
 
-  for (int i = 0; i < n; i++) {
-    JsonObject obj = arr.add<JsonObject>();
-    obj["ssid"] = WiFi.SSID(i);
-    obj["rssi"] = WiFi.RSSI(i);
-    obj["open"] = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
-    for (int j = 0; j < WIFI_MAX_NETWORKS; j++) {
-      if (strlen(baseCfg.wifi[j].ssid) > 0 && WiFi.SSID(i) == baseCfg.wifi[j].ssid) {
-        obj["configured"] = j + 1;
-        break;
+  if (n > 0) {
+    for (int i = 0; i < n; i++) {
+      JsonObject obj = arr.add<JsonObject>();
+      obj["ssid"] = WiFi.SSID(i);
+      obj["rssi"] = WiFi.RSSI(i);
+      obj["open"] = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
+      for (int j = 0; j < WIFI_MAX_NETWORKS; j++) {
+        if (strlen(baseCfg.wifi[j].ssid) > 0 && WiFi.SSID(i) == baseCfg.wifi[j].ssid) {
+          obj["configured"] = j + 1;
+          break;
+        }
       }
     }
+    WiFi.scanDelete();
   }
-  WiFi.scanDelete();
 
   char buf[1024];
   serializeJson(doc, buf, sizeof(buf));

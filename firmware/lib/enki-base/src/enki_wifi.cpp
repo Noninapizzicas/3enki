@@ -48,6 +48,7 @@ static volatile uint8_t wifiLostReason = 0;
 static void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
   switch (event) {
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+      if (portalMode) break;
       wifiLostReason = info.wifi_sta_disconnected.reason;
       wifiLostFlag = true;
       Serial.printf("[WiFi] Desconectado (reason: %d)\n", wifiLostReason);
@@ -108,24 +109,47 @@ static bool wifiConnectMulti() {
 void wifiStartPortal() {
   portalMode = true;
   reconnActive = false;
-
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_AP);
+  WiFi.setAutoReconnect(false);
 
   String apName = String(WIFI_AP_NAME_PREFIX) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX).substring(4);
-  WiFi.softAP(apName.c_str());
 
-  dnsServer.start(53, "*", WiFi.softAPIP());
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+  // ESP32-P4 + ESP-Hosted: usa APSTA pero con STA desconectada.
+  // Pure AP (WIFI_MODE_AP) también funciona pero no permite scan desde el portal.
+  // APSTA + setAutoReconnect(false) + disconnect = AP activo, STA silenciosa.
+  WiFi.disconnect(false);
+  delay(100);
+  esp_wifi_stop();
+  delay(300);
+  esp_wifi_set_mode(WIFI_MODE_APSTA);
+  esp_wifi_start();
+  delay(500);
+#else
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_AP);
+#endif
 
-  Serial.printf("[WiFi] Portal cautivo — SSID: %s  IP: %s\n",
-    apName.c_str(), WiFi.softAPIP().toString().c_str());
+  bool ok = WiFi.softAP(apName.c_str());
+  IPAddress ip = WiFi.softAPIP();
+
+  if (ok && ip != IPAddress(0, 0, 0, 0)) {
+    dnsServer.start(53, "*", ip);
+    Serial.printf("[WiFi] Portal listo — SSID: %s  http://%s/\n", apName.c_str(), ip.toString().c_str());
+  } else {
+    Serial.printf("[WiFi] Portal AP no disponible (ok=%d IP=%s)\n",
+                  (int)ok, ip.toString().c_str());
+  }
 }
 
 // ── Setup (boot) ────────────────────────────────
 
 bool wifiSetup() {
-  // Configurar driver WiFi UNA vez
+  // En ESP32-P4 (ESP-Hosted), el framework inicializa el transporte SDIO antes de setup().
+  // Llamar WiFi.mode() en ese punto genera "Transport already initialized" y puede fallar.
+  // El modo STA ya está activo por defecto, así que lo omitimos en P4.
+#if !defined(CONFIG_IDF_TARGET_ESP32P4)
   WiFi.mode(WIFI_STA);
+#endif
   WiFi.persistent(false);       // no guardar creds en flash (las gestionamos nosotros via NVS)
   WiFi.setAutoReconnect(true);  // el driver reintenta con la ultima red automaticamente
   WiFi.onEvent(onWiFiEvent);    // deteccion instantanea de desconexion

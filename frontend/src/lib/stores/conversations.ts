@@ -366,6 +366,7 @@ export async function sendMessage(
       duration: number;
     }>('conversation', 'send', {
       conversationId: state.activeConversationId,
+      projectId: state.activeConversation?.project_id || get(activeProjectId),
       content,
       attachments
     });

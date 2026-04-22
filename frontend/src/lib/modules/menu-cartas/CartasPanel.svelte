@@ -17,7 +17,6 @@
     selectCarta,
     type Producto
   } from '$lib/stores/carta-manager';
-  import { updatePageStateBatch } from '$lib/stores/page-context';
 
   export let panelId: string = '';
 
@@ -42,7 +41,6 @@
   async function handleViewCarta(id: string) {
     await getCarta(id);
     view = 'detail';
-    updatePageStateBatch({ activeCarta: id, pipelineStep: 'viewing_carta' });
   }
 
   function handleBack() {

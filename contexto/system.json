@@ -34,7 +34,7 @@
     "tiers": {
       "tier_1_infra": ["credential-manager", "database-manager", "filesystem"],
       "tier_1_infra_disabled": ["log-manager"],
-      "tier_2_platform": ["plugin-manager", "prompt-manager", "prompt-composer", "scheduler", "perifericos"],
+      "tier_2_platform": ["plugin-manager", "prompt-manager", "prompt-engine", "scheduler", "perifericos"],
       "tier_3_core": ["project-manager", "composition-manager", "context-manager", "system-inspector", "ai-gateway", "ai-agent-framework", "agent-manager"],
       "tier_4_features": ["calling-generator", "bot-manager", "chat-ai-bridge", "chat-session", "code-executor"],
       "tier_5_domain_pizzepos": ["cuentas", "cuentas-canales", "pedidos", "cobros", "cocina", "comandero", "productos", "categorias", "ingredientes", "variaciones", "persistencia-comandero", "impresion"],
@@ -169,58 +169,16 @@
   },
 
   "patrones_recientes": {
-    "_updated": "2026-02-16",
-    "page_context": {
-      "descripcion": "Patrón reutilizable: página especializada + chat con contexto de lo que pasa en esa página. Dos caminos (UI manual, chat conversacional) comparten estado.",
-      "motivacion": "Cada vertical (menu-generator, comandero, cocina, facturación) tendrá su página con paneles y chat contextual. El LLM sabe qué página es, qué ha hecho el usuario, y qué datos hay disponibles.",
-      "componentes": {
-        "page-context.ts": {
-          "ubicacion": "frontend/src/lib/stores/page-context.ts",
-          "tipo": "Svelte writable store genérico",
-          "api": "setPageContext(), updatePageState(), updatePageStateBatch(), clearPageContext(), getPageContextSnapshot()",
-          "responsabilidad": "SOLO almacenar el estado de la página actual. No sabe de chat ni de prompt."
-        },
-        "chat.ts": {
-          "cambio": "sendMessage() captura getPageContextSnapshot() y lo envía como pageContext en el payload MQTT",
-          "responsabilidad": "SOLO capturar y transportar. No sabe qué página es ni qué significa el estado."
-        },
-        "chat-ai-bridge": {
-          "cambio": "Extrae page_context del payload, lo guarda en flowState, lo pasa a prompt.compose.request",
-          "responsabilidad": "SOLO transportar. No interpreta el contenido."
-        },
-        "prompt-composer": {
-          "cambio": "Nuevo método buildPageContextSection(). Renderiza ## Page Context con título, instrucciones, estado vivo.",
-          "responsabilidad": "SOLO renderizar como sección del system prompt. No sabe de páginas específicas.",
-          "truncamiento": "Valores >4000 chars se truncan. Objetos se serializan como JSON."
-        },
-        "+page.svelte": {
-          "cambio": "onMount → setPageContext({ route, title, description, instructions, state: { projectId } }). onDestroy → clearPageContext().",
-          "ubicacion": "routes/[project_id]/menu-generator/+page.svelte (project-scoped). La ruta legacy /menu-generator redirige al proyecto activo.",
-          "responsabilidad": "Definir QUÉ contexto tiene esta página y QUÉ instrucciones necesita el LLM. Incluye projectId del URL param."
-        },
-        "paneles/componentes": {
-          "cambio": "Cada panel llama updatePageState() cuando completa un paso.",
-          "responsabilidad": "SOLO escribir su dato al estado. No sabe de chat ni de prompt."
-        }
-      },
-      "flujo_completo": [
-        "1. +page.svelte → setPageContext({ route, title, description, instructions, state: {} })",
-        "2. Panel completa acción → updatePageState('ocrText', text) / updatePageStateBatch({...})",
-        "3. Usuario envía mensaje en chat → chat.ts captura getPageContextSnapshot()",
-        "4. mqttRequest('conversation', 'send', { content, pageContext }) → chat-ai-bridge",
-        "5. chat-ai-bridge → prompt.compose.request con page_context",
-        "6. prompt-composer.buildPageContextSection() → ## Page Context en system prompt",
-        "7. LLM recibe system prompt con contexto de página → usa tools informadamente",
-        "8. onDestroy → clearPageContext()"
-      ],
-      "primera_implementacion": "menu-generator (10 tools + 5 paneles + page context) en /[project_id]/menu-generator",
-      "proximas_implementaciones": ["comandero", "cocina", "facturación"],
-      "para_nueva_pagina": [
-        "1. setPageContext() en +page.svelte con route, title, description, instructions",
-        "2. updatePageState() en componentes cuando algo cambia",
-        "3. clearPageContext() en onDestroy",
-        "4. Cero cambios en backend — el patrón ya está implementado"
-      ]
+    "_updated": "2026-04-22",
+    "conversacion_pipeline": {
+      "_see": "conversacion.json — arquitectura completa del chat LLM",
+      "descripcion": "Pipeline event-driven: URL → chat.ts → chat-ai-bridge → chat-session → router → context-manager → prompt-engine → ai-gateway → LLM",
+      "principio": "El módulo es el contexto. La URL identifica el módulo. El backend arma el prompt.",
+      "separacion_context_prompt": "Cada módulo tiene context.json (siempre presente) y prompt.json (reemplazable por custom). Un custom prompt del usuario NO pierde el contexto del módulo.",
+      "tools_filtradas_por_pagina": "ai-gateway filtra tools por target_module (viene en chat.prompt.ready). En /recetas solo se envían recetas.*",
+      "contexto_modular": "Cada módulo tiene context.json (siempre presente) + prompt.json (reemplazable por custom). El contexto del módulo nunca desaparece.",
+      "frontend_minimalista": "page-context.ts ELIMINADO. Frontend solo deriva page desde URL y lo envía. No duplica capabilities/rules del módulo.",
+      "ver_doc": "conversacion.json para el pipeline completo, variables del payload, ejemplos"
     },
     "tools_first_modules": {
       "descripcion": "Módulos que exponen tools para el agentic loop del chat, además de ui_handlers para el frontend",
@@ -284,7 +242,7 @@
       "para_nueva_pagina": [
         "1. Crear routes/[project_id]/mi-pagina/+page.svelte",
         "2. getContext('project') para acceder al proyecto del layout padre",
-        "3. setPageContext() con route: '/mi-pagina' (sin prefijo de proyecto)",
+        "3. Crear modules/mi-modulo/context.json (capabilities) + prompt.json (role + intent) — el backend resuelve route → módulo automáticamente",
         "4. Manifests de módulos: routes: ['/mi-pagina'] — routeMatches() lo resuelve",
         "5. Opcional: redirect en routes/mi-pagina/+page.svelte para URLs legacy"
       ]

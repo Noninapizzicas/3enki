@@ -183,9 +183,9 @@ class ChatSessionModule {
       `, [], false, correlationId);
 
       this.initializedProjects.add(projectId);
-      this.logger.info('chat-session.schema.initialized', { correlationId, projectId });
+      this.logger.info({ correlationId, projectId }, 'Schema initialized');
     } catch (error) {
-      this.logger.error('chat-session.schema.init.failed', { correlationId, projectId, error: error.message });
+      this.logger.error({ correlationId, projectId, error: error.message }, 'Failed to initialize schema');
       throw error;
     }
   }
@@ -822,33 +822,25 @@ class ChatSessionModule {
 
   async onChatSendRequest(event) {
     const data = event.data || event;
-    let { conversation_id, content, project_id, user_id, page_context, attachments, request_id } = data;
-    if (!content || !project_id) return;
+    const { conversation_id, content, project_id, user_id, page, prompt } = data;
+    if (!conversation_id || !content) return;
 
     try {
-      if (!conversation_id) {
-        const conv = await this.createConversation(project_id, user_id, {}, request_id);
-        conversation_id = conv.id;
-      }
-
       const savedMessage = await this.saveMessage(conversation_id, {
-        role: 'user', content, user_id, attachments: attachments || []
+        role: 'user', content, user_id
       });
 
+      // Cargar historial reciente para que el AI tenga contexto
       const history = await this.getMessages(conversation_id, true).catch(() => []);
-      const messages = (history || []).map(m => ({
-        role: m.role,
-        content: m.content,
-        ...(m.attachments?.length ? { attachments: m.attachments } : {})
-      }));
+      const messages = (history || []).map(m => ({ role: m.role, content: m.content }));
 
       await this.eventBus.publish('chat.message.saved', {
         conversation_id, project_id,
-        request_id: request_id || null,
         message_id: savedMessage?.id,
         content,
         messages,
-        page_context: page_context || null
+        page: page || null,
+        prompt: prompt || null
       });
     } catch (err) {
       this.logger?.error('chat-session.send.failed', { conversation_id, error: err.message });

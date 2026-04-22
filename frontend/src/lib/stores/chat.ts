@@ -17,7 +17,18 @@ import { activeProjectId } from './projects';
 import { activeProvider, activeModel } from './workspace';
 import { notifyError } from './ui';
 import { generateUUID } from '$lib/utils';
-import { getPageContextSnapshot } from './page-context';
+
+/**
+ * Deriva la ruta de página desde la URL, sin el prefijo /[project_id].
+ * Ej: /pixel-bosch/recetas → /recetas
+ * El backend resuelve esta ruta al módulo correspondiente.
+ */
+function getPageRoute(): string | null {
+  if (typeof window === 'undefined') return null;
+  const segments = window.location.pathname.split('/').filter(Boolean);
+  if (segments.length < 2) return null;
+  return '/' + segments.slice(1).join('/');
+}
 
 // ============================================================================
 // STORES
@@ -102,12 +113,17 @@ export async function sendMessage(content: string): Promise<void> {
 
   // Enviar via mqttRequest (patrón ui/request/conversation/send)
   try {
-    // Capturar contexto de página (si hay) para inyectar en el system prompt
-    const currentPageContext = getPageContextSnapshot();
-
-    // Provider y modelo seleccionados (si hay)
     const currentProvider = get(activeProvider);
     const currentModel = get(activeModel);
+
+    // Scope de la conexión: proyecto + conversación + página (los tres siempre).
+    // El backend NO adivina ni cachea — lee del payload.
+    const currentProjectId = get(activeProjectId);
+    if (!currentProjectId) {
+      isStreaming.set(false);
+      notifyError('No hay proyecto activo');
+      return;
+    }
 
     const response = await mqttRequest<{
       conversationId: string;
@@ -116,8 +132,9 @@ export async function sendMessage(content: string): Promise<void> {
       tokens_used?: number;
       cost?: number;
     }>('conversation', 'send', {
+      project_id: currentProjectId,
       conversationId: convId,
-      projectId: get(activeProjectId),
+      page: getPageRoute(),
       content: userMessage.content,
       attachments: currentAttachments.map(a => ({
         type: a.type,
@@ -125,8 +142,7 @@ export async function sendMessage(content: string): Promise<void> {
         name: a.name
       })),
       provider: currentProvider?.id || undefined,
-      model: currentModel || undefined,
-      pageContext: currentPageContext || undefined
+      model: currentModel || undefined
     }, { timeout: 180000 }); // 180s para respuestas de IA con herramientas
 
     // Añadir mensaje del asistente si existe (está en response.data)

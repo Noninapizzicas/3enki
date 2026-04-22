@@ -1,12 +1,13 @@
 {
   "_AI_INSTRUCTIONS": {
     "IMPORTANT": "This is your primary context source. ALWAYS check here before generating anything.",
-    "LEER_PRIMERO": "1) eventos-dominio.json (catálogo canónico de eventos). 2) cartas-ecosystem.json (arquitectura de cartas 2026-04). Reemplazan info obsoleta en pizzepos.json y carta-digital.json.",
+    "LEER_PRIMERO": "1) eventos-dominio.json (catálogo canónico de eventos). 2) cartas-ecosystem.json (arquitectura de cartas 2026-04). 3) conversacion.json (pipeline del chat LLM, context.json/prompt.json por módulo, tools filtradas). Reemplazan info obsoleta en pizzepos.json, carta-digital.json y system.json→page_context.",
     "rule_1": "NEVER invent patterns, conventions, or structures not defined in these files",
     "rule_2": "If you don't know something, search in these files FIRST",
     "rule_3": "If it's not here, ASK the user before inventing",
     "rule_4_cartas": "Para CUALQUIER pregunta sobre menu-generator, carta-manager, tarifas, carta-marketing, carta-digital, carta-impresion, carta-scheduler → leer cartas-ecosystem.json PRIMERO. Ignorar secciones obsoletas de pizzepos.json y carta-digital.json.",
     "how_to_use": {
+      "conversacion_chat_llm": "Read conversacion.json (ALTA PRIORIDAD — pipeline del chat, context.json/prompt.json por módulo, tools filtradas por página, prompt custom vs contexto)",
       "cartas_ecosystem": "Read cartas-ecosystem.json (ALTA PRIORIDAD — arquitectura actual de todo lo relacionado con cartas)",
       "architecture_questions": "Read system.json",
       "ui_questions": "Read ui.json",
@@ -111,9 +112,14 @@
       "when": "Trabajar con módulos en modules/pizzepos/, canales de venta, pedidos, cobros, cocina"
     },
     {
+      "file": "conversacion.json",
+      "purpose": "Pipeline completo del chat LLM: context.json/prompt.json por módulo, tools filtradas por página, variables del payload, flujo event-driven",
+      "when": "Cualquier duda sobre chat, prompt, tools, contexto de página, custom prompts, prompt-engine, ai-gateway. REEMPLAZA secciones obsoletas en system.json y chat-refactoring.json"
+    },
+    {
       "file": "chat-refactoring.json",
-      "purpose": "Plan de refactorización del sistema de chat (COMPLETADO - facade eliminada)",
-      "when": "Referencia histórica del refactoring. Para estado actual ver modules.json secciones chat-session y chat-ai-bridge"
+      "purpose": "Plan histórico del refactoring del chat (COMPLETADO). INFORMACIÓN OBSOLETA — ver conversacion.json.",
+      "when": "Solo como referencia histórica. Para estado actual SIEMPRE conversacion.json"
     },
     {
       "file": "analisis-project-manager.json",
@@ -223,10 +229,10 @@
     },
     "recent_patterns": {
       "project_scoped_routes": "Páginas van bajo /[project_id]/pagina (ej: /peppone/menu-generator). Layout padre valida proyecto. Rutas legacy redirigen. routeMatches() stripea prefix para matching de manifests. Ver system.json",
-      "page_context": "Patrón reutilizable: página + chat contextual. UI y LLM comparten estado via page-context.ts. Incluye projectId. Ver system.json",
+      "conversacion_contexto_modular": "El módulo es el contexto. URL identifica módulo. Cada módulo tiene context.json (siempre presente) + prompt.json (reemplazable por custom). Tools filtradas por target_module. page-context.ts eliminado. Ver conversacion.json",
       "tools_first_modules": "Módulos exponen tools[] para agentic loop del chat (ej: menu-generator 10 tools)",
       "loader_auto_wiring": "Subscribes y UI handlers declarados en module.json, auto-wired por el loader — sin código imperativo en onLoad/onUnload (28/28 módulos migrados)",
-      "project_lifecycle_caching": "Módulos cachean proyecto activo via project.activated/deactivated",
+      "project_scoped_payload": "Frontend envía project_id + conversation_id + page en cada mensaje. Backend NO cachea — lee del payload. No hay estado 'proyecto activo' global.",
       "direct_ui_handlers": "Sin facade - handlers UI declarados en module.json ui_handlers array",
       "project_scoped": "Operaciones scoped por project_id (chat-session, scheduler, routes)"
     }

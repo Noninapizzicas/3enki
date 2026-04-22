@@ -15,7 +15,6 @@
     deleteProfile,
     initCartaDesignSubscriptions
   } from '$lib/stores/carta-design';
-  import { updatePageStateBatch } from '$lib/stores/page-context';
 
   export let panelId: string = '';
 
@@ -28,13 +27,6 @@
   onDestroy(() => {
     cleanup?.();
   });
-
-  function selectProfile(profileId: string) {
-    updatePageStateBatch({
-      selectedProfile: profileId,
-      hint: `El usuario seleccionó el perfil "${profileId}" — usa design.load_carta + genera HTML con este estilo`
-    });
-  }
 
   async function handleDelete(profileId: string) {
     await deleteProfile(profileId);
@@ -58,7 +50,7 @@
   {:else}
     <div class="profiles-list">
       {#each $designProfiles as profile}
-        <div class="profile-card" on:click={() => selectProfile(profile.id)} role="button" tabindex="0" on:keydown={e => e.key === 'Enter' && selectProfile(profile.id)}>
+        <div class="profile-card">
           <!-- Palette preview -->
           <div class="palette-bar">
             {#each paletteColors(profile.color_palette) as color}
@@ -95,9 +87,6 @@
           </div>
 
           <div class="profile-actions">
-            <button class="btn-use" on:click|stopPropagation={() => selectProfile(profile.id)}>
-              Usar
-            </button>
             {#if !profile.builtin}
               <button class="btn-delete" on:click|stopPropagation={() => handleDelete(profile.id)}>
                 ×

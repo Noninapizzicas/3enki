@@ -8,7 +8,6 @@
 
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
   import { FilePicker } from '$lib/components/base';
-  import { updatePageStateBatch } from '$lib/stores/page-context';
 
   export let panelId: string = '';
 
@@ -40,10 +39,6 @@
 
       resultImage = res.data?.image || '';
       resultPath = res.data?.path || '';
-
-      if (resultPath) {
-        updatePageStateBatch({ preparedImage: resultPath, pipelineStep: 'image_prepared' });
-      }
     } catch (err: any) {
       error = err.message || 'Error al preparar imagen';
     } finally {

@@ -1,0 +1,241 @@
+{
+  "_type": "context_file",
+  "_module": "conversacion",
+  "_updated": "2026-04-22",
+  "_supersedes": ["chat-refactoring.json (histórico)", "system.json → patrones_recientes.page_context (obsoleto)"],
+
+  "descripcion": "Subsistema de conversación: cómo se arma el prompt del LLM en cada mensaje, de dónde sale el contexto, cómo se filtran las tools, y qué viaja en el payload.",
+
+  "principio_raiz": {
+    "regla": "El módulo es el contexto. La URL identifica el módulo. El backend arma el prompt.",
+    "consecuencias": [
+      "El frontend NO define el contexto del chat — solo dice en qué ruta está",
+      "Cada módulo expone su contexto en context.json y su persona en prompt.json",
+      "Un prompt custom del usuario reemplaza la persona, no el contexto",
+      "Las tools se filtran al módulo activo, no se envían todas las 50+"
+    ]
+  },
+
+  "separacion_context_prompt": {
+    "problema_original": "prompt.json mezclaba contexto (capabilities, domain_knowledge, workflow) con persona (role, intent). Un custom prompt del usuario lo reemplazaba TODO — perdiendo el contexto del módulo.",
+    "solucion": "Dos archivos independientes por módulo:",
+    "archivos": {
+      "context.json": {
+        "ubicacion": "modules/{module}/context.json",
+        "contenido": ["capabilities", "domain_knowledge", "workflow", "rules", "integrations", "examples", "tools_disponibles"],
+        "regla": "Siempre se inyecta. Nunca se reemplaza.",
+        "tipo": "module_context"
+      },
+      "prompt.json": {
+        "ubicacion": "modules/{module}/prompt.json",
+        "contenido": ["role", "intent"],
+        "regla": "Reemplazable por customPromptId del usuario via UI.",
+        "tipo": "module_prompt"
+      }
+    },
+    "modulos_partidos": [
+      "recetas", "escandallo", "viabilidad", "facturas",
+      "pizzepos/menu-generator", "pizzepos/carta-digital", "pizzepos/carta-design",
+      "pizzepos/carta-impresion", "pizzepos/cocina", "pizzepos/comandero",
+      "certificate-authority"
+    ],
+    "modulos_sin_split": "Módulos de infraestructura (database-manager, log-manager, etc.) mantienen prompt.json plano — el engine es retrocompatible.",
+    "auto_generacion": "Si un módulo no tiene prompt.json ni context.json, prompt-engine auto-genera desde module.json (description, tools, events)."
+  },
+
+  "payload_del_chat": {
+    "descripcion": "Qué viaja desde el frontend al LLM en cada mensaje. 5 variables.",
+    "variables": {
+      "proposito": { "estado": "null", "descripcion": "Sin efecto hoy. Reservado para intención explícita del usuario." },
+      "contexto": {
+        "estado": "activo",
+        "fuentes": [
+          "modules/{module}/context.json — lo que el módulo expone",
+          "runtime: project_id, project.name, parent_chain, dependencies, system",
+          "conversation_id"
+        ],
+        "no_incluye": "page_context.state del frontend — se eliminó (ver seccion frontend_simplificado)"
+      },
+      "prompt": {
+        "estado": "activo",
+        "prioridad": [
+          "1. customPromptId (del usuario via UI) → reemplaza modules/{module}/prompt.json",
+          "2. modules/{module}/prompt.json (resuelto desde page=/recetas)",
+          "3. base prompt (modules/_shared/base.prompt.json)"
+        ],
+        "garantia": "El contexto del módulo SIEMPRE está presente, incluso con custom prompt"
+      },
+      "herramientas": {
+        "estado": "activo",
+        "mecanismo": "ai-gateway filtra tools por target_module. En /recetas → solo recetas.*",
+        "fuente_del_target": "prompt-engine publica target_module en chat.prompt.ready",
+        "sin_pagina": "Si no hay módulo resuelto → target_module=null → ai-gateway envía todas las tools"
+      },
+      "mensajes": {
+        "estado": "activo",
+        "mecanismo": "FIFO de 20 mensajes en chat-session (in_context=1/0)",
+        "trimming": "prompt-engine.buildMessages limita al maxHistory config (default 40)"
+      }
+    }
+  },
+
+  "pipeline_evento_por_evento": {
+    "descripcion": "Flujo desde que el usuario envía un mensaje hasta que el LLM responde.",
+    "pasos": [
+      {
+        "paso": 1,
+        "actor": "frontend / chat.ts",
+        "accion": "Deriva page desde window.location.pathname (ej: /pixel-bosch/recetas → /recetas)",
+        "publica": "mqttRequest('conversation', 'send', { project_id, conversationId, page, content, provider, model })"
+      },
+      {
+        "paso": 2,
+        "actor": "chat-ai-bridge",
+        "handler": "handleConversationSend",
+        "accion": "Valida project_id, crea conversación si no existe, publica chat.send.request",
+        "payload": "{ request_id, project_id, conversation_id, page, content, use_tools: true, correlation_id }"
+      },
+      {
+        "paso": 3,
+        "actor": "chat-session",
+        "handler": "onChatSendRequest",
+        "accion": "Guarda mensaje en SQLite del proyecto, carga historial, publica chat.message.saved",
+        "payload": "{ conversation_id, project_id, message_id, content, messages, page, prompt }"
+      },
+      {
+        "paso": 4,
+        "actor": "conversation-router",
+        "handler": "onChatMessageSaved",
+        "accion": "Matching de intents. Decide path: 'llm' | 'tool_call' | 'agent' | 'forward_agent'. Publica chat.message.routed.",
+        "payload": "{ ...data, path, decision }",
+        "detalle": "Spread preserva page, prompt, messages. Para path='llm' continúa el pipeline."
+      },
+      {
+        "paso": 5,
+        "actor": "context-manager",
+        "handler": "onChatMessageRouted",
+        "accion": "Enriquece con contexto de proyecto (parentChain, dependencies, sharedContext). Publica chat.message.enriched.",
+        "payload": "{ ...data, context: { project, parentChain, dependencies, system } }"
+      },
+      {
+        "paso": 6,
+        "actor": "prompt-engine",
+        "handler": "onChatMessageEnriched",
+        "accion": "Resuelve page → moduleName. Construye systemPrompt (base + context + prompt/custom + runtime). Publica chat.prompt.ready.",
+        "payload": "{ conversation_id, project_id, message_id, content, prompt: systemPrompt, messages, decision, target_module }"
+      },
+      {
+        "paso": 7,
+        "actor": "ai-gateway",
+        "handler": "onChatPromptReady",
+        "accion": "Filtra tools por target_module. Llama al provider (Anthropic/OpenAI/DeepSeek/…). Agentic loop hasta 10 iteraciones.",
+        "responde": "conversation/{conv_id}/message con el assistant message y metadata"
+      }
+    ]
+  },
+
+  "prompt_engine": {
+    "ubicacion": "modules/conversacion/prompt-engine/index.js",
+    "reemplaza": "prompt-composer (eliminado, 1037 líneas) + prompt-manager complejidad",
+    "responsabilidades": [
+      "Escanear modules/**/context.json y prompt.json al cargar (_contexts y _prompts Maps)",
+      "Auto-generar prompt desde module.json si no existe prompt.json",
+      "Resolver route → module: /recetas → recetas, /menu-generator → pizzepos/menu-generator",
+      "Ensamblar system prompt según prioridad",
+      "Publicar target_module para que ai-gateway filtre tools",
+      "Hot-reload de context.json y prompt.json (reloadModule)",
+      "Sincronizar con prompt-manager para prompts de BD (override filesystem)"
+    ],
+    "api": {
+      "buildSystemPrompt(moduleName, runtimeContext)": "Base + context + prompt del módulo + runtime",
+      "_formatCustomPrompt(customPrompt, runtimeContext, moduleName)": "Base + context del módulo + custom + runtime",
+      "resolveRouteToModule(route)": "Exact match → suffix match (/menu-generator → pizzepos/menu-generator)",
+      "buildMessages(moduleName, userMessage, history, runtimeContext)": "Array completo [{role, content}] listo para provider"
+    }
+  },
+
+  "frontend_simplificado": {
+    "eliminado": {
+      "archivo": "frontend/src/lib/stores/page-context.ts",
+      "razon": "Ruido. Duplicaba role/rules/tools del módulo en cada +page.svelte. El backend ya tiene esa info."
+    },
+    "simplificaciones": {
+      "chat_ts": "Deriva page desde window.location.pathname. No hay setPageContext ni getPageContextSnapshot.",
+      "page_svelte": "Cada +page.svelte es solo <LazyShell /> con docstring. Sin onMount/onDestroy/setPageContext.",
+      "paneles": "Los paneles ya no llaman updatePageState. Solo tienen su lógica propia."
+    },
+    "regla_oro": "Si un dato del dominio lo necesita el LLM, lo pide por tool (recetas.obtener, etc.). El frontend no lo manda proactivamente."
+  },
+
+  "herramientas_filtrado": {
+    "registro": {
+      "ubicacion": "core/modules/loader.js → toolsRegistry (Map)",
+      "poblacion": "registerToolsForAI() al cargar cada módulo. Clave: tool.name (ej: recetas.buscar)"
+    },
+    "exposicion": {
+      "ai_gateway": "getAvailableTools() → todas las registradas",
+      "traduccion": "translateToolsForProvider() — formato Anthropic/OpenAI/Gemini según provider"
+    },
+    "filtrado": {
+      "ubicacion": "ai-gateway/index.js ~línea 248",
+      "logica": "const tools = target_module ? allTools.filter(t => t.name.startsWith(target_module + '.')) : allTools",
+      "sin_target": "Sin target_module → se envían TODAS las tools. Usar con cuidado (50+ tools = tokens + latencia)."
+    }
+  },
+
+  "ejemplo_completo": {
+    "escenario": "Usuario en /pixel-bosch/recetas escribe 'busca recetas con pollo'",
+    "flujo": {
+      "frontend": "page='/recetas', project_id='pixel-bosch', content='busca recetas con pollo'",
+      "chat_session": "Guarda mensaje, lee historial (FIFO 20), emite chat.message.saved con page y prompt (null)",
+      "router": "Matching de intents → match 'buscar receta' con action='tool_call' (decision.path='tool_call'). PERO aquí seguimos llm→ si no matchea, pasa a chat.message.routed con path='llm'",
+      "context_manager": "Añade project.name='Pixel Bosch', dependencies=[recetas, escandallo]...",
+      "prompt_engine": {
+        "resuelve": "moduleName='recetas' desde page='/recetas'",
+        "construye": [
+          "base.prompt.json",
+          "recetas/context.json (role=Chef de costes, capabilities, workflow, rules)",
+          "recetas/prompt.json (role=Chef de costes, intent=Gestionar recetas...)",
+          "CONTEXTO ACTIVO: project_id=pixel-bosch, conversation_id=xxx",
+          "{ _runtime: { project_id, project: {name: 'Pixel Bosch'}, dependencies: [...] } }"
+        ],
+        "emite": "chat.prompt.ready con target_module='recetas'"
+      },
+      "ai_gateway": "Filtra tools.filter(t => t.name.startsWith('recetas.')) → 13 tools (recetas.buscar, recetas.crear...). Llama al provider.",
+      "llm": "Decide usar recetas.buscar con ingredientes=['pollo']. Ejecuta. Recibe resultados. Responde al usuario."
+    }
+  },
+
+  "retrocompatibilidad": {
+    "modulos_sin_context_json": "Usan solo prompt.json (comportamiento anterior). El _formatCustomPrompt busca context por moduleName — si no existe, solo añade base + custom.",
+    "modulos_sin_prompt_json": "_scanDir auto-genera prompt desde module.json (_auto_generated: true).",
+    "modulos_sin_nada": "prompt-engine retorna base prompt para ese módulo. Sin errores."
+  },
+
+  "tamanos_actuales": {
+    "context_json_promedio": "30-50 líneas (capabilities + domain_knowledge + rules + integrations + examples)",
+    "prompt_json_promedio": "5 líneas (role + intent)",
+    "reduccion_tokens": "Eliminación de instructions duplicados en frontend = -600 líneas y -1500 chars/mensaje"
+  },
+
+  "archivos_clave": [
+    "modules/conversacion/prompt-engine/index.js",
+    "modules/conversacion/ai-gateway/index.js",
+    "modules/conversacion/chat-ai-bridge/index.js",
+    "modules/conversacion/chat-session/index.js",
+    "modules/conversacion/conversation-router/index.js",
+    "modules/conversacion/context-manager/index.js",
+    "modules/_shared/base.prompt.json",
+    "modules/{module}/context.json",
+    "modules/{module}/prompt.json",
+    "frontend/src/lib/stores/chat.ts"
+  ],
+
+  "no_hacer": [
+    "NO crear page-context stores o similares en frontend — el módulo es la fuente",
+    "NO duplicar capabilities/rules en frontend — están en context.json",
+    "NO meter tools o tools_disponibles en prompt.json — van en context.json",
+    "NO hacer que custom prompts reemplacen el contexto del módulo",
+    "NO enviar todas las tools al LLM sin target_module — usar el filtro"
+  ]
+}

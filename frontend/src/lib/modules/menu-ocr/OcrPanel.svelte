@@ -9,7 +9,6 @@
 
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
   import { FilePicker } from '$lib/components/base';
-  import { updatePageStateBatch } from '$lib/stores/page-context';
 
   export let panelId: string = '';
 
@@ -60,16 +59,6 @@
       extractedText = res?.data?.text || '';
       confidence = res?.data?.confidence || 0;
       usedBackend = res?.data?.backend || backend;
-
-      if (extractedText) {
-        updatePageStateBatch({
-          ocrText: extractedText,
-          ocrBackend: usedBackend,
-          ocrConfidence: confidence,
-          ocrImagePath: imagePath.trim(),
-          pipelineStep: 'ocr_done'
-        });
-      }
     } catch (err: any) {
       error = err.message || 'Error en OCR';
     } finally {

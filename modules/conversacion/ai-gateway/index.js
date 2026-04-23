@@ -1480,20 +1480,20 @@ class AIGatewayModule {
     const responseEvent = `${toolName}.response`;
 
     return new Promise((resolve, reject) => {
+      let unsub;
       const timeout = setTimeout(() => {
-        unsub();
+        if (unsub) unsub();
         reject(new Error(`Tool timeout: ${toolName}`));
       }, timeoutMs);
 
-      let unsub;
-      this.eventBus.subscribe(responseEvent, (event) => {
+      unsub = this.eventBus.subscribe(responseEvent, (event) => {
         const data = event.data || event;
         if (data.request_id !== request_id) return;
         unsub();
         clearTimeout(timeout);
         if (data.error) reject(new Error(data.error));
         else resolve(data.result);
-      }).then(fn => { unsub = fn; });
+      });
 
       this.eventBus.publish(toolName, { request_id, ...args });
     });

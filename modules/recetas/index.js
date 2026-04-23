@@ -831,7 +831,8 @@ class RecetasModule {
 
   async _toolResponse(toolName, event, handlerFn) {
     const data = event.data || event;
-    const { request_id, ...params } = data;
+    const { request_id, project_id, ...rest } = data;
+    const params = { ...rest, proyecto_id: project_id ?? rest.proyecto_id };
     try {
       const result = await handlerFn(params);
       await this.eventBus.publish(`${toolName}.response`, { request_id, result });

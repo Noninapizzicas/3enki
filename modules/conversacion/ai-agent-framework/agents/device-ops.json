@@ -65,5 +65,9 @@
     "total_cost": 0,
     "avg_latency_ms": 0,
     "last_execution": null
-  }
+  },
+  "scope": [
+    "device-registry",
+    "esp32-dev"
+  ]
 }

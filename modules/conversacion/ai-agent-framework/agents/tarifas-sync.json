@@ -4,9 +4,7 @@
   "description": "Cuando la carta base cambia, evalúa cada variante derivada y decide cómo propagar el cambio: añadir/quitar productos, ajustar precios según las reglas de la variante",
   "version": "1.0.0",
   "enabled": true,
-
   "prompt_file": "prompts/tarifas-sync-system.md",
-
   "tools": [
     "carta.get",
     "carta.save",
@@ -17,28 +15,38 @@
     "tarifas.get_variants",
     "tarifas.get"
   ],
-
   "provider": "auto",
   "temperature": 0.2,
   "max_tokens": 8000,
-
   "context_enabled": false,
   "timeout_ms": 180000,
   "max_retries": 1,
-
   "metadata": {
     "type": "domain-agent",
     "domain": "tarifas",
     "author": "system",
     "created_at": "2026-04-14",
-    "tags": ["tarifas", "sync", "propagation", "variants", "automation"]
+    "tags": [
+      "tarifas",
+      "sync",
+      "propagation",
+      "variants",
+      "automation"
+    ]
   },
-
   "created_at": "2026-04-14T00:00:00.000Z",
   "updated_at": "2026-04-14T00:00:00.000Z",
   "stats": {
-    "executions": 0, "successes": 0, "failures": 0,
-    "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0,
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
     "last_execution": null
-  }
+  },
+  "scope": [
+    "tarifas",
+    "carta-digital"
+  ]
 }

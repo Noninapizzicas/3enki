@@ -4,9 +4,7 @@
   "description": "Cuando un cambio de carta programado se dispara, avisa al usuario con detalles claros y espera confirmación. No aplica nada automáticamente — siempre pregunta.",
   "version": "1.0.0",
   "enabled": true,
-
   "prompt_file": "prompts/scheduler-dispatcher-system.md",
-
   "tools": [
     "scheduler.proximos_cambios",
     "scheduler.confirmar",
@@ -14,22 +12,34 @@
     "carta.get",
     "tarifas.get"
   ],
-
   "provider": "auto",
   "temperature": 0.2,
   "max_tokens": 3000,
-
   "context_enabled": false,
   "timeout_ms": 120000,
   "max_retries": 1,
-
   "metadata": {
     "type": "domain-agent",
     "domain": "carta-scheduler",
-    "tags": ["scheduler", "dispatcher", "notification", "confirmation"]
+    "tags": [
+      "scheduler",
+      "dispatcher",
+      "notification",
+      "confirmation"
+    ]
   },
-
   "created_at": "2026-04-14T00:00:00.000Z",
   "updated_at": "2026-04-14T00:00:00.000Z",
-  "stats": { "executions": 0, "successes": 0, "failures": 0, "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0, "last_execution": null }
+  "stats": {
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
+    "last_execution": null
+  },
+  "scope": [
+    "carta-scheduler"
+  ]
 }

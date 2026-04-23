@@ -2,7 +2,7 @@
   "id": "architect",
   "name": "architect",
   "description": "Meta-agente que crea y gestiona otros agentes del sistema",
-  "prompt_file": "prompts/architect-system.md",
+  "prompt_file": "prompts/architect.json",
   "knowledge_file": "prompts/architect-knowledge.md",
   "provider": "deepseek",
   "model": "deepseek-chat",
@@ -37,5 +37,8 @@
     "total_cost": 0,
     "avg_latency_ms": 0,
     "last_execution": null
-  }
+  },
+  "scope": [
+    "*"
+  ]
 }

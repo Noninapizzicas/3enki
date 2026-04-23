@@ -4,23 +4,18 @@
   "description": "Validación de escandallos: coherencia de cálculos, detección de anomalías, evaluación de viabilidad de precio, recomendaciones automáticas.",
   "version": "1.0.0",
   "enabled": true,
-
-  "prompt_file": "prompts/escandallo-analyzer-system.md",
-
+  "prompt_file": "prompts/escandallo-analyzer.json",
   "tools": [
     "escandallo.obtener",
     "escandallo.obtener_historico",
     "escandallo.obtener_alertas"
   ],
-
   "provider": "auto",
   "temperature": 0.3,
   "max_tokens": 2000,
-
   "context_enabled": true,
   "timeout_ms": 120000,
   "max_retries": 1,
-
   "event_listener": {
     "event": "escandallo.calculado",
     "context_mapping": {
@@ -33,7 +28,6 @@
       "timestamp": "$.timestamp"
     }
   },
-
   "publish_on_success": {
     "event": "escandallo.analysis.completed",
     "payload_template": {
@@ -47,7 +41,6 @@
       "timestamp": "$.timestamp"
     }
   },
-
   "publish_on_failure": {
     "event": "escandallo.analysis.failed",
     "payload_template": {
@@ -58,16 +51,19 @@
       "timestamp": "$.timestamp"
     }
   },
-
   "metadata": {
     "type": "pipeline-agent",
     "domain": "escandallo",
     "pipeline_role": "step-1-analysis",
     "author": "system",
     "created_at": "2026-04-15",
-    "tags": ["escandallo", "análisis", "validación", "anomalías"]
+    "tags": [
+      "escandallo",
+      "análisis",
+      "validación",
+      "anomalías"
+    ]
   },
-
   "created_at": "2026-04-15T00:00:00.000Z",
   "updated_at": "2026-04-15T00:00:00.000Z",
   "stats": {
@@ -78,5 +74,9 @@
     "total_cost": 0,
     "avg_latency_ms": 0,
     "last_execution": null
-  }
+  },
+  "scope": [
+    "escandallo",
+    "recetas"
+  ]
 }

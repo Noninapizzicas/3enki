@@ -33,6 +33,9 @@ class Agent {
     this.timeout_ms = config.timeout_ms || 60000;
     this.max_retries = config.max_retries || 3;
 
+    // Scope: modules where this agent is available ('*' = global)
+    this.scope = config.scope || ['*'];
+
     // Metadata
     this.metadata = config.metadata || {};
     this.created_at = config.created_at || new Date().toISOString();

@@ -4,9 +4,7 @@
   "description": "Crea variantes de carta para canales de venta: duplica carta base, ajusta precios, filtra productos, renombra, y registra la variante en tarifas",
   "version": "1.0.0",
   "enabled": true,
-
   "prompt_file": "prompts/tarifas-creator-system.md",
-
   "tools": [
     "carta.get",
     "carta.save",
@@ -14,28 +12,38 @@
     "tarifas.register_variant",
     "tarifas.get"
   ],
-
   "provider": "auto",
   "temperature": 0.2,
   "max_tokens": 8000,
-
   "context_enabled": false,
   "timeout_ms": 120000,
   "max_retries": 2,
-
   "metadata": {
     "type": "domain-agent",
     "domain": "tarifas",
     "author": "system",
     "created_at": "2026-04-14",
-    "tags": ["tarifas", "carta", "variant", "pricing", "channels"]
+    "tags": [
+      "tarifas",
+      "carta",
+      "variant",
+      "pricing",
+      "channels"
+    ]
   },
-
   "created_at": "2026-04-14T00:00:00.000Z",
   "updated_at": "2026-04-14T00:00:00.000Z",
   "stats": {
-    "executions": 0, "successes": 0, "failures": 0,
-    "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0,
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
     "last_execution": null
-  }
+  },
+  "scope": [
+    "tarifas",
+    "carta-digital"
+  ]
 }

@@ -150,7 +150,8 @@
       { "event": "recetas.crear",            "handler": "onToolCrear" },
       { "event": "recetas.analizar",         "handler": "onToolAnalizar" },
       { "event": "recetas.actualizar",       "handler": "onToolActualizar" },
-      { "event": "recetas.eliminar",         "handler": "onToolEliminar" }
+      { "event": "recetas.eliminar",         "handler": "onToolEliminar" },
+      { "event": "recetas.investigar_receta","handler": "onToolInvestigarReceta" }
     ]
   },
 

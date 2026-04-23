@@ -4,7 +4,7 @@
   "description": "Agente con VISIÓN que analiza imágenes y decide cómo optimizarlas para OCR",
   "version": "2.0.0",
   "enabled": true,
-  "prompt_file": "image-processor-system.md",
+  "prompt_file": "prompts/image-processor.json",
   "subscribes": [
     "imagen.optimizar.request"
   ],

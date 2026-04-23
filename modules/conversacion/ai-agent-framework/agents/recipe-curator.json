@@ -4,7 +4,7 @@
   "description": "Validación final, persistencia en SQLite con versionado, actualización de índices de búsqueda. Entrada: receta + análisis. Salida: receta guardada.",
   "version": "1.0.0",
   "enabled": true,
-  "prompt_file": "prompts/recipe-curator-system.md",
+  "prompt_file": "prompts/recipe-curator.json",
   "tools": [
     "recetas.actualizar",
     "recetas.obtener",

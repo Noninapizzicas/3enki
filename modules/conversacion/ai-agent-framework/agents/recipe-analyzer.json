@@ -4,7 +4,7 @@
   "description": "Análisis profundo de recetas: viabilidad, costes reales, alérgenos, tiempos, dificultad. Entrada: receta JSON estructurada. Salida: análisis completo.",
   "version": "1.0.0",
   "enabled": true,
-  "prompt_file": "prompts/recipe-analyzer-system.md",
+  "prompt_file": "prompts/recipe-analyzer.json",
   "tools": [
     "recetas.ingredientes",
     "recetas.obtener",

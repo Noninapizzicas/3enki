@@ -4,7 +4,7 @@
   "description": "Estructura datos OCR y campos candidatos en JSON schema válido de receta. Entrada: ocrText + datosNormalizados. Salida: receta JSON completa.",
   "version": "1.0.0",
   "enabled": true,
-  "prompt_file": "prompts/recipe-structurer-system.md",
+  "prompt_file": "prompts/recipe-structurer.json",
   "tools": [
     "recetas.obtener",
     "recetas.validar_schema"

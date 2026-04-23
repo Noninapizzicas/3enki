@@ -124,5 +124,6 @@
   },
   "scope": [
     "recetas"
-  ]
+  ],
+  "prompt_file": "prompts/recipe-chef-advisor.json"
 }

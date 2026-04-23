@@ -4,7 +4,7 @@
   "description": "Entrevista conversacional para construir el perfil de marca de un proyecto. Hace preguntas simples y construye el perfil desde las respuestas.",
   "version": "1.0.0",
   "enabled": true,
-  "prompt_file": "prompts/marketing-onboarding-system.md",
+  "prompt_file": "prompts/marketing-onboarding.json",
   "tools": [
     "marketing.get_perfil",
     "marketing.update_perfil",

@@ -4,7 +4,7 @@
   "description": "Evaluación de viabilidad de receta: rentabilidad, riesgos, recomendaciones, impacto en negocio.",
   "version": "1.0.0",
   "enabled": true,
-  "prompt_file": "prompts/viabilidad-receta-analyzer-system.md",
+  "prompt_file": "prompts/viabilidad-receta-analyzer.json",
   "tools": [
     "viabilidad.obtener",
     "viabilidad.obtener_recomendaciones",

@@ -473,7 +473,7 @@ class PromptEngine {
       decision, context, page, prompt: customPromptId
     } = data;
 
-    if (path !== 'llm') return;
+    if (path !== 'llm' && path !== 'tool_call') return;
 
     const runtimeContext = {};
     if (project_id) runtimeContext.project_id = project_id;

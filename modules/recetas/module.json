@@ -192,7 +192,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "proyecto_id": {
+          "project_id": {
             "type": "string",
             "description": "ID del proyecto"
           },
@@ -210,7 +210,7 @@
             "description": "Referencia (URL original, nombre archivo, etc.)"
           }
         },
-        "required": ["proyecto_id", "input"]
+        "required": ["project_id", "input"]
       }
     },
     {
@@ -224,7 +224,7 @@
             "type": "string",
             "description": "ID de la receta a analizar"
           },
-          "proyecto_id": {
+          "project_id": {
             "type": "string",
             "description": "ID del proyecto"
           },
@@ -234,7 +234,7 @@
             "description": "Nivel de análisis (default: normal)"
           }
         },
-        "required": ["receta_id", "proyecto_id"]
+        "required": ["receta_id", "project_id"]
       }
     },
     {
@@ -244,7 +244,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "proyecto_id": {
+          "project_id": {
             "type": "string",
             "description": "ID del proyecto"
           },
@@ -307,7 +307,7 @@
             "description": "Número máximo de resultados"
           }
         },
-        "required": ["proyecto_id"]
+        "required": ["project_id"]
       }
     },
     {
@@ -317,7 +317,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "proyecto_id": { "type": "string", "description": "ID del proyecto" },
+          "project_id": { "type": "string", "description": "ID del proyecto" },
           "nombre": { "type": "string", "description": "Nombre de la receta" },
           "descripcion": { "type": "string", "description": "Descripción breve" },
           "ingredientes": {
@@ -341,7 +341,7 @@
           "categorias": { "type": "array", "items": { "type": "string" } },
           "etiquetas": { "type": "array", "items": { "type": "string" } }
         },
-        "required": ["proyecto_id", "nombre", "ingredientes", "porciones"]
+        "required": ["project_id", "nombre", "ingredientes", "porciones"]
       }
     },
     {
@@ -352,13 +352,13 @@
         "type": "object",
         "properties": {
           "receta_id": { "type": "string", "description": "ID de la receta" },
-          "proyecto_id": { "type": "string", "description": "ID del proyecto" },
+          "project_id": { "type": "string", "description": "ID del proyecto" },
           "cambios": {
             "type": "object",
             "description": "Solo los campos a cambiar (merge con versión actual)"
           }
         },
-        "required": ["receta_id", "proyecto_id"]
+        "required": ["receta_id", "project_id"]
       }
     },
     {
@@ -368,11 +368,11 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "proyecto_id": { "type": "string", "description": "ID del proyecto" },
+          "project_id": { "type": "string", "description": "ID del proyecto" },
           "estado": { "type": "string", "enum": ["activa", "archivada", "todos"] },
           "limit": { "type": "number", "default": 50 }
         },
-        "required": ["proyecto_id"]
+        "required": ["project_id"]
       }
     },
     {
@@ -395,9 +395,9 @@
         "type": "object",
         "properties": {
           "receta_id": { "type": "string" },
-          "proyecto_id": { "type": "string" }
+          "project_id": { "type": "string" }
         },
-        "required": ["receta_id", "proyecto_id"]
+        "required": ["receta_id", "project_id"]
       }
     },
     {
@@ -421,10 +421,10 @@
         "type": "object",
         "properties": {
           "receta_id": { "type": "string" },
-          "proyecto_id": { "type": "string" },
+          "project_id": { "type": "string" },
           "target_version": { "type": "number", "description": "Número de versión a restaurar" }
         },
-        "required": ["receta_id", "proyecto_id", "target_version"]
+        "required": ["receta_id", "project_id", "target_version"]
       }
     },
     {
@@ -434,10 +434,10 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "proyecto_id": { "type": "string" },
+          "project_id": { "type": "string" },
           "categoria": { "type": "string", "description": "Filtrar por categoría (opcional)" }
         },
-        "required": ["proyecto_id"]
+        "required": ["project_id"]
       }
     },
     {
@@ -448,11 +448,11 @@
         "type": "object",
         "properties": {
           "ingrediente_id": { "type": "string" },
-          "proyecto_id": { "type": "string" },
+          "project_id": { "type": "string" },
           "precio_mercado": { "type": "number" },
           "fuente": { "type": "string", "description": "Fuente del precio (ej: mercadona.es)" }
         },
-        "required": ["ingrediente_id", "proyecto_id", "precio_mercado"]
+        "required": ["ingrediente_id", "project_id", "precio_mercado"]
       }
     },
     {
@@ -464,10 +464,10 @@
         "properties": {
           "nombre": { "type": "string", "description": "Nombre de la receta" },
           "ingredientes": { "type": "string", "description": "Ingredientes tal como los mencionó el usuario" },
-          "proyecto_id": { "type": "string", "description": "ID del proyecto activo" },
+          "project_id": { "type": "string", "description": "ID del proyecto activo" },
           "notas": { "type": "string", "description": "Notas adicionales opcionales (cantidades, método)" }
         },
-        "required": ["nombre", "ingredientes", "proyecto_id"]
+        "required": ["nombre", "ingredientes", "project_id"]
       }
     },
     {
@@ -477,9 +477,9 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "proyecto_id": { "type": "string" }
+          "project_id": { "type": "string" }
         },
-        "required": ["proyecto_id"]
+        "required": ["project_id"]
       }
     },
     {
@@ -489,7 +489,7 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "proyecto_id": {
+          "project_id": {
             "type": "string",
             "description": "ID del proyecto"
           },
@@ -507,7 +507,7 @@
             "description": "Número máximo de alternativas a retornar"
           }
         },
-        "required": ["proyecto_id", "nombre_receta"]
+        "required": ["project_id", "nombre_receta"]
       }
     }
   ],

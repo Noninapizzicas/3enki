@@ -877,6 +877,10 @@ class RecetasModule {
     return this._toolResponse('recetas.eliminar', event, p => this.handleEliminar(p));
   }
 
+  async onToolInvestigarReceta(event) {
+    return this._toolResponse('recetas.investigar_receta', event, p => this.handleInvestigarReceta(p));
+  }
+
   async handleActualizar({ proyecto_id, receta_id, cambios = {} }) {
     try {
       const { nombre, descripcion, estado } = cambios;

@@ -316,7 +316,7 @@ class AIGatewayModule {
         execute_tools: true,
         project_id,
         conversation_id,
-        stream: true
+        stream: false
       }
     });
   }

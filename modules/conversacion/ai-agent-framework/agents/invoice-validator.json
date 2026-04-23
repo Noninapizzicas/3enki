@@ -4,31 +4,29 @@
   "description": "Valida datos extraídos de facturas: coherencia fiscal, datos sospechosos, campos faltantes. Complementa la validación determinista del pipeline.",
   "version": "1.0.0",
   "enabled": true,
-
   "prompt_file": "prompts/invoice-validator-system.md",
-
   "provider": "deepseek",
   "model": "deepseek-chat",
   "temperature": 0.0,
   "max_tokens": 1500,
-
   "subscribes": [],
   "tools": [],
-
   "context_enabled": false,
-
   "timeout_ms": 30000,
   "max_retries": 1,
-
   "metadata": {
     "type": "pipeline-agent",
     "domain": "facturas",
     "step": "validate",
     "author": "system",
     "created": "2026-04-13",
-    "tags": ["facturas", "validation", "spanish-tax", "quality"]
+    "tags": [
+      "facturas",
+      "validation",
+      "spanish-tax",
+      "quality"
+    ]
   },
-
   "created_at": "2026-04-13T00:00:00.000Z",
   "updated_at": "2026-04-13T00:00:00.000Z",
   "stats": {
@@ -39,5 +37,8 @@
     "total_cost": 0,
     "avg_latency_ms": 0,
     "last_execution": null
-  }
+  },
+  "scope": [
+    "facturas"
+  ]
 }

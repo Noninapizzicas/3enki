@@ -4,9 +4,7 @@
   "description": "Agente principal del chat. Traduce lo que dice el usuario a eventos del dominio, los publica, espera respuestas, y redacta la respuesta al usuario. Es la ÚNICA puerta de entrada del chat conversacional.",
   "version": "1.0.0",
   "enabled": true,
-
   "prompt_file": "prompts/intent-router-system.md",
-
   "tools": [
     "publish_event",
     "fs.list",
@@ -16,23 +14,35 @@
     "carta.get",
     "invoke_agent"
   ],
-
   "provider": "auto",
   "temperature": 0.2,
   "max_tokens": 4000,
-
   "context_enabled": true,
   "context_window": 20,
   "timeout_ms": 120000,
   "max_retries": 1,
-
   "metadata": {
     "type": "chat-router",
     "domain": "conversational",
-    "tags": ["chat", "router", "intent", "orchestration"]
+    "tags": [
+      "chat",
+      "router",
+      "intent",
+      "orchestration"
+    ]
   },
-
   "created_at": "2026-04-16T00:00:00.000Z",
   "updated_at": "2026-04-16T00:00:00.000Z",
-  "stats": { "executions": 0, "successes": 0, "failures": 0, "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0, "last_execution": null }
+  "stats": {
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
+    "last_execution": null
+  },
+  "scope": [
+    "*"
+  ]
 }

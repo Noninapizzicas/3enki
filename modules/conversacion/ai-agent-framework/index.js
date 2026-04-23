@@ -111,7 +111,13 @@ class AIAgentFrameworkModule {
       handler: null,
       event_based: true,
       module: 'ai-agent-framework',
-      confirmation: false
+      confirmation: false,
+      // Metadata for dynamic scope filtering by ai-gateway
+      _agentsList: enabledAgents.map(a => ({
+        name: a.name,
+        description: a.description,
+        scope: Array.isArray(a.scope) ? a.scope : (a.scope ? [a.scope] : ['*'])
+      }))
     };
 
     moduleLoader.toolsRegistry.set('invoke_agent', tool);

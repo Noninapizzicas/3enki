@@ -4,30 +4,40 @@
   "description": "Experto en ingeniería de menú. Analiza la carta y optimiza: identifica productos estrella, sugiere orden de categorías, aplica psicología de precios, asigna tags estratégicos.",
   "version": "1.0.0",
   "enabled": true,
-
   "prompt_file": "prompts/marketing-strategist-system.md",
-
   "tools": [
     "carta.get",
     "carta.save",
     "carta.stats"
   ],
-
   "provider": "auto",
   "temperature": 0.3,
   "max_tokens": 6000,
-
   "context_enabled": false,
   "timeout_ms": 120000,
   "max_retries": 1,
-
   "metadata": {
     "type": "domain-agent",
     "domain": "carta-marketing",
-    "tags": ["marketing", "strategy", "menu-engineering", "pricing"]
+    "tags": [
+      "marketing",
+      "strategy",
+      "menu-engineering",
+      "pricing"
+    ]
   },
-
   "created_at": "2026-04-14T00:00:00.000Z",
   "updated_at": "2026-04-14T00:00:00.000Z",
-  "stats": { "executions": 0, "successes": 0, "failures": 0, "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0, "last_execution": null }
+  "stats": {
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
+    "last_execution": null
+  },
+  "scope": [
+    "menu-generator"
+  ]
 }

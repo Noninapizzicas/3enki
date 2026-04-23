@@ -4,31 +4,41 @@
   "description": "Entrevista conversacional para construir el perfil de marca de un proyecto. Hace preguntas simples y construye el perfil desde las respuestas.",
   "version": "1.0.0",
   "enabled": true,
-
   "prompt_file": "prompts/marketing-onboarding-system.md",
-
   "tools": [
     "marketing.get_perfil",
     "marketing.update_perfil",
     "marketing.completar_onboarding"
   ],
-
   "provider": "auto",
   "temperature": 0.5,
   "max_tokens": 3000,
-
   "context_enabled": true,
   "context_window": 20,
   "timeout_ms": 120000,
   "max_retries": 1,
-
   "metadata": {
     "type": "domain-agent",
     "domain": "carta-marketing",
-    "tags": ["marketing", "onboarding", "brand", "profile"]
+    "tags": [
+      "marketing",
+      "onboarding",
+      "brand",
+      "profile"
+    ]
   },
-
   "created_at": "2026-04-14T00:00:00.000Z",
   "updated_at": "2026-04-14T00:00:00.000Z",
-  "stats": { "executions": 0, "successes": 0, "failures": 0, "total_tokens": 0, "total_cost": 0, "avg_latency_ms": 0, "last_execution": null }
+  "stats": {
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
+    "last_execution": null
+  },
+  "scope": [
+    "*"
+  ]
 }

@@ -292,9 +292,35 @@ class AIGatewayModule {
     const history = this._resolveAttachments(rawHistory);
 
     const allTools = this.getAvailableTools();
-    const tools = target_module
-      ? allTools.filter(t => (t.function?.name || t.name || '').startsWith(target_module + '.'))
-      : allTools;
+    let tools;
+    if (target_module) {
+      tools = allTools.filter(t => (t.name || '').startsWith(target_module + '.'));
+      // Always include invoke_agent, scoped to this module
+      const rawInvokeAgent = this.moduleLoader?.getTool('invoke_agent');
+      if (rawInvokeAgent?._agentsList) {
+        const scopedAgents = rawInvokeAgent._agentsList.filter(a => {
+          const scope = a.scope || ['*'];
+          return scope.includes('*') || scope.includes(target_module);
+        });
+        if (scopedAgents.length > 0) {
+          const desc = scopedAgents.map(a => `  - ${a.name}: ${a.description}`).join('\n');
+          tools.push({
+            name: 'invoke_agent',
+            description: `Invoca un agente especialista para realizar una tarea compleja.\n\nAgentes disponibles:\n${desc}\n\nDevuelve cuando el agente termina con su resultado.`,
+            parameters: {
+              ...rawInvokeAgent.parameters,
+              properties: {
+                ...rawInvokeAgent.parameters.properties,
+                agent_name: { ...rawInvokeAgent.parameters.properties.agent_name, enum: scopedAgents.map(a => a.name) }
+              }
+            },
+            confirmation: false
+          });
+        }
+      }
+    } else {
+      tools = allTools;
+    }
 
     this.logger.info('ai-gateway.tools.filtered', {
       conversation_id,
@@ -1459,7 +1485,8 @@ class AIGatewayModule {
       try {
         this.logger.info('ai-gateway.tool.executing', { tool: name, call_id: id });
 
-        const result = await this._executeToolViaEvent(name, enrichedArgs);
+        const timeoutMs = name === 'invoke_agent' ? 150000 : 15000;
+        const result = await this._executeToolViaEvent(name, enrichedArgs, timeoutMs);
 
         results.push({ tool_call_id: id, name, status: 'success', result });
         this.logger.info('ai-gateway.tool.executed', { tool: name, call_id: id });

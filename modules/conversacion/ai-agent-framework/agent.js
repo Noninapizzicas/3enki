@@ -553,6 +553,7 @@ class Agent {
       enabled: this.enabled,
       timeout_ms: this.timeout_ms,
       max_retries: this.max_retries,
+      scope: this.scope,
       metadata: this.metadata,
       created_at: this.created_at,
       updated_at: this.updated_at,

@@ -347,8 +347,9 @@ class AIAgentFrameworkModule {
       await this.contextManager.shutdown();
     }
 
-    // Save agents to disk
-    await this.saveAgentsToDisk();
+    // NO guardar al disco en unload — los archivos agents/*.json son source of truth.
+    // saveAgentsToDisk() se llama solo tras create/update/delete explícitos vía API.
+    // Si se guardara aquí, cualquier edición manual de agent.json se perdería al reiniciar.
 
     this.logger.info('ai-agent-framework.unloaded', {
       agents_count: this.agents.size

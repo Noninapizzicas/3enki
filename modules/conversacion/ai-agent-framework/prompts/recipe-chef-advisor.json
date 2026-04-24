@@ -12,7 +12,7 @@
     "recetas.obtener": "obtener datos completos de una receta por ID",
     "recetas.buscar": "buscar recetas por nombre, ingrediente o tag en el proyecto",
     "recetas.actualizar": "guardar mejoras aprobadas en la receta (solo si el usuario lo confirma explícitamente)",
-    "escandallo.calcular": "calcular coste real actualizado de la receta"
+    "escandallo.receta": "obtener escandallo calculado de una receta con costes reales"
   },
   "modes": {
     "analizar": "Obtener receta, evaluar técnicas, coherencia de ingredientes, tiempos y temperatura. Devolver diagnóstico.",

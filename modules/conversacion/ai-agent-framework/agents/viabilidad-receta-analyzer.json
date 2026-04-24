@@ -6,9 +6,9 @@
   "enabled": true,
   "prompt_file": "prompts/viabilidad-receta-analyzer.json",
   "tools": [
-    "viabilidad.obtener",
-    "viabilidad.obtener_recomendaciones",
-    "viabilidad.obtener_historico"
+    "viabilidad.estudio",
+    "viabilidad.escenario",
+    "viabilidad.punto_equilibrio"
   ],
   "provider": "auto",
   "temperature": 0.3,

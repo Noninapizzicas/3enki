@@ -1,7 +1,7 @@
 {
   "name": "conversation-router",
-  "version": "1.0.0",
-  "description": "Enrutador de mensajes de usuario. Capa 2-3 de la arquitectura conversation-routing: decide si el mensaje va a un agente activo, a un tool call, o al LLM. Sin dependencias directas de otros módulos.",
+  "version": "2.0.0",
+  "description": "Enruta cada mensaje de usuario: forward_agent si hay agente multi-turn activo, llm en cualquier otro caso. El LLM decide tools y agentes.",
   "author": "Event Core Team",
   "main": "index.js",
 
@@ -10,21 +10,9 @@
   ],
 
   "subscribes": [
-    { "event": "chat.message.saved",  "handler": "onChatMessageSaved" },
-    { "event": "agent.execute",       "handler": "onAgentExecute" },
-    { "event": "agent.active",        "handler": "onAgentActive" },
-    { "event": "agent.completed",     "handler": "onAgentCompleted" },
-    { "event": "agent.failed",        "handler": "onAgentFailed" }
-  ],
-
-  "observability": {
-    "metrics": {
-      "counters": [
-        "router.path.tool_call",
-        "router.path.agent",
-        "router.path.forward_agent",
-        "router.path.llm"
-      ]
-    }
-  }
+    { "event": "chat.message.saved", "handler": "onChatMessageSaved" },
+    { "event": "agent.active",       "handler": "onAgentActive" },
+    { "event": "agent.completed",    "handler": "onAgentCleared" },
+    { "event": "agent.failed",       "handler": "onAgentCleared" }
+  ]
 }

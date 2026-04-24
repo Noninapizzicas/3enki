@@ -1,7 +1,7 @@
 {
   "name": "conversation-router",
-  "version": "2.0.0",
-  "description": "Enruta cada mensaje de usuario: forward_agent si hay agente multi-turn activo, llm en cualquier otro caso. El LLM decide tools y agentes.",
+  "version": "3.0.0",
+  "description": "Republica chat.message.saved como chat.message.routed con decision.module=page. Thin wrapper.",
   "author": "Event Core Team",
   "main": "index.js",
 
@@ -10,9 +10,6 @@
   ],
 
   "subscribes": [
-    { "event": "chat.message.saved", "handler": "onChatMessageSaved" },
-    { "event": "agent.active",       "handler": "onAgentActive" },
-    { "event": "agent.completed",    "handler": "onAgentCleared" },
-    { "event": "agent.failed",       "handler": "onAgentCleared" }
+    { "event": "chat.message.saved", "handler": "onChatMessageSaved" }
   ]
 }

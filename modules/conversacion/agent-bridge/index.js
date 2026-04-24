@@ -66,35 +66,6 @@ class AgentBridgeModule {
     return this._executeAgent(event.data || event);
   }
 
-  async onChatMessageRouted(event) {
-    const data = event.data || event;
-    const { path, conversation_id, content, project_id, decision } = data;
-
-    if (path === 'forward_agent') {
-      let pipelineId = null;
-      let entry = null;
-      for (const [pid, e] of this.inFlight.entries()) {
-        if (e.conversation_id === conversation_id) { pipelineId = pid; entry = e; break; }
-      }
-      if (!entry) {
-        this.logger.warn('agent-bridge.forward.no_inflight', { conversation_id });
-        return;
-      }
-      await this.eventBus.publish('agent.user_reply', {
-        conversation_id, agent_name: entry.agent_name, pipelineId, content,
-        project_id: project_id || entry.projectId
-      });
-      this.logger.debug('agent-bridge.forward', { conversation_id, agent_name: entry.agent_name });
-      return;
-    }
-
-    if (path === 'agent' && decision?.agent) {
-      return this._executeAgent({
-        conversation_id, agent_name: decision.agent, task: content, project_id
-      });
-    }
-  }
-
   async _executeAgent({ conversation_id, agent_name, task, project_id, params }) {
     if (!agent_name) {
       this.logger.warn('agent-bridge.execute.invalid', { reason: 'missing agent_name' });
@@ -288,20 +259,6 @@ class AgentBridgeModule {
         await this.eventBus.publish('agent.active', { conversation_id, agent_name, pipelineId });
       }
     }
-  }
-
-  // ==========================================
-  // Observabilidad
-  // ==========================================
-
-  getStats() {
-    return {
-      in_flight: this.inFlight.size,
-      executions: Array.from(this.inFlight.values()).map(e => ({
-        agent: e.agent_name,
-        conversation_id: e.conversation_id
-      }))
-    };
   }
 }
 

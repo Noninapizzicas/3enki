@@ -21,8 +21,8 @@
     "el limite de contexto por defecto es 20 mensajes o 32k tokens"
   ],
   "integrations": {
-    "listens_to": ["session.create.request", "session.save.request", "session.context.load.request"],
-    "emits": ["session.create.response", "session.save.response", "session.context.load.response"],
+    "listens_to": ["chat.send.request", "ai.chat.response", "agent.completed", "agent.failed", "session.create.request"],
+    "emits": ["chat.message.saved", "chat.assistant.saved"],
     "depends_on": ["database-manager"]
   }
 }

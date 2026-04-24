@@ -849,14 +849,47 @@ class RecetasModule {
   async onToolEstadisticas(event)    { return this._toolResponse('recetas.estadisticas',       event, p => this.handleEstadisticas(p)); }
   async onToolIngredientes(event)    { return this._toolResponse('recetas.ingredientes',       event, p => this.handleIngredientes(p)); }
   async onToolActualizarPrecio(event){ return this._toolResponse('recetas.actualizar_precio',  event, p => this.handleActualizarPrecio(p)); }
-  async onToolCrearDesdeChat(event)  { return this._toolResponse('recetas.crear_desde_chat',   event, p => this.handleIngestar(p)); }
+  async onToolCrearDesdeChat(event)  { return this._toolResponse('recetas.crear_desde_chat',   event, p => this._crearRecetaSync(p)); }
 
   async onToolCrear(event) {
-    return this._toolResponse('recetas.crear', event, async (p) => {
-      const { proyecto_id, nombre, descripcion, ingredientes, instrucciones, ...rest } = p;
-      const input = JSON.stringify({ nombre, descripcion, ingredientes, instrucciones, ...rest });
-      return this.handleIngestar({ proyecto_id, input, tipo: 'json', fuente_referencia: 'chat' });
-    });
+    return this._toolResponse('recetas.crear', event, p => this._crearRecetaSync(p));
+  }
+
+  // Crea receta síncrona: INSERT en DB + publica receta.creada + devuelve id.
+  // Sin eventos intermedios. El módulo recetas sabe persistir su dominio.
+  async _crearRecetaSync(params) {
+    const { proyecto_id, nombre, ingredientes, instrucciones, notas, descripcion } = params;
+    if (!proyecto_id) return { error: 'proyecto_id requerido' };
+    if (!nombre) return { error: 'nombre requerido' };
+
+    const id = require('crypto').randomUUID();
+    const now = Date.now();
+
+    // descripcion consolidada: texto principal + ingredientes + instrucciones
+    const desc = [
+      descripcion,
+      ingredientes ? `Ingredientes: ${typeof ingredientes === 'string' ? ingredientes : JSON.stringify(ingredientes)}` : null,
+      instrucciones ? `Instrucciones: ${typeof instrucciones === 'string' ? instrucciones : JSON.stringify(instrucciones)}` : null,
+      notas ? `Notas: ${notas}` : null
+    ].filter(Boolean).join('\n\n');
+
+    try {
+      await this._dbRun(proyecto_id,
+        `INSERT INTO recetas (id, proyecto_id, nombre, descripcion, created_at, updated_at, fuente)
+         VALUES (?, ?, ?, ?, ?, ?, 'manual')`,
+        [id, proyecto_id, nombre, desc || null, now, now]
+      );
+
+      await this.eventBus.publish('receta.creada', {
+        proyecto_id, id, nombre, timestamp: now
+      });
+
+      return { id, nombre, status: 'creada' };
+    } catch (err) {
+      this.logger.error('recetas.crear.failed', { proyecto_id, nombre, error: err.message });
+      return { error: err.message };
+    }
+  }
   }
 
   async onToolAnalizar(event) {

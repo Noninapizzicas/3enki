@@ -12,109 +12,25 @@ const { EVENTS } = require('../../../core/constants');
 /**
  * AI Gateway Module
  *
- * Cliente unificado para múltiples proveedores LLM con:
- * - Rate limiting
- * - Retry con exponential backoff
- * - Streaming SSE
- * - Cost tracking
- * - Fallback automático entre proveedores
+ * Entrada: chat.prompt.ready
+ * Salida:  ai.chat.response
+ *
+ * Responsabilidades:
+ * - Llamar al LLM con las tools disponibles
+ * - Ejecutar tool calls vía events (agentic loop)
+ * - Fallback automático entre providers
+ * - Resolver API keys desde credential-manager
  */
 class AIGatewayModule {
   constructor() {
     this.providers = new Map();
-    this.usage = new Map(); // Track usage per provider
     this.config = null;
     this.logger = null;
     this.eventBus = null;
 
-    // UI State: Provider/modelo seleccionado actualmente
-    this.currentProvider = 'auto';
-    this.currentModel = null;
-
     // Credential resolution
     this.pendingCredentialRequests = new Map(); // requestId -> {resolve, reject, timeout}
     this.credentialCache = new Map(); // provider -> {apiKey, resolvedAt, projectId}
-
-    // Configuración de parámetros LLM
-    this.chatConfig = {
-      temperature: 0.7,
-      maxTokens: 2048,
-      topP: 1.0,
-      frequencyPenalty: 0,
-      presencePenalty: 0,
-      systemPrompt: '',
-      stream: true
-    };
-  }
-
-  // ============ UI HELPERS ============
-
-  /**
-   * Get display name for provider
-   */
-  getProviderDisplayName(providerId) {
-    const displayNames = {
-      deepseek: 'DeepSeek',
-      anthropic: 'Anthropic Claude',
-      openai: 'OpenAI',
-      ollama: 'Ollama (Local)',
-      groq: 'Groq',
-      gemini: 'Google Gemini'
-    };
-    return displayNames[providerId] || providerId;
-  }
-
-  /**
-   * Get icon for provider
-   */
-  getProviderIcon(providerId) {
-    const icons = {
-      deepseek: '🔮',
-      anthropic: '🧠',
-      openai: '🤖',
-      ollama: '🦙',
-      groq: '⚡',
-      gemini: '💎'
-    };
-    return icons[providerId] || '⚡';
-  }
-
-  /**
-   * Get display name for model
-   */
-  getModelDisplayName(modelId) {
-    const displayNames = {
-      'deepseek-chat': 'DeepSeek Chat',
-      'deepseek-coder': 'DeepSeek Coder',
-      'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
-      'claude-3-opus-20240229': 'Claude 3 Opus',
-      'claude-3-haiku-20240307': 'Claude 3 Haiku',
-      'gpt-4o': 'GPT-4o',
-      'gpt-4o-mini': 'GPT-4o Mini',
-      'gpt-3.5-turbo': 'GPT-3.5 Turbo',
-      'deepseek-reasoner': 'DeepSeek Reasoner',
-      'llama2': 'Llama 2',
-      'codellama': 'Code Llama',
-      'mistral': 'Mistral',
-      'mixtral': 'Mixtral',
-      'llama-3.3-70b-versatile': 'Llama 3.3 70B',
-      'mixtral-8x7b-32768': 'Mixtral 8x7B',
-      'gemma2-9b-it': 'Gemma 2 9B',
-      'gemini-2.5-flash': 'Gemini 2.5 Flash',
-      'gemini-2.5-pro': 'Gemini 2.5 Pro'
-    };
-    return displayNames[modelId] || modelId;
-  }
-
-  /**
-   * Get provider status
-   */
-  getProviderStatus(available, provider) {
-    if (!available) {
-      return 'no_api_key';
-    }
-    // Could add more status checks here (rate_limited, error, etc.)
-    return 'ready';
   }
 
   /**
@@ -149,8 +65,8 @@ class AIGatewayModule {
     });
   }
 
-  // Event Handlers: onAIChatRequest, onAIRequestCreated, onCredentialResponse
-  // are wired by the loader from module.json
+  // Event handlers (onChatPromptReady, onCredentialResponse, etc.)
+  // se conectan por el loader desde module.json.subscribes.
 
   /**
    * Resolve credential from credential-manager via events
@@ -386,24 +302,7 @@ class AIGatewayModule {
     });
 
     try {
-      // Build onChunk callback for streaming (handles text deltas and tool status)
-      const onChunk = stream ? (data) => {
-        if (typeof data === 'object' && data.tool) {
-          this.eventBus.publish(EVENTS.AI.CHAT_CHUNK, {
-            request_id,
-            tool: data.tool,
-            done: false
-          });
-        } else {
-          this.eventBus.publish(EVENTS.AI.CHAT_CHUNK, {
-            request_id,
-            delta: typeof data === 'string' ? data : '',
-            done: false
-          });
-        }
-      } : null;
-
-      // Procesar la solicitud
+      // Procesar la solicitud (streaming eliminado — nadie consume ai.chat.chunk)
       const result = await this.handleChatCompletion({
         body: {
           messages,
@@ -414,19 +313,9 @@ class AIGatewayModule {
           model,
           temperature,
           max_tokens,
-          stream: !!stream,
           metadata: { request_id, project_id }
         }
-      }, { correlationId, projectId: project_id, onChunk });
-
-      // Signal streaming done
-      if (stream && result.status === 200) {
-        await this.eventBus.publish(EVENTS.AI.CHAT_CHUNK, {
-          request_id,
-          delta: '',
-          done: true
-        });
-      }
+      }, { correlationId, projectId: project_id });
 
       // Publicar respuesta exitosa
       const responsePayload = {
@@ -505,10 +394,7 @@ class AIGatewayModule {
    * Module lifecycle: onUnload
    */
   async onUnload() {
-    this.logger.info('ai-gateway.unloaded', {
-      total_requests: Array.from(this.usage.values()).reduce((sum, u) => sum + u.requests, 0),
-      total_cost: Array.from(this.usage.values()).reduce((sum, u) => sum + u.cost, 0)
-    });
+    this.logger.info('ai-gateway.unloaded');
   }
 
   /**
@@ -534,16 +420,7 @@ class AIGatewayModule {
       if (providerConfig && providerConfig.enabled) {
         const provider = new ProviderClass(providerConfig, this.logger, credentialResolver);
         await provider.initialize();
-
         this.providers.set(name, provider);
-
-        // Initialize usage tracking
-        this.usage.set(name, {
-          requests: 0,
-          tokens: 0,
-          cost: 0,
-          errors: 0
-        });
       }
     }
   }
@@ -605,10 +482,8 @@ class AIGatewayModule {
         top_p,
         metadata,
         execute_tools,
-        max_tool_iterations,
-        stream
+        max_tool_iterations
       } = req.body || {};
-      const onChunk = context?.onChunk;
       const projectId = context?.projectId || metadata?.project_id;
 
       if (!initialMessages || !Array.isArray(initialMessages) || initialMessages.length === 0) {
@@ -683,11 +558,6 @@ class AIGatewayModule {
         retryConfig: this.config.retry
       };
 
-      // Determine if we can use real streaming:
-      // - stream requested AND no tools to execute
-      // Real streaming gives text-as-it-generates experience
-      const useRealStreaming = stream && onChunk && (!translatedTools || !execute_tools);
-
       // Agentic loop - execute tools and continue conversation
       let result;
       let iteration = 0;
@@ -700,19 +570,10 @@ class AIGatewayModule {
         this.logger.info('ai-gateway.chat.iteration', {
           iteration,
           messages_count: messages.length,
-          has_tools: !!translatedTools,
-          streaming: useRealStreaming && iteration === 1
+          has_tools: !!translatedTools
         });
 
-        // Call AI - use streaming for first/only call when no tools
-        if (useRealStreaming) {
-          result = await this.chatStreamWithRetry(provider, messages, {
-            ...chatOptions,
-            onChunk
-          });
-        } else {
-          result = await this.chatWithRetry(provider, messages, chatOptions);
-        }
+        result = await this.chatWithRetry(provider, messages, chatOptions);
 
         // Accumulate usage
         totalTokens += result.usage?.total_tokens || 0;
@@ -737,23 +598,8 @@ class AIGatewayModule {
 
         // Parse and execute tool calls
         const toolCalls = this.parseToolCallsFromProvider(result, providerName);
-
-        // Notify frontend: tools are being executed
-        if (onChunk) {
-          for (const tc of toolCalls) {
-            onChunk({ tool: { name: tc.name, status: 'executing' } });
-          }
-        }
-
         const toolResults = await this.executeToolCalls(toolCalls, context);
         allToolResults.push(...toolResults);
-
-        // Notify frontend: tools completed
-        if (onChunk) {
-          for (const tr of toolResults) {
-            onChunk({ tool: { name: tr.name, status: tr.status === 'error' ? 'error' : 'completed' } });
-          }
-        }
 
         // Check if any tool requires confirmation (pause the loop)
         const pendingConfirmation = toolResults.find(r => r.requires_confirmation);
@@ -826,41 +672,7 @@ class AIGatewayModule {
         messages.push(...toolResultMessages);
       }
 
-      // Post-hoc streaming: when tools were active, real-time streaming was
-      // not possible. Simulate typewriter effect by publishing content progressively.
-      if (stream && onChunk && !useRealStreaming && result?.content) {
-        const content = result.content;
-        const chunkSize = 12;
-        for (let i = 0; i < content.length; i += chunkSize) {
-          onChunk(content.slice(i, i + chunkSize));
-          await new Promise(r => setTimeout(r, 10));
-        }
-      }
-
       const latencyMs = Date.now() - startTime;
-
-      // Record usage
-      const usageStats = this.usage.get(providerName);
-      if (usageStats) {
-        usageStats.requests++;
-        usageStats.tokens += totalTokens;
-        usageStats.cost += totalCost;
-      }
-
-      // Publish completion event
-      if (this.config.analytics?.enabled && this.eventBus) {
-        this.eventBus.publish(EVENTS.AI.COMPLETION_COMPLETED, {
-          provider: providerName,
-          model: result.model,
-          prompt_id: metadata?.prompt_id,
-          tokens_used: totalTokens,
-          latency_ms: latencyMs,
-          cost: totalCost,
-          tool_calls_count: allToolResults.length,
-          iterations: iteration,
-          metadata
-        });
-      }
 
       return {
         status: 200,
@@ -883,567 +695,6 @@ class AIGatewayModule {
         status: 500,
         data: { error: 'CHAT_FAILED', message: error.message }
       };
-    }
-  }
-
-  /**
-   * API Handler: Chat Completion Stream (SSE)
-   * Note: Streaming requires special handling
-   */
-  async handleChatStream(req, context) {
-    // For now, return error - streaming needs special HTTP handling
-    return {
-      status: 501,
-      data: { error: 'NOT_IMPLEMENTED', message: 'Streaming requires SSE, use /chat for now' }
-    };
-  }
-
-  /**
-   * API Handler: List Providers
-   */
-  async handleListProviders(req, context) {
-    try {
-      const providers = [];
-
-      for (const [name, provider] of this.providers.entries()) {
-        const available = await provider.isAvailable();
-        const usage = this.usage.get(name);
-
-        providers.push({
-          name,
-          priority: this.config.providers?.[name]?.priority || 99,
-          available,
-          models: this.config.providers?.[name]?.models || [],
-          default_model: this.config.providers?.[name]?.default_model,
-          usage: usage || { requests: 0, tokens: 0, cost: 0, errors: 0 }
-        });
-      }
-
-      // Sort by priority
-      providers.sort((a, b) => a.priority - b.priority);
-
-      return { status: 200, data: { providers } };
-    } catch (error) {
-      this.logger.error('ai-gateway.list-providers.error', { error: error.message });
-      return { status: 500, data: { error: 'LIST_PROVIDERS_FAILED', message: error.message } };
-    }
-  }
-
-  /**
-   * API Handler: List Models
-   */
-  async handleListModels(req, context) {
-    try {
-      const { provider: providerName } = req.query || {};
-      const models = [];
-
-      if (providerName) {
-        const providerConfig = this.config.providers?.[providerName];
-        if (providerConfig) {
-          for (const model of providerConfig.models || []) {
-            models.push({
-              provider: providerName,
-              model,
-              default: model === providerConfig.default_model
-            });
-          }
-        }
-      } else {
-        // All models from all providers
-        for (const [name, config] of Object.entries(this.config.providers || {})) {
-          if (config.enabled) {
-            for (const model of config.models || []) {
-              models.push({
-                provider: name,
-                model,
-                default: model === config.default_model
-              });
-            }
-          }
-        }
-      }
-
-      return { status: 200, data: { models, total: models.length } };
-    } catch (error) {
-      this.logger.error('ai-gateway.list-models.error', { error: error.message });
-      return { status: 500, data: { error: 'LIST_MODELS_FAILED', message: error.message } };
-    }
-  }
-
-  /**
-   * API Handler: Get Usage
-   */
-  async handleGetUsage(req, context) {
-    try {
-      const { provider: providerName } = req.query || {};
-
-      const usageData = [];
-
-      if (providerName) {
-        const usage = this.usage.get(providerName);
-        if (usage) {
-          usageData.push({ provider: providerName, ...usage });
-        }
-      } else {
-        // All providers
-        for (const [name, usage] of this.usage.entries()) {
-          usageData.push({ provider: name, ...usage });
-        }
-      }
-
-      // Calculate totals
-      const totals = usageData.reduce(
-        (acc, u) => ({
-          requests: acc.requests + u.requests,
-          tokens: acc.tokens + u.tokens,
-          cost: acc.cost + u.cost,
-          errors: acc.errors + u.errors
-        }),
-        { requests: 0, tokens: 0, cost: 0, errors: 0 }
-      );
-
-      return { status: 200, data: { usage: usageData, totals } };
-    } catch (error) {
-      this.logger.error('ai-gateway.usage.error', { error: error.message });
-      return { status: 500, data: { error: 'GET_USAGE_FAILED', message: error.message } };
-    }
-  }
-
-  /**
-   * API Handler: Test Provider
-   */
-  async handleTestProvider(req, context) {
-    try {
-      const { provider: providerName } = req.body || {};
-
-      if (!providerName) {
-        return { status: 400, data: { error: 'INVALID_REQUEST', message: 'provider is required' } };
-      }
-
-      const provider = this.providers.get(providerName);
-
-      if (!provider) {
-        return { status: 404, data: { error: 'PROVIDER_NOT_FOUND', message: `Provider '${providerName}' not found` } };
-      }
-
-      const available = await provider.isAvailable();
-
-      if (!available) {
-        return {
-          status: 503,
-          data: { provider: providerName, available: false, message: 'Provider not available (check API key)' }
-        };
-      }
-
-      // Test with simple message
-      const testMessages = [
-        { role: 'user', content: 'Say "OK" if you can receive this message' }
-      ];
-
-      const startTime = Date.now();
-
-      const result = await provider.chatCompletion(testMessages, { max_tokens: 10 });
-
-      const latencyMs = Date.now() - startTime;
-
-      return {
-        status: 200,
-        data: {
-          provider: providerName,
-          available: true,
-          latency_ms: latencyMs,
-          response_preview: result.content?.slice(0, 50),
-          model: result.model
-        }
-      };
-    } catch (error) {
-      this.logger.error('ai-gateway.test.error', { error: error.message });
-      return { status: 500, data: { error: 'TEST_FAILED', message: error.message } };
-    }
-  }
-
-  // ============ UI API HANDLERS ============
-
-  /**
-   * API Handler: UI State
-   * GET /ui/state - Estado completo para la UI (listo para pintar)
-   */
-  async handleUIState(req, context) {
-    try {
-      const providers = [];
-
-      for (const [name, provider] of this.providers.entries()) {
-        const available = await provider.isAvailable();
-        const config = this.config.providers?.[name];
-        const usage = this.usage.get(name);
-
-        // Construir lista de modelos formateada
-        const models = (config?.models || []).map(modelId => ({
-          id: modelId,
-          name: this.getModelDisplayName(modelId),
-          isDefault: modelId === config?.default_model,
-          isSelected: this.currentProvider === name && this.currentModel === modelId
-        }));
-
-        providers.push({
-          id: name,
-          displayName: this.getProviderDisplayName(name),
-          icon: this.getProviderIcon(name),
-          available,
-          status: this.getProviderStatus(available, provider),
-          priority: config?.priority || 99,
-          isSelected: this.currentProvider === name,
-          models,
-          pricing: {
-            input: config?.cost_per_1k_tokens?.input || 0,
-            output: config?.cost_per_1k_tokens?.output || 0,
-            currency: 'USD'
-          },
-          limits: {
-            requestsPerMinute: config?.rate_limit?.requests_per_minute || 60,
-            tokensPerMinute: config?.rate_limit?.tokens_per_minute || 100000
-          },
-          usage: usage || { requests: 0, tokens: 0, cost: 0, errors: 0 }
-        });
-      }
-
-      // Ordenar por prioridad
-      providers.sort((a, b) => a.priority - b.priority);
-
-      // Calcular totales de uso
-      const totalUsage = Array.from(this.usage.values()).reduce(
-        (acc, u) => ({
-          requests: acc.requests + u.requests,
-          tokens: acc.tokens + u.tokens,
-          cost: acc.cost + u.cost,
-          errors: acc.errors + u.errors
-        }),
-        { requests: 0, tokens: 0, cost: 0, errors: 0 }
-      );
-
-      return {
-        status: 200,
-        data: {
-          providers,
-          current: {
-            provider: this.currentProvider,
-            model: this.currentModel,
-            displayName: this.currentProvider === 'auto'
-              ? 'Automático'
-              : this.getProviderDisplayName(this.currentProvider),
-            modelDisplayName: this.currentModel
-              ? this.getModelDisplayName(this.currentModel)
-              : null
-          },
-          usage: {
-            session: totalUsage
-          }
-        }
-      };
-    } catch (error) {
-      this.logger.error('ai-gateway.ui-state.error', { error: error.message });
-      return { status: 500, data: { error: 'UI_STATE_FAILED', message: error.message } };
-    }
-  }
-
-  /**
-   * API Handler: UI Select
-   * POST /ui/select - Seleccionar provider y modelo
-   */
-  async handleUISelect(req, context) {
-    try {
-      const { provider, model } = req.body || {};
-
-      // Validar provider
-      if (provider && provider !== 'auto') {
-        if (!this.providers.has(provider)) {
-          return {
-            status: 400,
-            data: { error: 'INVALID_PROVIDER', message: `Provider '${provider}' not found` }
-          };
-        }
-
-        const providerInstance = this.providers.get(provider);
-        const available = await providerInstance.isAvailable();
-
-        if (!available) {
-          return {
-            status: 400,
-            data: { error: 'PROVIDER_NOT_AVAILABLE', message: `Provider '${provider}' is not available (check API key)` }
-          };
-        }
-
-        // Validar modelo si se proporciona
-        if (model) {
-          const config = this.config.providers?.[provider];
-          if (!config?.models?.includes(model)) {
-            return {
-              status: 400,
-              data: { error: 'INVALID_MODEL', message: `Model '${model}' not available for provider '${provider}'` }
-            };
-          }
-        }
-      }
-
-      // Actualizar selección
-      this.currentProvider = provider || 'auto';
-      this.currentModel = model || null;
-
-      this.logger.info('ai-gateway.ui.selected', {
-        provider: this.currentProvider,
-        model: this.currentModel
-      });
-
-      return {
-        status: 200,
-        data: {
-          success: true,
-          current: {
-            provider: this.currentProvider,
-            model: this.currentModel,
-            displayName: this.currentProvider === 'auto'
-              ? 'Automático'
-              : this.getProviderDisplayName(this.currentProvider),
-            modelDisplayName: this.currentModel
-              ? this.getModelDisplayName(this.currentModel)
-              : null
-          }
-        }
-      };
-    } catch (error) {
-      this.logger.error('ai-gateway.ui-select.error', { error: error.message });
-      return { status: 500, data: { error: 'UI_SELECT_FAILED', message: error.message } };
-    }
-  }
-
-  /**
-   * API Handler: UI Config GET
-   * GET /ui/config - Obtener configuración de parámetros LLM
-   */
-  async handleUIConfigGet(req, context) {
-    try {
-      // Definición de parámetros con metadatos para la UI
-      const configSchema = {
-        temperature: {
-          value: this.chatConfig.temperature,
-          type: 'range',
-          min: 0,
-          max: 2,
-          step: 0.1,
-          label: 'Temperatura',
-          description: 'Creatividad de las respuestas (0=preciso, 2=creativo)',
-          icon: '🌡️'
-        },
-        maxTokens: {
-          value: this.chatConfig.maxTokens,
-          type: 'range',
-          min: 256,
-          max: 8192,
-          step: 256,
-          label: 'Máx. Tokens',
-          description: 'Longitud máxima de la respuesta',
-          icon: '📏'
-        },
-        topP: {
-          value: this.chatConfig.topP,
-          type: 'range',
-          min: 0,
-          max: 1,
-          step: 0.05,
-          label: 'Top P',
-          description: 'Nucleus sampling (diversidad)',
-          icon: '🎯'
-        },
-        frequencyPenalty: {
-          value: this.chatConfig.frequencyPenalty,
-          type: 'range',
-          min: -2,
-          max: 2,
-          step: 0.1,
-          label: 'Penalización Frecuencia',
-          description: 'Reduce repetición de palabras',
-          icon: '🔄'
-        },
-        presencePenalty: {
-          value: this.chatConfig.presencePenalty,
-          type: 'range',
-          min: -2,
-          max: 2,
-          step: 0.1,
-          label: 'Penalización Presencia',
-          description: 'Fomenta temas nuevos',
-          icon: '💡'
-        },
-        systemPrompt: {
-          value: this.chatConfig.systemPrompt,
-          type: 'textarea',
-          maxLength: 4000,
-          label: 'System Prompt',
-          description: 'Instrucciones iniciales para el modelo',
-          icon: '📝',
-          placeholder: 'Ej: Eres un asistente experto en programación...'
-        },
-        stream: {
-          value: this.chatConfig.stream,
-          type: 'toggle',
-          label: 'Streaming',
-          description: 'Respuestas en tiempo real',
-          icon: '⚡'
-        }
-      };
-
-      return {
-        status: 200,
-        data: {
-          config: configSchema,
-          presets: [
-            { id: 'precise', name: 'Preciso', icon: '🎯', temperature: 0.3, topP: 0.9 },
-            { id: 'balanced', name: 'Balanceado', icon: '⚖️', temperature: 0.7, topP: 1.0 },
-            { id: 'creative', name: 'Creativo', icon: '🎨', temperature: 1.2, topP: 0.95 },
-            { id: 'code', name: 'Código', icon: '💻', temperature: 0.2, topP: 0.9, systemPrompt: 'Eres un experto programador. Responde con código limpio y comentado.' }
-          ]
-        }
-      };
-    } catch (error) {
-      this.logger.error('ai-gateway.ui-config-get.error', { error: error.message });
-      return { status: 500, data: { error: 'UI_CONFIG_GET_FAILED', message: error.message } };
-    }
-  }
-
-  /**
-   * API Handler: UI Config POST
-   * POST /ui/config - Actualizar configuración de parámetros LLM
-   */
-  async handleUIConfigPost(req, context) {
-    try {
-      const updates = req.body || {};
-
-      // Validar y aplicar cada parámetro
-      if (typeof updates.temperature === 'number') {
-        this.chatConfig.temperature = Math.max(0, Math.min(2, updates.temperature));
-      }
-      if (typeof updates.maxTokens === 'number') {
-        this.chatConfig.maxTokens = Math.max(256, Math.min(8192, updates.maxTokens));
-      }
-      if (typeof updates.topP === 'number') {
-        this.chatConfig.topP = Math.max(0, Math.min(1, updates.topP));
-      }
-      if (typeof updates.frequencyPenalty === 'number') {
-        this.chatConfig.frequencyPenalty = Math.max(-2, Math.min(2, updates.frequencyPenalty));
-      }
-      if (typeof updates.presencePenalty === 'number') {
-        this.chatConfig.presencePenalty = Math.max(-2, Math.min(2, updates.presencePenalty));
-      }
-      if (typeof updates.systemPrompt === 'string') {
-        this.chatConfig.systemPrompt = updates.systemPrompt.slice(0, 4000);
-      }
-      if (typeof updates.stream === 'boolean') {
-        this.chatConfig.stream = updates.stream;
-      }
-
-      // Aplicar preset si se proporciona
-      if (updates.preset) {
-        const presets = {
-          precise: { temperature: 0.3, topP: 0.9 },
-          balanced: { temperature: 0.7, topP: 1.0 },
-          creative: { temperature: 1.2, topP: 0.95 },
-          code: { temperature: 0.2, topP: 0.9, systemPrompt: 'Eres un experto programador. Responde con código limpio y comentado.' }
-        };
-        const preset = presets[updates.preset];
-        if (preset) {
-          Object.assign(this.chatConfig, preset);
-        }
-      }
-
-      this.logger.info('ai-gateway.ui.config-updated', { config: this.chatConfig });
-
-      return {
-        status: 200,
-        data: {
-          success: true,
-          config: this.chatConfig
-        }
-      };
-    } catch (error) {
-      this.logger.error('ai-gateway.ui-config-post.error', { error: error.message });
-      return { status: 500, data: { error: 'UI_CONFIG_POST_FAILED', message: error.message } };
-    }
-  }
-
-  // ============ TOOLS API HANDLERS ============
-
-  /**
-   * API Handler: List available tools
-   * GET /tools - Lista todas las tools disponibles para AI
-   */
-  async handleListTools(req, context) {
-    try {
-      const tools = this.getAvailableTools();
-
-      return {
-        status: 200,
-        data: {
-          tools,
-          count: tools.length,
-          source: 'moduleLoader'
-        }
-      };
-    } catch (error) {
-      this.logger.error('ai-gateway.list-tools.error', { error: error.message });
-      return { status: 500, data: { error: 'LIST_TOOLS_FAILED', message: error.message } };
-    }
-  }
-
-  /**
-   * API Handler: Execute a tool
-   * POST /tools/:name/execute - Ejecuta una tool específica
-   */
-  async handleExecuteTool(req, context) {
-    try {
-      const toolName = context.params?.name || req.body?.name;
-      const args = req.body?.args || req.body?.arguments || {};
-
-      if (!toolName) {
-        return { status: 400, data: { error: 'INVALID_REQUEST', message: 'tool name is required' } };
-      }
-
-      // Check if tool exists
-      const tool = this.moduleLoader?.getTool(toolName);
-      if (!tool) {
-        return { status: 404, data: { error: 'TOOL_NOT_FOUND', message: `Tool '${toolName}' not found` } };
-      }
-
-      // Check confirmation requirement
-      if (tool.confirmation) {
-        const confirmed = req.body?.confirmed === true;
-        if (!confirmed) {
-          return {
-            status: 200,
-            data: {
-              requires_confirmation: true,
-              tool: toolName,
-              description: tool.description,
-              message: 'Esta acción requiere confirmación. Envía confirmed: true para ejecutar.'
-            }
-          };
-        }
-      }
-
-      // Execute
-      const result = await this.moduleLoader.executeTool(toolName, args);
-
-      return {
-        status: result?.status || 200,
-        data: {
-          success: true,
-          tool: toolName,
-          result: result?.data || result
-        }
-      };
-
-    } catch (error) {
-      this.logger.error('ai-gateway.execute-tool.error', { error: error.message });
-      return { status: 500, data: { error: 'EXECUTE_TOOL_FAILED', message: error.message } };
     }
   }
 
@@ -1856,17 +1107,6 @@ class AIGatewayModule {
   async chatWithRetry(provider, messages, options) {
     return provider.withRetry(
       () => provider.chatCompletion(messages, options),
-      options.retryConfig
-    );
-  }
-
-  /**
-   * Chat streaming with retry
-   * Uses chatCompletionStream instead of chatCompletion
-   */
-  async chatStreamWithRetry(provider, messages, options) {
-    return provider.withRetry(
-      () => provider.chatCompletionStream(messages, options),
       options.retryConfig
     );
   }

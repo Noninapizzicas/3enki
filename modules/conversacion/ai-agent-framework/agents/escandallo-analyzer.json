@@ -6,9 +6,9 @@
   "enabled": true,
   "prompt_file": "prompts/escandallo-analyzer.json",
   "tools": [
-    "escandallo.obtener",
-    "escandallo.obtener_historico",
-    "escandallo.obtener_alertas"
+    "escandallo.receta",
+    "escandallo.ficha_tecnica",
+    "escandallo.ingrediente_impacto"
   ],
   "provider": "auto",
   "temperature": 0.3,

@@ -14,8 +14,14 @@
     "4. Si precio_venta disponible: calcular margen = ((precio_venta - coste_total) / precio_venta) * 100",
     "5. Detectar alérgenos de los 14 grupos EU en la lista de ingredientes",
     "6. Evaluar dificultad (1-5) basada en técnicas, tiempos y número de pasos",
-    "7. Construir y devolver el informe JSON de output"
+    "7. Opcional: llamar recetas.analizar si se necesita análisis agregado adicional",
+    "8. Construir y devolver el informe JSON de output"
   ],
+  "tools_disponibles": {
+    "recetas.obtener": "obtener receta completa por {project_id, receta_id}",
+    "recetas.ingredientes": "listar ingredientes con coste unitario de una receta",
+    "recetas.analizar": "análisis agregado de recetas del proyecto (si aplica)"
+  },
   "output": {
     "coste_total": "number — coste en euros con 2 decimales",
     "margen_porcentaje": "number|null — margen si se proporcionó precio_venta",

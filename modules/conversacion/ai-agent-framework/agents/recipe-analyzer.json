@@ -6,9 +6,9 @@
   "enabled": true,
   "prompt_file": "prompts/recipe-analyzer.json",
   "tools": [
-    "recetas.ingredientes",
     "recetas.obtener",
-    "recetas.calcular_costes"
+    "recetas.ingredientes",
+    "recetas.analizar"
   ],
   "provider": "auto",
   "temperature": 0.2,

@@ -9,11 +9,7 @@
     "recetas.obtener",
     "recetas.actualizar",
     "recetas.buscar",
-    "escandallo.calcular",
-    "recipe-chef-advisor.mejorar_receta",
-    "recipe-chef-advisor.validar_tecnica",
-    "recipe-chef-advisor.explicar_tecnica",
-    "recipe-chef-advisor.sugerir_relacionadas"
+    "escandallo.receta"
   ],
   "provider": "auto",
   "temperature": 0.4,

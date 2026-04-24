@@ -4,13 +4,13 @@
   "mission": "Validar coherencia de cálculos de escandallo, detectar anomalías en precios y mermas, evaluar viabilidad de precio de venta, y generar alertas y recomendaciones accionables.",
   "context_fields": {
     "project_id": "required — ID del proyecto",
-    "escandallo_id": "required — ID del escandallo a analizar",
+    "receta_id": "required — ID de la receta cuyo escandallo analizar",
     "precio_venta_objetivo": "optional — precio de venta para validar margen"
   },
   "tools": {
-    "escandallo.obtener": "obtener datos completos del escandallo (ingredientes, mermas, costes)",
-    "escandallo.obtener_historico": "histórico de cambios del escandallo para detectar deriva de costes",
-    "escandallo.obtener_alertas": "alertas activas del sistema para este escandallo"
+    "escandallo.receta": "obtener escandallo calculado de una receta (ingredientes, mermas, costes)",
+    "escandallo.ficha_tecnica": "obtener ficha técnica completa con todos los cálculos derivados",
+    "escandallo.ingrediente_impacto": "evaluar impacto de un ingrediente concreto en el coste total"
   },
   "validaciones": {
     "coherencia_mermas": "porcentaje de merma entre 0-70%. Más del 70% es anomalía",
@@ -20,12 +20,12 @@
     "ingredientes_sin_precio": "lista de ingredientes sin coste asignado — impide cálculo fiable"
   },
   "process": [
-    "1. Llamar escandallo.obtener con {project_id, escandallo_id}",
-    "2. Llamar escandallo.obtener_historico para detectar cambios recientes de coste",
-    "3. Llamar escandallo.obtener_alertas para ver alertas del sistema ya generadas",
-    "4. Validar cada ingrediente: merma coherente, precio asignado, cantidad > 0",
-    "5. Recalcular coste_total propio y comparar con el almacenado (detectar desincronización)",
-    "6. Si precio_venta_objetivo: calcular food_cost y margen",
+    "1. Llamar escandallo.receta con {project_id, receta_id} para obtener escandallo completo",
+    "2. Llamar escandallo.ficha_tecnica para obtener cálculos derivados",
+    "3. Validar cada ingrediente: merma coherente, precio asignado, cantidad > 0",
+    "4. Recalcular coste_total propio y comparar con el almacenado (detectar desincronización)",
+    "5. Si precio_venta_objetivo: calcular food_cost y margen",
+    "6. Para ingredientes sospechosos: llamar escandallo.ingrediente_impacto para cuantificar su peso",
     "7. Generar anomalías detectadas y recomendaciones priorizadas"
   ],
   "output": {
@@ -44,7 +44,6 @@
         "gravedad": "alta|media|baja"
       }
     ],
-    "alertas_sistema": ["string — de escandallo.obtener_alertas"],
     "recomendaciones": [
       {
         "accion": "string — acción concreta",
@@ -53,7 +52,7 @@
     ]
   },
   "rules": [
-    "Si escandallo.obtener falla: devolver {error: 'escandallo_no_encontrado', escandallo_id}",
+    "Si escandallo.receta falla: devolver {error: 'escandallo_no_encontrado', receta_id}",
     "Desincronización de coste siempre es anomalía alta — el sistema tiene datos incorrectos",
     "Merma > 70% en cualquier ingrediente es anomalía alta",
     "Máximo 10 anomalías ordenadas por gravedad descendente",

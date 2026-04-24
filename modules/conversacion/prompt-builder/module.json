@@ -1,0 +1,20 @@
+{
+  "name": "prompt-builder",
+  "version": "1.0.0",
+  "description": "Escanea modules/**/prompt.json y context.json al arrancar. Cuando llega chat.message.saved construye el system prompt (base + context + prompt del módulo activo + runtime) y carga el historial de messages de la DB. Emite chat.prompt.ready.",
+  "author": "Event Core Team",
+
+  "publishes": [
+    "chat.prompt.ready"
+  ],
+  "subscribes": [
+    { "event": "chat.message.saved", "handler": "onMessageSaved" },
+    { "event": "db.query.response", "handler": "onDbQueryResponse" }
+  ],
+
+  "dependencies": ["database-manager"],
+
+  "config": {
+    "maxHistoryMessages": 20
+  }
+}

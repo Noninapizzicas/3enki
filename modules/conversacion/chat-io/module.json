@@ -1,0 +1,24 @@
+{
+  "name": "chat-io",
+  "version": "1.0.0",
+  "description": "Entrada y salida del chat: recibe mensajes del frontend (ui/request/conversation/send), persiste conversaciones y mensajes en SQLite por proyecto, y reenvía la respuesta del LLM al frontend por MQTT (conversation/{id}/message). Lazy-create de conversaciones.",
+  "author": "Event Core Team",
+
+  "publishes": [
+    "chat.message.saved",
+    "chat.assistant.saved"
+  ],
+  "subscribes": [
+    { "event": "ai.chat.response",  "handler": "onAiResponse" },
+    { "event": "db.query.response", "handler": "onDbQueryResponse" },
+    { "event": "project.activated", "handler": "onProjectActivated" }
+  ],
+
+  "ui_handlers": [
+    { "domain": "conversation", "action": "send",   "handler": "handleSend" },
+    { "domain": "conversation", "action": "list",   "handler": "handleList" },
+    { "domain": "conversation", "action": "load",   "handler": "handleLoad" }
+  ],
+
+  "dependencies": ["database-manager"]
+}

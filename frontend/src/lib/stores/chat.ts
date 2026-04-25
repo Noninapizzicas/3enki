@@ -152,8 +152,20 @@ export async function sendMessage(content: string): Promise<void> {
       conversationId.set(data.conversation_id);
     }
 
-    isStreaming.set(false);
-    streamingMessageId.set(null);
+    // NO ponemos isStreaming = false aquí. El ack del request vuelve en ~50ms
+    // pero la respuesta del LLM tarda 5-30s y llega por MQTT push. El indicador
+    // de "asistente escribiendo" se mantiene hasta que llega el push (handler
+    // del subscribe a conversation/+/message).
+
+    // Failsafe: si el push del asistente nunca llega (LLM crasheado,
+    // ai-gateway down, etc.), cerrar el indicador tras 3 minutos.
+    setTimeout(() => {
+      if (get(isStreaming)) {
+        isStreaming.set(false);
+        streamingMessageId.set(null);
+        notifyError('La respuesta tardó demasiado. Inténtalo de nuevo.');
+      }
+    }, 180000);
   } catch (error: any) {
     console.error('[chat] Error sending message:', error);
     isStreaming.set(false);
@@ -386,6 +398,13 @@ export function initChatSubscriptions(): () => void {
       streaming: data.streaming,
       attachments: data.attachments
     });
+
+    // El push del assistant marca el final del turno: el indicador de
+    // "asistente escribiendo" se apaga cuando llega su respuesta.
+    if (data.role === 'assistant' && !data.streaming) {
+      isStreaming.set(false);
+      streamingMessageId.set(null);
+    }
   }));
 
   // Tool status — filtrar por conversación activa

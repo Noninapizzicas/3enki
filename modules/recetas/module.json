@@ -79,15 +79,9 @@
 
   "provides": {
     "events": [
-      "receta.ingestion.started",
-      "receta.ingestion.completed",
-      "receta.ingestion.failed",
-      "receta.analysis.completed",
-      "receta.analysis.failed",
       "receta.creada",
       "receta.actualizada",
       "receta.eliminada",
-      "receta.versión.revertida",
       "ingrediente.precio.actualizado"
     ]
   },
@@ -95,28 +89,12 @@
   "events": {
     "publishes": [
       {
-        "event": "receta.ingestion.started",
-        "description": "Ingestion pipeline iniciado (URL, PDF, foto, JSON)"
-      },
-      {
-        "event": "receta.ingestion.completed",
-        "description": "Datos normalizados listos para análisis"
-      },
-      {
-        "event": "receta.ingestion.failed",
-        "description": "Error en ingestion con estado resumible"
-      },
-      {
-        "event": "receta.analysis.completed",
-        "description": "Análisis profundo completado (viabilidad, costes reales)"
-      },
-      {
         "event": "receta.creada",
         "description": "Receta nueva guardada en BD"
       },
       {
         "event": "receta.actualizada",
-        "description": "Receta modificada (nueva versión)"
+        "description": "Receta modificada"
       },
       {
         "event": "receta.eliminada",
@@ -130,18 +108,9 @@
     "subscribes": [
       { "event": "project.activated",        "handler": "onProjectActivated" },
       { "event": "project.deactivated",      "handler": "onProjectDeactivated" },
-      { "event": "receta.crear",             "handler": "onRecetaCrear" },
-      { "event": "receta.actualizar",        "handler": "onRecetaActualizar" },
-      { "event": "receta.borrar",            "handler": "onRecetaBorrar" },
-      { "event": "receta.buscar",            "handler": "onRecetaBuscar" },
-      { "event": "receta.obtener",           "handler": "onRecetaObtener" },
-      { "event": "receta.listar",            "handler": "onRecetaListar" },
-      { "event": "receta.ingestar",          "handler": "onRecetaIngestar" },
-      { "event": "receta.investigar",        "handler": "onRecetaInvestigar" },
       { "event": "recetas.buscar",           "handler": "onToolBuscar" },
       { "event": "recetas.listar",           "handler": "onToolListar" },
       { "event": "recetas.obtener",          "handler": "onToolObtener" },
-      { "event": "recetas.ingestar",         "handler": "onToolIngestar" },
       { "event": "recetas.historial",        "handler": "onToolHistorial" },
       { "event": "recetas.estadisticas",     "handler": "onToolEstadisticas" },
       { "event": "recetas.ingredientes",     "handler": "onToolIngredientes" },
@@ -156,7 +125,6 @@
   },
 
   "handlers": [
-    { "domain": "recetas", "action": "ingestar", "method": "handleIngestar" },
     { "domain": "recetas", "action": "analizar", "method": "handleAnalizar" },
     { "domain": "recetas", "action": "buscar", "method": "handleBuscar" },
     { "domain": "recetas", "action": "listar", "method": "handleListar" },
@@ -173,7 +141,6 @@
   ],
 
   "ui_handlers": [
-    { "domain": "recetas", "action": "ingestar", "handler": "handleIngestar" },
     { "domain": "recetas", "action": "analizar", "handler": "handleAnalizar" },
     { "domain": "recetas", "action": "buscar", "handler": "handleBuscar" },
     { "domain": "recetas", "action": "listar", "handler": "handleListar" },
@@ -186,34 +153,6 @@
   ],
 
   "tools": [
-    {
-      "name": "recetas.ingestar",
-      "description": "Ingesta receta desde URL web, PDF, foto, JSON o formulario manual. Pipeline determinista: descarga → parse → normalización → indexación. Retorna ingestion_id para tracking.",
-      "handler": "toolIngestar",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "project_id": {
-            "type": "string",
-            "description": "ID del proyecto"
-          },
-          "input": {
-            "type": ["string", "object"],
-            "description": "URL (string), ruta archivo (string), o datos JSON (object)"
-          },
-          "tipo": {
-            "type": "string",
-            "enum": ["url", "pdf", "imagen", "json", "manual", "auto"],
-            "description": "Tipo de input. 'auto' para detección automática"
-          },
-          "fuente_referencia": {
-            "type": "string",
-            "description": "Referencia (URL original, nombre archivo, etc.)"
-          }
-        },
-        "required": ["project_id", "input"]
-      }
-    },
     {
       "name": "recetas.analizar",
       "description": "Análisis profundo de receta: viabilidad técnica, tiempos reales, costes precisos, dificultad real (1-10), alérgenos, sustituciones posibles, puntos débiles/fuertes, potencial de mejora. Usa Claude con tool calling para investigación.",
@@ -513,45 +452,7 @@
     }
   ],
 
-  "pipeline": {
-    "ingestion": {
-      "description": "Pipeline multi-formato: intake → download/read → parse → normalize → index",
-      "steps": [
-        { "step": "intake", "description": "Validar input, registrar en BD" },
-        { "step": "download_or_read", "description": "Fetch URL o read archivo local" },
-        { "step": "parse", "description": "Detectar formato (HTML, PDF, IMG, JSON)" },
-        { "step": "normalize", "description": "Extraer campos candidatos" },
-        { "step": "index", "description": "Guardar estado intermedio para resume" }
-      ],
-      "resumable": true,
-      "providers": {
-        "url": "http client",
-        "pdf": "local.pdfjs + local.sharp + local.google-vision",
-        "image": "local.sharp + local.google-vision",
-        "json": "json schema validator"
-      }
-    },
-    "analysis": {
-      "description": "Análisis profundo: estructuración IA → validación → análisis costes/tiempo",
-      "agent": "receta-analyzer",
-      "trigger": "receta.ingestion.completed"
-    },
-    "storage": {
-      "description": "Persistencia + versionado: SQLite per-project con audit trail",
-      "database": "SQLite",
-      "location": "data/projects/{proyecto}/recetas.db",
-      "versionado": true,
-      "rollback": true
-    }
-  },
-
   "config": {
-    "ingestion": {
-      "timeout_url": 30000,
-      "timeout_pdf": 60000,
-      "timeout_ocr": 60000,
-      "max_file_size": 50000000
-    },
     "analysis": {
       "providers": ["anthropic", "deepseek", "openai", "gemini"],
       "temperature": 0.1,
@@ -566,19 +467,13 @@
   "observability": {
     "metrics": {
       "counters": [
-        "receta.ingestion.started",
-        "receta.ingestion.completed",
-        "receta.ingestion.failed",
-        "receta.analysis.completed",
-        "receta.analysis.failed",
         "receta.creada",
         "receta.actualizada",
         "receta.eliminada",
-        "receta.buscada"
+        "receta.buscada",
+        "receta.investigada"
       ],
       "histograms": [
-        "receta.ingestion.duration_ms",
-        "receta.analysis.duration_ms",
         "receta.search.results_count"
       ]
     },

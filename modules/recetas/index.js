@@ -1,19 +1,17 @@
 /**
- * MÓDULO RECETAS v2 — Refactorizado
+ * MÓDULO RECETAS
  *
- * Responsabilidades:
- * - Ingestion multi-formato (URL/PDF/foto/JSON) → eventos
- * - Búsqueda en BD local (40+ criterios)
- * - Persistencia SQLite per-project con versionado
- * - Orquestación vía eventos (NO lógica bloqueante)
+ * Dominio: recetas del proyecto (CRUD, búsqueda, estadísticas).
  *
- * Flujo event-driven:
- *   Ingestion Pipeline → receta.ingestion.completed
- *   → Recipe Structurer Agent → receta.structuring.completed
- *   → Recipe Analyzer Agent → receta.analysis.completed
- *   → Recipe Curator Agent → receta.creada/actualizada
+ * Eventos de dominio emitidos:
+ *   - receta.creada            (tras crear)
+ *   - receta.actualizada       (tras editar)
+ *   - receta.eliminada         (tras archivar)
+ *   - ingrediente.precio.actualizado
  *
- * @version 2.0.0
+ * Tools expuestas al LLM: recetas.crear, .crear_desde_chat, .buscar,
+ * .listar, .obtener, .analizar, .actualizar, .eliminar, .historial,
+ * .estadisticas, .ingredientes, .actualizar_precio, .investigar_receta.
  */
 
 const path = require('path');
@@ -132,20 +130,6 @@ class RecetasModule {
   // HANDLERS: UI endpoints (domain: recetas)
   // ==========================================
 
-  async handleIngestar(request) {
-    const { proyecto_id, input, tipo, fuente_referencia } = request;
-    try {
-      const ingestion_id = require('crypto').randomUUID();
-      await this.eventBus.publish('receta.ingestion.request', {
-        proyecto_id, input, tipo, fuente_referencia, ingestion_id
-      });
-      return { status: 200, data: { ingestion_id, status: 'processing' } };
-    } catch (err) {
-      this.logger.error('recetas.ingestar.failed', { proyecto_id, error: err.message });
-      return { status: 500, error: err.message };
-    }
-  }
-
   async handleBuscar(request) {
     const { proyecto_id, ...criteria } = request;
 
@@ -238,13 +222,6 @@ class RecetasModule {
 
     try {
       // TODO: implementar via db events (revertVersion requiere lógica multi-step)
-      await this.eventBus.publish('receta.revertida', {
-        receta_id,
-        proyecto_id,
-        revertida_a_version: target_version,
-        timestamp: Date.now()
-      });
-
       return { status: 200, data: { receta_id, revertida_a_version: target_version } };
     } catch (err) {
       this.logger.error('recetas.revertir.failed', { receta_id, error: err.message });
@@ -697,97 +674,6 @@ class RecetasModule {
   // TOOLS: Para agentes IA
   // ==========================================
 
-  async toolIngestar(params) {
-    return this.handleIngestar(params);
-  }
-
-  // Emitido por el LLM cuando detecta una receta nueva en la conversación
-  async onRecetaCrear(event) {
-    const data = event.data || event;
-    const { proyecto_id, nombre, ingredientes, notas } = data;
-    if (!proyecto_id || !ingredientes) return;
-    const input = notas
-      ? `${nombre || 'Receta'}: ${ingredientes}. ${notas}`
-      : `${nombre || 'Receta'}: ${ingredientes}`;
-    const result = await this.handleIngestar({ proyecto_id, input, tipo: 'texto', fuente_referencia: 'chat' });
-    if (result.status === 200) {
-      await this.eventBus.publish('receta.creada', { proyecto_id, nombre, resultado: result.data });
-    }
-  }
-
-  // Tool que el LLM llama desde el chat (fire-and-forget)
-  async toolCrearDesdeChat(params) {
-    const { nombre, ingredientes, proyecto_id, notas } = params;
-    // Lanzar sin await — el LLM continúa la conversación
-    this.eventBus.publish('receta.crear', { proyecto_id, nombre, ingredientes, notas })
-      .catch(() => {});
-    return { status: 'ok', message: `Guardando receta "${nombre}"…` };
-  }
-
-  async onRecetaActualizar(event) {
-    const { proyecto_id, id, cambios } = event.data || event;
-    const result = await this.handleActualizar({ proyecto_id, receta_id: id, ...cambios });
-    if (result.status === 200) {
-      await this.eventBus.publish('receta.actualizada', { proyecto_id, id, datos: result.data });
-    }
-  }
-
-  async onRecetaBorrar(event) {
-    const { proyecto_id, id } = event.data || event;
-    const result = await this.handleEliminar({ proyecto_id, receta_id: id });
-    if (result.status === 200) {
-      await this.eventBus.publish('receta.borrada', { proyecto_id, id });
-    }
-  }
-
-  async onRecetaBuscar(event) {
-    const { proyecto_id, request_id, ...criteria } = event.data || event;
-    const result = await this.handleBuscar({ proyecto_id, ...criteria });
-    await this.eventBus.publish('receta.buscada', {
-      proyecto_id, request_id,
-      resultados: result.data?.recetas || [],
-      error: result.error || null
-    });
-  }
-
-  async onRecetaObtener(event) {
-    const { proyecto_id, id, request_id } = event.data || event;
-    const result = await this.handleObtener({ proyecto_id, receta_id: id });
-    await this.eventBus.publish('receta.obtenida', {
-      proyecto_id, request_id,
-      datos: result.data || null,
-      error: result.error || null
-    });
-  }
-
-  async onRecetaListar(event) {
-    const { proyecto_id, request_id, estado, limit } = event.data || event;
-    const result = await this.handleListar({ proyecto_id, estado, limit });
-    await this.eventBus.publish('receta.listada', {
-      proyecto_id, request_id,
-      items: result.data?.recetas || [],
-      error: result.error || null
-    });
-  }
-
-  async onRecetaIngestar(event) {
-    const { proyecto_id, input, tipo, fuente_referencia } = event.data || event;
-    const result = await this.handleIngestar({ proyecto_id, input, tipo, fuente_referencia });
-    if (result.status === 200) {
-      await this.eventBus.publish('receta.ingestada', { proyecto_id, resultado: result.data });
-    }
-  }
-
-  async onRecetaInvestigar(event) {
-    const { proyecto_id, request_id, query } = event.data || event;
-    const result = await this.handleInvestigarReceta({ proyecto_id, query });
-    await this.eventBus.publish('receta.investigada', {
-      proyecto_id, request_id,
-      resultado: result.data || null,
-      error: result.error || null
-    });
-  }
-
   async toolBuscar(params) {
     return this.handleBuscar(params);
   }
@@ -844,19 +730,50 @@ class RecetasModule {
   async onToolBuscar(event)          { return this._toolResponse('recetas.buscar',            event, p => this.handleBuscar(p)); }
   async onToolListar(event)          { return this._toolResponse('recetas.listar',             event, p => this.handleListar(p)); }
   async onToolObtener(event)         { return this._toolResponse('recetas.obtener',            event, p => this.handleObtener(p)); }
-  async onToolIngestar(event)        { return this._toolResponse('recetas.ingestar',           event, p => this.handleIngestar(p)); }
   async onToolHistorial(event)       { return this._toolResponse('recetas.historial',          event, p => this.handleHistorial(p)); }
   async onToolEstadisticas(event)    { return this._toolResponse('recetas.estadisticas',       event, p => this.handleEstadisticas(p)); }
   async onToolIngredientes(event)    { return this._toolResponse('recetas.ingredientes',       event, p => this.handleIngredientes(p)); }
   async onToolActualizarPrecio(event){ return this._toolResponse('recetas.actualizar_precio',  event, p => this.handleActualizarPrecio(p)); }
-  async onToolCrearDesdeChat(event)  { return this._toolResponse('recetas.crear_desde_chat',   event, p => this.handleIngestar(p)); }
+  async onToolCrearDesdeChat(event)  { return this._toolResponse('recetas.crear_desde_chat',   event, p => this._crearRecetaSync(p)); }
 
   async onToolCrear(event) {
-    return this._toolResponse('recetas.crear', event, async (p) => {
-      const { proyecto_id, nombre, descripcion, ingredientes, instrucciones, ...rest } = p;
-      const input = JSON.stringify({ nombre, descripcion, ingredientes, instrucciones, ...rest });
-      return this.handleIngestar({ proyecto_id, input, tipo: 'json', fuente_referencia: 'chat' });
-    });
+    return this._toolResponse('recetas.crear', event, p => this._crearRecetaSync(p));
+  }
+
+  // Crea receta síncrona: INSERT en DB + publica receta.creada + devuelve id.
+  // Sin eventos intermedios. El módulo recetas sabe persistir su dominio.
+  async _crearRecetaSync(params) {
+    const { proyecto_id, nombre, ingredientes, instrucciones, notas, descripcion } = params;
+    if (!proyecto_id) return { error: 'proyecto_id requerido' };
+    if (!nombre) return { error: 'nombre requerido' };
+
+    const id = require('crypto').randomUUID();
+    const now = Date.now();
+
+    // descripcion consolidada: texto principal + ingredientes + instrucciones
+    const desc = [
+      descripcion,
+      ingredientes ? `Ingredientes: ${typeof ingredientes === 'string' ? ingredientes : JSON.stringify(ingredientes)}` : null,
+      instrucciones ? `Instrucciones: ${typeof instrucciones === 'string' ? instrucciones : JSON.stringify(instrucciones)}` : null,
+      notas ? `Notas: ${notas}` : null
+    ].filter(Boolean).join('\n\n');
+
+    try {
+      await this._dbRun(proyecto_id,
+        `INSERT INTO recetas (id, proyecto_id, nombre, descripcion, created_at, updated_at, fuente)
+         VALUES (?, ?, ?, ?, ?, ?, 'manual')`,
+        [id, proyecto_id, nombre, desc || null, now, now]
+      );
+
+      await this.eventBus.publish('receta.creada', {
+        proyecto_id, id, nombre, timestamp: now
+      });
+
+      return { id, nombre, status: 'creada' };
+    } catch (err) {
+      this.logger.error('recetas.crear.failed', { proyecto_id, nombre, error: err.message });
+      return { error: err.message };
+    }
   }
 
   async onToolAnalizar(event) {
@@ -896,6 +813,9 @@ class RecetasModule {
         `UPDATE recetas SET ${sets.join(', ')} WHERE id = ? AND proyecto_id = ?`,
         params
       );
+      await this.eventBus.publish('receta.actualizada', {
+        proyecto_id, receta_id, cambios, timestamp: Date.now()
+      });
       return { status: 200, data: { updated: true, receta_id } };
     } catch (err) {
       this.logger.error('recetas.actualizar.failed', { receta_id, error: err.message });
@@ -909,6 +829,9 @@ class RecetasModule {
         'UPDATE recetas SET estado = ?, updated_at = ? WHERE id = ? AND proyecto_id = ?',
         ['archivada', Date.now(), receta_id, proyecto_id]
       );
+      await this.eventBus.publish('receta.eliminada', {
+        proyecto_id, receta_id, timestamp: Date.now()
+      });
       return { status: 200, data: { eliminada: true, receta_id } };
     } catch (err) {
       this.logger.error('recetas.eliminar.failed', { receta_id, error: err.message });

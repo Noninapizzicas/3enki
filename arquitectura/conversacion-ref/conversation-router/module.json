@@ -1,0 +1,15 @@
+{
+  "name": "conversation-router",
+  "version": "3.0.0",
+  "description": "Republica chat.message.saved como chat.message.routed con decision.module=page. Thin wrapper.",
+  "author": "Event Core Team",
+  "main": "index.js",
+
+  "publishes": [
+    "chat.message.routed"
+  ],
+
+  "subscribes": [
+    { "event": "chat.message.saved", "handler": "onChatMessageSaved" }
+  ]
+}

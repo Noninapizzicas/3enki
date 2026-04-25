@@ -1,0 +1,45 @@
+{
+  "name": "chat-session",
+  "version": "1.0.0",
+  "description": "Persistencia de conversaciones y mensajes con gestión de contexto FIFO",
+  "author": "Event Core Team",
+
+  "publishes": [
+    "chat.message.saved",
+    "chat.assistant.saved"
+  ],
+  "subscribes": [
+    { "event": "db.query.response",      "handler": "onDbQueryResponse" },
+    { "event": "session.create.request", "handler": "onCreateRequest" },
+    { "event": "chat.send.request",      "handler": "onChatSendRequest" },
+    { "event": "ai.chat.response",       "handler": "onChatAiResponse" },
+    { "event": "agent.completed",        "handler": "onAgentCompleted" },
+    { "event": "agent.failed",           "handler": "onAgentFailed" }
+  ],
+
+  "ui_handlers": [
+    { "domain": "conversation", "action": "load",          "handler": "handleConversationLoad" },
+    { "domain": "conversation", "action": "get",           "handler": "handleConversationGet" },
+    { "domain": "conversation", "action": "toggleContext", "handler": "handleConversationToggleContext" },
+    { "domain": "conversation", "action": "contextStats",  "handler": "handleConversationContextStats" }
+  ],
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del módulo"
+    }
+  ],
+
+  "dependencies": [
+    "database-manager",
+    "project-manager"
+  ],
+
+  "config": {
+    "contextWindow": 20,
+    "dbTimeout": 10000
+  }
+}

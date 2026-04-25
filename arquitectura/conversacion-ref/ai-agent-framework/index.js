@@ -1,0 +1,745 @@
+const Agent = require('./agent');
+const ContextManager = require('./context-manager');
+const ToolManager = require('./tool-manager');
+const ServiceExecutor = require('../../../core/service-executor');
+const fs = require('fs').promises;
+const path = require('path');
+
+/**
+ * AI Agent Framework Module
+ *
+ * Orquesta agentes IA event-driven con:
+ * - Context management (memoria)
+ * - Tool calling (acceso a APIs)
+ * - Agent registry (descubrimiento)
+ * - Orchestration (coordinación)
+ */
+class AIAgentFrameworkModule {
+  constructor() {
+    this.agents = new Map(); // Map<agentId, Agent>
+    this.contextManager = null;
+    this.toolManager = null;
+    this.config = null;
+    this.logger = null;
+    this.eventBus = null;
+
+    // Dependencies
+    this.promptManager = null;
+    this.aiGateway = null;
+  }
+
+  /**
+   * Module lifecycle: onLoad
+   */
+  async onLoad(context) {
+    this.logger = context.logger;
+    this.eventBus = context.eventBus;
+    this.config = context.moduleConfig || {};
+
+    // Initialize Context Manager
+    this.contextManager = new ContextManager(
+      this.config.context || {},
+      this.logger
+    );
+    await this.contextManager.initialize();
+
+    // Initialize Tool Manager
+    this.toolManager = new ToolManager(
+      this.config.tools || {},
+      this.logger,
+      context.config
+    );
+    this.toolManager.setEventBus(this.eventBus);
+
+    // Inject provider registry for auto-discovery of provider tools
+    if (context.providerRegistry) {
+      this.toolManager.setProviderRegistry(context.providerRegistry);
+    }
+
+    // Inject moduleLoader for unified tool access (shares tools with chat/ai-gateway)
+    if (context.moduleLoader) {
+      this.toolManager.setModuleLoader(context.moduleLoader);
+    }
+
+    await this.toolManager.initialize();
+
+    // Get dependencies from other modules
+    await this.resolveDependencies(context);
+
+    // Load agents from disk
+    await this.loadAgentsFromDisk();
+
+    // Register the universal `invoke_agent` tool so the chat LLM can dispatch agents
+    if (context.moduleLoader?.toolsRegistry) {
+      this.registerInvokeAgentTool(context.moduleLoader);
+    }
+
+    this.logger.info('ai-agent-framework.loaded', {
+      agents_count: this.agents.size,
+      tools_count: this.toolManager.tools.size
+    });
+  }
+
+  registerInvokeAgentTool(moduleLoader) {
+    const enabledAgents = Array.from(this.agents.values()).filter(a => a.enabled);
+    const agentDescriptions = enabledAgents
+      .map(a => `  - ${a.name}: ${a.description}`)
+      .join('\n');
+
+    const tool = {
+      name: 'invoke_agent',
+      description: `Invoca un agente especialista para realizar una tarea compleja. Usa esto en lugar de intentar hacer trabajo creativo o de pipeline tú mismo. Cada agente sabe su dominio.\n\nAgentes disponibles:\n${agentDescriptions}\n\nDevuelve cuando el agente termina con su resultado.`,
+      parameters: {
+        type: 'object',
+        properties: {
+          agent_name: {
+            type: 'string',
+            description: 'Nombre exacto del agente a invocar (ej: "menu-structurer", "marketing-copywriter")',
+            enum: enabledAgents.map(a => a.name)
+          },
+          context: {
+            type: 'object',
+            description: 'Contexto que necesita el agente. Cada agente espera campos específicos según su prompt — incluye los datos relevantes del usuario (texto, archivo, project_id, carta_id, etc.)'
+          },
+          task: {
+            type: 'string',
+            description: 'Tarea concreta para el agente en lenguaje natural (ej: "Estructura este texto de carta y guárdalo")'
+          }
+        },
+        required: ['agent_name', 'context', 'task']
+      },
+      handler: null,
+      event_based: true,
+      module: 'ai-agent-framework',
+      confirmation: false,
+      // Metadata for dynamic scope filtering by ai-gateway
+      _agentsList: enabledAgents.map(a => ({
+        name: a.name,
+        description: a.description,
+        scope: Array.isArray(a.scope) ? a.scope : (a.scope ? [a.scope] : ['*'])
+      }))
+    };
+
+    moduleLoader.toolsRegistry.set('invoke_agent', tool);
+    this.logger.info('ai-agent-framework.invoke_agent.registered', {
+      agents_listed: enabledAgents.length
+    });
+  }
+
+  /**
+   * Handle invoke_agent tool call from ai-gateway (event-based pattern).
+   * ai-gateway emits `invoke_agent { request_id, agent_name, context, task }`
+   * We run the agent and emit `invoke_agent.response { request_id, result|error }`
+   */
+  async onInvokeAgentTool(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, agent_name, context = {}, task = '' } = data;
+
+    const agent = Array.from(this.agents.values()).find(a => a.name === agent_name);
+    if (!agent) {
+      return this.eventBus.publish('invoke_agent.response', {
+        request_id, error: `Agente "${agent_name}" no encontrado`
+      });
+    }
+    if (!agent.enabled) {
+      return this.eventBus.publish('invoke_agent.response', {
+        request_id, error: `Agente "${agent_name}" está deshabilitado`
+      });
+    }
+
+    const TIMEOUT_MS = (agent.config?.timeout_ms || agent.timeout_ms || 120000) + 10000;
+    let resolved = false;
+    let unsubCompleted, unsubFailed;
+
+    const timer = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      unsubCompleted?.();
+      unsubFailed?.();
+      this.eventBus.publish('invoke_agent.response', {
+        request_id, error: `Timeout esperando agente ${agent_name} (${TIMEOUT_MS}ms)`
+      });
+    }, TIMEOUT_MS);
+
+    unsubCompleted = await this.eventBus.subscribe(`agent.${agent_name}.completed`, (e) => {
+      if (resolved) return;
+      const d = e?.data || e?.payload || e;
+      resolved = true;
+      clearTimeout(timer);
+      unsubCompleted?.();
+      unsubFailed?.();
+      this.eventBus.publish('invoke_agent.response', {
+        request_id, result: { success: true, agent: agent_name, result: d.result }
+      });
+    });
+
+    unsubFailed = await this.eventBus.subscribe(`agent.${agent_name}.failed`, (e) => {
+      if (resolved) return;
+      const d = e?.data || e?.payload || e;
+      resolved = true;
+      clearTimeout(timer);
+      unsubCompleted?.();
+      unsubFailed?.();
+      this.eventBus.publish('invoke_agent.response', {
+        request_id, error: d.error || 'agent failed'
+      });
+    });
+
+    await this.eventBus.publish('agent.execute.request', { agentName: agent_name, context, task });
+
+    this.logger.info('ai-agent-framework.invoke_agent.dispatched', {
+      agent_name, task: task?.slice(0, 80)
+    });
+  }
+
+  /**
+   * Handle agent.execute.request from agent-manager
+   */
+  async onExecuteRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { agentName, context, task, pipelineId } = data;
+
+    this.logger.info('ai-agent-framework.execute-request', {
+      agentName,
+      pipelineId,
+      hasContext: !!context
+    });
+
+    // Find agent by name
+    const agent = Array.from(this.agents.values()).find(a => a.name === agentName);
+
+    if (!agent) {
+      this.logger.error('ai-agent-framework.agent-not-found', { agentName });
+
+      await this.eventBus.publish(`agent.${agentName}.failed`, {
+        agent_name: agentName,
+        error: `Agent '${agentName}' not found`,
+        pipelineId,
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    if (!agent.enabled) {
+      this.logger.warn('ai-agent-framework.agent-disabled', { agentName });
+
+      await this.eventBus.publish(`agent.${agentName}.failed`, {
+        agent_name: agentName,
+        error: `Agent '${agentName}' is disabled`,
+        pipelineId,
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    try {
+      // Create execution event with context from agent-manager
+      const executionEvent = {
+        type: 'agent.execute.request',
+        payload: {
+          context,
+          task,
+          pipelineId
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      // Execute agent
+      const result = await agent.handleEvent(executionEvent);
+
+      // Publish success (agent.handleEvent already publishes, but we ensure pipelineId is included)
+      await this.eventBus.publish(`agent.${agentName}.completed`, {
+        agent_id: agent.id,
+        agent_name: agentName,
+        result,
+        pipelineId,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      this.logger.error('ai-agent-framework.execution-failed', {
+        agentName,
+        error: error.message
+      });
+
+      await this.eventBus.publish(`agent.${agentName}.failed`, {
+        agent_id: agent.id,
+        agent_name: agentName,
+        error: error.message,
+        pipelineId,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
+  /**
+   * Handle agent.invoke.request — synchronous request/response pattern
+   *
+   * Allows any module to call an agent via ServiceExecutor:
+   *   services.call('agent', 'invoke', { agentName, message, projectId })
+   *
+   * Returns the agent's AI response directly (not fire-and-forget).
+   * Used by invoice-pipeline and other modules that need agent results inline.
+   */
+  async onInvokeRequest(event) {
+    const data = event?.data || event?.payload || event;
+    const { request_id, agentName, message, context: extraContext, projectId } = data;
+
+    const agent = Array.from(this.agents.values()).find(a => a.name === agentName);
+
+    if (!agent) {
+      this.eventBus.publish('agent.invoke.response', {
+        request_id,
+        success: false,
+        error: `Agent '${agentName}' not found`
+      });
+      return;
+    }
+
+    if (!agent.enabled) {
+      this.eventBus.publish('agent.invoke.response', {
+        request_id,
+        success: false,
+        error: `Agent '${agentName}' is disabled`
+      });
+      return;
+    }
+
+    try {
+      const executionEvent = {
+        type: 'agent.invoke',
+        payload: {
+          message,
+          context: extraContext,
+          projectId
+        },
+        timestamp: new Date().toISOString()
+      };
+
+      const result = await agent.handleEvent(executionEvent);
+
+      this.eventBus.publish('agent.invoke.response', {
+        request_id,
+        success: true,
+        data: result
+      });
+
+    } catch (error) {
+      this.logger.error('ai-agent-framework.invoke.failed', {
+        agentName,
+        error: error.message
+      });
+
+      this.eventBus.publish('agent.invoke.response', {
+        request_id,
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Module lifecycle: onUnload
+   */
+  async onUnload() {
+    // Shutdown context manager
+    if (this.contextManager) {
+      await this.contextManager.shutdown();
+    }
+
+    // NO guardar al disco en unload — los archivos agents/*.json son source of truth.
+    // saveAgentsToDisk() se llama solo tras create/update/delete explícitos vía API.
+    // Si se guardara aquí, cualquier edición manual de agent.json se perdería al reiniciar.
+
+    this.logger.info('ai-agent-framework.unloaded', {
+      agents_count: this.agents.size
+    });
+  }
+
+  /**
+   * Resolve dependencies (Prompt Manager, AI Gateway)
+   * Uses ServiceExecutor (EventBus request/response) — same pattern as all other modules.
+   */
+  async resolveDependencies(context) {
+    this.services = new ServiceExecutor(this.eventBus, this.logger);
+
+    this.promptManager = {
+      renderTemplate: async (promptId, variables) => {
+        return this.services.call('prompt-manager', 'render', {
+          prompt_id: promptId,
+          variables
+        }, { timeout: 10000 });
+      }
+    };
+
+    this.aiGateway = {
+      chatCompletion: async (params) => {
+        return this.services.call('ai', 'chat', params, { timeout: params.timeout || 60000 });
+      }
+    };
+  }
+
+  /**
+   * Load agents from disk
+   */
+  async loadAgentsFromDisk() {
+    const agentsDir = path.join(__dirname, 'agents');
+
+    try {
+      await fs.mkdir(agentsDir, { recursive: true });
+
+      const files = await fs.readdir(agentsDir);
+      const jsonFiles = files.filter(f => f.endsWith('.json'));
+
+      for (const file of jsonFiles) {
+        try {
+          const filePath = path.join(agentsDir, file);
+          const content = await fs.readFile(filePath, 'utf8');
+          const agentData = JSON.parse(content);
+
+          const agent = Agent.fromJSON(agentData);
+
+          // Skip duplicate agents (same name already loaded)
+          const existingByName = Array.from(this.agents.values()).find(a => a.name === agent.name);
+          if (existingByName) {
+            this.logger.warn('ai-agent-framework.agent.duplicate.skipped', {
+              name: agent.name,
+              existing_id: existingByName.id,
+              skipped_id: agent.id,
+              file
+            });
+            continue;
+          }
+
+          await this.registerAgent(agent);
+        } catch (error) {
+          this.logger.error('ai-agent-framework.load-agent.failed', {
+            file,
+            error: error.message
+          });
+        }
+      }
+
+      this.logger.info('ai-agent-framework.agents.loaded', {
+        count: this.agents.size
+      });
+    } catch (error) {
+      this.logger.warn('ai-agent-framework.load-agents.failed', {
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Save agents to disk
+   */
+  async saveAgentsToDisk() {
+    const agentsDir = path.join(__dirname, 'agents');
+
+    try {
+      await fs.mkdir(agentsDir, { recursive: true });
+
+      for (const [agentId, agent] of this.agents.entries()) {
+        const filePath = path.join(agentsDir, `${agentId}.json`);
+        await fs.writeFile(filePath, JSON.stringify(agent.toJSON(), null, 2), 'utf8');
+      }
+
+      this.logger.info('ai-agent-framework.agents.saved', {
+        count: this.agents.size
+      });
+    } catch (error) {
+      this.logger.error('ai-agent-framework.save-agents.failed', {
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Register agent
+   */
+  async registerAgent(agent) {
+    // Initialize agent with dependencies
+    await agent.initialize({
+      logger: this.logger,
+      eventBus: this.eventBus,
+      contextManager: this.contextManager,
+      toolManager: this.toolManager,
+      promptManager: this.promptManager,
+      aiGateway: this.aiGateway
+    });
+
+    this.agents.set(agent.id, agent);
+
+    this.logger.info('ai-agent-framework.agent.registered', {
+      agent_id: agent.id,
+      name: agent.name
+    });
+  }
+
+  /**
+   * API Handler: Register Agent
+   * Format: return { status, data }
+   */
+  async handleRegisterAgent(req, context) {
+    try {
+      const agentConfig = req.body;
+
+      // Validate
+      if (!agentConfig.name) {
+        return {
+          status: 400,
+          data: { error: 'INVALID_CONFIG', message: 'Agent name is required' }
+        };
+      }
+
+      // Check if agent with same name exists
+      const existing = Array.from(this.agents.values()).find(a => a.name === agentConfig.name);
+      if (existing) {
+        return {
+          status: 409,
+          data: { error: 'AGENT_EXISTS', message: `Agent with name '${agentConfig.name}' already exists` }
+        };
+      }
+
+      // Create agent
+      const agent = new Agent(agentConfig);
+      await this.registerAgent(agent);
+
+      // Save to disk
+      await this.saveAgentsToDisk();
+
+      return { status: 201, data: agent.toJSON() };
+    } catch (error) {
+      this.logger.error('ai-agent-framework.register.error', { error: error.message });
+      return { status: 500, data: { error: 'REGISTER_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: List Agents
+   * Format: return { status, data }
+   */
+  async handleListAgents(req, context) {
+    try {
+      const { enabled } = req.query || {};
+
+      let agents = Array.from(this.agents.values());
+
+      // Filter by enabled status
+      if (enabled !== undefined) {
+        const isEnabled = enabled === 'true';
+        agents = agents.filter(a => a.enabled === isEnabled);
+      }
+
+      return {
+        status: 200,
+        data: { agents: agents.map(a => a.toJSON()), total: agents.length }
+      };
+    } catch (error) {
+      this.logger.error('ai-agent-framework.list.error', { error: error.message });
+      return { status: 500, data: { error: 'LIST_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: Get Agent
+   * Format: return { status, data }
+   */
+  async handleGetAgent(req, context) {
+    try {
+      const id = context?.params?.id || req.params?.id;
+      const agent = this.agents.get(id);
+
+      if (!agent) {
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
+      }
+
+      return { status: 200, data: agent.toJSON() };
+    } catch (error) {
+      this.logger.error('ai-agent-framework.get.error', { error: error.message });
+      return { status: 500, data: { error: 'GET_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: Update Agent
+   * Format: return { status, data }
+   */
+  async handleUpdateAgent(req, context) {
+    try {
+      const id = context?.params?.id || req.params?.id;
+      const updates = req.body;
+      const agent = this.agents.get(id);
+
+      if (!agent) {
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
+      }
+
+      // Update fields
+      if (updates.description !== undefined) agent.description = updates.description;
+      if (updates.prompt_id !== undefined) agent.prompt_id = updates.prompt_id;
+      if (updates.provider !== undefined) agent.provider = updates.provider;
+      if (updates.model !== undefined) agent.model = updates.model;
+      if (updates.temperature !== undefined) agent.temperature = updates.temperature;
+      if (updates.max_tokens !== undefined) agent.max_tokens = updates.max_tokens;
+      if (updates.subscribes !== undefined) agent.subscribes = updates.subscribes;
+      if (updates.tools !== undefined) agent.tools = updates.tools;
+      if (updates.enabled !== undefined) agent.enabled = updates.enabled;
+      if (updates.metadata !== undefined) agent.metadata = { ...agent.metadata, ...updates.metadata };
+
+      agent.updated_at = new Date().toISOString();
+
+      // Save to disk
+      await this.saveAgentsToDisk();
+
+      return { status: 200, data: agent.toJSON() };
+    } catch (error) {
+      this.logger.error('ai-agent-framework.update.error', { error: error.message });
+      return { status: 500, data: { error: 'UPDATE_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: Delete Agent
+   * Format: return { status, data }
+   */
+  async handleDeleteAgent(req, context) {
+    try {
+      const id = context?.params?.id || req.params?.id;
+      const agent = this.agents.get(id);
+
+      if (!agent) {
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
+      }
+
+      // Remove agent
+      this.agents.delete(id);
+
+      // Delete from disk
+      const filePath = path.join(__dirname, 'agents', `${id}.json`);
+      try {
+        await fs.unlink(filePath);
+      } catch {}
+
+      // Clear context
+      await this.contextManager.clearContext(id);
+
+      return { status: 200, data: { success: true, message: 'Agent deleted successfully' } };
+    } catch (error) {
+      this.logger.error('ai-agent-framework.delete.error', { error: error.message });
+      return { status: 500, data: { error: 'DELETE_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: Trigger Agent
+   * Format: return { status, data }
+   */
+  async handleTriggerAgent(req, context) {
+    try {
+      const id = context?.params?.id || req.params?.id;
+      const { payload } = req.body || {};
+      const agent = this.agents.get(id);
+
+      if (!agent) {
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
+      }
+
+      // Create synthetic event
+      const event = {
+        type: 'agent.manual.trigger',
+        payload: payload || {},
+        timestamp: new Date().toISOString()
+      };
+
+      // Execute agent
+      const result = await agent.handleEvent(event);
+
+      return { status: 200, data: { agent_id: id, agent_name: agent.name, result } };
+    } catch (error) {
+      this.logger.error('ai-agent-framework.trigger.error', { error: error.message });
+      return { status: 500, data: { error: 'TRIGGER_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: Get Context
+   * Format: return { status, data }
+   */
+  async handleGetContext(req, context) {
+    try {
+      const id = context?.params?.id || req.params?.id;
+      const agent = this.agents.get(id);
+
+      if (!agent) {
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
+      }
+
+      const agentContext = await this.contextManager.getContext(id);
+
+      return { status: 200, data: agentContext };
+    } catch (error) {
+      this.logger.error('ai-agent-framework.get-context.error', { error: error.message });
+      return { status: 500, data: { error: 'GET_CONTEXT_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: Clear Context
+   * Format: return { status, data }
+   */
+  async handleClearContext(req, context) {
+    try {
+      const id = context?.params?.id || req.params?.id;
+      const agent = this.agents.get(id);
+
+      if (!agent) {
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
+      }
+
+      await this.contextManager.clearContext(id);
+
+      return { status: 200, data: { success: true, message: 'Context cleared successfully' } };
+    } catch (error) {
+      this.logger.error('ai-agent-framework.clear-context.error', { error: error.message });
+      return { status: 500, data: { error: 'CLEAR_CONTEXT_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: List Tools
+   * Format: return { status, data }
+   */
+  async handleListTools(req, context) {
+    try {
+      const tools = this.toolManager.listTools();
+
+      return { status: 200, data: { tools, total: tools.length } };
+    } catch (error) {
+      this.logger.error('ai-agent-framework.list-tools.error', { error: error.message });
+      return { status: 500, data: { error: 'LIST_TOOLS_FAILED', message: error.message } };
+    }
+  }
+
+  /**
+   * API Handler: Get Agent Stats
+   * Format: return { status, data }
+   */
+  async handleGetAgentStats(req, context) {
+    try {
+      const id = context?.params?.id || req.params?.id;
+      const agent = this.agents.get(id);
+
+      if (!agent) {
+        return { status: 404, data: { error: 'AGENT_NOT_FOUND', message: `Agent '${id}' not found` } };
+      }
+
+      return { status: 200, data: { agent_id: id, agent_name: agent.name, stats: agent.stats } };
+    } catch (error) {
+      this.logger.error('ai-agent-framework.get-stats.error', { error: error.message });
+      return { status: 500, data: { error: 'GET_STATS_FAILED', message: error.message } };
+    }
+  }
+}
+
+module.exports = AIAgentFrameworkModule;

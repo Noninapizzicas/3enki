@@ -1,0 +1,45 @@
+{
+  "id": "impresion-builder",
+  "name": "impresion-builder",
+  "description": "Genera HTML+CSS print-ready de alta calidad para cartas de restaurante según el guión del architect y el perfil de marca del proyecto. Produce cartas imprimibles con personalidad.",
+  "version": "1.0.0",
+  "enabled": true,
+  "prompt_file": "prompts/impresion-builder-system.md",
+  "tools": [
+    "carta.get",
+    "marketing.get_perfil",
+    "impresion.save_html"
+  ],
+  "provider": "auto",
+  "temperature": 0.3,
+  "max_tokens": 16000,
+  "context_enabled": false,
+  "timeout_ms": 180000,
+  "max_retries": 1,
+  "metadata": {
+    "type": "domain-agent",
+    "domain": "carta-impresion",
+    "tags": [
+      "carta",
+      "impresion",
+      "html",
+      "css",
+      "print",
+      "builder"
+    ]
+  },
+  "created_at": "2026-04-14T00:00:00.000Z",
+  "updated_at": "2026-04-14T00:00:00.000Z",
+  "stats": {
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
+    "last_execution": null
+  },
+  "scope": [
+    "impresion"
+  ]
+}

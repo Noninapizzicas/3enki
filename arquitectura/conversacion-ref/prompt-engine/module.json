@@ -1,0 +1,21 @@
+{
+  "name": "prompt-engine",
+  "version": "2.0.0",
+  "description": "Motor de prompts: lee prompt.json y context.json de cada módulo desde disco, construye el system prompt y emite chat.prompt.ready.",
+  "author": "Event Core Team",
+  "main": "index.js",
+
+  "subscribes": [
+    { "event": "chat.message.enriched", "handler": "onChatMessageEnriched" }
+  ],
+
+  "publishes": [
+    "chat.prompt.ready"
+  ],
+
+  "apis": [],
+
+  "config": {
+    "modulesDir": null
+  }
+}

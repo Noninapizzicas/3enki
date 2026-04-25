@@ -1,0 +1,79 @@
+{
+  "id": "viabilidad-receta-analyzer",
+  "name": "viabilidad-receta-analyzer",
+  "description": "Evaluación de viabilidad de receta: rentabilidad, riesgos, recomendaciones, impacto en negocio.",
+  "version": "1.0.0",
+  "enabled": true,
+  "prompt_file": "prompts/viabilidad-receta-analyzer.json",
+  "tools": [
+    "viabilidad.estudio",
+    "viabilidad.escenario",
+    "viabilidad.punto_equilibrio"
+  ],
+  "provider": "auto",
+  "temperature": 0.3,
+  "max_tokens": 2000,
+  "context_enabled": true,
+  "timeout_ms": 120000,
+  "max_retries": 1,
+  "event_listener": {
+    "event": "receta.viabilidad.evaluada",
+    "context_mapping": {
+      "receta_id": "$.receta_id",
+      "projectId": "$.projectId",
+      "viabilidad": "$.viabilidad",
+      "recomendaciones": "$.recomendaciones",
+      "timestamp": "$.timestamp"
+    }
+  },
+  "publish_on_success": {
+    "event": "receta.viabilidad.analysis.completed",
+    "payload_template": {
+      "receta_id": "$.context.receta_id",
+      "projectId": "$.context.projectId",
+      "viabilidad": "$.context.viabilidad",
+      "analisis": "$.result.analisis",
+      "riesgos": "$.result.riesgos",
+      "recomendaciones_ampliadas": "$.result.recomendaciones_ampliadas",
+      "alertas_generadas": "$.result.alertas_generadas",
+      "timestamp": "$.timestamp"
+    }
+  },
+  "publish_on_failure": {
+    "event": "receta.viabilidad.analysis.failed",
+    "payload_template": {
+      "receta_id": "$.context.receta_id",
+      "projectId": "$.context.projectId",
+      "error": "$.error.message",
+      "timestamp": "$.timestamp"
+    }
+  },
+  "metadata": {
+    "type": "pipeline-agent",
+    "domain": "viabilidad",
+    "pipeline_role": "viability-analyzer",
+    "author": "system",
+    "created_at": "2026-04-15",
+    "tags": [
+      "viabilidad",
+      "análisis",
+      "rentabilidad",
+      "recomendaciones"
+    ]
+  },
+  "created_at": "2026-04-15T00:00:00.000Z",
+  "updated_at": "2026-04-15T00:00:00.000Z",
+  "stats": {
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
+    "last_execution": null
+  },
+  "scope": [
+    "viabilidad",
+    "recetas"
+  ]
+}

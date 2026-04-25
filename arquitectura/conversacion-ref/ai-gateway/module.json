@@ -1,0 +1,98 @@
+{
+  "name": "ai-gateway",
+  "version": "1.0.0",
+  "description": "Gateway LLM: recibe chat.prompt.ready, llama al proveedor con tools, ejecuta tool calls en agentic loop, emite ai.chat.response",
+  "author": "Event Core Team",
+  "provides": [
+    "ai-chat",
+    "function-calling"
+  ],
+  "publishes": [
+    "ai.chat.response"
+  ],
+  "subscribes": [
+    { "event": "chat.prompt.ready",          "handler": "onChatPromptReady" },
+    { "event": "credential.resolve.response","handler": "onCredentialResponse" },
+    { "event": "credential.saved",           "handler": "onCredentialSaved" },
+    { "event": "credential.updated",         "handler": "onCredentialSaved" },
+    { "event": "credential.deleted",         "handler": "onCredentialDeleted" }
+  ],
+  "apis": [],
+  "hooks": {},
+  "config": {
+    "providers": {
+      "deepseek": {
+        "enabled": true,
+        "priority": 1,
+        "api_base": "https://api.deepseek.com/v1",
+        "models": ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
+        "default_model": "deepseek-chat",
+        "rate_limit": { "requests_per_minute": 60, "tokens_per_minute": 500000 },
+        "cost_per_1k_tokens": { "input": 0.0001, "output": 0.0002 }
+      },
+      "anthropic": {
+        "enabled": true,
+        "priority": 2,
+        "api_base": "https://api.anthropic.com/v1",
+        "models": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"],
+        "default_model": "claude-3-5-sonnet-20241022",
+        "rate_limit": { "requests_per_minute": 50, "tokens_per_minute": 80000 },
+        "cost_per_1k_tokens": { "input": 0.003, "output": 0.015 }
+      },
+      "openai": {
+        "enabled": true,
+        "priority": 3,
+        "api_base": "https://api.openai.com/v1",
+        "models": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
+        "default_model": "gpt-4o-mini",
+        "rate_limit": { "requests_per_minute": 60, "tokens_per_minute": 90000 },
+        "cost_per_1k_tokens": { "input": 0.0015, "output": 0.006 }
+      },
+      "groq": {
+        "enabled": true,
+        "priority": 4,
+        "api_base": "https://api.groq.com/openai/v1",
+        "models": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it"],
+        "default_model": "llama-3.3-70b-versatile",
+        "rate_limit": { "requests_per_minute": 30, "tokens_per_minute": 60000 },
+        "cost_per_1k_tokens": { "input": 0.00059, "output": 0.00079 }
+      },
+      "gemini": {
+        "enabled": true,
+        "priority": 5,
+        "api_base": "https://generativelanguage.googleapis.com/v1beta",
+        "models": ["gemini-2.5-flash", "gemini-2.5-pro"],
+        "default_model": "gemini-2.5-flash",
+        "rate_limit": { "requests_per_minute": 60, "tokens_per_minute": 100000 },
+        "cost_per_1k_tokens": { "input": 0.000075, "output": 0.0003 }
+      },
+      "ollama": {
+        "enabled": true,
+        "priority": 6,
+        "api_base": "http://localhost:11434/api",
+        "models": ["llama2", "codellama", "mistral", "mixtral"],
+        "default_model": "llama2",
+        "rate_limit": { "requests_per_minute": 120, "tokens_per_minute": 200000 },
+        "cost_per_1k_tokens": { "input": 0, "output": 0 }
+      },
+      "claude-cli": {
+        "enabled": true,
+        "priority": 7,
+        "cli_path": "claude",
+        "models": ["sonnet", "opus", "haiku"],
+        "default_model": "sonnet",
+        "allowed_tools": ["Read", "Edit", "Write", "Bash", "Glob", "Grep"],
+        "rate_limit": { "requests_per_minute": 20, "tokens_per_minute": 200000 },
+        "cost_per_1k_tokens": { "input": 0, "output": 0 }
+      }
+    },
+    "retry": {
+      "max_attempts": 3,
+      "initial_delay_ms": 1000,
+      "max_delay_ms": 10000,
+      "backoff_multiplier": 2
+    }
+  },
+  "dependencies": [],
+  "tags": ["ai", "llm", "gateway"]
+}

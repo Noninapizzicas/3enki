@@ -1,0 +1,26 @@
+{
+  "name": "agent-bridge",
+  "version": "2.0.0",
+  "description": "Adaptador de agent-manager → ai-agent-framework. Recibe agent.execute (con conversation_id), genera pipelineId, despacha agent.execute.request, persiste ejecuciones en SQLite, y republica agent.completed/failed con conversation_id.",
+  "author": "Event Core Team",
+  "main": "index.js",
+
+  "subscribes": [
+    { "event": "agent.execute",     "handler": "onAgentExecute" },
+    { "event": "db.query.response", "handler": "onDbQueryResponse" },
+    { "event": "project.activated", "handler": "onProjectActivated" }
+  ],
+
+  "publishes": [
+    "agent.execute.request",
+    "agent.completed",
+    "agent.failed",
+    "agent.progress",
+    "agent.active"
+  ],
+
+  "config": {
+    "execution_timeout_ms": 0,
+    "db_timeout_ms": 10000
+  }
+}

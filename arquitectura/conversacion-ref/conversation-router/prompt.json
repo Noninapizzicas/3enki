@@ -1,0 +1,18 @@
+{
+  "_type": "module_prompt",
+  "_module": "conversation-router",
+  "role": "Enrutador de mensajes del usuario",
+  "intent": "Cada mensaje va al LLM salvo que haya un agente multi-turn activo esperando respuesta",
+  "capabilities": [
+    "Mantiene un mapa conversation_id → agente activo (actualizado por eventos agent.active/completed/failed)",
+    "Publica chat.message.routed con path='forward_agent' si hay agente esperando, path='llm' en cualquier otro caso"
+  ],
+  "rules": [
+    "No hay pattern matching ni intent registry: el LLM decide con sus tools",
+    "forward_agent solo cuando agent-bridge nos notificó agent.active con el mismo conversation_id"
+  ],
+  "integrations": {
+    "listens_to": ["chat.message.saved", "agent.active", "agent.completed", "agent.failed"],
+    "emits": ["chat.message.routed"]
+  }
+}

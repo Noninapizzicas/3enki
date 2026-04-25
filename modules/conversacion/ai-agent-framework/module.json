@@ -1,0 +1,15 @@
+{
+  "name": "ai-agent-framework",
+  "version": "1.0.0",
+  "description": "Carga agentes desde agents/*.json + prompts/*.json. Registra la tool invoke_agent en el moduleLoader. Cuando el LLM principal la invoca, ejecuta el agente: arma su prompt y llama al LLM via llm.complete.request.",
+  "author": "Event Core Team",
+
+  "publishes": [
+    "invoke_agent.response",
+    "llm.complete.request"
+  ],
+  "subscribes": [
+    { "event": "invoke_agent",         "handler": "onInvokeAgent" },
+    { "event": "llm.complete.response","handler": "onLlmCompleteResponse" }
+  ]
+}

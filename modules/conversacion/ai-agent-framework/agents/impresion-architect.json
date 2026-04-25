@@ -1,0 +1,44 @@
+{
+  "id": "impresion-architect",
+  "name": "impresion-architect",
+  "description": "Analiza una carta concreta y su perfil de marca, y decide con criterio el layout óptimo para impresión: orientación, tamaño, caras, columnas, densidad, estructura narrativa.",
+  "version": "1.0.0",
+  "enabled": true,
+  "prompt_file": "prompts/impresion-architect-system.md",
+  "tools": [
+    "carta.get",
+    "carta.stats",
+    "marketing.get_perfil"
+  ],
+  "provider": "auto",
+  "temperature": 0.4,
+  "max_tokens": 4000,
+  "context_enabled": false,
+  "timeout_ms": 90000,
+  "max_retries": 1,
+  "metadata": {
+    "type": "domain-agent",
+    "domain": "carta-impresion",
+    "tags": [
+      "carta",
+      "impresion",
+      "layout",
+      "design",
+      "print"
+    ]
+  },
+  "created_at": "2026-04-14T00:00:00.000Z",
+  "updated_at": "2026-04-14T00:00:00.000Z",
+  "stats": {
+    "executions": 0,
+    "successes": 0,
+    "failures": 0,
+    "total_tokens": 0,
+    "total_cost": 0,
+    "avg_latency_ms": 0,
+    "last_execution": null
+  },
+  "scope": [
+    "impresion"
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "name": "chat-io",
   "version": "1.0.0",
-  "description": "Entrada y salida del chat: recibe mensajes del frontend (ui/request/conversation/send), persiste conversaciones y mensajes en SQLite por proyecto, y reenvía la respuesta del LLM al frontend por MQTT (conversation/{id}/message). Lazy-create de conversaciones.",
+  "description": "Entrada y salida del chat. Recibe mensajes del frontend (ui/request/conversation/send), persiste conversaciones y mensajes en SQLite por proyecto, aplica FIFO de contexto, y reenvía la respuesta del LLM al frontend por MQTT (conversation/{id}/message).",
   "author": "Event Core Team",
 
   "publishes": [
@@ -15,9 +15,14 @@
   ],
 
   "ui_handlers": [
-    { "domain": "conversation", "action": "send",   "handler": "handleSend" },
-    { "domain": "conversation", "action": "list",   "handler": "handleList" },
-    { "domain": "conversation", "action": "load",   "handler": "handleLoad" }
+    { "domain": "conversation", "action": "send",            "handler": "handleSend" },
+    { "domain": "conversation", "action": "create",          "handler": "handleCreate" },
+    { "domain": "conversation", "action": "list",            "handler": "handleList" },
+    { "domain": "conversation", "action": "load",            "handler": "handleLoad" },
+    { "domain": "conversation", "action": "delete",          "handler": "handleDelete" },
+    { "domain": "conversation", "action": "update_settings", "handler": "handleUpdateSettings" },
+    { "domain": "conversation", "action": "toggle_context",  "handler": "handleToggleContext" },
+    { "domain": "conversation", "action": "context_stats",   "handler": "handleContextStats" }
   ],
 
   "dependencies": ["database-manager"]

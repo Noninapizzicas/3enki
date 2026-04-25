@@ -150,7 +150,7 @@ export async function loadConversations(projectId?: string): Promise<void> {
     const response = await mqttRequest<{
       conversations: Conversation[];
       total: number;
-    }>('conversation', 'list', { projectId: projId });
+    }>('conversation', 'list', { project_id: projId });
 
     const conversations = response.data.conversations || [];
     const sections = groupByDate(conversations);
@@ -175,13 +175,15 @@ export async function loadConversations(projectId?: string): Promise<void> {
  * Carga una conversacion con sus mensajes
  */
 export async function loadConversation(conversationId: string): Promise<void> {
+  const projId = get(activeProjectId);
+  if (!projId) throw new Error('No active project');
   conversationsStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
     const response = await mqttRequest<{
       conversation: Conversation;
       messages: Message[];
-    }>('conversation', 'get', { conversationId });
+    }>('conversation', 'load', { project_id: projId, conversation_id: conversationId });
 
     conversationsStore.update(s => ({
       ...s,
@@ -214,26 +216,38 @@ export async function createConversation(
 
   conversationsStore.update(s => ({ ...s, loading: true, error: null }));
 
-  // Support both old signature (just title string) and new signature (config object)
+  // Contrato del backend (chat-io.handleCreate):
+  //   { project_id, title, context_window, temperature, max_tokens, prompt_id }
+  // El backend NO conoce system_prompt/model/provider — se eligen por defecto
+  // o se actualizan después con conversation/update_settings.
   const createData = typeof config === 'string'
-    ? { projectId: projId, title: config }
+    ? { project_id: projId, title: config }
     : {
-        projectId: projId,
+        project_id: projId,
         title: config?.title || 'Nueva conversación',
-        system_prompt: config?.system_prompt,
-        model: config?.model,
-        provider: config?.provider,
+        context_window: config?.context_window,
         temperature: config?.temperature,
-        max_tokens: config?.max_tokens,
-        context_window: config?.context_window
+        max_tokens: config?.max_tokens
       };
 
   try {
+    // Backend devuelve { conversation_id }. Construimos el Conversation localmente.
     const response = await mqttRequest<{
-      conversation: Conversation;
+      conversation_id: string;
     }>('conversation', 'create', createData);
 
-    const conversation = response.data.conversation;
+    const conversationId = response.data.conversation_id;
+    const conversation: Conversation = {
+      id: conversationId,
+      project_id: projId,
+      title: createData.title || 'Nueva conversación',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      message_count: 0,
+      context_window: createData.context_window || 20,
+      temperature: createData.temperature ?? 0.7,
+      max_tokens: createData.max_tokens || 2000
+    } as Conversation;
 
     conversationsStore.update(s => ({
       ...s,
@@ -262,15 +276,24 @@ export async function updateConversation(
   conversationId: string,
   updates: Partial<Pick<Conversation, 'title' | 'system_prompt' | 'model' | 'provider' | 'temperature' | 'max_tokens' | 'context_window'>>
 ): Promise<Conversation> {
+  const projId = get(activeProjectId);
+  if (!projId) throw new Error('No active project');
   try {
-    const response = await mqttRequest<{
-      conversation: Conversation;
-    }>('conversation', 'update', {
-      conversationId,
-      ...updates
-    });
+    // Mapeamos a los campos que conoce el backend (chat-io.handleUpdateSettings)
+    const settingsToUpdate: any = {
+      project_id: projId,
+      conversation_id: conversationId
+    };
+    if (updates.title !== undefined) settingsToUpdate.title = updates.title;
+    if (updates.context_window !== undefined) settingsToUpdate.context_window = updates.context_window;
+    if (updates.temperature !== undefined) settingsToUpdate.temperature = updates.temperature;
+    if (updates.max_tokens !== undefined) settingsToUpdate.max_tokens = updates.max_tokens;
 
-    const conversation = response.data.conversation;
+    await mqttRequest('conversation', 'update_settings', settingsToUpdate);
+
+    // El backend solo confirma. Reconstruimos el objeto desde el store + updates.
+    const current = get(conversationsStore).conversations.find(c => c.id === conversationId);
+    const conversation = { ...(current as Conversation), ...updates, id: conversationId };
 
     conversationsStore.update(s => ({
       ...s,
@@ -296,8 +319,10 @@ export async function updateConversation(
  * Elimina una conversacion
  */
 export async function deleteConversation(conversationId: string): Promise<void> {
+  const projId = get(activeProjectId);
+  if (!projId) throw new Error('No active project');
   try {
-    await mqttRequest('conversation', 'delete', { conversationId });
+    await mqttRequest('conversation', 'delete', { project_id: projId, conversation_id: conversationId });
 
     conversationsStore.update(s => {
       const newConversations = s.conversations.filter(c => c.id !== conversationId);
@@ -382,7 +407,10 @@ export async function sendMessage(
         const convResponse = await mqttRequest<{
           conversation: Conversation;
           messages: Message[];
-        }>('conversation', 'get', { conversationId });
+        }>('conversation', 'load', {
+          project_id: state.activeConversation?.project_id || get(activeProjectId),
+          conversation_id: conversationId
+        });
 
         conversationsStore.update(s => {
           // Evitar duplicados en la lista
@@ -525,10 +553,10 @@ export async function toggleMessageContext(
   }));
 
   try {
-    await mqttRequest('conversation', 'toggleContext', {
-      projectId: projId,
-      messageId,
-      inContext
+    await mqttRequest('conversation', 'toggle_context', {
+      project_id: projId,
+      message_id: messageId,
+      in_context: inContext
     });
 
     console.log('[Conversations] Toggled context:', messageId, inContext);
@@ -560,9 +588,9 @@ export async function loadContextStats(): Promise<ContextStats | null> {
   }
 
   try {
-    const response = await mqttRequest<ContextStats>('conversation', 'contextStats', {
-      projectId: projId,
-      conversationId: state.activeConversationId
+    const response = await mqttRequest<ContextStats>('conversation', 'context_stats', {
+      project_id: projId,
+      conversation_id: state.activeConversationId
     });
 
     return response.data;

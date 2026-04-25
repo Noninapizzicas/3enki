@@ -240,23 +240,29 @@ class ChatIoModule {
     const id = crypto.randomUUID();
     const now = Date.now();
     const s = defaultSettings();
+    const finalTitle = title || 'Nueva conversación';
+    const finalCw = context_window || s.context_window;
+    const finalT = temperature ?? s.temperature;
+    const finalMt = max_tokens || s.max_tokens;
 
     await this._db(project_id,
       `INSERT INTO conversations
         (id, project_id, title, context_window, temperature, max_tokens, prompt_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id, project_id, title || 'Nueva conversación',
-        context_window || s.context_window,
-        temperature ?? s.temperature,
-        max_tokens || s.max_tokens,
-        prompt_id || null,
-        now, now
-      ]
+      [id, project_id, finalTitle, finalCw, finalT, finalMt, prompt_id || null, now, now]
     );
 
     this.knownConversations.set(id, project_id);
-    return { conversation_id: id };
+    return {
+      conversation: {
+        id, project_id, title: finalTitle,
+        context_window: finalCw, temperature: finalT, max_tokens: finalMt,
+        prompt_id: prompt_id || null,
+        created_at: now, updated_at: now,
+        message_count: 0
+      },
+      conversation_id: id  // alias por retrocompatibilidad
+    };
   }
 
   // ============================================================
@@ -293,6 +299,12 @@ class ChatIoModule {
     if (!(await this._validateConversation(project_id, conversation_id))) {
       throw { status: 400, code: 'CONVERSATION_REQUIRED' };
     }
+    const convRows = await this._db(project_id,
+      `SELECT id, project_id, title, context_window, temperature, max_tokens, prompt_id,
+              created_at, updated_at
+       FROM conversations WHERE id = ?`,
+      [conversation_id], true
+    );
     const messages = await this._db(project_id,
       `SELECT id, role, content, in_context, manually_toggled, tokens, cost, metadata, created_at
        FROM messages
@@ -300,7 +312,7 @@ class ChatIoModule {
        ORDER BY created_at ASC`,
       [conversation_id], true
     );
-    return { conversation_id, messages };
+    return { conversation: convRows[0] || null, messages };
   }
 
   // ============================================================

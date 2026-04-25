@@ -12,10 +12,11 @@
 import { writable, derived, get } from 'svelte/store';
 import { publish, subscribe, mqttRequest } from '$lib/ui-core';
 import type { Message, Attachment } from '$lib/ui-core';
+import { openPanel } from '$lib/ui-core/registry';
 import { attachments, clearAttachments } from './attachments';
 import { activeProjectId } from './projects';
 import { activeProvider, activeModel } from './workspace';
-import { notifyError } from './ui';
+import { notifyError, notifyInfo } from './ui';
 import { generateUUID } from '$lib/utils';
 
 /**
@@ -94,6 +95,21 @@ export async function sendMessage(content: string): Promise<void> {
     return;
   }
 
+  // Sin proyecto activo → abrir el selector de proyecto
+  const currentProjectId = get(activeProjectId);
+  if (!currentProjectId) {
+    notifyInfo('Selecciona un proyecto para chatear');
+    openPanel('project');
+    return;
+  }
+
+  // Sin conversación activa → abrir el panel de conversaciones
+  if (!convId) {
+    notifyInfo('Selecciona o crea una conversación');
+    openPanel('conversations');
+    return;
+  }
+
   // Crear mensaje del usuario
   const userMessage: Message = {
     id: generateUUID(),
@@ -113,19 +129,8 @@ export async function sendMessage(content: string): Promise<void> {
   isStreaming.set(true);
 
   // Enviar via mqttRequest (patrón ui/request/conversation/send)
+  // currentProjectId y convId ya validados arriba
   try {
-    const currentProvider = get(activeProvider);
-    const currentModel = get(activeModel);
-
-    // Scope de la conexión: proyecto + conversación + página (los tres siempre).
-    // El backend NO adivina ni cachea — lee del payload.
-    const currentProjectId = get(activeProjectId);
-    if (!currentProjectId) {
-      isStreaming.set(false);
-      notifyError('No hay proyecto activo');
-      return;
-    }
-
     const response = await mqttRequest<{
       conversation_id: string;
       message_id: string;
@@ -170,6 +175,21 @@ export async function sendMessage(content: string): Promise<void> {
     console.error('[chat] Error sending message:', error);
     isStreaming.set(false);
     streamingMessageId.set(null);
+
+    // Códigos del backend que disparan UX específica (modales)
+    const code = error?.response?.error?.code || error?.code;
+    if (code === 'PROJECT_REQUIRED') {
+      notifyInfo('Selecciona un proyecto');
+      openPanel('project');
+      return;
+    }
+    if (code === 'CONVERSATION_REQUIRED') {
+      // Conversación obsoleta o borrada — limpiar estado y abrir panel
+      conversationId.set(null);
+      notifyInfo('Selecciona o crea una conversación');
+      openPanel('conversations');
+      return;
+    }
 
     // Mostrar error al usuario
     const errorMsg = error?.response?.error?.message
@@ -263,11 +283,14 @@ export async function loadConversation(id: string): Promise<void> {
   messages.set([]);
 
   try {
+    const projId = get(activeProjectId);
+    if (!projId) throw new Error('No active project');
     const response = await mqttRequest<{
       conversation: any;
       messages: any[];
-    }>('conversation', 'get', {
-      conversationId: id
+    }>('conversation', 'load', {
+      project_id: projId,
+      conversation_id: id
     });
     if (response?.data?.messages) {
       // Map backend fields (created_at) to frontend fields (timestamp)
@@ -334,10 +357,10 @@ export async function toggleMessageContext(messageId: string, inContext: boolean
   );
 
   try {
-    await mqttRequest('conversation', 'toggleContext', {
-      projectId: projId,
-      messageId,
-      inContext
+    await mqttRequest('conversation', 'toggle_context', {
+      project_id: projId,
+      message_id: messageId,
+      in_context: inContext
     });
   } catch (error) {
     // Rollback on error

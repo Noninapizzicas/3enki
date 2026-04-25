@@ -50,12 +50,6 @@ class OllamaProvider extends BaseProvider {
     const messagesText = messages.map(m => m.content).join(' ');
     const estimatedTokens = this.countTokens(messagesText);
 
-    // Check rate limit (Ollama is more permissive)
-    const rateLimitCheck = this.checkRateLimit(estimatedTokens);
-    if (!rateLimitCheck.allowed) {
-      throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
-    }
-
     // Build Ollama-specific request
     const requestData = {
       model,
@@ -78,9 +72,6 @@ class OllamaProvider extends BaseProvider {
     const content = response.message?.content || '';
     const outputTokens = this.countTokens(content);
     const totalTokens = estimatedTokens + outputTokens;
-
-    // Record usage
-    this.recordUsage(totalTokens);
 
     // Ollama has no cost (local)
     const cost = 0;
@@ -112,12 +103,6 @@ class OllamaProvider extends BaseProvider {
     // Estimate tokens
     const messagesText = messages.map(m => m.content).join(' ');
     const estimatedTokens = this.countTokens(messagesText);
-
-    // Check rate limit
-    const rateLimitCheck = this.checkRateLimit(estimatedTokens);
-    if (!rateLimitCheck.allowed) {
-      throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
-    }
 
     // Build Ollama-specific request
     const requestData = {
@@ -168,8 +153,6 @@ class OllamaProvider extends BaseProvider {
         () => {
           const outputTokens = this.countTokens(fullContent);
           const totalTokens = estimatedTokens + outputTokens;
-
-          this.recordUsage(totalTokens);
 
           resolve({
             provider: this.name,

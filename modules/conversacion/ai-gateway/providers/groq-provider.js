@@ -54,12 +54,6 @@ class GroqProvider extends BaseProvider {
     const messagesText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ');
     const estimatedTokens = this.countTokens(messagesText);
 
-    // Check rate limit
-    const rateLimitCheck = this.checkRateLimit(estimatedTokens);
-    if (!rateLimitCheck.allowed) {
-      throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
-    }
-
     // Build request — OpenAI-compatible format
     const requestData = {
       model,
@@ -100,9 +94,6 @@ class GroqProvider extends BaseProvider {
     const outputTokens = response.usage?.completion_tokens || this.countTokens(content);
     const totalTokens = inputTokens + outputTokens;
 
-    // Record usage
-    this.recordUsage(totalTokens);
-
     // Calculate cost
     const cost = this.calculateCost(inputTokens, outputTokens);
 
@@ -141,12 +132,6 @@ class GroqProvider extends BaseProvider {
     // Estimate tokens
     const messagesText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ');
     const estimatedTokens = this.countTokens(messagesText);
-
-    // Check rate limit
-    const rateLimitCheck = this.checkRateLimit(estimatedTokens);
-    if (!rateLimitCheck.allowed) {
-      throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
-    }
 
     // Build request
     const requestData = {
@@ -205,8 +190,6 @@ class GroqProvider extends BaseProvider {
         () => {
           const outputTokens = this.countTokens(fullContent);
           const totalTokens = estimatedTokens + outputTokens;
-
-          this.recordUsage(totalTokens);
 
           const cost = this.calculateCost(estimatedTokens, outputTokens);
 

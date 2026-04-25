@@ -160,12 +160,6 @@ class AnthropicProvider extends BaseProvider {
     const messagesText = messages.map(m => m.content).join(' ');
     const estimatedTokens = this.countTokens(messagesText);
 
-    // Check rate limit
-    const rateLimitCheck = this.checkRateLimit(estimatedTokens);
-    if (!rateLimitCheck.allowed) {
-      throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
-    }
-
     // Build request
     const requestData = {
       model,
@@ -227,9 +221,6 @@ class AnthropicProvider extends BaseProvider {
     const outputTokens = response.usage?.output_tokens || this.countTokens(content);
     const totalTokens = inputTokens + outputTokens;
 
-    // Record usage
-    this.recordUsage(totalTokens);
-
     // Calculate cost
     const cost = this.calculateCost(inputTokens, outputTokens);
 
@@ -264,12 +255,6 @@ class AnthropicProvider extends BaseProvider {
     // Estimate tokens
     const messagesText = messages.map(m => m.content).join(' ');
     const estimatedTokens = this.countTokens(messagesText);
-
-    // Check rate limit
-    const rateLimitCheck = this.checkRateLimit(estimatedTokens);
-    if (!rateLimitCheck.allowed) {
-      throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
-    }
 
     // Build request
     const requestData = {
@@ -332,8 +317,6 @@ class AnthropicProvider extends BaseProvider {
         () => {
           const outputTokens = this.countTokens(fullContent);
           const totalTokens = estimatedTokens + outputTokens;
-
-          this.recordUsage(totalTokens);
 
           const cost = this.calculateCost(estimatedTokens, outputTokens);
 

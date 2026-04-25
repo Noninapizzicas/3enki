@@ -105,15 +105,9 @@ class DeepSeekProvider extends BaseProvider {
     // Convert messages for vision if needed
     const processedMessages = hasImages ? this.convertMessagesForVision(messages) : messages;
 
-    // Estimate tokens for rate limiting (add extra for images)
+    // Estimate input tokens for logging/cost
     const messagesText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ');
     const estimatedTokens = this.countTokens(messagesText) + (hasImages ? 1000 : 0);
-
-    // Check rate limit — wait and retry instead of failing immediately
-    const rateLimitCheck = await this.checkRateLimitWithWait(estimatedTokens);
-    if (!rateLimitCheck.allowed) {
-      throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
-    }
 
     // Build request — deepseek-reasoner does not support temperature/top_p
     const requestData = {
@@ -168,9 +162,6 @@ class DeepSeekProvider extends BaseProvider {
     const outputTokens = response.usage?.completion_tokens || this.countTokens(content);
     const reasoningTokens = response.usage?.completion_tokens_details?.reasoning_tokens || 0;
     const totalTokens = inputTokens + outputTokens;
-
-    // Record usage
-    this.recordUsage(totalTokens);
 
     // Calculate cost — reasoning tokens may have different pricing
     const cost = this.calculateCost(inputTokens, outputTokens);
@@ -310,15 +301,9 @@ class DeepSeekProvider extends BaseProvider {
 
     const model = options.model || this.config.default_model;
 
-    // Estimate tokens for rate limiting
+    // Estimate input tokens for cost calc
     const messagesText = messages.map(m => m.content).join(' ');
     const estimatedTokens = this.countTokens(messagesText);
-
-    // Check rate limit — wait and retry instead of failing immediately
-    const rateLimitCheck = await this.checkRateLimitWithWait(estimatedTokens);
-    if (!rateLimitCheck.allowed) {
-      throw new Error(`Rate limit exceeded: ${rateLimitCheck.reason}`);
-    }
 
     // Build request
     const requestData = {
@@ -380,8 +365,6 @@ class DeepSeekProvider extends BaseProvider {
           // Stream ended
           const outputTokens = this.countTokens(fullContent);
           const totalTokens = estimatedTokens + outputTokens;
-
-          this.recordUsage(totalTokens);
 
           const cost = this.calculateCost(estimatedTokens, outputTokens);
 

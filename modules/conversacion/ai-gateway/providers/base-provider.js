@@ -12,11 +12,6 @@ class BaseProvider {
     this.logger = logger;
     this.name = 'base';
 
-    // Rate limiting state
-    this.requestCount = 0;
-    this.tokenCount = 0;
-    this.lastResetTime = Date.now();
-
     // API key management
     this.apiKey = null;
     this.credentialResolver = credentialResolver; // Function to resolve credentials via events
@@ -116,77 +111,6 @@ class BaseProvider {
     const inputCost = (inputTokens / 1000) * (this.config.cost_per_1k_tokens.input || 0);
     const outputCost = (outputTokens / 1000) * (this.config.cost_per_1k_tokens.output || 0);
     return inputCost + outputCost;
-  }
-
-  /**
-   * Check rate limit
-   */
-  checkRateLimit(estimatedTokens) {
-    const now = Date.now();
-    const elapsedMinutes = (now - this.lastResetTime) / 60000;
-
-    // Reset counters if a minute has passed
-    if (elapsedMinutes >= 1) {
-      this.requestCount = 0;
-      this.tokenCount = 0;
-      this.lastResetTime = now;
-    }
-
-    // Check limits
-    const { requests_per_minute, tokens_per_minute } = this.config.rate_limit;
-
-    if (this.requestCount >= requests_per_minute) {
-      return {
-        allowed: false,
-        reason: 'REQUEST_RATE_LIMIT_EXCEEDED',
-        retry_after_ms: Math.max(1000, (1 - elapsedMinutes) * 60000)
-      };
-    }
-
-    if (this.tokenCount + estimatedTokens > tokens_per_minute) {
-      return {
-        allowed: false,
-        reason: 'TOKEN_RATE_LIMIT_EXCEEDED',
-        retry_after_ms: Math.max(1000, (1 - elapsedMinutes) * 60000)
-      };
-    }
-
-    return { allowed: true };
-  }
-
-  /**
-   * Check rate limit with automatic wait and retry.
-   * Instead of failing immediately, waits for the rate limit window to reset
-   * and retries up to maxWaitAttempts times.
-   */
-  async checkRateLimitWithWait(estimatedTokens, maxWaitAttempts = 2) {
-    for (let attempt = 0; attempt <= maxWaitAttempts; attempt++) {
-      const check = this.checkRateLimit(estimatedTokens);
-      if (check.allowed) return check;
-
-      // Last attempt — don't wait, just fail
-      if (attempt === maxWaitAttempts) {
-        return check;
-      }
-
-      const waitMs = Math.min(check.retry_after_ms, 30000); // Cap at 30s
-      this.logger.info(`${this.name}.rate_limit.waiting`, {
-        reason: check.reason,
-        waitMs,
-        attempt: attempt + 1,
-        maxAttempts: maxWaitAttempts
-      });
-
-      await this.sleep(waitMs);
-    }
-  }
-
-  /**
-   * Record usage
-   */
-  recordUsage(tokens) {
-    this.requestCount++;
-    this.tokenCount += tokens;
   }
 
   /**

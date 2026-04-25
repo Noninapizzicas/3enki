@@ -23,11 +23,12 @@ import { generateUUID } from '$lib/utils';
  * Ej: /pixel-bosch/recetas → /recetas
  * El backend resuelve esta ruta al módulo correspondiente.
  */
-function getPageRoute(): string | null {
-  if (typeof window === 'undefined') return null;
+function getPageRoute(): string {
+  if (typeof window === 'undefined') return 'chat';
   const segments = window.location.pathname.split('/').filter(Boolean);
-  if (segments.length < 2) return null;
-  return '/' + segments.slice(1).join('/');
+  // segments[0] = project_id, segments[1+] = página activa (recetas, menu-generator, etc.)
+  if (segments.length < 2) return 'chat';
+  return segments.slice(1).join('/');
 }
 
 // ============================================================================
@@ -126,64 +127,29 @@ export async function sendMessage(content: string): Promise<void> {
     }
 
     const response = await mqttRequest<{
-      conversationId: string;
-      user_message: Message;
-      assistant_message: Message;
-      tokens_used?: number;
-      cost?: number;
+      conversation_id: string;
+      message_id: string;
     }>('conversation', 'send', {
+      // Contrato fijo: 9 campos, en este orden.
       project_id: currentProjectId,
-      conversationId: convId,
-      page: getPageRoute(),
-      content: userMessage.content,
-      attachments: currentAttachments.map(a => ({
-        type: a.type,
-        path: a.path,
-        name: a.name
-      })),
-      provider: currentProvider?.id || undefined,
-      model: currentModel || undefined
+      page_id: getPageRoute(),
+      conversation_id: convId,
+      context: {},
+      settings: {},
+      prompt: null,
+      attachments: currentAttachments.map(a => a.path),
+      intencion: null,
+      message: userMessage.content
     }, { timeout: 180000 }); // 180s para respuestas de IA con herramientas
 
-    // Añadir mensaje del asistente si existe (está en response.data)
+    // El backend devuelve solo { conversation_id, message_id } como ack.
+    // El mensaje del asistente llega vía MQTT push en conversation/{id}/message
+    // (procesado por el subscribe global más abajo).
     const data = response?.data;
-    if (data?.assistant_message) {
-      messages.update(msgs => {
-        // Check if streaming already added this message (by content match or streaming flag)
-        const lastIdx = msgs.length - 1;
-        const lastMsg = msgs[lastIdx];
 
-        if (lastMsg?.role === 'assistant') {
-          // Finalize: update with server-confirmed data (id, full content, metadata)
-          return [
-            ...msgs.slice(0, lastIdx),
-            {
-              ...lastMsg,
-              id: data.assistant_message.id || lastMsg.id,
-              content: data.assistant_message.content || lastMsg.content,
-              timestamp: data.assistant_message.created_at || lastMsg.timestamp,
-              metadata: data.assistant_message.metadata,
-              in_context: data.assistant_message.in_context !== false,
-              streaming: false
-            }
-          ];
-        }
-
-        // No streaming happened: add the message normally
-        return [...msgs, {
-          id: data.assistant_message.id || generateUUID(),
-          role: 'assistant',
-          content: data.assistant_message.content,
-          timestamp: data.assistant_message.created_at || new Date().toISOString(),
-          metadata: data.assistant_message.metadata,
-          in_context: data.assistant_message.in_context !== false
-        }];
-      });
-    }
-
-    // Actualizar conversationId si se creó una nueva
-    if (data?.conversationId && data.conversationId !== convId) {
-      conversationId.set(data.conversationId);
+    // Actualizar conversationId si se creó una nueva (lazy-create)
+    if (data?.conversation_id && data.conversation_id !== convId) {
+      conversationId.set(data.conversation_id);
     }
 
     isStreaming.set(false);

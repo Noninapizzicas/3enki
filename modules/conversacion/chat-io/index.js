@@ -94,13 +94,15 @@ class ChatIoModule {
   }
 
   onDbQueryResponse(event) {
-    const { request_id, rows, error } = event.data || event;
+    const payload = event.data || event;
+    const { request_id, error } = payload;
     const pending = this.pendingDb.get(request_id);
     if (!pending) return;
     clearTimeout(pending.timeout);
     this.pendingDb.delete(request_id);
     if (error) pending.reject(new Error(error));
-    else pending.resolve(rows || []);
+    // database-manager publica las filas en `data`; aceptamos `rows` por compatibilidad
+    else pending.resolve(payload.data ?? payload.rows ?? []);
   }
 
   async _ensureSchema(project_id) {

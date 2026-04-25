@@ -108,7 +108,37 @@ class ChatIoModule {
     for (const stmt of SCHEMA_SQL.split(';').map(s => s.trim()).filter(Boolean)) {
       await this._db(project_id, stmt, []);
     }
+    await this._migrateSchema(project_id);
     this.schemaReady.add(project_id);
+  }
+
+  // Migración suave: para tablas que ya existían en versiones anteriores,
+  // añade las columnas que faltan (CREATE TABLE IF NOT EXISTS no las añade).
+  async _migrateSchema(project_id) {
+    const migrations = [
+      { table: 'conversations', column: 'prompt_id',        def: 'TEXT' },
+      { table: 'conversations', column: 'context_window',   def: 'INTEGER DEFAULT 20' },
+      { table: 'conversations', column: 'temperature',      def: 'REAL DEFAULT 0.7' },
+      { table: 'conversations', column: 'max_tokens',       def: 'INTEGER DEFAULT 2000' },
+      { table: 'messages',      column: 'in_context',       def: 'INTEGER DEFAULT 1' },
+      { table: 'messages',      column: 'manually_toggled', def: 'INTEGER DEFAULT 0' },
+      { table: 'messages',      column: 'tokens',           def: 'INTEGER' },
+      { table: 'messages',      column: 'cost',             def: 'REAL' },
+      { table: 'messages',      column: 'metadata',         def: 'TEXT' }
+    ];
+    for (const m of migrations) {
+      try {
+        const cols = await this._db(project_id, `PRAGMA table_info(${m.table})`, [], true);
+        const exists = cols.some(c => c.name === m.column);
+        if (!exists) {
+          await this._db(project_id, `ALTER TABLE ${m.table} ADD COLUMN ${m.column} ${m.def}`, []);
+          this.logger.info('chat-io.schema.migrated', { project_id, table: m.table, column: m.column });
+        }
+      } catch (err) {
+        // ignorar — race condition o columna creada por otro path
+        this.logger.debug('chat-io.schema.migrate.skip', { project_id, table: m.table, column: m.column, error: err.message });
+      }
+    }
   }
 
   onProjectActivated(event) {

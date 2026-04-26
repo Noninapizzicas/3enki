@@ -83,9 +83,6 @@
       },
       link({ href, text }: { href: string; text: string }) {
         return `<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
-      },
-      table({ header, rows }: { header: string; rows: string }) {
-        return `<div class="table-wrapper"><table>${header}${rows}</table></div>`;
       }
     }
   });
@@ -113,7 +110,13 @@
   function renderMarkdown(text: string): string {
     if (!text) return '';
     try {
-      return marked.parse(text) as string;
+      // Envolvemos las tablas en un wrapper para permitir scroll horizontal en móvil.
+      // Antes lo hacíamos con un renderer custom de table(), pero la API de marked v5+
+      // pasa tokens (objetos) en vez de strings — al concatenarlos producía [object Object].
+      const html = marked.parse(text) as string;
+      return html
+        .replace(/<table>/g, '<div class="table-wrapper"><table>')
+        .replace(/<\/table>/g, '</table></div>');
     } catch {
       return escapeHtml(text);
     }

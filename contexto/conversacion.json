@@ -1,241 +1,302 @@
 {
   "_type": "context_file",
   "_module": "conversacion",
-  "_updated": "2026-04-22",
-  "_supersedes": ["chat-refactoring.json (histórico)", "system.json → patrones_recientes.page_context (obsoleto)"],
-
-  "descripcion": "Subsistema de conversación: cómo se arma el prompt del LLM en cada mensaje, de dónde sale el contexto, cómo se filtran las tools, y qué viaja en el payload.",
+  "_updated": "2026-04-26",
+  "_supersedes": [
+    "Versión anterior (2026-04-22) describía prompt-engine + chat-session + chat-ai-bridge + conversation-router + context-manager — esa arquitectura fue archivada en arquitectura/conversacion-ref/ y reemplazada por 4 módulos limpios."
+  ],
+  "_estado": "REESCRITO tras tabula rasa de modules/conversacion/ (commits dc03d1b → e2ec393, semana 22-26 abril 2026). Capa conversacional reducida de 10 módulos / ~8000 líneas a 4 módulos / 1476 líneas con cero require entre módulos.",
 
   "principio_raiz": {
-    "regla": "El módulo es el contexto. La URL identifica el módulo. El backend arma el prompt.",
-    "consecuencias": [
-      "El frontend NO define el contexto del chat — solo dice en qué ruta está",
-      "Cada módulo expone su contexto en context.json y su persona en prompt.json",
-      "Un prompt custom del usuario reemplaza la persona, no el contexto",
-      "Las tools se filtran al módulo activo, no se envían todas las 50+"
+    "regla": "Emite evento, quien sabe hace. Cero require entre módulos. La capa conversacional es 4 módulos que sólo se comunican por eventBus.",
+    "aplicacion": [
+      "chat-io no sabe nada de prompts ni de LLM — sólo persiste y reenvía",
+      "prompt-builder no sabe quién pide ni quién consume — emite chat.prompt.ready y se va",
+      "ai-gateway no conoce módulos de dominio — invoca tools por evento {tool_name} y espera {tool_name}.response",
+      "ai-agent-framework no llama al LLM directamente — emite llm.complete.request y reusa ai-gateway"
     ]
   },
 
-  "separacion_context_prompt": {
-    "problema_original": "prompt.json mezclaba contexto (capabilities, domain_knowledge, workflow) con persona (role, intent). Un custom prompt del usuario lo reemplazaba TODO — perdiendo el contexto del módulo.",
-    "solucion": "Dos archivos independientes por módulo:",
-    "archivos": {
-      "context.json": {
-        "ubicacion": "modules/{module}/context.json",
-        "contenido": ["capabilities", "domain_knowledge", "workflow", "rules", "integrations", "examples", "tools_disponibles"],
-        "regla": "Siempre se inyecta. Nunca se reemplaza.",
-        "tipo": "module_context"
-      },
-      "prompt.json": {
-        "ubicacion": "modules/{module}/prompt.json",
-        "contenido": ["role", "intent"],
-        "regla": "Reemplazable por customPromptId del usuario via UI.",
-        "tipo": "module_prompt"
+  "modulos": {
+    "chat-io": {
+      "ubicacion": "modules/conversacion/chat-io/",
+      "lineas": 522,
+      "rol": "Entrada y salida del chat. Interfaz MQTT del frontend + persistencia de conversaciones y mensajes en SQLite por proyecto.",
+      "responsabilidades": [
+        "Recibir ui/request/conversation/{action} del frontend (UIRequestHandler)",
+        "Persistir conversations y messages en la DB del proyecto vía db.query.request",
+        "Aplicar FIFO de contexto (in_context flag) según context_window de la conversación",
+        "Migración suave del schema (PRAGMA + ALTER TABLE) para tablas heredadas",
+        "Reenviar la respuesta del LLM al frontend por MQTT (conversation/{id}/message)",
+        "Serializar fechas a ISO + incluir message_count en list/load (commit f82bc65)"
+      ],
+      "ui_handlers": [
+        "conversation.send", "conversation.create", "conversation.list", "conversation.load",
+        "conversation.delete", "conversation.update_settings", "conversation.toggle_context", "conversation.context_stats"
+      ],
+      "publishes": ["chat.message.saved", "chat.assistant.saved"],
+      "subscribes": ["ai.chat.response", "db.query.response", "project.activated"],
+      "schema_sqlite": {
+        "conversations": ["id", "project_id", "title", "context_window", "temperature", "max_tokens", "prompt_id", "created_at", "updated_at"],
+        "messages":      ["id", "conversation_id", "role", "content", "in_context", "manually_toggled", "tokens", "cost", "metadata", "created_at"]
       }
     },
-    "modulos_partidos": [
-      "recetas", "escandallo", "viabilidad", "facturas",
-      "pizzepos/menu-generator", "pizzepos/carta-digital", "pizzepos/carta-design",
-      "pizzepos/carta-impresion", "pizzepos/cocina", "pizzepos/comandero",
-      "certificate-authority"
-    ],
-    "modulos_sin_split": "Módulos de infraestructura (database-manager, log-manager, etc.) mantienen prompt.json plano — el engine es retrocompatible.",
-    "auto_generacion": "Si un módulo no tiene prompt.json ni context.json, prompt-engine auto-genera desde module.json (description, tools, events)."
-  },
-
-  "payload_del_chat": {
-    "descripcion": "Qué viaja desde el frontend al LLM en cada mensaje. 5 variables.",
-    "variables": {
-      "proposito": { "estado": "null", "descripcion": "Sin efecto hoy. Reservado para intención explícita del usuario." },
-      "contexto": {
-        "estado": "activo",
-        "fuentes": [
-          "modules/{module}/context.json — lo que el módulo expone",
-          "runtime: project_id, project.name, parent_chain, dependencies, system",
-          "conversation_id"
-        ],
-        "no_incluye": "page_context.state del frontend — se eliminó (ver seccion frontend_simplificado)"
-      },
-      "prompt": {
-        "estado": "activo",
-        "prioridad": [
-          "1. customPromptId (del usuario via UI) → reemplaza modules/{module}/prompt.json",
-          "2. modules/{module}/prompt.json (resuelto desde page=/recetas)",
-          "3. base prompt (modules/_shared/base.prompt.json)"
-        ],
-        "garantia": "El contexto del módulo SIEMPRE está presente, incluso con custom prompt"
-      },
-      "herramientas": {
-        "estado": "activo",
-        "mecanismo": "ai-gateway filtra tools por target_module. En /recetas → solo recetas.*",
-        "fuente_del_target": "prompt-engine publica target_module en chat.prompt.ready",
-        "sin_pagina": "Si no hay módulo resuelto → target_module=null → ai-gateway envía todas las tools"
-      },
-      "mensajes": {
-        "estado": "activo",
-        "mecanismo": "FIFO de 20 mensajes en chat-session (in_context=1/0)",
-        "trimming": "prompt-engine.buildMessages limita al maxHistory config (default 40)"
-      }
+    "prompt-builder": {
+      "ubicacion": "modules/conversacion/prompt-builder/",
+      "lineas": 268,
+      "rol": "Construye el system prompt completo cuando llega un mensaje nuevo del usuario.",
+      "responsabilidades": [
+        "Cargar al arranque base.prompt.json + scan modules/**/prompt.json + modules/**/context.json",
+        "Cachear prompts del usuario (suscribe prompt.list.response del prompt-manager)",
+        "Al recibir chat.message.saved: resolver page → módulo, ensamblar prompt (base + context + prompt user/módulo + CONTEXTO ACTIVO)",
+        "Publicar chat.prompt.ready para que ai-gateway tome el relevo"
+      ],
+      "publishes": ["chat.prompt.ready", "prompt.list.request"],
+      "subscribes": ["chat.message.saved", "prompt.list.response", "prompt.created", "prompt.updated", "prompt.deleted", "db.query.response"]
+    },
+    "ai-gateway": {
+      "ubicacion": "modules/conversacion/ai-gateway/",
+      "lineas": 441,
+      "rol": "Ejecutor del LLM. Dos entry points: chat (chat.prompt.ready) y agentes (llm.complete.request). Comparten _executeLLM internamente.",
+      "responsabilidades": [
+        "Inicializar 7 providers desde module.json.config.providers (deepseek/anthropic/openai/groq/gemini/ollama/claude-cli)",
+        "Resolución de credenciales por evento (credential.resolve.request) con cache 5min",
+        "Selección de provider con fallback por priority si requested='auto'",
+        "Filtrado de tools por page_id desde moduleLoader.toolsRegistry",
+        "Resolución de attachments por evento (fs.read.request)",
+        "Agentic loop: si LLM pide tool → publica evento {tool_name} → espera {tool_name}.response → continúa hasta max_tool_iterations (10) o respuesta final"
+      ],
+      "publishes": ["ai.chat.response", "llm.complete.response", "credential.resolve.request", "fs.read.request"],
+      "subscribes": ["chat.prompt.ready", "llm.complete.request", "credential.resolve.response", "credential.saved", "credential.updated", "credential.deleted", "fs.read.response"],
+      "providers": [
+        { "name": "deepseek",   "priority": 1, "default_model": "deepseek-chat" },
+        { "name": "anthropic",  "priority": 2, "default_model": "claude-3-5-sonnet-20241022" },
+        { "name": "openai",     "priority": 3, "default_model": "gpt-4o-mini" },
+        { "name": "groq",       "priority": 4, "default_model": "llama-3.3-70b-versatile" },
+        { "name": "gemini",     "priority": 5, "default_model": "gemini-2.5-flash" },
+        { "name": "ollama",     "priority": 6, "default_model": "llama2" },
+        { "name": "claude-cli", "priority": 7, "default_model": "sonnet" }
+      ],
+      "config_keys_que_lee": ["providers", "retry", "max_tool_iterations", "tool_timeout_ms"],
+      "removidos_en_tabula_rasa": [
+        "rate_limit local en base-provider.js (commit 79aa575) — era contador en memoria, no prevenía 429 real del provider, sólo añadía superficie de bug",
+        "calculateCost local en base-provider.js (commit 58a02f2) — mismo patrón, leía this.config.cost_per_1k_tokens.input sin defensa y rompía"
+      ]
+    },
+    "ai-agent-framework": {
+      "ubicacion": "modules/conversacion/ai-agent-framework/",
+      "lineas": 245,
+      "rol": "Agentes especialistas. Carga agents/*.json + prompts/*.json al arranque y registra la tool invoke_agent en moduleLoader.toolsRegistry.",
+      "responsabilidades": [
+        "Escanear agents/*.json, asociar prompt (prompt_file o prompts/{name}.{json|md} fallback)",
+        "Registrar tool invoke_agent con la lista enum de agentes habilitados",
+        "Al recibir invoke_agent: armar prompt (base + agent prompt + CONTEXTO ENTREGADO + task) y publicar llm.complete.request a ai-gateway",
+        "Al recibir llm.complete.response: publicar invoke_agent.response con el resultado"
+      ],
+      "publishes": ["invoke_agent.response", "llm.complete.request"],
+      "subscribes": ["invoke_agent", "llm.complete.response"],
+      "no_tiene": [
+        "agentic loop propio (lo hace ai-gateway dentro de llm.complete.request)",
+        "lifecycle complejo",
+        "SQLite ni persistencia"
+      ]
     }
   },
 
-  "pipeline_evento_por_evento": {
-    "descripcion": "Flujo desde que el usuario envía un mensaje hasta que el LLM responde.",
+  "flujo_chat": {
+    "descripcion": "Desde que el usuario manda 'Hola' hasta que recibe respuesta del LLM.",
     "pasos": [
       {
         "paso": 1,
         "actor": "frontend / chat.ts",
-        "accion": "Deriva page desde window.location.pathname (ej: /pixel-bosch/recetas → /recetas)",
-        "publica": "mqttRequest('conversation', 'send', { project_id, conversationId, page, content, provider, model })"
+        "accion": "Valida (project_id + conversation_id) — si falta abre modal. Construye payload de 9 campos (project_id, page_id, conversation_id, context, settings, prompt, attachments, intencion, message)",
+        "publica": "MQTT ui/request/conversation/send"
       },
       {
         "paso": 2,
-        "actor": "chat-ai-bridge",
-        "handler": "handleConversationSend",
-        "accion": "Valida project_id, crea conversación si no existe, publica chat.send.request",
-        "payload": "{ request_id, project_id, conversation_id, page, content, use_tools: true, correlation_id }"
+        "actor": "chat-io",
+        "handler": "handleSend",
+        "accion": "Persiste user message (INSERT en messages), aplica FIFO context_window",
+        "publica": "chat.message.saved con { conversation_id, project_id, page_id, content, history, prompt, attachments, settings }"
       },
       {
         "paso": 3,
-        "actor": "chat-session",
-        "handler": "onChatSendRequest",
-        "accion": "Guarda mensaje en SQLite del proyecto, carga historial, publica chat.message.saved",
-        "payload": "{ conversation_id, project_id, message_id, content, messages, page, prompt }"
+        "actor": "prompt-builder",
+        "handler": "onChatMessageSaved",
+        "accion": "Resuelve page_id → módulo. Ensambla system prompt: base.prompt.json + context.json del módulo + (prompt del user O prompt del módulo) + sección CONTEXTO ACTIVO",
+        "publica": "chat.prompt.ready con { system, messages, page_id, project_id, conversation_id, attachments, settings, request_id }"
       },
       {
         "paso": 4,
-        "actor": "conversation-router",
-        "handler": "onChatMessageSaved",
-        "accion": "Matching de intents. Decide path: 'llm' | 'tool_call' | 'agent' | 'forward_agent'. Publica chat.message.routed.",
-        "payload": "{ ...data, path, decision }",
-        "detalle": "Spread preserva page, prompt, messages. Para path='llm' continúa el pipeline."
+        "actor": "ai-gateway",
+        "handler": "onChatPromptReady",
+        "accion": "Filtra tools por page_id, resuelve attachments si los hay, llama provider. Agentic loop: por cada tool_call → publica evento {tool_name} → espera {tool_name}.response → continúa.",
+        "publica": "ai.chat.response con { conversation_id, request_id, success, content, tool_calls_executed, tokens, model, provider }"
       },
       {
         "paso": 5,
-        "actor": "context-manager",
-        "handler": "onChatMessageRouted",
-        "accion": "Enriquece con contexto de proyecto (parentChain, dependencies, sharedContext). Publica chat.message.enriched.",
-        "payload": "{ ...data, context: { project, parentChain, dependencies, system } }"
-      },
-      {
-        "paso": 6,
-        "actor": "prompt-engine",
-        "handler": "onChatMessageEnriched",
-        "accion": "Resuelve page → moduleName. Construye systemPrompt (base + context + prompt/custom + runtime). Publica chat.prompt.ready.",
-        "payload": "{ conversation_id, project_id, message_id, content, prompt: systemPrompt, messages, decision, target_module }"
-      },
-      {
-        "paso": 7,
-        "actor": "ai-gateway",
-        "handler": "onChatPromptReady",
-        "accion": "Filtra tools por target_module. Llama al provider (Anthropic/OpenAI/DeepSeek/…). Agentic loop hasta 10 iteraciones.",
-        "responde": "conversation/{conv_id}/message con el assistant message y metadata"
+        "actor": "chat-io",
+        "handler": "onAiResponse",
+        "accion": "Persiste assistant message + actualiza updated_at de la conversación",
+        "publica_mqtt": "conversation/{conversation_id}/message → frontend lo recibe via subscribe"
       }
     ]
   },
 
-  "prompt_engine": {
-    "ubicacion": "modules/conversacion/prompt-engine/index.js",
-    "reemplaza": "prompt-composer (eliminado, 1037 líneas) + prompt-manager complejidad",
-    "responsabilidades": [
-      "Escanear modules/**/context.json y prompt.json al cargar (_contexts y _prompts Maps)",
-      "Auto-generar prompt desde module.json si no existe prompt.json",
-      "Resolver route → module: /recetas → recetas, /menu-generator → pizzepos/menu-generator",
-      "Ensamblar system prompt según prioridad",
-      "Publicar target_module para que ai-gateway filtre tools",
-      "Hot-reload de context.json y prompt.json (reloadModule)",
-      "Sincronizar con prompt-manager para prompts de BD (override filesystem)"
+  "flujo_invoke_agent": {
+    "descripcion": "Cuando el LLM principal decide delegar a un agente especialista.",
+    "pasos": [
+      "1. ai-gateway (durante agentic loop) detecta tool_call invoke_agent → publica evento invoke_agent { agent_name, task, context, request_id }",
+      "2. ai-agent-framework.onInvokeAgent: localiza agente, arma prompt (base + agent.prompt + task + context), publica llm.complete.request a ai-gateway",
+      "3. ai-gateway.onLlmCompleteRequest: ejecuta como un chat normal pero con tools restringidas a las del agente. Publica llm.complete.response.",
+      "4. ai-agent-framework.onLlmCompleteResponse: publica invoke_agent.response con el resultado",
+      "5. ai-gateway recibe invoke_agent.response como cualquier tool result → continúa el agentic loop principal"
     ],
-    "api": {
-      "buildSystemPrompt(moduleName, runtimeContext)": "Base + context + prompt del módulo + runtime",
-      "_formatCustomPrompt(customPrompt, runtimeContext, moduleName)": "Base + context del módulo + custom + runtime",
-      "resolveRouteToModule(route)": "Exact match → suffix match (/menu-generator → pizzepos/menu-generator)",
-      "buildMessages(moduleName, userMessage, history, runtimeContext)": "Array completo [{role, content}] listo para provider"
-    }
+    "ventaja": "Reusa el agentic loop completo de ai-gateway (incluyendo tool execution). El framework de agentes es ~245 líneas, no tiene su propio loop ni lifecycle complejo."
   },
 
-  "frontend_simplificado": {
-    "eliminado": {
-      "archivo": "frontend/src/lib/stores/page-context.ts",
-      "razon": "Ruido. Duplicaba role/rules/tools del módulo en cada +page.svelte. El backend ya tiene esa info."
+  "payload_9_campos": {
+    "descripcion": "Contrato fijo entre frontend y backend. Fijado durante la tabula rasa para evitar mismatches.",
+    "campos": {
+      "project_id":      "UUID del proyecto activo. Frontend valida; si null abre modal de proyecto",
+      "page_id":         "Slug de la página (ej: 'recetas'). Determina qué tools y qué context.json usar",
+      "conversation_id": "UUID de la conversación. Frontend valida; si null abre modal de conversaciones",
+      "context":         "Objeto libre con datos que el frontend quiera adjuntar (puede estar vacío)",
+      "settings":        "{ temperature?, max_tokens?, model?, provider? } — sobrescribe defaults de la conversación",
+      "prompt":          "ID de un prompt user de prompt-manager o null (usa el del módulo)",
+      "attachments":     "Array de paths del filesystem del proyecto a adjuntar al mensaje",
+      "intencion":       "string|null — reservado para intent explícito",
+      "message":         "Texto del usuario"
     },
-    "simplificaciones": {
-      "chat_ts": "Deriva page desde window.location.pathname. No hay setPageContext ni getPageContextSnapshot.",
-      "page_svelte": "Cada +page.svelte es solo <LazyShell /> con docstring. Sin onMount/onDestroy/setPageContext.",
-      "paneles": "Los paneles ya no llaman updatePageState. Solo tienen su lógica propia."
-    },
-    "regla_oro": "Si un dato del dominio lo necesita el LLM, lo pide por tool (recetas.obtener, etc.). El frontend no lo manda proactivamente."
+    "regla_clave": "Frontend valida project_id y conversation_id ANTES de enviar. Backend confía y no inventa nada (no auto-create de conversaciones)."
   },
 
-  "herramientas_filtrado": {
-    "registro": {
-      "ubicacion": "core/modules/loader.js → toolsRegistry (Map)",
-      "poblacion": "registerToolsForAI() al cargar cada módulo. Clave: tool.name (ej: recetas.buscar)"
-    },
-    "exposicion": {
-      "ai_gateway": "getAvailableTools() → todas las registradas",
-      "traduccion": "translateToolsForProvider() — formato Anthropic/OpenAI/Gemini según provider"
-    },
-    "filtrado": {
-      "ubicacion": "ai-gateway/index.js ~línea 248",
-      "logica": "const tools = target_module ? allTools.filter(t => t.name.startsWith(target_module + '.')) : allTools",
-      "sin_target": "Sin target_module → se envían TODAS las tools. Usar con cuidado (50+ tools = tokens + latencia)."
-    }
-  },
-
-  "ejemplo_completo": {
-    "escenario": "Usuario en /pixel-bosch/recetas escribe 'busca recetas con pollo'",
-    "flujo": {
-      "frontend": "page='/recetas', project_id='pixel-bosch', content='busca recetas con pollo'",
-      "chat_session": "Guarda mensaje, lee historial (FIFO 20), emite chat.message.saved con page y prompt (null)",
-      "router": "Matching de intents → match 'buscar receta' con action='tool_call' (decision.path='tool_call'). PERO aquí seguimos llm→ si no matchea, pasa a chat.message.routed con path='llm'",
-      "context_manager": "Añade project.name='Pixel Bosch', dependencies=[recetas, escandallo]...",
-      "prompt_engine": {
-        "resuelve": "moduleName='recetas' desde page='/recetas'",
-        "construye": [
-          "base.prompt.json",
-          "recetas/context.json (role=Chef de costes, capabilities, workflow, rules)",
-          "recetas/prompt.json (role=Chef de costes, intent=Gestionar recetas...)",
-          "CONTEXTO ACTIVO: project_id=pixel-bosch, conversation_id=xxx",
-          "{ _runtime: { project_id, project: {name: 'Pixel Bosch'}, dependencies: [...] } }"
-        ],
-        "emite": "chat.prompt.ready con target_module='recetas'"
+  "norma_eventos": {
+    "ubicacion": "arquitectura/eventos.json",
+    "vigente_desde": "2026-04-26 (commit d2527e6)",
+    "tres_categorias": {
+      "dominio": {
+        "patron": "<entidad-singular-es>.<verbo-pasado>",
+        "ejemplos": ["receta.creada", "factura.procesada", "proyecto.activado"]
       },
-      "ai_gateway": "Filtra tools.filter(t => t.name.startsWith('recetas.')) → 13 tools (recetas.buscar, recetas.crear...). Llama al provider.",
-      "llm": "Decide usar recetas.buscar con ingredientes=['pollo']. Ejecuta. Recibe resultados. Responde al usuario."
-    }
+      "request_response": {
+        "patron": "<scope>.<accion-infinitivo>.request | .response",
+        "ejemplos": ["db.query.request", "llm.complete.request", "credential.resolve.request"]
+      },
+      "tool_llm": {
+        "patron": "<dominio-plural>.<accion-infinitivo>",
+        "ejemplos": ["recetas.crear", "recetas.listar", "escandallo.calcular"]
+      }
+    },
+    "envelope_de_datos": "Las filas/datos siempre viajan en `data` (database-manager). NUNCA `rows`/`results`/`payload` mezclados.",
+    "consumidores_db_query_response_ya_arreglados": ["chat-io (commit d44b6b9)", "recetas (commit e0ea97f)"]
   },
 
-  "retrocompatibilidad": {
-    "modulos_sin_context_json": "Usan solo prompt.json (comportamiento anterior). El _formatCustomPrompt busca context por moduleName — si no existe, solo añade base + custom.",
-    "modulos_sin_prompt_json": "_scanDir auto-genera prompt desde module.json (_auto_generated: true).",
-    "modulos_sin_nada": "prompt-engine retorna base prompt para ese módulo. Sin errores."
+  "bugs_arreglados_en_la_tabula_rasa": {
+    "_doc": "Bugs reales detectados durante el hardening de la nueva capa. Cada commit deja la causa explicada para evitar regresiones.",
+    "items": [
+      {
+        "commit": "244cbfa", "modulo": "chat-io",
+        "sintoma": "SQLITE_ERROR: table conversations has no column named prompt_id",
+        "causa": "CREATE TABLE IF NOT EXISTS no añade columnas a tabla preexistente",
+        "fix": "_migrateSchema: PRAGMA table_info + ALTER TABLE ADD COLUMN para columnas faltantes"
+      },
+      {
+        "commit": "21b8bfe + c367f86 + f6f180e", "modulo": "frontend/chat",
+        "sintoma": "Crear conversación no funcionaba, mensajes sin respuesta",
+        "causa": "Frontend mandaba camelCase (projectId) y campos extra; isStreaming se desbloqueaba antes del push del asistente",
+        "fix": "Renombrado a snake_case + payload de 9 campos exacto + isStreaming hasta MQTT push + 180s failsafe"
+      },
+      {
+        "commit": "79aa575", "modulo": "ai-gateway/providers",
+        "sintoma": "Cannot destructure property 'requests_per_minute' of 'this.config.rate_limit' as it is undefined",
+        "causa": "rate_limit no estaba en module.json pero base-provider.js lo destructuraba",
+        "fix": "Eliminadas 180 líneas de rate-limit local (no prevenía 429 real, sólo memory counter)"
+      },
+      {
+        "commit": "d44b6b9", "modulo": "chat-io",
+        "sintoma": "Lista de conversaciones siempre vacía aunque hubiera",
+        "causa": "Leía `rows` pero database-manager publica `data`",
+        "fix": "payload.data ?? payload.rows ?? []"
+      },
+      {
+        "commit": "f82bc65", "modulo": "chat-io",
+        "sintoma": "'mensajes · Invalid Date' en cada item de la lista",
+        "causa": "Backend devolvía epoch ms; frontend interfaz esperaba string ISO. Faltaba message_count",
+        "fix": "_serializeConversation/_toIso + subquery COUNT(*) AS message_count"
+      },
+      {
+        "commit": "1209a62", "modulo": "core/gateway",
+        "feature": "/health expone version: { sha, short_sha, branch, subject, committed_at }",
+        "motivo": "Verificar qué commit corre en el VPS sin SSH"
+      },
+      {
+        "commit": "58a02f2", "modulo": "ai-gateway/providers",
+        "sintoma": "Cannot read properties of undefined (reading 'input')",
+        "causa": "calculateCost leía this.config.cost_per_1k_tokens.input sin defensa; el config no lo trae",
+        "fix": "Eliminado calculateCost (gemelo del bug de rate-limit). cost: 0 hardcoded en results"
+      },
+      {
+        "commit": "bad4776", "modulo": "recetas",
+        "sintoma": "LLM mostraba ingredientes como '[object Object],[object Object]...' tras crear",
+        "causa": "Tool devolvía sólo {id,nombre,status}; el LLM embuda el array de objetos del input en su respuesta",
+        "fix": "_crearRecetaSync devuelve ingredientes_formateados (markdown) + regla en context.json para usarlo tal cual"
+      },
+      {
+        "commit": "e0ea97f", "modulo": "recetas",
+        "sintoma": "recetas.listar siempre devolvía 0 recetas (también buscar/obtener/etc)",
+        "causa": "_dbQuery leía d.results pero database-manager publica d.data (mismo bug que chat-io tuvo)",
+        "fix": "resolve(d.data ?? d.results ?? [])"
+      },
+      {
+        "commit": "e2ec393", "modulo": "frontend/MarkdownRenderer.svelte",
+        "sintoma": "Tablas markdown se renderizaban como '[object Object]' por celda",
+        "causa": "Override custom de table() recibe tokens (objetos) en marked v5+, no strings",
+        "fix": "Eliminado el override; envolver <table> con regex post-process para mantener wrapper de scroll"
+      }
+    ]
   },
 
-  "tamanos_actuales": {
-    "context_json_promedio": "30-50 líneas (capabilities + domain_knowledge + rules + integrations + examples)",
-    "prompt_json_promedio": "5 líneas (role + intent)",
-    "reduccion_tokens": "Eliminación de instructions duplicados en frontend = -600 líneas y -1500 chars/mensaje"
+  "removidos_en_la_tabula_rasa": {
+    "ubicacion_archivo": "arquitectura/conversacion-ref/",
+    "modulos": [
+      "agent-bridge", "agent-manager", "ai-agent-framework (versión vieja)",
+      "ai-gateway (versión vieja)", "chat-ai-bridge", "chat-mqtt", "chat-session",
+      "context-manager", "conversation-router", "prompt-engine"
+    ],
+    "lineas_brutas": "~8000 → 1476 (-82%)",
+    "razon": "10 módulos con código aspiracional, capas duplicadas, pipelines fantasma. Tabula rasa decidida tras intentar refactor surgical y comprobar que el desenredo era infinito."
   },
+
+  "como_extender": {
+    "anadir_provider_LLM": "Crear modules/conversacion/ai-gateway/providers/<name>-provider.js extendiendo BaseProvider. Registrar en index.js _initializeProviders. Añadir entrada al config.providers de module.json (api_base, default_model, models, priority).",
+    "anadir_agente_especialista": "Crear modules/conversacion/ai-agent-framework/agents/<name>.json (con tools y scope) + opcionalmente prompts/<name>.json. Hot-reload no implementado — restart o llamar onLoad.",
+    "anadir_tool_de_modulo": "En el module.json del módulo declarar `tools: [{name, description, parameters}]` y en `subscribes` la entrada `<tool_name>` con su handler. ai-gateway autodescubre via moduleLoader.toolsRegistry y filtra por page_id."
+  },
+
+  "no_hacer": [
+    "NO añadir require entre los 4 módulos de conversacion — sólo eventBus",
+    "NO devolver epoch ms al frontend — siempre ISO via _toIso",
+    "NO devolver datos en `rows`/`results` — usar `data` (norma de envelope)",
+    "NO añadir rate_limit local ni cost calculation local en providers (ya intentamos, no aporta y rompe)",
+    "NO hacer auto-create de conversaciones en backend — el frontend valida y abre modal",
+    "NO meter context o tools en prompt.json del módulo — van en context.json",
+    "NO acoplar chat-io a un provider concreto: viaja todo por evento (db.query.request, ai.chat.response)"
+  ],
 
   "archivos_clave": [
-    "modules/conversacion/prompt-engine/index.js",
+    "modules/conversacion/chat-io/index.js",
+    "modules/conversacion/prompt-builder/index.js",
     "modules/conversacion/ai-gateway/index.js",
-    "modules/conversacion/chat-ai-bridge/index.js",
-    "modules/conversacion/chat-session/index.js",
-    "modules/conversacion/conversation-router/index.js",
-    "modules/conversacion/context-manager/index.js",
+    "modules/conversacion/ai-agent-framework/index.js",
+    "modules/conversacion/ai-gateway/providers/base-provider.js",
     "modules/_shared/base.prompt.json",
     "modules/{module}/context.json",
     "modules/{module}/prompt.json",
-    "frontend/src/lib/stores/chat.ts"
-  ],
-
-  "no_hacer": [
-    "NO crear page-context stores o similares en frontend — el módulo es la fuente",
-    "NO duplicar capabilities/rules en frontend — están en context.json",
-    "NO meter tools o tools_disponibles en prompt.json — van en context.json",
-    "NO hacer que custom prompts reemplacen el contexto del módulo",
-    "NO enviar todas las tools al LLM sin target_module — usar el filtro"
+    "arquitectura/eventos.json",
+    "arquitectura/conversacion-ref/ (versión vieja archivada)",
+    "frontend/src/lib/stores/chat.ts",
+    "frontend/src/lib/stores/conversations.ts",
+    "frontend/src/lib/components/base/MarkdownRenderer.svelte"
   ]
 }

@@ -1,7 +1,73 @@
 {
   "descripcion": "Lista de mejoras y refactorizaciones pendientes para el sistema",
-  "_updated": "2026-03-21",
+  "_updated": "2026-04-26",
   "mejoras": [
+    {
+      "id": "tabula-rasa-conversacion",
+      "titulo": "Tabula rasa de modules/conversacion/ — 10 módulos → 4",
+      "prioridad": "alta",
+      "estado": "implementado",
+      "fecha_propuesta": "2026-04-22",
+      "fecha_implementacion": "2026-04-22 (estructura) → 2026-04-26 (hardening completo)",
+      "descripcion": "La capa conversacional acumulaba 8000+ líneas en 10 módulos con código aspiracional, capas duplicadas, pipelines fantasma. Tras intentar refactor surgical sin éxito, decisión de tabula rasa: archivar todo en arquitectura/conversacion-ref/ y reescribir desde cero siguiendo CLAUDE.md (emite evento, quien sabe hace, cero require entre módulos).",
+      "implementacion": {
+        "modulos_nuevos": [
+          "chat-io (522 líneas) — MQTT in/out + persistencia SQLite + FIFO contexto",
+          "prompt-builder (268) — ensamblaje system prompt: base + context.json + prompt.json + CONTEXTO ACTIVO",
+          "ai-gateway (441) — agentic loop + 7 providers + filtrado tools por page_id",
+          "ai-agent-framework (245) — agentes especialistas (delegan llm.complete.request a ai-gateway)"
+        ],
+        "modulos_archivados_en_arquitectura/conversacion-ref/": [
+          "agent-bridge", "agent-manager", "ai-agent-framework (vieja)", "ai-gateway (vieja)",
+          "chat-ai-bridge", "chat-mqtt", "chat-session", "context-manager", "conversation-router", "prompt-engine"
+        ],
+        "payload_fijo_9_campos": "{ project_id, page_id, conversation_id, context, settings, prompt, attachments, intencion, message }",
+        "frontend": "Validación pre-send (modal si project_id o conversation_id null) + isStreaming hasta MQTT push del asistente + 180s failsafe"
+      },
+      "bugs_resueltos_durante_hardening": [
+        "244cbfa — chat-io: migración suave de schema (PRAGMA + ALTER TABLE)",
+        "21b8bfe + c367f86 + f6f180e — frontend: contratos snake_case + 9 campos + isStreaming",
+        "79aa575 — providers: rate-limit local eliminado (180 líneas, era memory counter sin propósito)",
+        "d44b6b9 — chat-io: leer filas como `data` en db.query.response",
+        "f82bc65 — chat-io: fechas a ISO + message_count en list/load",
+        "1209a62 — core/gateway: /health expone git sha + branch",
+        "58a02f2 — providers: calculateCost local eliminado (gemelo de rate-limit)",
+        "bad4776 — recetas: ingredientes_formateados en respuesta de crear + regla en context.json",
+        "e0ea97f — recetas: leer filas como `data` (gemelo del bug que tuvo chat-io)",
+        "e2ec393 — frontend MarkdownRenderer: tablas markdown ya no salen como [object Object]"
+      ],
+      "documentacion": "contexto/conversacion.json (vigente), contexto/chat-refactoring.json (histórico), arquitectura/eventos.json (norma de naming)",
+      "metricas": {
+        "lineas_antes": "~8000",
+        "lineas_despues": 1476,
+        "reduccion": "-82%",
+        "modulos_antes": 10,
+        "modulos_despues": 4,
+        "require_entre_modulos": "0 (sólo eventBus)"
+      }
+    },
+    {
+      "id": "norma-naming-eventos",
+      "titulo": "Norma de naming de eventos en arquitectura/eventos.json",
+      "prioridad": "alta",
+      "estado": "implementado",
+      "fecha_propuesta": "2026-04-26",
+      "fecha_implementacion": "2026-04-26",
+      "descripcion": "Codificada la norma de naming de eventos en arquitectura/eventos.json. Tres categorías con patrón, reglas, ejemplos buenos/malos. Lista de eventos legacy a renombrar cuando se toque cada módulo emisor (sin big-bang).",
+      "categorias": [
+        "Dominio (algo pasó): <entidad-singular-es>.<verbo-pasado> — receta.creada, factura.procesada",
+        "Request/response: <scope>.<accion-infinitivo>.request|.response — db.query.request, llm.complete.request",
+        "Tool LLM: <dominio-plural>.<accion-infinitivo> — recetas.crear, escandallo.calcular"
+      ],
+      "envelope_de_datos": "Las filas siempre en `data` (database-manager). NUNCA `rows` / `results`. Auditoría hecha — todos los consumidores OK tras los fixes.",
+      "legacy_a_renombrar": [
+        "invoke_agent → agente.invocar (ai-agent-framework)",
+        "project.activated → proyecto.activado (project-manager)",
+        "project.deactivated → proyecto.desactivado (project-manager)",
+        "chat.prompt.ready → chat.prompt.preparado (prompt-builder)"
+      ],
+      "archivo": "arquitectura/eventos.json (commit d2527e6)"
+    },
     {
       "id": "pantallas-cocina",
       "titulo": "Pantallas digitales de cocina con ESP32-P4 (800x1280)",

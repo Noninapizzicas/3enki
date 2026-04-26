@@ -1,26 +1,58 @@
 {
   "_type": "event_catalog",
   "_title": "Catálogo canónico de eventos de dominio",
-  "_version": "1.0",
+  "_version": "2.0",
   "_created": "2026-04-16",
+  "_updated": "2026-04-26",
   "_PRIORIDAD": "ALTA — fuente de verdad para eventos nuevos.",
 
-  "principio": "Cada módulo escucha SUS eventos y hace SU trabajo. Cuando termina, emite el evento de respuesta. El agente intent-router traduce lenguaje natural a estos eventos.",
-
-  "convencion_naming": {
-    "formato": "<dominio>.<accion>.<estado>",
-    "estados": {
-      "solicitado": "Alguien pide que se haga la acción",
-      "realizando": "Alguien la está haciendo (opcional, para progreso)",
-      "completada": "Terminó OK + datos",
-      "fallida": "Terminó mal + razón"
-    },
-    "forma_solicitado": "<dominio>.<accion>.solicitado[a]",
-    "forma_completado": "<dominio>.<accion>.completado[a] o variantes naturales (borrado, creado, editado...)",
-    "nota": "El estado completado/fallido puede tener forma natural: carta.borrada, carta.generada, archivo.leido. Lo importante es coherencia dentro del dominio."
+  "_NORMA_VIGENTE": {
+    "ubicacion": "arquitectura/eventos.json",
+    "vigente_desde": "2026-04-26 (commit d2527e6)",
+    "resumen": "Tres categorías: dominio (singular + verbo pasado), request_response (.request/.response con request_id), tool_llm (plural + infinitivo). Detalle completo, ejemplos buenos/malos y checklist en arquitectura/eventos.json.",
+    "compatibilidad_con_v1": "El catálogo de v1 usaba forma 'solicitado/completado/fallido' (carta.generar.solicitada → carta.generada). Esa forma sigue funcionando para eventos ya emitidos, pero los NUEVOS eventos siguen la norma de arquitectura/eventos.json. La sección 'catalogo' de abajo se mantiene como inventario histórico de los flujos de carta-manager / menu-generator."
   },
 
-  "catalogo": {
+  "tres_categorias_resumen": {
+    "dominio": {
+      "patron": "<entidad-singular-es>.<verbo-pasado>",
+      "uso": "Algo HA SUCEDIDO en el dominio. El emisor lo anuncia y sigue. 0..N escuchadores actúan.",
+      "ejemplos_vigentes": ["receta.creada", "receta.actualizada", "receta.eliminada", "ingrediente.precio.actualizado", "factura.procesada", "proyecto.activado"]
+    },
+    "request_response": {
+      "patron": "<scope>.<accion-infinitivo>.request | .response",
+      "uso": "Petición técnica con respuesta esperada. Siempre par. request_id UUID en ambos lados.",
+      "ejemplos_vigentes": ["db.query.request/.response", "db.schema.init.request/.response", "credential.resolve.request/.response", "llm.complete.request/.response", "fs.read.request/.response", "prompt.list.request/.response"]
+    },
+    "tool_llm": {
+      "patron": "<dominio-plural>.<accion-infinitivo>",
+      "uso": "Acción invocable por el LLM como tool. ai-gateway publica el evento durante el agentic loop; el módulo dueño responde con .response.",
+      "ejemplos_vigentes": ["recetas.crear", "recetas.listar", "recetas.buscar", "recetas.crear_desde_chat", "escandallo.calcular", "invoke_agent (legacy a renombrar a agente.invocar)"]
+    }
+  },
+
+  "envelope_de_datos": {
+    "regla": "Las filas/datos siempre viajan en `data`. Las tool responses viajan en `result`. NUNCA mezclar con `rows` / `results` / `payload`.",
+    "incidentes_recientes": [
+      "chat-io leía `rows` cuando database-manager publica `data` → todo SELECT vacío (commit d44b6b9)",
+      "recetas leía `results` cuando database-manager publica `data` → todo SELECT vacío (commit e0ea97f)"
+    ],
+    "auditoría_realizada_2026_04_26": "Verificados todos los consumidores de db.query.response (chat-io, conversation-export, pdf-viewer, channel-manager, recetas) — todos OK tras los dos fixes."
+  },
+
+  "legacy_a_renombrar_lista_completa": {
+    "_doc": "Eventos vivos que violan la norma actual. Se renombran cuando se toque el módulo emisor (sin big-bang).",
+    "items": [
+      { "actual": "invoke_agent", "propuesto": "agente.invocar", "modulo": "ai-agent-framework", "motivo": "snake_case + inglés" },
+      { "actual": "project.activated", "propuesto": "proyecto.activado", "modulo": "project-manager", "motivo": "inglés en evento de dominio" },
+      { "actual": "project.deactivated", "propuesto": "proyecto.desactivado", "modulo": "project-manager", "motivo": "inglés en evento de dominio" },
+      { "actual": "chat.prompt.ready", "propuesto": "chat.prompt.preparado", "modulo": "prompt-builder", "motivo": "estado en inglés" }
+    ]
+  },
+
+  "catalogo_historico": {
+    "_doc": "Inventario v1 — usa forma 'solicitado/completado/fallido'. Sigue funcionando para los flujos de cartas y programación. Los eventos NUEVOS deben seguir la norma de arquitectura/eventos.json (3 categorías arriba).",
+
     "archivo": {
       "listar": {
         "solicitado": "archivo.listar.solicitado",
@@ -51,41 +83,31 @@
     "carta": {
       "generar": {
         "solicitado": "carta.generar.solicitada",
-        "payload_solicitado": "{ project_id, nombre, filePath?, texto?, correlation_id, request_id }",
         "completado": "carta.generada",
-        "payload_completado": "{ carta_id, project_id, meta, categorias, productos, request_id, correlation_id }",
         "fallido": "carta.generar.fallida",
         "responsable": "menu-generator (pipeline OCR + structurer)"
       },
       "listar": {
         "solicitado": "carta.listar.solicitada",
-        "payload_solicitado": "{ project_id, correlation_id, request_id }",
         "completado": "carta.listada",
-        "payload_completado": "{ project_id, cartas: [...], total, request_id, correlation_id }",
         "responsable": "carta-manager"
       },
       "editar": {
         "solicitado": "carta.editar.solicitada",
-        "payload_solicitado": "{ carta_id, project_id, cambios, correlation_id, request_id }",
         "completado": "carta.editada",
-        "payload_completado": "{ carta_id, project_id, cambios_aplicados, request_id, correlation_id }",
         "fallido": "carta.editar.fallida",
         "responsable": "carta-manager",
-        "nota": "carta-manager ya emite carta.actualizada (evento legacy compatible)"
+        "nota": "carta-manager también emite carta.actualizada (legacy compatible)"
       },
       "borrar": {
         "solicitado": "carta.borrar.solicitada",
-        "payload_solicitado": "{ carta_id, project_id, correlation_id, request_id }",
         "completado": "carta.borrada",
-        "payload_completado": "{ carta_id, project_id, request_id, correlation_id }",
         "fallido": "carta.borrar.fallida",
         "responsable": "carta-manager"
       },
       "imprimir": {
         "solicitado": "carta.imprimir.solicitada",
-        "payload_solicitado": "{ carta_id, project_id, formato?, correlation_id, request_id }",
         "completado": "carta.impresa",
-        "payload_completado": "{ carta_id, html_path, pdf_path?, request_id, correlation_id }",
         "fallido": "carta.imprimir.fallida",
         "responsable": "carta-impresion (architect + builder agents)"
       }
@@ -94,9 +116,7 @@
     "programacion": {
       "crear": {
         "solicitado": "programacion.crear.solicitada",
-        "payload_solicitado": "{ project_id, regla, correlation_id, request_id }",
         "completado": "programacion.creada",
-        "payload_completado": "{ regla_id, project_id, request_id, correlation_id }",
         "fallido": "programacion.crear.fallida",
         "responsable": "carta-scheduler"
       }
@@ -104,23 +124,23 @@
   },
 
   "reglas_para_responsables": [
-    "Al recibir un evento .solicitado, SIEMPRE responder: o .completado o .fallido. No dejar colgado.",
-    "SIEMPRE incluir request_id y correlation_id en la respuesta para que intent-router pueda correlacionar.",
-    "Si la operación tarda >5s, emitir un evento .realizando intermedio con progreso.",
-    "Los eventos .fallida DEBEN incluir un campo error con mensaje humano legible."
+    "Al recibir un .request o .solicitado, SIEMPRE responder: o .response/.completado o equivalente con error. No dejar colgado.",
+    "SIEMPRE incluir request_id (y correlation_id si lo hay) en la respuesta.",
+    "Operaciones >5s: emitir progreso intermedio (.realizando o equivalente).",
+    "Errores DEBEN incluir un campo `error` con mensaje humano legible."
   ],
 
-  "reglas_para_intent_router": [
-    "Publicar evento .solicitado con request_id único (uuid).",
-    "Esperar .completada o .fallida con el mismo request_id.",
-    "Si pasados 30s no llega respuesta, reportar al usuario 'hay retraso'.",
-    "NO llamar tools del dominio (carta.save, etc.) directamente — publicar evento."
+  "reglas_para_emisores": [
+    "request_id siempre UUID v4, generado por el emisor.",
+    "Esperar el .response/.completado con el mismo request_id.",
+    "Timeout configurable (default 10s para tools, 30s para LLM).",
+    "Tools del LLM se invocan publicando el evento (no llamando funciones de otros módulos)."
   ],
 
   "eventos_legacy_compatibles": {
-    "descripcion": "Eventos antiguos que siguen existiendo. En fase aditiva — módulos emiten ambos (nuevo + viejo).",
+    "descripcion": "Eventos antiguos que siguen vivos por retrocompatibilidad. En fase aditiva — módulos emiten ambos (nuevo + viejo).",
     "mapeo": {
-      "carta.actualizada": "EQUIVALENTE a carta.editada (module carta-manager sigue emitiéndolo — NO quitar)",
+      "carta.actualizada": "EQUIVALENTE a carta.editada (carta-manager sigue emitiéndolo — NO quitar)",
       "menu.generated": "EQUIVALENTE a carta.generada",
       "carta.impresion.lista": "EQUIVALENTE a carta.impresa"
     }

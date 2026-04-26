@@ -104,7 +104,8 @@ class RecetasModule {
         unsub();
         clearTimeout(timeout);
         if (d.error) return reject(new Error(d.error));
-        resolve(d.results || []);
+        // database-manager publica las filas en `data`; aceptamos `results` por compat
+        resolve(d.data ?? d.results ?? []);
       });
       this.eventBus.publish('db.query.request', { project_id, query, params, read_only: true, request_id }).catch(reject);
     });

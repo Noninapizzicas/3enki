@@ -1,0 +1,138 @@
+{
+  "_doc": "Norma de naming para eventos del event-bus en event-core. Toda nueva emisión debe seguir esta norma. Eventos legacy se renombran cuando se toca el módulo que los emite.",
+  "_version": "1.0.0",
+  "_updated_at": "2026-04-26",
+
+  "principio": "Emite evento. Quien sabe, hace. El nombre del evento debe leerse como una frase corta y dejar claro QUÉ es: dominio (algo pasó), petición técnica, o invocación de tool.",
+
+  "categorias": {
+    "dominio": {
+      "descripcion": "Algo ha sucedido en el dominio. El emisor lo anuncia y sigue. Cero a N escuchadores actúan.",
+      "patron": "<entidad-singular-es>.<verbo-pasado>",
+      "reglas": [
+        "Singular: la entidad concreta a la que le pasó algo (una receta, una factura).",
+        "Pasado: el hecho ya ocurrió.",
+        "Género del verbo concuerda con el sustantivo (creada/creado, procesada/procesado).",
+        "Español. El dominio es del negocio."
+      ],
+      "ejemplos_buenos": [
+        "receta.creada",
+        "receta.actualizada",
+        "receta.eliminada",
+        "factura.procesada",
+        "cobro.procesado",
+        "pedido.recibido",
+        "ingrediente.precio.actualizado",
+        "proyecto.activado",
+        "proyecto.desactivado"
+      ],
+      "ejemplos_malos": [
+        { "nombre": "recetas.creada",     "motivo": "plural — el evento es sobre UNA receta concreta" },
+        { "nombre": "receta.crear",       "motivo": "infinitivo — sería tool, no dominio" },
+        { "nombre": "receta.create",      "motivo": "inglés — el dominio va en español" },
+        { "nombre": "receta.creando",     "motivo": "gerundio — el evento se emite cuando ya pasó" }
+      ]
+    },
+
+    "request_response": {
+      "descripcion": "Petición técnica con respuesta esperada. Siempre van en par. El emisor crea un request_id, espera el .response con ese mismo id.",
+      "patron": "<scope>.<accion-infinitivo>.request | <scope>.<accion-infinitivo>.response",
+      "reglas": [
+        "Siempre par: cada .request tiene su .response.",
+        "Infinitivo: la acción que se pide.",
+        "El request lleva un request_id (UUID). El response devuelve ese mismo request_id.",
+        "Scope identifica el subsistema técnico (db, credential, llm, fs, etc.)."
+      ],
+      "ejemplos_buenos": [
+        "db.query.request",
+        "db.query.response",
+        "db.schema.init.request",
+        "db.schema.init.response",
+        "credential.resolve.request",
+        "credential.resolve.response",
+        "llm.complete.request",
+        "llm.complete.response",
+        "fs.read.request",
+        "fs.read.response"
+      ],
+      "ejemplos_malos": [
+        { "nombre": "db.query",           "motivo": "no indica si es petición o respuesta" },
+        { "nombre": "db.query.req",       "motivo": "abreviar rompe consistencia" },
+        { "nombre": "db.querying",        "motivo": "gerundio, no es ni request ni response" }
+      ]
+    },
+
+    "tool_llm": {
+      "descripcion": "Acción invocable por el LLM. ai-gateway las publica cuando el LLM elige una tool durante el agentic loop. El módulo dueño del dominio responde con .response.",
+      "patron": "<dominio-plural>.<accion-infinitivo> | <dominio-plural>.<accion-infinitivo>.response",
+      "reglas": [
+        "Plural: representa la API del módulo entero, no una entidad concreta.",
+        "Infinitivo: es una acción que el LLM pide ejecutar.",
+        "Su respuesta SIEMPRE lleva sufijo .response.",
+        "El nombre coincide con el `name` declarado en la tool (module.json)."
+      ],
+      "ejemplos_buenos": [
+        "recetas.crear",
+        "recetas.listar",
+        "recetas.buscar",
+        "recetas.actualizar",
+        "recetas.eliminar",
+        "escandallo.calcular",
+        "facturas.listar",
+        "agente.invocar"
+      ],
+      "ejemplos_malos": [
+        { "nombre": "receta.crear",       "motivo": "singular — eso lo confunde con dominio" },
+        { "nombre": "invoke_agent",       "motivo": "sin punto, en inglés, snake_case (legacy a renombrar)" },
+        { "nombre": "recetas.crearReceta","motivo": "camelCase y redundante con el dominio" }
+      ]
+    }
+  },
+
+  "convenciones_globales": {
+    "separador": ".",
+    "snake_case_o_kebab": "Ninguno. Solo segmentos en minúsculas separados por punto.",
+    "idioma": "Español para dominio. Inglés permitido para subsistemas técnicos del core (db, fs, llm, credential, http) por ser jerga universal.",
+    "request_id": "Siempre UUID v4. Lo genera el emisor del .request.",
+    "data_envelope": "Las filas/datos siempre viajan en `data` (o `result` para tool responses). Nunca `rows`/`results`/`payload` mezclados."
+  },
+
+  "legacy_a_renombrar": {
+    "_doc": "Eventos que existen hoy y violan la norma. Se renombran cuando se toque el módulo emisor. No se hace big-bang — sólo cuando ya tocas ese código.",
+    "items": [
+      {
+        "actual": "invoke_agent",
+        "propuesto": "agente.invocar",
+        "modulo": "ai-agent-framework",
+        "motivo": "snake_case + inglés"
+      },
+      {
+        "actual": "project.activated",
+        "propuesto": "proyecto.activado",
+        "modulo": "project-manager",
+        "motivo": "inglés en evento de dominio"
+      },
+      {
+        "actual": "project.deactivated",
+        "propuesto": "proyecto.desactivado",
+        "modulo": "project-manager",
+        "motivo": "inglés en evento de dominio"
+      },
+      {
+        "actual": "chat.prompt.ready",
+        "propuesto": "chat.prompt.preparado",
+        "modulo": "prompt-builder",
+        "motivo": "estado emitido como dominio, en inglés"
+      }
+    ]
+  },
+
+  "checklist_para_nuevo_evento": [
+    "1. ¿Es algo que YA HA PASADO en mi dominio? → categoría `dominio`. Singular + pasado.",
+    "2. ¿Es una petición técnica con respuesta esperada? → categoría `request_response`. .request / .response.",
+    "3. ¿Es una acción que el LLM puede invocar como tool? → categoría `tool_llm`. Plural + infinitivo.",
+    "4. ¿El nombre se entiende sin contexto? Si no, reformular.",
+    "5. ¿Cumple el separador, idioma y forma de su categoría? Si no, ajustar.",
+    "6. ¿Quién va a escuchar este evento? Si nadie, NO lo emitas — es huérfano."
+  ]
+}

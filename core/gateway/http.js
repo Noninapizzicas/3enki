@@ -141,6 +141,12 @@ class HTTPGateway {
     };
 
     /**
+     * Información de versión (git) — se resuelve al construir y se cachea.
+     * Permite a /health exponer en qué commit corre el proceso.
+     */
+    this.version = this._resolveVersion();
+
+    /**
      * Log collector - publica interacciones HTTP a log-manager via MQTT
      */
     this.logCollectorEnabled = true;
@@ -683,10 +689,31 @@ class HTTPGateway {
       status: 'healthy',
       core_id: this.coreId,
       uptime: Date.now() - this.stats.started_at,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      version: this.version
     };
 
     await this.sendResponse(res, 200, health, req);
+  }
+
+  /**
+   * Lee SHA + rama de git al arrancar. Falla a 'unknown' si no hay .git
+   * (p.ej. en contenedor sin repo).
+   */
+  _resolveVersion() {
+    try {
+      const { execSync } = require('child_process');
+      const path = require('path');
+      const repoRoot = path.resolve(__dirname, '..', '..');
+      const opts = { cwd: repoRoot, stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' };
+      const sha = execSync('git rev-parse HEAD', opts).trim();
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', opts).trim();
+      const subject = execSync('git log -1 --pretty=%s', opts).trim();
+      const committed_at = execSync('git log -1 --pretty=%cI', opts).trim();
+      return { sha, short_sha: sha.slice(0, 7), branch, subject, committed_at };
+    } catch {
+      return { sha: 'unknown', short_sha: 'unknown', branch: 'unknown', subject: null, committed_at: null };
+    }
   }
 
   /**

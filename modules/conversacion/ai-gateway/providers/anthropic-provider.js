@@ -221,9 +221,6 @@ class AnthropicProvider extends BaseProvider {
     const outputTokens = response.usage?.output_tokens || this.countTokens(content);
     const totalTokens = inputTokens + outputTokens;
 
-    // Calculate cost
-    const cost = this.calculateCost(inputTokens, outputTokens);
-
     return {
       provider: this.name,
       model,
@@ -234,7 +231,7 @@ class AnthropicProvider extends BaseProvider {
         output_tokens: outputTokens,
         total_tokens: totalTokens
       },
-      cost,
+      cost: 0,
       finish_reason: response.stop_reason || 'stop'
     };
   }
@@ -318,8 +315,6 @@ class AnthropicProvider extends BaseProvider {
           const outputTokens = this.countTokens(fullContent);
           const totalTokens = estimatedTokens + outputTokens;
 
-          const cost = this.calculateCost(estimatedTokens, outputTokens);
-
           resolve({
             provider: this.name,
             model,
@@ -329,7 +324,7 @@ class AnthropicProvider extends BaseProvider {
               output_tokens: outputTokens,
               total_tokens: totalTokens
             },
-            cost,
+            cost: 0,
             finish_reason: 'stop'
           });
         },

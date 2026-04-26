@@ -105,15 +105,6 @@ class BaseProvider {
   }
 
   /**
-   * Calculate cost
-   */
-  calculateCost(inputTokens, outputTokens) {
-    const inputCost = (inputTokens / 1000) * (this.config.cost_per_1k_tokens.input || 0);
-    const outputCost = (outputTokens / 1000) * (this.config.cost_per_1k_tokens.output || 0);
-    return inputCost + outputCost;
-  }
-
-  /**
    * HTTP request helper
    */
   async makeRequest(method, path, data = null, headers = {}) {

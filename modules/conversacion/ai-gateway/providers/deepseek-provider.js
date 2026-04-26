@@ -163,9 +163,6 @@ class DeepSeekProvider extends BaseProvider {
     const reasoningTokens = response.usage?.completion_tokens_details?.reasoning_tokens || 0;
     const totalTokens = inputTokens + outputTokens;
 
-    // Calculate cost — reasoning tokens may have different pricing
-    const cost = this.calculateCost(inputTokens, outputTokens);
-
     const result = {
       provider: this.name,
       model,
@@ -176,7 +173,7 @@ class DeepSeekProvider extends BaseProvider {
         total_tokens: totalTokens,
         reasoning_tokens: reasoningTokens || undefined
       },
-      cost,
+      cost: 0,
       finish_reason: response.choices[0]?.finish_reason || 'stop'
     };
 
@@ -366,8 +363,6 @@ class DeepSeekProvider extends BaseProvider {
           const outputTokens = this.countTokens(fullContent);
           const totalTokens = estimatedTokens + outputTokens;
 
-          const cost = this.calculateCost(estimatedTokens, outputTokens);
-
           resolve({
             provider: this.name,
             model,
@@ -377,7 +372,7 @@ class DeepSeekProvider extends BaseProvider {
               output_tokens: outputTokens,
               total_tokens: totalTokens
             },
-            cost,
+            cost: 0,
             finish_reason: 'stop'
           });
         },

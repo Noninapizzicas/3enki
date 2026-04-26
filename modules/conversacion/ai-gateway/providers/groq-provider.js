@@ -94,9 +94,6 @@ class GroqProvider extends BaseProvider {
     const outputTokens = response.usage?.completion_tokens || this.countTokens(content);
     const totalTokens = inputTokens + outputTokens;
 
-    // Calculate cost
-    const cost = this.calculateCost(inputTokens, outputTokens);
-
     const result = {
       provider: this.name,
       model,
@@ -107,7 +104,7 @@ class GroqProvider extends BaseProvider {
         output_tokens: outputTokens,
         total_tokens: totalTokens
       },
-      cost,
+      cost: 0,
       finish_reason: response.choices[0]?.finish_reason || 'stop'
     };
 
@@ -191,8 +188,6 @@ class GroqProvider extends BaseProvider {
           const outputTokens = this.countTokens(fullContent);
           const totalTokens = estimatedTokens + outputTokens;
 
-          const cost = this.calculateCost(estimatedTokens, outputTokens);
-
           resolve({
             provider: this.name,
             model,
@@ -202,7 +197,7 @@ class GroqProvider extends BaseProvider {
               output_tokens: outputTokens,
               total_tokens: totalTokens
             },
-            cost,
+            cost: 0,
             finish_reason: 'stop'
           });
         },

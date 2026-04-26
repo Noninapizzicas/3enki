@@ -117,19 +117,17 @@
     "filesystem",
     "plugin-manager",
     "prompt-manager",
-    "prompt-composer",
     "scheduler",
     "project-manager",
     "composition-manager",
-    "context-manager",
     "system-inspector",
-    "ai-gateway",
-    "ai-agent-framework",
+    "conversacion/chat-io",
+    "conversacion/prompt-builder",
+    "conversacion/ai-gateway",
+    "conversacion/ai-agent-framework",
     "agent-manager",
     "calling-generator",
     "bot-manager",
-    "chat-ai-bridge",
-    "chat-session",
     "code-executor",
     "admin-panel",
     "pdf-viewer",
@@ -163,26 +161,30 @@
     "esp32-flasher",
     "gateway-manager"
   ],
-  "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "security-p2p", "staff-manager", "esp32-dev"],
+  "disabled_modules": ["conversation-manager", "dashboard", "metricas", "notas", "scratch-designer", "ui-designer", "security-p2p", "staff-manager", "esp32-dev", "certificate-authority"],
   "module_count": {
-    "_updated": "2026-03-24",
-    "core": 44,
-    "core_active": 36,
+    "_updated": "2026-04-26",
+    "core": 39,
+    "core_active": 30,
     "core_disabled": 9,
+    "conversacion": 4,
     "pizzepos": 15,
     "facturacion": 2,
-    "total_discovered": 62,
-    "total_active": 53,
-    "disabled": 9
+    "total_discovered": 60,
+    "total_active": 51,
+    "disabled": 10,
+    "_nota": "Capa conversacion reducida de 10 módulos a 4 tras tabula rasa (Abril 2026). Los 10 módulos antiguos están archivados en arquitectura/conversacion-ref/ y NO se cargan."
   },
   "module_categories": {
     "ai": {
-      "description": "Módulos de inteligencia artificial",
-      "modules": ["ai-gateway", "ai-agent-framework", "agent-manager", "calling-generator"]
+      "description": "Módulos de inteligencia artificial (capa LLM)",
+      "modules": ["conversacion/ai-gateway", "conversacion/ai-agent-framework", "agent-manager", "calling-generator"]
     },
-    "chat": {
-      "description": "Módulos del stack de chat/conversaciones",
-      "modules": ["chat-session", "chat-ai-bridge", "prompt-composer", "conversation-manager (legacy facade)"]
+    "conversacion": {
+      "description": "Capa conversacional reescrita en tabula rasa (Abril 2026). 4 módulos / 1476 líneas, cero require entre módulos, sólo eventBus.",
+      "modules": ["chat-io", "prompt-builder", "ai-gateway", "ai-agent-framework"],
+      "documentacion": "contexto/conversacion.json",
+      "archivo_legacy": "arquitectura/conversacion-ref/ (10 módulos previos archivados)"
     },
     "project": {
       "description": "Módulos de gestión de proyectos y composición (5 fases)",
@@ -402,85 +404,53 @@
         "context": ["import", "remove", "getShared", "getExported", "getAvailableSources", "getFullProjectContext"]
       }
     },
-    "prompt-composer": {
-      "version": "1.1.0",
-      "description": "Composición de system prompts con contexto heredado de proyectos + contexto de página",
-      "features": [
-        "Composición de system prompts con templates",
-        "Sustitución de variables {{variable}}",
-        "Contexto heredado automático de proyectos relacionados",
-        "Contexto de página (Page Context) — inyecta estado de la UI actual en el system prompt"
-      ],
-      "system_prompt_sections_order": [
-        "Base prompt (template o default)",
-        "## Project Context - nombre, descripción, storage",
-        "## System Context - sistema al que pertenece",
-        "## Dependencies / ## Related Projects / ## Inherited Knowledge",
-        "## Page Context - qué página, estado vivo, instrucciones (NEW v4)",
-        "## Capabilities - tools agrupados por prefijo"
-      ],
-      "page_context": {
-        "descripcion": "Sección inyectada cuando el frontend envía pageContext. El LLM sabe en qué página está el usuario y qué datos hay.",
-        "method": "buildPageContextSection(pageContext) — renderiza título, descripción, instrucciones y estado. Trunca >4000 chars.",
-        "flujo": "chat.ts snapshot → chat-ai-bridge → prompt.compose.request.page_context → buildPageContextSection()",
-        "cada_pagina_define": "{ route, title, description, instructions?, state: {} }",
-        "patron_reutilizable": "Cualquier página usa setPageContext() en onMount, clearPageContext() en onDestroy. Sin tocar backend."
-      },
+    "_NOTA_capa_conversacion": {
+      "_doc": "Detalle completo de los 4 módulos en contexto/conversacion.json. Aquí sólo el resumen para que key_modules quede consistente con la realidad.",
+      "fecha_tabula_rasa": "2026-04-22 → 2026-04-26",
+      "anterior_archivado_en": "arquitectura/conversacion-ref/"
+    },
+    "conversacion/chat-io": {
+      "version": "1.0.0",
+      "lineas": 522,
+      "description": "Entrada y salida del chat. UIRequestHandler MQTT + persistencia SQLite (conversations, messages) + reenvío de respuesta del LLM al frontend.",
       "events": {
-        "publishes": ["prompt.compose.response", "context.full.request"],
-        "subscribes": ["prompt.compose.request", "context.full.response"]
+        "publishes": ["chat.message.saved", "chat.assistant.saved"],
+        "subscribes": ["ai.chat.response", "db.query.response", "project.activated"]
       },
-      "usage": {
-        "with_inherited_context": "eventBus.publish('prompt.compose.request', { project_id, include_inherited_context: true })",
-        "with_page_context": "eventBus.publish('prompt.compose.request', { project_id, page_context: { route, title, description, instructions, state } })"
+      "ui_handlers": {
+        "conversation": ["send", "create", "list", "load", "delete", "update_settings", "toggle_context", "context_stats"]
+      },
+      "dependencies": ["database-manager"]
+    },
+    "conversacion/prompt-builder": {
+      "version": "1.0.0",
+      "lineas": 268,
+      "description": "Construye el system prompt al recibir chat.message.saved. Lee base.prompt.json + scan modules/**/prompt.json y context.json. Cachea prompts del usuario.",
+      "events": {
+        "publishes": ["chat.prompt.ready", "prompt.list.request"],
+        "subscribes": ["chat.message.saved", "prompt.list.response", "prompt.created", "prompt.updated", "prompt.deleted", "db.query.response"]
       }
     },
-    "chat-session": {
+    "conversacion/ai-gateway": {
       "version": "1.0.0",
-      "description": "Persistencia CRUD de conversaciones y mensajes",
-      "responsibilities": [
-        "CRUD de conversaciones en SQLite",
-        "CRUD de mensajes",
-        "Context FIFO management (ventana de 20 mensajes)",
-        "Schema management por proyecto",
-        "Cache de proyecto activo (event-driven)"
-      ],
+      "lineas": 441,
+      "description": "Ejecutor del LLM con agentic loop. 7 providers (deepseek/anthropic/openai/groq/gemini/ollama/claude-cli). Dos entry points: chat.prompt.ready y llm.complete.request.",
       "events": {
-        "publishes": ["session.*.response", "session.created", "session.updated", "session.deleted", "session.message.saved"],
-        "subscribes": ["session.*.request", "db.query.response", "project.activated", "project.deactivated"]
+        "publishes": ["ai.chat.response", "llm.complete.response", "credential.resolve.request", "fs.read.request"],
+        "subscribes": ["chat.prompt.ready", "llm.complete.request", "credential.resolve.response", "credential.saved", "credential.updated", "credential.deleted", "fs.read.response"]
       },
-      "apis": [
-        "POST /conversations - Crear conversación",
-        "GET /conversations - Listar conversaciones",
-        "GET /conversations/:id/messages - Obtener mensajes",
-        "POST/GET /conversations/:id/context - Gestión de contexto",
-        "POST /messages/:id/toggle-context - Toggle contexto mensaje"
-      ],
-      "tools": ["session.list_conversations", "session.get_conversation", "session.get_messages"],
-      "config": { "contextWindow": 20, "dbTimeout": 10000 },
-      "dependencies": ["database-manager", "project-manager"]
+      "providers": ["deepseek (priority:1)", "anthropic (2)", "openai (3)", "groq (4)", "gemini (5)", "ollama (6)", "claude-cli (7)"],
+      "max_tool_iterations": 10,
+      "tool_timeout_ms": 150000
     },
-    "chat-ai-bridge": {
+    "conversacion/ai-agent-framework": {
       "version": "1.0.0",
-      "description": "Orquestador de flujo entre chat y ai-gateway",
-      "responsibilities": [
-        "Coordinar flujo: session → prompt → ai-gateway",
-        "Agentic loop con tools (post-hoc streaming)",
-        "Cache de proyecto activo (event-driven)",
-        "Flow state tracking con stages",
-        "Transportar page_context del frontend al prompt-composer (NO lo interpreta)"
-      ],
+      "lineas": 245,
+      "description": "Carga agents/*.json + prompts/*.json al arranque. Registra tool invoke_agent. Cuando se invoca, arma prompt y delega al LLM via llm.complete.request a ai-gateway.",
       "events": {
-        "publishes": ["chat.send.response", "ai.chat.request", "session.save.request", "prompt.compose.request"],
-        "subscribes": ["chat.send.request", "ai.chat.response", "session.save.response", "prompt.compose.response", "session.context.load.response", "project.activated", "project.deactivated"]
-      },
-      "apis": [
-        "POST /send - Enviar mensaje y obtener respuesta AI",
-        "GET /status - Estado de requests pendientes",
-        "GET /health - Health check"
-      ],
-      "tools": ["chat.send_message"],
-      "dependencies": ["chat-session", "prompt-composer", "ai-gateway"]
+        "publishes": ["invoke_agent.response", "llm.complete.request"],
+        "subscribes": ["invoke_agent", "llm.complete.response"]
+      }
     },
     "scheduler": {
       "version": "1.0.0",
@@ -664,28 +634,23 @@
       "result": "El AI recibe contexto automático de proyectos relacionados"
     },
     "chat_flow": {
-      "description": "Flujo de mensaje de chat (sin facade, handlers directos)",
+      "description": "Flujo de mensaje de chat tras tabula rasa de Abril 2026. 4 módulos en modules/conversacion/, sólo eventBus, sin facade, sin require entre ellos.",
+      "_documentacion_completa": "contexto/conversacion.json → flujo_chat",
       "entry_points": {
-        "conversation.send": "chat-ai-bridge (UI handler directo)",
-        "conversation.load|create|list|get|update|delete|toggleContext|contextStats": "chat-session (UI handlers directos)"
+        "conversation.send|create|list|load|delete|update_settings|toggle_context|context_stats": "chat-io (UI handlers directos)"
       },
       "send_flow": [
-        "1. Frontend: mqttRequest('conversation', 'send', { conversationId, content, pageContext? })",
-        "1b. chat.ts captura getPageContextSnapshot() del page-context store y lo añade al payload",
-        "2. UIRequestHandler → chat-ai-bridge.handleConversationSend({ content, pageContext })",
-        "3. chat-ai-bridge usa proyecto activo CACHEADO (fast path, sin RPC)",
-        "4. chat-ai-bridge crea conversación si no existe (session.create.request → chat-session)",
-        "5. chat-ai-bridge guarda mensaje usuario (session.save.request → chat-session)",
-        "6. chat-ai-bridge compone prompt (prompt.compose.request → prompt-composer) — incluye page_context si existe",
-        "6b. prompt-composer.buildPageContextSection() renderiza ## Page Context con título, instrucciones y estado vivo",
-        "7. chat-ai-bridge llama AI (ai.chat.request → ai-gateway, con agentic loop). LLM ve el estado de la página.",
-        "8. chat-ai-bridge guarda respuesta + safety-net MQTT QoS 1",
-        "9. UIRequestHandler devuelve resultado al frontend"
+        "1. Frontend: payload de 9 campos exactos (project_id, page_id, conversation_id, context, settings, prompt, attachments, intencion, message). Frontend valida project_id y conversation_id antes de enviar; si null abre modal.",
+        "2. mqttRequest('conversation', 'send', payload) → UIRequestHandler → chat-io.handleSend",
+        "3. chat-io persiste user message en SQLite del proyecto + aplica FIFO context_window. Publica chat.message.saved.",
+        "4. prompt-builder resuelve page_id → módulo. Ensambla system: base.prompt.json + context.json del módulo + (prompt user O prompt módulo) + CONTEXTO ACTIVO. Publica chat.prompt.ready.",
+        "5. ai-gateway filtra tools por page_id, llama provider. Agentic loop: por cada tool_call publica evento {tool_name}, espera {tool_name}.response, continúa hasta max_tool_iterations (10) o respuesta final. Publica ai.chat.response.",
+        "6. chat-io persiste assistant message + actualiza updated_at. MQTT publish a conversation/{id}/message → frontend lo recibe."
       ]
     },
     "project_lifecycle_caching": {
       "description": "Patrón de caching del proyecto activo via eventos (evita N+1 RPC)",
-      "subscribers": ["chat-ai-bridge", "chat-session", "scheduler"],
+      "subscribers": ["chat-io", "scheduler", "recetas"],
       "events": {
         "project.activated": "→ cache activeProjectId en cada módulo suscrito",
         "project.deactivated": "→ clear cache activeProjectId"

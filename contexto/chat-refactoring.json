@@ -1,661 +1,78 @@
 {
-  "title": "Plan de Refactorización: Chat Modules",
-  "version": "2.0.0",
-  "status": "completed",
+  "title": "Plan de Refactorización: Chat Modules — HISTÓRICO",
+  "version": "3.0.0",
+  "status": "superseded",
   "created": "2026-01-07",
-  "updated": "2026-02-09",
-  "_nota": "Refactoring COMPLETADO. Facade eliminada (commit 962ca7f). chat-session y chat-ai-bridge manejan todo directamente. Project lifecycle caching implementado (commits 1384bc6, 4da83e0, c5bec2c). Ver modules.json para estado actual.",
-  "problem": {
-    "summary": "Duplicación de lógica entre conversation-manager y ai-gateway",
-    "modules_affected": [
-      {
-        "module": "conversation-manager",
-        "location": "modules/conversation-manager/index.js",
-        "lines": 2469,
-        "issues": [
-          "Viola Single Responsibility Principle (SRP)",
-          "17+ responsabilidades en un solo archivo",
-          "Difícil de testear y mantener",
-          "Tool execution hardcodeada en lugar de eventos",
-          "Lógica de UI mezclada con lógica de negocio",
-          "Duplica lógica de tools que ya existe en ai-gateway"
-        ]
-      },
-      {
-        "module": "ai-gateway",
-        "location": "modules/ai-gateway/index.js",
-        "lines": 1523,
-        "issues": [
-          "Tiene lógica de tools que no se usa (conversation-manager la reimplementa)",
-          "Podría centralizar toda la lógica de tools"
-        ]
-      }
+  "updated": "2026-04-26",
+
+  "_AVISO": "Este archivo describe un refactor INTERMEDIO (Feb 2026) que dividió conversation-manager monolítico en chat-session + chat-ai-bridge + prompt-composer + ai-gateway. Esa arquitectura YA NO ESTÁ EN USO. Fue reemplazada por la TABULA RASA de Abril 2026.",
+
+  "_reemplazado_por": {
+    "documento_vigente": "contexto/conversacion.json",
+    "fecha_reemplazo": "2026-04-26",
+    "rango_commits": "dc03d1b (tabula rasa) → e2ec393 (tabla markdown)",
+    "ubicacion_codigo_archivado": "arquitectura/conversacion-ref/",
+    "nueva_arquitectura": {
+      "modulos": ["chat-io", "prompt-builder", "ai-gateway", "ai-agent-framework"],
+      "lineas_totales": 1476,
+      "comparacion_brutal": "10 módulos / ~8000 líneas → 4 módulos / 1476 líneas (-82%)"
+    }
+  },
+
+  "lecciones_aprendidas": {
+    "del_refactor_de_febrero": [
+      "Dividir un monolito en 5 módulos no garantiza simplicidad si el flujo sigue distribuido en 7 pasos con 4 hops por evento",
+      "chat-ai-bridge acabó concentrando 1023 líneas — más que el monolito original sin esa división",
+      "El streaming post-hoc + safety-net QoS 1 fue parche para timing del agentic loop, no solución de raíz",
+      "page_context viajaba por 3 capas y se interpretaba en una cuarta — duplicación encubierta"
     ],
-    "duplicated_logic": {
-      "description": "Ambos módulos implementan la misma funcionalidad de tools",
-      "conversation_manager": {
-        "loadAvailableTools": "línea 586 - Carga tools desde moduleLoader",
-        "formatToolsForLLM": "línea 620 - Convierte a formato OpenAI",
-        "convertToolNameFromLLM": "línea 644 - fs_write → fs.write",
-        "executeToolCall": "línea 770 - Ejecuta tool individual",
-        "executeToolCalls": "línea 831 - Ejecuta múltiples tools",
-        "formatToolResultsAsMessages": "línea 844 - Formatea resultados"
-      },
-      "ai_gateway": {
-        "getAvailableTools": "línea 1228 - Carga tools desde moduleLoader",
-        "translateToolsForProvider": "línea 1317 - Convierte por provider",
-        "parseToolCallsFromProvider": "línea 1390 - Parsea respuesta del LLM",
-        "executeToolCalls": "línea 1242 - Ejecuta múltiples tools",
-        "formatToolResultsForProvider": "línea 1468 - Formatea por provider"
-      },
-      "total_duplicated_lines": "~400 líneas"
-    }
-  },
-  "ai_gateway_analysis": {
-    "current_structure": {
-      "main_file": "modules/ai-gateway/index.js (1523 líneas)",
-      "providers": {
-        "base-provider.js": "303 líneas - Clase abstracta",
-        "deepseek-provider.js": "Priority 1 - API DeepSeek",
-        "anthropic-provider.js": "Priority 2 - API Claude",
-        "openai-provider.js": "Priority 3 - API OpenAI",
-        "ollama-provider.js": "Priority 4 - Local Ollama"
-      }
-    },
-    "current_responsibilities": {
-      "provider_management": {
-        "methods": ["initializeProviders", "getProvidersByPriority", "isAvailable"],
-        "description": "Gestión de múltiples providers LLM"
-      },
-      "credential_resolution": {
-        "methods": ["resolveCredential", "onCredentialResponse"],
-        "description": "Resolución de API keys via credential-manager",
-        "cascade": "custom → client → project → global"
-      },
-      "chat_completion": {
-        "methods": ["handleChatCompletion", "chatWithRetry"],
-        "description": "Llamadas a LLM con retry y fallback"
-      },
-      "tool_management_unused": {
-        "methods": ["getAvailableTools", "translateToolsForProvider", "executeToolCalls", "parseToolCallsFromProvider", "formatToolResultsForProvider"],
-        "lines": "1145-1507 (~360 líneas)",
-        "description": "EXISTE pero NO SE USA - conversation-manager lo reimplementa"
-      },
-      "ui_handlers": {
-        "methods": ["handleUIState", "handleUISelect", "handleUIConfigGet", "handleUIConfigPost"],
-        "description": "Estado y configuración para UI"
-      }
-    },
-    "events": {
-      "subscribes": [
-        "ai.chat.request - Principal, desde conversation-manager",
-        "ai.request - Legacy, desde otros módulos",
-        "credential.resolve.response - Respuesta de credentials"
-      ],
-      "publishes": [
-        "ai.chat.response - Respuesta con content/tool_calls",
-        "ai.completion.completed - Analytics",
-        "credential.resolve.request - Solicita API key"
-      ]
-    },
-    "provider_fallback_flow": {
-      "description": "Si provider='auto', intenta en orden de prioridad",
-      "order": [
-        "1. DeepSeek (priority: 1) - Más barato",
-        "2. Anthropic (priority: 2) - Claude",
-        "3. OpenAI (priority: 3) - GPT",
-        "4. Ollama (priority: 4) - Local/gratuito"
-      ],
-      "on_failure": "Continúa al siguiente provider hasta que uno responda"
-    }
-  },
-  "current_flow": {
-    "description": "Flujo ACTUAL (con duplicación)",
-    "diagram": [
-      "conversation-manager.sendMessage()",
-      "    │",
-      "    ├─► loadAvailableTools() ◄── DUPLICADO con ai-gateway",
-      "    ├─► formatToolsForLLM()  ◄── DUPLICADO con ai-gateway",
-      "    │",
-      "    └─► eventBus.publish('ai.chat.request', { messages, tools })",
-      "              │",
-      "              ▼",
-      "        ai-gateway.onAIChatRequest()",
-      "              │",
-      "              ├─► getProvidersByPriority()",
-      "              ├─► resolveCredential() → credential-manager",
-      "              ├─► chatWithRetry() → LLM Provider API",
-      "              │",
-      "              └─► eventBus.publish('ai.chat.response', { content, tool_calls })",
-      "                        │",
-      "                        ▼",
-      "        conversation-manager.onAIChatResponse()",
-      "              │",
-      "              ├─► Si tool_calls:",
-      "              │     executeToolCalls() ◄── DUPLICADO con ai-gateway",
-      "              │     formatToolResultsAsMessages() ◄── DUPLICADO",
-      "              │     LOOP → ai.chat.request",
-      "              │",
-      "              └─► Guarda mensaje y responde"
+    "lo_que_funciono_y_se_conservo": [
+      "Eventos request/response con request_id correlacionado (db.query, llm.complete, credential.resolve)",
+      "ai-gateway con providers polimórficos por priority",
+      "Persistencia SQLite por proyecto + FIFO de contexto",
+      "ui_handlers declarados en module.json + UIRequestHandler"
+    ],
+    "lo_que_se_eliminó": [
+      "conversation-router con intent matching aspiracional (nadie publicaba los intents declarados)",
+      "context-manager que enriquecía con parent_chain/dependencies/system que el LLM no usaba",
+      "prompt-composer multi-capa con templates y variable substitution (overkill para insertar 4 strings)",
+      "agent-bridge multi-turn forward (no se invocaba)",
+      "chat-mqtt como capa separada (mejor MQTT en chat-io directo)"
     ]
   },
-  "proposed_flow": {
-    "description": "Flujo PROPUESTO (tools centralizados en ai-gateway)",
-    "option_a": {
-      "name": "Tools en ai-gateway (recomendado)",
-      "description": "ai-gateway maneja todo el ciclo de tools internamente",
-      "diagram": [
-        "conversation-manager.handleUISend()",
-        "    │",
-        "    └─► eventBus.publish('chat.send.request', { conversationId, content })",
-        "              │",
-        "              ▼",
-        "        chat-ai-bridge.onChatSendRequest()",
-        "              │",
-        "              ├─► session.save.request → chat-session (guarda user msg)",
-        "              ├─► prompt.compose.request → prompt-composer",
-        "              │",
-        "              └─► eventBus.publish('ai.chat.request', {",
-        "                    messages,",
-        "                    tools: true,        ◄── Solo flag, ai-gateway carga tools",
-        "                    execute_tools: true ◄── ai-gateway ejecuta el loop",
-        "                  })",
-        "                        │",
-        "                        ▼",
-        "                  ai-gateway.onAIChatRequest()",
-        "                        │",
-        "                        ├─► getAvailableTools() ◄── Centralizado aquí",
-        "                        ├─► translateToolsForProvider()",
-        "                        ├─► chatWithRetry() → LLM",
-        "                        │",
-        "                        ├─► Si tool_calls y execute_tools:",
-        "                        │     executeToolCalls() ◄── Centralizado aquí",
-        "                        │     formatToolResultsForProvider()",
-        "                        │     LOOP interno hasta max_iterations",
-        "                        │",
-        "                        └─► eventBus.publish('ai.chat.response', {",
-        "                              content: 'respuesta final',",
-        "                              tool_calls_executed: [...],",
-        "                              iterations: 3",
-        "                            })",
-        "                                  │",
-        "                                  ▼",
-        "                  chat-ai-bridge recibe respuesta final",
-        "                        │",
-        "                        └─► session.save.request (guarda assistant msg)"
-      ],
-      "benefits": [
-        "Elimina ~400 líneas duplicadas de conversation-manager",
-        "ai-gateway ya tiene la lógica de tools por provider",
-        "Un solo lugar para mantener compatibilidad con providers",
-        "chat-ai-bridge se simplifica enormemente"
-      ]
-    },
-    "option_b": {
-      "name": "Tools en chat-ai-bridge",
-      "description": "Mantener tool loop en chat-ai-bridge, eliminar de ai-gateway",
-      "when_to_use": "Si se necesita control granular del loop desde el chat"
-    }
-  },
-  "proposed_modules": {
-    "conversation-manager": {
-      "role": "Orquestador y punto de entrada UI",
-      "estimated_lines": 600,
-      "responsibilities": [
-        "UI Request handlers (MQTT)",
-        "HTTP API handlers (proxy a eventos)",
-        "Orquestación del flujo de mensajes",
-        "Health y metrics del módulo"
-      ],
-      "removes": [
-        "loadAvailableTools → centralizado en ai-gateway",
-        "formatToolsForLLM → centralizado en ai-gateway",
-        "executeToolCalls → centralizado en ai-gateway",
-        "queryDatabase → usa eventos a chat-session",
-        "composeSystemPrompt → movido a prompt-composer"
-      ],
-      "events": {
-        "publishes": [
-          "chat.send.request",
-          "session.create.request",
-          "session.list.request",
-          "session.get.request",
-          "session.update.request",
-          "session.delete.request"
-        ],
-        "subscribes": [
-          "chat.send.response",
-          "session.*.response"
-        ]
-      }
-    },
-    "chat-session": {
-      "role": "Persistencia de conversaciones y mensajes",
-      "estimated_lines": 400,
-      "location": "modules/chat-session/",
-      "responsibilities": [
-        "CRUD de conversaciones en SQLite",
-        "CRUD de mensajes",
-        "Context FIFO management",
-        "Schema management por proyecto"
-      ],
-      "methods": [
-        "createConversation",
-        "updateConversation",
-        "deleteConversation",
-        "saveMessage",
-        "getMessages",
-        "applyContextFIFO",
-        "toggleMessageContext",
-        "getContextStats"
-      ],
-      "events": {
-        "publishes": ["session.*.response", "conversation.created", "message.saved"],
-        "subscribes": ["session.*.request"]
-      }
-    },
-    "chat-ai-bridge": {
-      "role": "Puente entre chat y ai-gateway (simplificado)",
-      "estimated_lines": 300,
-      "location": "modules/chat-ai-bridge/",
-      "responsibilities": [
-        "Coordinar flujo: session → prompt → ai-gateway",
-        "Manejar respuesta y guardar mensaje",
-        "NO maneja tools (delegado a ai-gateway)"
-      ],
-      "methods": [
-        "onChatSendRequest",
-        "buildAIRequest",
-        "handleAIResponse",
-        "saveAssistantMessage"
-      ],
-      "events": {
-        "publishes": [
-          "chat.send.response",
-          "ai.chat.request",
-          "session.save.request",
-          "prompt.compose.request"
-        ],
-        "subscribes": [
-          "chat.send.request",
-          "ai.chat.response",
-          "session.save.response",
-          "prompt.compose.response"
-        ]
-      }
-    },
-    "prompt-composer": {
-      "role": "Composición de system prompts con contexto",
-      "estimated_lines": 200,
-      "location": "modules/prompt-composer/",
-      "responsibilities": [
-        "Cargar contexto del proyecto",
-        "Componer system prompt con templates",
-        "Sustituir variables en templates"
-      ],
-      "methods": [
-        "loadProjectContext",
-        "composeSystemPrompt",
-        "substituteVariables"
-      ],
-      "events": {
-        "publishes": ["prompt.compose.response", "project.get.request"],
-        "subscribes": ["prompt.compose.request", "project.get.response"]
-      }
-    },
-    "ai-gateway": {
-      "role": "Gateway LLM con tools centralizados (existente, modificado)",
-      "location": "modules/ai-gateway/",
-      "modifications": {
-        "enable_tool_loop": {
-          "description": "Activar el loop de tools interno cuando execute_tools=true",
-          "new_payload_fields": {
-            "tools": "boolean|array - true para cargar automáticamente, o array específico",
-            "execute_tools": "boolean - si true, ai-gateway ejecuta el loop",
-            "max_tool_iterations": "number - máximo de iteraciones (default 10)"
-          }
-        },
-        "enhanced_response": {
-          "description": "Respuesta incluye historial de tools ejecutados",
-          "new_response_fields": {
-            "tool_calls_executed": "array - historial de todas las tools ejecutadas",
-            "iterations": "number - cuántas iteraciones del loop",
-            "final_content": "string - respuesta final del LLM"
-          }
-        }
-      },
-      "events": {
-        "subscribes": ["ai.chat.request", "credential.resolve.response"],
-        "publishes": ["ai.chat.response", "ai.completion.completed"]
-      }
-    }
-  },
-  "event_catalog": {
-    "ai_domain": {
-      "ai.chat.request": {
-        "publisher": "chat-ai-bridge",
-        "subscriber": "ai-gateway",
-        "payload": {
-          "request_id": "uuid",
-          "messages": "array - historial de mensajes",
-          "tools": "boolean|array - true=auto, array=específico",
-          "execute_tools": "boolean - ai-gateway ejecuta loop",
-          "max_tool_iterations": "number? - default 10",
-          "provider": "string? - 'auto'|'deepseek'|'anthropic'|'openai'|'ollama'",
-          "model": "string? - modelo específico",
-          "temperature": "number?",
-          "max_tokens": "number?",
-          "project_id": "uuid",
-          "correlation_id": "uuid"
-        }
-      },
-      "ai.chat.response": {
-        "publisher": "ai-gateway",
-        "subscriber": "chat-ai-bridge",
-        "payload": {
-          "request_id": "uuid",
-          "success": "boolean",
-          "content": "string - respuesta final",
-          "tool_calls_executed": "array? - historial de tools [{name, args, result}]",
-          "iterations": "number? - cuántas iteraciones",
-          "tokens": "number",
-          "cost": "number",
-          "model": "string",
-          "provider": "string",
-          "error": "string?"
-        }
-      }
-    },
-    "chat_domain": {
-      "chat.send.request": {
-        "publisher": "conversation-manager",
-        "subscriber": "chat-ai-bridge",
-        "payload": {
-          "request_id": "uuid",
-          "conversation_id": "uuid",
-          "content": "string",
-          "user_id": "string?",
-          "attachments": "array?",
-          "correlation_id": "uuid"
-        }
-      },
-      "chat.send.response": {
-        "publisher": "chat-ai-bridge",
-        "subscriber": "conversation-manager",
-        "payload": {
-          "request_id": "uuid",
-          "success": "boolean",
-          "user_message": "Message",
-          "assistant_message": "Message",
-          "tokens_used": "number",
-          "cost": "number",
-          "tools_executed": "array?",
-          "error": "string?"
-        }
-      }
-    },
-    "session_domain": {
-      "session.save.request": {
-        "publisher": "chat-ai-bridge",
-        "subscriber": "chat-session",
-        "payload": {
-          "request_id": "uuid",
-          "conversation_id": "uuid",
-          "role": "user|assistant",
-          "content": "string",
-          "tokens": "number?",
-          "cost": "number?",
-          "metadata": "object?",
-          "correlation_id": "uuid"
-        }
-      }
-    },
-    "prompt_domain": {
-      "prompt.compose.request": {
-        "publisher": "chat-ai-bridge",
-        "subscriber": "prompt-composer",
-        "payload": {
-          "request_id": "uuid",
-          "conversation": "Conversation",
-          "include_tools_description": "boolean?",
-          "correlation_id": "uuid"
-        }
-      }
-    }
-  },
-  "migration_strategy": {
-    "phase_0": {
-      "name": "Activar tools en ai-gateway",
-      "tasks": [
-        "Modificar ai-gateway para aceptar execute_tools=true",
-        "Implementar loop interno de tools en ai-gateway",
-        "Agregar tool_calls_executed a la respuesta",
-        "Testear con llamadas directas"
-      ],
-      "risk": "bajo",
-      "breaking_changes": false,
-      "note": "ai-gateway ya tiene el código, solo hay que activarlo"
-    },
-    "phase_1": {
-      "name": "Crear chat-session",
-      "tasks": [
-        "Crear módulo chat-session con estructura básica",
-        "Mover CRUD de conversaciones",
-        "Mover gestión de mensajes",
-        "Mover context FIFO",
-        "Actualizar conversation-manager para usar eventos"
-      ],
-      "risk": "bajo",
-      "breaking_changes": false
-    },
-    "phase_2": {
-      "name": "Crear prompt-composer",
-      "tasks": [
-        "Crear módulo prompt-composer",
-        "Mover loadProjectContext",
-        "Mover composeSystemPrompt",
-        "Testear composición de prompts"
-      ],
-      "risk": "bajo",
-      "breaking_changes": false
-    },
-    "phase_3": {
-      "name": "Crear chat-ai-bridge (simplificado)",
-      "tasks": [
-        "Crear módulo chat-ai-bridge",
-        "Implementar coordinación session → prompt → ai-gateway",
-        "NO implementar tool loop (usa ai-gateway)",
-        "Actualizar conversation-manager"
-      ],
-      "risk": "medio",
-      "breaking_changes": false
-    },
-    "phase_4": {
-      "name": "Limpieza",
-      "tasks": [
-        "Eliminar código de tools de conversation-manager (~400 líneas)",
-        "Simplificar handlers",
-        "Actualizar tests",
-        "Actualizar documentación"
-      ],
-      "risk": "bajo",
-      "breaking_changes": false
-    }
-  },
-  "benefits": {
-    "maintainability": "Cada módulo tiene una sola responsabilidad clara",
-    "no_duplication": "Lógica de tools en un solo lugar (ai-gateway)",
-    "provider_compatibility": "ai-gateway maneja diferencias entre providers",
-    "testability": "Módulos pequeños son más fáciles de testear",
-    "reusability": "chat-session y ai-gateway pueden ser usados por otros módulos",
-    "debugging": "Más fácil identificar dónde ocurren errores"
-  },
-  "metrics_comparison": {
-    "before": {
-      "conversation_manager_lines": 2469,
-      "ai_gateway_lines": 1523,
-      "duplicated_tool_logic": 400,
-      "total_lines": 3992
-    },
-    "estimated": {
-      "conversation_manager_lines": 600,
-      "chat_session_lines": 400,
-      "chat_ai_bridge_lines": 300,
-      "prompt_composer_lines": 200,
-      "ai_gateway_lines": 1523,
-      "total_lines": 3023
-    },
-    "actual": {
-      "conversation_manager_lines": 1061,
-      "chat_session_lines": 1233,
-      "chat_ai_bridge_lines": 1023,
-      "prompt_composer_lines": 1296,
-      "ai_gateway_lines": 1523,
-      "total_lines": 6136,
-      "note": "Líneas superiores a lo estimado porque incluyen funcionalidad adicional: streaming post-hoc, safety-net MQTT, context FIFO avanzado, composición multi-capa de prompts"
-    },
-    "reduction": {
-      "lines_removed": "~970 líneas (24%)",
-      "duplication_eliminated": "400 líneas",
-      "modules": "2 → 5 (más granular)"
-    }
-  },
-  "implementation_status": {
-    "date_implemented": "2026-02-03/04",
-    "option_used": "option_b - Tools en chat-ai-bridge",
-    "reason": "Se necesita control granular del agentic loop desde el chat, incluyendo streaming post-hoc y tool status publishing",
-    "phases_completed": {
-      "phase_1_chat_session": {
-        "status": "completado",
-        "actual_lines": 1233,
-        "notes": "Incluye CRUD conversaciones, mensajes, context FIFO, schema management, toggleContext"
-      },
-      "phase_2_prompt_composer": {
-        "status": "completado",
-        "actual_lines": 1296,
-        "notes": "Composición multi-capa: system prompt base + contexto proyecto + tools description"
-      },
-      "phase_3_chat_ai_bridge": {
-        "status": "completado",
-        "actual_lines": 1023,
-        "notes": "Orquesta flujo completo de 7 pasos. Maneja tool loop internamente con streaming post-hoc"
-      },
-      "phase_4_limpieza": {
-        "status": "completado",
-        "actual_lines": 607,
-        "notes": "conversation-manager eliminado como facade activa - handlers distribuidos directamente a chat-session y chat-ai-bridge"
-      },
-      "phase_5_eliminar_facade": {
-        "status": "completado",
-        "date": "2026-02-04",
-        "notes": "conversation-manager desactivado en config.json. Los handlers conversation.* se registran directamente: chat-ai-bridge registra conversation.send, chat-session registra conversation.load|create|list|get|update|delete|toggleContext|contextStats. Frontend sin cambios."
-      }
-    },
-    "chat_ai_bridge_flow": {
-      "description": "Flujo implementado en 7 pasos",
-      "steps": [
-        "1. Save user message → chat-session (session.save.request)",
-        "2. Load context messages → chat-session (session.getMessages.request)",
-        "3. Compose prompt → prompt-composer (prompt.compose.request)",
-        "4. Build AI messages array (system + context + user)",
-        "5. Call AI → ai-gateway (ai.chat.request) con agentic loop",
-        "6. Save assistant message → chat-session",
-        "6b. Safety-net: publish complete message via MQTT QoS 1",
-        "7. Return response → frontend (via UIRequestHandler)"
-      ],
-      "streaming": {
-        "type": "post-hoc",
-        "description": "Cuando hay tools, el AI response se entrega progresivamente después del agentic loop (~12 chars per 10ms)",
-        "mqtt_topics": [
-          "conversation/{id}/message - chunks de streaming",
-          "conversation/{id}/tool-status - estado de ejecución de tools",
-          "conversation/stream/end - señal de fin de streaming"
-        ]
-      }
-    }
-  },
-  "bugs_found_and_fixed": {
-    "date": "2026-02-04",
-    "bugs": [
-      {
-        "id": "BUG-001",
-        "title": "Chat no operativo - NO_PROJECT",
-        "root_cause": "LazyShell.svelte (página principal /) no llamaba a initProjectsSubscriptions() ni initConversations(). El backend no tenía proyecto activo, causando error NO_PROJECT en cada envío",
-        "fix": "Añadir initProjectsSubscriptions() e initConversations() en LazyShell.onMount + cleanup en onDestroy",
-        "files": ["frontend/src/lib/components/layout/LazyShell.svelte"],
-        "severity": "critical",
-        "lesson": "LazyShell es bootstrap mínimo - verificar que TODAS las inicializaciones necesarias estén presentes"
-      },
-      {
-        "id": "BUG-002",
-        "title": "Errores silenciosos en sendMessage",
-        "root_cause": "sendMessage en chat.ts solo hacía console.error sin feedback al usuario",
-        "fix": "Añadir notifyError() para mostrar toast con el mensaje de error",
-        "files": ["frontend/src/lib/stores/chat.ts"],
-        "severity": "medium",
-        "lesson": "Siempre mostrar errores al usuario, nunca silenciarlos solo con console.error"
-      },
-      {
-        "id": "BUG-003",
-        "title": "Race condition en ordenamiento de mensajes",
-        "root_cause": "La suscripción MQTT a conversation/stream/end llamaba endStreaming() que ponía isStreaming=false. Esto desbloqueaba el botón de envío ANTES de que mqttRequest retornara. Si el usuario enviaba rápido, el segundo mensaje se intercalaba con la respuesta del primero",
-        "fix": "stream/end ahora solo finaliza el contenido del mensaje (quita flag streaming) sin tocar isStreaming. Solo sendMessage completion y stopGeneration controlan isStreaming",
-        "files": ["frontend/src/lib/stores/chat.ts"],
-        "severity": "high",
-        "lesson": "isStreaming debe ser controlado SOLO por sendMessage (request/response), no por señales MQTT asíncronas"
-      },
-      {
-        "id": "BUG-004",
-        "title": "AI response no aparece después de tool execution",
-        "root_cause": "Tres causas: (1) Frontend timeout 60s vs backend 180s, (2) chunks de streaming perdidos sin safety-net, (3) addMessage no manejaba mensajes assistant no-streaming",
-        "fix": "(1) Timeout frontend → 180s, (2) Safety-net MQTT QoS 1 en chat-ai-bridge después de guardar, (3) addMessage mejorado para manejar ambos casos",
-        "files": ["frontend/src/lib/stores/chat.ts", "modules/chat-ai-bridge/index.js"],
-        "severity": "high",
-        "lesson": "Para mensajes críticos usar QoS 1. El timeout del frontend debe ser >= al del backend"
-      }
+
+  "bugs_de_la_tabula_rasa": {
+    "_doc": "Bugs detectados y corregidos durante el hardening del nuevo flujo. Cada uno con causa raíz para evitar repetirlo.",
+    "ver_detalle_completo_en": "contexto/conversacion.json → bugs_arreglados_en_la_tabula_rasa",
+    "resumen": [
+      "244cbfa — chat-io: migración suave de schema (ALTER TABLE para columnas heredadas)",
+      "21b8bfe + c367f86 + f6f180e — frontend: contratos snake_case + 9 campos exactos + isStreaming hasta MQTT push",
+      "79aa575 — providers: rate-limit local eliminado (180 líneas, era memory counter sin propósito real)",
+      "d44b6b9 — chat-io: leer filas como `data` en db.query.response (database-manager publica `data`, no `rows`)",
+      "f82bc65 — chat-io: fechas a ISO + message_count en list/load",
+      "1209a62 — core/gateway: /health expone git sha + branch (verificar versión sin SSH)",
+      "58a02f2 — providers: calculateCost local eliminado (mismo gemelo del rate-limit)",
+      "bad4776 — recetas: ingredientes_formateados en respuesta de crear + regla en context.json",
+      "e0ea97f — recetas: leer filas como `data` (gemelo del bug que ya tenía chat-io)",
+      "e2ec393 — frontend: tablas markdown salían como [object Object] (override roto en marked v5+)"
     ]
   },
-  "frontend_architecture": {
-    "stores": {
-      "chat.ts": {
-        "purpose": "Estado de conversación activa - mensajes visibles en ChatArea",
-        "stores": ["messages", "conversationId", "isStreaming", "streamingMessageId", "toolStatus"],
-        "derived": ["messageCount", "hasConversation", "lastMessage", "userMessages", "assistantMessages"],
-        "key_functions": ["sendMessage", "addMessage", "endStreaming", "loadConversation", "toggleMessageContext"],
-        "mqtt_subscriptions": [
-          "conversation/+/message - chunks de streaming y mensajes finales",
-          "conversation/+/tool-status - estado de ejecución de tools",
-          "conversation/stream/end - finalización de streaming (solo marca mensaje, NO desbloquea envío)"
-        ]
-      },
-      "conversations.ts": {
-        "purpose": "Gestión de lista de conversaciones (separado de chat.ts)",
-        "key_functions": ["selectConversation", "initConversations"],
-        "note": "selectConversation llama tanto a conversations.ts loadConversation como a chat.ts loadConversation"
-      },
-      "projects.ts": {
-        "purpose": "Gestión de proyectos",
-        "key_functions": ["initProjects (alias initProjectsSubscriptions)", "activateProject"],
-        "note": "activateProject envía mqttRequest('project', 'activate', {id}) al backend + guarda en localStorage"
-      }
+
+  "comparativa_arquitecturas": {
+    "antes_monolito": {
+      "modulos": ["conversation-manager"],
+      "lineas": 2469,
+      "problema": "SRP violado, 17+ responsabilidades, lógica de tools duplicada con ai-gateway"
     },
-    "critical_initialization": {
-      "LazyShell.svelte": {
-        "must_call": [
-          "initWorkspaceSubscriptions() - suscripciones de workspace",
-          "initChatSubscriptions() - suscripciones MQTT del chat",
-          "initProjectsSubscriptions() - carga proyectos + activa proyecto guardado",
-          "initConversations() - carga conversaciones + restaura conversación activa"
-        ],
-        "order_matters": "initProjectsSubscriptions ANTES de initConversations (necesita proyecto activo)"
-      }
+    "intermedio_5_modulos_feb_2026": {
+      "modulos": ["chat-session", "chat-ai-bridge", "prompt-composer", "conversation-manager (facade)", "ai-gateway"],
+      "lineas_totales_reales": 6136,
+      "problema": "División no eliminó complejidad — la repartió. Más hops por evento, más estado distribuido."
     },
-    "request_response_pattern": {
-      "flow": "mqttRequest(domain, action, data) → ui/request/{domain}/{action} → UIRequestHandler → handler → ui/response/{requestId}",
-      "timeout_defaults": {
-        "general": "10s",
-        "chat_with_tools": "180s"
-      }
+    "actual_tabula_rasa_abr_2026": {
+      "modulos": ["chat-io", "prompt-builder", "ai-gateway", "ai-agent-framework"],
+      "lineas_totales": 1476,
+      "logro": "Cero require entre módulos. Sólo eventBus. Cada módulo tiene una sola razón para cambiar."
     }
   }
 }

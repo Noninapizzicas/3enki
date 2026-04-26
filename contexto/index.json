@@ -1,7 +1,7 @@
 {
   "_AI_INSTRUCTIONS": {
     "IMPORTANT": "This is your primary context source. ALWAYS check here before generating anything.",
-    "LEER_PRIMERO": "1) eventos-dominio.json (catálogo canónico de eventos). 2) cartas-ecosystem.json (arquitectura de cartas 2026-04). 3) conversacion.json (pipeline del chat LLM, context.json/prompt.json por módulo, tools filtradas). Reemplazan info obsoleta en pizzepos.json, carta-digital.json y system.json→page_context.",
+    "LEER_PRIMERO": "1) arquitectura/eventos.json (norma vigente de naming de eventos — 3 categorías). 2) conversacion.json (capa conversacional ACTUAL: 4 módulos chat-io/prompt-builder/ai-gateway/ai-agent-framework — reescrita Abril 2026). 3) eventos-dominio.json (catálogo histórico + apuntador a la norma). 4) cartas-ecosystem.json (arquitectura de cartas 2026-04). Reemplazan info obsoleta en pizzepos.json, carta-digital.json, chat-refactoring.json y system.json→page_context.",
     "rule_1": "NEVER invent patterns, conventions, or structures not defined in these files",
     "rule_2": "If you don't know something, search in these files FIRST",
     "rule_3": "If it's not here, ASK the user before inventing",
@@ -40,13 +40,14 @@
     "version": "0.2.0",
     "version_note": "package.json es la fuente de verdad. Si se actualiza, cambiar aquí también",
     "description": "Meta-Core Event-Driven Framework",
-    "last_context_update": "2026-04-07",
+    "last_context_update": "2026-04-26",
     "module_count": {
-      "enabled": 55,
+      "enabled": 51,
       "disabled": 10,
+      "conversacion_submodules": 4,
       "pizzepos_submodules": 15,
       "facturacion_submodules": 2,
-      "note": "Cifras según config.json enabled/disabled arrays"
+      "note": "Capa conversacion reducida de 10 → 4 módulos en tabula rasa Abril 2026 (chat-io, prompt-builder, ai-gateway, ai-agent-framework). 10 módulos previos archivados en arquitectura/conversacion-ref/."
     }
   },
 
@@ -113,13 +114,13 @@
     },
     {
       "file": "conversacion.json",
-      "purpose": "Pipeline completo del chat LLM: context.json/prompt.json por módulo, tools filtradas por página, variables del payload, flujo event-driven",
-      "when": "Cualquier duda sobre chat, prompt, tools, contexto de página, custom prompts, prompt-engine, ai-gateway. REEMPLAZA secciones obsoletas en system.json y chat-refactoring.json"
+      "purpose": "Capa conversacional ACTUAL post-tabula-rasa (Abril 2026): 4 módulos (chat-io, prompt-builder, ai-gateway, ai-agent-framework), payload de 9 campos, flujo evento por evento, registro de bugs y razones de cada fix",
+      "when": "Cualquier duda sobre chat, prompt, tools, providers LLM, agentes. SIEMPRE leer este antes de tocar modules/conversacion/"
     },
     {
       "file": "chat-refactoring.json",
-      "purpose": "Plan histórico del refactoring del chat (COMPLETADO). INFORMACIÓN OBSOLETA — ver conversacion.json.",
-      "when": "Solo como referencia histórica. Para estado actual SIEMPRE conversacion.json"
+      "purpose": "Histórico de refactores del chat (Feb 2026 → Abril 2026 tabula rasa). Marcador de qué se intentó y qué funcionó.",
+      "when": "Solo como referencia histórica. Para estado actual SIEMPRE conversacion.json. Para naming de eventos arquitectura/eventos.json"
     },
     {
       "file": "analisis-project-manager.json",
@@ -229,12 +230,14 @@
     },
     "recent_patterns": {
       "project_scoped_routes": "Páginas van bajo /[project_id]/pagina (ej: /peppone/menu-generator). Layout padre valida proyecto. Rutas legacy redirigen. routeMatches() stripea prefix para matching de manifests. Ver system.json",
-      "conversacion_contexto_modular": "El módulo es el contexto. URL identifica módulo. Cada módulo tiene context.json (siempre presente) + prompt.json (reemplazable por custom). Tools filtradas por target_module. page-context.ts eliminado. Ver conversacion.json",
-      "tools_first_modules": "Módulos exponen tools[] para agentic loop del chat (ej: menu-generator 10 tools)",
-      "loader_auto_wiring": "Subscribes y UI handlers declarados en module.json, auto-wired por el loader — sin código imperativo en onLoad/onUnload (28/28 módulos migrados)",
-      "project_scoped_payload": "Frontend envía project_id + conversation_id + page en cada mensaje. Backend NO cachea — lee del payload. No hay estado 'proyecto activo' global.",
+      "conversacion_tabula_rasa_abr_2026": "Capa conversacional reescrita: 4 módulos (chat-io / prompt-builder / ai-gateway / ai-agent-framework), 1476 líneas, cero require entre ellos, sólo eventBus. Payload fijo de 9 campos snake_case. Frontend valida project_id y conversation_id (modal si null). Detalle: contexto/conversacion.json. Versión vieja archivada en arquitectura/conversacion-ref/.",
+      "naming_eventos_norma": "3 categorías documentadas en arquitectura/eventos.json: (1) dominio: <entidad-singular>.<verbo-pasado> (receta.creada). (2) request_response: <scope>.<accion>.request|.response (db.query.request). (3) tool_llm: <dominio-plural>.<accion-infinitivo> (recetas.crear). Datos siempre en `data` (database-manager).",
+      "tools_first_modules": "Módulos exponen tools[] para agentic loop del chat (ej: menu-generator 10 tools, recetas 14 tools)",
+      "loader_auto_wiring": "Subscribes y UI handlers declarados en module.json, auto-wired por el loader — sin código imperativo en onLoad/onUnload",
+      "project_scoped_payload": "Frontend envía project_id + page_id + conversation_id en cada mensaje. Backend NO inventa: si falta project_id o conversation_id rechaza con códigos PROJECT_REQUIRED/CONVERSATION_REQUIRED para que el frontend abra modal.",
       "direct_ui_handlers": "Sin facade - handlers UI declarados en module.json ui_handlers array",
-      "project_scoped": "Operaciones scoped por project_id (chat-session, scheduler, routes)"
+      "health_endpoint_con_sha": "/health expone version.short_sha + branch + subject + committed_at desde Abril 2026 (commit 1209a62) — verificar qué commit corre en el VPS sin SSH",
+      "project_scoped": "Operaciones scoped por project_id (chat-io, scheduler, routes)"
     }
   }
 }

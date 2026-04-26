@@ -750,11 +750,15 @@ class RecetasModule {
     const id = require('crypto').randomUUID();
     const now = Date.now();
 
+    // Versión legible para mostrar al usuario y guardar en descripcion
+    const ingredientesTxt = this._formatIngredientes(ingredientes);
+    const instruccionesTxt = this._formatInstrucciones(instrucciones);
+
     // descripcion consolidada: texto principal + ingredientes + instrucciones
     const desc = [
       descripcion,
-      ingredientes ? `Ingredientes: ${typeof ingredientes === 'string' ? ingredientes : JSON.stringify(ingredientes)}` : null,
-      instrucciones ? `Instrucciones: ${typeof instrucciones === 'string' ? instrucciones : JSON.stringify(instrucciones)}` : null,
+      ingredientesTxt ? `Ingredientes:\n${ingredientesTxt}` : null,
+      instruccionesTxt ? `Instrucciones:\n${instruccionesTxt}` : null,
       notas ? `Notas: ${notas}` : null
     ].filter(Boolean).join('\n\n');
 
@@ -769,11 +773,51 @@ class RecetasModule {
         proyecto_id, id, nombre, timestamp: now
       });
 
-      return { id, nombre, status: 'creada' };
+      return {
+        id,
+        nombre,
+        status: 'creada',
+        ingredientes_formateados: ingredientesTxt || null,
+        instrucciones_formateadas: instruccionesTxt || null
+      };
     } catch (err) {
       this.logger.error('recetas.crear.failed', { proyecto_id, nombre, error: err.message });
       return { error: err.message };
     }
+  }
+
+  // Convierte ingredientes (array de objetos | array de strings | string) a markdown.
+  // Acepta {nombre, cantidad, unidad, notas?} en cualquier combinación.
+  _formatIngredientes(input) {
+    if (!input) return null;
+    if (typeof input === 'string') return input.trim() || null;
+    if (!Array.isArray(input)) return null;
+
+    const lines = input.map(item => {
+      if (item == null) return null;
+      if (typeof item === 'string') return `- ${item.trim()}`;
+      if (typeof item !== 'object') return `- ${String(item)}`;
+      const cantidad = item.cantidad ?? item.quantity ?? '';
+      const unidad   = item.unidad   ?? item.unit     ?? '';
+      const nombre   = item.nombre   ?? item.name     ?? item.ingrediente ?? '';
+      const notas    = item.notas    ?? item.notes    ?? '';
+      const head = [cantidad, unidad].filter(v => v !== '' && v != null).join(' ').trim();
+      const body = head && nombre ? `${head} de ${nombre}` : (nombre || head || '');
+      const suffix = notas ? ` (${notas})` : '';
+      return body ? `- ${body}${suffix}` : null;
+    }).filter(Boolean);
+
+    return lines.length > 0 ? lines.join('\n') : null;
+  }
+
+  _formatInstrucciones(input) {
+    if (!input) return null;
+    if (typeof input === 'string') return input.trim() || null;
+    if (!Array.isArray(input)) return null;
+    const lines = input
+      .map((p, i) => typeof p === 'string' ? `${i + 1}. ${p.trim()}` : null)
+      .filter(Boolean);
+    return lines.length > 0 ? lines.join('\n') : null;
   }
 
   async onToolAnalizar(event) {

@@ -28,7 +28,9 @@
     "al investigar, estima precios por ALTO",
     "siempre incluye las unidades de medida",
     "si un ingrediente ya existe en el catalogo, reutiliza su precio",
-    "las cantidades son para el total de la receta, no por porcion"
+    "las cantidades son para el total de la receta, no por porcion",
+    "al presentar ingredientes al usuario, formatealos siempre como lista markdown ('- 200ml de aceite de oliva'). NUNCA pegues el array JSON directamente, NUNCA escribas '[object Object]'.",
+    "tras recetas.crear, la respuesta incluye 'ingredientes_formateados' como string markdown listo para mostrar — usalo tal cual en tu respuesta en lugar de reformatear los objetos."
   ],
 
   "integrations": {

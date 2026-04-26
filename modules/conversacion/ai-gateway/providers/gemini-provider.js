@@ -250,9 +250,6 @@ class GeminiProvider extends BaseProvider {
     const outputTokens = response.usageMetadata?.candidatesTokenCount || this.countTokens(content);
     const totalTokens = inputTokens + outputTokens;
 
-    // Calculate cost
-    const cost = this.calculateCost(inputTokens, outputTokens);
-
     return {
       provider: this.name,
       model,
@@ -263,7 +260,7 @@ class GeminiProvider extends BaseProvider {
         output_tokens: outputTokens,
         total_tokens: totalTokens
       },
-      cost,
+      cost: 0,
       finish_reason: candidate?.finishReason === 'STOP' ? 'stop' : (candidate?.finishReason || 'stop')
     };
   }
@@ -347,8 +344,6 @@ class GeminiProvider extends BaseProvider {
           const outputTokens = this.countTokens(fullContent);
           const totalTokens = estimatedTokens + outputTokens;
 
-          const cost = this.calculateCost(estimatedTokens, outputTokens);
-
           resolve({
             provider: this.name,
             model,
@@ -358,7 +353,7 @@ class GeminiProvider extends BaseProvider {
               output_tokens: outputTokens,
               total_tokens: totalTokens
             },
-            cost,
+            cost: 0,
             finish_reason: 'stop'
           });
         },

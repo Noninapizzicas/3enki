@@ -166,6 +166,24 @@ class ChatIoModule {
     return true;
   }
 
+  // Convierte epoch ms (almacenado en DB) a ISO string para el frontend.
+  // El frontend usa `new Date(string)` y eso falla con números almacenados como string.
+  _toIso(v) {
+    if (v == null) return null;
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) ? new Date(n).toISOString() : null;
+  }
+
+  _serializeConversation(row) {
+    if (!row) return null;
+    return {
+      ...row,
+      created_at: this._toIso(row.created_at),
+      updated_at: this._toIso(row.updated_at),
+      message_count: row.message_count ?? 0
+    };
+  }
+
   // ============================================================
   // FIFO de contexto
   // ============================================================
@@ -286,13 +304,13 @@ class ChatIoModule {
 
     this.knownConversations.set(id, project_id);
     return {
-      conversation: {
+      conversation: this._serializeConversation({
         id, project_id, title: finalTitle,
         context_window: finalCw, temperature: finalT, max_tokens: finalMt,
         prompt_id: prompt_id || null,
         created_at: now, updated_at: now,
         message_count: 0
-      },
+      }),
       conversation_id: id  // alias por retrocompatibilidad
     };
   }
@@ -309,14 +327,15 @@ class ChatIoModule {
     await this._ensureSchema(project_id);
 
     const rows = await this._db(project_id,
-      `SELECT id, title, context_window, temperature, max_tokens, prompt_id,
-              created_at, updated_at
-       FROM conversations
-       WHERE project_id = ?
-       ORDER BY updated_at DESC LIMIT ?`,
+      `SELECT c.id, c.title, c.context_window, c.temperature, c.max_tokens, c.prompt_id,
+              c.created_at, c.updated_at,
+              (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
+       FROM conversations c
+       WHERE c.project_id = ?
+       ORDER BY c.updated_at DESC LIMIT ?`,
       [project_id, limit || 50], true
     );
-    return { conversations: rows };
+    return { conversations: rows.map(r => this._serializeConversation(r)) };
   }
 
   // ============================================================
@@ -332,19 +351,21 @@ class ChatIoModule {
       throw { status: 400, code: 'CONVERSATION_REQUIRED' };
     }
     const convRows = await this._db(project_id,
-      `SELECT id, project_id, title, context_window, temperature, max_tokens, prompt_id,
-              created_at, updated_at
-       FROM conversations WHERE id = ?`,
+      `SELECT c.id, c.project_id, c.title, c.context_window, c.temperature, c.max_tokens, c.prompt_id,
+              c.created_at, c.updated_at,
+              (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
+       FROM conversations c WHERE c.id = ?`,
       [conversation_id], true
     );
-    const messages = await this._db(project_id,
+    const rawMessages = await this._db(project_id,
       `SELECT id, role, content, in_context, manually_toggled, tokens, cost, metadata, created_at
        FROM messages
        WHERE conversation_id = ?
        ORDER BY created_at ASC`,
       [conversation_id], true
     );
-    return { conversation: convRows[0] || null, messages };
+    const messages = rawMessages.map(m => ({ ...m, created_at: this._toIso(m.created_at) }));
+    return { conversation: this._serializeConversation(convRows[0]), messages };
   }
 
   // ============================================================

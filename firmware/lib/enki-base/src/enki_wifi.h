@@ -37,4 +37,11 @@ void wifiHandleReconnect();
  */
 void wifiStartPortal();
 
+/**
+ * Deshabilitar el portal cautivo como fallback de WiFi.
+ * Cuando false: si la conexión falla, no abre portal (solo retries).
+ * Por defecto: true (comportamiento original).
+ */
+void wifiSetPortalEnabled(bool enabled);
+
 #endif // ENKI_WIFI_H

@@ -1,236 +1,83 @@
-# Módulo Recetas v2
+# modules/recetas
 
-Sistema de gestión de recetas con ingestion OCR, análisis automático, y búsqueda avanzada.
-
-## Arquitectura
+Gestión de recetas y catálogo de ingredientes por proyecto.
+**Almacenamiento: un único archivo JSON por proyecto** — sin SQL, sin schemas, sin migraciones.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│ Ingestion Pipeline (recipe-ingestion-pipeline.js)        │
-│ intake → download → prepare → ocr → normalize            │
-└────────────────┬────────────────────────────────────────┘
-                 │ receta.ingestion.completed
-                 ▼
-┌─────────────────────────────────────────────────────────┐
-│ Agent 1: Recipe Structurer (ai-agent-framework)          │
-│ Valida y estructura JSON, genera ID único               │
-└────────────────┬────────────────────────────────────────┘
-                 │ receta.structuring.completed
-                 ▼
-┌─────────────────────────────────────────────────────────┐
-│ Agent 2: Recipe Analyzer (ai-agent-framework)            │
-│ Calcula costes, alérgenos, tiempos, dificultad, viabilidad│
-└────────────────┬────────────────────────────────────────┘
-                 │ receta.analysis.completed
-                 ▼
-┌─────────────────────────────────────────────────────────┐
-│ Agent 3: Recipe Curator (ai-agent-framework)             │
-│ Validación final, persistencia, versionado, índices     │
-└────────────────┬────────────────────────────────────────┘
-                 │ receta.creada
-                 ▼
-┌─────────────────────────────────────────────────────────┐
-│ SQLite DB (per-project)                                  │
-│ - recetas (main records)                                │
-│ - receta_versiones (full history)                       │
-│ - ingredientes (catalog)                                │
-│ - receta_ingredientes (many-to-many)                   │
-│ - receta_search_index (denormalized for search)         │
-│ - receta_feedback (user ratings)                        │
-└─────────────────────────────────────────────────────────┘
+data/projects/{slug}/recetas.json
 ```
 
-## Quick Start
-
-### 1. Inicializar módulo
-
-```javascript
-const RecetasModule = require('./modules/recetas');
-
-const recetas = new RecetasModule(logger);
-await recetas.init({
-  basePath: '/home/user/2enki',
-  serviceExecutor: executor
-});
-```
-
-### 2. Ingestar receta
-
-```javascript
-// Vía API handler
-await recetas.handleIngestar({
-  projectId: 'proj_123',
-  fuente: 'pdf',
-  archivo: '/path/to/recipe.pdf',
-  fuente_referencia: 'https://example.com/recipe'
-});
-
-// Resultado: evento receta.ingestion.started publicado
-// Pipeline continúa automáticamente → agentes procesan
-```
-
-### 3. Buscar recetas
-
-```javascript
-const results = await recetas.handleBuscar({
-  projectId: 'proj_123',
-  criteria: {
-    nombre: 'pasta',
-    ingredientes: ['tomate', 'ajo'],
-    dificultad_max: 6,
-    coste_max: 10,
-    alerge nos_excluir: ['gluten'],
-    limit: 20,
-    sortBy: 'relevancia'
-  }
-});
-
-// Retorna: array de recetas ordenadas por relevancia (0-100+ score)
-```
-
-## API Reference
-
-### Handlers (llamables vía eventos o API)
-
-#### `handleIngestar(payload)`
-Inicia pipeline de ingestion desde archivo o URL
-
-**Params:**
-- `projectId`: string (requerido)
-- `fuente`: 'pdf' | 'imagen' | 'json' | 'url' (requerido)
-- `archivo`?: string (ruta local o URL)
-- `fuente_referencia`?: string (URL de origen)
-
-**Returns:** `{ingestion_id, status}`
-
-#### `handleBuscar(payload)`
-Busca recetas por criterios avanzados
-
-**Params:**
-- `projectId`: string (requerido)
-- `criteria`: objeto con 40+ campos opcionales
-
-**Returns:** array de recetas ordenadas por relevancia
-
-#### `handleObtener(payload)`
-Obtiene receta completa con historial de versiones
-
-**Params:**
-- `projectId`: string
-- `receta_id`: string
-
-**Returns:** receta con metadata completa
-
-#### `handleHistorial(payload)`
-Lista versiones de una receta
-
-**Params:**
-- `projectId`: string
-- `receta_id`: string
-- `limit`?: number (default 10)
-
-**Returns:** array de versiones con changeset
-
-#### `handleRevertir(payload)`
-Revierte a una versión anterior
-
-**Params:**
-- `projectId`: string
-- `receta_id`: string
-- `version`: number
-
-**Returns:** receta actualizada
-
-#### `handleIngredientes(payload)`
-Lista ingredientes del catálogo
-
-**Params:**
-- `projectId`: string
-- `query`?: string (búsqueda)
-- `limit`?: number
-
-**Returns:** array de ingredientes con precios
-
-## Versionado
-
-Cada guardado crea una **nueva versión inmutable** con snapshot completo:
+## Estructura del archivo
 
 ```json
 {
-  "receta": {...},
-  "version": 2,
-  "cambios": ["precio_actualizado", "alerge nos_validados"],
-  "cambios_descripcion": "Actualizado: precios reales de mercado",
-  "cambiado_por": "recipe-curator-agent",
-  "cambiado_at": 1713090001000
+  "_version": "1.0",
+  "_updated_at": "2026-04-26T18:30:00Z",
+  "recetas": [
+    {
+      "id": "uuid",
+      "nombre": "Alioli",
+      "descripcion": "...",
+      "ingredientes": [{"nombre":"ajo","cantidad":50,"unidad":"g"}],
+      "instrucciones": ["paso 1", "paso 2"],
+      "porciones": 4, "tiempo_min": 10, "dificultad": 2,
+      "categorias": ["salsa"], "etiquetas": ["frío"],
+      "estado": "activa",
+      "fuente": "manual",
+      "incompleta": false, "campos_pendientes": [],
+      "version": 1, "history": [],
+      "created_at": 1777000000000, "updated_at": 1777000000000
+    }
+  ],
+  "ingredientes_catalogo": [
+    {"nombre":"aceite oliva","precio_mercado":9,"unidad":"litro","fuente":"manual","updated_at":...}
+  ]
 }
 ```
 
-**Audit trail:** Todos los cambios se registran con timestamp + usuario.
+## Tools (13)
 
-**Rollback:** `handleRevertir()` puede restaurar cualquier versión anterior.
+| Tool | Qué hace |
+|---|---|
+| `recetas.crear` | Guarda receta. Solo `nombre`+`project_id` requeridos — el resto opcional. Marca `incompleta` si faltan campos clave. |
+| `recetas.listar` | Lista activas (o por estado). Filtro `solo_incompletas` para revisión. |
+| `recetas.obtener` | Receta completa por id o nombre. |
+| `recetas.buscar` | Filtros combinables: texto, ingrediente, categoría, etiqueta, dificultad, tiempo, porciones. |
+| `recetas.actualizar` | Modifica campos. Snapshot anterior va a `history` automáticamente. `version++`. |
+| `recetas.historial` | Versiones anteriores (resumen de cada una). |
+| `recetas.revertir` | Restaura una versión del history. El estado actual se archiva primero. |
+| `recetas.eliminar` | `estado = 'archivada'` (no borra). |
+| `recetas.estadisticas` | Conteos: total, por estado, incompletas, ingredientes con/sin precio. |
+| `recetas.ingredientes` | Catálogo de ingredientes (separado de las recetas). |
+| `recetas.actualizar_precio` | Crea/actualiza ingrediente en catálogo por nombre. |
+| `recetas.analizar` | Cruza ingredientes con catálogo, calcula coste real / por porción. |
+| `recetas.investigar_receta` | Comprueba si existe; si no, instruye al LLM a proponer una. |
 
-## Búsqueda
+## Flujo de "incompleta"
 
-Ver `SEARCH_STRATEGY.md` para algoritmo de ranking y ejemplos.
+Una receta es **`incompleta: true`** si le faltan: `ingredientes`, `porciones` o `instrucciones` (configurable en `module.json` → `config.campos_para_completa`).
 
-Criterios soportados: nombre, ingredientes, dificultad, tiempo, coste, viabilidad, características, alérgenos, etiquetas, fechas, porciones, métodos de cocción, tipos de plato.
+Cuando el LLM crea una receta con datos parciales (por ejemplo solo nombre + ingredientes), se guarda igualmente y queda con `incompleta=true` y `campos_pendientes=["porciones","instrucciones"]`. **El usuario decide cuándo completarla.**
 
-## Per-Project Isolation
-
-Cada proyecto tiene su propia BD SQLite:
-- **Ruta:** `data/projects/{projectId}/recetas.db`
-- **Tamaño estimado:** 50-100 recetas / 1MB
-- **Indices:** Optimizados para búsqueda + versionado
-- **Concurrencia:** WAL mode + transacciones
+(Pendiente futuro: agente revisor que detecte incompletas y pregunte al usuario qué hacer.)
 
 ## Eventos
 
-### Publicados por pipeline:
-- `receta.ingestion.started` → Comienza descarga/OCR
-- `receta.ingestion.completed` → Listo para structurer
-- `receta.structuring.completed` → Listo para analyzer
-- `receta.analysis.completed` → Listo para curator
-- `receta.creada` → Guardada y indexada
+**Publica:**
+- `receta.creada` — al crear
+- `receta.actualizada` — al modificar/revertir
+- `receta.eliminada` — al archivar
+- `ingrediente.precio.actualizado` — al actualizar precio
 
-### Publicados en error:
-- `receta.ingestion.failed` → Problema en pipeline
-- `receta.structuring.failed` → Problema en structurer
-- `receta.analysis.failed` → Problema en analyzer
-- `receta.curation.failed` → Problema en curator (guardada como borrador)
+**Suscribe:**
+- `project.activated` — cachea `slug`
+- `fs.read.response` / `fs.write.response` — del módulo filesystem
+- `project.get.response` — para resolver slug si no está en cache
+- `recetas.<accion>` — los 13 tools del LLM
 
-## Herramientas para Agentes
+## Cero dependencias internas
 
-Tools disponibles en ai-agent-framework:
-
-- `recetas.obtener` → Busca ingrediente o receta existente
-- `recetas.ingredientes` → Consulta catálogo con precios/alérgenos
-- `recetas.calcular_costes` → Calcula coste total y por porción
-- `recetas.validar_schema` → Valida JSON contra schema
-- `recetas.actualizar` → CREATE/UPDATE con versionado
-- `recetas.actualizar_indices` → Actualiza search index
-
-## Development Notes
-
-- **Phase 1:** SQLite schema + manager ✓
-- **Phase 2:** Ingestion pipeline (OCR con facturas) ✓
-- **Phase 3:** 3 agentes (structurer, analyzer, curator) ✓
-- **Phase 4:** Búsqueda mejorada con ranking ✓
-- **Phase 5:** Versionado UI + comparador visual
-- **Phase 6:** Metrics, tests, full docs
-
-## Files
-
-- `db/schema.sql` → DDL + indices
-- `core/sqlite-manager.js` → CRUD + search con ranking
-- `core/search-ranker.js` → Algoritmo scoring multi-factor
-- `core/search-filters.js` → Builder de filtros SQL
-- `pipeline/recipe-ingestion-pipeline.js` → intake→download→prepare→ocr→normalize
-- `index.js` → RecetasModule class con handlers
-- `module.json` → Declaración de handlers + tools + eventos
-
-## See Also
-
-- `SCHEMA.md` → Modelo de datos detallado
-- `PIPELINE.md` → Flow eventos-driven
-- `SEARCH_STRATEGY.md` → Ejemplos de búsqueda
+- No usa SQLite, no instancia ningún manager
+- Acceso al archivo vía eventos `fs.read.request` / `fs.write.request` al módulo `filesystem`
+- Resuelve `project_id → slug` vía `project.get.request` al `project-manager`
+- Concurrencia: cola interna por proyecto — escritura serializada

@@ -133,14 +133,15 @@ uint16_t enki_config_get_u16(const char* key, uint16_t defaultValue) {
 }
 
 void enki_led_blink(int times, int ms) {
+  if (LED_PIN < 0) return;
   for (int i = 0; i < times; i++) {
     digitalWrite(LED_PIN, HIGH); delay(ms);
     digitalWrite(LED_PIN, LOW);  delay(ms);
   }
 }
 
-void enki_led_on()  { digitalWrite(LED_PIN, HIGH); }
-void enki_led_off() { digitalWrite(LED_PIN, LOW);  }
+void enki_led_on()  { if (LED_PIN >= 0) digitalWrite(LED_PIN, HIGH); }
+void enki_led_off() { if (LED_PIN >= 0) digitalWrite(LED_PIN, LOW);  }
 
 void enki_request_restart() {
   Serial.println("[BASE] Restart solicitado...");

@@ -9,6 +9,7 @@
 #include <driver/ledc.h>
 #include <driver/gpio.h>
 #include <driver/i2c.h>
+#include <Wire.h>
 #include <esp_heap_caps.h>
 
 // ─── Handles ─────────────────────────────────────────────────────────────────

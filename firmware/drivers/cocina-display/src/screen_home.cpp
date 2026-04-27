@@ -2,6 +2,7 @@
 
 #include "screen_home.h"
 #include "app.h"
+#include "config.h"
 
 // ─── Colores ─────────────────────────────────────────────────────────────────
 #define C_BG     0x0f172a

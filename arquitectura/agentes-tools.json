@@ -1,0 +1,144 @@
+{
+  "_doc": "Categorización de tools y reglas de qué puede usar cada agente. Combinación de Opción 3 (categorías read/write/destructive) + Opción 6 (confirmación inline para destructivas) decidida en sesión 2026-04-27. Esta es regla GLOBAL del sistema, aplica a todos los módulos cuyas tools sean invocables por agentes (recetas, escandallo, viabilidad, carta-manager, marketing, scheduler, etc.).",
+  "_version": "1.0.0",
+  "_created": "2026-04-27",
+  "_status": "vigente",
+
+  "principio": "El LLM principal tiene acceso a todo el dominio. Los agentes especialistas tienen un subconjunto basado en categorías. Las operaciones destructivas SIEMPRE pasan por confirmación inline del humano — ni el LLM principal puede ejecutarlas sin un bloque de confirmación previo aceptado por un participante humano de la sala.",
+
+  "categorias": {
+    "read": {
+      "_doc": "Lectura pura. Sin riesgo. No modifica estado del proyecto.",
+      "regla": "Cualquier agente del scope puede tenerlas en su tools[]. Sin restricciones.",
+      "ejemplos_genericos": ["obtener", "listar", "buscar", "estadisticas", "analizar", "ingredientes", "historial"],
+      "patron_naming": "verbos pasivos: obtener, listar, buscar, ver, consultar, analizar"
+    },
+    "write": {
+      "_doc": "Modificación reversible del estado. Cambia datos del proyecto pero la operación es revertible (con history o equivalente). NO requiere confirmación inline — la acción está acotada y el usuario puede deshacer si se equivoca.",
+      "regla": "El agente puede tenerlas en su tools[] si su misión lo justifica. El que las declara, las usa libremente cuando el LLM principal le delega una tarea apropiada.",
+      "ejemplos_genericos": ["crear", "actualizar", "actualizar_precio", "registrar"],
+      "patron_naming": "verbos activos NO destructivos: crear, actualizar, registrar, anotar, marcar"
+    },
+    "destructive": {
+      "_doc": "Operación con impacto significativo o difícilmente reversible. Aunque internamente sea reversible (ej. archivar = soft delete), su impacto en el flujo del usuario justifica confirmación humana.",
+      "regla": "NINGÚN agente puede tenerlas en su tools[]. Se valida al cargar el agente — si un agents/<name>.json declara una tool destructive, el ai-agent-framework debe rechazar la carga con error visible.",
+      "regla_para_LLM_principal": "El LLM principal NO ejecuta tools destructive directamente. Emite un mensaje con block.type='confirmation_request' (ver mecanismo abajo). Solo cuando el sistema recibe la confirmación humana válida, la tool se ejecuta.",
+      "ejemplos_genericos": ["eliminar", "borrar", "revertir", "archivar_irreversible", "fusionar_destructivo"],
+      "patron_naming": "verbos destructivos o de impacto fuerte"
+    }
+  },
+
+  "mecanismo_confirmacion_inline": {
+    "_doc": "Cómo se ejecuta una tool destructive. Apoyado en el contrato mensaje-rico.json — sin inventar mecanismos nuevos.",
+    "pasos": [
+      "1. El LLM principal (o un agente, si pasara por moderador) decide que hace falta una operación destructive.",
+      "2. En lugar de invocar la tool, emite un mensaje en la conversación con metadata.block: { type: 'confirmation_request', status: 'waiting_input', title: 'Confirmar archivar Alioli', ... }. El cuerpo (content) explica al humano qué se va a hacer y por qué.",
+      "3. El frontend renderiza ese mensaje como una tarjeta especial — bloque de confirmación, visualmente distinto del resto.",
+      "4. El humano responde citando ese mensaje (reply_to apuntando al confirmation_request). Su respuesta puede ser libre — 'sí', 'adelante', 'cancelar', 'no, hoy no'. El LLM principal interpreta la intención.",
+      "5a. Si el LLM principal interpreta CONFIRMACIÓN, ejecuta la tool. La respuesta queda registrada como 'tool ejecutada por confirmación de <user_id> en mensaje <reply_to_id>'.",
+      "5b. Si interpreta CANCELACIÓN, cierra el bloque (status: 'closed') sin ejecutar nada y lo confirma al usuario.",
+      "5c. Si NO está claro, repite la pregunta sin asumir. NO infiere consentimiento por silencio."
+    ],
+    "metadata_del_confirmation_request": {
+      "block": {
+        "type": "confirmation_request",
+        "status": "waiting_input",
+        "title": "string corto — qué se va a hacer",
+        "tool_pendiente": {
+          "name": "recetas.eliminar",
+          "params": { "project_id": "...", "receta_id": "..." }
+        },
+        "impacto": "string descriptivo — qué cambiará si se confirma"
+      }
+    },
+    "garantia_critica": "El sistema NUNCA ejecuta una tool destructive sin un mensaje previo de tipo confirmation_request en la conversación con un reply_to humano que represente confirmación clara. Si esto se viola por bug, es bug grave y se trata como tal."
+  },
+
+  "aplicacion_a_modulo_recetas": {
+    "_doc": "Aplicación concreta de las categorías a las 13 tools del módulo recetas v2.",
+    "read": [
+      "recetas.obtener",
+      "recetas.listar",
+      "recetas.buscar",
+      "recetas.estadisticas",
+      "recetas.ingredientes",
+      "recetas.historial",
+      "recetas.analizar",
+      "recetas.investigar_receta"
+    ],
+    "write": [
+      "recetas.crear",
+      "recetas.actualizar",
+      "recetas.actualizar_precio"
+    ],
+    "destructive": [
+      "recetas.eliminar",
+      "recetas.revertir"
+    ],
+    "comentarios": {
+      "recetas.eliminar": "Es archivar (soft delete) — técnicamente reversible cambiando estado de 'archivada' a 'activa'. Pero impacta el flujo del usuario (deja de ver la receta en listar default), así que requiere confirmación.",
+      "recetas.revertir": "Sobrescribe la versión actual con una anterior del history. Reversible pero supone deshacer trabajo del usuario. Confirmación.",
+      "recetas.actualizar_precio": "Cambia el catálogo de ingredientes del proyecto. Es WRITE porque normalmente es benigno (corregir un precio mal puesto), pero si en el futuro el impacto se considera mayor, se promueve a destructive sin discusión.",
+      "recetas.investigar_receta": "Pure read — no modifica estado. Solo consulta y devuelve hint al LLM."
+    }
+  },
+
+  "que_implica_para_los_agentes_actuales": {
+    "_doc": "Verificación de los agentes activos en scope=recetas tras esta categorización.",
+    "recipe-analyzer": {
+      "tools_declaradas": ["recetas.obtener", "recetas.ingredientes", "recetas.analizar"],
+      "categorias": ["read", "read", "read"],
+      "veredicto": "OK — solo read, conforme."
+    },
+    "recipe-chef-advisor": {
+      "tools_declaradas": ["recetas.obtener", "recetas.actualizar", "recetas.buscar"],
+      "categorias": ["read", "write", "read"],
+      "veredicto": "OK — read + write, conforme. La regla del agente (en su prompt) ya dice: 'no actualizar sin que el task lo indique con guardar:true'."
+    },
+    "recipe-completer": {
+      "tools_declaradas": ["recetas.listar", "recetas.obtener", "recetas.actualizar"],
+      "categorias": ["read", "read", "write"],
+      "veredicto": "OK — read + write, conforme."
+    },
+    "ningun_agente_tiene_destructive": "Confirmado. Los 3 agentes activos respetan la regla."
+  },
+
+  "validacion_al_cargar_agente": {
+    "_doc": "Comportamiento esperado del ai-agent-framework cuando carga agents/*.json.",
+    "comprobacion": "Para cada tool declarada, mirar a qué categoría pertenece (lookup en este archivo o en una tabla derivada).",
+    "accion_si_destructive": "Rechazar la carga del agente. Loggear error: 'agent <name> declares destructive tool <tool>, agents are not allowed destructive tools'.",
+    "accion_si_tool_no_existe": "Rechazar la carga. Loggear: 'agent <name> declares unknown tool <tool>'.",
+    "accion_si_categoria_desconocida": "Rechazar la carga. Una tool sin categoría es un agujero de seguridad — toca clasificarla antes de exponerla."
+  },
+
+  "como_clasificar_tools_de_otros_modulos": {
+    "_doc": "Cuando se añadan tools de otros módulos (escandallo, viabilidad, carta-manager, marketing, scheduler...), seguir este criterio.",
+    "regla_decision": [
+      "1. ¿La tool MODIFICA el estado persistente del proyecto? Si NO → read. Fin.",
+      "2. ¿La modificación es REVERSIBLE (history, soft delete, undo trivial)? Si SÍ → write. Si NO o si su impacto en el flujo del usuario es alto → destructive.",
+      "3. ¿La operación involucra COMUNICACIÓN EXTERNA con efecto en el mundo real (enviar email, publicar carta pública, contactar API de terceros, imprimir, cobrar)? → destructive automáticamente, aunque sea técnicamente reversible."
+    ],
+    "ejemplos_otros_modulos": {
+      "carta-manager.publicar":     "destructive — la carta se hace pública",
+      "carta-manager.editar":       "write — modifica datos pero reversible",
+      "facturas.guardar":           "write",
+      "facturas.enviar_a_asesoria": "destructive — comunicación externa",
+      "scheduler.programar_cambio": "write — el cambio se podría cancelar antes de aplicarse",
+      "scheduler.aplicar_ahora":    "destructive — ejecuta el cambio en producción"
+    }
+  },
+
+  "decisiones_aplazadas": {
+    "permisos_por_proyecto_o_usuario": "Hoy las categorías son globales. Si en el futuro hay roles humanos (admin / cocinero / camarero), se podrá restringir qué humanos pueden confirmar qué destructive. Pero NO se implementa hoy.",
+    "agentes_pueden_solicitar_destructive_via_moderador": "Cuando exista el moderador, un agente especialista podrá emitir un mensaje 'necesito ejecutar X destructive' al moderador. El moderador genera el confirmation_request al humano. La cadena queda en el hilo. No se implementa hoy — el LLM principal hace ese papel.",
+    "tools_dinamicas_creadas_al_vuelo": "Cuando el LLM principal pueda generar tools nuevas, estas heredarán la categoría que se declare en el momento de creación. Sin categoría declarada, NO se exponen.",
+    "interfaz_de_confirmacion_en_frontend": "El render del confirmation_request como tarjeta especial vs mensaje normal con cita es decisión del frontend cuando se construya. Backend solo emite el mensaje con metadata correcto."
+  },
+
+  "checklist_para_un_modulo_que_expone_tools": [
+    "1. Para cada tool declarada en module.json, decidir su categoría (read / write / destructive) según la regla_decision.",
+    "2. Documentarla en este archivo (sección aplicacion_a_modulo_<X>).",
+    "3. Asegurarse de que ningún agente del scope la tenga si es destructive.",
+    "4. Asegurarse de que el handler de la tool, si es destructive, valide que el evento llegue acompañado de un confirmed_by (id de usuario) y un confirmation_message_id (id del mensaje de confirmación). Si no, rechazar la ejecución."
+  ]
+}

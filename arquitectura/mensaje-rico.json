@@ -1,0 +1,240 @@
+{
+  "_doc": "Contrato del mensaje en una conversación. Este archivo es la fuente de verdad: cualquier productor (chat-io, agente, moderador, frontend) y cualquier consumidor (LLM, UI, exportadores) DEBEN respetarlo. Cambios al contrato pasan por discusión consciente, no se invenrtan en código.",
+  "_version": "1.0.0",
+  "_created": "2026-04-27",
+  "_status": "vigente",
+  "_motivo": "Una conversación es una sala compartida estilo tertulia: múltiples humanos + múltiples agentes + un moderador, todos en el mismo contexto. El mensaje 'role: user|assistant' del modelo tradicional 1-a-1 se queda corto. Este contrato extiende sin migrar SQL ni tirar lo que ya funciona.",
+
+  "principio": "Cero migración SQL. Solo extendemos el enum de role y enriquecemos el campo metadata (TEXT JSON) que ya existe en la tabla messages. La FIFO de contexto (context_window + in_context + manually_toggled) se mantiene tal cual.",
+
+  "schema_actual_messages_sqlite": {
+    "_doc": "La tabla messages sigue siendo la misma. Cero ALTER TABLE para implementar este contrato.",
+    "campos": [
+      "id TEXT PRIMARY KEY",
+      "conversation_id TEXT NOT NULL",
+      "role TEXT  — enum extendido (ver abajo)",
+      "content TEXT  — el cuerpo del mensaje en texto plano o markdown",
+      "in_context INTEGER DEFAULT 1  — flag FIFO",
+      "manually_toggled INTEGER DEFAULT 0  — el usuario excluyó este mensaje",
+      "tokens INTEGER  — opcional",
+      "cost REAL  — opcional",
+      "metadata TEXT  — JSON con autor + reply_to + block + tool_calls (este contrato)",
+      "created_at INTEGER NOT NULL"
+    ]
+  },
+
+  "enum_role_extendido": {
+    "user":      "Persona humana (cualquiera de los participantes humanos de la sala). El campo metadata.author distingue entre humanos.",
+    "assistant": "LLM principal (coordinador o moderador en su rol genérico). Conservado por compatibilidad con el flujo histórico del chat 1-a-1.",
+    "agent":     "Intervención de un agente especialista (recipe-completer, scheduler-planner, etc.). El campo metadata.author.id identifica cuál.",
+    "moderator": "Intervención del moderador de la sala (cuando exista como entidad separada del LLM principal).",
+    "system":    "Mensaje del sistema: notificaciones, eventos importantes inyectados al hilo (factura recibida, cambio programado, etc.). No los emite un humano ni un agente.",
+    "tool":      "Resultado bruto de una tool, cuando se quiera mostrar como mensaje aparte. Por defecto los tool_calls van como metadata del assistant; este role solo se usa si el frontend quiere bloque dedicado."
+  },
+
+  "metadata_schema": {
+    "_doc": "Estructura del campo `messages.metadata` (JSON). TODOS los campos son opcionales: si no hay metadata, el mensaje se trata como antes (chat 1-a-1).",
+
+    "author": {
+      "_doc": "Identifica quién escribe. Sustituye al simple 'user/assistant' cuando hay más de 2 participantes en la sala.",
+      "campos": {
+        "kind": {
+          "tipo": "enum: human | agent | moderator | system",
+          "obligatorio": "sí (cuando hay metadata.author)"
+        },
+        "id": {
+          "tipo": "string",
+          "ejemplos": ["paco", "maria", "recipe-completer", "moderator-default", "system"],
+          "obligatorio": "sí",
+          "regla": "Para agentes coincide con el name de agents/<name>.json. Para humanos: id local del proyecto (no requiere auth global todavía)."
+        },
+        "name": {
+          "tipo": "string",
+          "ejemplos": ["Paco", "María", "Recipe Completer"],
+          "obligatorio": "sí",
+          "_doc": "Para mostrar en UI."
+        },
+        "role_in_room": {
+          "tipo": "enum opcional: owner | guest | specialist | host",
+          "_doc": "Solo si tiene sentido para el flujo. owner=dueño del proyecto, host=moderador, specialist=agente, guest=otro humano."
+        }
+      }
+    },
+
+    "reply_to": {
+      "_doc": "Cita a un mensaje anterior, estilo WhatsApp/Telegram. Cualquier participante (humano o agente) puede responder a un mensaje concreto seleccionándolo.",
+      "tipo": "string (id de message) | null",
+      "consecuencias": [
+        "Frontend: muestra cabecera con cita (autor + snippet del mensaje original) sobre el contenido nuevo.",
+        "Backend: cuando se construye el contexto para el LLM/agente, el mensaje citado se incluye SIEMPRE, aunque ya no esté en la ventana FIFO. Ver regla_contexto abajo."
+      ],
+      "no_es": "No es una rama paralela ni un thread aparte: el hilo sigue siendo lineal. reply_to solo señala 'esta intervención está provocada por aquella'."
+    },
+
+    "block": {
+      "_doc": "Marca el tipo de intervención para que la UI pueda renderizar adecuadamente (mensaje simple vs tarjeta grande de agente vs decisión cerrada).",
+      "campos": {
+        "type": {
+          "tipo": "enum: message | agent_intervention | decision | tool_call | aside | system_event | confirmation_request",
+          "valores": {
+            "message":              "Mensaje normal (humano o assistant). Por defecto.",
+            "agent_intervention":   "Intervención estructurada de un agente. La UI puede mostrarla como tarjeta expandible con título + cuerpo.",
+            "decision":             "Conclusión / acuerdo cerrado de un sub-tema. Útil para resúmenes del moderador.",
+            "tool_call":            "Bloque dedicado a una ejecución de tool con su resultado.",
+            "aside":                "Mensaje corto sin disparar trabajo (un 'vale, gracias' del humano, un ack del agente).",
+            "system_event":         "Evento del sistema mostrado en línea (factura procesada, cambio aplicado, etc.).",
+            "confirmation_request": "Solicitud de confirmación humana ANTES de ejecutar una tool destructive. Ver arquitectura/agentes-tools.json. Lleva campos extra: tool_pendiente, impacto. status='waiting_input' hasta que un humano cite el mensaje y confirme/cancele."
+          }
+        },
+        "title": {
+          "tipo": "string opcional",
+          "_doc": "Título visible cuando el bloque es expandible (agent_intervention sobre todo)."
+        },
+        "status": {
+          "tipo": "enum opcional: in_progress | waiting_input | closed",
+          "_doc": "Si el agente sigue trabajando, espera respuesta humana, o ya terminó. waiting_input se usa especialmente para confirmation_request."
+        },
+        "tool_pendiente": {
+          "tipo": "{ name: string, params: object } | undefined",
+          "_doc": "Solo en bloques de type='confirmation_request'. La tool destructive que se ejecutará si el humano confirma. Ver arquitectura/agentes-tools.json."
+        },
+        "impacto": {
+          "tipo": "string | undefined",
+          "_doc": "Solo en confirmation_request. Descripción humana de qué cambiará si se ejecuta la tool — para que el humano decida con info."
+        }
+      },
+      "no_incluye": [
+        "actions[] / botones predefinidos: descartado por dirigir demasiado el flujo. La forma de responder a un mensaje concreto es reply_to (cita libre)."
+      ]
+    },
+
+    "tool_calls": {
+      "_doc": "Histórico de tools ejecutadas durante este turno. Ya existía antes del contrato. Se mantiene.",
+      "tipo": "array<{name, status, args?, result?}>",
+      "ejemplo": [
+        { "name": "recetas.crear", "status": "success" },
+        { "name": "recetas.actualizar", "status": "error", "result": "..." }
+      ]
+    }
+  },
+
+  "regla_contexto": {
+    "_doc": "Cómo se construye la lista de mensajes que se envía al LLM o agente cuando va a generar la siguiente respuesta. El usuario controla el tamaño (context_window de la conversación). Esta regla añade el comportamiento de reply_to.",
+    "pasos": [
+      "1. Tomar los últimos N mensajes de la conversación con in_context=1, ordenados por created_at ASC. N = conversations.context_window (5, 20, 50, 100, lo que el usuario haya configurado).",
+      "2. Si el mensaje actual del usuario lleva reply_to !== null, BUSCAR ese mensaje citado por id en la conversación.",
+      "3. Si el mensaje citado NO está ya en la lista del paso 1, añadirlo al principio del contexto (en su posición cronológica).",
+      "4. Si el mensaje citado tampoco está, simplemente seguir (no romper).",
+      "5. NUNCA añadir mensajes con manually_toggled=1 que el usuario haya excluido — ni siquiera por reply_to. La voluntad del usuario manda."
+    ],
+    "objetivo": "Que cuando alguien cite un mensaje, el LLM/agente reciba ese mensaje en su input aunque sea antiguo. Resuelve el problema de 'Cuatro → ¿a qué te refieres?' sin necesidad de botones."
+  },
+
+  "compatibilidad_hacia_atras": {
+    "_doc": "Para no romper nada cuando este contrato entre en producción.",
+    "garantias": [
+      "Mensajes existentes sin metadata: se tratan como hasta hoy (role:user → human, role:assistant → LLM principal).",
+      "Mensajes sin reply_to: comportamiento idéntico al actual.",
+      "Frontend antiguo que no entiende metadata.block: muestra el content como mensaje plano.",
+      "El LLM principal no se ve afectado: cuando construye su system prompt el contexto se le entrega como messages[{role, content}] como siempre."
+    ]
+  },
+
+  "decisiones_aplazadas": {
+    "_doc": "Cosas que el contrato HABILITA pero NO obliga a implementar todavía. Cuando llegue el momento, encajan sin tocar este archivo.",
+    "items": {
+      "moderador_como_entidad_separada": "Será un agente con role:'moderator'. Su trabajo: dar turnos, resumir, no usar tools de dominio. Cuando se construya, ya hay sitio en el enum.",
+      "cola_de_turnos": "Se gestionará con metadata.block.status='in_progress' / 'closed' por mensaje. No hace falta tabla nueva.",
+      "respuestas_estructuradas_en_formularios": "Si llega caso real donde hace falta input estructurado complejo (ej. fecha+hora+lugar), añadir metadata.block.form con schema. NO implementar de antemano.",
+      "auth_y_perfiles_humanos": "metadata.author.id basta hoy. Cuando haya auth real se añadirá metadata.author.user_uuid sin romper.",
+      "creacion_dinamica_de_agentes": "El LLM podrá generar un agents/<nuevo>.json al vuelo y registrarlo. La sala lo verá como un participante más con role:'agent'. Ningún cambio aquí cuando ocurra.",
+      "persistencia_de_sesion_de_agente": "Si un agente tiene que retomar tras cerrar el chat, basta con que metadata.block.status quede 'in_progress' en su última intervención. El moderador o el agente lo retoman al volver."
+    }
+  },
+
+  "ejemplos": {
+    "humano_escribe_mensaje_normal": {
+      "role": "user",
+      "content": "Guarda una receta de alioli con ajo, leche y aceite",
+      "metadata": {
+        "author": { "kind": "human", "id": "paco", "name": "Paco" }
+      }
+    },
+    "agente_responde_a_humano": {
+      "role": "agent",
+      "content": "Tienes Alioli guardada pero le faltan porciones e instrucciones. ¿Cuántas porciones suele dar tu receta?",
+      "metadata": {
+        "author": { "kind": "agent", "id": "recipe-completer", "name": "Completer de Recetas" },
+        "block": { "type": "agent_intervention", "title": "Completando: Alioli", "status": "in_progress" },
+        "reply_to": "abc-123"
+      }
+    },
+    "humano_responde_citando_al_agente": {
+      "role": "user",
+      "content": "Cuatro",
+      "metadata": {
+        "author": { "kind": "human", "id": "paco", "name": "Paco" },
+        "reply_to": "agente-msg-456"
+      }
+    },
+    "moderador_cierra_subtema": {
+      "role": "moderator",
+      "content": "Listo, Alioli completa. Resumen: 4 porciones, instrucciones añadidas. Coste estimado por porción: 0.40€.",
+      "metadata": {
+        "author": { "kind": "moderator", "id": "moderator-default", "name": "Moderador" },
+        "block": { "type": "decision", "title": "Tarea completada: Alioli", "status": "closed" }
+      }
+    },
+    "evento_del_sistema_inyectado": {
+      "role": "system",
+      "content": "📥 Factura recibida: Mercadona 24.50€. ¿Procesar y añadir ingredientes al catálogo?",
+      "metadata": {
+        "author": { "kind": "system", "id": "system", "name": "Sistema" },
+        "block": { "type": "system_event" }
+      }
+    },
+    "llm_pide_confirmacion_destructive": {
+      "_doc": "El LLM principal quiere ejecutar recetas.eliminar (destructive). Emite confirmation_request en lugar de ejecutar. Ver arquitectura/agentes-tools.json.",
+      "role": "assistant",
+      "content": "Voy a archivar la receta 'Alioli'. Dejará de aparecer en la lista de activas pero seguirá disponible si la necesitas. ¿Confirmas?",
+      "metadata": {
+        "author": { "kind": "agent", "id": "moderator-default", "name": "Moderador" },
+        "block": {
+          "type": "confirmation_request",
+          "status": "waiting_input",
+          "title": "Confirmar archivar Alioli",
+          "tool_pendiente": {
+            "name": "recetas.eliminar",
+            "params": { "project_id": "uuid-paco", "receta_id": "uuid-alioli" }
+          },
+          "impacto": "La receta 'Alioli' (versión 3) pasará de estado 'activa' a 'archivada'. Se podrá restaurar después. Reversible."
+        }
+      }
+    },
+    "humano_confirma_destructive": {
+      "_doc": "El humano cita el confirmation_request anterior y dice 'sí'. El LLM principal interpretará la cita + el sí como confirmación válida y procederá a ejecutar recetas.eliminar.",
+      "role": "user",
+      "content": "Sí, archívala",
+      "metadata": {
+        "author": { "kind": "human", "id": "paco", "name": "Paco" },
+        "reply_to": "id-del-confirmation-request"
+      }
+    }
+  },
+
+  "checklist_para_un_emisor_nuevo": [
+    "1. ¿Mi mensaje tiene autor distinto de un humano simple? Sí → llenar metadata.author con kind/id/name.",
+    "2. ¿Estoy respondiendo a un mensaje concreto? Sí → metadata.reply_to = id del mensaje original.",
+    "3. ¿Mi mensaje merece tarjeta especial en UI (intervención de agente, decisión, evento)? Sí → metadata.block.type adecuado.",
+    "4. ¿He ejecutado tools? Sí → metadata.tool_calls con su lista.",
+    "5. ¿No aplica nada de lo anterior? No metas metadata. El mensaje se trata como chat plano."
+  ],
+
+  "checklist_para_un_consumidor": [
+    "1. Si message.metadata es null/vacío → render plano (compatibilidad).",
+    "2. Para mostrar autor: leer metadata.author.name. Si no hay, usar role como fallback ('user'/'assistant').",
+    "3. Para mostrar cita: si metadata.reply_to existe, buscar el mensaje original por id y mostrar cabecera con su autor + snippet.",
+    "4. Para mostrar tarjeta: si metadata.block.type !== 'message', renderizar como bloque expandible con título y status.",
+    "5. Para construir contexto LLM: aplicar regla_contexto de este contrato."
+  ]
+}

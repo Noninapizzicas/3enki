@@ -176,8 +176,10 @@ static bool _init_panel() {
 #define GT911_STATUS_REG 0x814E
 #define GT911_DATA_REG   0x8150
 
+static uint8_t _touch_addr = TOUCH_I2C_ADDR;
+
 static bool _gt911_write_reg(uint16_t reg, uint8_t val) {
-    Wire.beginTransmission(TOUCH_I2C_ADDR);
+    Wire.beginTransmission(_touch_addr);
     Wire.write(reg >> 8);
     Wire.write(reg & 0xFF);
     Wire.write(val);
@@ -185,18 +187,17 @@ static bool _gt911_write_reg(uint16_t reg, uint8_t val) {
 }
 
 static int _gt911_read(uint16_t reg, uint8_t* buf, uint8_t len) {
-    Wire.beginTransmission(TOUCH_I2C_ADDR);
+    Wire.beginTransmission(_touch_addr);
     Wire.write(reg >> 8);
     Wire.write(reg & 0xFF);
     if (Wire.endTransmission(false) != 0) return -1;
-    Wire.requestFrom((uint8_t)TOUCH_I2C_ADDR, len);
+    Wire.requestFrom(_touch_addr, len);
     int n = 0;
     while (Wire.available() && n < len) buf[n++] = Wire.read();
     return n;
 }
 
 static bool _touch_init() {
-    // Address select: INT low → 0x14 during reset
     gpio_set_direction((gpio_num_t)TOUCH_RST, GPIO_MODE_OUTPUT);
     gpio_set_direction((gpio_num_t)TOUCH_INT, GPIO_MODE_OUTPUT);
     gpio_set_level((gpio_num_t)TOUCH_INT, 0);
@@ -206,13 +207,36 @@ static bool _touch_init() {
 
     Wire.begin(TOUCH_SDA, TOUCH_SCL);
 
-    // Read product ID to verify
-    uint8_t id[4] = {};
-    if (_gt911_read(0x8140, id, 4) < 4) {
+    // I2C scan — find GT911 at 0x14 or 0x5D
+    Serial.println("[TOUCH] I2C scan...");
+    uint8_t candidates[] = { 0x14, 0x5D };
+    bool found = false;
+    for (uint8_t addr : candidates) {
+        Wire.beginTransmission(addr);
+        if (Wire.endTransmission() == 0) {
+            Serial.printf("[TOUCH] Encontrado dispositivo en 0x%02X\n", addr);
+            _touch_addr = addr;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        // Full scan for debugging
+        for (uint8_t a = 1; a < 127; a++) {
+            Wire.beginTransmission(a);
+            if (Wire.endTransmission() == 0)
+                Serial.printf("[TOUCH] I2C device @ 0x%02X\n", a);
+        }
         Serial.println("[TOUCH] GT911 no detectado — touch desactivado");
         return false;
     }
-    Serial.printf("[TOUCH] GT911 ID: %c%c%c%c\n", id[0], id[1], id[2], id[3]);
+
+    uint8_t id[4] = {};
+    if (_gt911_read(0x8140, id, 4) < 4) {
+        Serial.println("[TOUCH] GT911 ID read failed — touch desactivado");
+        return false;
+    }
+    Serial.printf("[TOUCH] GT911 ID: %c%c%c%c (addr=0x%02X)\n", id[0], id[1], id[2], id[3], _touch_addr);
     return true;
 }
 

@@ -282,16 +282,61 @@ class AiGatewayModule {
   // ============================================================
 
   async _executeToolCall(toolName, args, chatContext) {
+    const ctx = chatContext || {};
+    // Enriquecemos args con los 9 campos del contrato chat-io. Los args que
+    // venían del LLM (tool_call.arguments) tienen prioridad — solo rellenamos
+    // los que no estén ya en args. Esto garantiza que cualquier handler de
+    // tool de un módulo reciba el contexto completo y pueda propagarlo al
+    // evento agent.execute.request si invoca a un agente.
+    const enrichedArgs = {
+      ...args,
+      project_id:      args.project_id      ?? ctx.project_id      ?? null,
+      page_id:         args.page_id         ?? ctx.page_id         ?? null,
+      conversation_id: args.conversation_id ?? ctx.conversation_id ?? null,
+      settings:        args.settings        ?? ctx.settings        ?? null,
+      attachments:     args.attachments     ?? ctx.attachments     ?? null,
+      prompt:          args.prompt          ?? ctx.prompt          ?? null,
+      intencion:       args.intencion       ?? ctx.intencion       ?? null,
+      // El campo "context" del payload chat-io se preserva como _chat_context
+      // para no colisionar con args.context que pueda venir del LLM.
+      _chat_context:   ctx.context          ?? null
+    };
+
+    // PATH 1 — invocación directa del handler si está registrado en toolsRegistry.
+    // Los módulos que declaran tools con handler (todos los que usan
+    // moduleLoader.registerToolsForAI) tienen el handler bindeado a su instance.
+    // Llamarlo directamente evita la dependencia de que el módulo haya declarado
+    // también un subscribe al evento <toolName>. Esto desbloquea menu-generator,
+    // carta-manager, etc. que tienen handler pero no subscribe explícito.
+    const tool = this.moduleLoader?.toolsRegistry?.get(toolName);
+    if (tool?.handler && typeof tool.handler === 'function') {
+      try {
+        const result = await tool.handler(enrichedArgs);
+        // Convención: si el handler devuelve { error } o { status: 4xx+, error }, propagamos como error.
+        if (result && typeof result === 'object') {
+          if (result.error && (result.status == null || result.status >= 400)) {
+            throw new Error(result.error);
+          }
+          // Si devuelve { status, data } estilo HTTP, devolvemos data; si no, el objeto entero.
+          if ('status' in result && 'data' in result && result.status >= 200 && result.status < 400) {
+            return result.data;
+          }
+        }
+        return result;
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    // PATH 2 — fallback por evento (para tools que dependen estrictamente del bus).
     const request_id = crypto.randomUUID();
     const timeoutMs = toolName === 'invoke_agent' ? 150000 : (this.config.tool_timeout_ms || 15000);
-
     return new Promise((resolve, reject) => {
       let unsub = null;
       const timeout = setTimeout(() => {
         if (unsub) unsub();
         reject(new Error(`tool timeout: ${toolName}`));
       }, timeoutMs);
-
       unsub = this.eventBus.subscribe(`${toolName}.response`, (event) => {
         const data = event.data || event;
         if (data.request_id !== request_id) return;
@@ -300,27 +345,6 @@ class AiGatewayModule {
         if (data.error) reject(new Error(data.error));
         else resolve(data.result);
       });
-
-      // Enriquecemos args con los 9 campos del contrato chat-io. Los args que
-      // venían del LLM (tool_call.arguments) tienen prioridad — solo rellenamos
-      // los que no estén ya en args. Esto garantiza que cualquier handler de
-      // tool de un módulo reciba el contexto completo y pueda propagarlo al
-      // evento agent.execute.request si invoca a un agente.
-      const ctx = chatContext || {};
-      const enrichedArgs = {
-        ...args,
-        project_id:      args.project_id      ?? ctx.project_id      ?? null,
-        page_id:         args.page_id         ?? ctx.page_id         ?? null,
-        conversation_id: args.conversation_id ?? ctx.conversation_id ?? null,
-        settings:        args.settings        ?? ctx.settings        ?? null,
-        attachments:     args.attachments     ?? ctx.attachments     ?? null,
-        prompt:          args.prompt          ?? ctx.prompt          ?? null,
-        intencion:       args.intencion       ?? ctx.intencion       ?? null,
-        // El campo "context" del payload chat-io se preserva como _chat_context
-        // para no colisionar con args.context que pueda venir del LLM.
-        _chat_context:   ctx.context          ?? null
-      };
-
       this.eventBus.publish(toolName, { request_id, ...enrichedArgs });
     });
   }

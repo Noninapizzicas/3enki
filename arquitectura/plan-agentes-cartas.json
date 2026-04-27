@@ -1,0 +1,222 @@
+{
+  "_doc": "Plan de implementación del ecosistema cartas + agentes. Decidido en sesión 2026-04-27. Vivo: avanzamos por fases, esto es el anchor durable. Cada fase con criterios de done verificables.",
+  "_version": "1.0.0",
+  "_created": "2026-04-27",
+  "_status": "vigente",
+  "_decisiones_clave": [
+    "Aplicar el patrón estructural completo de recetas v2 al ecosistema cartas (1 archivo JSON por proyecto, history dentro, eventos a filesystem, cero require entre módulos, smoke test local).",
+    "NO renombrar nada. Mantener invoke_agent (tool del LLM) y agent.execute.request (evento huérfano) con sus nombres actuales.",
+    "Fix del evento huérfano (Fase 1) sin tocar emisores: solo añadir handler que escuche en ai-agent-framework.",
+    "Cada fase deja cimentaciones para la visión futura (sesiones de agente, moderador, chat multi-usuario, frontend de bloques, confirmation_request) sin implementarla.",
+    "menu-generator queda separado y crece con más fuentes (scraping, búsqueda online, audio, APIs)."
+  ],
+
+  "estado_partida": {
+    "que_funciona": [
+      "7 módulos del ecosistema cartas con responsabilidades claras",
+      "carta-manager guarda en archivos JSON (no SQLite) — usa fs directo",
+      "~10 agentes especializados con prompts y tools declaradas",
+      "Categorías read/write/destructive documentadas (arquitectura/agentes-tools.json)",
+      "Contrato mensaje-rico (arquitectura/mensaje-rico.json)",
+      "Smoke test pattern reusable (recetas v2 — modules/recetas/__tests__/smoke.js)",
+      "Fix _getTools en ai-gateway — invoke_agent disponible al LLM (commit cea1823)"
+    ],
+    "que_esta_roto": [
+      "agent.execute.request es huérfano — nadie lo escucha en ai-agent-framework v2 → ~10 agentes inalcanzables desde flujos event-driven",
+      "carta-manager usa fs directo en lugar de eventos fs.read.request/fs.write.request (rompe paradigma)",
+      "Algunos agentes pueden tener referencias a tools que no existen (no auditado al 100%)"
+    ],
+    "pendiente_vision_futuro": [
+      "Sesiones de agente persistentes (multi-turno con estado entre turnos del usuario)",
+      "Moderador como agente especializado (LLM ligero)",
+      "Chat multi-usuario, frontend de bloques con cita estilo WhatsApp",
+      "confirmation_request inline para tools destructive",
+      "Creación dinámica de agentes al vuelo"
+    ]
+  },
+
+  "patron_recetas_v2": {
+    "_doc": "Lo que vamos a replicar en cada módulo del ecosistema cartas.",
+    "principios": [
+      "1 archivo JSON por proyecto (no por entidad): data/projects/{slug}/<modulo>.json",
+      "Acceso al filesystem vía eventos fs.read.request / fs.write.request (no fs directo)",
+      "history[] dentro de cada entidad (no carpeta de versiones aparte)",
+      "Cola de operaciones por project_id para serializar escrituras (concurrencia)",
+      "Cache de project_id → slug vía project.get.request",
+      "Marca incompleta + campos_pendientes donde aplique",
+      "Tools categorizadas read/write/destructive según arquitectura/agentes-tools.json",
+      "Wrapper _toolDispatch (para eventos) y _uiAdapt (para UI handlers) unificados",
+      "Smoke test local con eventBus mockeado en __tests__/smoke.js",
+      "Cero require entre módulos — solo eventBus"
+    ]
+  },
+
+  "aplicacion_ecosistema_cartas": {
+    "carta-manager":     { "archivo": "data/projects/{slug}/cartas.json",        "datos": "Cartas con history, productos, categorías" },
+    "carta-digital":     { "archivo": "data/projects/{slug}/cartadigital.json",  "datos": "Config branding, ofertas, caché de carta pública" },
+    "carta-impresion":   { "archivo": "data/projects/{slug}/cartaimpresion.json","datos": "HTML generado por carta (cache + plantillas)" },
+    "carta-marketing":   { "archivo": "data/projects/{slug}/marketing.json",     "datos": "Perfil de marca, ofertas, actividad" },
+    "carta-scheduler":   { "archivo": "data/projects/{slug}/scheduler.json",     "datos": "Reglas y cambios pendientes" },
+    "tarifas":           { "archivo": "data/projects/{slug}/tarifas.json",       "datos": "Asignación canal→carta + variantes" },
+    "menu-generator":    { "archivo": "(sin archivo propio)",                     "datos": "Solo orquesta — los datos los guardan otros" }
+  },
+
+  "fases": [
+    {
+      "n": 1,
+      "titulo": "Fix del evento agent.execute.request huérfano",
+      "estado": "pendiente",
+      "esfuerzo": "30 min",
+      "bloqueante": true,
+      "pasos": [
+        "1.1 Diseñar contrato del payload (request + response)",
+        "1.2 Implementar onAgentExecuteRequest en ai-agent-framework (reusa lógica de onInvokeAgent)",
+        "1.3 Añadir suscripción y publicación en module.json",
+        "1.4 Smoke test local con eventBus mockeado (sin VPS)",
+        "1.5 Commit + push aislado (revertible)"
+      ],
+      "preparado_para_vision_futura": [
+        "Payload acepta campos opcionales session_id, prev_state, conversation_id (hoy null, Fase 8 los usará)",
+        "Respuesta acepta campos opcionales next_state, should_continue (hoy null/false)",
+        "Si conversation_id != null, ai-agent-framework también publica el resultado como mensaje en la conversación con metadata.author del agente"
+      ],
+      "criterio_done": "Smoke test pasa: agent.execute.request → agent.execute.response con result"
+    },
+    {
+      "n": 2,
+      "titulo": "Test E2E que demuestra que los 6 emisores funcionan",
+      "estado": "pendiente",
+      "esfuerzo": "1 h",
+      "depende": [1],
+      "pasos": [
+        "2.1 Test menu-generator → menu-structurer (texto corto → carta aparece en carta-manager)",
+        "2.2 Test cada uno de los otros 5 emisores",
+        "2.3 Reporte: tabla emisor → agente → status"
+      ],
+      "criterio_done": "Mínimo menu-generator → menu-structurer end-to-end. El resto son comprobaciones."
+    },
+    {
+      "n": 3,
+      "titulo": "Auditoría de TODOS los agentes",
+      "estado": "pendiente",
+      "esfuerzo": "2 h",
+      "depende": [1],
+      "pasos": [
+        "3.1 Inventario: para cada agents/*.json verificar prompt, tools reales, descripción coherente",
+        "3.2 Limpiar: tools fantasma fuera, prompts obsoletos reescritos, agentes muertos disabled con motivo",
+        "3.3 Documentar en arquitectura/agentes-inventario.json",
+        "3.4 Validación al cargar agente en ai-agent-framework (rechazar si declara destructive)"
+      ],
+      "preparado_para_vision_futura": [
+        "Inventario lleva campos created_by ('system'|'user:X'|'agent:X'), created_at, is_dynamic",
+        "Hoy todos created_by:'system', is_dynamic:false. Cuando llegue creación dinámica, los campos están."
+      ],
+      "criterio_done": "arquitectura/agentes-inventario.json existe con todos los agentes auditados"
+    },
+    {
+      "n": 4,
+      "titulo": "Categorías read/write/destructive en tools de cartas",
+      "estado": "pendiente",
+      "esfuerzo": "1 h",
+      "depende": [3],
+      "pasos": [
+        "4.1 Categorizar 13 tools de carta-manager",
+        "4.2 Categorizar tools de cartadigital, impresion, marketing, scheduler, tarifas",
+        "4.3 Documentar en arquitectura/agentes-tools.json secciones aplicacion_<modulo>",
+        "4.4 Validación destructive en handlers (preparada para confirmation_request — campo _security)"
+      ],
+      "preparado_para_vision_futura": [
+        "Handlers destructive validan params._security.confirmed_by (hoy null, Fase 8 lo rellena con datos del confirmation_request humano)"
+      ],
+      "criterio_done": "Cada tool del ecosistema cartas con su categoría documentada"
+    },
+    {
+      "n": 5,
+      "titulo": "Aplicar patrón recetas v2 a cada módulo del ecosistema cartas",
+      "estado": "pendiente",
+      "esfuerzo": "~15 h total, distribuido en 7 sub-fases",
+      "depende": [1, 4],
+      "subfases": [
+        { "n": "5.1", "modulo": "carta-manager",   "esfuerzo": "3 h" },
+        { "n": "5.2", "modulo": "carta-digital",   "esfuerzo": "2 h" },
+        { "n": "5.3", "modulo": "carta-impresion", "esfuerzo": "2 h" },
+        { "n": "5.4", "modulo": "carta-marketing", "esfuerzo": "3 h" },
+        { "n": "5.5", "modulo": "carta-scheduler", "esfuerzo": "3 h" },
+        { "n": "5.6", "modulo": "tarifas",         "esfuerzo": "2 h" },
+        { "n": "5.7", "modulo": "menu-generator",  "esfuerzo": "0.5 h (limpieza menor)" }
+      ],
+      "regla": "Cada sub-fase = un commit aislado, smoke test propio, verificable. No avanzar al siguiente hasta que el anterior pase 100%.",
+      "preparado_para_vision_futura": [
+        "history dentro de cada entidad lleva modified_by ({kind, id, name}) y session_id opcional",
+        "Eventos de dominio (carta.creada, marketing.actualizada, etc.) llevan modified_by y session_id"
+      ],
+      "criterio_done": "Cada módulo con su smoke test pasando + README actualizado"
+    },
+    {
+      "n": 6,
+      "titulo": "Verificación cruzada del ecosistema",
+      "estado": "pendiente",
+      "esfuerzo": "1 h",
+      "depende": [5],
+      "pasos": [
+        "Test E2E del flujo completo: PDF → menu-generator → carta-manager → carta-marketing → carta-digital → carta-impresion",
+        "Verificar que los 7 módulos refactorizados se entienden por eventos",
+        "Smoke test cruzado documentado"
+      ],
+      "criterio_done": "Flujo E2E pasa sin errores"
+    },
+    {
+      "n": 7,
+      "titulo": "Ampliar menu-generator con nuevas fuentes",
+      "estado": "futuro",
+      "esfuerzo": "variable, por fuente",
+      "fuentes_pendientes": [
+        "Scraping web (URL de competidor o proveedor)",
+        "Búsqueda online (Google/Bing API)",
+        "Audio dictado (Whisper o similar)",
+        "API de plataforma (Glovo, JustEat, TripAdvisor)"
+      ],
+      "regla": "Cada fuente = un nuevo extractor dentro de menu-generator que termina con texto plano → agente menu-structurer (sin tocar lo demás)"
+    },
+    {
+      "n": 8,
+      "titulo": "Visión a futuro (out of scope para este sprint)",
+      "estado": "futuro",
+      "items": [
+        "Sesiones de agente persistentes (multi-turno con estado)",
+        "Moderador como agente especializado",
+        "Chat multi-usuario con identidad rica",
+        "Frontend de bloques + cita + confirmation_request",
+        "Creación dinámica de agentes al vuelo"
+      ],
+      "nota": "Las cimentaciones quedan listas en las fases 1-6. Cuando lleguen, se construye encima sin refactor."
+    }
+  ],
+
+  "resumen_esfuerzo": {
+    "fases_1_2": "1.5 h",
+    "fases_3_4": "3 h",
+    "fase_5": "~15 h",
+    "fase_6": "1 h",
+    "subtotal_fases_1_a_6": "~21 h",
+    "fase_7": "variable, según necesidad",
+    "fase_8": "no en este sprint"
+  },
+
+  "documentacion_que_se_actualiza": {
+    "arquitectura/agentes-inventario.json": "NUEVO en Fase 3",
+    "arquitectura/agentes-tools.json":      "Añadir secciones aplicacion_<modulo> en Fase 4",
+    "arquitectura/eventos.json":            "Sin cambios (no renombramos)",
+    "contexto/cartas-ecosystem.json":       "Refrescar al final de cada fase 5.X",
+    "contexto/conversacion.json":           "Añadir agent.execute.request al catálogo en Fase 1",
+    "contexto/mejoras-pendientes.json":     "Marcar items completados al cierre de cada fase",
+    "contexto/index.json":                  "Actualizar last_context_update si hay cambios estructurales"
+  },
+
+  "riesgos_y_mitigaciones": {
+    "fase_1_logica_oculta": "Si onAgentExecuteRequest necesita más que reusar onInvokeAgent (ej: estado interno), 30 min no bastan. Mitigación: smoke test local antes de subir.",
+    "fase_3_problemas_en_agentes": "La auditoría puede revelar mucha cruft. Mitigación: priorizar agentes activos sobre inactivos.",
+    "fase_5_cambio_fs_directo": "Cambiar fs directo a eventos puede romper sutiles. Mitigación: smoke test local exhaustivo antes de subir.",
+    "tests_e2e_dependen_VPS": "DNS overflow, connect timeout intermitentes. Mitigación: smoke locales para todo lo verificable sin red."
+  }
+}

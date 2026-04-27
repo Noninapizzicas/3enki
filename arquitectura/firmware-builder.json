@@ -1,0 +1,190 @@
+{
+  "$schema": "https://enki.local/schemas/arquitectura/module.json",
+  "module": "firmware-builder",
+  "version": "1.1.0",
+  "tier": "tier_3",
+  "description": "Compilación de firmware ESP32 con arquitectura BASE + LÓGICA. Detecta drivers en firmware/drivers/, compila via PlatformIO",
+
+  "dominio": {
+    "responsabilidad_unica": "Compilar drivers ESP32 pre-empaquetados via PlatformIO. Detecta drivers en firmware/drivers/, valida estructura, compila, y reporta resultados.",
+    "conoce": ["Drivers pre-empaquetados", "PlatformIO CLI", "Board definitions", "Build flags", "Compilación"],
+    "no_conoce": ["Proyectos de usuario", "Templates", "Catálogos", "OTA", "Device registry", "Flash serial"]
+  },
+
+  "eventos_emitidos": [
+    {
+      "nombre": "firmware.build_started",
+      "descripcion": "Compilación de driver iniciada",
+      "schema": {
+        "driver": "string (nombre del driver, ej: print-proxy)"
+      },
+      "quien_escucha": ["UI (mostrar compilación en curso)", "Métricas"],
+      "intención": "Notificar que compilación comenzó"
+    },
+    {
+      "nombre": "firmware.build_completed",
+      "descripcion": "Compilación completada, binario disponible",
+      "schema": {
+        "driver": "string",
+        "binary_path": "string (ruta al .bin)",
+        "binary_size": "integer (bytes)",
+        "duration_ms": "integer",
+        "firmware_type": "string (NUEVO: extraído del manifest del driver, ej: print-proxy)",
+        "firmware_version": "string (NUEVO: extraído de platformio.ini o manifest, semver)",
+        "firmware_utility": "string (NUEVO: para qué sirve el driver)",
+        "firmware_board": "string (NUEVO: board target)",
+        "firmware_capabilities": ["string"] (NUEVO: capacidades, ej: [ota, mqtt])"
+      },
+      "quien_escucha": ["firmware-manager (auto-registra en catálogo)", "esp32-flasher (cachea para UI)"],
+      "intención": "Notificar que binario está listo. firmware-manager lo registra en catálogo.",
+      "nota_arquitectural": "CRÍTICO: Incluir firmware_* metadata igual que esp32.build_completed. Ver problema P1 en esp32-modules-analysis.md"
+    },
+    {
+      "nombre": "firmware.build_failed",
+      "descripcion": "Compilación falló",
+      "schema": {
+        "driver": "string",
+        "error": "string (mensaje de error de PlatformIO)",
+        "exit_code": "integer",
+        "duration_ms": "integer"
+      },
+      "quien_escucha": ["UI (mostrar error)", "Métricas"],
+      "intención": "Notificar fallo"
+    }
+  ],
+
+  "eventos_escuchados": [
+    {
+      "nombre": "ninguno",
+      "descripcion": "firmware-builder NO escucha eventos. Es reactivo vía UI handlers."
+    }
+  ],
+
+  "flujos_dominio": [
+    {
+      "nombre": "Listar Drivers Disponibles",
+      "pasos": [
+        "UI → builder.list-drivers()",
+        "firmware-builder → escanea firmware/drivers/ en busca de subdirectorios",
+        "firmware-builder → por cada driver: extrae metadata de platformio.ini + manifest.json",
+        "firmware-builder → retorna lista con: driver name, utility, board, capabilities, source files",
+        "FIN."
+      ]
+    },
+    {
+      "nombre": "Compilar Driver",
+      "pasos": [
+        "UI → builder.build({ driver: 'print-proxy', board: 'esp32dev' })",
+        "firmware-builder → valida que driver/print-proxy/ existe",
+        "firmware-builder → valida que platformio.ini es válido",
+        "firmware-builder → emite: firmware.build_started",
+        "firmware-builder → ejecuta: pio run -d firmware/drivers/print-proxy",
+        "firmware-builder → si --clean: pio run -t clean primero",
+        "firmware-builder → si éxito:",
+        "  ├─ extrae versión de platformio.ini (build_flags)",
+        "  ├─ extrae metadata de firmware/drivers/print-proxy/manifest.json",
+        "  ├─ calcula sha256 del .bin",
+        "  └─ emite: firmware.build_completed({ driver, binary_path, firmware_type, firmware_version, ... })",
+        "firmware-builder → si fallo:",
+        "  └─ emite: firmware.build_failed({ driver, error, exit_code })",
+        "FIN. firmware-builder NO sabe qué pasa con el binario."
+      ]
+    },
+    {
+      "nombre": "Ver Estado de Compilación",
+      "pasos": [
+        "UI → builder.build-status({ driver })",
+        "firmware-builder → retorna estado actual de build (si activo) o último build (si inactivo)",
+        "firmware-builder → incluye: estado (idle/building/success/error), log completo, duración",
+        "FIN."
+      ]
+    }
+  ],
+
+  "almacenamiento": {
+    "ruta_base": "firmware/drivers",
+    "estructura": {
+      "drivers/": "Drivers pre-empaquetados",
+      "  print-proxy/": "Driver ejemplo: impresora térmica",
+      "    platformio.ini": "Config de compilación (board, build_flags, version)",
+      "    manifest.json": "Metadata: utility, capabilities, description",
+      "    src/": "Código fuente Arduino/C++",
+      "    build/": "Salida de compilación (generada)"
+    }
+  },
+
+  "estructura_driver": {
+    "platformio.ini": {
+      "contenido_esperado": "[env]\ndefault_envs = esp32dev\n[env:esp32dev]\nboard = esp32dev\nframework = arduino\nbuild_flags = -DVERSION=\\\"1.2.0\\\"\n"
+    },
+    "manifest.json": {
+      "contenido_esperado": {
+        "name": "print-proxy",
+        "version": "1.2.0",
+        "utility": "Gateway de impresora térmica",
+        "board": "esp32dev",
+        "capabilities": ["ota", "mqtt", "serial-debug"],
+        "description": "Descripción larga..."
+      }
+    }
+  },
+
+  "dependencias_externas": [
+    {
+      "herramienta": "platformio",
+      "razon": "Compilación de Arduino/ESP-IDF",
+      "versión_minima": "6.0.0",
+      "comando_verificacion": "pio --version"
+    }
+  ],
+
+  "problemas_detectados": [
+    {
+      "id": "P1",
+      "titulo": "Duplicación con esp32-dev",
+      "severidad": "ALTA",
+      "descripcion": "Hay DOS compiladores: firmware-builder (para drivers pre-empaquetados) y esp32-dev (para proyectos de usuario). Ambos emiten eventos de build separados que firmware-manager debe escuchar.",
+      "solucion": "OPCIÓN A (Recomendada): Integrar drivers en esp32-dev bajo directorio especial, eliminar firmware-builder\nOPCIÓN B: Documentar explícitamente cuándo usar cada uno y converger hacia uno solo",
+      "impacto": "Si no se resuelve, cualquier cambio en estructura de build requiere actualizar ambos módulos",
+      "estado": "PENDIENTE"
+    },
+    {
+      "id": "P2",
+      "titulo": "Metadatos incompletos en build_completed",
+      "severidad": "ALTA",
+      "descripcion": "El evento firmware.build_completed no incluye firmware_type, firmware_version, etc. Mismo problema que esp32-dev.",
+      "solucion": "Ver schema arriba: agregar firmware_* fields. Extraer de manifest.json del driver.",
+      "estado": "PENDIENTE"
+    },
+    {
+      "id": "P3",
+      "titulo": "Sin introspección automática de versión",
+      "severidad": "MEDIA",
+      "descripcion": "¿Cómo se extrae la versión? ¿De platformio.ini? ¿De manifest.json? ¿De git tag?",
+      "solucion": "Documentar clara y explícitamente. Preferiblemente: manifest.json como source of truth.",
+      "estado": "PENDIENTE"
+    }
+  ],
+
+  "configuracion": {
+    "firmware_path": "./firmware/drivers",
+    "platformio_path": "platformio",
+    "build_timeout_ms": 300000,
+    "max_concurrent_builds": 2
+  },
+
+  "metricas_observabilidad": {
+    "counters": [
+      "firmware.build_started.total",
+      "firmware.build_completed.total",
+      "firmware.build_failed.total"
+    ],
+    "gauges": [
+      "firmware.active_builds.count",
+      "firmware.drivers.count"
+    ],
+    "timings": [
+      "firmware.build.duration"
+    ]
+  }
+}

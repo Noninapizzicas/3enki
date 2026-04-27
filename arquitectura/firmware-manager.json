@@ -1,0 +1,270 @@
+{
+  "$schema": "https://enki.local/schemas/arquitectura/module.json",
+  "module": "firmware-manager",
+  "version": "2.0.0",
+  "tier": "tier_3",
+  "description": "Registro de firmwares, versionado con checksums, y orquestación de OTA via device-shadow",
+
+  "dominio": {
+    "responsabilidad_unica": "Mantener catálogo centralizado de firmware con versionado semver, validación de checksums, y orquestar actualizaciones OTA de dispositivos via device-shadow",
+    "conoce": ["Catálogos de firmware", "Versionado semver", "SHA256", "device-shadow", "OTA orchestration", "Timeout management"],
+    "no_conoce": ["Compilación", "Flash serial", "Templates", "Proyectos de usuario", "Board definitions", "PlatformIO"]
+  },
+
+  "eventos_emitidos": [
+    {
+      "nombre": "firmware.registered",
+      "descripcion": "Nuevo firmware registrado en catálogo con validación de checksum",
+      "schema": {
+        "type": "string (ej: print-proxy, sensor-mqtt)",
+        "version": "string (semver: X.Y.Z)",
+        "sha256": "string (hex de 64 chars)",
+        "utility": "string (para qué sirve)",
+        "board": "string (board target)",
+        "capabilities": ["string"] (ej: [ota, mqtt, serial-debug]),
+        "projects": ["string"] (proyectos asociados, opcional)"
+      },
+      "quien_escucha": ["UI (actualizar catálogo)", "Analytics", "Otros módulos que necesiten firmware registrado"],
+      "intención": "Notificar que un firmware está disponible en catálogo y validado para OTA"
+    },
+    {
+      "nombre": "firmware.ota_requested",
+      "descripcion": "OTA solicitada para un dispositivo via shadow",
+      "schema": {
+        "device_id": "string",
+        "type": "string (tipo de firmware)",
+        "target_version": "string (semver)",
+        "firmware_url": "string (ruta relativa: /firmware/print-proxy/3.4.0/...)",
+        "timestamp": "ISO8601"
+      },
+      "quien_escucha": ["device-shadow (escribe en desired)", "UI (mostrar OTA pendiente)"],
+      "intención": "Notificar que se escribió desired.firmware en shadow. El device se sincronizará en background."
+    },
+    {
+      "nombre": "firmware.ota_completed",
+      "descripcion": "Dispositivo actualizó firmware exitosamente (reported == desired)",
+      "schema": {
+        "device_id": "string",
+        "type": "string",
+        "from": "string (versión anterior, nullable)",
+        "to": "string (versión nueva)",
+        "status": "string (const: 'completed')",
+        "duration_ms": "integer (tiempo desde requested_at)",
+        "requested_at": "ISO8601",
+        "completed_at": "ISO8601"
+      },
+      "quien_escucha": ["UI (actualizar estado)", "Analytics", "Device registry (actualizar versión conocida)"],
+      "intención": "Notificar éxito de OTA. El dispositivo tiene la nueva versión."
+    },
+    {
+      "nombre": "firmware.ota_failed",
+      "descripcion": "OTA falló para un dispositivo",
+      "schema": {
+        "device_id": "string",
+        "type": "string",
+        "from": "string (versión anterior, nullable)",
+        "to": "string (versión intentada)",
+        "actual": "string (versión reportada si hay mismatch)",
+        "status": "string (const: 'failed')",
+        "reason": "string enum (timeout | version_mismatch | stale_cleanup)",
+        "requested_at": "ISO8601",
+        "failed_at": "ISO8601"
+      },
+      "quien_escucha": ["UI (mostrar error)", "Analytics", "Device registry (mantener versión anterior)"],
+      "intención": "Notificar fallo. Razones: timeout (device no respondió en 5m), version_mismatch (device reportó versión distinta), stale_cleanup (se limpió OTA antigua)"
+    }
+  ],
+
+  "eventos_escuchados": [
+    {
+      "nombre": "shadow.updated",
+      "descripcion": "device-shadow notifica cambio en estado del dispositivo",
+      "schema_esperado": {
+        "device_id": "string",
+        "delta": "object (qué cambió: desired vs reported)",
+        "reported": "object (incluye reported.firmware: { type, version })"
+      },
+      "handler": "onShadowUpdated",
+      "logica": "1) Si reported.firmware.version == desired.firmware.version → emite ota_completed\n2) Si timeout sin cambio → emite ota_failed con reason: 'timeout'\n3) Si reported.firmware.version != desired.firmware.version → emite ota_failed con reason: 'version_mismatch'",
+      "nota_arquitectural": "Este es el mecanismo de sincronización OTA. Sin shadow.updated, firmware-manager no sabe si OTA tuvo éxito."
+    },
+    {
+      "nombre": "device.registered",
+      "descripcion": "Nuevo dispositivo registrado en device-registry",
+      "schema_esperado": {
+        "device_id": "string",
+        "device_type": "string",
+        "properties": "object"
+      },
+      "handler": "onDeviceRegistered",
+      "logica": "TODO: DOCUMENTAR. Probablemente valida que el device tenga firmware compatible.",
+      "nota_arquitectural": "AMBIGUO: ¿Qué hace realmente? ¿Es necesario? Ver problema P2.",
+      "estado": "CUESTIONABLE"
+    },
+    {
+      "nombre": "firmware.build_completed",
+      "descripcion": "firmware-builder terminó compilación de driver",
+      "schema_esperado": {
+        "driver": "string",
+        "binary_path": "string",
+        "binary_size": "integer"
+      },
+      "handler": "onBuildCompleted",
+      "logica": "TODO: DOCUMENTAR. Probablemente auto-registra en catálogo. Pero ¿con qué version? ¿Utility?",
+      "problema": "El evento no contiene firmware_type, firmware_version, etc. El handler debe adivinar o extraer de filesystem.",
+      "nota_arquitectural": "CRÍTICO: Ver problema P1 en esp32-modules-analysis.md"
+    },
+    {
+      "nombre": "esp32.build_completed",
+      "descripcion": "esp32-dev terminó compilación de proyecto usuario",
+      "schema_esperado": {
+        "project_name": "string",
+        "binary_path": "string",
+        "binary_size": "integer",
+        "firmware_type": "string (NUEVO)",
+        "firmware_version": "string (NUEVO)"
+      },
+      "handler": "onBuildCompleted",
+      "logica": "Auto-registra binario en catálogo con metadatos del evento",
+      "nota_arquitectural": "Mismo handler que firmware.build_completed (duplicación). Si ambos eventos tienen schema completo, se converge en uno solo."
+    }
+  ],
+
+  "flujos_dominio": [
+    {
+      "nombre": "Registrar Firmware en Catálogo",
+      "pasos": [
+        "UI → firmware.register({ type, version, file, changelog, board, capabilities, projects })",
+        "firmware-manager → valida que file existe en data/firmware/binaries/",
+        "firmware-manager → calcula sha256 del binario",
+        "firmware-manager → valida semver de version",
+        "firmware-manager → guarda metadatos en catálogo (SQLite o JSON)",
+        "firmware-manager → emite: firmware.registered({ type, version, sha256 })",
+        "FIN."
+      ]
+    },
+    {
+      "nombre": "Auto-Registrar Tras Build (esp32-dev o firmware-builder)",
+      "pasos": [
+        "esp32-dev/firmware-builder → emite: esp32.build_completed({ binary_path, firmware_type, firmware_version, ... })",
+        "firmware-manager.onBuildCompleted() escucha",
+        "firmware-manager → extrae binario y metadatos del evento",
+        "firmware-manager → calcula sha256",
+        "firmware-manager → registra en catálogo",
+        "firmware-manager → emite: firmware.registered",
+        "FIN.",
+        "NOTA: Requiere que el evento contenga firmware_type y firmware_version (ver problema P1)"
+      ]
+    },
+    {
+      "nombre": "Disparar OTA para un Dispositivo",
+      "pasos": [
+        "UI → firmware.trigger-ota({ device_id, type, version, project_id })",
+        "firmware-manager → busca firmware en catálogo",
+        "firmware-manager → valida que device_id existe (debe estar registrado)",
+        "firmware-manager → extrae firmware_url del binario",
+        "firmware-manager → escribe en device-shadow: desired.firmware = { type, version, url }",
+        "firmware-manager → emite: firmware.ota_requested({ device_id, type, target_version, firmware_url })",
+        "firmware-manager → inicia timer: 5 minutos (ota_timeout_ms)",
+        "FIN. Ahora depende de device-shadow y el device mismo."
+      ]
+    },
+    {
+      "nombre": "Monitorear OTA (Sincronización via Shadow)",
+      "pasos": [
+        "[Device conectado via MQTT]",
+        "device-shadow → device reporta: reported.firmware = { type, version: 2.1.0 }",
+        "device-shadow → emite: shadow.updated({ device_id, reported: ... })",
+        "firmware-manager.onShadowUpdated() escucha",
+        "firmware-manager → compara desired vs reported:",
+        "  SI reported.version == desired.version:",
+        "    └─ emite: firmware.ota_completed({ device_id, to, duration_ms })",
+        "  SI timer expirado (5 min):",
+        "    └─ emite: firmware.ota_failed({ device_id, to, reason: 'timeout' })",
+        "  SI reported.version != desired.version (incorrecto):",
+        "    └─ emite: firmware.ota_failed({ device_id, to, actual, reason: 'version_mismatch' })",
+        "FIN."
+      ]
+    }
+  ],
+
+  "almacenamiento": {
+    "ruta_base": "data/firmware",
+    "estructura": {
+      "binaries/": "Archivos .bin (los que se descargan)",
+      "catalog/": "Metadatos en JSON (type, version, sha256, utility, board, capabilities, projects)",
+      "otas/": "Log de OTA histórico (device_id, type, from, to, status, timestamp)"
+    }
+  },
+
+  "problemas_detectados": [
+    {
+      "id": "P1",
+      "titulo": "Auto-registro fragado en firmware-manager",
+      "severidad": "ALTA",
+      "descripcion": "Los eventos firmware.build_completed y esp32.build_completed no incluyen firmware_type, firmware_version, etc. firmware-manager debe adivinar o extraer de filesystem.",
+      "solucion": "Enriquecer ambos eventos con firmware_* metadata (ver esp32-dev.json y firmware-builder.json)",
+      "impacto": "Si esp32-dev cambia estructura, auto-registro falla",
+      "estado": "PENDIENTE"
+    },
+    {
+      "id": "P2",
+      "titulo": "device.registered listener ambiguo",
+      "severidad": "MEDIA",
+      "descripcion": "onDeviceRegistered existe en subscribes pero no hay documentación clara de qué hace",
+      "solucion": "O documentar su propósito claro, o remover si no se usa",
+      "estado": "PENDIENTE"
+    },
+    {
+      "id": "P3",
+      "titulo": "Doble evento de build (firmware.build_completed + esp32.build_completed)",
+      "severidad": "MEDIA",
+      "descripcion": "Mismo handler maneja dos eventos con schemas parcialmente diferentes",
+      "solucion": "Converger a un único evento (ej: esp32.build_completed para ambos). Eliminar firmware.build_completed.",
+      "estado": "PENDIENTE"
+    },
+    {
+      "id": "P4",
+      "titulo": "Sin feedback de flash.completed",
+      "severidad": "ALTA",
+      "descripcion": "esp32-flasher emite flash.completed pero firmware-manager no lo escucha. No hay forma de saber si device fue flashed correctamente (vs. OTA).",
+      "solucion": "esp32-flasher emite evento que firmware-manager pueda usar para actualizar shadow (si device_id es conocido)",
+      "estado": "PENDIENTE"
+    }
+  ],
+
+  "configuracion": {
+    "data_path": "./data/firmware",
+    "auto_check_on_register": true,
+    "ota_timeout_ms": 300000,
+    "ota_cleanup_interval_ms": 60000,
+    "validate_binaries_on_load": true
+  },
+
+  "metricas_observabilidad": {
+    "counters": [
+      "firmware.ota_requested.total",
+      "firmware.ota_completed.total",
+      "firmware.ota_failed.total",
+      "firmware.ota_timeout.total",
+      "firmware.ota_stale_cleanup.total",
+      "firmware.catalog_entries.total",
+      "firmware.rollback.total",
+      "firmware.device_outdated.total",
+      "firmware.binary_served.total",
+      "firmware.binary_served.bytes",
+      "firmware.binary_served.errors"
+    ],
+    "gauges": [
+      "firmware.pending_otas.count",
+      "firmware.catalog_types.count",
+      "firmware.catalog_entries.count",
+      "firmware.catalog_valid_binaries.count",
+      "firmware.catalog_missing_binaries.count"
+    ],
+    "timings": [
+      "firmware.ota.duration",
+      "firmware.register.duration"
+    ]
+  }
+}

@@ -1,0 +1,216 @@
+{
+  "$schema": "https://enki.local/schemas/arquitectura/module.json",
+  "module": "esp32-flasher",
+  "version": "1.0.0",
+  "tier": "tier_3",
+  "description": "Flash de firmware a ESP32 via serie + monitor serial en tiempo real",
+
+  "dominio": {
+    "responsabilidad_unica": "Grabar (flash) firmware en ESP32 conectados via puerto serie, usando múltiples métodos, y proporcionar monitoreo serial en tiempo real",
+    "conoce": ["Puertos serie USB", "esptool.py", "PlatformIO upload", "ESPHome run", "Monitor serial", "Serial output streaming"],
+    "no_conoce": ["Catálogos de firmware", "Versionado", "OTA", "Device registry", "WiFi", "Configuración remota"]
+  },
+
+  "eventos_emitidos": [
+    {
+      "nombre": "flash.started",
+      "descripcion": "Flash iniciado en un puerto serie",
+      "schema": {
+        "flash_id": "string (UUID único para este flash)",
+        "port": "string (ej: /dev/ttyUSB0)",
+        "method": "string enum (esptool | platformio | esphome | mpremote)",
+        "binary_path": "string (ruta al .bin)",
+        "baud": "integer (velocidad, típicamente 460800 para flash)",
+        "timestamp": "ISO8601"
+      },
+      "quien_escucha": ["UI (mostrar progreso)", "Métricas"],
+      "intención": "Notificar que un flash comenzó. Para observabilidad y UI."
+    },
+    {
+      "nombre": "flash.progress",
+      "descripcion": "Progreso de flash (porcentaje, etapa)",
+      "schema": {
+        "flash_id": "string",
+        "stage": "string enum (connecting | erasing | writing | verifying)",
+        "percent": "number (0-100)",
+        "message": "string (ej: 'Writing at 0x00001234')"
+      },
+      "quien_escucha": ["UI (barra de progreso)"],
+      "intención": "Notificar cada paso del flash para UI responsive"
+    },
+    {
+      "nombre": "flash.completed",
+      "descripcion": "Flash completado exitosamente",
+      "schema": {
+        "flash_id": "string",
+        "port": "string",
+        "method": "string",
+        "binary_path": "string",
+        "binary_size": "integer (bytes flashed)",
+        "duration_ms": "integer"
+      },
+      "quien_escucha": ["UI (confirmación)", "Métricas"],
+      "intención": "Notificar éxito. NO actualiza device-shadow — es responsabilidad de otro módulo.",
+      "nota_arquitectural": "CRÍTICO: esp32-flasher NO sabe si el device está en el registry. No debe intentar actualizar firmware en device-shadow."
+    },
+    {
+      "nombre": "flash.failed",
+      "descripcion": "Flash falló",
+      "schema": {
+        "flash_id": "string",
+        "port": "string",
+        "method": "string",
+        "error": "string (mensaje de error de esptool/pio)",
+        "exit_code": "integer",
+        "duration_ms": "integer"
+      },
+      "quien_escucha": ["UI (mostrar error)", "Métricas"],
+      "intención": "Notificar fallo"
+    },
+    {
+      "nombre": "flash.serial_output",
+      "descripcion": "Línea de output del monitor serial",
+      "schema": {
+        "port": "string",
+        "line": "string (salida en bruto del ESP32)",
+        "timestamp": "ISO8601"
+      },
+      "quien_escucha": ["UI (terminal embebido)", "Collectors de logs"],
+      "intención": "Streaming de output en tiempo real para debugging"
+    }
+  ],
+
+  "eventos_escuchados": [
+    {
+      "nombre": "firmware.build_completed",
+      "descripcion": "Notifica que hay un binario listo para flashear",
+      "schema_esperado": {
+        "binary_path": "string",
+        "project_name": "string",
+        "firmware_type": "string"
+      },
+      "handler": "onBuildCompleted",
+      "logica": "Cachea binario recién compilado en memoria con TTL 5m para permitir flash rápido sin re-seleccionar archivo",
+      "nota": "CRÍTICO: Documentar explícitamente qué hace este listener. Actualmente ambiguo.",
+      "NO hace": "No inicia flash automático. No valida firmware. No registra en catálogo."
+    }
+  ],
+
+  "flujos_dominio": [
+    {
+      "nombre": "Listar Puertos Serie",
+      "pasos": [
+        "UI → flash.list-ports()",
+        "esp32-flasher → escanea /dev/ttyUSB*, /dev/ttyACM*",
+        "esp32-flasher → deteta chip (esptool --detect-chip)",
+        "esp32-flasher → retorna lista con puerto, chip, velocidad default",
+        "FIN."
+      ]
+    },
+    {
+      "nombre": "Flashear Firmware",
+      "pasos": [
+        "UI → flash.start({ port, binary_path, method: 'esptool' })",
+        "esp32-flasher → valida puerto existe y binario es legible",
+        "esp32-flasher → genera flash_id único",
+        "esp32-flasher → emite: flash.started",
+        "esp32-flasher → ejecuta: esptool.py --port /dev/ttyUSB0 write_flash 0x0 firmware.bin",
+        "esp32-flasher → en cada línea de output de esptool:",
+        "  └─ emite: flash.progress (extrae % del output)",
+        "esp32-flasher → si éxito:",
+        "  └─ emite: flash.completed({ duration_ms })",
+        "esp32-flasher → si error:",
+        "  └─ emite: flash.failed({ error, exit_code })",
+        "FIN. esp32-flasher NO actualiza device-shadow. Ese es trabajo de otro módulo (device-registry o similar)."
+      ]
+    },
+    {
+      "nombre": "Monitor Serial en Vivo",
+      "pasos": [
+        "UI → flash.monitor-start({ port, baud: 115200 })",
+        "esp32-flasher → abre puerto serie con pyserial",
+        "esp32-flasher → buffer circular de últimas N líneas (max_monitor_buffer)",
+        "esp32-flasher → en cada línea recibida:",
+        "  └─ emite: flash.serial_output({ line, timestamp })",
+        "UI → Muestra en terminal embebido",
+        "UI → flash.monitor-stop({ port })",
+        "esp32-flasher → cierra puerto",
+        "FIN."
+      ]
+    }
+  ],
+
+  "dependencias_externas": [
+    {
+      "herramienta": "esptool.py",
+      "razon": "Flash directo via serial",
+      "versión_minima": "4.0.0",
+      "comando_verificacion": "esptool.py --version"
+    },
+    {
+      "herramienta": "platformio",
+      "razon": "Flash via PlatformIO CLI (método alternativo)",
+      "versión_minima": "6.0.0",
+      "comando_verificacion": "pio --version"
+    },
+    {
+      "herramienta": "pyserial",
+      "razon": "Monitor serial",
+      "python_package": "pyserial",
+      "comando_verificacion": "python3 -c 'import serial; print(serial.VERSION)'"
+    }
+  ],
+
+  "almacenamiento": {
+    "ruta_base": "data/esp32-flasher",
+    "estructura": {
+      "history/": "Log de operaciones de flash realizadas",
+      "active/": "Sesiones de flash en curso"
+    }
+  },
+
+  "problemas_detectados": [
+    {
+      "id": "P1",
+      "titulo": "Handler onBuildCompleted ambiguo",
+      "severidad": "MEDIA",
+      "descripcion": "El listener de firmware.build_completed existe en module.json pero su lógica no está documentada. ¿Cachea? ¿Valida? ¿Sugiere en UI?",
+      "solucion": "Documentar explícitamente qué hace en el código y en arquitectura/esp32-flasher.json",
+      "estado": "PENDIENTE"
+    },
+    {
+      "id": "P2",
+      "titulo": "Sin retroalimentación a firmware-manager",
+      "severidad": "ALTA",
+      "descripcion": "esp32-flasher emite flash.completed pero no notifica a firmware-manager. No hay forma de saber si un device tiene la versión correcta flashed.",
+      "solucion": "Tras flash exitoso en un device conocido, emitir evento que firmware-manager pueda escuchar para actualizar shadow",
+      "estado": "PENDIENTE"
+    },
+    {
+      "id": "P3",
+      "titulo": "Flash local vs. OTA desconectados",
+      "severidad": "MEDIA",
+      "descripcion": "El flash serial (esp32-flasher) y OTA remoto (firmware-manager) son dos paths independientes. No hay unificación de versionado.",
+      "solucion": "Documento de arquitectura que aclare cuándo usar cada uno",
+      "estado": "PENDIENTE"
+    }
+  ],
+
+  "metricas_observabilidad": {
+    "counters": [
+      "flash.started.total",
+      "flash.completed.total",
+      "flash.failed.total",
+      "flash.cancelled.total",
+      "flash.monitor_started.total"
+    ],
+    "gauges": [
+      "flash.active.count",
+      "flash.monitors.count",
+      "flash.ports_detected.count"
+    ],
+    "timings": [
+      "flash.duration"
+    ]
+  }
+}

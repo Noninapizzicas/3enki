@@ -1,888 +1,740 @@
 /**
- * MÓDULO RECETAS
+ * modules/recetas — almacenamiento JSON por proyecto
  *
- * Dominio: recetas del proyecto (CRUD, búsqueda, estadísticas).
+ * Una sola fuente de verdad por proyecto: data/projects/{slug}/recetas.json
  *
- * Eventos de dominio emitidos:
- *   - receta.creada            (tras crear)
- *   - receta.actualizada       (tras editar)
- *   - receta.eliminada         (tras archivar)
- *   - ingrediente.precio.actualizado
+ * Estructura del archivo:
+ * {
+ *   "_version": "1.0",
+ *   "_updated_at": "iso",
+ *   "recetas":              [ Receta, ... ],
+ *   "ingredientes_catalogo":[ Ingrediente, ... ]
+ * }
  *
- * Tools expuestas al LLM: recetas.crear, .crear_desde_chat, .buscar,
- * .listar, .obtener, .analizar, .actualizar, .eliminar, .historial,
- * .estadisticas, .ingredientes, .actualizar_precio, .investigar_receta.
+ * Cero SQL. Cero schema. Cero junction tables. Si añades un campo, las recetas viejas
+ * no lo tienen y las nuevas sí — sin migrar nada.
+ *
+ * Acceso al archivo via eventos fs.read.request / fs.write.request al módulo
+ * filesystem. Path absoluto con prefijo @/projects/{slug}/recetas.json para no
+ * depender del proyecto activo de filesystem (multi-tenancy seguro).
+ *
+ * Concurrencia: cola interna por project_id — solo una operación write a la vez.
  */
 
-const path = require('path');
-const fs = require('fs').promises;
 const crypto = require('crypto');
 
-const ServiceExecutor = require('../../core/service-executor');
+// ============================================================
+// Tools que el LLM puede invocar
+// ============================================================
+const TOOL_HANDLERS = {
+  'recetas.crear':            'crear',
+  'recetas.listar':           'listar',
+  'recetas.obtener':          'obtener',
+  'recetas.buscar':           'buscar',
+  'recetas.actualizar':       'actualizar',
+  'recetas.historial':        'historial',
+  'recetas.revertir':         'revertir',
+  'recetas.eliminar':         'eliminar',
+  'recetas.estadisticas':     'estadisticas',
+  'recetas.ingredientes':     'ingredientes',
+  'recetas.actualizar_precio':'actualizarPrecio',
+  'recetas.analizar':         'analizar',
+  'recetas.investigar_receta':'investigarReceta'
+};
+
+// Campos sin los cuales una receta se considera incompleta
+const CAMPOS_REQUERIDOS_PARA_COMPLETA = ['ingredientes', 'porciones', 'instrucciones'];
+
+// ============================================================
 
 class RecetasModule {
   constructor() {
     this.name = 'recetas';
     this.version = '2.0.0';
-
-    // Inyected by loader
-    this.eventBus = null;
     this.logger = null;
-    this.metrics = null;
-    this.uiHandler = null;
+    this.eventBus = null;
 
-    this.services = null;                // ServiceExecutor
+    // project_id → slug (cache)
+    this.projectSlugs = new Map();
 
-    // Config
-    this.config = {
-      ingestion: {
-        timeout_url: 30000,
-        timeout_pdf: 60000,
-        timeout_ocr: 60000,
-        max_file_size: 50000000
-      }
-    };
+    // project_id → Promise (cola para serializar writes)
+    this.writeQueues = new Map();
+
+    // request_id → { resolve, reject, timer } para fs.* y project.*
+    this.pendingFs = new Map();
+    this.pendingProject = new Map();
   }
 
-  // ==========================================
-  // LIFECYCLE
-  // ==========================================
-
   async onLoad(context) {
-    this.eventBus = context.eventBus;
     this.logger = context.logger;
-    this.metrics = context.metrics;
-    this.uiHandler = context.uiHandler;
-
-    // ServiceExecutor para providers
-    this.services = new ServiceExecutor(this.eventBus, this.logger);
-
-    this.logger.info('module.loaded', { module: this.name, version: this.version });
+    this.eventBus = context.eventBus;
+    this.logger.info('recetas.loaded', { storage: 'json-per-project' });
   }
 
   async onUnload() {
-    this.logger.info('module.unloaded', { module: this.name });
+    for (const { timer } of this.pendingFs.values()) clearTimeout(timer);
+    for (const { timer } of this.pendingProject.values()) clearTimeout(timer);
+    this.pendingFs.clear();
+    this.pendingProject.clear();
   }
 
-  // ==========================================
-  // PROJECT ACTIVATION
-  // ==========================================
+  // ============================================================
+  // Eventos del proyecto — cacheamos slug
+  // ============================================================
 
-  async onProjectActivated(event) {
-    const { project_id } = event.data || event;
-    try {
-      // Leer schema SQL y enviarlo a database-manager para inicializar
-      const schemaPath = require('path').join(__dirname, 'db', 'schema.sql');
-      const schema = require('fs').readFileSync(schemaPath, 'utf-8');
-      await this.eventBus.publish('db.schema.init.request', {
-        project_id,
-        schema,
-        request_id: require('crypto').randomUUID()
-      });
-      this.logger.info('recetas.project.activated', { project_id });
-    } catch (err) {
-      this.logger.error('recetas.project.activation_failed', { project_id, error: err.message });
-    }
+  onProjectActivated(event) {
+    const data = event.data || event;
+    const id = data.project_id || data.id;
+    const project = data.project || null;
+    if (id && project?.slug) this.projectSlugs.set(id, project.slug);
   }
 
-  async onProjectDeactivated(event) {
-    const { project_id } = event.data || event;
-    this.logger.info('recetas.project.deactivated', { project_id });
+  onProjectDeactivated() { /* no-op por ahora; mantenemos cache */ }
+
+  // ============================================================
+  // Resolver project_id → slug (si no está en cache, lo pedimos)
+  // ============================================================
+
+  async _slugForProject(project_id) {
+    if (!project_id) throw new Error('project_id requerido');
+    if (this.projectSlugs.has(project_id)) return this.projectSlugs.get(project_id);
+
+    const request_id = crypto.randomUUID();
+    const slug = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingProject.delete(request_id);
+        reject(new Error(`project.get timeout para ${project_id}`));
+      }, 5000);
+      this.pendingProject.set(request_id, { resolve, reject, timer });
+      this.eventBus.publish('project.get.request', { request_id, project_id });
+    });
+    this.projectSlugs.set(project_id, slug);
+    return slug;
   }
 
-  // ==========================================
-  // DB HELPERS — emite eventos, no toca SQLite
-  // ==========================================
+  onProjectGetResponse(event) {
+    const { request_id, project, error } = event.data || event;
+    const p = this.pendingProject.get(request_id);
+    if (!p) return;
+    clearTimeout(p.timer); this.pendingProject.delete(request_id);
+    if (error || !project) return p.reject(new Error(error || 'Project not found'));
+    p.resolve(project.slug);
+  }
 
-  async _dbQuery(project_id, query, params = []) {
-    const request_id = require('crypto').randomUUID();
+  // ============================================================
+  // Filesystem — leer/escribir archivo JSON del proyecto
+  // ============================================================
+
+  _pathFor(slug) {
+    return `@/projects/${slug}/recetas.json`;
+  }
+
+  async _readFile(slug) {
+    const request_id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('db.query timeout')), 10000);
-      const unsub = this.eventBus.subscribe('db.query.response', (e) => {
-        const d = e.data || e;
-        if (d.request_id !== request_id) return;
-        unsub();
-        clearTimeout(timeout);
-        if (d.error) return reject(new Error(d.error));
-        // database-manager publica las filas en `data`; aceptamos `results` por compat
-        resolve(d.data ?? d.results ?? []);
-      });
-      this.eventBus.publish('db.query.request', { project_id, query, params, read_only: true, request_id }).catch(reject);
+      const timer = setTimeout(() => {
+        this.pendingFs.delete(request_id);
+        reject(new Error(`fs.read timeout: ${slug}`));
+      }, 8000);
+      this.pendingFs.set(request_id, { resolve, reject, timer, op: 'read' });
+      this.eventBus.publish('fs.read.request', { request_id, path: this._pathFor(slug) });
     });
   }
 
-  async _dbRun(project_id, query, params = []) {
-    const request_id = require('crypto').randomUUID();
+  async _writeFile(slug, content) {
+    const request_id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('db.run timeout')), 10000);
-      const unsub = this.eventBus.subscribe('db.query.response', (e) => {
-        const d = e.data || e;
-        if (d.request_id !== request_id) return;
-        unsub();
-        clearTimeout(timeout);
-        if (d.error) return reject(new Error(d.error));
-        resolve(d);
+      const timer = setTimeout(() => {
+        this.pendingFs.delete(request_id);
+        reject(new Error(`fs.write timeout: ${slug}`));
+      }, 8000);
+      this.pendingFs.set(request_id, { resolve, reject, timer, op: 'write' });
+      this.eventBus.publish('fs.write.request', {
+        request_id, path: this._pathFor(slug), content, encoding: 'utf-8'
       });
-      this.eventBus.publish('db.query.request', { project_id, query, params, read_only: false, request_id }).catch(reject);
     });
   }
 
-  // ==========================================
-  // HANDLERS: UI endpoints (domain: recetas)
-  // ==========================================
-
-  async handleBuscar(request) {
-    const { proyecto_id, ...criteria } = request;
-
-    try {
-      // Build simple query from criteria
-      const { texto, estado, limit: lim = 50 } = criteria;
-      let query = 'SELECT * FROM recetas WHERE proyecto_id = ?';
-      const params = [proyecto_id];
-      if (estado) { query += ' AND estado = ?'; params.push(estado); }
-      if (texto) { query += ' AND (nombre LIKE ? OR descripcion LIKE ?)'; params.push(`%${texto}%`, `%${texto}%`); }
-      query += ` LIMIT ${parseInt(lim)}`;
-      const resultados = await this._dbQuery(proyecto_id, query, params);
-      this.metrics?.increment('receta.buscada');
-
-      return {
-        status: 200,
-        data: {
-          recetas: resultados,
-          total_encontradas: resultados.length,
-          criterios_aplicados: criteria,
-          timestamp: Date.now()
-        }
-      };
-    } catch (err) {
-      this.logger.error('recetas.buscar.failed', { proyecto_id, error: err.message });
-      return { status: 500, error: err.message };
-    }
+  onFsReadResponse(event) {
+    const { request_id, content, status, error } = event.data || event;
+    const p = this.pendingFs.get(request_id);
+    if (!p) return;
+    clearTimeout(p.timer); this.pendingFs.delete(request_id);
+    if (status === 404) return p.resolve(null); // archivo no existe todavía
+    if (error || status >= 400) return p.reject(new Error(error || `fs.read status ${status}`));
+    p.resolve(content);
   }
 
-  async handleListar(request) {
-    const { proyecto_id, estado, limit } = request;
-
-    try {
-      const { estado: est, limit: lim = 100 } = request;
-      let query = 'SELECT * FROM recetas WHERE proyecto_id = ?';
-      const params = [proyecto_id];
-      if (est) { query += ' AND estado = ?'; params.push(est); }
-      query += ` ORDER BY created_at DESC LIMIT ${parseInt(lim)}`;
-      const recetas = await this._dbQuery(proyecto_id, query, params);
-
-      return {
-        status: 200,
-        data: {
-          recetas,
-          total: recetas.length
-        }
-      };
-    } catch (err) {
-      this.logger.error('recetas.listar.failed', { proyecto_id, error: err.message });
-      return { status: 500, error: err.message };
-    }
+  onFsWriteResponse(event) {
+    const { request_id, error, status } = event.data || event;
+    const p = this.pendingFs.get(request_id);
+    if (!p) return;
+    clearTimeout(p.timer); this.pendingFs.delete(request_id);
+    if (error || status >= 400) return p.reject(new Error(error || `fs.write status ${status}`));
+    p.resolve(true);
   }
 
-  async handleObtener(request) {
-    const { receta_id, proyecto_id } = request;
+  // ============================================================
+  // Carga / guardado del store — con cola por proyecto
+  // ============================================================
 
-    try {
-      const rows = await this._dbQuery(proyecto_id, 'SELECT * FROM recetas WHERE id = ? AND proyecto_id = ?', [receta_id, proyecto_id]);
-      const receta = rows[0];
-      if (!receta) {
-        return { status: 404, error: 'Receta no encontrada' };
-      }
-
-      return { status: 200, data: receta };
-    } catch (err) {
-      this.logger.error('recetas.obtener.failed', { receta_id, error: err.message });
-      return { status: 500, error: err.message };
-    }
-  }
-
-  async handleHistorial(request) {
-    const { receta_id, proyecto_id, limit = 50 } = request;
-
-    try {
-      const historial = await this._dbQuery(
-        proyecto_id,
-        'SELECT * FROM recetas_versiones WHERE receta_id = ? ORDER BY version DESC LIMIT ?',
-        [receta_id, parseInt(limit)]
-      );
-
-      return { status: 200, data: historial };
-    } catch (err) {
-      this.logger.error('recetas.historial.failed', { receta_id, error: err.message });
-      return { status: 500, error: err.message };
-    }
-  }
-
-  async handleRevertir(request) {
-    const { receta_id, proyecto_id, target_version } = request;
-
-    try {
-      // TODO: implementar via db events (revertVersion requiere lógica multi-step)
-      return { status: 200, data: { receta_id, revertida_a_version: target_version } };
-    } catch (err) {
-      this.logger.error('recetas.revertir.failed', { receta_id, error: err.message });
-      return { status: 500, error: err.message };
-    }
-  }
-
-  async handleIngredientes(request) {
-    const { proyecto_id, categoria } = request;
-
-    try {
-      let query = 'SELECT * FROM ingredientes WHERE proyecto_id = ?';
-      const params = [proyecto_id];
-      if (categoria) { query += ' AND categoria = ?'; params.push(categoria); }
-      query += ' ORDER BY nombre';
-      const ingredientes = await this._dbQuery(proyecto_id, query, params);
-
-      return { status: 200, data: ingredientes };
-    } catch (err) {
-      this.logger.error('recetas.ingredientes.failed', { proyecto_id, error: err.message });
-      return { status: 500, error: err.message };
-    }
-  }
-
-  async handleActualizarPrecio(request) {
-    const { ingrediente_id, proyecto_id, precio_mercado, fuente } = request;
-
-    try {
-      await this._dbRun(
-        proyecto_id,
-        'UPDATE ingredientes SET precio_mercado = ?, precio_fuente = ?, precio_updated_at = ? WHERE id = ? AND proyecto_id = ?',
-        [precio_mercado, fuente || null, Date.now(), ingrediente_id, proyecto_id]
-      );
-
-      await this.eventBus.publish('ingrediente.precio.actualizado', {
-        ingrediente_id,
-        proyecto_id,
-        precio_mercado,
-        fuente,
-        timestamp: Date.now()
-      });
-
-      return { status: 200, data: { ingrediente_id, precio_mercado } };
-    } catch (err) {
-      this.logger.error('recetas.actualizar_precio.failed', { ingrediente_id, error: err.message });
-      return { status: 500, error: err.message };
-    }
-  }
-
-  async handleEstadisticas(request) {
-    const { proyecto_id } = request;
-
-    try {
-      const [totalRows, estadosRows] = await Promise.all([
-        this._dbQuery(proyecto_id, 'SELECT COUNT(*) as total FROM recetas WHERE proyecto_id = ?', [proyecto_id]),
-        this._dbQuery(proyecto_id, 'SELECT estado, COUNT(*) as count FROM recetas WHERE proyecto_id = ? GROUP BY estado', [proyecto_id])
-      ]);
-
-      const stats = {
-        total: totalRows[0]?.total || 0,
-        por_estado: estadosRows
-      };
-
-      return { status: 200, data: stats };
-    } catch (err) {
-      this.logger.error('recetas.estadisticas.failed', { proyecto_id, error: err.message });
-      return { status: 500, error: err.message };
-    }
-  }
-
-  /**
-   * Extraer palabras clave de un nombre de receta
-   * "salsa oriental con patatas" → ["salsa", "oriental", "patatas"]
-   */
-  extractKeywords(text) {
-    if (!text) return [];
-    const stopwords = new Set(['con', 'de', 'la', 'el', 'y', 'o', 'a', 'al', 'del', 'los', 'las']);
-    const words = text
-      .toLowerCase()
-      .split(/[\s\-,]+/)
-      .filter(w => w.length > 2 && !stopwords.has(w));
-    return [...new Set(words)];
-  }
-
-  /**
-   * Búsqueda multi-criterio inteligente
-   * Realiza varias búsquedas y rankea por relevancia
-   */
-  async intelligentSearch(projectId, nombreReceta, descripcion) {
-    const keywords = this.extractKeywords(nombreReceta);
-
-    // Búsquedas a ejecutar: { sqlWhere, sqlParams, weight, name }
-    const searches = [];
-
-    // Búsqueda 1: Nombre exacto (mayor relevancia)
-    searches.push({
-      query: 'SELECT * FROM recetas WHERE proyecto_id = ? AND nombre = ? LIMIT 10',
-      params: [projectId, nombreReceta],
-      weight: 100,
-      name: 'exact_name'
-    });
-
-    // Búsqueda 2: Palabras clave del nombre
-    for (const keyword of keywords) {
-      searches.push({
-        query: 'SELECT * FROM recetas WHERE proyecto_id = ? AND nombre LIKE ? LIMIT 10',
-        params: [projectId, `%${keyword}%`],
-        weight: 80,
-        name: 'keyword_name'
-      });
-    }
-
-    // Búsqueda 3: Por tipo de plato
-    const tiposPlato = {
-      'salsa': 'salsa', 'sopa': 'sopa', 'ensalada': 'ensalada',
-      'postre': 'postre', 'pasta': 'pasta', 'arroz': 'arroz',
-      'carne': 'carne', 'pescado': 'pescado', 'verdura': 'verdura', 'pan': 'pan'
+  _emptyStore() {
+    return {
+      _version: '1.0',
+      _updated_at: new Date().toISOString(),
+      recetas: [],
+      ingredientes_catalogo: []
     };
+  }
 
-    for (const keyword of keywords) {
-      if (tiposPlato[keyword]) {
-        searches.push({
-          query: 'SELECT * FROM recetas WHERE proyecto_id = ? AND tipo_plato = ? LIMIT 10',
-          params: [projectId, tiposPlato[keyword]],
-          weight: 60,
-          name: 'type_search'
-        });
-      }
+  async _loadStore(slug) {
+    const raw = await this._readFile(slug);
+    if (raw == null) return this._emptyStore();
+    try {
+      const parsed = JSON.parse(raw);
+      // Garantizar arrays presentes (forwards compatible)
+      parsed.recetas = Array.isArray(parsed.recetas) ? parsed.recetas : [];
+      parsed.ingredientes_catalogo = Array.isArray(parsed.ingredientes_catalogo) ? parsed.ingredientes_catalogo : [];
+      return parsed;
+    } catch (err) {
+      this.logger.error('recetas.store.parse.failed', { slug, error: err.message });
+      throw new Error('recetas.json corrupto: ' + err.message);
     }
+  }
 
-    // Ejecutar todas las búsquedas y recolectar resultados
-    const resultMap = new Map(); // receta_id → { receta, score }
+  async _saveStore(slug, store) {
+    store._updated_at = new Date().toISOString();
+    await this._writeFile(slug, JSON.stringify(store, null, 2));
+  }
 
-    for (const search of searches) {
-      try {
-        const results = await this._dbQuery(projectId, search.query, search.params);
-        if (results && results.length > 0) {
-          for (const receta of results) {
-            const existingEntry = resultMap.get(receta.id);
-            const newScore = search.weight;
-
-            // Calcular score adicional por coincidencia
-            let matchBonus = 0;
-            if (receta.nombre.toLowerCase() === nombreReceta.toLowerCase()) {
-              matchBonus = 50; // Coincidencia exacta
-            } else if (receta.nombre.toLowerCase().includes(nombreReceta.toLowerCase())) {
-              matchBonus = 30; // Coincidencia parcial
-            } else {
-              // Calcular similitud de Levenshtein simplificada
-              matchBonus = this.calculateSimilarity(nombreReceta.toLowerCase(), receta.nombre.toLowerCase()) * 25;
-            }
-
-            const totalScore = newScore + matchBonus;
-
-            if (!existingEntry || existingEntry.score < totalScore) {
-              resultMap.set(receta.id, {
-                receta,
-                score: totalScore,
-                matchedBy: search.name
-              });
-            }
-          }
-        }
-      } catch (err) {
-        this.logger.debug('recetas.investigar.search-error', {
-          search: search.name,
-          error: err.message
-        });
-      }
+  /**
+   * Encola una operación que lee + modifica + escribe atómicamente para un proyecto.
+   * Garantiza que dos tool calls concurrentes sobre el mismo proyecto no se pisen.
+   */
+  async _withStore(project_id, mutator) {
+    const slug = await this._slugForProject(project_id);
+    const prev = this.writeQueues.get(project_id) || Promise.resolve();
+    const next = prev
+      .catch(() => {}) // no propagar error de operación previa al siguiente
+      .then(async () => {
+        const store = await this._loadStore(slug);
+        const result = await mutator(store);
+        await this._saveStore(slug, store);
+        return result;
+      });
+    this.writeQueues.set(project_id, next);
+    try { return await next; }
+    finally {
+      // Si esta era la última, limpiar la entrada
+      if (this.writeQueues.get(project_id) === next) this.writeQueues.delete(project_id);
     }
+  }
 
-    // Ordenar por score y retornar top 5
-    const ranked = Array.from(resultMap.values())
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5)
-      .map(entry => ({
-        ...entry.receta,
-        _investigacion_score: entry.score,
-        _matched_by: entry.matchedBy
+  /** Solo lectura: no necesita cola. */
+  async _readOnly(project_id, reader) {
+    const slug = await this._slugForProject(project_id);
+    const store = await this._loadStore(slug);
+    return reader(store);
+  }
+
+  // ============================================================
+  // Helpers de dominio
+  // ============================================================
+
+  _calcIncompleta(receta) {
+    const pendientes = [];
+    for (const campo of CAMPOS_REQUERIDOS_PARA_COMPLETA) {
+      const v = receta[campo];
+      const vacio = v == null || (Array.isArray(v) && v.length === 0) || v === '';
+      if (vacio) pendientes.push(campo);
+    }
+    receta.incompleta = pendientes.length > 0;
+    receta.campos_pendientes = pendientes;
+    return receta;
+  }
+
+  _normalizeIngredientes(ingredientes) {
+    if (ingredientes == null) return [];
+    if (typeof ingredientes === 'string') {
+      // Texto libre del usuario: lo metemos como un solo item con notas
+      return [{ nombre: ingredientes.trim(), cantidad: null, unidad: null, notas: 'texto libre' }];
+    }
+    if (!Array.isArray(ingredientes)) return [];
+    return ingredientes.map(it => {
+      if (typeof it === 'string') return { nombre: it.trim(), cantidad: null, unidad: null };
+      if (typeof it !== 'object' || it == null) return { nombre: String(it), cantidad: null, unidad: null };
+      return {
+        nombre: (it.nombre ?? it.name ?? it.ingrediente ?? '').toString().trim(),
+        cantidad: it.cantidad ?? it.quantity ?? null,
+        unidad:   it.unidad   ?? it.unit     ?? null,
+        notas:    it.notas    ?? it.notes    ?? undefined
+      };
+    }).filter(i => i.nombre);
+  }
+
+  _normalizeInstrucciones(input) {
+    if (input == null) return [];
+    if (typeof input === 'string') return input.split(/\n+|\.\s+/).map(s => s.trim()).filter(Boolean);
+    if (!Array.isArray(input)) return [];
+    return input.map(s => String(s).trim()).filter(Boolean);
+  }
+
+  _formatIngredientesText(arr) {
+    if (!arr || !arr.length) return null;
+    return arr.map(i => {
+      const head = [i.cantidad, i.unidad].filter(v => v != null && v !== '').join(' ').trim();
+      const body = head && i.nombre ? `${head} de ${i.nombre}` : (i.nombre || head || '');
+      const suffix = i.notas ? ` (${i.notas})` : '';
+      return body ? `- ${body}${suffix}` : null;
+    }).filter(Boolean).join('\n');
+  }
+
+  _findRecetaByRefBuilder(store) {
+    return (ref) => {
+      if (!ref) return null;
+      // Por id exacto
+      let r = store.recetas.find(x => x.id === ref);
+      if (r) return r;
+      // Por nombre (case-insensitive, primer match en estado activa)
+      const refLower = String(ref).toLowerCase().trim();
+      r = store.recetas.find(x => x.nombre.toLowerCase() === refLower && x.estado === 'activa');
+      if (r) return r;
+      // Por nombre parcial
+      r = store.recetas.find(x => x.nombre.toLowerCase().includes(refLower) && x.estado === 'activa');
+      return r || null;
+    };
+  }
+
+  // ============================================================
+  // Tools — implementaciones limpias sobre el store JSON
+  // ============================================================
+
+  async crear(params) {
+    const { proyecto_id, nombre } = params;
+    if (!proyecto_id) return { error: 'proyecto_id requerido' };
+    if (!nombre || !nombre.trim()) return { error: 'nombre requerido' };
+
+    const ingredientes = this._normalizeIngredientes(params.ingredientes);
+    const instrucciones = this._normalizeInstrucciones(params.instrucciones);
+
+    return this._withStore(proyecto_id, (store) => {
+      // No duplicar nombres dentro del mismo proyecto entre activas
+      const dup = store.recetas.find(r => r.nombre.toLowerCase() === nombre.toLowerCase().trim() && r.estado === 'activa');
+      if (dup) {
+        return {
+          error: 'Ya existe una receta activa con ese nombre',
+          existing_id: dup.id
+        };
+      }
+
+      const id = crypto.randomUUID();
+      const now = Date.now();
+      const receta = {
+        id,
+        nombre: nombre.trim(),
+        descripcion: params.descripcion || null,
+        ingredientes,
+        instrucciones,
+        porciones: params.porciones ?? null,
+        tiempo_min: params.tiempo_min ?? params.tiempo_preparacion ?? null,
+        dificultad: params.dificultad ?? null,
+        categorias: Array.isArray(params.categorias) ? params.categorias : [],
+        etiquetas: Array.isArray(params.etiquetas) ? params.etiquetas : [],
+        estado: 'activa',
+        fuente: params.fuente || 'manual',
+        notas: params.notas || null,
+        created_at: now,
+        updated_at: now,
+        version: 1,
+        history: []
+      };
+      this._calcIncompleta(receta);
+      store.recetas.push(receta);
+
+      this.eventBus.publish('receta.creada', { proyecto_id, id, nombre: receta.nombre, timestamp: now });
+
+      return {
+        id,
+        nombre: receta.nombre,
+        status: 'creada',
+        incompleta: receta.incompleta,
+        campos_pendientes: receta.campos_pendientes,
+        ingredientes_formateados: this._formatIngredientesText(ingredientes),
+        version: 1
+      };
+    });
+  }
+
+  async listar(params) {
+    const { proyecto_id } = params;
+    return this._readOnly(proyecto_id, (store) => {
+      let r = store.recetas;
+      if (params.estado) r = r.filter(x => x.estado === params.estado);
+      else r = r.filter(x => x.estado !== 'archivada'); // por defecto solo activas/borrador
+      if (params.solo_incompletas) r = r.filter(x => x.incompleta);
+      const limit = params.limit ?? 100;
+      const items = r
+        .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
+        .slice(0, limit)
+        .map(x => ({ id: x.id, nombre: x.nombre, porciones: x.porciones, dificultad: x.dificultad,
+                     incompleta: x.incompleta, campos_pendientes: x.campos_pendientes,
+                     estado: x.estado, version: x.version, updated_at: x.updated_at }));
+      return { total: items.length, recetas: items };
+    });
+  }
+
+  async obtener(params) {
+    const { proyecto_id, receta_id, nombre } = params;
+    return this._readOnly(proyecto_id, (store) => {
+      const find = this._findRecetaByRefBuilder(store);
+      const r = find(receta_id || nombre);
+      if (!r) return { error: 'Receta no encontrada', ref: receta_id || nombre };
+      // No enviar el history completo en obtener (puede ser pesado)
+      const { history, ...rest } = r;
+      return { ...rest, ingredientes_formateados: this._formatIngredientesText(r.ingredientes), versiones_anteriores: history.length };
+    });
+  }
+
+  async buscar(params) {
+    const { proyecto_id } = params;
+    return this._readOnly(proyecto_id, (store) => {
+      let r = store.recetas.filter(x => x.estado === 'activa');
+
+      if (params.texto) {
+        const t = params.texto.toLowerCase();
+        r = r.filter(x => x.nombre.toLowerCase().includes(t)
+                       || (x.descripcion || '').toLowerCase().includes(t)
+                       || x.ingredientes.some(i => (i.nombre || '').toLowerCase().includes(t)));
+      }
+      if (params.ingrediente) {
+        const t = params.ingrediente.toLowerCase();
+        r = r.filter(x => x.ingredientes.some(i => (i.nombre || '').toLowerCase().includes(t)));
+      }
+      if (params.categoria) {
+        r = r.filter(x => (x.categorias || []).some(c => c.toLowerCase() === params.categoria.toLowerCase()));
+      }
+      if (params.etiqueta) {
+        r = r.filter(x => (x.etiquetas || []).some(e => e.toLowerCase() === params.etiqueta.toLowerCase()));
+      }
+      if (params.dificultad_max != null) r = r.filter(x => x.dificultad != null && x.dificultad <= params.dificultad_max);
+      if (params.dificultad_min != null) r = r.filter(x => x.dificultad != null && x.dificultad >= params.dificultad_min);
+      if (params.tiempo_max != null)     r = r.filter(x => x.tiempo_min != null && x.tiempo_min <= params.tiempo_max);
+      if (params.porciones != null)      r = r.filter(x => x.porciones === params.porciones);
+
+      const limit = params.limit ?? 50;
+      const items = r.slice(0, limit).map(x => ({
+        id: x.id, nombre: x.nombre, porciones: x.porciones, tiempo_min: x.tiempo_min,
+        dificultad: x.dificultad, categorias: x.categorias, etiquetas: x.etiquetas
       }));
-
-    return ranked;
+      return { total: items.length, recetas: items };
+    });
   }
 
-  /**
-   * Calcular similitud simple entre dos strings (0-1)
-   * Implementación simplificada de Levenshtein
-   */
-  calculateSimilarity(str1, str2) {
-    const longer = str1.length > str2.length ? str1 : str2;
-    const shorter = str1.length > str2.length ? str2 : str1;
+  async actualizar(params) {
+    const { proyecto_id, receta_id, cambios = {} } = params;
+    if (!receta_id) return { error: 'receta_id requerido' };
 
-    if (longer.length === 0) return 1.0;
+    return this._withStore(proyecto_id, (store) => {
+      const find = this._findRecetaByRefBuilder(store);
+      const r = find(receta_id);
+      if (!r) return { error: 'Receta no encontrada', ref: receta_id };
 
-    const editDistance = this.getEditDistance(longer, shorter);
-    return (longer.length - editDistance) / longer.length;
-  }
+      // Snapshot de la versión actual al history (sin history para evitar recursión)
+      const { history: _h, ...snapshot } = r;
+      r.history.push({ ...snapshot, _archived_at: Date.now() });
 
-  /**
-   * Calcular distancia de edición (Levenshtein)
-   */
-  getEditDistance(s1, s2) {
-    const costs = [];
-    for (let i = 0; i <= s1.length; i++) {
-      let lastValue = i;
-      for (let j = 0; j <= s2.length; j++) {
-        if (i === 0) {
-          costs[j] = j;
-        } else if (j > 0) {
-          let newValue = costs[j - 1];
-          if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
-            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-          }
-          costs[j - 1] = lastValue;
-          lastValue = newValue;
+      // Aplicar cambios soportados
+      const aplicados = {};
+      const setIf = (k, transform) => {
+        if (k in cambios) {
+          const v = transform ? transform(cambios[k]) : cambios[k];
+          aplicados[k] = { antes: r[k], despues: v };
+          r[k] = v;
         }
-      }
-      if (i > 0) costs[s2.length] = lastValue;
-    }
-    return costs[s2.length];
-  }
-
-  /**
-   * Handle: investigar_receta (OPCIÓN 2 - Fase 1 MEJORADA)
-   *
-   * Orquesta la investigación de una receta con búsqueda inteligente multi-criterio:
-   * 1. Búsqueda por nombre exacto
-   * 2. Búsqueda por palabras clave
-   * 3. Búsqueda por tipo de plato
-   * 4. Búsqueda por ingredientes
-   * 5. Rankea por relevancia
-   * 6. Si existe → retorna con costos
-   * 7. Si no existe → estructura parcial con "needs_generation"
-   */
-  async handleInvestigarReceta(request) {
-    const { proyecto_id, nombre_receta, descripcion_opcional } = request;
-
-    try {
-      if (!nombre_receta || nombre_receta.trim() === '') {
-        return { status: 400, error: 'nombre_receta es requerido' };
-      }
-
-      this.logger.info('recetas.investigar.iniciado', {
-        proyecto_id,
-        nombre_receta,
-        tiene_descripcion: !!descripcion_opcional,
-        busqueda_inteligente: true
-      });
-
-      // PASO 1: Búsqueda inteligente multi-criterio
-      const busqueda = await this.intelligentSearch(proyecto_id, nombre_receta, descripcion_opcional);
-
-      let resultado = {
-        investigacion_id: `inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: Date.now(),
-        proyecto_id,
-        nombre_buscado: nombre_receta,
-        descripcion_proporcionada: descripcion_opcional || null
       };
+      setIf('nombre');
+      setIf('descripcion');
+      setIf('porciones');
+      setIf('tiempo_min');
+      setIf('dificultad');
+      setIf('estado');
+      setIf('notas');
+      setIf('fuente');
+      setIf('ingredientes', this._normalizeIngredientes.bind(this));
+      setIf('instrucciones', this._normalizeInstrucciones.bind(this));
+      if ('categorias' in cambios)  { aplicados.categorias = { antes: r.categorias,  despues: cambios.categorias  }; r.categorias  = cambios.categorias; }
+      if ('etiquetas' in cambios)   { aplicados.etiquetas  = { antes: r.etiquetas,   despues: cambios.etiquetas   }; r.etiquetas   = cambios.etiquetas; }
 
-      // PASO 2: Evaluar resultados
-      if (busqueda && busqueda.length > 0) {
-        // Encontró coincidencias
-        const receta = busqueda[0];
-        const confidence = this.calculateConfidence(receta._investigacion_score);
+      r.version += 1;
+      r.updated_at = Date.now();
+      this._calcIncompleta(r);
 
-        resultado.status = 'receta_encontrada';
-        resultado.confianza = confidence;
-        resultado.receta = receta;
-        resultado.ingredientes_pendientes = [];
-        resultado.flags = [];
-        resultado.search_score = receta._investigacion_score;
-        resultado.matched_by = receta._matched_by;
-
-        // Mostrar alternativas si hay varias coincidencias
-        if (busqueda.length > 1) {
-          resultado.alternativas = busqueda.slice(1, 4).map(r => ({
-            id: r.id,
-            nombre: r.nombre,
-            score: r._investigacion_score,
-            matched_by: r._matched_by
-          }));
-        }
-
-        // Obtener costos (reales o estimados)
-        try {
-          resultado.costes = await this.obtenerCostosReceta(receta, proyecto_id);
-
-          // Agregar advertencia si son estimados
-          if (resultado.costes.tipo === 'estimado') {
-            resultado.flags.push('costos_estimados_no_reales');
-          }
-        } catch (e) {
-          this.logger.error('recetas.investigar.costos-error', {
-            receta_id: receta.id,
-            error: e.message
-          });
-          // Continuar sin costos si hay error
-        }
-
-        resultado.viabilidad = {
-          estado: 'VIABLE',
-          razon: `Receta encontrada (score: ${receta._investigacion_score.toFixed(1)})`,
-          confianza_alta: confidence === 'alta'
-        };
-
-        this.logger.info('recetas.investigar.encontrada', {
-          proyecto_id,
-          receta_id: receta.id,
-          confidence,
-          search_score: receta._investigacion_score
-        });
-
-      } else {
-        // No encontró - necesita generación (Fase 2)
-        resultado.status = 'needs_generation';
-        resultado.confianza = 'baja';
-        resultado.receta = {
-          nombre: nombre_receta,
-          descripcion: descripcion_opcional || '',
-          estado: 'borrador',
-          ingredientes: [],
-          elaboracion: [],
-          _estatus_investigacion: 'pendiente_generacion'
-        };
-        resultado.ingredientes_pendientes = [
-          {
-            razon: 'no_encontrada_en_bd',
-            sugerencia: 'Se requiere generación con Claude en Fase 2'
-          }
-        ];
-        resultado.flags = [
-          'receta_no_existe',
-          'requiere_generacion_fase_2',
-          'fase_1_completada',
-          'busqueda_inteligente_ejecutada'
-        ];
-
-        this.logger.info('recetas.investigar.no_encontrada', {
-          proyecto_id,
-          nombre_receta,
-          busqueda_inteligente: true
-        });
-      }
-
-      this.metrics?.increment('receta.investigada');
+      this.eventBus.publish('receta.actualizada', { proyecto_id, id: r.id, nombre: r.nombre, version: r.version, timestamp: r.updated_at });
 
       return {
-        status: 200,
-        data: resultado
+        id: r.id, nombre: r.nombre, version: r.version, cambios_aplicados: aplicados,
+        incompleta: r.incompleta, campos_pendientes: r.campos_pendientes
       };
+    });
+  }
 
-    } catch (err) {
-      this.logger.error('recetas.investigar.failed', {
-        proyecto_id,
+  async historial(params) {
+    const { proyecto_id, receta_id } = params;
+    return this._readOnly(proyecto_id, (store) => {
+      const find = this._findRecetaByRefBuilder(store);
+      const r = find(receta_id);
+      if (!r) return { error: 'Receta no encontrada', ref: receta_id };
+      const versiones = r.history.map(h => ({
+        version: h.version, archived_at: h._archived_at,
+        nombre: h.nombre, porciones: h.porciones, dificultad: h.dificultad,
+        ingredientes_count: (h.ingredientes || []).length
+      }));
+      return {
+        receta_id: r.id, nombre: r.nombre, version_actual: r.version,
+        versiones_anteriores: versiones.length, historial: versiones
+      };
+    });
+  }
+
+  async revertir(params) {
+    const { proyecto_id, receta_id, target_version } = params;
+    if (target_version == null) return { error: 'target_version requerido' };
+
+    return this._withStore(proyecto_id, (store) => {
+      const find = this._findRecetaByRefBuilder(store);
+      const r = find(receta_id);
+      if (!r) return { error: 'Receta no encontrada', ref: receta_id };
+
+      const target = r.history.find(h => h.version === target_version);
+      if (!target) return { error: `version ${target_version} no encontrada`, versiones_disponibles: r.history.map(h => h.version) };
+
+      // Snapshot actual al history
+      const { history: _h, ...snapshot } = r;
+      r.history.push({ ...snapshot, _archived_at: Date.now() });
+
+      // Restaurar campos de la versión target
+      const { _archived_at, version: _v, history: _hh, ...restore } = target;
+      Object.assign(r, restore);
+      r.version += 1; // nueva versión "post-revertida"
+      r.updated_at = Date.now();
+      this._calcIncompleta(r);
+
+      this.eventBus.publish('receta.actualizada', { proyecto_id, id: r.id, nombre: r.nombre, version: r.version, timestamp: r.updated_at, motivo: 'revertir' });
+
+      return { id: r.id, nombre: r.nombre, revertida_a_version: target_version, version_actual: r.version };
+    });
+  }
+
+  async eliminar(params) {
+    const { proyecto_id, receta_id } = params;
+    return this._withStore(proyecto_id, (store) => {
+      const find = this._findRecetaByRefBuilder(store);
+      const r = find(receta_id);
+      if (!r) return { error: 'Receta no encontrada', ref: receta_id };
+      if (r.estado === 'archivada') return { id: r.id, nombre: r.nombre, status: 'ya_estaba_archivada' };
+      r.estado = 'archivada';
+      r.updated_at = Date.now();
+      this.eventBus.publish('receta.eliminada', { proyecto_id, id: r.id, nombre: r.nombre, timestamp: r.updated_at });
+      return { id: r.id, nombre: r.nombre, status: 'archivada' };
+    });
+  }
+
+  async estadisticas(params) {
+    const { proyecto_id } = params;
+    return this._readOnly(proyecto_id, (store) => {
+      const por_estado = { activa: 0, archivada: 0, borrador: 0 };
+      let incompletas = 0;
+      let con_precios = 0;
+      const ingredientesUsados = new Set();
+      for (const r of store.recetas) {
+        por_estado[r.estado] = (por_estado[r.estado] || 0) + 1;
+        if (r.incompleta) incompletas += 1;
+        for (const i of r.ingredientes || []) ingredientesUsados.add((i.nombre || '').toLowerCase());
+      }
+      for (const ing of store.ingredientes_catalogo) {
+        if (ing.precio_mercado != null) con_precios += 1;
+      }
+      return {
+        total_recetas: store.recetas.length,
+        por_estado,
+        incompletas,
+        ingredientes_catalogo: store.ingredientes_catalogo.length,
+        ingredientes_con_precio: con_precios,
+        ingredientes_usados_unicos: ingredientesUsados.size
+      };
+    });
+  }
+
+  async ingredientes(params) {
+    const { proyecto_id } = params;
+    return this._readOnly(proyecto_id, (store) => {
+      let arr = store.ingredientes_catalogo;
+      if (params.categoria) arr = arr.filter(i => (i.categoria || '').toLowerCase() === params.categoria.toLowerCase());
+      return { total: arr.length, ingredientes: arr };
+    });
+  }
+
+  async actualizarPrecio(params) {
+    const { proyecto_id, nombre, precio_mercado, unidad, fuente, categoria } = params;
+    if (!nombre) return { error: 'nombre requerido' };
+    if (precio_mercado == null) return { error: 'precio_mercado requerido' };
+
+    return this._withStore(proyecto_id, (store) => {
+      const nombreLower = nombre.toLowerCase().trim();
+      let item = store.ingredientes_catalogo.find(i => (i.nombre || '').toLowerCase() === nombreLower);
+      const now = Date.now();
+      if (!item) {
+        item = { nombre: nombre.trim(), categoria: categoria || null, unidad: unidad || null,
+                 precio_mercado, fuente: fuente || 'manual', created_at: now, updated_at: now };
+        store.ingredientes_catalogo.push(item);
+      } else {
+        item.precio_mercado = precio_mercado;
+        if (unidad) item.unidad = unidad;
+        if (categoria) item.categoria = categoria;
+        if (fuente) item.fuente = fuente;
+        item.updated_at = now;
+      }
+      this.eventBus.publish('ingrediente.precio.actualizado', { proyecto_id, nombre: item.nombre, precio_mercado, timestamp: now });
+      return { nombre: item.nombre, precio_mercado, unidad: item.unidad, status: 'actualizado' };
+    });
+  }
+
+  /**
+   * Análisis profundo de receta. Devuelve datos estructurados; el LLM
+   * compone la narrativa. Cruza ingredientes con catálogo si hay precios.
+   */
+  async analizar(params) {
+    const { proyecto_id, receta_id } = params;
+    return this._readOnly(proyecto_id, (store) => {
+      const find = this._findRecetaByRefBuilder(store);
+      const r = find(receta_id);
+      if (!r) return { error: 'Receta no encontrada', ref: receta_id };
+      if (r.incompleta) {
+        return { error: 'Receta incompleta — faltan campos para analizar', campos_pendientes: r.campos_pendientes };
+      }
+
+      // Cruzar ingredientes con catálogo
+      const cat = new Map(store.ingredientes_catalogo.map(i => [(i.nombre || '').toLowerCase(), i]));
+      let costeTotal = 0;
+      let costeReal = true;
+      const detalles = (r.ingredientes || []).map(i => {
+        const matched = cat.get((i.nombre || '').toLowerCase());
+        const precio_mercado = matched?.precio_mercado ?? null;
+        if (precio_mercado == null) costeReal = false;
+        // Cálculo simple: si cantidad y precio están en mismas unidades, multiplica.
+        // Si no, dejar coste null y avisar en notas.
+        let coste = null;
+        if (precio_mercado != null && i.cantidad != null && (matched.unidad === i.unidad || !matched.unidad)) {
+          coste = Number((i.cantidad * precio_mercado).toFixed(4));
+          costeTotal += coste;
+        }
+        return { nombre: i.nombre, cantidad: i.cantidad, unidad: i.unidad, precio_mercado, coste, en_catalogo: !!matched };
+      });
+
+      const costePorPorcion = (r.porciones && r.porciones > 0 && costeReal) ? Number((costeTotal / r.porciones).toFixed(2)) : null;
+
+      return {
+        receta_id: r.id, nombre: r.nombre, porciones: r.porciones,
+        tiempo_min: r.tiempo_min, dificultad: r.dificultad,
+        ingredientes: detalles,
+        coste_total: costeReal ? Number(costeTotal.toFixed(2)) : null,
+        coste_por_porcion: costePorPorcion,
+        coste_es_real: costeReal,
+        nota: costeReal ? 'Coste calculado con precios reales del catálogo' : 'Faltan precios en catálogo para algunos ingredientes — coste no calculable'
+      };
+    });
+  }
+
+  /**
+   * Investigación de receta: si existe en el proyecto, la devuelve. Si no,
+   * devuelve estructura vacía indicando que el LLM debe proponerla. Esta tool
+   * no llama al LLM por dentro: el LLM principal compone la propuesta usando
+   * el resultado de esta tool.
+   */
+  async investigarReceta(params) {
+    const { proyecto_id, nombre_receta } = params;
+    if (!nombre_receta) return { error: 'nombre_receta requerido' };
+    return this._readOnly(proyecto_id, (store) => {
+      const find = this._findRecetaByRefBuilder(store);
+      const existing = find(nombre_receta);
+      if (existing) {
+        return {
+          existe_en_proyecto: true,
+          receta: { id: existing.id, nombre: existing.nombre, version: existing.version,
+                    incompleta: existing.incompleta, ingredientes: existing.ingredientes,
+                    porciones: existing.porciones, instrucciones: existing.instrucciones }
+        };
+      }
+      return {
+        existe_en_proyecto: false,
         nombre_receta,
-        error: err.message
-      });
-      return { status: 500, error: err.message };
-    }
+        instruccion_para_llm: 'No existe esta receta en el proyecto. Proponla al usuario con ingredientes (cantidad, unidad), instrucciones, porciones, tiempo y dificultad estimados. Cuando el usuario confirme, llama recetas.crear con esos datos.'
+      };
+    });
   }
 
-  /**
-   * Calcular nivel de confianza basado en score
-   */
-  calculateConfidence(score) {
-    if (score >= 80) return 'alta';
-    if (score >= 50) return 'media';
-    return 'baja';
-  }
+  // ============================================================
+  // Wrapper de tools — recibe evento, normaliza project_id, llama handler
+  // ============================================================
 
-  /**
-   * Intentar obtener costos reales de escandallo
-   * Si no existe escandallo, calcula estimado y marca como tal
-   */
-  async obtenerCostosReceta(receta, projectId) {
-    const costos = {
-      tipo: 'estimado', // 'real' o 'estimado'
-      coste_total: 0,
-      coste_porcion: 0,
-      food_cost_porcentaje: null,
-      detalles: []
-    };
-
-    try {
-      // PASO 1: Intentar obtener costos del escandallo si existen
-      // (En futuro, usar escandallo tool directamente)
-      // Para ahora, calcular basado en ingredientes
-
-      if (!receta.ingredientes || receta.ingredientes.length === 0) {
-        return costos; // Sin ingredientes
-      }
-
-      // PASO 2: Calcular costos basados en precios de ingredientes
-      let coste_total = 0;
-      const detalles = [];
-
-      for (const ing of receta.ingredientes) {
-        const precio = ing.precio_mercado_en_momento || ing.precio_mercado || 0;
-        coste_total += precio;
-
-        detalles.push({
-          nombre: ing.nombre,
-          cantidad: ing.cantidad,
-          unidad: ing.unidad,
-          precio_unitario: precio,
-          es_precio_real: !!ing.precio_mercado // true si es precio de mercado real
-        });
-      }
-
-      // PASO 3: Calcular por porción
-      const coste_porcion = receta.porciones && receta.porciones > 0
-        ? coste_total / receta.porciones
-        : coste_total;
-
-      // PASO 4: Determinar si es "real" o "estimado"
-      // Es "real" si todos los ingredientes tienen precio_mercado
-      const todosTienenPrecio = receta.ingredientes.every(
-        ing => ing.precio_mercado_en_momento || ing.precio_mercado
-      );
-
-      costos.tipo = todosTienenPrecio ? 'real' : 'estimado';
-      costos.coste_total = Math.round(coste_total * 100) / 100;
-      costos.coste_porcion = Math.round(coste_porcion * 100) / 100;
-      costos.detalles = detalles;
-      costos.fuente = todosTienenPrecio ? 'precios_mercado' : 'precios_parciales';
-
-      // PASO 5: Log para debugging
-      this.logger.debug('recetas.investigar.costos-calculados', {
-        receta_id: receta.id,
-        tipo: costos.tipo,
-        coste_total: costos.coste_total,
-        ingredientes_con_precio: detalles.filter(d => d.es_precio_real).length,
-        ingredientes_total: detalles.length
-      });
-
-      return costos;
-
-    } catch (err) {
-      this.logger.error('recetas.investigar.costos-error', {
-        receta_id: receta.id,
-        error: err.message
-      });
-      // Retornar objeto vacío pero válido
-      return costos;
-    }
-  }
-
-  // ==========================================
-  // TOOLS: Para agentes IA
-  // ==========================================
-
-  async toolBuscar(params) {
-    return this.handleBuscar(params);
-  }
-
-  async toolListar(params) {
-    return this.handleListar(params);
-  }
-
-  async toolObtener(params) {
-    return this.handleObtener(params);
-  }
-
-  async toolHistorial(params) {
-    return this.handleHistorial(params);
-  }
-
-  async toolRevertir(params) {
-    return this.handleRevertir(params);
-  }
-
-  async toolIngredientes(params) {
-    return this.handleIngredientes(params);
-  }
-
-  async toolActualizarPrecio(params) {
-    return this.handleActualizarPrecio(params);
-  }
-
-  async toolEstadisticas(params) {
-    return this.handleEstadisticas(params);
-  }
-
-  async toolInvestigarReceta(params) {
-    return this.handleInvestigarReceta(params);
-  }
-
-  // ==========================================
-  // TOOL EVENT HANDLERS — paradigma event-driven
-  // AI emite recetas.buscar → recetas responde recetas.buscar.response
-  // ==========================================
-
-  async _toolResponse(toolName, event, handlerFn) {
+  async _toolDispatch(toolName, event) {
     const data = event.data || event;
     const { request_id, project_id, ...rest } = data;
     const params = { ...rest, proyecto_id: project_id ?? rest.proyecto_id };
+    const handlerName = TOOL_HANDLERS[toolName];
+    if (!handlerName) {
+      return this.eventBus.publish(`${toolName}.response`, { request_id, error: `unknown tool ${toolName}` });
+    }
     try {
-      const result = await handlerFn(params);
+      const result = await this[handlerName](params);
       await this.eventBus.publish(`${toolName}.response`, { request_id, result });
     } catch (err) {
+      this.logger.error(`${toolName}.failed`, { error: err.message });
       await this.eventBus.publish(`${toolName}.response`, { request_id, error: err.message });
     }
   }
 
-  async onToolBuscar(event)          { return this._toolResponse('recetas.buscar',            event, p => this.handleBuscar(p)); }
-  async onToolListar(event)          { return this._toolResponse('recetas.listar',             event, p => this.handleListar(p)); }
-  async onToolObtener(event)         { return this._toolResponse('recetas.obtener',            event, p => this.handleObtener(p)); }
-  async onToolHistorial(event)       { return this._toolResponse('recetas.historial',          event, p => this.handleHistorial(p)); }
-  async onToolEstadisticas(event)    { return this._toolResponse('recetas.estadisticas',       event, p => this.handleEstadisticas(p)); }
-  async onToolIngredientes(event)    { return this._toolResponse('recetas.ingredientes',       event, p => this.handleIngredientes(p)); }
-  async onToolActualizarPrecio(event){ return this._toolResponse('recetas.actualizar_precio',  event, p => this.handleActualizarPrecio(p)); }
-  async onToolCrearDesdeChat(event)  { return this._toolResponse('recetas.crear_desde_chat',   event, p => this._crearRecetaSync(p)); }
+  // Handlers expuestos al loader (subscribes en module.json)
+  async onToolCrear(e)             { return this._toolDispatch('recetas.crear', e); }
+  async onToolListar(e)            { return this._toolDispatch('recetas.listar', e); }
+  async onToolObtener(e)           { return this._toolDispatch('recetas.obtener', e); }
+  async onToolBuscar(e)            { return this._toolDispatch('recetas.buscar', e); }
+  async onToolActualizar(e)        { return this._toolDispatch('recetas.actualizar', e); }
+  async onToolHistorial(e)         { return this._toolDispatch('recetas.historial', e); }
+  async onToolRevertir(e)          { return this._toolDispatch('recetas.revertir', e); }
+  async onToolEliminar(e)          { return this._toolDispatch('recetas.eliminar', e); }
+  async onToolEstadisticas(e)      { return this._toolDispatch('recetas.estadisticas', e); }
+  async onToolIngredientes(e)      { return this._toolDispatch('recetas.ingredientes', e); }
+  async onToolActualizarPrecio(e)  { return this._toolDispatch('recetas.actualizar_precio', e); }
+  async onToolAnalizar(e)          { return this._toolDispatch('recetas.analizar', e); }
+  async onToolInvestigarReceta(e)  { return this._toolDispatch('recetas.investigar_receta', e); }
 
-  async onToolCrear(event) {
-    return this._toolResponse('recetas.crear', event, p => this._crearRecetaSync(p));
-  }
-
-  // Crea receta síncrona: INSERT en DB + publica receta.creada + devuelve id.
-  // Sin eventos intermedios. El módulo recetas sabe persistir su dominio.
-  async _crearRecetaSync(params) {
-    const { proyecto_id, nombre, ingredientes, instrucciones, notas, descripcion } = params;
-    if (!proyecto_id) return { error: 'proyecto_id requerido' };
-    if (!nombre) return { error: 'nombre requerido' };
-
-    const id = require('crypto').randomUUID();
-    const now = Date.now();
-
-    // Versión legible para mostrar al usuario y guardar en descripcion
-    const ingredientesTxt = this._formatIngredientes(ingredientes);
-    const instruccionesTxt = this._formatInstrucciones(instrucciones);
-
-    // descripcion consolidada: texto principal + ingredientes + instrucciones
-    const desc = [
-      descripcion,
-      ingredientesTxt ? `Ingredientes:\n${ingredientesTxt}` : null,
-      instruccionesTxt ? `Instrucciones:\n${instruccionesTxt}` : null,
-      notas ? `Notas: ${notas}` : null
-    ].filter(Boolean).join('\n\n');
-
+  // UI handlers (mismos handlers, formato distinto: { status, data, error })
+  async _uiAdapt(handlerName, request) {
+    const params = { ...request, proyecto_id: request.project_id ?? request.proyecto_id };
     try {
-      await this._dbRun(proyecto_id,
-        `INSERT INTO recetas (id, proyecto_id, nombre, descripcion, created_at, updated_at, fuente)
-         VALUES (?, ?, ?, ?, ?, ?, 'manual')`,
-        [id, proyecto_id, nombre, desc || null, now, now]
-      );
-
-      await this.eventBus.publish('receta.creada', {
-        proyecto_id, id, nombre, timestamp: now
-      });
-
-      return {
-        id,
-        nombre,
-        status: 'creada',
-        ingredientes_formateados: ingredientesTxt || null,
-        instrucciones_formateadas: instruccionesTxt || null
-      };
+      const result = await this[handlerName](params);
+      if (result && result.error) return { status: 400, error: result.error };
+      return { status: 200, data: result };
     } catch (err) {
-      this.logger.error('recetas.crear.failed', { proyecto_id, nombre, error: err.message });
-      return { error: err.message };
-    }
-  }
-
-  // Convierte ingredientes (array de objetos | array de strings | string) a markdown.
-  // Acepta {nombre, cantidad, unidad, notas?} en cualquier combinación.
-  _formatIngredientes(input) {
-    if (!input) return null;
-    if (typeof input === 'string') return input.trim() || null;
-    if (!Array.isArray(input)) return null;
-
-    const lines = input.map(item => {
-      if (item == null) return null;
-      if (typeof item === 'string') return `- ${item.trim()}`;
-      if (typeof item !== 'object') return `- ${String(item)}`;
-      const cantidad = item.cantidad ?? item.quantity ?? '';
-      const unidad   = item.unidad   ?? item.unit     ?? '';
-      const nombre   = item.nombre   ?? item.name     ?? item.ingrediente ?? '';
-      const notas    = item.notas    ?? item.notes    ?? '';
-      const head = [cantidad, unidad].filter(v => v !== '' && v != null).join(' ').trim();
-      const body = head && nombre ? `${head} de ${nombre}` : (nombre || head || '');
-      const suffix = notas ? ` (${notas})` : '';
-      return body ? `- ${body}${suffix}` : null;
-    }).filter(Boolean);
-
-    return lines.length > 0 ? lines.join('\n') : null;
-  }
-
-  _formatInstrucciones(input) {
-    if (!input) return null;
-    if (typeof input === 'string') return input.trim() || null;
-    if (!Array.isArray(input)) return null;
-    const lines = input
-      .map((p, i) => typeof p === 'string' ? `${i + 1}. ${p.trim()}` : null)
-      .filter(Boolean);
-    return lines.length > 0 ? lines.join('\n') : null;
-  }
-
-  async onToolAnalizar(event) {
-    return this._toolResponse('recetas.analizar', event, async (p) => {
-      const { proyecto_id, receta_id } = p;
-      // Obtener nombre de la receta para investigar
-      const row = await this.handleObtener({ proyecto_id, receta_id });
-      const nombre = row?.data?.nombre || receta_id;
-      return this.handleInvestigarReceta({ proyecto_id, nombre_receta: nombre });
-    });
-  }
-
-  async onToolActualizar(event) {
-    return this._toolResponse('recetas.actualizar', event, p => this.handleActualizar(p));
-  }
-
-  async onToolEliminar(event) {
-    return this._toolResponse('recetas.eliminar', event, p => this.handleEliminar(p));
-  }
-
-  async onToolInvestigarReceta(event) {
-    return this._toolResponse('recetas.investigar_receta', event, p => this.handleInvestigarReceta(p));
-  }
-
-  async handleActualizar({ proyecto_id, receta_id, cambios = {} }) {
-    try {
-      const { nombre, descripcion, estado } = cambios;
-      const sets = [];
-      const params = [];
-      if (nombre) { sets.push('nombre = ?'); params.push(nombre); }
-      if (descripcion !== undefined) { sets.push('descripcion = ?'); params.push(descripcion); }
-      if (estado) { sets.push('estado = ?'); params.push(estado); }
-      if (sets.length === 0) return { status: 400, error: 'No hay campos para actualizar' };
-      sets.push('updated_at = ?');
-      params.push(Date.now(), receta_id, proyecto_id);
-      await this._dbRun(proyecto_id,
-        `UPDATE recetas SET ${sets.join(', ')} WHERE id = ? AND proyecto_id = ?`,
-        params
-      );
-      await this.eventBus.publish('receta.actualizada', {
-        proyecto_id, receta_id, cambios, timestamp: Date.now()
-      });
-      return { status: 200, data: { updated: true, receta_id } };
-    } catch (err) {
-      this.logger.error('recetas.actualizar.failed', { receta_id, error: err.message });
+      this.logger.error(`recetas.ui.${handlerName}.failed`, { error: err.message });
       return { status: 500, error: err.message };
     }
   }
 
-  async handleEliminar({ proyecto_id, receta_id }) {
-    try {
-      await this._dbRun(proyecto_id,
-        'UPDATE recetas SET estado = ?, updated_at = ? WHERE id = ? AND proyecto_id = ?',
-        ['archivada', Date.now(), receta_id, proyecto_id]
-      );
-      await this.eventBus.publish('receta.eliminada', {
-        proyecto_id, receta_id, timestamp: Date.now()
-      });
-      return { status: 200, data: { eliminada: true, receta_id } };
-    } catch (err) {
-      this.logger.error('recetas.eliminar.failed', { receta_id, error: err.message });
-      return { status: 500, error: err.message };
-    }
-  }
+  async handleCrear(req)            { return this._uiAdapt('crear', req); }
+  async handleListar(req)           { return this._uiAdapt('listar', req); }
+  async handleObtener(req)          { return this._uiAdapt('obtener', req); }
+  async handleBuscar(req)           { return this._uiAdapt('buscar', req); }
+  async handleActualizar(req)       { return this._uiAdapt('actualizar', req); }
+  async handleHistorial(req)        { return this._uiAdapt('historial', req); }
+  async handleRevertir(req)         { return this._uiAdapt('revertir', req); }
+  async handleEliminar(req)         { return this._uiAdapt('eliminar', req); }
+  async handleEstadisticas(req)     { return this._uiAdapt('estadisticas', req); }
+  async handleIngredientes(req)     { return this._uiAdapt('ingredientes', req); }
+  async handleActualizarPrecio(req) { return this._uiAdapt('actualizarPrecio', req); }
+  async handleAnalizar(req)         { return this._uiAdapt('analizar', req); }
+  async handleInvestigarReceta(req) { return this._uiAdapt('investigarReceta', req); }
 }
 
 module.exports = RecetasModule;

@@ -3,50 +3,69 @@
   "_module": "recetas",
 
   "capabilities": [
-    "crear recetas con ingredientes y precios estimados",
-    "investigar recetas: buscar info, proponer ingredientes y precios de mercado",
-    "calcular escandallo: coste total, coste por porcion, % de cada ingrediente",
-    "gestionar catalogo de ingredientes y precios",
-    "duplicar recetas para crear variantes"
+    "guardar recetas (con datos completos o parciales — la marca 'incompleta' se calcula sola)",
+    "listar y buscar recetas por múltiples criterios",
+    "ver y actualizar recetas con audit trail (history dentro de cada receta)",
+    "revertir a versiones anteriores",
+    "archivar recetas (no borrado definitivo)",
+    "gestionar catálogo de ingredientes con precios de mercado (independiente de recetas)",
+    "calcular coste de una receta cruzando con el catálogo de precios",
+    "investigar recetas: si existe en el proyecto la devuelve; si no, sirve de hint para que el LLM proponga una"
   ],
 
-  "domain_knowledge": {
-    "precios": "estima precios de mercado por ALTO (mejor pasarse que quedarse corto)",
-    "unidades": "g, kg, ml, l, ud, cucharada, cucharadita, pizca",
-    "food_cost": "objetivo tipico hosteleria: 28-33% del precio de venta",
-    "porciones": "una receta define porciones — el coste se calcula por porcion"
+  "tools_disponibles": {
+    "recetas.crear": "guardar receta nueva (solo nombre + project_id obligatorios)",
+    "recetas.listar": "listar recetas (filtro por estado, solo_incompletas)",
+    "recetas.obtener": "obtener una receta por id o nombre",
+    "recetas.buscar": "buscar por texto, ingrediente, categoría, dificultad, tiempo, etc.",
+    "recetas.actualizar": "modificar (history snapshot automático)",
+    "recetas.historial": "ver versiones anteriores",
+    "recetas.revertir": "restaurar versión anterior",
+    "recetas.eliminar": "archivar (estado='archivada')",
+    "recetas.estadisticas": "conteos del proyecto",
+    "recetas.ingredientes": "catálogo de ingredientes",
+    "recetas.actualizar_precio": "crear/actualizar precio de ingrediente",
+    "recetas.analizar": "coste calculado con catálogo",
+    "recetas.investigar_receta": "comprobar existencia o proponer (vía LLM)"
   },
 
-  "workflow": {
-    "investigar": "1. usuario pide receta → 2. investigas ingredientes y precios → 3. presentas al usuario → 4. si confirma, guardas con recetas.crear",
-    "escandallo": "1. receta existe → 2. calculas coste por ingrediente → 3. si hay precio_venta, calculas margen y food cost",
-    "precio_mercado": "los precios de mercado son estimaciones. los de compra vienen de facturas reales"
+  "domain_knowledge": {
+    "almacenamiento": "data/projects/{slug}/recetas.json — un archivo por proyecto, con todas las recetas y el catálogo de ingredientes dentro",
+    "incompleta": "Una receta es 'incompleta' si le faltan ingredientes, porciones o instrucciones. Se guarda igualmente y queda marcada para que el usuario la complete después.",
+    "versionado": "Cada receta tiene un campo 'history' con snapshots de versiones anteriores. recetas.actualizar añade el snapshot automáticamente.",
+    "catalogo": "Los ingredientes del catálogo (con precios) son INDEPENDIENTES de las recetas. Se llenan vía recetas.actualizar_precio o por procesamiento de facturas. Una receta puede tener ingredientes que NO están en el catálogo — en ese caso el coste no es real.",
+    "unidades": "g, kg, ml, l, ud, cucharada, cucharadita, pizca",
+    "food_cost_objetivo_hosteleria": "28-33% del precio de venta"
   },
 
   "rules": [
-    "nunca guardes una receta sin confirmacion del usuario",
-    "al investigar, estima precios por ALTO",
-    "siempre incluye las unidades de medida",
-    "si un ingrediente ya existe en el catalogo, reutiliza su precio",
-    "las cantidades son para el total de la receta, no por porcion",
-    "al presentar ingredientes al usuario, formatealos siempre como lista markdown ('- 200ml de aceite de oliva'). NUNCA pegues el array JSON directamente, NUNCA escribas '[object Object]'.",
-    "tras recetas.crear, la respuesta incluye 'ingredientes_formateados' como string markdown listo para mostrar — usalo tal cual en tu respuesta en lugar de reformatear los objetos."
+    "Cuando el usuario diga 'guárdala', 'guarda la', 'sí guárdala', llama recetas.crear DE INMEDIATO con los datos que tengas. Si solo tienes nombre + ingredientes, GUÁRDALA igualmente — la marca 'incompleta' se ocupará de recordar al usuario que faltan datos.",
+    "NUNCA pidas al usuario que rellene campos antes de guardar. Guardas con lo que hay. Después, si el usuario quiere completar, lo hacemos.",
+    "Si el usuario acaba de usar recetas.investigar_receta y dice 'guárdala', usa los datos EXACTOS de esa investigación — nombre, ingredientes, porciones, instrucciones tal como los propusiste. NUNCA inventes una receta diferente.",
+    "Al presentar ingredientes al usuario, formatea SIEMPRE como lista markdown: '- 200ml de aceite de oliva'. NUNCA pegues el array JSON, NUNCA escribas '[object Object]'. Tras recetas.crear, la respuesta incluye 'ingredientes_formateados' como string markdown listo para mostrar — úsalo tal cual.",
+    "Si recetas.analizar devuelve coste_es_real=false, dile al usuario que faltan precios en el catálogo y ofrece llamar a recetas.actualizar_precio para añadirlos.",
+    "Para identificar una receta acepta tanto UUID como nombre — el backend lo resuelve."
   ],
 
   "integrations": {
-    "listens_to": ["project.activated", "factura.procesada"],
-    "emits": ["receta.creada", "receta.actualizada", "receta.eliminada"],
-    "related_modules": ["escandallo", "viabilidad"]
+    "listens_to": ["project.activated"],
+    "emits": ["receta.creada", "receta.actualizada", "receta.eliminada", "ingrediente.precio.actualizado"],
+    "depends_on": ["filesystem (fs.read.request, fs.write.request)", "project-manager (project.get.request para resolver slug)"],
+    "related_modules": ["escandallo (consumirá receta.creada/actualizada para recalcular)", "viabilidad", "facturas (alimentará el catálogo de ingredientes)"]
   },
 
   "examples": [
     {
-      "user": "investiga la receta de carbonara clasica romana para 4 personas",
-      "assistant": "Uso recetas.investigar para buscar la receta. Presento ingredientes con cantidades y precios estimados. NO la guardo hasta que confirmes."
+      "user": "guarda una receta de alioli con 50g de ajo, 250ml de aceite, sal",
+      "assistant": "Llamo recetas.crear con nombre='Alioli' e ingredientes=[{nombre:'ajo',cantidad:50,unidad:'g'}, ...]. La receta se guarda como 'incompleta' porque faltan porciones e instrucciones. Confirmo al usuario y le pregunto si quiere completarla."
     },
     {
-      "user": "cuanto cuesta hacer la carbonara?",
-      "assistant": "Uso recetas.escandallo con el ID de la receta. Muestro desglose por ingrediente, coste total y coste por porcion."
+      "user": "qué recetas tengo a medio hacer?",
+      "assistant": "Llamo recetas.listar con solo_incompletas=true. Muestro las que faltan datos y los campos pendientes."
+    },
+    {
+      "user": "cuánto cuesta hacer la carbonara?",
+      "assistant": "Llamo recetas.analizar con receta_id='carbonara'. Si coste_es_real=true, presento desglose. Si no, explico qué ingredientes faltan en el catálogo."
     }
   ]
 }

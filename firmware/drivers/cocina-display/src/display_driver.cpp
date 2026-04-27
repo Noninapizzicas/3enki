@@ -156,7 +156,7 @@ static bool _init_panel() {
     dpi.dpi_clk_src                      = MIPI_DSI_DPI_CLK_SRC_DEFAULT;
     dpi.dpi_clock_freq_mhz               = MIPI_DPI_CLK_MHZ;
     dpi.pixel_format                     = LCD_COLOR_PIXEL_FORMAT_RGB565;
-    dpi.num_fbs                          = 1;
+    dpi.num_fbs                          = 2;
     dpi.video_timing.h_size              = DISPLAY_WIDTH;
     dpi.video_timing.v_size              = DISPLAY_HEIGHT;
     dpi.video_timing.hsync_back_porch    = MIPI_HSYNC_BACK_PORCH;
@@ -287,14 +287,14 @@ bool display_driver_init() {
 
     bool panel_ok = _init_panel();
 
-    const size_t bsz = DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(lv_color_t);
-    _buf1 = heap_caps_malloc(bsz, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    _buf2 = heap_caps_malloc(bsz, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!_buf1) { Serial.println("[DISP] Sin PSRAM"); return false; }
+    // Use DPI panel's own DMA framebuffers — no PSRAM copy needed
+    esp_lcd_dpi_panel_get_frame_buffer(_panel, 2, &_buf1, &_buf2);
+    const size_t bsz = DISPLAY_WIDTH * DISPLAY_HEIGHT * 2;  // RGB565
 
     _lv_disp = lv_display_create(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    lv_display_set_color_format(_lv_disp, LV_COLOR_FORMAT_RGB565);
     lv_display_set_flush_cb(_lv_disp, _flush_cb);
-    lv_display_set_buffers(_lv_disp, _buf1, _buf2, bsz, LV_DISPLAY_RENDER_MODE_FULL);
+    lv_display_set_buffers(_lv_disp, _buf1, _buf2, bsz, LV_DISPLAY_RENDER_MODE_DIRECT);
 
     bool touch_ok = _touch_init();
     if (touch_ok) {

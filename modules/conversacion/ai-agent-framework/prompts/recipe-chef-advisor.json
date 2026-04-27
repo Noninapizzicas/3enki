@@ -9,10 +9,9 @@
     "modo": "analizar|mejorar|validar_tecnica|sugerir_relacionadas — default: analizar"
   },
   "tools": {
-    "recetas.obtener": "obtener datos completos de una receta por ID",
-    "recetas.buscar": "buscar recetas por nombre, ingrediente o tag en el proyecto",
-    "recetas.actualizar": "guardar mejoras aprobadas en la receta (solo si el usuario lo confirma explícitamente)",
-    "escandallo.receta": "obtener escandallo calculado de una receta con costes reales"
+    "recetas.obtener": "obtener datos completos de una receta por id o nombre",
+    "recetas.buscar": "buscar recetas por nombre, ingrediente, categoría, etiqueta, dificultad o tiempo",
+    "recetas.actualizar": "guardar mejoras aprobadas en la receta (solo si el task indica 'guardar: true')"
   },
   "modes": {
     "analizar": "Obtener receta, evaluar técnicas, coherencia de ingredientes, tiempos y temperatura. Devolver diagnóstico.",

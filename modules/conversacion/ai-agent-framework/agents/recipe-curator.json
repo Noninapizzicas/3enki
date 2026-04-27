@@ -1,78 +1,14 @@
 {
-  "id": "recipe-curator",
   "name": "recipe-curator",
-  "description": "Validación final, persistencia en SQLite con versionado, actualización de índices de búsqueda. Entrada: receta + análisis. Salida: receta guardada.",
-  "version": "1.0.0",
-  "enabled": true,
+  "description": "[OBSOLETO] Curador de recetas con persistencia SQLite. Tras la reescritura de recetas v2 (almacenamiento JSON + history dentro de cada receta) este rol ya no aporta: la validación pre-save la hace recetas.crear (con la marca incompleta), y la persistencia es atómica. Mantenido apagado por si en el futuro se necesita un agente de validación cruzada.",
+  "version": "2.0.0",
+  "enabled": false,
+  "_disabled_reason": "Rol obsoleto tras tabula rasa de recetas (Abril 2026). Si se reactivara, reescribir prompt para usar v2 (sin recetas.actualizar_indices, sin SQLite).",
+  "scope": ["recetas"],
   "prompt_file": "prompts/recipe-curator.json",
-  "tools": [
-    "recetas.actualizar",
-    "recetas.obtener",
-    "recetas.actualizar_indices"
-  ],
+  "tools": ["recetas.obtener", "recetas.actualizar"],
   "provider": "auto",
   "temperature": 0.0,
   "max_tokens": 3000,
-  "context_enabled": true,
-  "timeout_ms": 120000,
-  "max_retries": 1,
-  "event_listener": {
-    "event": "receta.analysis.completed",
-    "context_mapping": {
-      "receta_id": "$.receta_id",
-      "projectId": "$.projectId",
-      "receta": "$.receta",
-      "analisis": "$.analisis",
-      "timestamp": "$.timestamp"
-    }
-  },
-  "publish_on_success": {
-    "event": "receta.creada",
-    "payload_template": {
-      "receta_id": "$.context.receta_id",
-      "projectId": "$.context.projectId",
-      "nombre": "$.context.receta.nombre",
-      "version": "$.result.version",
-      "estado": "$.result.estado",
-      "timestamp": "$.timestamp"
-    }
-  },
-  "publish_on_failure": {
-    "event": "receta.curation.failed",
-    "payload_template": {
-      "receta_id": "$.context.receta_id",
-      "projectId": "$.context.projectId",
-      "error": "$.error.message",
-      "estado_guardado": "borrador",
-      "timestamp": "$.timestamp"
-    }
-  },
-  "metadata": {
-    "type": "pipeline-agent",
-    "domain": "recetas",
-    "pipeline_role": "step-4-curation",
-    "author": "system",
-    "created_at": "2026-04-14",
-    "tags": [
-      "recipe",
-      "curation",
-      "persistence",
-      "versioning",
-      "audit-trail"
-    ]
-  },
-  "created_at": "2026-04-14T00:00:00.000Z",
-  "updated_at": "2026-04-14T00:00:00.000Z",
-  "stats": {
-    "executions": 0,
-    "successes": 0,
-    "failures": 0,
-    "total_tokens": 0,
-    "total_cost": 0,
-    "avg_latency_ms": 0,
-    "last_execution": null
-  },
-  "scope": [
-    "recetas"
-  ]
+  "timeout_ms": 120000
 }

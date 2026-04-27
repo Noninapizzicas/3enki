@@ -76,7 +76,11 @@ static bool wifiTryConnect(int idx) {
 
   Serial.printf("[WiFi] Intentando red %d: %s...\n", idx + 1, baseCfg.wifi[idx].ssid);
 
-  WiFi.disconnect(true);  // limpiar estado previo
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+  WiFi.disconnect(false);  // P4: no destruir netif — ESP-Hosted no se puede reiniciar
+#else
+  WiFi.disconnect(true);
+#endif
   delay(100);
   WiFi.begin(baseCfg.wifi[idx].ssid, baseCfg.wifi[idx].pass);
 
@@ -238,7 +242,11 @@ void wifiHandleReconnect() {
   }
 
   if (reconnTryingIdx < WIFI_MAX_NETWORKS) {
-    WiFi.disconnect(true);  // limpiar estado antes de cambiar de red
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+    WiFi.disconnect(false);  // P4: mantener transport ESP-Hosted vivo
+#else
+    WiFi.disconnect(true);
+#endif
     delay(100);
     WiFi.begin(baseCfg.wifi[reconnTryingIdx].ssid, baseCfg.wifi[reconnTryingIdx].pass);
     reconnStartMs = now;

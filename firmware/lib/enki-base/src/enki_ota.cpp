@@ -61,7 +61,7 @@ static void onOtaProgress(int current, int total) {
   static int lastPercent = -1;
   int percent = (total > 0) ? (current * 100 / total) : 0;
 
-  digitalWrite(LED_PIN, (percent / 5) % 2);
+  if (LED_PIN >= 0) digitalWrite(LED_PIN, (percent / 5) % 2);
 
   if (percent / 10 != lastPercent / 10) {
     lastPercent = percent;
@@ -88,7 +88,7 @@ static void executeOta() {
   t_httpUpdate_return ret = httpUpdate.update(otaClient, otaTargetUrl);
 
   esp_task_wdt_reset();
-  digitalWrite(LED_PIN, LOW);
+  if (LED_PIN >= 0) digitalWrite(LED_PIN, LOW);
 
   switch (ret) {
     case HTTP_UPDATE_OK:
@@ -180,7 +180,7 @@ void otaHandle() {
 
   t_httpUpdate_return ret = httpUpdate.update(otaClient, url);
   esp_task_wdt_reset();
-  digitalWrite(LED_PIN, LOW);
+  if (LED_PIN >= 0) digitalWrite(LED_PIN, LOW);
 
   switch (ret) {
     case HTTP_UPDATE_FAILED: {

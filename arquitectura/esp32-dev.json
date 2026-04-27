@@ -1,0 +1,154 @@
+{
+  "$schema": "https://enki.local/schemas/arquitectura/module.json",
+  "module": "esp32-dev",
+  "version": "1.0.0",
+  "tier": "tier_3",
+  "description": "Desarrollo ESP32: templates, scaffolding, compilación de proyectos de usuario",
+
+  "dominio": {
+    "responsabilidad_unica": "Gestionar el ciclo completo de desarrollo de firmware ESP32 en el contexto de un proyecto: templates, creación de proyectos (scaffolding), configuración de boards, y compilación via PlatformIO",
+    "conoce": ["Templates", "Proyectos de usuario", "PlatformIO CLI", "Board definitions"],
+    "no_conoce": ["SQLite, persistencia de firmware", "Catálogos", "OTA", "Flash serial", "Device registry", "Drivers pre-empaquetados"]
+  },
+
+  "eventos_emitidos": [
+    {
+      "nombre": "esp32.project_created",
+      "descripcion": "Nuevo proyecto de firmware creado desde template",
+      "schema": {
+        "project_name": "string (nombre único del proyecto)",
+        "template": "string (template usado: sensor-basic, gateway-printer, etc.)",
+        "board": "string (esp32dev, esp32-s3, esp32-c3, etc.)",
+        "framework": "string enum (arduino | espidf)"
+      },
+      "quien_escucha": [],
+      "intención": "Notificar que un proyecto de usuario fue creado. Sin expectativa de confirmación."
+    },
+    {
+      "nombre": "esp32.build_started",
+      "descripcion": "Compilación de proyecto iniciada",
+      "schema": {
+        "project_name": "string",
+        "board": "string",
+        "timestamp": "ISO8601"
+      },
+      "quien_escucha": [],
+      "intención": "Notificar inicio de compilación para observabilidad (logs, UI, métricas)"
+    },
+    {
+      "nombre": "esp32.build_completed",
+      "descripcion": "Compilación completada exitosamente",
+      "schema": {
+        "project_name": "string",
+        "board": "string",
+        "framework": "string (arduino | espidf)",
+        "binary_path": "string (ruta al .bin generado)",
+        "binary_size": "integer (bytes)",
+        "duration_ms": "integer",
+        "firmware_type": "string (NUEVO: tipo de firmware, ej: print-proxy, sensor-basic)",
+        "firmware_version": "string (NUEVO: semver, extraído de platformio.ini o manifest)",
+        "firmware_utility": "string (NUEVO: para qué sirve, ej: Gateway de impresora térmica)",
+        "firmware_board": "string (NUEVO: board target, ej: esp32dev)",
+        "firmware_capabilities": ["string"] (NUEVO: capacidades, ej: [ota, mqtt, serial-debug])"
+      },
+      "quien_escucha": ["firmware-manager (auto-registra en catálogo)", "esp32-flasher (cachea para UI)"],
+      "intención": "Notificar que un binario está listo. Los listeners pueden registrarlo en catálogo o cachear para flash rápido.",
+      "nota_arquitectural": "CRÍTICO: Incluir metadatos firmware_* para que firmware-manager pueda auto-registrar sin adivinanzas"
+    },
+    {
+      "nombre": "esp32.build_failed",
+      "descripcion": "Compilación falló",
+      "schema": {
+        "project_name": "string",
+        "board": "string",
+        "error": "string (mensaje de error de PlatformIO)",
+        "exit_code": "integer",
+        "duration_ms": "integer"
+      },
+      "quien_escucha": [],
+      "intención": "Notificar fallo para observabilidad"
+    }
+  ],
+
+  "eventos_escuchados": [
+    {
+      "nombre": "ninguno",
+      "descripcion": "esp32-dev NO escucha eventos. Es reactivo vía UI handlers."
+    }
+  ],
+
+  "flujos_dominio": [
+    {
+      "nombre": "Crear Proyecto",
+      "pasos": [
+        "UI → esp32.create-project({ template, board, project_name })",
+        "esp32-dev → valida template, board, nombre único",
+        "esp32-dev → descarga template, scaffolding en data/esp32-dev/projects/{project_name}/",
+        "esp32-dev → emite: esp32.project_created",
+        "FIN. esp32-dev no sabe qué pasa después."
+      ]
+    },
+    {
+      "nombre": "Compilar Proyecto",
+      "pasos": [
+        "UI → esp32.build({ project_name, board })",
+        "esp32-dev → valida que proyecto existe",
+        "esp32-dev → emite: esp32.build_started",
+        "esp32-dev → ejecuta: pio run -d data/esp32-dev/projects/{project_name}",
+        "esp32-dev → si éxito:",
+        "  ├─ extrae versión de platformio.ini (build_flags, version)",
+        "  ├─ calcula sha256 del .bin",
+        "  └─ emite: esp32.build_completed({ binary_path, firmware_type, firmware_version, ... })",
+        "esp32-dev → si fallo:",
+        "  └─ emite: esp32.build_failed({ error, exit_code })",
+        "FIN. esp32-dev no controla qué pasa con el binario."
+      ]
+    }
+  ],
+
+  "dependencias_externas": [
+    {
+      "herramienta": "platformio",
+      "razon": "Compilación de Arduino/ESP-IDF",
+      "versión_minima": "6.0.0",
+      "comando_verificacion": "pio --version"
+    }
+  ],
+
+  "almacenamiento": {
+    "ruta_base": "data/esp32-dev",
+    "estructura": {
+      "projects/": "Proyectos de usuario",
+      "templates/": "Templates custom del proyecto (además de builtin)",
+      "boards/": "Definiciones de boards custom"
+    },
+    "nota": "NO almacena binarios finales — solo proyectos. Los binarios se cachean temporalmente en build/ de cada proyecto."
+  },
+
+  "problemas_detectados": [
+    {
+      "id": "P1",
+      "titulo": "Metadatos incompletos en build_completed",
+      "severidad": "ALTA",
+      "descripcion": "El evento esp32.build_completed no incluye firmware_type, firmware_version, etc. Esto obliga a firmware-manager a adivinar.",
+      "solucion": "Ver schema de esp32.build_completed arriba: incluir firmware_* fields",
+      "estado": "PENDIENTE"
+    }
+  ],
+
+  "metricas_observabilidad": {
+    "counters": [
+      "esp32.project_created.total",
+      "esp32.build_started.total",
+      "esp32.build_completed.total",
+      "esp32.build_failed.total"
+    ],
+    "gauges": [
+      "esp32.active_builds.count",
+      "esp32.projects.count"
+    ],
+    "timings": [
+      "esp32.build.duration"
+    ]
+  }
+}

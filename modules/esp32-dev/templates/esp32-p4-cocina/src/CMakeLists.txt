@@ -1,0 +1,23 @@
+idf_component_register(
+    SRCS
+        "main.cpp"
+        "nvstorage.cpp"
+        "display.cpp"
+        "wifi_manager.cpp"
+        "mqtt_client.cpp"
+        "webview.cpp"
+        "config_mode.cpp"
+        "trabajo_mode.cpp"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        esp_wifi
+        esp_netif
+        nvs_flash
+        esp_mqtt
+        lvgl
+        esp_lcd
+        freertos
+        esp_event
+        driver
+)

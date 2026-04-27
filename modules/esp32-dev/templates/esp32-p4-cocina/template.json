@@ -1,0 +1,240 @@
+{
+  "id": "esp32-p4-cocina",
+  "name": "ESP32-P4 Pantalla Cocina",
+  "description": "Kiosko multimedia para pantalla de cocina en tiempo real. Modo CONFIG + Modo TRABAJO. WiFi 6, pantalla 10.1\" 800×1280, botones físicos para seleccionar modo.",
+  "version": "1.0.0",
+  "framework": "esp-idf",
+  "board": "esp32-p4",
+  "hardware": {
+    "processor": "ESP32-P4 (dual-core RISC-V 400MHz)",
+    "display": "10.1\" IPS 800×1280 capacitive touch",
+    "memory": "32MB PSRAM + 16MB Flash",
+    "connectivity": ["WiFi 6", "Bluetooth 5"],
+    "interfaces": ["USB-C", "MIPI CSI", "TF Card", "RTC", "Mic"]
+  },
+
+  "structure": {
+    "main": {
+      "description": "Entry point — selecciona modo CONFIG o TRABAJO basado en botón físico"
+    },
+    "config_mode": {
+      "description": "Setup WiFi + MQTT — pantalla de configuración interactiva",
+      "screens": [
+        "Scan WiFi networks",
+        "Select red + ingresar password",
+        "Guardar red (up to 3)",
+        "MQTT broker IP + puerto",
+        "Mostrar redes guardadas",
+        "Ready — volver a seleccionar TRABAJO"
+      ]
+    },
+    "trabajo_mode": {
+      "description": "WebView kiosko — carga URL configurada en NVS",
+      "screens": [
+        "Splash screen (logo Pizzicas)",
+        "WiFi connecting...",
+        "MQTT connecting...",
+        "Load WebView: http://vps:5173/[project]/cocina",
+        "Fullscreen — touch-interactive"
+      ]
+    },
+    "src": {
+      "main.cpp": "Entry point, button handling, mode selection",
+      "config_mode.cpp": "UI para WiFi + MQTT setup",
+      "trabajo_mode.cpp": "WebView + MQTT client, manejar pantalla",
+      "nvstorage.cpp": "Persistencia de credenciales (NVS)",
+      "display.cpp": "Inicializar pantalla, render texto/UI",
+      "wifi_manager.cpp": "WiFi scan, connect, multi-network",
+      "mqtt_client.cpp": "Cliente MQTT para recibir pedidos en tiempo real",
+      "webview.cpp": "Inicializar esp_browser WebView fullscreen"
+    },
+    "components": {
+      "esp_browser": "LVGL + WebView para renderizar HTML/JS",
+      "nvs_flash": "Almacenamiento persistente de config",
+      "wifi": "WiFi driver",
+      "mqtt": "MQTT client para IDF",
+      "esp_lcd": "Display driver"
+    }
+  },
+
+  "config_schema": {
+    "nvsNamespace": "cocina_config",
+    "keys": {
+      "mode": {
+        "type": "uint8_t",
+        "description": "Último modo usado: 0=CONFIG, 1=TRABAJO",
+        "default": 0
+      },
+      "wifi_networks": {
+        "type": "blob",
+        "description": "Array JSON de redes WiFi guardadas: [{ssid, password, priority}, ...]",
+        "maxSize": 1024
+      },
+      "mqtt_broker": {
+        "type": "string",
+        "description": "IP o hostname del broker MQTT (ej: 192.168.1.100)",
+        "maxSize": 256
+      },
+      "mqtt_port": {
+        "type": "uint16_t",
+        "description": "Puerto MQTT (default 1883)",
+        "default": 1883
+      },
+      "server_url": {
+        "type": "string",
+        "description": "URL del servidor web (ej: http://192.168.1.10:5173)",
+        "maxSize": 256
+      },
+      "project_id": {
+        "type": "string",
+        "description": "Project ID para la URL de cocina (ej: peppone)",
+        "maxSize": 64
+      },
+      "brightness": {
+        "type": "uint8_t",
+        "description": "Brillo pantalla 0-100",
+        "default": 80
+      },
+      "orientation": {
+        "type": "string",
+        "description": "portrait | landscape",
+        "default": "portrait"
+      },
+      "device_name": {
+        "type": "string",
+        "description": "Nombre del dispositivo (ej: Cocina-1)",
+        "maxSize": 64
+      }
+    }
+  },
+
+  "event_flow": {
+    "startup": [
+      "Leer último mode de NVS",
+      "Esperar 500ms — si botón CONFIG presionado → modo CONFIG",
+      "Si no → entrar en modo TRABAJO"
+    ],
+    "config_mode_flow": [
+      "Inicializar pantalla en blanco",
+      "Mostrar: CONFIG MODE — WiFi Setup",
+      "WiFi scan (5 segundos)",
+      "Mostrar lista de redes disponibles",
+      "Usuario selecciona red",
+      "Usuario ingresa password (teclado virtual)",
+      "Guardar en NVS (up to 3 redes)",
+      "Pedir MQTT broker IP:puerto",
+      "Pedir server URL (ej: http://192.168.1.10:5173)",
+      "Pedir project_id (ej: peppone)",
+      "Mostrar resumen de configuración",
+      "Botón OK → volver a seleccionar modo (10s timeout)"
+    ],
+    "trabajo_mode_flow": [
+      "Inicializar pantalla",
+      "Mostrar splash: logo Pizzicas + 'Pantalla de Cocina'",
+      "Conectar WiFi (usar red #1, si falla intentar #2, etc.)",
+      "Mostrar: 'Conectando WiFi...' + SSID",
+      "Una vez conectado, mostrar IP en corner",
+      "Conectar MQTT broker",
+      "Mostrar: 'Conectando MQTT...'",
+      "Suscribirse a: pedido.enviado_cocina, cocina.item_preparado, cocina.pedido_listo, pedido.cancelado",
+      "Inicializar WebView",
+      "Cargar URL: http://{server}/[project_id]/cocina",
+      "Pantalla fullscreen — touch interactivo",
+      "Si WiFi se cae → mostrar overlay offline + reintentrar conexión cada 10s",
+      "Si MQTT se cae → mostrar indicador offline en corner, WebView sigue funcionando (cache)"
+    ]
+  },
+
+  "mqtt_integration": {
+    "topics": [
+      "pedido.enviado_cocina — nuevo pedido → forward a WebView via postMessage",
+      "cocina.item_preparado — item listo → update estado en WebView",
+      "cocina.pedido_listo — pedido completo → notificación en WebView",
+      "pedido.cancelado — pedido cancelado → remover de WebView"
+    ],
+    "mechanism": "El MQTT client NO procesa datos en C++. Solo recibe eventos y los envía a la página web via WebView.postMessage(). La lógica está en el frontend cocina.ts.",
+    "example_message": {
+      "topic": "pedido.enviado_cocina",
+      "payload": {
+        "pedido_id": "mesa_001",
+        "cuenta_id": "mesa_001",
+        "items": [...],
+        "recibido_at": "2026-04-27T14:30:00Z"
+      },
+      "cpp_action": "mqtt_client → parse JSON → webview.post_message('pedido.enviado_cocina', json)"
+    }
+  },
+
+  "button_mapping": {
+    "description": "GPIO asignados para los 2 botones físicos",
+    "config_button": {
+      "gpio": "GPIO_NUM_0 (típico de reset/boot en ESP32-P4)",
+      "action": "Al presionar y mantener 2+ segundos → CONFIG mode",
+      "feedback": "LED rojo parpadea mientras está presionado"
+    },
+    "trabajo_button": {
+      "gpio": "GPIO_NUM_1 (segundo botón)",
+      "action": "Presionar → TRABAJO mode (si está en CONFIG)",
+      "feedback": "LED verde parpadea mientras está presionado"
+    },
+    "timeout_config": "Si está en CONFIG y no hay actividad por 10 minutos → volver a seleccionar modo automáticamente"
+  },
+
+  "power_management": {
+    "sleep": "NO sleep — este es un kiosko de producción, siempre activo",
+    "watchdog": "Watchdog enabled — si WebView crashea, reiniciar",
+    "ota": "OTA sobre-the-air habilitado — firmware updates sin intervención manual",
+    "brownout_detection": "Enabled — protege contra fallos de alimentación"
+  },
+
+  "ui_libraries": {
+    "framework": "LVGL (Light and Versatile Graphics Library) para UI en C++",
+    "webview": "ESP-IDF esp_browser — renderiza HTML/CSS/JS (la página web)",
+    "fonts": "FreeSerif 24pt para texto de configuración (clara en pantalla táctil)",
+    "colors": {
+      "background": "#0f172a (slate-900)",
+      "text": "#f8fafc (slate-50)",
+      "button_active": "#ef4444 (red)",
+      "button_inactive": "#94a3b8 (slate-400)",
+      "status_ok": "#22c55e (green)",
+      "status_error": "#f87171 (red-400)"
+    }
+  },
+
+  "dependencies": {
+    "external_components": [
+      "idf_component_fetch — ESP-IDF component manager",
+      "lvgl — UI library",
+      "esp_browser — WebView",
+      "esp_mqtt — MQTT client",
+      "nvs_flash — Persistencia"
+    ],
+    "sdkconfig": "Archivo de configuración CMake para compilación con esp-idf"
+  },
+
+  "building": {
+    "framework": "esp-idf",
+    "platformio_ini": "Referencia a esp-idf, define board=esp32-p4, framework=espidf",
+    "compile_command": "idf.py build",
+    "flash_command": "idf.py flash -p /dev/ttyUSB0"
+  },
+
+  "features": {
+    "phase_1": [
+      "2 modos: CONFIG + TRABAJO",
+      "WiFi setup con UI táctil",
+      "MQTT broker configuration",
+      "WebView carga URL configurada",
+      "Botones físicos para seleccionar modo",
+      "NVS persistencia de config",
+      "Splash screen de Pizzicas"
+    ],
+    "phase_2": [
+      "Brightness control desde CONFIG",
+      "OTA firmware updates vía WiFi",
+      "Monitoreo de batería (si aplica)",
+      "Logs a servidor para debugging",
+      "Múltiples URLs por estación (pizzas, fritos, etc.)"
+    ]
+  }
+}

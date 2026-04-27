@@ -249,7 +249,7 @@ static void _build_card(const CocOrder& o) {
         lv_obj_set_style_pad_bottom(row, 8, 0);
         lv_obj_set_style_pad_column(row, 10, 0);
         lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
-        TapData* itd = _alloc_tap(o.id, it.item_id, false);
+        TapData* itd = _alloc_tap(o.id, it.id, false);
         lv_obj_add_event_cb(row, _tap_cb, LV_EVENT_CLICKED, itd);
 
         // Dot de estado
@@ -302,7 +302,7 @@ static void _build_card(const CocOrder& o) {
             lv_obj_set_style_text_font(sl, &lv_font_montserrat_12, 0);
         }
 
-        ItemSlot* is = _alloc_item(o.id, it.item_id);
+        ItemSlot* is = _alloc_item(o.id, it.id);
         if (is) {
             is->row      = row;
             is->dot      = dot;

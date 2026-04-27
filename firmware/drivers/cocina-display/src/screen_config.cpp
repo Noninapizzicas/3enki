@@ -72,7 +72,7 @@ static void _kbd_cb(lv_event_t* e) {
 }
 
 static void _ta_focused(lv_event_t* e) {
-    lv_obj_t* ta = lv_event_get_target(e);
+    lv_obj_t* ta = (lv_obj_t*)lv_event_get_target(e);
     lv_keyboard_set_textarea(_kbd, ta);
     lv_obj_remove_flag(_kbd, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_height(_cont, SCR_H - KBD_H);

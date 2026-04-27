@@ -26,10 +26,28 @@
     "_doc": "Contrato del mensaje en una conversación. Vigente desde 2026-04-27. Cualquier productor (chat-io, agente, moderador, frontend) y cualquier consumidor (LLM, UI, exportadores) deben respetarlo.",
     "ubicacion": "arquitectura/mensaje-rico.json",
     "principio": "Cero migración SQL — solo extendemos el enum de role y enriquecemos metadata (campo TEXT JSON ya existente).",
-    "campos_metadata": ["author (kind, id, name, role_in_room)", "reply_to (id de mensaje citado)", "block (type, title, status)", "tool_calls (ya existía)"],
+    "campos_metadata": ["author (kind, id, name, role_in_room)", "reply_to (id de mensaje citado)", "block (type, title, status, [tool_pendiente, impacto])", "tool_calls (ya existía)"],
     "enum_role_extendido": ["user", "assistant", "agent", "moderator", "system", "tool"],
+    "block_types": ["message", "agent_intervention", "decision", "tool_call", "aside", "system_event", "confirmation_request"],
     "regla_contexto": "Últimos N con in_context=1 (FIFO) + el mensaje citado por reply_to si existe (rescatado aunque sea antiguo, salvo manually_toggled=1).",
     "compatibilidad": "Mensajes sin metadata se tratan como chat plano. Frontend antiguo que ignore metadata sigue funcionando."
+  },
+
+  "categorias_de_tools_y_agentes": {
+    "_doc": "Reglas globales de qué tools puede tener cada agente y cómo se ejecutan las destructivas. Vigente desde 2026-04-27. Aplica a TODOS los módulos cuyas tools sean invocables por agentes.",
+    "ubicacion": "arquitectura/agentes-tools.json",
+    "tres_categorias": {
+      "read":        "Lectura pura, sin riesgo. Cualquier agente del scope puede tenerlas.",
+      "write":       "Modificación reversible. El agente las declara si su misión las necesita. Ejecución libre.",
+      "destructive": "Impacto fuerte o difícilmente reversible. NINGÚN agente puede tenerlas. Solo el LLM principal, y SIEMPRE pasando por confirmation_request a un humano de la sala."
+    },
+    "mecanismo_confirmation_request": "Cuando el LLM principal quiere ejecutar una tool destructive, emite un mensaje con block.type='confirmation_request' (status='waiting_input', con tool_pendiente y impacto). El humano cita ese mensaje (reply_to) y confirma o cancela libremente. Solo entonces se ejecuta la tool.",
+    "aplicacion_recetas": {
+      "read": ["recetas.obtener", "recetas.listar", "recetas.buscar", "recetas.estadisticas", "recetas.ingredientes", "recetas.historial", "recetas.analizar", "recetas.investigar_receta"],
+      "write": ["recetas.crear", "recetas.actualizar", "recetas.actualizar_precio"],
+      "destructive": ["recetas.eliminar", "recetas.revertir"]
+    },
+    "validacion_al_cargar_agente": "ai-agent-framework debe rechazar la carga de cualquier agente que declare una tool destructive (loggear error visible)."
   },
 
   "principio_raiz": {

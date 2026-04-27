@@ -75,14 +75,15 @@
       "_doc": "Marca el tipo de intervención para que la UI pueda renderizar adecuadamente (mensaje simple vs tarjeta grande de agente vs decisión cerrada).",
       "campos": {
         "type": {
-          "tipo": "enum: message | agent_intervention | decision | tool_call | aside | system_event",
+          "tipo": "enum: message | agent_intervention | decision | tool_call | aside | system_event | confirmation_request",
           "valores": {
-            "message":            "Mensaje normal (humano o assistant). Por defecto.",
-            "agent_intervention": "Intervención estructurada de un agente. La UI puede mostrarla como tarjeta expandible con título + cuerpo.",
-            "decision":           "Conclusión / acuerdo cerrado de un sub-tema. Útil para resúmenes del moderador.",
-            "tool_call":          "Bloque dedicado a una ejecución de tool con su resultado.",
-            "aside":              "Mensaje corto sin disparar trabajo (un 'vale, gracias' del humano, un ack del agente).",
-            "system_event":       "Evento del sistema mostrado en línea (factura procesada, cambio aplicado, etc.)."
+            "message":              "Mensaje normal (humano o assistant). Por defecto.",
+            "agent_intervention":   "Intervención estructurada de un agente. La UI puede mostrarla como tarjeta expandible con título + cuerpo.",
+            "decision":             "Conclusión / acuerdo cerrado de un sub-tema. Útil para resúmenes del moderador.",
+            "tool_call":            "Bloque dedicado a una ejecución de tool con su resultado.",
+            "aside":                "Mensaje corto sin disparar trabajo (un 'vale, gracias' del humano, un ack del agente).",
+            "system_event":         "Evento del sistema mostrado en línea (factura procesada, cambio aplicado, etc.).",
+            "confirmation_request": "Solicitud de confirmación humana ANTES de ejecutar una tool destructive. Ver arquitectura/agentes-tools.json. Lleva campos extra: tool_pendiente, impacto. status='waiting_input' hasta que un humano cite el mensaje y confirme/cancele."
           }
         },
         "title": {
@@ -90,8 +91,16 @@
           "_doc": "Título visible cuando el bloque es expandible (agent_intervention sobre todo)."
         },
         "status": {
-          "tipo": "enum opcional: in_progress | closed",
-          "_doc": "Si el agente sigue trabajando o ya terminó. Útil para mostrar spinner."
+          "tipo": "enum opcional: in_progress | waiting_input | closed",
+          "_doc": "Si el agente sigue trabajando, espera respuesta humana, o ya terminó. waiting_input se usa especialmente para confirmation_request."
+        },
+        "tool_pendiente": {
+          "tipo": "{ name: string, params: object } | undefined",
+          "_doc": "Solo en bloques de type='confirmation_request'. La tool destructive que se ejecutará si el humano confirma. Ver arquitectura/agentes-tools.json."
+        },
+        "impacto": {
+          "tipo": "string | undefined",
+          "_doc": "Solo en confirmation_request. Descripción humana de qué cambiará si se ejecuta la tool — para que el humano decida con info."
         }
       },
       "no_incluye": [
@@ -182,6 +191,33 @@
       "metadata": {
         "author": { "kind": "system", "id": "system", "name": "Sistema" },
         "block": { "type": "system_event" }
+      }
+    },
+    "llm_pide_confirmacion_destructive": {
+      "_doc": "El LLM principal quiere ejecutar recetas.eliminar (destructive). Emite confirmation_request en lugar de ejecutar. Ver arquitectura/agentes-tools.json.",
+      "role": "assistant",
+      "content": "Voy a archivar la receta 'Alioli'. Dejará de aparecer en la lista de activas pero seguirá disponible si la necesitas. ¿Confirmas?",
+      "metadata": {
+        "author": { "kind": "agent", "id": "moderator-default", "name": "Moderador" },
+        "block": {
+          "type": "confirmation_request",
+          "status": "waiting_input",
+          "title": "Confirmar archivar Alioli",
+          "tool_pendiente": {
+            "name": "recetas.eliminar",
+            "params": { "project_id": "uuid-paco", "receta_id": "uuid-alioli" }
+          },
+          "impacto": "La receta 'Alioli' (versión 3) pasará de estado 'activa' a 'archivada'. Se podrá restaurar después. Reversible."
+        }
+      }
+    },
+    "humano_confirma_destructive": {
+      "_doc": "El humano cita el confirmation_request anterior y dice 'sí'. El LLM principal interpretará la cita + el sí como confirmación válida y procederá a ejecutar recetas.eliminar.",
+      "role": "user",
+      "content": "Sí, archívala",
+      "metadata": {
+        "author": { "kind": "human", "id": "paco", "name": "Paco" },
+        "reply_to": "id-del-confirmation-request"
       }
     }
   },

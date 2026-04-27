@@ -153,15 +153,55 @@ class AiGatewayModule {
     if (!this.moduleLoader) return [];
     const all = this.moduleLoader.getToolsForAI?.() || [];
     if (!page_id) return all;
+    // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
+    // se invoca, se escanean todos los módulos cargados y se cachea.
+    if (this.pagePrefixes === undefined) this._buildPagePrefixes();
     // Tools globales que SIEMPRE se exponen al LLM principal aunque haya page_id activo.
     // Necesarias para que el LLM pueda delegar a agentes (invoke_agent), leer ficheros
     // del proyecto (fs.read), etc., independientemente de en qué módulo esté.
     const GLOBAL_TOOLS = new Set(['invoke_agent', 'fs.read', 'fs.write', 'fs.list', 'fs.search']);
+    // Prefijos de tools válidos para este page_id. Permite que módulos como
+    // menu-generator (tools 'menu.*') matcheen aunque el name del módulo y el
+    // prefijo de la tool no coincidan literalmente — sin renombrar nada.
+    const allowedPrefixes = this.pagePrefixes?.get(page_id);
     return all.filter(t => {
       const name = t.name || '';
-      if (name.startsWith(page_id + '.')) return true;
       if (GLOBAL_TOOLS.has(name)) return true;
+      if (allowedPrefixes && name.includes('.') && allowedPrefixes.has(name.split('.')[0])) return true;
+      // Fallback: tool name empieza por page_id (caso recetas — name del módulo coincide con prefijo)
+      if (name.startsWith(page_id + '.')) return true;
       return false;
+    });
+  }
+
+  /**
+   * Auto-deriva el mapa page_id → prefijos válidos de tools al arrancar.
+   * Para cada módulo cargado, lee los prefijos únicos de sus tools[].name
+   * y los asocia al name del módulo.
+   *
+   * Se llama en onLoad después de _initializeProviders.
+   */
+  _buildPagePrefixes() {
+    this.pagePrefixes = new Map();
+    const loaded = this.moduleLoader?.loadedModules;
+    if (!loaded || typeof loaded[Symbol.iterator] !== 'function') {
+      this.logger.warn('ai-gateway.page-prefixes.unavailable', {
+        reason: 'moduleLoader.loadedModules no disponible'
+      });
+      return;
+    }
+    for (const [name, mod] of loaded) {
+      const tools = mod?.manifest?.tools || [];
+      const prefixes = new Set();
+      for (const t of tools) {
+        const tn = t?.name || '';
+        if (tn.includes('.')) prefixes.add(tn.split('.')[0]);
+      }
+      if (prefixes.size > 0) this.pagePrefixes.set(name, prefixes);
+    }
+    this.logger.info('ai-gateway.page-prefixes.built', {
+      modules: this.pagePrefixes.size,
+      mapping: Object.fromEntries([...this.pagePrefixes].map(([k, v]) => [k, [...v]]))
     });
   }
 
@@ -241,7 +281,7 @@ class AiGatewayModule {
   // Ejecución de tool calls (event-driven)
   // ============================================================
 
-  async _executeToolCall(toolName, args, context) {
+  async _executeToolCall(toolName, args, chatContext) {
     const request_id = crypto.randomUUID();
     const timeoutMs = toolName === 'invoke_agent' ? 150000 : (this.config.tool_timeout_ms || 15000);
 
@@ -261,11 +301,24 @@ class AiGatewayModule {
         else resolve(data.result);
       });
 
-      // Enriquecemos args con el context conocido
+      // Enriquecemos args con los 9 campos del contrato chat-io. Los args que
+      // venían del LLM (tool_call.arguments) tienen prioridad — solo rellenamos
+      // los que no estén ya en args. Esto garantiza que cualquier handler de
+      // tool de un módulo reciba el contexto completo y pueda propagarlo al
+      // evento agent.execute.request si invoca a un agente.
+      const ctx = chatContext || {};
       const enrichedArgs = {
         ...args,
-        ...(context.project_id && !args.project_id ? { project_id: context.project_id } : {}),
-        ...(context.conversation_id && !args.conversation_id ? { conversation_id: context.conversation_id } : {})
+        project_id:      args.project_id      ?? ctx.project_id      ?? null,
+        page_id:         args.page_id         ?? ctx.page_id         ?? null,
+        conversation_id: args.conversation_id ?? ctx.conversation_id ?? null,
+        settings:        args.settings        ?? ctx.settings        ?? null,
+        attachments:     args.attachments     ?? ctx.attachments     ?? null,
+        prompt:          args.prompt          ?? ctx.prompt          ?? null,
+        intencion:       args.intencion       ?? ctx.intencion       ?? null,
+        // El campo "context" del payload chat-io se preserva como _chat_context
+        // para no colisionar con args.context que pueda venir del LLM.
+        _chat_context:   ctx.context          ?? null
       };
 
       this.eventBus.publish(toolName, { request_id, ...enrichedArgs });
@@ -276,7 +329,7 @@ class AiGatewayModule {
   // Núcleo: _executeLLM (agentic loop compartido)
   // ============================================================
 
-  async _executeLLM({ system, messages, tools, settings, attachments, project_id, conversation_id, page_id, providerName }) {
+  async _executeLLM({ system, messages, tools, settings, attachments, project_id, conversation_id, page_id, context, prompt, intencion, providerName }) {
     const { name: providerNameUsed, provider } = await this._selectProvider(providerName, project_id);
 
     // Resolver attachments y mezclarlos con el último mensaje user
@@ -294,6 +347,14 @@ class AiGatewayModule {
       tools: translatedTools,
       projectId: project_id,
       retryConfig: this.config.retry
+    };
+
+    // Contexto completo del chat (9 campos del contrato chat-io) que se propaga
+    // a cada tool call. Cualquier handler de tool de un módulo lo recibe en sus
+    // args y puede propagarlo al evento agent.execute.request si invoca un agente.
+    const chatContext = {
+      project_id, page_id, conversation_id,
+      settings, attachments, prompt, intencion, context
     };
 
     const maxIterations = this.config.max_tool_iterations || 10;
@@ -324,7 +385,7 @@ class AiGatewayModule {
       for (const tc of toolCalls) {
         try {
           const args = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments;
-          const result = await this._executeToolCall(tc.name, args, { project_id, conversation_id });
+          const result = await this._executeToolCall(tc.name, args, chatContext);
           toolResults.push({ tool_call_id: tc.id, name: tc.name, status: 'success', result });
         } catch (err) {
           toolResults.push({ tool_call_id: tc.id, name: tc.name, status: 'error', error: err.message });
@@ -381,7 +442,10 @@ class AiGatewayModule {
         attachments,
         project_id,
         conversation_id,
-        page_id
+        page_id,
+        context,
+        prompt: systemPrompt,
+        intencion
       });
     } catch (err) {
       this.logger.error('ai-gateway.chat.failed', { error: err.message, conversation_id });

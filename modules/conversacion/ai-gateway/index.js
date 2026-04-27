@@ -153,14 +153,14 @@ class AiGatewayModule {
     if (!this.moduleLoader) return [];
     const all = this.moduleLoader.getToolsForAI?.() || [];
     if (!page_id) return all;
-    // Tools del módulo activo + tools globales (las que no tienen prefijo de módulo)
+    // Tools globales que SIEMPRE se exponen al LLM principal aunque haya page_id activo.
+    // Necesarias para que el LLM pueda delegar a agentes (invoke_agent), leer ficheros
+    // del proyecto (fs.read), etc., independientemente de en qué módulo esté.
+    const GLOBAL_TOOLS = new Set(['invoke_agent', 'fs.read', 'fs.write', 'fs.list', 'fs.search']);
     return all.filter(t => {
       const name = t.name || '';
       if (name.startsWith(page_id + '.')) return true;
-      // Globales: las que no tienen un prefijo módulo.* (ej: invoke_agent, fs.read, etc.)
-      // Aquí decidimos que las que NO empiezan por algún módulo conocido son globales — más simple:
-      // se consideran globales las tools registradas sin prefijo o con prefijo 'tool.', etc.
-      // De momento: solo las del módulo activo. Las globales se añaden explícitamente.
+      if (GLOBAL_TOOLS.has(name)) return true;
       return false;
     });
   }

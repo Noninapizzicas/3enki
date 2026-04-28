@@ -1,0 +1,110 @@
+{
+  "_meta": {
+    "modulo": "conversacion/chat-io",
+    "ubicacion": "modules/conversacion/chat-io",
+    "auditado_en": "2026-04-28",
+    "version_modulo": "1.0.0",
+    "habilitado_en_config": true,
+    "tier_carga": null,
+    "estado_modulo": "vivo"
+  },
+
+  "responsabilidad": {
+    "una_frase": "Entrada y salida del chat: recibe mensajes del frontend (ui/request/conversation/send), persiste conversaciones y mensajes en SQLite por proyecto, aplica FIFO de contexto, y reenvia la respuesta del LLM al frontend por MQTT (conversation/{id}/message).",
+    "subdominios_internos": []
+  },
+
+  "como_se_invoca": {
+    "via_tools_llm": [],
+    "via_ui_handlers": [
+      "conversation.send",
+      "conversation.create",
+      "conversation.list",
+      "conversation.load",
+      "conversation.delete",
+      "conversation.update_settings",
+      "conversation.toggle_context",
+      "conversation.context_stats"
+    ],
+    "via_apis_http": [],
+    "via_eventos_externos": [
+      "ai.chat.response",
+      "db.query.response",
+      "project.activated"
+    ],
+    "via_otros_modulos_directamente": null
+  },
+
+  "scope": {
+    "tipo": "project_scoped",
+    "como_recibe_project_id": "cache via project.activated (handler onProjectActivated declarado en module.json)"
+  },
+
+  "eventos": {
+    "publica": [],
+    "subscribes": []
+  },
+
+  "tools": [],
+
+  "ui_handlers": [],
+
+  "apis_http": [],
+
+  "contratos_transversales": {},
+
+  "observabilidad": {},
+
+  "modos_de_fallo": [],
+
+  "configuracion_externa": {},
+
+  "estado_persistente": {},
+
+  "estado_memoria": [],
+
+  "dependencias_implicitas": [],
+
+  "lifecycle": {
+    "onLoad_resumen": "Auto-wire de subscribes declarados en module.json (ai.chat.response, db.query.response, project.activated). Sin wildcards.",
+    "onUnload_resumen": null,
+    "depende_de_orden_de_carga": "Depende de database-manager (declarado en dependencies de module.json) — debe estar disponible para responder a db.query.response y para que las queries que emite resuelvan.",
+    "auto_wired_subscribes": true,
+    "wildcards_o_dinamicos": []
+  },
+
+  "agentes_propios": [],
+
+  "violaciones_paradigma": [],
+
+  "eventos_huerfanos": {},
+
+  "eventos_legacy_a_renombrar": [],
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "razon_de_archivo_segun_repo": "No existe un chat-io archivado bajo el mismo nombre. arquitectura/conversacion-ref/ contiene predecesores funcionales (chat-ai-bridge, chat-mqtt, chat-session) del rediseno previo, pero ninguno se llama chat-io."
+  },
+
+  "frontend_acoplados": {},
+
+  "tests": {},
+
+  "historial_fixes": {
+    "ventana": "ultimo_anio",
+    "items": []
+  },
+
+  "seguridad": {},
+
+  "todos_e_incompletos": [],
+
+  "metricas": {
+    "lineas_de_codigo": 522,
+    "archivos": 1,
+    "fecha_ultimo_commit_relevante": "f82bc65 2026-04-25 15:13:05 +0000 chat-io: serializar fechas a ISO + incluir message_count en list/load"
+  },
+
+  "observaciones_libres": null
+}

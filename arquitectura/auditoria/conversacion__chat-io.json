@@ -74,8 +74,8 @@
           "idempotencia": "no_aplica — el request_id se genera nuevo cada vez",
           "timeout_esperado_ms": 10000
         },
-        "consumidores_conocidos": null,
-        "huerfano": null
+        "consumidores_conocidos": ["database-manager (via EVENTS.DB.QUERY_RESPONSE / publishQueryResponse en modules/database-manager/index.js:142 onQueryRequest)"],
+        "huerfano": false
       },
       {
         "nombre": "chat.message.saved",
@@ -104,8 +104,8 @@
           "idempotencia": "no_idempotente — cada publish corresponde a un INSERT diferente con message_id único",
           "timeout_esperado_ms": null
         },
-        "consumidores_conocidos": null,
-        "huerfano": null
+        "consumidores_conocidos": ["prompt-builder (modules/conversacion/prompt-builder/index.js — handler onChatMessageSaved)"],
+        "huerfano": false
       },
       {
         "nombre": "chat.assistant.saved",
@@ -129,30 +129,30 @@
           "idempotencia": "no_idempotente — message_id único por crypto.randomUUID()",
           "timeout_esperado_ms": null
         },
-        "consumidores_conocidos": null,
-        "huerfano": null
+        "consumidores_conocidos": ["ai-agent-framework (modules/conversacion/ai-agent-framework/index.js — más test smoke en __tests__/smoke.js)"],
+        "huerfano": false
       }
     ],
     "subscribes": [
       {
         "nombre": "ai.chat.response",
         "handler": "onAiResponse",
-        "emisor_conocido": null,
-        "huerfano": null,
+        "emisor_conocido": "ai-gateway (modules/conversacion/ai-gateway/index.js)",
+        "huerfano": false,
         "comportamiento_si_falla": "log error + return early. No emite chat.assistant.saved ni MQTT. El frontend se queda esperando hasta failsafe del frontend (180s)."
       },
       {
         "nombre": "db.query.response",
         "handler": "onDbQueryResponse",
-        "emisor_conocido": null,
-        "huerfano": null,
+        "emisor_conocido": "database-manager (publishQueryResponse via EVENTS.DB.QUERY_RESPONSE en modules/database-manager/index.js:1299)",
+        "huerfano": false,
         "comportamiento_si_falla": "Si hay error en payload, rechaza la promise pendiente con new Error(error). Si request_id no está en pendingDb (ya hecho timeout o evento ajeno), return silencioso."
       },
       {
         "nombre": "project.activated",
         "handler": "onProjectActivated",
-        "emisor_conocido": null,
-        "huerfano": null,
+        "emisor_conocido": "project-manager (publish EVENTS.PROJECT.ACTIVATED en modules/project-manager/index.js:202 y :576)",
+        "huerfano": false,
         "comportamiento_si_falla": "_ensureSchema(project_id).catch → logger.warn 'chat-io.schema.failed'. NO bloquea otras operaciones; cada UI handler vuelve a llamar _ensureSchema bajo demanda."
       }
     ]
@@ -293,7 +293,48 @@
 
   "apis_http": [],
 
-  "contratos_transversales": {},
+  "contratos_transversales": {
+    "envelope_data": {
+      "estado": "cumple",
+      "evidencia": "index.js:105 — `resolve(payload.data ?? payload.rows ?? []);` lee `data` con fallback a `rows` por compat. Comentario explícito: 'database-manager publica las filas en `data`'."
+    },
+    "request_id_uuid_v4": {
+      "estado": "cumple",
+      "evidencia": "index.js:85 — `const request_id = crypto.randomUUID();` en cada llamada a _db()."
+    },
+    "correlation_id_propagado": {
+      "estado": "incumple",
+      "evidencia": "El módulo NO recibe ni propaga correlation_id. _db() solo genera request_id; no extrae correlation_id de eventos entrantes para incluirlo en publish saliente. database-manager sí lo propaga, chat-io lo pierde."
+    },
+    "payload_snake_case": {
+      "estado": "cumple",
+      "evidencia": "Todos los campos del payload en snake_case (project_id, conversation_id, message_id, context_window, max_tokens, prompt_id, in_context, manually_toggled). Cero camelCase."
+    },
+    "fechas_iso_al_frontend": {
+      "estado": "cumple",
+      "evidencia": "index.js:171 _toIso() convierte epoch ms a ISO. _serializeConversation aplica a created_at y updated_at antes de devolver. handleLoad mapea m.created_at a ISO. Commit f82bc65 fix histórico."
+    },
+    "errores_con_campo_error_humano": {
+      "estado": "cumple",
+      "evidencia": "Todos los throw en UI handlers llevan `message` legible. Ej index.js:227 'Selecciona un proyecto para chatear', :230 'Selecciona o crea una conversación', :236 'Conversación no existe o no pertenece al proyecto'."
+    },
+    "progreso_intermedio_si_5s": {
+      "estado": "no_aplica",
+      "evidencia": "Operaciones cortas: cada _db() tiene timeout 10s pero típicamente subseg. UI handlers no tienen operaciones >5s observables."
+    },
+    "project_id_obligatorio_si_project_scoped": {
+      "estado": "cumple",
+      "evidencia": "Todos los UI handlers validan project_id con isUUID(project_id) y lanzan PROJECT_REQUIRED si falla. Líneas 226, 285, 324, 347, 377, 393, 423, 439."
+    },
+    "cero_require_entre_modulos": {
+      "estado": "cumple",
+      "evidencia": "index.js:18 — único require es `crypto`. Sin requires a otros módulos del repo."
+    },
+    "events_naming_norma_3_categorias": {
+      "estado": "cumple_parcial",
+      "evidencia": "db.query.request/.response cumple request_response. chat.message.saved y chat.assistant.saved son dominio (verbo pasado, español). project.activated subscribe es legacy (inglés en dominio — ya en lista de arquitectura/eventos.json a renombrar a proyecto.activado)."
+    }
+  },
 
   "observabilidad": {},
 
@@ -412,11 +453,36 @@
 
   "agentes_propios": [],
 
-  "violaciones_paradigma": [],
+  "violaciones_paradigma": [
+    {
+      "tipo": "dominio_mezclado_con_infraestructura",
+      "ubicacion": "modules/conversacion/chat-io/index.js:506-518",
+      "descripcion": "onAiResponse hace `this.mqtt.publish('conversation/{conversation_id}/message', JSON.stringify({...}), {qos:1})` directamente. El módulo de dominio (chat) habla MQTT (infraestructura). La forma alineada con el paradigma sería emitir un evento de dominio (ya emite chat.assistant.saved) y que un módulo dedicado a la salida MQTT publique al frontend.",
+      "gravedad": "media",
+      "regla_violada": "CLAUDE.md — 'Un módulo NO mezcla dominio con infraestructura (SQLite, HTTP, filesystem)'. Aquí mezcla dominio con MQTT directo."
+    },
+    {
+      "tipo": "dominio_mezclado_con_infraestructura",
+      "ubicacion": "modules/conversacion/chat-io/index.js:70",
+      "descripcion": "onLoad guarda referencia directa al cliente MQTT vía `this.mqtt = context.uiHandler?.mqtt || null`. Acopla el módulo a la infraestructura MQTT del core, no solo al eventBus.",
+      "gravedad": "media",
+      "regla_violada": "CLAUDE.md — 'Un módulo NO mezcla dominio con infraestructura'."
+    }
+  ],
 
-  "eventos_huerfanos": {},
+  "eventos_huerfanos": {
+    "emitidos_sin_consumidor": [],
+    "subscritos_sin_emisor": []
+  },
 
-  "eventos_legacy_a_renombrar": [],
+  "eventos_legacy_a_renombrar": [
+    {
+      "actual": "project.activated",
+      "propuesto": "proyecto.activado",
+      "motivo": "inglés en dominio — ya documentado en arquitectura/eventos.json.legacy_a_renombrar como evento del project-manager. chat-io lo escucha; cuando el emisor se renombre, hay que actualizar también el subscribe aquí.",
+      "es_publica_o_subscribe": "subscribe"
+    }
+  ],
 
   "version_archivada": {
     "existe": false,

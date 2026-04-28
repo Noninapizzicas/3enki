@@ -37,17 +37,259 @@
 
   "scope": {
     "tipo": "project_scoped",
-    "como_recibe_project_id": "cache via project.activated (handler onProjectActivated declarado en module.json)"
+    "como_recibe_project_id": "cache via project.activated (handler onProjectActivated declarado en module.json) + obligatorio en cada payload de UI handler (todos validan project_id con isUUID antes de operar)"
   },
 
   "eventos": {
-    "publica": [],
-    "subscribes": []
+    "publica": [
+      {
+        "nombre": "db.query.request",
+        "categoria": "request_response",
+        "contrato": {
+          "input": {
+            "project_id": "string UUID — obligatorio — identifica DB del proyecto",
+            "query": "string — obligatorio — SQL",
+            "params": "array — obligatorio (puede ser vacío) — params del prepared statement",
+            "read_only": "boolean — opcional — default false; si false database-manager auto-save tras ejecutar",
+            "request_id": "string UUID v4 — obligatorio — generado con crypto.randomUUID()"
+          },
+          "output_response": {
+            "_doc": "Recibido en onDbQueryResponse via subscribe a db.query.response",
+            "request_id": "string — obligatorio — correlación",
+            "data": "array — filas devueltas (database-manager publica filas en `data`; chat-io acepta `rows` por compatibilidad)",
+            "error": "string — opcional — mensaje de error si fallo"
+          },
+          "errores": [
+            {
+              "evento_o_campo": "rejeción de promise interna",
+              "shape": {"error": "Error con message"},
+              "codigos": ["db timeout (10s)"]
+            }
+          ],
+          "invariantes": [
+            "request_id se almacena en this.pendingDb antes de publish",
+            "timeout 10s registra rechazo y limpia pendingDb",
+            "el callback que resuelve la promesa hace payload.data ?? payload.rows ?? [] (compatibilidad envelope)"
+          ],
+          "idempotencia": "no_aplica — el request_id se genera nuevo cada vez",
+          "timeout_esperado_ms": 10000
+        },
+        "consumidores_conocidos": null,
+        "huerfano": null
+      },
+      {
+        "nombre": "chat.message.saved",
+        "categoria": "dominio",
+        "contrato": {
+          "input": {
+            "project_id": "string UUID — obligatorio",
+            "page_id": "string — obligatorio (default 'chat' si no se pasa)",
+            "conversation_id": "string UUID — obligatorio",
+            "context": "object — obligatorio (puede ser {})",
+            "settings": "object — obligatorio — { context_window, temperature, max_tokens } leído de la conversación o defaults",
+            "prompt": "string|null — obligatorio (puede ser null)",
+            "attachments": "array — obligatorio (puede ser [])",
+            "intencion": "string|null — obligatorio (puede ser null)",
+            "message": "string — obligatorio — texto del usuario",
+            "message_id": "string UUID — obligatorio — para correlacionar la respuesta del LLM"
+          },
+          "output_response": null,
+          "errores": [],
+          "invariantes": [
+            "El INSERT del mensaje user en SQLite ya ocurrió antes de publicar",
+            "El UPDATE de updated_at de la conversación ya ocurrió",
+            "FIFO de contexto ya se aplicó (mensajes antiguos pasados a in_context=0)",
+            "project_id y conversation_id ya validados como UUID y conversación pertenece al proyecto"
+          ],
+          "idempotencia": "no_idempotente — cada publish corresponde a un INSERT diferente con message_id único",
+          "timeout_esperado_ms": null
+        },
+        "consumidores_conocidos": null,
+        "huerfano": null
+      },
+      {
+        "nombre": "chat.assistant.saved",
+        "categoria": "dominio",
+        "contrato": {
+          "input": {
+            "project_id": "string UUID — obligatorio",
+            "conversation_id": "string UUID — obligatorio",
+            "message_id": "string UUID — obligatorio — id del mensaje assistant recién insertado",
+            "message": "string — obligatorio — content del assistant",
+            "metadata": "string|null — obligatorio (puede ser null) — JSON con tool_calls si los hubo"
+          },
+          "output_response": null,
+          "errores": [],
+          "invariantes": [
+            "El INSERT del mensaje assistant en SQLite ya ocurrió",
+            "El UPDATE de updated_at ya ocurrió",
+            "FIFO ya se aplicó",
+            "Si el INSERT falló, el evento NO se publica (return temprano tras logger.error)"
+          ],
+          "idempotencia": "no_idempotente — message_id único por crypto.randomUUID()",
+          "timeout_esperado_ms": null
+        },
+        "consumidores_conocidos": null,
+        "huerfano": null
+      }
+    ],
+    "subscribes": [
+      {
+        "nombre": "ai.chat.response",
+        "handler": "onAiResponse",
+        "emisor_conocido": null,
+        "huerfano": null,
+        "comportamiento_si_falla": "log error + return early. No emite chat.assistant.saved ni MQTT. El frontend se queda esperando hasta failsafe del frontend (180s)."
+      },
+      {
+        "nombre": "db.query.response",
+        "handler": "onDbQueryResponse",
+        "emisor_conocido": null,
+        "huerfano": null,
+        "comportamiento_si_falla": "Si hay error en payload, rechaza la promise pendiente con new Error(error). Si request_id no está en pendingDb (ya hecho timeout o evento ajeno), return silencioso."
+      },
+      {
+        "nombre": "project.activated",
+        "handler": "onProjectActivated",
+        "emisor_conocido": null,
+        "huerfano": null,
+        "comportamiento_si_falla": "_ensureSchema(project_id).catch → logger.warn 'chat-io.schema.failed'. NO bloquea otras operaciones; cada UI handler vuelve a llamar _ensureSchema bajo demanda."
+      }
+    ]
   },
 
   "tools": [],
 
-  "ui_handlers": [],
+  "ui_handlers": [
+    {
+      "domain": "conversation",
+      "action": "send",
+      "handler": "handleSend",
+      "contrato": {
+        "input": {
+          "project_id": "string UUID — obligatorio",
+          "conversation_id": "string UUID — obligatorio",
+          "page_id": "string — opcional (default 'chat')",
+          "context": "object — opcional (default {})",
+          "prompt": "string|null — opcional (default null)",
+          "attachments": "array — opcional (default [])",
+          "intencion": "string|null — opcional (default null)",
+          "message": "string — obligatorio"
+        },
+        "output_success": {"status": 200, "data": {"conversation_id": "string", "message_id": "string"}},
+        "output_error": {"status": 400, "code": "string", "message": "string"},
+        "codigos_error_conocidos": ["PROJECT_REQUIRED", "CONVERSATION_REQUIRED"]
+      }
+    },
+    {
+      "domain": "conversation",
+      "action": "create",
+      "handler": "handleCreate",
+      "contrato": {
+        "input": {
+          "project_id": "string UUID — obligatorio",
+          "title": "string — opcional (default 'Nueva conversación')",
+          "context_window": "number — opcional (default 20)",
+          "temperature": "number — opcional (default 0.7)",
+          "max_tokens": "number — opcional (default 2000)",
+          "prompt_id": "string|null — opcional (default null)"
+        },
+        "output_success": {"status": 200, "data": {"conversation": "object serializado con created_at/updated_at en ISO + message_count=0", "conversation_id": "string (alias retrocompat)"}},
+        "output_error": {"status": 400, "code": "string", "message": "string"},
+        "codigos_error_conocidos": ["PROJECT_REQUIRED"]
+      }
+    },
+    {
+      "domain": "conversation",
+      "action": "list",
+      "handler": "handleList",
+      "contrato": {
+        "input": {
+          "project_id": "string UUID — obligatorio",
+          "limit": "number — opcional (default 50)"
+        },
+        "output_success": {"status": 200, "data": {"conversations": "array de conversación serializada con message_count via subquery COUNT(*)"}},
+        "output_error": {"status": 400, "code": "string"},
+        "codigos_error_conocidos": ["PROJECT_REQUIRED"]
+      }
+    },
+    {
+      "domain": "conversation",
+      "action": "load",
+      "handler": "handleLoad",
+      "contrato": {
+        "input": {
+          "project_id": "string UUID — obligatorio",
+          "conversation_id": "string UUID — obligatorio"
+        },
+        "output_success": {"status": 200, "data": {"conversation": "object serializado", "messages": "array de mensajes con created_at en ISO"}},
+        "output_error": {"status": 400, "code": "string"},
+        "codigos_error_conocidos": ["PROJECT_REQUIRED", "CONVERSATION_REQUIRED"]
+      }
+    },
+    {
+      "domain": "conversation",
+      "action": "delete",
+      "handler": "handleDelete",
+      "contrato": {
+        "input": {
+          "project_id": "string UUID — obligatorio",
+          "conversation_id": "string UUID — obligatorio"
+        },
+        "output_success": {"status": 200, "data": {"ok": true}},
+        "output_error": {"status": 400, "code": "string"},
+        "codigos_error_conocidos": ["PROJECT_REQUIRED", "CONVERSATION_REQUIRED"]
+      }
+    },
+    {
+      "domain": "conversation",
+      "action": "update_settings",
+      "handler": "handleUpdateSettings",
+      "contrato": {
+        "input": {
+          "project_id": "string UUID — obligatorio",
+          "conversation_id": "string UUID — obligatorio",
+          "context_window": "number — opcional",
+          "temperature": "number — opcional",
+          "max_tokens": "number — opcional",
+          "prompt_id": "string|null — opcional",
+          "title": "string — opcional"
+        },
+        "output_success": {"status": 200, "data": {"ok": true, "changed": "number opcional 0 si nada que actualizar"}},
+        "output_error": {"status": 400, "code": "string"},
+        "codigos_error_conocidos": ["PROJECT_REQUIRED", "CONVERSATION_REQUIRED"]
+      }
+    },
+    {
+      "domain": "conversation",
+      "action": "toggle_context",
+      "handler": "handleToggleContext",
+      "contrato": {
+        "input": {
+          "project_id": "string UUID — obligatorio",
+          "message_id": "string — obligatorio (NO valida UUID — solo presencia)",
+          "in_context": "boolean — obligatorio"
+        },
+        "output_success": {"status": 200, "data": {"ok": true, "message_id": "string", "in_context": "boolean", "manually_toggled": true}},
+        "output_error": {"status": 400, "code": "string"},
+        "codigos_error_conocidos": ["PROJECT_REQUIRED", "MESSAGE_ID_REQUIRED"]
+      }
+    },
+    {
+      "domain": "conversation",
+      "action": "context_stats",
+      "handler": "handleContextStats",
+      "contrato": {
+        "input": {
+          "project_id": "string UUID — obligatorio",
+          "conversation_id": "string UUID — obligatorio"
+        },
+        "output_success": {"status": 200, "data": {"total": "number", "active": "number", "manually_toggled": "number", "max_context": "number", "remaining": "number"}},
+        "output_error": {"status": 400, "code": "string"},
+        "codigos_error_conocidos": ["PROJECT_REQUIRED", "CONVERSATION_REQUIRED"]
+      }
+    }
+  ],
 
   "apis_http": [],
 
@@ -59,15 +301,110 @@
 
   "configuracion_externa": {},
 
-  "estado_persistente": {},
+  "estado_persistente": {
+    "tablas_sqlite": [
+      {
+        "nombre": "conversations",
+        "scope_db": "project",
+        "campos": [
+          "id TEXT PRIMARY KEY",
+          "project_id TEXT NOT NULL",
+          "title TEXT",
+          "context_window INTEGER NOT NULL DEFAULT 20",
+          "temperature REAL NOT NULL DEFAULT 0.7",
+          "max_tokens INTEGER NOT NULL DEFAULT 2000",
+          "prompt_id TEXT",
+          "created_at INTEGER NOT NULL",
+          "updated_at INTEGER NOT NULL"
+        ],
+        "indices": [
+          "idx_conversations_project ON (project_id, updated_at DESC)"
+        ],
+        "creada_por": "_ensureSchema(project_id) — invocado por onProjectActivated y por cada UI handler antes de operar",
+        "migraciones_suaves": "_migrateSchema añade prompt_id, context_window, temperature, max_tokens via PRAGMA table_info + ALTER TABLE ADD COLUMN si no existen. Implementado en commit 244cbfa para tablas pre-existentes.",
+        "ttl_o_housekeeping": null
+      },
+      {
+        "nombre": "messages",
+        "scope_db": "project",
+        "campos": [
+          "id TEXT PRIMARY KEY",
+          "conversation_id TEXT NOT NULL",
+          "role TEXT NOT NULL CHECK(role IN ('user','assistant','system','tool'))",
+          "content TEXT NOT NULL",
+          "in_context INTEGER NOT NULL DEFAULT 1",
+          "manually_toggled INTEGER NOT NULL DEFAULT 0",
+          "tokens INTEGER",
+          "cost REAL",
+          "metadata TEXT",
+          "created_at INTEGER NOT NULL"
+        ],
+        "indices": [
+          "idx_messages_conv ON (conversation_id, created_at)",
+          "idx_messages_context ON (conversation_id, in_context)"
+        ],
+        "creada_por": "_ensureSchema",
+        "migraciones_suaves": "_migrateSchema añade in_context, manually_toggled, tokens, cost, metadata via ALTER TABLE si no existen.",
+        "ttl_o_housekeeping": "FIFO suave por contexto: _applyContextFIFO marca in_context=0 los mensajes más antiguos cuando active >= context_window (respeta manually_toggled=1). NO borra filas. delete de conversación SI borra mensajes (DELETE FROM messages WHERE conversation_id=?)."
+      }
+    ],
+    "archivos": [],
+    "config_propio": [],
+    "atomicidad_y_concurrencia": "Sin transacciones explícitas. Cada _db es un round-trip independiente vía evento. handleSend hace 4-5 _db calls secuenciales (insert message, update updated_at, count, select oldest, update in_context). NO hay lock entre llamadas — race condition teórica si 2 mensajes llegan en paralelo al mismo conversation_id (ambos podrían ver el mismo count y aplicar FIFO incorrectamente). this.pendingDb es un Map — race entre timeout y respuesta protegida con clearTimeout."
+  },
 
-  "estado_memoria": [],
+  "estado_memoria": [
+    {
+      "campo": "this.pendingDb",
+      "tipo": "Map<request_id, {resolve, reject, timeout}>",
+      "se_invalida_con": "respuesta db.query.response (clearTimeout + delete) | timeout 10s (delete + reject) | onUnload (clearTimeout sobre todos + clear)"
+    },
+    {
+      "campo": "this.schemaReady",
+      "tipo": "Set<project_id>",
+      "se_invalida_con": "NUNCA — solo se añade cuando _ensureSchema completa. No hay invalidación por reinicio del módulo (onUnload no toca schemaReady; está en estado de instancia y muere con la instancia)"
+    },
+    {
+      "campo": "this.knownConversations",
+      "tipo": "Map<conversation_id, project_id>",
+      "se_invalida_con": "handleDelete elimina la entrada | onUnload .clear(). NO se invalida si la conversación se elimina vía SQL externo (gap teórico — ver atomicidad)."
+    }
+  ],
 
-  "dependencias_implicitas": [],
+  "dependencias_implicitas": [
+    {
+      "modulo_dependido": "database-manager",
+      "via_evento": "db.query.request → db.query.response",
+      "obligatorio_en": "runtime",
+      "que_pasa_si_no_esta": "Cada _db rechaza con 'db timeout' tras 10s. Todos los UI handlers fallan (se quedan esperando _ensureSchema indefinidamente). Frontend recibe error 400 o se queda colgado.",
+      "es_cross_vertical": false
+    },
+    {
+      "modulo_dependido": "project-manager",
+      "via_evento": "project.activated (subscribe — no es .request)",
+      "obligatorio_en": "runtime opcional",
+      "que_pasa_si_no_esta": "Sin project.activated, _ensureSchema solo se ejecuta bajo demanda (primer UI handler que reciba project_id). El módulo sigue funcionando, solo pierde el pre-warming del schema.",
+      "es_cross_vertical": false
+    },
+    {
+      "modulo_dependido": "ai-gateway (productor de ai.chat.response)",
+      "via_evento": "ai.chat.response (subscribe)",
+      "obligatorio_en": "runtime",
+      "que_pasa_si_no_esta": "Sin emisor, los mensajes user se persisten y emiten chat.message.saved pero NUNCA hay respuesta del LLM. El frontend se queda colgado hasta su failsafe (180s).",
+      "es_cross_vertical": false
+    },
+    {
+      "modulo_dependido": "core/gateway/UIRequestHandler (mqtt context.uiHandler)",
+      "via_evento": "context.uiHandler.mqtt — referencia directa al cliente MQTT en onLoad",
+      "obligatorio_en": "onLoad",
+      "que_pasa_si_no_esta": "this.mqtt queda null. El push de respuesta del LLM al frontend NO se publica en conversation/{id}/message — el frontend no se entera de la respuesta hasta que recargue o use otro mecanismo.",
+      "es_cross_vertical": false
+    }
+  ],
 
   "lifecycle": {
-    "onLoad_resumen": "Auto-wire de subscribes declarados en module.json (ai.chat.response, db.query.response, project.activated). Sin wildcards.",
-    "onUnload_resumen": null,
+    "onLoad_resumen": "Auto-wire de subscribes declarados en module.json (ai.chat.response, db.query.response, project.activated). Sin wildcards. onLoad guarda referencias a logger, eventBus y mqtt (context.uiHandler.mqtt). Logger.info('chat-io.loaded').",
+    "onUnload_resumen": "Itera this.pendingDb y clearTimeout sobre cada timeout. Limpia this.pendingDb y this.knownConversations. NO limpia this.schemaReady (queda en GC).",
     "depende_de_orden_de_carga": "Depende de database-manager (declarado en dependencies de module.json) — debe estar disponible para responder a db.query.response y para que las queries que emite resuelvan.",
     "auto_wired_subscribes": true,
     "wildcards_o_dinamicos": []

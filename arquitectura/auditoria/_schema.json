@@ -1,0 +1,180 @@
+{
+  "_doc": "Esquema estricto que DEBE seguir cada arquitectura/auditoria/<modulo>.json. Cualquier campo sin dato verificable → null + nota en observaciones_libres. Prohibido inventar.",
+  "_version": "1.0.0",
+  "_created": "2026-04-28",
+
+  "_meta": {
+    "modulo": "string — kebab-case. Ej: 'chat-io', 'pizzepos/cobros'.",
+    "ubicacion": "string — path relativo desde la raíz del repo. Ej: 'modules/conversacion/chat-io'.",
+    "auditado_en": "string ISO date",
+    "version_modulo": "string — campo `version` de module.json. null si no existe.",
+    "habilitado_en_config": "boolean — true si está en config.json modules.enabled.",
+    "tier_carga": "string|null — tier_1_infra | tier_2_platform | tier_3_core | tier_4_features | tier_5_domain_* | tier_6_ui | null"
+  },
+
+  "responsabilidad": {
+    "una_frase": "string — el dominio único en 1-2 líneas. Si tiene más de un dominio, anotar y marcar como violación.",
+    "subdominios_internos": ["lista opcional — solo si dentro del módulo hay piezas con responsabilidades distintas"]
+  },
+
+  "como_se_invoca": {
+    "via_tools_llm": ["lista de tools que expone — coincide con tools[] de module.json"],
+    "via_ui_handlers": ["lista 'domain.action' — coincide con ui_handlers[] de module.json"],
+    "via_apis_http": ["lista 'METHOD /path'"],
+    "via_eventos_externos": ["eventos a los que se suscribe que vienen de OTROS módulos (no del propio)"],
+    "via_otros_modulos_directamente": "VIOLACIÓN — listar si algún otro módulo le hace require/llamada directa. Vacío si está limpio."
+  },
+
+  "scope": {
+    "tipo": "global | project_scoped | mixto",
+    "como_recibe_project_id": "string — 'cache via project.activated' | 'en cada payload' | 'no aplica' | otra explicación corta"
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": "string",
+        "categoria": "dominio | request_response | tool_llm | tool_llm_response | legacy",
+        "payload_campos": {
+          "campo": "tipo — obligatorio|opcional — descripción corta"
+        },
+        "consumidores_conocidos": ["módulos que lo escuchan según grep del repo"],
+        "huerfano": "boolean — true si nadie lo escucha"
+      }
+    ],
+    "subscribes": [
+      {
+        "nombre": "string",
+        "handler": "string — método de la clase del módulo",
+        "emisor_conocido": "string — módulo que lo emite, o 'frontend' o 'core' o null si nadie",
+        "huerfano": "boolean — true si nadie lo emite"
+      }
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "string — coincide con module.json.tools[].name",
+      "categoria": "read | write | destructive | sin_clasificar",
+      "parameters_resumidos": "string — qué parámetros pide, breve",
+      "handler": "string — método",
+      "fuente_categoria": "string — 'arquitectura/agentes-tools.json' | 'inferida' | 'sin clasificar'"
+    }
+  ],
+
+  "ui_handlers": [
+    { "domain": "string", "action": "string", "handler": "string" }
+  ],
+
+  "apis_http": [
+    { "method": "string", "path": "string", "handler": "string" }
+  ],
+
+  "estado_persistente": {
+    "tablas_sqlite": [
+      {
+        "nombre": "string",
+        "scope_db": "string — 'system' | 'project' | '_prompts' | otro",
+        "campos": ["columna TIPO"],
+        "creada_por": "string — método o evento",
+        "migraciones_suaves": "string|null — describir si hay PRAGMA + ALTER TABLE"
+      }
+    ],
+    "archivos": [
+      {
+        "path": "string — ej: data/projects/{id}/storage/pizzepos/cartas/{carta_id}.json",
+        "formato": "string — json | jsonl | raw | otro",
+        "descripcion": "string"
+      }
+    ],
+    "config_propio": ["paths de config.json del proyecto que lee"]
+  },
+
+  "estado_memoria": [
+    {
+      "campo": "string — ej: 'this.activeProjectCache'",
+      "tipo": "string — Map | Set | Object | array | otros",
+      "se_invalida_con": "string — evento que lo limpia, o 'NUNCA' o 'TTL Xs'"
+    }
+  ],
+
+  "dependencias_implicitas": [
+    {
+      "modulo_dependido": "string — credential-manager | database-manager | filesystem | ai-gateway | ...",
+      "via_evento": "string — el evento concreto que usa para hablar con él",
+      "obligatorio_en": "onLoad | runtime | ambos",
+      "que_pasa_si_no_esta": "string — describir el fallo observable"
+    }
+  ],
+
+  "lifecycle": {
+    "onLoad_resumen": "string — qué hace en orden",
+    "onUnload_resumen": "string|null",
+    "depende_de_orden_de_carga": "string|null — explicar si es crítico que otros módulos estén arriba antes",
+    "auto_wired_subscribes": "boolean — true si el loader cablea desde module.json. false si suscribe imperativamente.",
+    "wildcards_o_dinamicos": ["suscripciones que NO son auto-wireables (ej: 'agent.*.completed')"]
+  },
+
+  "agentes_propios": [
+    {
+      "name": "string",
+      "ubicacion": "string — path al agents/<name>.json",
+      "scope": "string — sobre qué módulo opera",
+      "tools_declaradas": ["lista de tools"],
+      "tools_destructive_declaradas": ["VIOLACIÓN si la lista no está vacía"],
+      "rol_breve": "string"
+    }
+  ],
+
+  "violaciones_paradigma": [
+    {
+      "tipo": "require_entre_modulos | persistencia_propia | espera_respuesta_de_lo_emitido | dominio_mezclado_con_infraestructura | RPC_directo | controla_flujo_post_emit | mas_de_un_dominio | otro",
+      "ubicacion": "string — archivo:linea o archivo:rango",
+      "descripcion": "string — qué viola exactamente, citando código si ayuda",
+      "gravedad": "alta | media | baja",
+      "regla_violada": "string — referencia textual a CLAUDE.md o a arquitectura/eventos.json"
+    }
+  ],
+
+  "eventos_huerfanos": {
+    "emitidos_sin_consumidor": ["lista — verificada por grep en todo el repo"],
+    "subscritos_sin_emisor": ["lista — verificada por grep en todo el repo"]
+  },
+
+  "eventos_legacy_a_renombrar": [
+    {
+      "actual": "string",
+      "propuesto": "string",
+      "motivo": "string — snake_case | inglés_en_dominio | singular_plural_invertido | sin_punto | otro",
+      "es_publica_o_subscribe": "publica | subscribe | ambos"
+    }
+  ],
+
+  "version_archivada": {
+    "existe": "boolean",
+    "ubicacion": "string|null — _archived/<fecha>/... | arquitectura/conversacion-ref/... | otro",
+    "razon_de_archivo_segun_repo": "string|null — sólo si está documentada"
+  },
+
+  "frontend_acoplados": {
+    "stores": ["frontend/src/lib/stores/<name>.ts que consumen sus datos"],
+    "rutas": ["routes/... que dependen de este módulo"],
+    "componentes": ["componentes Svelte críticos que lo consumen"]
+  },
+
+  "todos_e_incompletos": [
+    {
+      "ubicacion": "string — archivo:linea",
+      "tipo": "TODO | FIXME | XXX | aspiracional",
+      "descripcion": "string"
+    }
+  ],
+
+  "metricas": {
+    "lineas_de_codigo": "number — sumadas de index.js + lib/*.js + services/*.js",
+    "archivos": "number",
+    "fecha_ultimo_commit_relevante": "string|null — sha + fecha"
+  },
+
+  "observaciones_libres": "string — SOLO HECHOS notables del código que no caben arriba. PROHIBIDO: sugerir rediseño, proponer fusiones, opinar sobre calidad. Si dudas, no lo escribas."
+}

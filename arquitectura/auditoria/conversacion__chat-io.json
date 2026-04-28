@@ -336,11 +336,65 @@
     }
   },
 
-  "observabilidad": {},
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "fields_requeridos_cumplidos": false,
+      "ejemplos": [
+        "this.logger.info('chat-io.loaded') — index.js:71",
+        "this.logger.info('chat-io.schema.migrated', { project_id, table, column }) — index.js:137",
+        "this.logger.warn('chat-io.schema.failed', { project_id, error: err.message }) — index.js:150",
+        "this.logger.error('chat-io.save_assistant.failed', { error: err.message }) — index.js:498"
+      ],
+      "violaciones": [
+        "system.json conventions.logging.required_fields exige `module`, `action`, `outcome` — chat-io codifica module+action en el primer string ('chat-io.<accion>') pero NO incluye campo outcome separado. El formato pino con [object Object] NO se observa (todas las llamadas usan firma logger.X('string', {obj}))."
+      ]
+    },
+    "metricas": {
+      "counters": [],
+      "gauges": [],
+      "timings": []
+    },
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "El módulo no extrae correlation_id de eventos entrantes ni lo añade a publish salientes. _db() solo genera request_id local."
+    }
+  },
 
-  "modos_de_fallo": [],
+  "modos_de_fallo": [
+    {
+      "dependencia": "database-manager",
+      "que_pasa_si_cae": "Cada _db() rechaza con 'db timeout: <query slice>' tras 10s (index.js:87). _ensureSchema falla → UI handlers propagan el error tras await. handleSend lanza throw, frontend ve error 500.",
+      "evidencia": "index.js:84-94 _db() con setTimeout 10000."
+    },
+    {
+      "dependencia": "project-manager",
+      "que_pasa_si_cae": "Sin emisión de project.activated, _ensureSchema sólo se ejecuta bajo demanda (primer UI handler con project_id). El módulo sigue funcionando, solo pierde el pre-warming del schema. NO crítico.",
+      "evidencia": "index.js:146-152 onProjectActivated solo invoca _ensureSchema con .catch que loggea warn."
+    },
+    {
+      "dependencia": "ai-gateway",
+      "que_pasa_si_cae": "Mensajes user se persisten y emiten chat.message.saved pero NUNCA hay ai.chat.response. El frontend cuelga hasta failsafe 180s.",
+      "evidencia": "No hay timeout local en chat-io para esperar la respuesta — depende del frontend. onAiResponse simplemente nunca se invoca."
+    },
+    {
+      "dependencia": "core/gateway/UIRequestHandler (cliente MQTT)",
+      "que_pasa_si_cae": "this.mqtt queda null en onLoad. onAiResponse persiste y emite chat.assistant.saved pero NO publica conversation/{id}/message. Frontend no recibe la respuesta hasta recargar.",
+      "evidencia": "index.js:70 `this.mqtt = context.uiHandler?.mqtt || null` con guard. index.js:506 `if (this.mqtt)` antes del publish."
+    }
+  ],
 
-  "configuracion_externa": {},
+  "configuracion_externa": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "config_proyecto_paths": [],
+    "valores_hardcoded_que_deberian_ser_config": [
+      "timeout 10000 ms en _db() (index.js:87) — no configurable, podría serlo si hay queries pesadas",
+      "defaultSettings: context_window=20, temperature=0.7, max_tokens=2000 (index.js:53) — defaults globales hardcoded; deberían venir de config del proyecto o del provider activo",
+      "default 50 en handleList limit (index.js:336) — paginación hardcoded",
+      "default 'chat' como page_id si no se pasa en handleSend (index.js:219)"
+    ]
+  },
 
   "estado_persistente": {
     "tablas_sqlite": [
@@ -490,16 +544,88 @@
     "razon_de_archivo_segun_repo": "No existe un chat-io archivado bajo el mismo nombre. arquitectura/conversacion-ref/ contiene predecesores funcionales (chat-ai-bridge, chat-mqtt, chat-session) del rediseno previo, pero ninguno se llama chat-io."
   },
 
-  "frontend_acoplados": {},
+  "frontend_acoplados": {
+    "stores": [
+      "frontend/src/lib/stores/chat.ts",
+      "frontend/src/lib/ui-core/types.ts (tipos)"
+    ],
+    "rutas": [
+      "frontend/src/routes/chat/+page.svelte (chat global)",
+      "frontend/src/routes/[project_id]/chat/+page.svelte (chat project-scoped)"
+    ],
+    "componentes": []
+  },
 
-  "tests": {},
+  "tests": {
+    "ubicacion": [],
+    "tipo": [],
+    "cobertura_subjetiva": "inexistente",
+    "que_cubre": "Ningún test específico de chat-io en tests/. Hay test de conversation-manager (módulo legacy disabled) pero no de chat-io.",
+    "que_NO_cubre": "Todo: handlers, FIFO de contexto, migración de schema, contratos de eventos, paths de error con códigos PROJECT_REQUIRED/CONVERSATION_REQUIRED."
+  },
 
   "historial_fixes": {
     "ventana": "ultimo_anio",
-    "items": []
+    "items": [
+      {
+        "sha": "f82bc65",
+        "fecha": "2026-04-25",
+        "subject": "chat-io: serializar fechas a ISO + incluir message_count en list/load",
+        "causa_segun_commit": "Backend devolvía epoch ms; el frontend interpreta fechas con `new Date(string)` y eso falla con números almacenados como string. Faltaba además message_count para mostrar el contador en la lista."
+      },
+      {
+        "sha": "d44b6b9",
+        "fecha": "2026-04-24",
+        "subject": "chat-io: leer filas como `data` en db.query.response",
+        "causa_segun_commit": "chat-io leía `rows` mientras database-manager publica las filas en `data`. Resultado: lista de conversaciones siempre vacía. Fix: payload.data ?? payload.rows ?? []."
+      },
+      {
+        "sha": "244cbfa",
+        "fecha": "2026-04-22",
+        "subject": "fix(chat-io): migración suave para tablas heredadas (prompt_id missing)",
+        "causa_segun_commit": "CREATE TABLE IF NOT EXISTS no añade columnas a tabla preexistente. Tablas conversations heredadas no tenían prompt_id → SQLITE_ERROR. Fix: _migrateSchema con PRAGMA table_info + ALTER TABLE ADD COLUMN."
+      },
+      {
+        "sha": "21b8bfe",
+        "fecha": "2026-04-22",
+        "subject": "fix(chat): alinear contratos frontend ↔ backend (snake_case + modales)",
+        "causa_segun_commit": "Frontend mandaba camelCase (projectId) y campos extra; chat-io esperaba snake_case y payload de 9 campos exactos. Fix lado frontend + validación pre-send (modal si falta project_id o conversation_id)."
+      },
+      {
+        "sha": "dc03d1b",
+        "fecha": "2026-04-22",
+        "subject": "refactor(conversacion): tabula rasa — 4 módulos limpios desde cero",
+        "causa_segun_commit": "Refactor que dio origen a chat-io desde la nueva tabula rasa de la capa conversacional."
+      },
+      {
+        "sha": "e0f9329",
+        "fecha": "2026-04-22",
+        "subject": "wip: tabula rasa de modules/conversacion — checkpoint parcial",
+        "causa_segun_commit": "Checkpoint en pleno refactor, no fix puntual."
+      }
+    ]
   },
 
-  "seguridad": {},
+  "seguridad": {
+    "asume_mtls_actualmente": false,
+    "asume_certificate_authority": false,
+    "expone_endpoints_sin_auth": [
+      "conversation.send",
+      "conversation.create",
+      "conversation.list",
+      "conversation.load",
+      "conversation.delete",
+      "conversation.update_settings",
+      "conversation.toggle_context",
+      "conversation.context_stats"
+    ],
+    "que_cambia_al_reactivar_ca": "Cuando certificate-authority esté activa, el cliente MQTT WebSocket presumiblemente requerirá certificado de cliente. La identidad del usuario quedaría garantizada por el cert. Los UI handlers de chat-io NO cambiarían su contrato, pero seguirían sin validar autorización fina por usuario (cualquier cert válido podría operar sobre cualquier conversation_id si pasa la validación de UUID + pertenencia a project_id).",
+    "datos_sensibles_que_maneja": [
+      "Contenido de mensajes del chat (potencialmente PII según lo que el usuario escriba)",
+      "Metadata con tool_calls (pueden contener parámetros sensibles si la tool los recibió)",
+      "prompt_id (referencia, no contenido sensible en sí)"
+    ]
+  },
 
   "todos_e_incompletos": [],
 
@@ -509,5 +635,5 @@
     "fecha_ultimo_commit_relevante": "f82bc65 2026-04-25 15:13:05 +0000 chat-io: serializar fechas a ISO + incluir message_count en list/load"
   },
 
-  "observaciones_libres": null
+  "observaciones_libres": "Módulo nacido en la tabula rasa de Abril 2026 (commit dc03d1b) y endurecido durante esa misma semana con 4 fixes consecutivos (244cbfa, 21b8bfe, d44b6b9, f82bc65). 522 líneas en un único index.js (sin lib/ ni services/). Todas las dependencias se hablan por eventBus salvo this.mqtt (cliente MQTT directo guardado en onLoad para empujar conversation/{id}/message al frontend). Sin tests automatizados. correlation_id no se propaga. system.json fields (module/action/outcome) no se cumplen formalmente aunque el formato 'chat-io.<accion>' codifica module+action."
 }

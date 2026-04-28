@@ -8,9 +8,9 @@
   "_leyenda_prioridad": {
     "P0": "Foco actual del rediseño — chat con LLM. Auditar primero.",
     "P1": "Dependencias técnicas que el chat usa (DB, credenciales, filesystem, project-manager, scheduler).",
-    "P2": "Módulos de dominio que exponen tools al LLM — su contrato de eventos toca al rediseño.",
+    "P2": "Módulos de dominio con tools al LLM + dormidos por diseño (CA, security-p2p, dashboard, metricas). Su contrato importa para el rediseño.",
     "P3": "Resto de módulos activos.",
-    "P4": "Módulos disabled — auditar para decidir si se retiran del repo. Última prioridad."
+    "P4": "Candidatos a retirada — disabled sin documentación que los defienda. Auditoría superficial para confirmar borrado."
   },
 
   "modulos": [
@@ -96,7 +96,7 @@
     { "modulo": "calling-generator", "ubicacion": "modules/calling-generator", "salida": "arquitectura/auditoria/calling-generator.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Activo en config." },
     { "modulo": "code-executor", "ubicacion": "modules/code-executor", "salida": "arquitectura/auditoria/code-executor.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Tier 4. Ejecución de código." },
     { "modulo": "plugin-manager", "ubicacion": "modules/plugin-manager", "salida": "arquitectura/auditoria/plugin-manager.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Tier 2. Carga plugins JSON." },
-    { "modulo": "log-manager", "ubicacion": "modules/log-manager", "salida": "arquitectura/auditoria/log-manager.json", "prioridad": "P3", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Documentado como tier_1 pero DISABLED en config — discrepancia clave a verificar." },
+    { "modulo": "log-manager", "ubicacion": "modules/log-manager", "salida": "arquitectura/auditoria/log-manager.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Recomendación: retirar tras auditoría superficial. core/observability ya provee Logger+Tracer+Metrics+ActivityLogger; log-manager parece capa duplicada. Lleva disabled tiempo sin que nada se rompa." },
 
     { "modulo": "admin-panel", "ubicacion": "modules/admin-panel", "salida": "arquitectura/auditoria/admin-panel.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "UI. 2 TODOs (toggle, agent creation)." },
     { "modulo": "pdf-viewer", "ubicacion": "modules/pdf-viewer", "salida": "arquitectura/auditoria/pdf-viewer.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Consumidor de db.query.response." },
@@ -111,25 +111,33 @@
     { "modulo": "firmware-builder", "ubicacion": "modules/firmware-builder", "salida": "arquitectura/auditoria/firmware-builder.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "IoT — compila drivers ESP32 (reemplaza esp32-dev)." },
     { "modulo": "esp32-flasher", "ubicacion": "modules/esp32-flasher", "salida": "arquitectura/auditoria/esp32-flasher.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "IoT — flash USB y monitor serial." },
 
-    { "modulo": "esp32-dev", "ubicacion": "modules/esp32-dev", "salida": "arquitectura/auditoria/esp32-dev.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Existe en disco pero no en config.enabled ni en config.disabled — fantasma. Documentado como deprecado por firmware-builder." },
-    { "modulo": "certificate-authority", "ubicacion": "modules/certificate-authority", "salida": "arquitectura/auditoria/certificate-authority.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Disabled. Documentado extensamente como activo. data/ca/ no existe." },
-    { "modulo": "security-p2p", "ubicacion": "modules/security-p2p", "salida": "arquitectura/auditoria/security-p2p.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Disabled — cifrado E2E entre cores." },
-    { "modulo": "dashboard", "ubicacion": "modules/dashboard", "salida": "arquitectura/auditoria/dashboard.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Disabled — UI placeholder." },
-    { "modulo": "metricas", "ubicacion": "modules/metricas", "salida": "arquitectura/auditoria/metricas.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Disabled." },
-    { "modulo": "notas", "ubicacion": "modules/notas", "salida": "arquitectura/auditoria/notas.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Disabled." },
-    { "modulo": "scratch-designer", "ubicacion": "modules/scratch-designer", "salida": "arquitectura/auditoria/scratch-designer.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Disabled." },
-    { "modulo": "ui-designer", "ubicacion": "modules/ui-designer", "salida": "arquitectura/auditoria/ui-designer.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Disabled." },
-    { "modulo": "staff-manager", "ubicacion": "modules/staff-manager", "salida": "arquitectura/auditoria/staff-manager.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Disabled." }
+    { "modulo": "certificate-authority", "ubicacion": "modules/certificate-authority", "salida": "arquitectura/auditoria/certificate-authority.json", "prioridad": "P2", "estado": "pendiente", "habilitado": false, "razon_prioridad": "DORMIDO POR DISEÑO. Modelo de seguridad mTLS del sistema. Aunque disabled, su contrato es la spec contra la que el resto de módulos hablarán cuando se reactive. Auditar a fondo." },
+    { "modulo": "security-p2p", "ubicacion": "modules/security-p2p", "salida": "arquitectura/auditoria/security-p2p.json", "prioridad": "P2", "estado": "pendiente", "habilitado": false, "razon_prioridad": "DORMIDO POR DISEÑO. Cifrado E2E entre cores. Parte del modelo de seguridad junto con CA." },
+    { "modulo": "dashboard", "ubicacion": "modules/dashboard", "salida": "arquitectura/auditoria/dashboard.json", "prioridad": "P2", "estado": "pendiente", "habilitado": false, "razon_prioridad": "DORMIDO POR DISEÑO. UI a revivir." },
+    { "modulo": "metricas", "ubicacion": "modules/metricas", "salida": "arquitectura/auditoria/metricas.json", "prioridad": "P2", "estado": "pendiente", "habilitado": false, "razon_prioridad": "DORMIDO POR DISEÑO. Métricas del sistema en UI." },
+
+    { "modulo": "esp32-dev", "ubicacion": "modules/esp32-dev", "salida": "arquitectura/auditoria/esp32-dev.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Fantasma — existe en disco pero no en config.enabled ni en config.disabled. Documentado como deprecado por firmware-builder. Candidato a retirada." },
+    { "modulo": "notas", "ubicacion": "modules/notas", "salida": "arquitectura/auditoria/notas.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Disabled, sin uso aparente. Candidato a retirada." },
+    { "modulo": "scratch-designer", "ubicacion": "modules/scratch-designer", "salida": "arquitectura/auditoria/scratch-designer.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "UI placeholder nunca shipped. Candidato a retirada." },
+    { "modulo": "ui-designer", "ubicacion": "modules/ui-designer", "salida": "arquitectura/auditoria/ui-designer.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "UI placeholder nunca shipped. Candidato a retirada." },
+    { "modulo": "staff-manager", "ubicacion": "modules/staff-manager", "salida": "arquitectura/auditoria/staff-manager.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Nunca terminado. Candidato a retirada." }
   ],
 
   "resumen_por_prioridad": {
     "P0": 4,
     "P1": 9,
-    "P2": 12,
-    "P3": 32,
-    "P4": 9,
+    "P2": 16,
+    "P3": 31,
+    "P4": 6,
     "_total": 66
   },
 
-  "siguiente_paso": "Lanzar el agente auditor para los 4 módulos P0 en paralelo (chat-io, prompt-builder, ai-gateway, ai-agent-framework). Cuando terminen, validar las 4 salidas contra el schema y revisar el patrón emergente antes de seguir con P1."
+  "decisiones_2026_04_28": [
+    "P2 ampliado con 4 dormidos por diseño (certificate-authority, security-p2p, dashboard, metricas) — sus contratos importan para el rediseño aunque estén disabled.",
+    "log-manager bajado a P4 (candidato a retirada): core/observability ya cubre Logger+Tracer+Metrics+ActivityLogger. Auditoría confirma si tenía función única o era capa duplicada.",
+    "P4 reducido a 6 candidatos a retirada: log-manager, esp32-dev (fantasma), notas, scratch-designer, ui-designer, staff-manager.",
+    "conversation-manager listado en config.disabled pero el directorio no existe — fantasma, no se audita."
+  ],
+
+  "siguiente_paso": "Lanzar el agente auditor v2 para los 4 módulos P0 en paralelo (chat-io, prompt-builder, ai-gateway, ai-agent-framework). Cuando terminen, validar las 4 salidas contra _schema.json v2.0.0, revisar patrón emergente y decidir si pasar a P1 o ajustar el schema."
 }

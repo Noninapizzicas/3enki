@@ -27,33 +27,29 @@
 
   "eventos": {
     "publica": [
-      { "event": "pedido.creado",          "description": "Nuevo pedido creado para una cuenta" },
-      { "event": "pedido.item_agregado",   "description": "Item agregado al pedido (con variaciones)" },
-      { "event": "pedido.item_actualizado","description": "Item del pedido actualizado (cantidad, variaciones)" },
-      { "event": "pedido.item_eliminado",  "description": "Item eliminado del pedido" },
-      { "event": "pedido.enviado_cocina",  "description": "Pedido enviado a cocina para preparación" },
-      { "event": "pedido.completado",      "description": "Pedido completado (todos los items servidos)" },
-      { "event": "pedido.cancelado",       "description": "Pedido cancelado" }
+      { "event": "pedido.creado",           "description": "Nuevo pedido creado para una cuenta" },
+      { "event": "pedido.item_agregado",    "description": "Item agregado al pedido (con variaciones)" },
+      { "event": "pedido.item_actualizado", "description": "Item del pedido actualizado (cantidad, variaciones)" },
+      { "event": "pedido.item_eliminado",   "description": "Item eliminado del pedido" },
+      { "event": "pedido.enviado_cocina",   "description": "Pedido enviado a cocina para preparación" },
+      { "event": "pedido.completado",       "description": "Pedido completado (todos los items servidos)" },
+      { "event": "pedido.cancelado",        "description": "Pedido cancelado" }
     ],
     "subscribes": [
-      { "event": "comandero.enviar_cocina",  "handler": "onComanderoEnviarCocina",  "extras": {} },
-      { "event": "variacion.validada",       "handler": "onVariacionValidada",      "extras": {} },
-      { "event": "variacion.rechazada",      "handler": "onVariacionRechazada",     "extras": {} },
-      { "event": "cuenta.creada",            "handler": "onCuentaCreada",           "extras": {} },
-      { "event": "catalogo.actualizado",     "handler": "onCatalogoActualizado",    "extras": {} },
-      { "event": "producto.creado",          "handler": "onProductoActualizado",    "extras": {} },
-      { "event": "producto.actualizado",     "handler": "onProductoActualizado",    "extras": {} },
-      { "event": "caja.cerrada",             "handler": "onCajaCerrada",            "extras": {} },
-      { "event": "dia.iniciado",             "handler": "onDiaIniciado",            "extras": {} }
+      { "event": "comandero.enviar_cocina", "handler": "onComanderoEnviarCocina", "extras": {} },
+      { "event": "variacion.validada",      "handler": "onVariacionValidada",     "extras": {} },
+      { "event": "variacion.rechazada",     "handler": "onVariacionRechazada",    "extras": {} },
+      { "event": "cuenta.creada",           "handler": "onCuentaCreada",          "extras": {} },
+      { "event": "catalogo.actualizado",    "handler": "onCatalogoActualizado",   "extras": {} },
+      { "event": "producto.creado",         "handler": "onProductoActualizado",   "extras": {} },
+      { "event": "producto.actualizado",    "handler": "onProductoActualizado",   "extras": {} },
+      { "event": "caja.cerrada",            "handler": "onCajaCerrada",           "extras": {} },
+      { "event": "dia.iniciado",            "handler": "onDiaIniciado",           "extras": {} }
     ],
     "provides_eventos": [
-      "pedido.creado",
-      "pedido.item_agregado",
-      "pedido.item_actualizado",
-      "pedido.item_eliminado",
-      "pedido.enviado_cocina",
-      "pedido.completado",
-      "pedido.cancelado"
+      "pedido.obtener",
+      "pedido.listar",
+      "pedido.por_cuenta"
     ]
   },
 
@@ -211,12 +207,11 @@
     "title": "Gestión de Pedidos",
     "icon": "📋",
     "views_keys": ["main", "create", "edit", "detail"],
-    "section_widget_types": ["dashboard", "fullscreen", "grid"],
-    "permissions_declaradas": ["admin", "camarero", "gerente"],
+    "section_widget_types": ["grid"],
+    "permissions_declaradas": ["admin", "gerente", "camarero"],
     "tamano_bytes": 2728,
     "endpoints_referenciados": [
       "/modules/pedidos/pedidos",
-      "/modules/pedidos/pedidos/{id}",
       "/modules/pedidos/pedidos/{id}"
     ],
     "mqtt_topics_declarados": [
@@ -262,10 +257,12 @@
     "module_json_lineas": 388,
     "tiene_main_no_estandar": false,
     "warnings": [
-      "observability.logging tiene campo extra 'correlation_id' no capturado en observability_declarada (no está en schema de salida)",
-      "provides (canónico) declara events[] y queries[] — solapamiento con events.publishes y consultas no capturadas en schema",
-      "ui.description, ui.access_level, ui.components y ui.features son campos extra de ui no previstos en ui_declarativa del schema",
-      "apis usan 'request_schema'/'response_schema' (objetos $ref) en lugar de strings — mapeados a strings extraídos del $ref"
+      "observability.logging tiene campo extra 'correlation_id=true' no capturado en observability_declarada (fuera del schema de salida)",
+      "events.subscribes items tienen campo 'description' en lugar de 'extras' — normalizado a extras:{}",
+      "provides.queries=['pedido.obtener','pedido.listar','pedido.por_cuenta'] mapeados a provides_eventos (provides.events solapan con events.publishes)",
+      "apis usan 'request_schema'/'response_schema' (objetos con $ref) en lugar de strings — mapeados a los valores de $ref como strings",
+      "ui declara campos extra no previstos en ui_declarativa del schema: access_level, components, features, mqtt.sounds",
+      "No tiene campo 'main' declarado en module.json — main=null"
     ]
   }
 }

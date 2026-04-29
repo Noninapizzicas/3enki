@@ -1,0 +1,209 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/cocina",
+    "ubicacion": "modules/pizzepos/cocina",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "cocina",
+    "version": "3.1.0",
+    "description_oficial": "Display de cocina en tiempo real - Sistema de preparación de pedidos. Publica periferico.display para pantallas externas.",
+    "author": "Pizzepos Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_pizzepos",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "cocina.item_preparando", "description": "Cocinero empieza a preparar un item (primer tap)" },
+      { "event": "cocina.item_preparado",  "description": "Item marcado como preparado" },
+      { "event": "cocina.pedido_listo",    "description": "Pedido completamente preparado y listo para servir" },
+      { "event": "periferico.display",     "description": "Notificación a display externo de cocina (TV, LED, tablet) con estado de pedidos" },
+      { "event": "cocina.item_ticket",     "description": "Ticket de pieza individual — se imprime al completar item en estación con impresión configurada" }
+    ],
+    "subscribes": [
+      { "event": "pedido.enviado_cocina", "handler": "onPedidoEnviadoCocina", "extras": {} },
+      { "event": "pedido.cancelado",      "handler": "onPedidoCancelado",      "extras": {} },
+      { "event": "cuenta.creada",         "handler": "onCuentaCreada",         "extras": {} },
+      { "event": "cuenta.actualizada",    "handler": "onCuentaActualizada",    "extras": {} },
+      { "event": "cuenta.eliminada",      "handler": "onCuentaEliminada",      "extras": {} },
+      { "event": "caja.cerrada",          "handler": "onCajaCerrada",          "extras": {} },
+      { "event": "dia.iniciado",          "handler": "onDiaIniciado",          "extras": {} }
+    ],
+    "provides_eventos": [
+      "cocina.item_preparando",
+      "cocina.item_preparado",
+      "cocina.pedido_listo",
+      "cocina.item_ticket",
+      "periferico.display"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/cocina/activos",
+      "handler": "handleGetActivos",
+      "description": "Listar pedidos activos en cocina",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/cocina/historial",
+      "handler": "handleGetHistorial",
+      "description": "Historial de pedidos completados",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/cocina/pedidos/:pedido_id",
+      "handler": "handleGetPedido",
+      "description": "Obtener detalle de pedido en cocina",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/cocina/items/:item_id/preparar",
+      "handler": "handlePrepararItem",
+      "description": "Marcar item como preparado",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/cocina/pedidos/:pedido_id/listo",
+      "handler": "handleMarcarListo",
+      "description": "Marcar pedido completo como listo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "cocina.pedido_recibido.total",
+        "cocina.item_preparado.total",
+        "cocina.pedido_listo.total",
+        "cocina.pedido_cancelado.total"
+      ],
+      "gauges": [
+        "cocina.pedidos_activos.count",
+        "cocina.items_pendientes.count"
+      ],
+      "timings": [
+        "cocina.preparacion_item.duration",
+        "cocina.preparacion_pedido.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/pizzepos/cocina/schemas/cocina.json",
+      "modules/pizzepos/cocina/schemas/events.json"
+    ],
+    "prompts": [],
+    "context": true,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 5231,
+    "module_json_lineas": 180,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "main no declarado en module.json — se asume index.js por convención pero no está explícito",
+      "provides.queries declara ['cocina.activos', 'cocina.historial'] — campo 'queries' dentro de provides no es parte del schema de extracción",
+      "observability.logging.correlation_id=true — campo extra no capturado en observability_declarada"
+    ]
+  }
+}

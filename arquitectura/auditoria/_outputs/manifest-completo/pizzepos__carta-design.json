@@ -1,0 +1,184 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/carta-design",
+    "ubicacion": "modules/pizzepos/carta-design",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "carta-design",
+    "version": "3.0.0",
+    "description_oficial": "Estudio de diseño profesional de cartas impresas. Sistema multi-rol con entrevista, equipo creativo, guión maestro y producción HTML.",
+    "author": "Pizzepos Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "event": "carta.html.generada",
+        "description": "HTML de diseño profesional generado — se abre automáticamente en HtmlPreviewPanel"
+      }
+    ],
+    "subscribes": [
+      { "event": "project.activated",   "handler": "onProjectActivated",   "extras": {} },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated", "extras": {} },
+      { "event": "carta.actualizada",   "handler": "onCartaGenerada",       "extras": {} }
+    ],
+    "provides_eventos": ["carta.html.generada"]
+  },
+
+  "tools": [
+    {
+      "name": "design.load_carta",
+      "description": "Carga una carta con todos sus productos, categorías, precios e ingredientes. LLAMAR SIEMPRE al inicio del proceso de diseño para tener los datos disponibles.",
+      "parameters_required": ["carta_id"],
+      "parameters_property_names": ["carta_id"],
+      "parameters_size_chars": 146,
+      "parameters_full_path_hint": "modules/pizzepos/carta-design/module.json → tools[0].parameters"
+    },
+    {
+      "name": "design.save",
+      "description": "Guarda el HTML+CSS generado por el maquetador (R10) y lo abre automáticamente en el panel de preview. El usuario puede imprimir con Ctrl+P. LLAMAR después de generar el HTML completo en la fase de producción.",
+      "parameters_required": ["carta_id", "html"],
+      "parameters_property_names": ["carta_id", "html", "nombre"],
+      "parameters_size_chars": 329,
+      "parameters_full_path_hint": "modules/pizzepos/carta-design/module.json → tools[1].parameters"
+    },
+    {
+      "name": "design.profiles",
+      "description": "Lista los perfiles de estilo disponibles como referencia visual. No son plantillas — son inspiración para el equipo creativo.",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 33,
+      "parameters_full_path_hint": "modules/pizzepos/carta-design/module.json → tools[2].parameters"
+    },
+    {
+      "name": "design.save_profile",
+      "description": "Guarda un perfil de diseño reutilizable como referencia para futuros proyectos.",
+      "parameters_required": ["nombre"],
+      "parameters_property_names": ["nombre", "description", "color_palette", "fonts", "layout_type", "style_notes"],
+      "parameters_size_chars": 237,
+      "parameters_full_path_hint": "modules/pizzepos/carta-design/module.json → tools[3].parameters"
+    },
+    {
+      "name": "design.delete_profile",
+      "description": "Elimina un perfil de diseño custom.",
+      "parameters_required": ["profile_id"],
+      "parameters_property_names": ["profile_id"],
+      "parameters_size_chars": 89,
+      "parameters_full_path_hint": "modules/pizzepos/carta-design/module.json → tools[4].parameters"
+    },
+    {
+      "name": "design.gallery",
+      "description": "Lista todos los diseños generados previamente para una carta.",
+      "parameters_required": ["carta_id"],
+      "parameters_property_names": ["carta_id"],
+      "parameters_size_chars": 85,
+      "parameters_full_path_hint": "modules/pizzepos/carta-design/module.json → tools[5].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "design", "action": "load-carta",     "handler": "toolLoadCarta" },
+      { "domain": "design", "action": "profiles",       "handler": "toolProfiles" },
+      { "domain": "design", "action": "save",           "handler": "toolSave" },
+      { "domain": "design", "action": "save-profile",   "handler": "toolSaveProfile" },
+      { "domain": "design", "action": "delete-profile", "handler": "toolDeleteProfile" },
+      { "domain": "design", "action": "gallery",        "handler": "toolGallery" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": { "level": null, "structured": null },
+    "metrics": {
+      "enabled": null,
+      "counters": [
+        "design.load_carta.total",
+        "design.save.total",
+        "design.save_profile.total",
+        "design.gallery.total"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": true,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 4283,
+    "module_json_lineas": 121,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "Campo 'provides' (canónico) duplica events.publishes: provides.events=['carta.html.generada'] — redundante pero no outlier",
+      "tools[].handler declara campo adicional en cada tool (toolLoadCarta, toolSave, etc.) — campo informativo no normalizado en output"
+    ]
+  }
+}

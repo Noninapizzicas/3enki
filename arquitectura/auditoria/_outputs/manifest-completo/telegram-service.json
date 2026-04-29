@@ -1,0 +1,279 @@
+{
+  "_meta": {
+    "modulo": "telegram-service",
+    "ubicacion": "modules/telegram-service",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "telegram-service",
+    "version": "3.0.0",
+    "description_oficial": "Multi-bot Telegram service - centralized management, credential-manager integration",
+    "author": "Event Core Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_6_ui",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "telegram.text.received",     "description": "Text message received" },
+      { "event": "telegram.photo.received",    "description": "Photo received" },
+      { "event": "telegram.document.received", "description": "Document received" },
+      { "event": "telegram.video.received",    "description": "Video received" },
+      { "event": "telegram.audio.received",    "description": "Audio received" },
+      { "event": "telegram.voice.received",    "description": "Voice message received" },
+      { "event": "telegram.location.received", "description": "Location received" },
+      { "event": "telegram.contact.received",  "description": "Contact received" },
+      { "event": "telegram.command.received",  "description": "Bot command received" },
+      { "event": "telegram.callback.received", "description": "Inline button callback" },
+      { "event": "telegram.message.sent",      "description": "Message sent successfully" },
+      { "event": "telegram.send.failed",       "description": "Message send failed" },
+      { "event": "telegram.bot.started",       "description": "Bot started polling" },
+      { "event": "telegram.bot.stopped",       "description": "Bot stopped" },
+      { "event": "telegram.bot.error",         "description": "Bot error" },
+      { "event": "telegram.queue.overflow",    "description": "Message queue overflow" }
+    ],
+    "subscribes": [
+      { "event": "credential.saved",                    "handler": "onCredentialSaved",      "extras": {} },
+      { "event": "credential.deleted",                  "handler": "onCredentialDeleted",    "extras": {} },
+      { "event": "telegram.send_message.request",       "handler": "onSendMessageRequest",   "extras": {} },
+      { "event": "telegram.get_file.request",           "handler": "onGetFileRequest",       "extras": {} },
+      { "event": "telegram.send_photo.request",         "handler": "onSendPhotoRequest",     "extras": {} },
+      { "event": "telegram.send_document.request",      "handler": "onSendDocumentRequest",  "extras": {} },
+      { "event": "telegram.send_video.request",         "handler": "onSendVideoRequest",     "extras": {} },
+      { "event": "telegram.send_location.request",      "handler": "onSendLocationRequest",  "extras": {} },
+      { "event": "telegram.edit_message.request",       "handler": "onEditMessageRequest",   "extras": {} },
+      { "event": "telegram.delete_message.request",     "handler": "onDeleteMessageRequest", "extras": {} },
+      { "event": "telegram.answer_callback.request",    "handler": "onAnswerCallbackRequest","extras": {} },
+      { "event": "telegram.get_chat.request",           "handler": "onGetChatRequest",       "extras": {} },
+      { "event": "telegram.set_commands.request",       "handler": "onSetCommandsRequest",   "extras": {} },
+      { "event": "telegram.list_bots.request",          "handler": "onListBotsRequest",      "extras": {} }
+    ],
+    "provides_eventos": [
+      "telegram.text.received",
+      "telegram.photo.received",
+      "telegram.document.received",
+      "telegram.video.received",
+      "telegram.audio.received",
+      "telegram.voice.received",
+      "telegram.location.received",
+      "telegram.contact.received",
+      "telegram.command.received",
+      "telegram.callback.received",
+      "telegram.message.sent",
+      "telegram.send.failed",
+      "telegram.bot.started",
+      "telegram.bot.stopped",
+      "telegram.bot.error",
+      "telegram.queue.overflow"
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "telegram.send_message",
+      "description": "Enviar mensaje de texto a Telegram",
+      "parameters_required": ["botName", "chatId", "text"],
+      "parameters_property_names": ["botName", "chatId", "text", "parseMode", "replyMarkup"],
+      "parameters_size_chars": 419,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[0].parameters"
+    },
+    {
+      "name": "telegram.send_photo",
+      "description": "Enviar foto a Telegram",
+      "parameters_required": ["botName", "chatId", "photo"],
+      "parameters_property_names": ["botName", "chatId", "photo", "caption"],
+      "parameters_size_chars": 258,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[1].parameters"
+    },
+    {
+      "name": "telegram.send_document",
+      "description": "Enviar documento a Telegram",
+      "parameters_required": ["botName", "chatId", "document"],
+      "parameters_property_names": ["botName", "chatId", "document", "caption"],
+      "parameters_size_chars": 268,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[2].parameters"
+    },
+    {
+      "name": "telegram.send_video",
+      "description": "Enviar video a Telegram",
+      "parameters_required": ["botName", "chatId", "video"],
+      "parameters_property_names": ["botName", "chatId", "video", "caption"],
+      "parameters_size_chars": 252,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[3].parameters"
+    },
+    {
+      "name": "telegram.send_location",
+      "description": "Enviar ubicacion a Telegram",
+      "parameters_required": ["botName", "chatId", "latitude", "longitude"],
+      "parameters_property_names": ["botName", "chatId", "latitude", "longitude"],
+      "parameters_size_chars": 265,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[4].parameters"
+    },
+    {
+      "name": "telegram.edit_message",
+      "description": "Editar mensaje existente",
+      "parameters_required": ["botName", "chatId", "messageId", "text"],
+      "parameters_property_names": ["botName", "chatId", "messageId", "text"],
+      "parameters_size_chars": 248,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[5].parameters"
+    },
+    {
+      "name": "telegram.delete_message",
+      "description": "Eliminar mensaje",
+      "parameters_required": ["botName", "chatId", "messageId"],
+      "parameters_property_names": ["botName", "chatId", "messageId"],
+      "parameters_size_chars": 192,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[6].parameters"
+    },
+    {
+      "name": "telegram.answer_callback",
+      "description": "Responder a callback de boton inline",
+      "parameters_required": ["botName", "callbackId"],
+      "parameters_property_names": ["botName", "callbackId", "text", "showAlert"],
+      "parameters_size_chars": 272,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[7].parameters"
+    },
+    {
+      "name": "telegram.get_file",
+      "description": "Obtener info y descargar archivo",
+      "parameters_required": ["botName", "fileId"],
+      "parameters_property_names": ["botName", "fileId", "download"],
+      "parameters_size_chars": 214,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[8].parameters"
+    },
+    {
+      "name": "telegram.get_chat",
+      "description": "Obtener info de un chat",
+      "parameters_required": ["botName", "chatId"],
+      "parameters_property_names": ["botName", "chatId"],
+      "parameters_size_chars": 148,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[9].parameters"
+    },
+    {
+      "name": "telegram.set_commands",
+      "description": "Configurar menu de comandos del bot",
+      "parameters_required": ["botName", "commands"],
+      "parameters_property_names": ["botName", "commands"],
+      "parameters_size_chars": 314,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[10].parameters"
+    },
+    {
+      "name": "telegram.list_bots",
+      "description": "Listar bots activos",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 22,
+      "parameters_full_path_hint": "modules/telegram-service/module.json → tools[11].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": ["credential-manager", "filesystem"],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "pollingInterval",    "tipo": "number",  "valor_default": 1000 },
+      { "key": "rateLimitPerSecond", "tipo": "number",  "valor_default": 25 },
+      { "key": "maxQueueSize",       "tipo": "number",  "valor_default": 100 },
+      { "key": "storagePath",        "tipo": "string",  "valor_default": "./data/bots" }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "telegram.messages.received.total",
+        "telegram.messages.sent.total",
+        "telegram.errors.total",
+        "telegram.bots.started.total",
+        "telegram.bots.stopped.total"
+      ],
+      "gauges": [
+        "telegram.bots.active",
+        "telegram.queue.size"
+      ],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": true,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 12276,
+    "module_json_lineas": 343,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "provides.events duplica events.publishes — quirk de estructura mixta (provides top-level + events.publishes)",
+      "dependencies declarado como objeto {modules:[...]} en lugar de array — no canónico",
+      "tools[].handler campo extra no contemplado en schema (handler: 'handleTool*') — presente en cada tool pero no inlineable según contrato",
+      "No tiene ui_handlers ni handlers declarados en module.json"
+    ]
+  }
+}

@@ -1,0 +1,403 @@
+{
+  "_meta": {
+    "modulo": "conversacion/prompt-builder",
+    "ubicacion": "modules/conversacion/prompt-builder",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/conversacion__prompt-builder.json"
+  },
+
+  "identidad": {
+    "name": "prompt-builder",
+    "version": "1.0.0",
+    "description_oficial": "Construye el system prompt al recibir chat.message.saved. Mantiene en cache los prompt.json y context.json de los módulos (FS) y los prompts del usuario (prompt-manager). Emite chat.prompt.ready con los 9 campos.",
+    "author": "Event Core Team",
+    "main_declarado": null,
+    "main_real": "modules/conversacion/prompt-builder/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": false,
+    "estado_modulo": "candidato_a_retirada",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "prompt.list.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/prompt-builder/index.js:117",
+        "metodo_contenedor": "_requestUserPrompts",
+        "es_handler_de": null,
+        "bloque_logico": "tras generar request_id — solicita la librería de prompts del usuario al prompt-manager",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["request_id"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "    const request_id = crypto.randomUUID();\n    this._listRequestId = request_id;\n    this.eventBus.publish('prompt.list.request', { request_id }).catch(err =>",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "db.query.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/prompt-builder/index.js:156",
+        "metodo_contenedor": "_db",
+        "es_handler_de": null,
+        "bloque_logico": "dentro de Promise resolver, tras pendingDb.set — solicita historial de mensajes al database-manager",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["project_id", "query", "params", "read_only", "request_id"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": true,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      this.pendingDb.set(request_id, { resolve, reject, timeout });\n      this.eventBus.publish('db.query.request', { project_id, query, params, read_only: true, request_id });\n    });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "chat.prompt.ready", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/prompt-builder/index.js:252",
+        "metodo_contenedor": "onMessageSaved",
+        "es_handler_de": "chat.message.saved",
+        "bloque_logico": "tras construir system prompt y cargar historial — emite el prompt completo con los 9 campos + messages",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["project_id", "page_id", "conversation_id", "context", "settings", "prompt", "attachments", "intencion", "message", "messages", "message_id"],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": true,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    // Propagamos los 9 campos. prompt pasa de id → string final.\n    await this.eventBus.publish('chat.prompt.ready', {\n      project_id,",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      {
+        "nombre": "chat.message.saved",
+        "tipo_nombre": "literal",
+        "handler": "onMessageSaved",
+        "handler_ubicacion": "modules/conversacion/prompt-builder/index.js:217",
+        "comportamiento_si_falla": "log_y_sigue",
+        "evidencia_comportamiento": "modules/conversacion/prompt-builder/index.js:246",
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "prompt.list.response",
+        "tipo_nombre": "literal",
+        "handler": "onPromptListResponse",
+        "handler_ubicacion": "modules/conversacion/prompt-builder/index.js:122",
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": "modules/conversacion/prompt-builder/index.js:126 — retorna silenciosamente si !success || !data?.prompts",
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "prompt.created",
+        "tipo_nombre": "literal",
+        "handler": "onPromptUpserted",
+        "handler_ubicacion": "modules/conversacion/prompt-builder/index.js:133",
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": "modules/conversacion/prompt-builder/index.js:135 — retorna silenciosamente si !id",
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "prompt.updated",
+        "tipo_nombre": "literal",
+        "handler": "onPromptUpserted",
+        "handler_ubicacion": "modules/conversacion/prompt-builder/index.js:133",
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": "modules/conversacion/prompt-builder/index.js:135 — retorna silenciosamente si !id",
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "prompt.deleted",
+        "tipo_nombre": "literal",
+        "handler": "onPromptDeleted",
+        "handler_ubicacion": "modules/conversacion/prompt-builder/index.js:139",
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": "modules/conversacion/prompt-builder/index.js:141 — retorna silenciosamente si !id",
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "db.query.response",
+        "tipo_nombre": "literal",
+        "handler": "onDbQueryResponse",
+        "handler_ubicacion": "modules/conversacion/prompt-builder/index.js:160",
+        "comportamiento_si_falla": "rejecta_promise_pending",
+        "evidencia_comportamiento": "modules/conversacion/prompt-builder/index.js:166 — if (error) pending.reject(new Error(error))",
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["chat.prompt.ready", "prompt.list.request"],
+      "publica_literales_en_codigo": ["chat.prompt.ready", "db.query.request", "prompt.list.request"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": ["db.query.request"],
+      "subscribes_declarados_en_manifest": [
+        "chat.message.saved", "prompt.list.response", "prompt.created",
+        "prompt.updated", "prompt.deleted", "db.query.response"
+      ],
+      "subscribes_realmente_registrados": [
+        "chat.message.saved", "prompt.list.response", "prompt.created",
+        "prompt.updated", "prompt.deleted", "db.query.response"
+      ],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [],
+
+  "ui_handlers": [],
+
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      {
+        "campo": "_modulePrompts",
+        "tipo": "Map",
+        "ubicacion_init": "modules/conversacion/prompt-builder/index.js:29",
+        "se_invalida_con": "nunca — se llena en onLoad via _scanModules y no se limpia posteriormente",
+        "leak_potencial": true
+      },
+      {
+        "campo": "_moduleContexts",
+        "tipo": "Map",
+        "ubicacion_init": "modules/conversacion/prompt-builder/index.js:30",
+        "se_invalida_con": "nunca — se llena en onLoad via _scanModules y no se limpia posteriormente",
+        "leak_potencial": true
+      },
+      {
+        "campo": "_userPrompts",
+        "tipo": "Map",
+        "ubicacion_init": "modules/conversacion/prompt-builder/index.js:31",
+        "se_invalida_con": "onPromptUpserted (set individual) | onPromptDeleted (delete individual) — no hay clear() en onUnload",
+        "leak_potencial": true
+      },
+      {
+        "campo": "pendingDb",
+        "tipo": "Map",
+        "ubicacion_init": "modules/conversacion/prompt-builder/index.js:33",
+        "se_invalida_con": "onDbQueryResponse (delete tras respuesta) | timeout 8000ms (delete) | onUnload (clearTimeout + clear)",
+        "leak_potencial": false
+      }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [],
+      "notas_concurrencia": null
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "modulesDir", "tipo": "string", "default_si_primitivo": "path.join(__dirname, '../..')" }
+    ],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": [
+      { "valor": "8000", "ubicacion": "modules/conversacion/prompt-builder/index.js:154", "naturaleza": "timeout" },
+      { "valor": "20", "ubicacion": "modules/conversacion/prompt-builder/index.js:235", "naturaleza": "limit" },
+      { "valor": "_shared/base.prompt.json", "ubicacion": "modules/conversacion/prompt-builder/index.js:63", "naturaleza": "path" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/conversacion/prompt-builder/index.js:36",
+      "acciones": [
+        "guarda this.logger = context.logger",
+        "guarda this.eventBus = context.eventBus",
+        "guarda this._modulesDir = context.moduleConfig?.modulesDir || path.join(__dirname, '../..')",
+        "llama _loadBase() — lee _shared/base.prompt.json via fs.readFileSync",
+        "llama _scanModules(this._modulesDir, '') — escanea todos los módulos cargando prompt.json y context.json via fs.readFileSync",
+        "llama _requestUserPrompts() — emite prompt.list.request con request_id",
+        "logger.info('prompt-builder.loaded', { base, module_prompts, module_contexts })"
+      ],
+      "guarda_referencias_externas": ["this.logger=context.logger", "this.eventBus=context.eventBus"],
+      "puede_fallar_silenciosamente": true
+    },
+    "onUnload": {
+      "ubicacion": "modules/conversacion/prompt-builder/index.js:52",
+      "acciones": [
+        "for ({ timeout } of this.pendingDb.values()) clearTimeout(timeout)",
+        "this.pendingDb.clear()"
+      ],
+      "estado_no_limpiado": [
+        "_modulePrompts (cache de prompts de módulos — no se limpia en onUnload)",
+        "_moduleContexts (cache de contexts de módulos — no se limpia en onUnload)",
+        "_userPrompts (cache de prompts del usuario — no se limpia en onUnload)",
+        "_listRequestId (request_id de la solicitud pendiente de prompts — no se limpia en onUnload)"
+      ]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    {
+      "modulo_dependido": "prompt-manager",
+      "via_evento": "prompt.list.request",
+      "obligatorio_en": "onLoad",
+      "ubicacion_uso": "modules/conversacion/prompt-builder/index.js:117",
+      "es_cross_vertical": false
+    },
+    {
+      "modulo_dependido": "database-manager",
+      "via_evento": "db.query.request",
+      "obligatorio_en": "runtime",
+      "ubicacion_uso": "modules/conversacion/prompt-builder/index.js:156",
+      "es_cross_vertical": false
+    }
+  ],
+
+  "modos_de_fallo": [
+    {
+      "dependencia": "database-manager",
+      "que_pasa_si_cae": "timeout 8000ms y reject promise pending con 'db timeout' — onMessageSaved captura el error en try/catch y continúa sin historial (history=[]), emitiendo chat.prompt.ready igualmente",
+      "evidencia": "modules/conversacion/prompt-builder/index.js:151"
+    },
+    {
+      "dependencia": "prompt-manager (prompt.list.request)",
+      "que_pasa_si_cae": "fallo capturado via .catch() en _requestUserPrompts — logger.warn y continúa sin cache de prompts del usuario. El módulo funciona con prompts vacíos.",
+      "evidencia": "modules/conversacion/prompt-builder/index.js:118"
+    },
+    {
+      "dependencia": "filesystem (_loadBase)",
+      "que_pasa_si_cae": "excepción capturada en try/catch de _loadBase — logger.warn('prompt-builder.base.missing') — this._base queda null. El system prompt se construye sin sección base.",
+      "evidencia": "modules/conversacion/prompt-builder/index.js:65"
+    }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('module.action', { ...campos })",
+      "campos_estructurados_observados": ["base", "module_prompts", "module_contexts", "error", "count"],
+      "ejemplos": [
+        {
+          "snippet": "this.logger.info('prompt-builder.loaded', { base: !!this._base, module_prompts: this._modulePrompts.size, module_contexts: this._moduleContexts.size });",
+          "ubicacion": "modules/conversacion/prompt-builder/index.js:45"
+        },
+        {
+          "snippet": "this.logger.warn('prompt-builder.base.missing', { error: err.message });",
+          "ubicacion": "modules/conversacion/prompt-builder/index.js:66"
+        },
+        {
+          "snippet": "this.logger.warn('prompt-builder.list.failed', { error: err.message })",
+          "ubicacion": "modules/conversacion/prompt-builder/index.js:118"
+        },
+        {
+          "snippet": "this.logger.info('prompt-builder.user_prompts.loaded', { count: this._userPrompts.size });",
+          "ubicacion": "modules/conversacion/prompt-builder/index.js:130"
+        },
+        {
+          "snippet": "this.logger.warn('prompt-builder.history.failed', { error: err.message });",
+          "ubicacion": "modules/conversacion/prompt-builder/index.js:246"
+        }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — prompt-builder no extrae correlation_id de eventos entrantes ni lo añade a sus publish salientes. Genera request_id local con crypto.randomUUID() en _requestUserPrompts y _db."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": false,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      {
+        "ubicacion": "modules/conversacion/prompt-builder/index.js:95",
+        "comentario_literal": "Recursión solo si no había FS aquí (módulos anidados como pizzepos/menu-generator)",
+        "contexto": "_scanModules() — explica por qué la recursión es condicional: evita procesar doble los directorios que ya tienen prompt.json o context.json propios"
+      },
+      {
+        "ubicacion": "modules/conversacion/prompt-builder/index.js:195",
+        "comentario_literal": "Si es un prompt del usuario tiene .content; si es del FS es un objeto JSON",
+        "contexto": "_buildSystemPrompt() — explica la bifurcación en el tipo del prompt al construir el system prompt"
+      },
+      {
+        "ubicacion": "modules/conversacion/prompt-builder/index.js:251",
+        "comentario_literal": "Propagamos los 9 campos. prompt pasa de id → string final.",
+        "contexto": "onMessageSaved() — explica la transformación: el campo prompt en el evento entrante es un UUID/id, en el saliente es el string construido"
+      }
+    ],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 268,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "dc03d1b",
+      "fecha": "2026-04-25 09:56:05 +0000",
+      "subject": "refactor(conversacion): tabula rasa — 4 módulos limpios desde cero"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": ["publishes (top-level, no bajo events{})", "subscribes (top-level, no bajo events{})", "dependencies"],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "publishes/subscribes en top-level del module.json (no envueltos bajo events{})",
+      "nombre 'prompt-builder' no aparece en config.modules.enabled ni disabled — estado: candidato_a_retirada",
+      "dependencies declaradas pero módulo no está en enabled list"
+    ],
+    "secciones_vacias_intencionalmente": []
+  }
+}

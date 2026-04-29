@@ -1,0 +1,235 @@
+{
+  "_meta": {
+    "modulo": "escandallo",
+    "ubicacion": "modules/escandallo",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/escandallo.json"
+  },
+
+  "identidad": {
+    "name": "escandallo",
+    "version": "1.0.0",
+    "description_oficial": "Análisis de costes y escandallo de recetas. Calcula costes, márgenes, food cost, comparativas de precios y alertas.",
+    "author": "Event Core Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/escandallo/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_negocio_alimentario",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "escandallo.calculado", "variables_referenciadas": [] },
+        "ubicacion": "modules/escandallo/index.js:490",
+        "metodo_contenedor": "handleEscandalloReceta (probable, vía calcular interno)",
+        "es_handler_de": null,
+        "bloque_logico": "tras calcular escandallo completo de la receta + insights",
+        "payload": { "tipo": "variable", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    result.insights = insights;\n\n    await this.eventBus.publish('escandallo.calculado', result);",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "escandallo.alerta", "variables_referenciadas": [] },
+        "ubicacion": "modules/escandallo/index.js:496",
+        "metodo_contenedor": "handleEscandalloReceta (probable)",
+        "es_handler_de": null,
+        "bloque_logico": "condicional: si food_cost > 35% emite alerta tras escandallo.calculado",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["tipo", "receta_id", "nombre"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "        await this.eventBus.publish('escandallo.alerta', {\n          tipo: 'food_cost_alto', receta_id, nombre: receta.nombre, ...\n        });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "escandallo.comparativa", "variables_referenciadas": [] },
+        "ubicacion": "modules/escandallo/index.js:635",
+        "metodo_contenedor": "handleComparativa",
+        "es_handler_de": null,
+        "bloque_logico": "tras generar comparativa precio_mercado vs precio_compra real (cruce con facturas)",
+        "payload": { "tipo": "variable", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('escandallo.comparativa', resultData);\n\n    return { status: 200, data: resultData };",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.activated",                "tipo_nombre": "literal", "handler": "onProjectActivated",              "handler_ubicacion": "modules/escandallo/index.js:332", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/escandallo/index.js:332", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.deactivated",              "tipo_nombre": "literal", "handler": "onProjectDeactivated",            "handler_ubicacion": "modules/escandallo/index.js:345", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/escandallo/index.js:345", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "receta.creada",                    "tipo_nombre": "literal", "handler": "onRecetaCreada",                  "handler_ubicacion": "modules/escandallo/index.js:347", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/escandallo/index.js:347", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "receta.actualizada",               "tipo_nombre": "literal", "handler": "onRecetaActualizada",             "handler_ubicacion": "modules/escandallo/index.js:354", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/escandallo/index.js:354", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "ingrediente.precio.actualizado",   "tipo_nombre": "literal", "handler": "onIngredientePrecioActualizado",  "handler_ubicacion": "modules/escandallo/index.js:361", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/escandallo/index.js:361", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["escandallo.calculado", "escandallo.alerta", "escandallo.comparativa"],
+      "publica_literales_en_codigo": ["escandallo.alerta", "escandallo.calculado", "escandallo.comparativa"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["project.activated", "project.deactivated", "receta.creada", "receta.actualizada", "ingrediente.precio.actualizado"],
+      "subscribes_realmente_registrados": ["project.activated", "project.deactivated", "receta.creada", "receta.actualizada", "ingrediente.precio.actualizado"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [
+    { "name": "escandallo.receta",              "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "handleEscandalloReceta",   "handler_ubicacion": "modules/escandallo/index.js:424", "retorno": { "tipo": "object", "shape_inferido": { "coste_total": "number", "coste_porcion": "number", "food_cost": "number", "insights": "array" }, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["escandallo.calculado", "escandallo.alerta"] }, "errores_conocidos": [] },
+    { "name": "escandallo.global",              "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "handleEscandalloGlobal",   "handler_ubicacion": "modules/escandallo/index.js:431", "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "escandallo.comparar_precios",    "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "handleComparativa",        "handler_ubicacion": "modules/escandallo/index.js:438", "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["escandallo.comparativa"] }, "errores_conocidos": [] },
+    { "name": "escandallo.simular_precio",      "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": null, "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "escandallo.ingrediente_impacto", "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": null, "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "escandallo.optimizar",           "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": null, "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "escandallo.ficha_tecnica",       "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": null, "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "cache",         "tipo": "Map", "ubicacion_init": "modules/escandallo/index.js:37", "se_invalida_con": "onRecetaActualizada / onIngredientePrecioActualizado invalidan entradas cuando cambian datos relacionados", "leak_potencial": false },
+      { "campo": "projectPaths",  "tipo": "Map", "ubicacion_init": "modules/escandallo/index.js:38", "se_invalida_con": "onProjectActivated set; cache permanente",                                                                  "leak_potencial": false },
+      { "campo": "managers",      "tipo": "Map", "ubicacion_init": "modules/escandallo/index.js:41", "se_invalida_con": "instancias por proyecto; onUnload llama close() en cada uno",                                                "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [],
+      "notas_concurrencia": "Datos derivados de recetas (que persiste en JSON) e ingredientes_catalogo. Cache in-memory propio que se invalida via eventos receta.actualizada / ingrediente.precio.actualizado."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/projects/{slug}/recetas.json (lectura indirecta vía managers)"],
+    "valores_hardcoded_observables": [
+      { "valor": "35 (food_cost umbral alerta %)", "ubicacion": "modules/escandallo/index.js:495", "naturaleza": "limit" },
+      { "valor": "25 (food_cost bajo umbral %)",   "ubicacion": "modules/escandallo/index.js:485", "naturaleza": "limit" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/escandallo/index.js:44",
+      "acciones": [
+        "guarda this.logger / this.eventBus / this.moduleLoader",
+        "registra tools en moduleLoader.toolsRegistry (línea 277 escandallo.search_tools.registered)",
+        "logger.info('module.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus", "this.moduleLoader"],
+      "puede_fallar_silenciosamente": true
+    },
+    "onUnload": {
+      "ubicacion": "modules/escandallo/index.js:56",
+      "acciones": ["close() en cada manager (con catch en error)", "logger.info('module.unloaded')"],
+      "estado_no_limpiado": ["cache", "projectPaths"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "recetas",     "via_evento": "receta.creada / receta.actualizada (subscribes)",          "obligatorio_en": "runtime", "ubicacion_uso": "modules/escandallo/index.js:347", "es_cross_vertical": false },
+    { "modulo_dependido": "recetas",     "via_evento": "ingrediente.precio.actualizado (subscribe)",                "obligatorio_en": "runtime", "ubicacion_uso": "modules/escandallo/index.js:361", "es_cross_vertical": false },
+    { "modulo_dependido": "project-manager", "via_evento": "project.activated (subscribe)",                          "obligatorio_en": "runtime", "ubicacion_uso": "modules/escandallo/index.js:332", "es_cross_vertical": false },
+    { "modulo_dependido": "core/moduleLoader (toolsRegistry)", "via_evento": "context.moduleLoader — registro tools","obligatorio_en": "onLoad",  "ubicacion_uso": "modules/escandallo/index.js:277", "es_cross_vertical": false },
+    { "modulo_dependido": "facturas (lectura cross-vertical)", "via_evento": "lecturas indirectas via managers para comparativa precio_compra real", "obligatorio_en": "runtime", "ubicacion_uso": "modules/escandallo/index.js:438 (handleComparativa)", "es_cross_vertical": true }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "recetas (datos no disponibles)", "que_pasa_si_cae": "managers no pueden cargar recetas → handleEscandalloReceta devuelve error.",     "evidencia": "modules/escandallo/index.js:943 (logger error)" },
+    { "dependencia": "facturas (sin datos para comparativa)", "que_pasa_si_cae": "comparativa devuelve insights con 'sin precio de compra real' pero no falla.", "evidencia": "modules/escandallo/index.js:630" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('escandallo.<accion>' | 'module.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "version", "project_id", "error", "tools_count"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('module.loaded', { module: this.name, version: this.version });",        "ubicacion": "modules/escandallo/index.js:53"  },
+        { "snippet": "this.logger.warn('escandallo.register_tools.no_module_loader');",                          "ubicacion": "modules/escandallo/index.js:112" },
+        { "snippet": "this.logger.info('escandallo.search_tools.registered', { ... });",                          "ubicacion": "modules/escandallo/index.js:277" },
+        { "snippet": "this.logger.info('escandallo.project.activated', { project_id });",                         "ubicacion": "modules/escandallo/index.js:342" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — escandallo no propaga correlation_id."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 1236,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "08f170f",
+      "fecha": "2026-04-22 09:31:19 +0000",
+      "subject": "refactor(prompt-engine): separar context.json de prompt.json por módulo"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "manifest declara 7 tools pero solo 3 tienen handler_metodo identificado en el grep (escandallo.receta, escandallo.global, escandallo.comparar_precios). Los otros 4 (simular_precio, ingrediente_impacto, optimizar, ficha_tecnica) probablemente delegan a un agente o están instrumentados sin handler explícito — diferido.",
+      "Cross-vertical: handleComparativa lee datos de facturas (modulo otra vertical) para cruzar precios — única dependencia cross-vertical detectada.",
+      "0 publica_emitidos_no_declarados, 0 publica_declarados_no_emitidos — manifest 100% honesto",
+      "Tools registradas en moduleLoader.toolsRegistry (patrón escandallo.search_tools.registered línea 277) — escandallo es un módulo con muchas tools y delegación parcial"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "ui_handlers (no expone MQTT UI)",
+      "apis_http (no expone HTTP)",
+      "estado.persistencia.sqlite_tablas (lee datos derivados de recetas/JSON)",
+      "estado.persistencia.archivos",
+      "configuracion.env_vars / module_json_config_keys",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / workarounds_detectados",
+      "outliers_capturados",
+      "version_archivada"
+    ]
+  }
+}

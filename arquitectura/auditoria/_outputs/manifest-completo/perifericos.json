@@ -1,0 +1,166 @@
+{
+  "_meta": {
+    "modulo": "perifericos",
+    "ubicacion": "modules/perifericos",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "perifericos",
+    "version": "1.1.0",
+    "description_oficial": "Servicio core de periféricos — descubrimiento, registro y routing de dispositivos hardware. Capacidades: imprimir, display, abrir-cajon.",
+    "author": "Event Core Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_2_platform",
+    "tier_declarado": "tier_2_platform",
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "periferico.impreso",                    "description": "Datos enviados exitosamente a una impresora" },
+      { "event": "periferico.displayed",                  "description": "Contenido enviado exitosamente a un display externo" },
+      { "event": "periferico.cajon-abierto",              "description": "Cajón de dinero abierto exitosamente" },
+      { "event": "periferico.error",                      "description": "Error al enviar datos o conectar con dispositivo" },
+      { "event": "periferico.dispositivo.registrado",     "description": "Nuevo dispositivo registrado en el sistema" },
+      { "event": "periferico.dispositivo.desregistrado",  "description": "Dispositivo eliminado del registro" },
+      { "event": "periferico.dispositivo.online",         "description": "Dispositivo cambió a estado online" },
+      { "event": "periferico.dispositivo.offline",        "description": "Dispositivo cambió a estado offline" },
+      { "event": "periferico.estado.respuesta",           "description": "Respuesta a consulta de estado de un dispositivo" },
+      { "event": "periferico.listado",                    "description": "Respuesta a consulta de listado de dispositivos" }
+    ],
+    "subscribes": [
+      { "event": "periferico.imprimir",    "handler": "onImprimir",     "extras": {} },
+      { "event": "periferico.display",     "handler": "onDisplay",      "extras": {} },
+      { "event": "periferico.abrir-cajon", "handler": "onAbrirCajon",   "extras": {} },
+      { "event": "periferico.estado",      "handler": "onEstado",       "extras": {} },
+      { "event": "periferico.listar",      "handler": "onListar",       "extras": {} },
+      { "event": "periferico.registrar",   "handler": "onRegistrar",    "extras": {} },
+      { "event": "periferico.desregistrar","handler": "onDesregistrar", "extras": {} }
+    ],
+    "provides_eventos": [
+      "periferico.impreso",
+      "periferico.displayed",
+      "periferico.cajon-abierto",
+      "periferico.error",
+      "periferico.dispositivo.registrado",
+      "periferico.dispositivo.desregistrado",
+      "periferico.dispositivo.online",
+      "periferico.dispositivo.offline",
+      "periferico.estado.respuesta",
+      "periferico.listado"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "perifericos", "action": "list",                 "handler": "handleListar" },
+      { "domain": "perifericos", "action": "get",                  "handler": "handleGet" },
+      { "domain": "perifericos", "action": "create",               "handler": "handleRegistrar" },
+      { "domain": "perifericos", "action": "update",               "handler": "handleActualizar" },
+      { "domain": "perifericos", "action": "delete",               "handler": "handleDesregistrar" },
+      { "domain": "perifericos", "action": "test",                 "handler": "handleTestDispositivo" },
+      { "domain": "perifericos", "action": "status",               "handler": "handleEstado" },
+      { "domain": "perifericos", "action": "discover",             "handler": "handleDescubrir" },
+      { "domain": "perifericos", "action": "listar-por-capacidad", "handler": "handleListarPorCapacidad" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "dataPath",                 "tipo": "string",  "valor_default": "./data/perifericos" },
+      { "key": "dispositivos",             "tipo": "array",   "valor_default": [] },
+      { "key": "health_check_interval_ms", "tipo": "number",  "valor_default": 30000 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "perifericos.envios.total",
+        "perifericos.envios.ok",
+        "perifericos.envios.error",
+        "perifericos.registros.total"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 4420,
+    "module_json_lineas": 138,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "Campo 'provides' (canónico): duplica la lista de events.publishes — el módulo declara la misma lista de eventos en dos lugares.",
+      "subscribes[].description en module.json no se mapea al schema (extras vacíos)."
+    ]
+  }
+}

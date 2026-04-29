@@ -1,0 +1,375 @@
+{
+  "_meta": {
+    "modulo": "prompt-manager",
+    "ubicacion": "modules/prompt-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/prompt-manager.json"
+  },
+
+  "identidad": {
+    "name": "prompt-manager",
+    "version": "2.0.0",
+    "description_oficial": "Sistema de gestión de prompts con versionado, slots, presets y analytics. Usa database-manager para persistencia.",
+    "author": "Event Core Team",
+    "main_declarado": null,
+    "main_real": "modules/prompt-manager/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_2_platform",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "db.query.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:130",
+        "metodo_contenedor": "queryDatabase (helper)",
+        "es_handler_de": null,
+        "bloque_logico": "tras pendingRequests.set + setTimeout 10s; helper SQL común",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "query", "params", "request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false, "es_return": false,
+        "snippet": "      this.eventBus.publish(EVENTS.DB.QUERY_REQUEST, {\n        project_id, query, params, request_id\n      });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "db.schema.init.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:158",
+        "metodo_contenedor": "(initializeSchema interno en onLoad)",
+        "es_handler_de": null,
+        "bloque_logico": "carga schema desde archivo y pide a database-manager inicializarlo en la DB '_prompts'",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "schema", "request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false, "es_return": false,
+        "snippet": "        this.eventBus.publish(EVENTS.DB.SCHEMA_INIT_REQUEST, { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "prompt.created", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:270",
+        "metodo_contenedor": "handleCreatePrompt",
+        "es_handler_de": "API HTTP POST /prompts",
+        "bloque_logico": "tras INSERT en SQL + cache update",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["id", "name", "slot_type", "project_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      // Publish event\n      await this.eventBus.publish('prompt.created', {\n        id, name, slot_type: validSlotType, project_id: targetProject\n      });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "prompt.updated", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:427",
+        "metodo_contenedor": "handleUpdatePrompt",
+        "es_handler_de": "API HTTP PUT /prompts/:id",
+        "bloque_logico": "tras UPDATE + nueva versión",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["id", "version"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('prompt.updated', { id, version: prompt.current_version });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "prompt.deleted", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:462",
+        "metodo_contenedor": "handleDeletePrompt",
+        "es_handler_de": "API HTTP DELETE /prompts/:id",
+        "bloque_logico": "tras DELETE en SQL + cache delete",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('prompt.deleted', { id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "preset.created", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:521",
+        "metodo_contenedor": "handleCreatePreset",
+        "es_handler_de": "API HTTP POST /presets",
+        "bloque_logico": "tras crear preset en SQL",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["id", "name"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('preset.created', { id, name });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "preset.deleted", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:608",
+        "metodo_contenedor": "handleDeletePreset",
+        "es_handler_de": "API HTTP DELETE /presets/:id",
+        "bloque_logico": "tras DELETE preset",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('preset.deleted', { id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "prompt.created", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:774",
+        "metodo_contenedor": "handleUICreate",
+        "es_handler_de": "ui_handler MQTT prompt/ui/create",
+        "bloque_logico": "duplicado del flujo HTTP — vía MQTT UI",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["id", "name", "slot_type"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('prompt.created', { id, name, slot_type: validSlotType });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "prompt.updated", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:834",
+        "metodo_contenedor": "handleUIUpdate",
+        "es_handler_de": "ui_handler MQTT prompt/ui/update",
+        "bloque_logico": "duplicado de flujo HTTP via MQTT UI",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["id", "version"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('prompt.updated', { id, version: prompt.current_version });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "prompt.deleted", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:862",
+        "metodo_contenedor": "handleUIDelete",
+        "es_handler_de": "ui_handler MQTT prompt/ui/delete",
+        "bloque_logico": "duplicado de flujo HTTP via MQTT UI",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('prompt.deleted', { id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "preset.created", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:974",
+        "metodo_contenedor": "handleUIPresetCreate",
+        "es_handler_de": "ui_handler MQTT preset/ui/create",
+        "bloque_logico": "duplicado HTTP via MQTT",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["id", "name"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('preset.created', { id, name });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "preset.deleted", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:995",
+        "metodo_contenedor": "handleUIPresetDelete",
+        "es_handler_de": "ui_handler MQTT preset/ui/delete",
+        "bloque_logico": "duplicado HTTP via MQTT",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('preset.deleted', { id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "prompt.get.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:1626",
+        "metodo_contenedor": "onGetPromptRequest (probable)",
+        "es_handler_de": "prompt.get.request",
+        "bloque_logico": "respuesta success al request_response",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "prompt"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('prompt.get.response', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "prompt.get.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:1646",
+        "metodo_contenedor": "onGetPromptRequest (probable)",
+        "es_handler_de": "prompt.get.request",
+        "bloque_logico": "respuesta error / not found al request_response",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "error"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('prompt.get.response', { ... error path ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "prompt.list.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/prompt-manager/index.js:1675",
+        "metodo_contenedor": "onListPromptsRequest (probable)",
+        "es_handler_de": "prompt.list.request",
+        "bloque_logico": "respuesta al request_response con prompts del proyecto",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "prompts"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('prompt.list.response', { ... });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "db.query.response",        "tipo_nombre": "literal", "handler": "onQueryResponse",      "handler_ubicacion": "modules/prompt-manager/index.js:80", "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/prompt-manager/index.js:80", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "db.schema.init.response",  "tipo_nombre": "literal", "handler": "onSchemaInitResponse", "handler_ubicacion": "modules/prompt-manager/index.js:95", "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/prompt-manager/index.js:95", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "prompt.get.request",       "tipo_nombre": "literal", "handler": null,                  "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "prompt.list.request",      "tipo_nombre": "literal", "handler": null,                  "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "ai.completion.completed",  "tipo_nombre": "literal", "handler": null,                  "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "ai.request.started",       "tipo_nombre": "literal", "handler": null,                  "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["prompt.created", "prompt.updated", "prompt.deleted", "prompt.get.response", "prompt.list.response", "preset.created", "preset.deleted"],
+      "publica_literales_en_codigo": ["db.query.request", "db.schema.init.request", "preset.created", "preset.deleted", "prompt.created", "prompt.deleted", "prompt.get.response", "prompt.list.response", "prompt.updated"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": ["db.query.request", "db.schema.init.request"],
+      "subscribes_declarados_en_manifest": ["db.query.response", "db.schema.init.response", "prompt.get.request", "prompt.list.request", "ai.completion.completed", "ai.request.started"],
+      "subscribes_realmente_registrados": ["db.query.response", "db.schema.init.response", "prompt.get.request", "prompt.list.request", "ai.completion.completed", "ai.request.started"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "prompts",         "tipo": "Map", "ubicacion_init": "modules/prompt-manager/index.js:16", "se_invalida_con": "set en handleCreate/Update/loadCache | delete en handleDelete",       "leak_potencial": false },
+      { "campo": "presets",         "tipo": "Map", "ubicacion_init": "modules/prompt-manager/index.js:17", "se_invalida_con": "set en handleCreatePreset | delete en handleDeletePreset",            "leak_potencial": false },
+      { "campo": "analytics",       "tipo": "Map", "ubicacion_init": "modules/prompt-manager/index.js:18", "se_invalida_con": "no se observa invalidación explícita — acumula uso",                  "leak_potencial": true  },
+      { "campo": "pendingRequests", "tipo": "Map", "ubicacion_init": "modules/prompt-manager/index.js:21", "se_invalida_con": "delete en onQueryResponse / onSchemaInitResponse | timeout 10s (delete + reject)", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "modules/prompt-manager/schemas/*.sql (o similar)", "formato": "raw", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" }
+      ],
+      "notas_concurrencia": "Datos persisten en DB '_prompts' (no project-scoped) via db.query.request a database-manager. Schema cargado desde disco en onLoad y enviado a database-manager por db.schema.init.request."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": [
+      { "valor": "10000", "ubicacion": "modules/prompt-manager/index.js:128", "naturaleza": "timeout" },
+      { "valor": "_prompts (project_id de la DB)", "ubicacion": "modules/prompt-manager/index.js:131", "naturaleza": "otro" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/prompt-manager/index.js:46",
+      "acciones": [
+        "guarda this.logger / this.eventBus / this.metrics",
+        "initializeSchema (carga schema desde disco + db.schema.init.request)",
+        "loadCache (SELECT prompts y presets desde DB '_prompts' → Maps)",
+        "logger.info('prompt-manager.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus", "this.metrics"],
+      "puede_fallar_silenciosamente": true
+    },
+    "onUnload": {
+      "ubicacion": "modules/prompt-manager/index.js:70",
+      "acciones": ["logger.info('prompt-manager.unloaded')"],
+      "estado_no_limpiado": ["prompts", "presets", "analytics", "pendingRequests (no se clearTimeout sobre los pendientes)"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "database-manager", "via_evento": "db.query.request → db.query.response",                "obligatorio_en": "ambos",   "ubicacion_uso": "modules/prompt-manager/index.js:130", "es_cross_vertical": false },
+    { "modulo_dependido": "database-manager", "via_evento": "db.schema.init.request → db.schema.init.response",     "obligatorio_en": "onLoad",  "ubicacion_uso": "modules/prompt-manager/index.js:158", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "database-manager (queries)", "que_pasa_si_cae": "pendingRequests timeout 10s + reject. queryDatabase devuelve error. handleX devuelven 500.", "evidencia": "modules/prompt-manager/index.js:128" },
+    { "dependencia": "database-manager (schema init)", "que_pasa_si_cae": "logger.warn('prompt-manager.schema.timeout'); el módulo sigue cargando pero sin schema fresco.", "evidencia": "modules/prompt-manager/index.js:153" },
+    { "dependencia": "schema file en disco", "que_pasa_si_cae": "logger.error('prompt-manager.schema.read.error'); fallback al schema cacheado o falla suave.", "evidencia": "modules/prompt-manager/index.js:165" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('prompt-manager.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["id", "name", "slot_type", "error", "count"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('prompt-manager.loaded', { ... });",                                  "ubicacion": "modules/prompt-manager/index.js:63"  },
+        { "snippet": "this.logger.warn('prompt-manager.schema.timeout');",                                    "ubicacion": "modules/prompt-manager/index.js:153" },
+        { "snippet": "this.logger.error('prompt-manager.schema.read.error', { error: error.message });",     "ubicacion": "modules/prompt-manager/index.js:165" },
+        { "snippet": "this.logger.info('prompt-manager.cache.loaded', { ... });",                            "ubicacion": "modules/prompt-manager/index.js:190" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — solo genera request_id local en queryDatabase. No extrae correlation_id de eventos entrantes ni lo añade a publishes."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": false,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 1702,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "DUPLICACIÓN de publishes: prompt.created/updated/deleted y preset.created/deleted se emiten DOS VECES cada uno — una desde flujo HTTP (handle*) y otra desde flujo MQTT UI (handleUI*). Mismos shape pero acopla los flujos.",
+      "publica_emitidos_no_declarados: 2 (db.query.request, db.schema.init.request) — requests técnicas a database-manager no declaradas en manifest.",
+      "ai.completion.completed y ai.request.started suscritos en manifest pero no se ven handlers explícitos en el grep — probable instrumentación de analytics no implementada.",
+      "this.analytics Map sin invalidación → leak_potencial=true.",
+      "ui_handlers + apis_http no rellenados (los handle* y handleUI* son numerosos — diferidos por extensión)"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "tools (prompt-manager no expone tools al LLM)",
+      "ui_handlers (diferido — handleUI* son ~12 métodos)",
+      "apis_http (diferido — manifest declara 15)",
+      "estado.persistencia.sqlite_tablas (delega a database-manager via db.schema.init.request)",
+      "configuracion.env_vars / module_json_config_keys",
+      "observabilidad.metricas_emitidas (no usa metrics.X aunque this.metrics está guardado)",
+      "codigo_intencion.todos / workarounds_detectados",
+      "outliers_capturados",
+      "version_archivada (no hay versión archivada)"
+    ]
+  }
+}

@@ -62,7 +62,7 @@ function main() {
     process.exit(2);
   }
 
-  const ajv = new Ajv({ strict: true, allErrors: true });
+  const ajv = new Ajv({ strict: true, strictRequired: false, allErrors: true });
   addFormats(ajv);
   const schema   = loadJson(SCHEMA_PATH);
   const contract = loadJson(CONTRACT_PATH);

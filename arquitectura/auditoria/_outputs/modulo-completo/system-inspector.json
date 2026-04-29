@@ -1,0 +1,201 @@
+{
+  "_meta": {
+    "modulo": "system-inspector",
+    "ubicacion": "modules/system-inspector",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/system-inspector.json"
+  },
+
+  "identidad": {
+    "name": "system-inspector",
+    "version": "1.0.0",
+    "description_oficial": "Captura estado del sistema (HTTP, MQTT, errores, logs) para consulta por IA",
+    "author": null,
+    "main_declarado": "index.js",
+    "main_real": "modules/system-inspector/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": true,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [],
+    "subscribes": [
+      { "nombre": "core/+/events/#", "tipo_nombre": "wildcard", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "core/+/errors/#", "tipo_nombre": "wildcard", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": [],
+      "publica_literales_en_codigo": [],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["core/+/events/#", "core/+/errors/#"],
+      "subscribes_realmente_registrados": ["core/+/events/#", "core/+/errors/#"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [
+    { "method": "GET",    "path": "/status",  "handler_metodo": "handleGetStatus",  "handler_ubicacion": "modules/system-inspector/index.js:175", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] },
+    { "method": "GET",    "path": "/errors",  "handler_metodo": "handleGetErrors",  "handler_ubicacion": "modules/system-inspector/index.js:191", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] },
+    { "method": "GET",    "path": "/network", "handler_metodo": "handleGetNetwork", "handler_ubicacion": "modules/system-inspector/index.js:206", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] },
+    { "method": "DELETE", "path": "/clear",   "handler_metodo": "handleClear",      "handler_ubicacion": "modules/system-inspector/index.js:221", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] }
+  ],
+
+  "estado": {
+    "memoria": [
+      { "campo": "buffer",            "tipo": "Object", "ubicacion_init": "modules/system-inspector/index.js:62", "se_invalida_con": "handleClear lo vacía manualmente vía buffer.clear() en línea 221+",       "leak_potencial": false },
+      { "campo": "httpInterceptor",   "tipo": "Object", "ubicacion_init": "modules/system-inspector/index.js:35", "se_invalida_con": "instanciado en _initializeInterceptors línea 68; stop() en onUnload línea 91", "leak_potencial": false },
+      { "campo": "errorInterceptor",  "tipo": "Object", "ubicacion_init": "modules/system-inspector/index.js:36", "se_invalida_con": "instanciado en _initializeInterceptors línea 68; stop() en onUnload línea 93", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "this.config.output_file (config)", "formato": "raw", "operaciones": ["write", "append"], "via_evento": null, "atomicidad": "append-only" }
+      ],
+      "notas_concurrencia": "Buffer in-memory + escritor a archivo (file writer). Sin locks — single-process."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": ["NODE_ENV"],
+    "module_json_config_keys": [
+      { "key": "buffer_size",          "tipo": "number",  "default_si_primitivo": null },
+      { "key": "truncate_bodies",      "tipo": "number",  "default_si_primitivo": null },
+      { "key": "output_file",          "tipo": "string",  "default_si_primitivo": null },
+      { "key": "force_in_production",  "tipo": "boolean", "default_si_primitivo": false },
+      { "key": "capture",              "tipo": "object",  "default_si_primitivo": null }
+    ],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": []
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/system-inspector/index.js:44",
+      "acciones": [
+        "guarda this.core / this.logger / this.startTime",
+        "carga config (this._loadConfig)",
+        "EARLY EXIT si NODE_ENV=production y NO force_in_production (logger.warn 'system-inspector.skipped' y return)",
+        "instancia ConsoleBuffer (maxSize, truncateAt)",
+        "_initializeInterceptors (httpInterceptor + errorInterceptor)",
+        "_initializeFileWriter",
+        "logger.info('system-inspector.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.core=core", "this.logger=core.logger"],
+      "puede_fallar_silenciosamente": true
+    },
+    "onUnload": {
+      "ubicacion": "modules/system-inspector/index.js:88",
+      "acciones": ["httpInterceptor.stop()", "errorInterceptor.stop() (si existe)"],
+      "estado_no_limpiado": ["buffer (queda en GC)", "config"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "ConsoleBuffer (clase interna)",     "via_evento": "import / require interno",                              "obligatorio_en": "onLoad",  "ubicacion_uso": "modules/system-inspector/index.js:62", "es_cross_vertical": false },
+    { "modulo_dependido": "HttpInterceptor (clase interna)",   "via_evento": "import / require interno",                              "obligatorio_en": "onLoad",  "ubicacion_uso": "modules/system-inspector/index.js:68", "es_cross_vertical": false },
+    { "modulo_dependido": "Node.js fs (file writer)",          "via_evento": "fs directo",                                            "obligatorio_en": "runtime", "ubicacion_uso": "modules/system-inspector/index.js:71", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "config inválido / output_file inaccesible", "que_pasa_si_cae": "FileWriter falla silenciosamente y los logs solo van al buffer in-memory.",     "evidencia": "modules/system-inspector/index.js:71 (sin try/catch visible aquí)" },
+    { "dependencia": "interceptores (HTTP / errores)",            "que_pasa_si_cae": "_initializeInterceptors lanza si fallan; onLoad propaga error → módulo no carga.", "evidencia": "modules/system-inspector/index.js:68" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger?.<level>('system-inspector.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["reason", "hint", "buffer_size", "output_file", "capture"],
+      "ejemplos": [
+        { "snippet": "this.logger?.warn('system-inspector.skipped', { reason: 'production environment', ... });", "ubicacion": "modules/system-inspector/index.js:54" },
+        { "snippet": "this.logger?.info('system-inspector.loaded', { buffer_size, output_file, capture });",       "ubicacion": "modules/system-inspector/index.js:73" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — módulo NO publica eventos, solo escucha y expone via HTTP."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": false,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/system-inspector/index.js:52", "comentario_literal": "Solo cargar en desarrollo", "contexto": "early exit si NODE_ENV=production — explicación del por qué dev_only" }
+    ],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 235,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Suscripciones MQTT WILDCARD para observación pasiva (core/+/events/# y core/+/errors/#)", "ejemplo": "modules/system-inspector/module.json subscribes", "rareza": "inusual" },
+      { "patron": "Early exit en onLoad si NODE_ENV=production (dev_only=true)",                              "ejemplo": "modules/system-inspector/index.js:53",                "rareza": "inusual" }
+    ]
+  },
+
+  "quirks": {
+    "warnings": [
+      "ÚNICO módulo con dev_only=true (declarado en manifest, verificado en código línea 53 con NODE_ENV check)",
+      "ÚNICO módulo con subscribes wildcards MQTT (core/+/events/# y core/+/errors/#) — observación pasiva del bus completo",
+      "0 publishes — módulo puramente observador, expone estado via 4 APIs HTTP",
+      "ConsoleBuffer + interceptors HTTP/errors son helpers internos del módulo (clases ConsoleBuffer, HttpInterceptor, ErrorInterceptor) — no inspeccionados a fondo aquí"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "tools (no expone tools al LLM)",
+      "ui_handlers (no expone MQTT UI)",
+      "estado.persistencia.sqlite_tablas (usa archivo log, no SQLite)",
+      "configuracion.paths_proyecto_referenciados",
+      "configuracion.valores_hardcoded_observables",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / workarounds_detectados",
+      "version_archivada"
+    ]
+  }
+}

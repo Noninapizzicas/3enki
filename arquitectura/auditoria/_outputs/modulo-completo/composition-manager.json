@@ -1,0 +1,322 @@
+{
+  "_meta": {
+    "modulo": "composition-manager",
+    "ubicacion": "modules/composition-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/composition-manager.json"
+  },
+
+  "identidad": {
+    "name": "composition-manager",
+    "version": "1.0.0",
+    "description_oficial": "Generic entity composition: systems, links, and dependencies. Reusable by any module via events.",
+    "author": "Aichat Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/composition-manager/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_3_core",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "db.query.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:62",
+        "metodo_contenedor": "queryDb (helper)",
+        "es_handler_de": null,
+        "bloque_logico": "tras pendingDbRequests.set; helper SQL común vía database-manager",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "project_id", "query", "params"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false, "es_return": false,
+        "snippet": "      this.eventBus.publish('db.query.request', { request_id, project_id, query, params });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "system.created", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:162",
+        "metodo_contenedor": "createSystem",
+        "es_handler_de": null,
+        "bloque_logico": "tras INSERT en compositions table",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["system_id", "name", "type"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('system.created', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "system.updated", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:227",
+        "metodo_contenedor": "updateSystem",
+        "es_handler_de": null,
+        "bloque_logico": "tras UPDATE",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["system_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('system.updated', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "system.deleted", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:241",
+        "metodo_contenedor": "deleteSystem",
+        "es_handler_de": null,
+        "bloque_logico": "tras DELETE",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["system_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('system.deleted', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "entity.joined_system", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:272",
+        "metodo_contenedor": "addEntityToSystem",
+        "es_handler_de": null,
+        "bloque_logico": "tras INSERT en system_entities",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["entity_id", "system_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('entity.joined_system', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "entity.left_system", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:293",
+        "metodo_contenedor": "removeEntityFromSystem",
+        "es_handler_de": null,
+        "bloque_logico": "tras DELETE de system_entities",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["entity_id", "system_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('entity.left_system', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "entity.linked", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:342",
+        "metodo_contenedor": "linkEntities",
+        "es_handler_de": null,
+        "bloque_logico": "tras INSERT en links",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["from_entity", "to_entity", "link_type"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('entity.linked', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "entity.unlinked", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:358",
+        "metodo_contenedor": "unlinkEntities",
+        "es_handler_de": null,
+        "bloque_logico": "tras DELETE de links",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["from_entity", "to_entity"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('entity.unlinked', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "entity.dependency.added", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:429",
+        "metodo_contenedor": "addDependency",
+        "es_handler_de": null,
+        "bloque_logico": "tras INSERT en dependencies",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["dependent", "dependency"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('entity.dependency.added', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "entity.dependency.removed", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:446",
+        "metodo_contenedor": "removeDependency",
+        "es_handler_de": null,
+        "bloque_logico": "tras DELETE de dependencies",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["dependent", "dependency"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('entity.dependency.removed', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "composition.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:565",
+        "metodo_contenedor": "onCompositionRequest",
+        "es_handler_de": "composition.request",
+        "bloque_logico": "success path tras action despachada",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "result"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('composition.response', { request_id, success: true, result });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "composition.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/composition-manager/index.js:570",
+        "metodo_contenedor": "onCompositionRequest",
+        "es_handler_de": "composition.request",
+        "bloque_logico": "error path tras logger.warn",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "error"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('composition.response', { request_id, success: false, error: error.message });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "composition.request", "tipo_nombre": "literal", "handler": "onCompositionRequest", "handler_ubicacion": "modules/composition-manager/index.js:496", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/composition-manager/index.js:569", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "db.query.response", "tipo_nombre": "literal", "handler": "onDbQueryResponse", "handler_ubicacion": "modules/composition-manager/index.js:75", "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/composition-manager/index.js:75", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["composition.response", "system.created", "system.updated", "system.deleted", "entity.joined_system", "entity.left_system", "entity.linked", "entity.unlinked", "entity.dependency.added", "entity.dependency.removed"],
+      "publica_literales_en_codigo": ["composition.response", "db.query.request", "entity.dependency.added", "entity.dependency.removed", "entity.joined_system", "entity.left_system", "entity.linked", "entity.unlinked", "system.created", "system.deleted", "system.updated"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": ["db.query.request"],
+      "subscribes_declarados_en_manifest": ["composition.request", "db.query.response"],
+      "subscribes_realmente_registrados": ["composition.request", "db.query.response"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "pendingDbRequests", "tipo": "Map", "ubicacion_init": "modules/composition-manager/index.js:24", "se_invalida_con": "delete en onDbQueryResponse | timeout | onUnload", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [],
+      "notas_concurrencia": "Persiste systems/links/dependencies en DB 'system' via db.query.request a database-manager. composition-manager NO crea las tablas — son creadas por composition-manager.initializeSchema vía db.schema.init.request en onLoad (probable)."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": []
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/composition-manager/index.js:27",
+      "acciones": [
+        "guarda this.logger / this.eventBus",
+        "logger.info('composition-manager.loading')",
+        "initializeSchema (crea tablas systems/links/dependencies vía db.schema.init.request o queries directos)",
+        "logger.info('composition-manager.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/composition-manager/index.js:42",
+      "acciones": ["clearTimeout sobre pendingDbRequests + reject + clear()"],
+      "estado_no_limpiado": []
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "database-manager", "via_evento": "db.query.request → db.query.response", "obligatorio_en": "ambos", "ubicacion_uso": "modules/composition-manager/index.js:62", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "database-manager", "que_pasa_si_cae": "pendingDbRequests timeout y reject. onCompositionRequest catch → publica composition.response con success=false.", "evidencia": "modules/composition-manager/index.js:569" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('composition-manager.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["action", "error"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('composition-manager.loading');",                                    "ubicacion": "modules/composition-manager/index.js:35"  },
+        { "snippet": "this.logger.warn('composition-manager.request.failed', { action, error: error.message });", "ubicacion": "modules/composition-manager/index.js:569" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — solo genera request_id local."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": false,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 709,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "publica_emitidos_no_declarados: 1 (db.query.request — request técnico no declarado en manifest)",
+      "Dispatcher pattern: onCompositionRequest línea 496 despacha por action.type (createSystem, addEntity, link, etc.) — modelo similar a recetas._toolDispatch pero acotado a composition.",
+      "ui_handlers no rellenados (16 handleUI* — diferidos)",
+      "apis_http no rellenadas"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "tools (no expone tools al LLM)",
+      "ui_handlers (diferido)",
+      "apis_http (diferido)",
+      "estado.persistencia.sqlite_tablas (delega a database-manager)",
+      "estado.persistencia.archivos",
+      "configuracion.env_vars / module_json_config_keys / paths_proyecto / hardcoded",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / workarounds_detectados",
+      "outliers_capturados",
+      "version_archivada"
+    ]
+  }
+}

@@ -1,0 +1,183 @@
+{
+  "_meta": {
+    "modulo": "project-manager",
+    "ubicacion": "modules/project-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "project-manager",
+    "version": "3.0.0",
+    "description_oficial": "Project lifecycle management: CRUD, session, features/blueprints, directories. Consumes composition-manager and context-manager via events.",
+    "author": "Aichat Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_3_core",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "project.created",       "description": "Project created successfully" },
+      { "event": "project.updated",       "description": "Project metadata updated" },
+      { "event": "project.deleted",       "description": "Project deleted" },
+      { "event": "project.activated",     "description": "Project activated (set as current)" },
+      { "event": "project.deactivated",   "description": "Project deactivated" },
+      { "event": "project.get.response",  "description": "Response with project details" },
+      { "event": "project.list.response", "description": "Response with projects list" },
+      { "event": "project.active.response", "description": "Response with active project ID" },
+      { "event": "project/state",         "description": "UI state: list of projects with active project" }
+    ],
+    "subscribes": [
+      { "event": "project.get.request",    "handler": "onGetProjectRequest",        "extras": {} },
+      { "event": "project.list.request",   "handler": "onListProjectsRequest",      "extras": {} },
+      { "event": "project.active.request", "handler": "onGetActiveProjectRequest",  "extras": {} },
+      { "event": "db.query.response",      "handler": "onDbQueryResponse",          "extras": {} },
+      { "event": "composition.response",   "handler": "onCompositionResponse",      "extras": {} },
+      { "event": "project/state/request",  "handler": "onProjectStateRequest",      "extras": {} },
+      { "event": "project/create",         "handler": "onProjectCreate",            "extras": {} },
+      { "event": "project/update",         "handler": "onProjectUpdate",            "extras": {} },
+      { "event": "project/delete",         "handler": "onProjectDelete",            "extras": {} },
+      { "event": "project/activate",       "handler": "onProjectActivate",          "extras": {} }
+    ],
+    "provides_eventos": [
+      "project.created",
+      "project.updated",
+      "project.deleted",
+      "project.activated",
+      "project.deactivated",
+      "project.get.request",
+      "project.list.request",
+      "project.active.request"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "project", "action": "list",                "handler": "handleUIList" },
+      { "domain": "project", "action": "get",                 "handler": "handleUIGet" },
+      { "domain": "project", "action": "create",              "handler": "handleUICreate" },
+      { "domain": "project", "action": "update",              "handler": "handleUIUpdate" },
+      { "domain": "project", "action": "delete",              "handler": "handleUIDelete" },
+      { "domain": "project", "action": "activate",            "handler": "handleUIActivate" },
+      { "domain": "project", "action": "deactivate",          "handler": "handleUIDeactivate" },
+      { "domain": "system",  "action": "getUnassigned",       "handler": "handleUIGetUnassigned" },
+      { "domain": "project", "action": "add-features",        "handler": "handleUIAddFeatures" },
+      { "domain": "project", "action": "list-features",       "handler": "handleUIListFeatures" },
+      { "domain": "project", "action": "saveSession",         "handler": "handleUISaveSession" },
+      { "domain": "project", "action": "restoreSession",      "handler": "handleUIRestoreSession" },
+      { "domain": "project", "action": "setAIConfig",         "handler": "handleUISetAIConfig" },
+      { "domain": "project", "action": "setLastConversation", "handler": "handleUISetLastConversation" }
+    ]
+  },
+
+  "apis_http": [
+    { "method": "POST",   "path": "/projects",                          "handler": "handleCreateProject",      "description": "Create new project",                       "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/projects",                          "handler": "handleListProjects",        "description": "List all projects",                        "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/projects/:id",                      "handler": "handleGetProject",          "description": "Get project details",                      "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "PUT",    "path": "/projects/:id",                      "handler": "handleUpdateProject",       "description": "Update project metadata",                  "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "DELETE", "path": "/projects/:id",                      "handler": "handleDeleteProject",       "description": "Delete project",                           "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST",   "path": "/projects/:id/activate",             "handler": "handleActivateProject",     "description": "Activate project",                         "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/projects/active",                   "handler": "handleGetActiveProject",    "description": "Get currently active project",             "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST",   "path": "/projects/:id/session",              "handler": "handleSaveSession",         "description": "Save project session state",               "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/projects/:id/session",              "handler": "handleRestoreSession",      "description": "Restore project session state",            "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "PUT",    "path": "/projects/:id/ai-config",            "handler": "handleSetAIConfig",         "description": "Set AI configuration override",            "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "PUT",    "path": "/projects/:id/last-conversation",    "handler": "handleSetLastConversation", "description": "Update last active conversation ID",       "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/health",                            "handler": "handleHealthCheck",         "description": "Health check endpoint",                    "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/metrics",                           "handler": "handleGetMetrics",          "description": "Module metrics",                           "request_schema_ref": null, "response_schema_ref": null }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "dbTimeout",         "tipo": "number",  "valor_default": 10000 },
+      { "key": "compositionTimeout","tipo": "number",  "valor_default": 10000 },
+      { "key": "maxProjects",       "tipo": "number",  "valor_default": 1000 },
+      { "key": "defaultSchema",     "tipo": "string",  "valor_default": "" },
+      { "key": "projectsBasePath",  "tipo": "string",  "valor_default": "./data/projects" }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": ["project.created.total", "project.updated.total", "project.deleted.total", "project.activated.total"],
+      "gauges": ["project.active.count", "project.total.count"],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": ["modules/project-manager/schemas/events.json", "modules/project-manager/schemas/project.json"],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 6643,
+    "module_json_lineas": 98,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "observability.metrics.timings no declarado en module.json — se normaliza a []",
+      "observability.logging.correlation_id es campo extra dentro de logging (no en schema de observability_declarada)",
+      "provides contiene sub-clave 'queries' no capturada en provides_eventos (solo se captura provides.events)"
+    ]
+  }
+}

@@ -398,6 +398,17 @@
       "nombre 'prompt-builder' no aparece en config.modules.enabled ni disabled — estado: candidato_a_retirada",
       "dependencies declaradas pero módulo no está en enabled list"
     ],
-    "secciones_vacias_intencionalmente": []
+    "secciones_vacias_intencionalmente": [
+      "tools (prompt-builder no expone tools al LLM — es infraestructura de pipeline)",
+      "ui_handlers (no expone endpoints de UI)",
+      "apis_http (no expone rutas HTTP)",
+      "estado.persistencia.sqlite_tablas (no crea tablas — lee de DB via evento pero no gestiona esquema)",
+      "estado.persistencia.archivos (lee archivos FS via fs.readFileSync directo en onLoad, no via eventos fs.read.request — es lectura de arranque, no persistencia en runtime)",
+      "configuracion.env_vars (no usa process.env)",
+      "observabilidad.metricas_emitidas (no usa metrics.X())",
+      "codigo_intencion.todos (no hay TODOs/FIXMEs/XXX/HACK marcados)",
+      "codigo_intencion.workarounds_detectados (sin comentarios marcados como workaround)",
+      "version_archivada (no existe versión archivada)"
+    ]
   }
 }

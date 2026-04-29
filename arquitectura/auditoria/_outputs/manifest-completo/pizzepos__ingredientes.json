@@ -1,0 +1,224 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/ingredientes",
+    "ubicacion": "modules/pizzepos/ingredientes",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "ingredientes",
+    "version": "4.0.0",
+    "description_oficial": "Catálogo de ingredientes - Actualizado desde menús generados por IA",
+    "author": "Pizzepos Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_pizzepos",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "event": "ingrediente.creado",
+        "description": "Nuevo ingrediente creado desde menú generado"
+      },
+      {
+        "event": "ingrediente.actualizado",
+        "description": "Ingrediente actualizado"
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "carta.actualizada",
+        "handler": "onCartaActualizada",
+        "extras": {}
+      },
+      {
+        "event": "producto.creado",
+        "handler": "onProductoCreado",
+        "extras": {}
+      },
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated",
+        "extras": {}
+      },
+      {
+        "event": "ingrediente.actualizado",
+        "handler": "onIngredienteActualizadoExterno",
+        "extras": {}
+      }
+    ],
+    "provides_eventos": [
+      "ingrediente.creado",
+      "ingrediente.actualizado"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/ingredientes",
+      "handler": "handleListIngredientes",
+      "description": "Listar ingredientes (filtros: tipo, alergeno)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/ingredientes/:id",
+      "handler": "handleGetIngrediente",
+      "description": "Obtener ingrediente por ID",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/ingredientes/search",
+      "handler": "handleSearchIngredientes",
+      "description": "Buscar ingredientes por nombre",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/alergenos",
+      "handler": "handleListAlergenos",
+      "description": "Listar ingredientes alérgenos",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/ingredientes/:id",
+      "handler": "handleUpdateIngrediente",
+      "description": "Actualizar ingrediente",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "ingrediente.creado.total",
+        "ingrediente.actualizado.total"
+      ],
+      "gauges": [
+        "ingrediente.total.count",
+        "ingrediente.alergenos.count"
+      ],
+      "timings": [
+        "ingrediente.sync.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Ingredientes",
+    "icon": "🥬",
+    "views_keys": ["main"],
+    "section_widget_types": ["dashboard"],
+    "permissions_declaradas": ["admin", "gerente"],
+    "tamano_bytes": 694,
+    "endpoints_referenciados": ["/modules/ingredientes/ingredientes"],
+    "mqtt_topics_declarados": [
+      "ingrediente.creado",
+      "ingrediente.actualizado"
+    ]
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/pizzepos/ingredientes/schemas/events.json",
+      "modules/pizzepos/ingredientes/schemas/ingrediente.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": true,
+    "ubicacion": "_archived/2026-02-13_otros-modulos/modules/ingredientes"
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 4041,
+    "module_json_lineas": 150,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "No tiene main declarado (campo ausente en module.json)",
+      "No declara ui_handlers ni handlers — integración UI no declarada en module.json",
+      "provides.queries declara ingrediente.obtener, ingrediente.listar, ingrediente.buscar pero no hay tools ni events correspondientes en module.json",
+      "ingrediente.actualizado aparece tanto en publishes como en subscribes (el módulo se auto-escucha para sincronización externa)",
+      "ui.tamano_bytes estimado (ui block no tiene campo de bytes explícito — calculado como longitud JSON del bloque ui)"
+    ]
+  }
+}

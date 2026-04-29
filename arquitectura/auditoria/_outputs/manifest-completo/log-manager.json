@@ -1,0 +1,222 @@
+{
+  "_meta": {
+    "modulo": "log-manager",
+    "ubicacion": "modules/log-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "log-manager",
+    "version": "2.0.0",
+    "description_oficial": "Sistema centralizado de logs por sesión. Cada arranque crea una nueva sesión con logs organizados por módulo. Configurable para trackear módulos específicos.",
+    "author": null,
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_1_infra_disabled",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [],
+    "subscribes": [
+      { "event": "core/+/logs/#", "handler": null, "extras": {} },
+      { "event": "activity.logged", "handler": null, "extras": {} },
+      { "event": "activity.batch", "handler": null, "extras": {} }
+    ],
+    "provides_eventos": ["logging", "observability", "sessions", "log-storage"]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/session",
+      "handler": "getSession",
+      "description": "Info de la sesión actual",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/session/modules",
+      "handler": "getSessionModules",
+      "description": "Módulos con logs en la sesión actual",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/session/modules/*/logs",
+      "handler": "getSessionModuleLogs",
+      "description": "Logs de un módulo en la sesión actual",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "PUT",
+      "path": "/session/track",
+      "handler": "setTrackedModules",
+      "description": "Configurar qué módulos trackear",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/session/track/add",
+      "handler": "addTrackedModules",
+      "description": "Añadir módulos al tracking",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/sessions",
+      "handler": "getSessions",
+      "description": "Listar todas las sesiones",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/sessions/*",
+      "handler": "getSessionById",
+      "description": "Info de una sesión específica",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/sessions/*/logs",
+      "handler": "getSessionLogs",
+      "description": "Logs de una sesión (con filtro opcional de módulo)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/logs",
+      "handler": "getLogs",
+      "description": "Obtener logs consolidados con filtros",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/logs",
+      "handler": "addLog",
+      "description": "Agregar log (desde frontend u otros sistemas)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/stats",
+      "handler": "getStats",
+      "description": "Estadísticas de logs y sesión actual",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/session/resumen",
+      "handler": "getSessionResumen",
+      "description": "Diagnóstico rápido post-servicio: errores, MQTT, impresora, timeline problemas",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "logsPath", "tipo": "string", "valor_default": "./data/logs" },
+      { "key": "trackedModules", "tipo": "array", "valor_default": ["*"] },
+      { "key": "excludedModules", "tipo": "array", "valor_default": ["log-manager"] },
+      { "key": "maxFileSize", "tipo": "number", "valor_default": 10485760 },
+      { "key": "retentionDays", "tipo": "number", "valor_default": 30 },
+      { "key": "sessionRetentionDays", "tipo": "number", "valor_default": 7 },
+      { "key": "rotateDaily", "tipo": "boolean", "valor_default": true }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": { "level": null, "structured": null },
+    "metrics": { "enabled": null, "counters": [], "gauges": [], "timings": [] }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": ["observability", "logging", "sessions", "ai-friendly", "jsonl"],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": true,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 2662,
+    "module_json_lineas": 91,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "subscribes es array top-level de strings (MQTT wildcards + dot.notation mezclados), no el formato {event, handler, extras} — handlers son null",
+      "publishes/events ausentes: no hay eventos publicados declarados",
+      "author ausente en module.json",
+      "main ausente en module.json — se asume index.js pero no está declarado",
+      "tier_carga_inferido='tier_1_infra_disabled': módulo aparece en system.json.module_load_order.disabled pero SÍ está en config.modules.enabled — contradicción entre config y system.json",
+      "config declarado como objeto (no array): convertido a config_declarada[] con 7 entradas"
+    ]
+  }
+}

@@ -1,0 +1,227 @@
+{
+  "_meta": {
+    "modulo": "admin-panel",
+    "ubicacion": "modules/admin-panel",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "admin-panel",
+    "version": "1.0.0",
+    "description_oficial": "Web-based admin panel for managing Event Core system",
+    "author": null,
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_6_ui",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "event": "admin.action",
+        "description": null
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "plugin.loaded",
+        "handler": "onPluginLoaded",
+        "extras": {}
+      }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/",
+      "handler": "handleUi",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard",
+      "handler": "handleDashboardData",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/modules",
+      "handler": "handleListModules",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/plugins",
+      "handler": "handleListPlugins",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/plugins/:name/toggle",
+      "handler": "handleTogglePlugin",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/agents",
+      "handler": "handleListAgents",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/agents",
+      "handler": "handleCreateAgent",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/agents/:id",
+      "handler": "handleDeleteAgent",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/prompts",
+      "handler": "handleListPrompts",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/prompts/:name",
+      "handler": "handleGetPrompt",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/prompts",
+      "handler": "handleCreatePrompt",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "PUT",
+      "path": "/api/prompts/:name",
+      "handler": "handleUpdatePrompt",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": ["ui-renderer"],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": null,
+      "structured": null
+    },
+    "metrics": {
+      "enabled": null,
+      "counters": [],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Admin Panel",
+    "icon": "⚙️",
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 85,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 2506,
+    "module_json_lineas": 126,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "No ui_handlers ni handlers declarados — sólo apis (campo 'apis' en module.json)",
+      "Campo 'schema' no canónico presente — inline entity schema que no es ui_declarativa ni tools",
+      "dependency 'ui-renderer' declarada pero no listada en config.modules.enabled ni disabled",
+      "prompt.json existe pero no hay context.json"
+    ]
+  }
+}

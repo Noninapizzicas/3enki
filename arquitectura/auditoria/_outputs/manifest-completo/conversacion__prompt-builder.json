@@ -1,0 +1,120 @@
+{
+  "_meta": {
+    "modulo": "conversacion/prompt-builder",
+    "ubicacion": "modules/conversacion/prompt-builder",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "prompt-builder",
+    "version": "1.0.0",
+    "description_oficial": "Construye el system prompt al recibir chat.message.saved. Mantiene en cache los prompt.json y context.json de los módulos (FS) y los prompts del usuario (prompt-manager). Emite chat.prompt.ready con los 9 campos.",
+    "author": "Event Core Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": false,
+    "estado_modulo": "candidato_a_retirada",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "chat.prompt.ready",    "description": null },
+      { "event": "prompt.list.request",  "description": null }
+    ],
+    "subscribes": [
+      { "event": "chat.message.saved",   "handler": "onMessageSaved",     "extras": {} },
+      { "event": "prompt.list.response", "handler": "onPromptListResponse","extras": {} },
+      { "event": "prompt.created",       "handler": "onPromptUpserted",   "extras": {} },
+      { "event": "prompt.updated",       "handler": "onPromptUpserted",   "extras": {} },
+      { "event": "prompt.deleted",       "handler": "onPromptDeleted",    "extras": {} },
+      { "event": "db.query.response",    "handler": "onDbQueryResponse",  "extras": {} }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": ["database-manager", "prompt-manager"],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": { "level": null, "structured": null },
+    "metrics": { "enabled": null, "counters": [], "gauges": [], "timings": [] }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": false,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": true,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 907,
+    "module_json_lineas": 21,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "publishes/subscribes en top-level (no envueltos bajo events{})",
+      "nombre 'prompt-builder' no aparece en config.modules.enabled ni disabled — estado: candidato_a_retirada",
+      "dependencies declaradas pero módulo no está en enabled list"
+    ]
+  }
+}

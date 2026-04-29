@@ -1,0 +1,127 @@
+{
+  "_meta": {
+    "modulo": "conversacion/chat-io",
+    "ubicacion": "modules/conversacion/chat-io",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "chat-io",
+    "version": "1.0.0",
+    "description_oficial": "Entrada y salida del chat. Recibe mensajes del frontend (ui/request/conversation/send), persiste conversaciones y mensajes en SQLite por proyecto, aplica FIFO de contexto, y reenvía la respuesta del LLM al frontend por MQTT (conversation/{id}/message).",
+    "author": "Event Core Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": false,
+    "estado_modulo": "candidato_a_retirada",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "chat.message.saved",    "description": null },
+      { "event": "chat.assistant.saved",  "description": null }
+    ],
+    "subscribes": [
+      { "event": "ai.chat.response",  "handler": "onAiResponse",       "extras": {} },
+      { "event": "db.query.response", "handler": "onDbQueryResponse",  "extras": {} },
+      { "event": "project.activated", "handler": "onProjectActivated", "extras": {} }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "conversation", "action": "send",            "handler": "handleSend" },
+      { "domain": "conversation", "action": "create",          "handler": "handleCreate" },
+      { "domain": "conversation", "action": "list",            "handler": "handleList" },
+      { "domain": "conversation", "action": "load",            "handler": "handleLoad" },
+      { "domain": "conversation", "action": "delete",          "handler": "handleDelete" },
+      { "domain": "conversation", "action": "update_settings", "handler": "handleUpdateSettings" },
+      { "domain": "conversation", "action": "toggle_context",  "handler": "handleToggleContext" },
+      { "domain": "conversation", "action": "context_stats",   "handler": "handleContextStats" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": ["database-manager"],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": { "level": null, "structured": null },
+    "metrics": { "enabled": null, "counters": [], "gauges": [], "timings": [] }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": false,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": true,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 1455,
+    "module_json_lineas": 29,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "eventos_top_level: publishes/subscribes declarados a nivel raíz, no bajo events{}",
+      "publishes es array de strings (sin description), normalizado a {event, description: null}",
+      "main no declarado en module.json, asumido null",
+      "chat-io no aparece en config.modules.enabled ni disabled → candidato_a_retirada"
+    ]
+  }
+}

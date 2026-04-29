@@ -1,0 +1,713 @@
+{
+  "_meta": {
+    "modulo": "recetas",
+    "ubicacion": "modules/recetas",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/recetas.json"
+  },
+
+  "identidad": {
+    "name": "recetas",
+    "version": "2.0.0",
+    "description_oficial": "Gestión de recetas con almacenamiento JSON por proyecto (data/projects/{slug}/recetas.json). Cada receta tiene history interno (versionado), incompleta flag y campos_pendientes. Cero SQL, cero schema migrations.",
+    "author": "Event Core Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/recetas/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_negocio_alimentario",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "project.get.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/recetas/index.js:109",
+        "metodo_contenedor": "_slugForProject",
+        "es_handler_de": null,
+        "bloque_logico": "dentro de Promise resolver tras pendingProject.set",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["request_id", "project_id"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": true,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      this.pendingProject.set(request_id, { resolve, reject, timer });\n      this.eventBus.publish('project.get.request', { request_id, project_id });\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.read.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/recetas/index.js:140",
+        "metodo_contenedor": "_readFile",
+        "es_handler_de": null,
+        "bloque_logico": "dentro de Promise resolver tras pendingFs.set",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["request_id", "path"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": ["path"]
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      this.pendingFs.set(request_id, { resolve, reject, timer, op: 'read' });\n      this.eventBus.publish('fs.read.request', { request_id, path: this._pathFor(slug) });\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.write.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/recetas/index.js:152",
+        "metodo_contenedor": "_writeFile",
+        "es_handler_de": null,
+        "bloque_logico": "dentro de Promise resolver tras pendingFs.set; multilinea",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["request_id", "path", "content", "encoding"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": ["path"]
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      this.pendingFs.set(request_id, { resolve, reject, timer, op: 'write' });\n      this.eventBus.publish('fs.write.request', {\n        request_id, path: this._pathFor(slug), content, encoding: 'utf-8'\n      });\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "receta.creada", "variables_referenciadas": [] },
+        "ubicacion": "modules/recetas/index.js:354",
+        "metodo_contenedor": "crear",
+        "es_handler_de": "tool recetas.crear (vía _toolDispatch)",
+        "bloque_logico": "tras store.recetas.push(receta) — receta ya añadida al store",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["proyecto_id", "id", "nombre", "timestamp"],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": true,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      store.recetas.push(receta);\n\n      this.eventBus.publish('receta.creada', { proyecto_id, id, nombre: receta.nombre, timestamp: now });\n",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "receta.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/recetas/index.js:472",
+        "metodo_contenedor": "actualizar",
+        "es_handler_de": "tool recetas.actualizar (vía _toolDispatch)",
+        "bloque_logico": "tras incrementar version y actualizar updated_at",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["proyecto_id", "id", "nombre", "version", "timestamp"],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": true,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      this._calcIncompleta(r);\n\n      this.eventBus.publish('receta.actualizada', { proyecto_id, id: r.id, nombre: r.nombre, version: r.version, timestamp: r.updated_at });\n",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "receta.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/recetas/index.js:522",
+        "metodo_contenedor": "revertir",
+        "es_handler_de": "tool recetas.revertir (vía _toolDispatch)",
+        "bloque_logico": "tras restaurar campos de target version, mismo evento que actualizar pero con campo motivo='revertir'",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["proyecto_id", "id", "nombre", "version", "timestamp", "motivo"],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": true,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      this._calcIncompleta(r);\n\n      this.eventBus.publish('receta.actualizada', { proyecto_id, id: r.id, nombre: r.nombre, version: r.version, timestamp: r.updated_at, motivo: 'revertir' });\n",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "receta.eliminada", "variables_referenciadas": [] },
+        "ubicacion": "modules/recetas/index.js:537",
+        "metodo_contenedor": "eliminar",
+        "es_handler_de": "tool recetas.eliminar (vía _toolDispatch)",
+        "bloque_logico": "tras setear estado='archivada' (no borra, archiva)",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["proyecto_id", "id", "nombre", "timestamp"],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": true,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      r.updated_at = Date.now();\n      this.eventBus.publish('receta.eliminada', { proyecto_id, id: r.id, nombre: r.nombre, timestamp: r.updated_at });\n      return { id: r.id, nombre: r.nombre, status: 'archivada' };",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "ingrediente.precio.actualizado", "variables_referenciadas": [] },
+        "ubicacion": "modules/recetas/index.js:597",
+        "metodo_contenedor": "actualizarPrecio",
+        "es_handler_de": "tool recetas.actualizar_precio (vía _toolDispatch)",
+        "bloque_logico": "tras crear/actualizar el ingrediente en el catálogo del proyecto",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["proyecto_id", "nombre", "precio_mercado", "timestamp"],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": true,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      }\n      this.eventBus.publish('ingrediente.precio.actualizado', { proyecto_id, nombre: item.nombre, precio_mercado, timestamp: now });\n      return { nombre: item.nombre, precio_mercado, unidad: item.unidad, status: 'actualizado' };",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "dynamic_template", "valor": "${toolName}.response", "variables_referenciadas": ["toolName"] },
+        "ubicacion": "modules/recetas/index.js:686",
+        "metodo_contenedor": "_toolDispatch",
+        "es_handler_de": "fallback unknown tool",
+        "bloque_logico": "tool no encontrada en TOOL_HANDLERS — return temprano con error",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["request_id", "error"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": ["error"]
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": true,
+        "snippet": "    if (!handlerName) {\n      return this.eventBus.publish(`${toolName}.response`, { request_id, error: `unknown tool ${toolName}` });\n    }",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "dynamic_template", "valor": "${toolName}.response", "variables_referenciadas": ["toolName"] },
+        "ubicacion": "modules/recetas/index.js:690",
+        "metodo_contenedor": "_toolDispatch",
+        "es_handler_de": "respuesta de tool exitosa",
+        "bloque_logico": "tras await del handler — devuelve result del handler",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["request_id", "result"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "      const result = await this[handlerName](params);\n      await this.eventBus.publish(`${toolName}.response`, { request_id, result });\n    } catch (err) {",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "dynamic_template", "valor": "${toolName}.response", "variables_referenciadas": ["toolName"] },
+        "ubicacion": "modules/recetas/index.js:693",
+        "metodo_contenedor": "_toolDispatch",
+        "es_handler_de": "respuesta de tool con error",
+        "bloque_logico": "dentro del catch tras logger.error",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["request_id", "error"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "      this.logger.error(`${toolName}.failed`, { error: err.message });\n      await this.eventBus.publish(`${toolName}.response`, { request_id, error: err.message });\n    }",
+        "declarado_en_manifest": false
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.activated", "tipo_nombre": "literal", "handler": "onProjectActivated", "handler_ubicacion": "modules/recetas/index.js:85", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:85", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.deactivated", "tipo_nombre": "literal", "handler": "onProjectDeactivated", "handler_ubicacion": "modules/recetas/index.js:92", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:92", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.get.response", "tipo_nombre": "literal", "handler": "onProjectGetResponse", "handler_ubicacion": "modules/recetas/index.js:115", "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/recetas/index.js:120", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.read.response", "tipo_nombre": "literal", "handler": "onFsReadResponse", "handler_ubicacion": "modules/recetas/index.js:158", "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/recetas/index.js:158", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.write.response", "tipo_nombre": "literal", "handler": "onFsWriteResponse", "handler_ubicacion": "modules/recetas/index.js:168", "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/recetas/index.js:168", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.crear", "tipo_nombre": "literal", "handler": "onToolCrear", "handler_ubicacion": "modules/recetas/index.js:698", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.listar", "tipo_nombre": "literal", "handler": "onToolListar", "handler_ubicacion": "modules/recetas/index.js:699", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.obtener", "tipo_nombre": "literal", "handler": "onToolObtener", "handler_ubicacion": "modules/recetas/index.js:700", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.buscar", "tipo_nombre": "literal", "handler": "onToolBuscar", "handler_ubicacion": "modules/recetas/index.js:701", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.actualizar", "tipo_nombre": "literal", "handler": "onToolActualizar", "handler_ubicacion": "modules/recetas/index.js:702", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.historial", "tipo_nombre": "literal", "handler": "onToolHistorial", "handler_ubicacion": "modules/recetas/index.js:703", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.revertir", "tipo_nombre": "literal", "handler": "onToolRevertir", "handler_ubicacion": "modules/recetas/index.js:704", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.eliminar", "tipo_nombre": "literal", "handler": "onToolEliminar", "handler_ubicacion": "modules/recetas/index.js:705", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.estadisticas", "tipo_nombre": "literal", "handler": "onToolEstadisticas", "handler_ubicacion": "modules/recetas/index.js:706", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.ingredientes", "tipo_nombre": "literal", "handler": "onToolIngredientes", "handler_ubicacion": "modules/recetas/index.js:707", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.actualizar_precio", "tipo_nombre": "literal", "handler": "onToolActualizarPrecio", "handler_ubicacion": "modules/recetas/index.js:708", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.analizar", "tipo_nombre": "literal", "handler": "onToolAnalizar", "handler_ubicacion": "modules/recetas/index.js:709", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "recetas.investigar_receta", "tipo_nombre": "literal", "handler": "onToolInvestigarReceta", "handler_ubicacion": "modules/recetas/index.js:710", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/recetas/index.js:692", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": [
+        "receta.creada", "receta.actualizada", "receta.eliminada",
+        "ingrediente.precio.actualizado",
+        "fs.read.request", "fs.write.request", "project.get.request"
+      ],
+      "publica_literales_en_codigo": [
+        "fs.read.request", "fs.write.request", "ingrediente.precio.actualizado",
+        "project.get.request", "receta.actualizada", "receta.creada", "receta.eliminada"
+      ],
+      "publica_patrones_dinamicos": ["${toolName}.response"],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": [
+        "project.activated", "project.deactivated", "project.get.response",
+        "fs.read.response", "fs.write.response",
+        "recetas.crear", "recetas.listar", "recetas.obtener", "recetas.buscar",
+        "recetas.actualizar", "recetas.historial", "recetas.revertir", "recetas.eliminar",
+        "recetas.estadisticas", "recetas.ingredientes", "recetas.actualizar_precio",
+        "recetas.analizar", "recetas.investigar_receta"
+      ],
+      "subscribes_realmente_registrados": [
+        "project.activated", "project.deactivated", "project.get.response",
+        "fs.read.response", "fs.write.response",
+        "recetas.crear", "recetas.listar", "recetas.obtener", "recetas.buscar",
+        "recetas.actualizar", "recetas.historial", "recetas.revertir", "recetas.eliminar",
+        "recetas.estadisticas", "recetas.ingredientes", "recetas.actualizar_precio",
+        "recetas.analizar", "recetas.investigar_receta"
+      ],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [
+    {
+      "name": "recetas.crear",
+      "description_para_llm": "Guarda una receta nueva en el proyecto. Llámala en cuanto tengas nombre + ingredientes — aunque sean texto libre del usuario y falten otros campos, GUÁRDALA igualmente. Los campos que falten se marcarán como pendientes y se completarán después. NO PIDAS al usuario datos que no haya dado.",
+      "parameters_required": ["project_id", "nombre"],
+      "parameters_property_names": ["project_id", "nombre", "descripcion", "ingredientes", "instrucciones", "porciones", "tiempo_min", "dificultad", "categorias", "etiquetas", "fuente", "notas"],
+      "parameters_size_chars": 866,
+      "handler_metodo": "crear",
+      "handler_ubicacion": "modules/recetas/index.js:312",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "id": "string", "nombre": "string", "status": "string", "incompleta": "boolean", "campos_pendientes": "array", "ingredientes_formateados": "string (markdown formateado)", "version": "number" },
+        "es_markdown_formateado": true,
+        "ejemplos_observados": ["return { id, nombre: receta.nombre, status: 'creada', incompleta: receta.incompleta, campos_pendientes: receta.campos_pendientes, ingredientes_formateados: this._formatIngredientesText(ingredientes), version: 1 };"],
+        "publica_eventos_de_dominio": ["receta.creada"]
+      },
+      "errores_conocidos": []
+    },
+    {
+      "name": "recetas.listar",
+      "description_para_llm": "Lista las recetas del proyecto. Por defecto solo activas (no archivadas). Filtros opcionales por estado o solo_incompletas.",
+      "parameters_required": ["project_id"],
+      "parameters_property_names": ["project_id", "estado", "solo_incompletas", "limit"],
+      "parameters_size_chars": 290,
+      "handler_metodo": "listar",
+      "handler_ubicacion": "modules/recetas/index.js:368",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "total": "number", "recetas": "array de {id, nombre, porciones, dificultad, incompleta, campos_pendientes, estado, version, updated_at}" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": ["return { total: items.length, recetas: items };"],
+        "publica_eventos_de_dominio": []
+      },
+      "errores_conocidos": []
+    },
+    {
+      "name": "recetas.obtener",
+      "description_para_llm": "Devuelve una receta completa con ingredientes, instrucciones, todos los campos. Acepta receta_id (UUID) o nombre.",
+      "parameters_required": ["project_id"],
+      "parameters_property_names": ["project_id", "receta_id", "nombre"],
+      "parameters_size_chars": 245,
+      "handler_metodo": "obtener",
+      "handler_ubicacion": "modules/recetas/index.js:386",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "id": "string", "nombre": "string", "ingredientes": "array", "ingredientes_formateados": "string (markdown)", "versiones_anteriores": "number", "...campos_de_receta": "any" },
+        "es_markdown_formateado": true,
+        "ejemplos_observados": ["return { ...rest, ingredientes_formateados: this._formatIngredientesText(r.ingredientes), versiones_anteriores: history.length };"],
+        "publica_eventos_de_dominio": []
+      },
+      "errores_conocidos": [
+        { "condicion": "Receta no encontrada", "respuesta_shape": { "error": "string", "ref": "string" }, "ubicacion": "modules/recetas/index.js:391" }
+      ]
+    },
+    {
+      "name": "recetas.buscar",
+      "description_para_llm": "Busca recetas activas por criterios combinables: texto libre, ingrediente, categoría, etiqueta, dificultad, tiempo, porciones.",
+      "parameters_required": ["project_id"],
+      "parameters_property_names": ["project_id", "texto", "ingrediente", "categoria", "etiqueta", "dificultad_min", "dificultad_max", "tiempo_max", "porciones", "limit"],
+      "parameters_size_chars": 595,
+      "handler_metodo": "buscar",
+      "handler_ubicacion": "modules/recetas/index.js:398",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "total": "number", "resultados": "array de recetas filtradas" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": [],
+        "publica_eventos_de_dominio": []
+      },
+      "errores_conocidos": []
+    },
+    {
+      "name": "recetas.actualizar",
+      "description_para_llm": "Modifica campos de una receta. Crea automáticamente snapshot de la versión anterior en history. Devuelve diff de cambios aplicados.",
+      "parameters_required": ["project_id", "receta_id", "cambios"],
+      "parameters_property_names": ["project_id", "receta_id", "cambios"],
+      "parameters_size_chars": 287,
+      "handler_metodo": "actualizar",
+      "handler_ubicacion": "modules/recetas/index.js:433",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "id": "string", "nombre": "string", "version": "number", "cambios_aplicados": "object {campo: {antes, despues}}", "incompleta": "boolean", "campos_pendientes": "array" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": ["return { id: r.id, nombre: r.nombre, version: r.version, cambios_aplicados: aplicados, incompleta: r.incompleta, campos_pendientes: r.campos_pendientes };"],
+        "publica_eventos_de_dominio": ["receta.actualizada"]
+      },
+      "errores_conocidos": [
+        { "condicion": "Receta no encontrada", "respuesta_shape": { "error": "string", "ref": "string" }, "ubicacion": "modules/recetas/index.js" }
+      ]
+    },
+    {
+      "name": "recetas.historial",
+      "description_para_llm": "Devuelve las versiones anteriores de una receta (cada versión es un snapshot completo). Incluye version_actual y array historial con resúmenes.",
+      "parameters_required": ["project_id", "receta_id"],
+      "parameters_property_names": ["project_id", "receta_id"],
+      "parameters_size_chars": 152,
+      "handler_metodo": "historial",
+      "handler_ubicacion": "modules/recetas/index.js:481",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "receta_id": "string", "nombre": "string", "version_actual": "number", "versiones_anteriores": "number", "historial": "array de {version, archived_at, nombre, porciones, dificultad, ingredientes_count}" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": ["return { receta_id: r.id, nombre: r.nombre, version_actual: r.version, versiones_anteriores: versiones.length, historial: versiones };"],
+        "publica_eventos_de_dominio": []
+      },
+      "errores_conocidos": [
+        { "condicion": "Receta no encontrada", "respuesta_shape": { "error": "string", "ref": "string" }, "ubicacion": "modules/recetas/index.js:486" }
+      ]
+    },
+    {
+      "name": "recetas.revertir",
+      "description_para_llm": "Restaura una versión anterior de la receta (desde history). El estado actual se archiva primero como nueva entrada en history (audit trail). target_version es el número de versión a restaurar.",
+      "parameters_required": ["project_id", "receta_id", "target_version"],
+      "parameters_property_names": ["project_id", "receta_id", "target_version"],
+      "parameters_size_chars": 251,
+      "handler_metodo": "revertir",
+      "handler_ubicacion": "modules/recetas/index.js:499",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "id": "string", "nombre": "string", "revertida_a_version": "number", "version_actual": "number" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": ["return { id: r.id, nombre: r.nombre, revertida_a_version: target_version, version_actual: r.version };"],
+        "publica_eventos_de_dominio": ["receta.actualizada"]
+      },
+      "errores_conocidos": [
+        { "condicion": "target_version requerido", "respuesta_shape": { "error": "string" }, "ubicacion": "modules/recetas/index.js:501" },
+        { "condicion": "Receta no encontrada", "respuesta_shape": { "error": "string", "ref": "string" }, "ubicacion": "modules/recetas/index.js:506" },
+        { "condicion": "version no encontrada", "respuesta_shape": { "error": "string", "versiones_disponibles": "array" }, "ubicacion": "modules/recetas/index.js:509" }
+      ]
+    },
+    {
+      "name": "recetas.eliminar",
+      "description_para_llm": "Archiva una receta (estado='archivada'). NO la borra del archivo — sigue accesible vía recetas.listar con estado='archivada'. Para borrado definitivo no hay tool aún.",
+      "parameters_required": ["project_id", "receta_id"],
+      "parameters_property_names": ["project_id", "receta_id"],
+      "parameters_size_chars": 152,
+      "handler_metodo": "eliminar",
+      "handler_ubicacion": "modules/recetas/index.js:528",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "id": "string", "nombre": "string", "status": "string ('archivada' | 'ya_estaba_archivada')" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": ["return { id: r.id, nombre: r.nombre, status: 'archivada' };"],
+        "publica_eventos_de_dominio": ["receta.eliminada"]
+      },
+      "errores_conocidos": [
+        { "condicion": "Receta no encontrada", "respuesta_shape": { "error": "string", "ref": "string" }, "ubicacion": "modules/recetas/index.js:533" }
+      ]
+    },
+    {
+      "name": "recetas.estadisticas",
+      "description_para_llm": "Resumen del proyecto: total recetas, distribución por estado, número de incompletas, tamaño del catálogo de ingredientes y cuántos tienen precio.",
+      "parameters_required": ["project_id"],
+      "parameters_property_names": ["project_id"],
+      "parameters_size_chars": 102,
+      "handler_metodo": "estadisticas",
+      "handler_ubicacion": "modules/recetas/index.js:542",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "total_recetas": "number", "por_estado": "object {activa, archivada, borrador}", "incompletas": "number", "ingredientes_catalogo": "number", "ingredientes_con_precio": "number", "ingredientes_usados_unicos": "number" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": ["return { total_recetas: store.recetas.length, por_estado, incompletas, ingredientes_catalogo: store.ingredientes_catalogo.length, ingredientes_con_precio: con_precios, ingredientes_usados_unicos: ingredientesUsados.size };"],
+        "publica_eventos_de_dominio": []
+      },
+      "errores_conocidos": []
+    },
+    {
+      "name": "recetas.ingredientes",
+      "description_para_llm": "Lista el catálogo de ingredientes del proyecto (independiente de las recetas). Incluye precio_mercado, unidad, fuente.",
+      "parameters_required": ["project_id"],
+      "parameters_property_names": ["project_id", "categoria"],
+      "parameters_size_chars": 197,
+      "handler_metodo": "ingredientes",
+      "handler_ubicacion": "modules/recetas/index.js:568",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "total": "number", "ingredientes": "array de {nombre, categoria, unidad, precio_mercado, fuente, ...}" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": ["return { total: arr.length, ingredientes: arr };"],
+        "publica_eventos_de_dominio": []
+      },
+      "errores_conocidos": []
+    },
+    {
+      "name": "recetas.actualizar_precio",
+      "description_para_llm": "Actualiza (o crea si no existe) el precio de mercado de un ingrediente en el catálogo. Identifica por nombre.",
+      "parameters_required": ["project_id", "nombre", "precio_mercado"],
+      "parameters_property_names": ["project_id", "nombre", "precio_mercado", "unidad", "categoria", "fuente"],
+      "parameters_size_chars": 469,
+      "handler_metodo": "actualizarPrecio",
+      "handler_ubicacion": "modules/recetas/index.js:577",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "nombre": "string", "precio_mercado": "number", "unidad": "string|null", "status": "string ('actualizado')" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": ["return { nombre: item.nombre, precio_mercado, unidad: item.unidad, status: 'actualizado' };"],
+        "publica_eventos_de_dominio": ["ingrediente.precio.actualizado"]
+      },
+      "errores_conocidos": []
+    },
+    {
+      "name": "recetas.analizar",
+      "description_para_llm": "Análisis de coste de una receta: cruza sus ingredientes con el catálogo de precios. Devuelve coste_total, coste_por_porcion, y coste_es_real (true si todos los ingredientes están en catálogo). Si la receta está incompleta (faltan ingredientes/porciones) devuelve error.",
+      "parameters_required": ["project_id", "receta_id"],
+      "parameters_property_names": ["project_id", "receta_id"],
+      "parameters_size_chars": 152,
+      "handler_metodo": "analizar",
+      "handler_ubicacion": "modules/recetas/index.js:606",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": { "receta_id": "string", "nombre": "string", "porciones": "number", "tiempo_min": "number", "dificultad": "number", "ingredientes": "array de {nombre, cantidad, unidad, precio_mercado, coste, en_catalogo}", "coste_total": "number|null", "coste_por_porcion": "number|null", "coste_es_real": "boolean", "nota": "string" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": ["return { receta_id: r.id, nombre: r.nombre, ..., coste_total: ..., coste_es_real: costeReal, nota: ... };"],
+        "publica_eventos_de_dominio": []
+      },
+      "errores_conocidos": [
+        { "condicion": "Receta no encontrada", "respuesta_shape": { "error": "string", "ref": "string" }, "ubicacion": "modules/recetas/index.js:611" },
+        { "condicion": "Receta incompleta", "respuesta_shape": { "error": "string", "campos_pendientes": "array" }, "ubicacion": "modules/recetas/index.js:613" }
+      ]
+    },
+    {
+      "name": "recetas.investigar_receta",
+      "description_para_llm": "Comprueba si una receta existe en el proyecto. Si existe, la devuelve. Si no, devuelve instrucción para que el LLM proponga una receta nueva (que después se guardará vía recetas.crear con confirmación del usuario).",
+      "parameters_required": ["project_id", "nombre_receta"],
+      "parameters_property_names": ["project_id", "nombre_receta"],
+      "parameters_size_chars": 235,
+      "handler_metodo": "investigarReceta",
+      "handler_ubicacion": "modules/recetas/index.js:654",
+      "retorno": {
+        "tipo": "mixto",
+        "shape_inferido": { "existe": "boolean", "receta_o_instruccion": "object" },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": [],
+        "publica_eventos_de_dominio": []
+      },
+      "errores_conocidos": []
+    }
+  ],
+
+  "ui_handlers": [
+    { "domain": "recetas", "action": "crear",             "handler_metodo": "handleCrear",            "handler_ubicacion": "modules/recetas/index.js:725", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["id", "nombre", "status", "incompleta", "campos_pendientes", "ingredientes_formateados", "version"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "listar",            "handler_metodo": "handleListar",           "handler_ubicacion": "modules/recetas/index.js:726", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["total", "recetas"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "obtener",           "handler_metodo": "handleObtener",          "handler_ubicacion": "modules/recetas/index.js:727", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["id", "nombre", "ingredientes", "ingredientes_formateados", "versiones_anteriores"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "buscar",            "handler_metodo": "handleBuscar",           "handler_ubicacion": "modules/recetas/index.js:728", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["total", "resultados"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "actualizar",        "handler_metodo": "handleActualizar",       "handler_ubicacion": "modules/recetas/index.js:729", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["id", "nombre", "version", "cambios_aplicados", "incompleta", "campos_pendientes"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "historial",         "handler_metodo": "handleHistorial",        "handler_ubicacion": "modules/recetas/index.js:730", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["receta_id", "nombre", "version_actual", "versiones_anteriores", "historial"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "revertir",          "handler_metodo": "handleRevertir",         "handler_ubicacion": "modules/recetas/index.js:731", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["id", "nombre", "revertida_a_version", "version_actual"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "eliminar",          "handler_metodo": "handleEliminar",         "handler_ubicacion": "modules/recetas/index.js:732", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["id", "nombre", "status"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "estadisticas",      "handler_metodo": "handleEstadisticas",     "handler_ubicacion": "modules/recetas/index.js:733", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["total_recetas", "por_estado", "incompletas", "ingredientes_catalogo", "ingredientes_con_precio", "ingredientes_usados_unicos"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "ingredientes",      "handler_metodo": "handleIngredientes",     "handler_ubicacion": "modules/recetas/index.js:734", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["total", "ingredientes"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "actualizar_precio", "handler_metodo": "handleActualizarPrecio", "handler_ubicacion": "modules/recetas/index.js:735", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["nombre", "precio_mercado", "unidad", "status"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "analizar",          "handler_metodo": "handleAnalizar",         "handler_ubicacion": "modules/recetas/index.js:736", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["receta_id", "nombre", "ingredientes", "coste_total", "coste_por_porcion", "coste_es_real", "nota"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "recetas", "action": "investigar_receta", "handler_metodo": "handleInvestigarReceta", "handler_ubicacion": "modules/recetas/index.js:737", "input_validado": ["project_id"], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["existe", "receta_o_instruccion"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" }
+  ],
+
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "projectSlugs",   "tipo": "Map", "ubicacion_init": "modules/recetas/index.js:58", "se_invalida_con": "nunca (cache permanente durante vida del módulo)", "leak_potencial": true },
+      { "campo": "writeQueues",    "tipo": "Map", "ubicacion_init": "modules/recetas/index.js:61", "se_invalida_con": "nunca explícitamente (cola interna por project_id)", "leak_potencial": true },
+      { "campo": "pendingFs",      "tipo": "Map", "ubicacion_init": "modules/recetas/index.js:64", "se_invalida_con": "respuesta fs.read.response/fs.write.response (delete) | timeout 8s (delete) | onUnload (clearTimeout + clear)", "leak_potencial": false },
+      { "campo": "pendingProject", "tipo": "Map", "ubicacion_init": "modules/recetas/index.js:65", "se_invalida_con": "respuesta project.get.response (delete) | timeout 5s (delete) | onUnload (clearTimeout + clear)", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "@/projects/{slug}/recetas.json", "formato": "json", "operaciones": ["read", "write"], "via_evento": "fs.read.request / fs.write.request", "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "Cola interna por project_id en writeQueues evita writes concurrentes sobre el mismo proyecto. Lectura-modificación-escritura serializada. Documentado explícitamente en comentario inicial: 'Concurrencia: cola interna por project_id — solo una operación write a la vez.'"
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "campos_para_completa", "tipo": "array", "default_si_primitivo": ["ingredientes", "porciones", "instrucciones"] }
+    ],
+    "paths_proyecto_referenciados": ["@/projects/{slug}/recetas.json"],
+    "valores_hardcoded_observables": [
+      { "valor": "5000", "ubicacion": "modules/recetas/index.js:107", "naturaleza": "timeout" },
+      { "valor": "8000", "ubicacion": "modules/recetas/index.js:138", "naturaleza": "timeout" },
+      { "valor": "8000", "ubicacion": "modules/recetas/index.js:149", "naturaleza": "timeout" },
+      { "valor": "100",  "ubicacion": "modules/recetas/index.js:375", "naturaleza": "limit" },
+      { "valor": "@/projects/{slug}/recetas.json", "ubicacion": "modules/recetas/index.js:129", "naturaleza": "path" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/recetas/index.js:68",
+      "acciones": [
+        "guarda this.logger = context.logger",
+        "guarda this.eventBus = context.eventBus",
+        "logger.info('recetas.loaded', { storage: 'json-per-project' })"
+      ],
+      "guarda_referencias_externas": ["this.logger=context.logger", "this.eventBus=context.eventBus"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/recetas/index.js:74",
+      "acciones": [
+        "for ({ timer } of this.pendingFs.values()) clearTimeout(timer)",
+        "for ({ timer } of this.pendingProject.values()) clearTimeout(timer)",
+        "this.pendingFs.clear()",
+        "this.pendingProject.clear()"
+      ],
+      "estado_no_limpiado": ["projectSlugs (cache de slugs por project_id)", "writeQueues (cola de writes por project_id)"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "project-manager", "via_evento": "project.get.request", "obligatorio_en": "runtime", "ubicacion_uso": "modules/recetas/index.js:109", "es_cross_vertical": false },
+    { "modulo_dependido": "filesystem",      "via_evento": "fs.read.request",     "obligatorio_en": "runtime", "ubicacion_uso": "modules/recetas/index.js:140", "es_cross_vertical": false },
+    { "modulo_dependido": "filesystem",      "via_evento": "fs.write.request",    "obligatorio_en": "runtime", "ubicacion_uso": "modules/recetas/index.js:152", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "project-manager",   "que_pasa_si_cae": "timeout 5000ms y reject promise pending con 'project.get timeout para ${project_id}'", "evidencia": "modules/recetas/index.js:104" },
+    { "dependencia": "filesystem (read)", "que_pasa_si_cae": "timeout 8000ms y reject promise pending con 'fs.read timeout: ${slug}'",              "evidencia": "modules/recetas/index.js:135" },
+    { "dependencia": "filesystem (write)","que_pasa_si_cae": "timeout 8000ms y reject promise pending con 'fs.write timeout: ${slug}'",             "evidencia": "modules/recetas/index.js:147" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('module.action', { ...campos })",
+      "campos_estructurados_observados": ["error", "slug", "storage"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('recetas.loaded', { storage: 'json-per-project' });",                  "ubicacion": "modules/recetas/index.js:71" },
+        { "snippet": "this.logger.error('recetas.store.parse.failed', { slug, error: err.message });",        "ubicacion": "modules/recetas/index.js:200" },
+        { "snippet": "this.logger.error(`${toolName}.failed`, { error: err.message });",                      "ubicacion": "modules/recetas/index.js:692" },
+        { "snippet": "this.logger.error(`recetas.ui.${handlerName}.failed`, { error: err.message });",        "ubicacion": "modules/recetas/index.js:720" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — recetas no extrae correlation_id de eventos entrantes ni lo añade a sus publish salientes. Solo genera request_id local con crypto.randomUUID() en _slugForProject, _readFile, _writeFile."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": true,
+    "prompt_json_existe": true,
+    "readme_existe": true,
+    "tests_propios_existen": true
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/recetas/index.js:14", "comentario_literal": "Cero SQL. Cero schema. Cero junction tables. Si añades un campo, las recetas viejas no lo tienen y las nuevas sí — sin migrar nada.", "contexto": "header del módulo: justifica la elección de JSON sobre SQL para evitar migraciones" },
+      { "ubicacion": "modules/recetas/index.js:17", "comentario_literal": "Acceso al archivo via eventos fs.read.request / fs.write.request al módulo filesystem. Path absoluto con prefijo @/projects/{slug}/recetas.json para no depender del proyecto activo de filesystem (multi-tenancy seguro).", "contexto": "header del módulo: justifica el path con prefijo @ para multi-tenancy" },
+      { "ubicacion": "modules/recetas/index.js:21", "comentario_literal": "Concurrencia: cola interna por project_id — solo una operación write a la vez.", "contexto": "header del módulo: justifica writeQueues como cola por proyecto" },
+      { "ubicacion": "modules/recetas/index.js:392", "comentario_literal": "No enviar el history completo en obtener (puede ser pesado)", "contexto": "obtener() devuelve receta sin history para evitar payload pesado al LLM" },
+      { "ubicacion": "modules/recetas/index.js:511", "comentario_literal": "Snapshot actual al history", "contexto": "revertir() archiva el estado actual antes de restaurar — audit trail" },
+      { "ubicacion": "modules/recetas/index.js:518", "comentario_literal": "nueva versión \"post-revertida\"", "contexto": "revertir() incrementa version aunque sea reversión — historial monotónico" },
+      { "ubicacion": "modules/recetas/index.js:624", "comentario_literal": "Cálculo simple: si cantidad y precio están en mismas unidades, multiplica. Si no, dejar coste null y avisar en notas.", "contexto": "analizar() — política de cálculo cuando faltan unidades" },
+      { "ubicacion": "modules/recetas/index.js:649", "comentario_literal": "Investigación de receta: si existe en el proyecto, la devuelve. Si no, devuelve estructura vacía indicando que el LLM debe proponerla. Esta tool no llama al LLM por dentro: el LLM principal compone la propuesta usando el resultado de esta tool.", "contexto": "investigarReceta() — explica división de responsabilidad con el LLM principal" }
+    ],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 740,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "23714bc",
+      "fecha": "2026-04-27 00:02:51 +0000",
+      "subject": "recetas: smoke test local que verifica las 13 tools end-to-end"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [],
+    "secciones_vacias_intencionalmente": [
+      "apis_http (recetas no expone HTTP, todo va por eventos y ui_handlers)",
+      "estado.persistencia.sqlite_tablas (recetas usa JSON files, no SQLite — decisión documentada en header: 'Cero SQL')",
+      "configuracion.env_vars (no usa process.env)",
+      "observabilidad.metricas_emitidas (no usa metrics.X())",
+      "codigo_intencion.todos (no hay TODOs/FIXMEs/XXX/HACK marcados explícitamente)",
+      "codigo_intencion.workarounds_detectados (sin comentarios marcados como workaround)",
+      "outliers_capturados.* (manifest sin claves no canónicas; código sin patrones raros)",
+      "version_archivada (no existe versión archivada de recetas)"
+    ]
+  }
+}

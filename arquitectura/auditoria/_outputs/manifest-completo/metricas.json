@@ -1,0 +1,200 @@
+{
+  "_meta": {
+    "modulo": "metricas",
+    "ubicacion": "modules/metricas",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "metricas",
+    "version": "1.0.0",
+    "description_oficial": "Módulo de métricas centralizado - Escucha eventos del sistema y genera métricas en tiempo real",
+    "author": "Pizzepos Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": true,
+    "estado_modulo": "dormido_por_diseno",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "event": "metricas.snapshot",
+        "description": "Snapshot periódico de todas las métricas del sistema"
+      },
+      {
+        "event": "metricas.alerta",
+        "description": "Alerta cuando se detecta anomalía en métricas"
+      }
+    ],
+    "subscribes": [
+      { "event": "*.creado",     "handler": "onEntityCreated",      "extras": {} },
+      { "event": "*.actualizado","handler": "onEntityUpdated",       "extras": {} },
+      { "event": "*.eliminado",  "handler": "onEntityDeleted",       "extras": {} },
+      { "event": "*.error",      "handler": "onError",               "extras": {} },
+      { "event": "*.completado", "handler": "onOperationCompleted",  "extras": {} }
+    ],
+    "provides_eventos": ["metricas.snapshot", "metricas.alerta"]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetAllMetrics",
+      "description": "Obtener todas las métricas del sistema (counters, gauges, timings)",
+      "request_schema_ref": null,
+      "response_schema_ref": "modules/metricas/schemas/metrics.json#/definitions/all_metrics_response"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics/counters",
+      "handler": "handleGetCounters",
+      "description": "Obtener solo counters (eventos contados)",
+      "request_schema_ref": null,
+      "response_schema_ref": "modules/metricas/schemas/metrics.json#/definitions/counters_response"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics/gauges",
+      "handler": "handleGetGauges",
+      "description": "Obtener solo gauges (valores instantáneos)",
+      "request_schema_ref": null,
+      "response_schema_ref": "modules/metricas/schemas/metrics.json#/definitions/gauges_response"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics/timings",
+      "handler": "handleGetTimings",
+      "description": "Obtener timings de operaciones (últimos 1000)",
+      "request_schema_ref": null,
+      "response_schema_ref": "modules/metricas/schemas/metrics.json#/definitions/timings_response"
+    },
+    {
+      "method": "GET",
+      "path": "/metrics/eventos",
+      "handler": "handleGetEventMetrics",
+      "description": "Métricas agrupadas por tipo de evento",
+      "request_schema_ref": null,
+      "response_schema_ref": "modules/metricas/schemas/metrics.json#/definitions/event_metrics_response"
+    },
+    {
+      "method": "DELETE",
+      "path": "/metrics/reset",
+      "handler": "handleResetMetrics",
+      "description": "Resetear todas las métricas (admin only)",
+      "request_schema_ref": null,
+      "response_schema_ref": "modules/metricas/schemas/metrics.json#/definitions/reset_response"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del módulo de métricas",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "snapshot_interval_ms", "tipo": "number",  "valor_default": 10000 },
+      { "key": "max_timings_stored",   "tipo": "number",  "valor_default": 1000  },
+      { "key": "enable_alerts",        "tipo": "boolean", "valor_default": false  }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": false,
+      "counters": [],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Métricas del Sistema",
+    "icon": "📊",
+    "views_keys": ["main"],
+    "section_widget_types": ["dashboard"],
+    "permissions_declaradas": [],
+    "tamano_bytes": 314,
+    "endpoints_referenciados": ["/modules/metricas/metrics"],
+    "mqtt_topics_declarados": ["metricas.snapshot"]
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/metricas/schemas/events.json",
+      "modules/metricas/schemas/metrics.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 4629,
+    "module_json_lineas": 167,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "apis[*].response_schema declarado como objeto inline ($ref) en module.json — normalizado a string path en response_schema_ref",
+      "apis[3] (/metrics/timings) tiene query_params[] inline — campo no estándar en item de api, no capturado en apis_http",
+      "events.publishes[*].schema declarado inline ($ref) — no capturado en publica (solo event+description según contrato)",
+      "observability.logging.correlation_id=true — campo extra fuera del schema logging estándar, no capturado en observability_declarada",
+      "observability.metrics.comment presente — campo extra informativo, no capturado",
+      "provides.queries=['metricas.obtener','metricas.counters','metricas.gauges'] — subkey queries no capturada (solo provides.events → provides_eventos)"
+    ]
+  }
+}

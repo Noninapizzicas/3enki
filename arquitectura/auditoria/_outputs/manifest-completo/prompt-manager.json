@@ -1,0 +1,194 @@
+{
+  "_meta": {
+    "modulo": "prompt-manager",
+    "ubicacion": "modules/prompt-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "prompt-manager",
+    "version": "2.0.0",
+    "description_oficial": "Sistema de gestión de prompts con versionado, slots, presets y analytics. Usa database-manager para persistencia.",
+    "author": "Event Core Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_2_platform",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "prompt.created",       "description": null },
+      { "event": "prompt.updated",       "description": null },
+      { "event": "prompt.deleted",       "description": null },
+      { "event": "prompt.get.response",  "description": null },
+      { "event": "prompt.list.response", "description": null },
+      { "event": "preset.created",       "description": null },
+      { "event": "preset.deleted",       "description": null }
+    ],
+    "subscribes": [
+      { "event": "db.query.response",       "handler": "onQueryResponse",       "extras": {} },
+      { "event": "db.schema.init.response", "handler": "onSchemaInitResponse",  "extras": {} },
+      { "event": "prompt.get.request",      "handler": "onPromptGetRequest",    "extras": {} },
+      { "event": "prompt.list.request",     "handler": "onPromptListRequest",   "extras": {} },
+      { "event": "ai.completion.completed", "handler": null,                    "extras": {} },
+      { "event": "ai.request.started",      "handler": null,                    "extras": {} }
+    ],
+    "provides_eventos": [
+      "prompt-management",
+      "slot-management",
+      "preset-management",
+      "template-rendering",
+      "analytics"
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "prompt.list",
+      "description": "Lista prompts disponibles por slot type, categoría o tags. Útil para conocer qué prompts hay configurados en el sistema.",
+      "parameters_required": [],
+      "parameters_property_names": ["slot_type", "tag", "search"],
+      "parameters_size_chars": 358,
+      "parameters_full_path_hint": "modules/prompt-manager/module.json → tools[0].parameters"
+    },
+    {
+      "name": "prompt.get",
+      "description": "Obtiene el contenido completo de un prompt específico por ID o nombre.",
+      "parameters_required": [],
+      "parameters_property_names": ["id", "name"],
+      "parameters_size_chars": 153,
+      "parameters_full_path_hint": "modules/prompt-manager/module.json → tools[1].parameters"
+    },
+    {
+      "name": "prompt.render",
+      "description": "Renderiza un prompt con variables interpoladas. Las variables en el template usan formato {{variable}}.",
+      "parameters_required": [],
+      "parameters_property_names": ["id", "name", "variables"],
+      "parameters_size_chars": 231,
+      "parameters_full_path_hint": "modules/prompt-manager/module.json → tools[2].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "prompt",    "action": "list",      "handler": "handleUIList" },
+      { "domain": "prompt",    "action": "get",       "handler": "handleUIGet" },
+      { "domain": "prompt",    "action": "create",    "handler": "handleUICreate" },
+      { "domain": "prompt",    "action": "update",    "handler": "handleUIUpdate" },
+      { "domain": "prompt",    "action": "delete",    "handler": "handleUIDelete" },
+      { "domain": "prompt",    "action": "versions",  "handler": "handleUIVersions" },
+      { "domain": "preset",    "action": "list",      "handler": "handleUIPresetList" },
+      { "domain": "preset",    "action": "get",       "handler": "handleUIPresetGet" },
+      { "domain": "preset",    "action": "create",    "handler": "handleUIPresetCreate" },
+      { "domain": "preset",    "action": "delete",    "handler": "handleUIPresetDelete" },
+      { "domain": "preset",    "action": "apply",     "handler": "handleUIPresetApply" },
+      { "domain": "composer",  "action": "render",    "handler": "handleUIComposerRender" },
+      { "domain": "prompt",    "action": "analytics", "handler": "handleUIAnalytics" }
+    ]
+  },
+
+  "apis_http": [
+    { "method": "GET",    "path": "/ui/state",            "handler": "handleGetUIState",    "description": "Estado UI-ready con prompts agrupados por slot, presets y stats",   "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST",   "path": "/prompts",             "handler": "handleCreatePrompt",  "description": "Crear un nuevo prompt",                                              "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/prompts",             "handler": "handleListPrompts",   "description": "Listar todos los prompts (filtrar por slot_type, tag, search)",     "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/prompts/:id",         "handler": "handleGetPrompt",     "description": "Obtener un prompt específico",                                       "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "PUT",    "path": "/prompts/:id",         "handler": "handleUpdatePrompt",  "description": "Actualizar un prompt existente",                                     "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "DELETE", "path": "/prompts/:id",         "handler": "handleDeletePrompt",  "description": "Eliminar un prompt",                                                 "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/prompts/:id/versions","handler": "handleListVersions",  "description": "Listar versiones de un prompt",                                      "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST",   "path": "/prompts/:id/render",  "handler": "handleRenderTemplate","description": "Renderizar template de prompt con variables",                        "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST",   "path": "/presets",             "handler": "handleCreatePreset",  "description": "Crear un nuevo preset de slots",                                     "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/presets",             "handler": "handleListPresets",   "description": "Listar todos los presets",                                           "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/presets/:id",         "handler": "handleGetPreset",     "description": "Obtener un preset específico con sus slots",                         "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "DELETE", "path": "/presets/:id",         "handler": "handleDeletePreset",  "description": "Eliminar un preset",                                                 "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/analytics",           "handler": "handleGetAnalytics",  "description": "Obtener analytics de prompts",                                       "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/health",              "handler": "handleHealthCheck",   "description": "Health check del módulo",                                            "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/metrics",             "handler": "handleGetMetrics",    "description": "Métricas del módulo",                                                "request_schema_ref": null, "response_schema_ref": null }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": ["database-manager"],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "max_versions_per_prompt",    "tipo": "number",  "valor_default": 10 },
+      { "key": "enable_analytics",           "tipo": "boolean", "valor_default": true },
+      { "key": "analytics_retention_days",   "tipo": "number",  "valor_default": 90 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging":  { "level": null, "structured": null },
+    "metrics":  { "enabled": null, "counters": [], "gauges": [], "timings": [] }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/prompt-manager/schemas/create-prompt.json",
+      "modules/prompt-manager/schemas/render-template.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": ["ai", "prompts", "slots", "presets", "templates", "analytics"],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": true,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 6714,
+    "module_json_lineas": 223,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "publishes es array de strings (sin description): descriptions seteadas a null",
+      "subscribes mezcla objetos {event,handler} con strings bare ('ai.completion.completed', 'ai.request.started'): strings normalizados con handler=null",
+      "main no declarado: seteado a null",
+      "config es objeto (no array): normalizado a config_declarada[]"
+    ]
+  }
+}

@@ -1,0 +1,235 @@
+{
+  "_meta": {
+    "modulo": "scheduler",
+    "ubicacion": "modules/scheduler",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "scheduler",
+    "version": "1.0.0",
+    "description_oficial": "Advanced job scheduling module with multiple trigger types (cron, interval, datetime, event-based, condition, composite)",
+    "author": "Event-Core",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_2_platform",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": true
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "scheduler.job.created",   "description": "Job created successfully" },
+      { "event": "scheduler.job.updated",   "description": "Job updated" },
+      { "event": "scheduler.job.deleted",   "description": "Job deleted" },
+      { "event": "scheduler.job.enabled",   "description": "Job enabled" },
+      { "event": "scheduler.job.disabled",  "description": "Job disabled" },
+      { "event": "scheduler.job.triggered", "description": "Job triggered (manually or by schedule)" },
+      { "event": "scheduler.job.completed", "description": "Job execution completed successfully" },
+      { "event": "scheduler.job.failed",    "description": "Job execution failed" }
+    ],
+    "subscribes": [
+      {
+        "event": "scheduler.trigger.check",
+        "handler": "onTriggerCheck",
+        "extras": { "description": "Internal trigger check events" }
+      }
+    ],
+    "provides_eventos": [
+      "scheduler.job.created",
+      "scheduler.job.updated",
+      "scheduler.job.deleted",
+      "scheduler.job.enabled",
+      "scheduler.job.disabled",
+      "scheduler.job.triggered",
+      "scheduler.job.completed",
+      "scheduler.job.failed"
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "scheduler.list_jobs",
+      "description": "List all scheduled jobs with their status and next execution time",
+      "parameters_required": [],
+      "parameters_property_names": ["enabled", "triggerType"],
+      "parameters_size_chars": 267,
+      "parameters_full_path_hint": "modules/scheduler/module.json → tools[0].parameters"
+    },
+    {
+      "name": "scheduler.create_job",
+      "description": "Create a new scheduled job",
+      "parameters_required": ["name", "trigger", "action"],
+      "parameters_property_names": ["name", "description", "trigger", "action"],
+      "parameters_size_chars": 572,
+      "parameters_full_path_hint": "modules/scheduler/module.json → tools[1].parameters"
+    },
+    {
+      "name": "scheduler.trigger_job",
+      "description": "Manually trigger a job execution",
+      "parameters_required": ["jobId"],
+      "parameters_property_names": ["jobId"],
+      "parameters_size_chars": 111,
+      "parameters_full_path_hint": "modules/scheduler/module.json → tools[2].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    { "method": "GET",    "path": "/health",               "handler": "handleHealthCheck",     "description": "Health check endpoint",          "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/jobs",                 "handler": "handleListJobs",        "description": "List all jobs",                  "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/jobs/:jobId",          "handler": "handleGetJob",          "description": "Get job by ID",                  "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST",   "path": "/jobs",                 "handler": "handleCreateJob",       "description": "Create new job",                 "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "PUT",    "path": "/jobs/:jobId",          "handler": "handleUpdateJob",       "description": "Update job",                     "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "DELETE", "path": "/jobs/:jobId",          "handler": "handleDeleteJob",       "description": "Delete job",                     "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST",   "path": "/jobs/:jobId/enable",  "handler": "handleEnableJob",       "description": "Enable job",                     "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST",   "path": "/jobs/:jobId/disable", "handler": "handleDisableJob",      "description": "Disable job",                    "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST",   "path": "/jobs/:jobId/trigger", "handler": "handleTriggerJob",      "description": "Manually trigger job execution", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/triggers/types",       "handler": "handleGetTriggerTypes", "description": "List available trigger types",   "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/executions",           "handler": "handleListExecutions",  "description": "List recent job executions",     "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",    "path": "/stats",                "handler": "handleGetStats",        "description": "Get scheduler statistics",        "request_schema_ref": null, "response_schema_ref": null }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "jobsPath",        "tipo": "string",  "valor_default": "./data/scheduler/jobs.json" },
+      { "key": "autoSave",        "tipo": "boolean", "valor_default": true },
+      { "key": "saveInterval",    "tipo": "number",  "valor_default": 30000 },
+      { "key": "defaultTimezone", "tipo": "string",  "valor_default": "Europe/Madrid" },
+      { "key": "maxConcurrentJobs", "tipo": "number", "valor_default": 100 },
+      { "key": "defaultTimeout",  "tipo": "number",  "valor_default": 300000 },
+      { "key": "defaultRetries",  "tipo": "number",  "valor_default": 3 },
+      { "key": "defaultRetryDelay", "tipo": "number", "valor_default": 5000 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "scheduler.jobs.created",
+        "scheduler.jobs.deleted",
+        "scheduler.jobs.triggered",
+        "scheduler.jobs.completed",
+        "scheduler.jobs.failed"
+      ],
+      "gauges": [
+        "scheduler.jobs.total",
+        "scheduler.jobs.active",
+        "scheduler.jobs.disabled"
+      ],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/scheduler/schemas/events.json",
+      "modules/scheduler/schemas/job.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": ["icon", "uiActions"],
+    "snapshots": {
+      "icon": "⏰",
+      "provides": {
+        "events": [
+          "scheduler.job.created",
+          "scheduler.job.updated",
+          "scheduler.job.deleted",
+          "scheduler.job.enabled",
+          "scheduler.job.disabled",
+          "scheduler.job.triggered",
+          "scheduler.job.completed",
+          "scheduler.job.failed"
+        ],
+        "queries": [
+          "scheduler.jobs.list",
+          "scheduler.job.get",
+          "scheduler.triggers.types"
+        ]
+      },
+      "uiActions": [
+        { "domain": "scheduler", "action": "list",       "handler": "handleUIListJobs" },
+        { "domain": "scheduler", "action": "get",        "handler": "handleUIGetJob" },
+        { "domain": "scheduler", "action": "create",     "handler": "handleUICreateJob" },
+        { "domain": "scheduler", "action": "update",     "handler": "handleUIUpdateJob" },
+        { "domain": "scheduler", "action": "delete",     "handler": "handleUIDeleteJob" },
+        { "domain": "scheduler", "action": "enable",     "handler": "handleUIEnableJob" },
+        { "domain": "scheduler", "action": "disable",    "handler": "handleUIDisableJob" },
+        { "domain": "scheduler", "action": "trigger",    "handler": "handleUITriggerJob" },
+        { "domain": "scheduler", "action": "triggers",   "handler": "handleUIGetTriggerTypes" },
+        { "domain": "scheduler", "action": "stats",      "handler": "handleUIGetStats" },
+        { "domain": "scheduler", "action": "executions", "handler": "handleUIListExecutions" }
+      ]
+    }
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 7650,
+    "module_json_lineas": 317,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "uiActions es campo no canónico — no es ui_handlers ni handlers; items capturados en outliers_capturados.snapshots.uiActions",
+      "observability.metrics.histograms presente en module.json pero no mapeado en schema (solo counters/gauges/timings se capturan)",
+      "tools[].handler declarado en module.json pero no es campo del schema de tools — campo ignorado en extracción",
+      "observability.logging.correlation_id declarado pero no mapeado en schema"
+    ]
+  }
+}

@@ -1,0 +1,152 @@
+{
+  "_meta": {
+    "modulo": "conversacion/ai-gateway",
+    "ubicacion": "modules/conversacion/ai-gateway",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "ai-gateway",
+    "version": "1.0.0",
+    "description_oficial": "Ejecutor del LLM. Dos entry points: chat.prompt.ready (flujo de chat) y llm.complete.request (flujo genérico, usado por agentes). Internamente comparten _executeLLM (agentic loop con tools, providers con fallback, credentials event-driven).",
+    "author": "Event Core Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_3_core",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "ai.chat.response",          "description": null },
+      { "event": "llm.complete.response",      "description": null },
+      { "event": "credential.resolve.request", "description": null },
+      { "event": "fs.read.request",            "description": null }
+    ],
+    "subscribes": [
+      { "event": "chat.prompt.ready",           "handler": "onChatPromptReady",     "extras": {} },
+      { "event": "llm.complete.request",        "handler": "onLlmCompleteRequest",  "extras": {} },
+      { "event": "credential.resolve.response", "handler": "onCredentialResponse",  "extras": {} },
+      { "event": "credential.saved",            "handler": "onCredentialSaved",     "extras": {} },
+      { "event": "credential.updated",          "handler": "onCredentialSaved",     "extras": {} },
+      { "event": "credential.deleted",          "handler": "onCredentialDeleted",   "extras": {} },
+      { "event": "fs.read.response",            "handler": "onFsReadResponse",      "extras": {} }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      {
+        "key": "providers",
+        "tipo": "object",
+        "valor_default": {
+          "deepseek":   { "enabled": true, "priority": 1, "api_base": "https://api.deepseek.com/v1", "default_model": "deepseek-chat", "models": ["deepseek-chat","deepseek-coder","deepseek-reasoner"] },
+          "anthropic":  { "enabled": true, "priority": 2, "api_base": "https://api.anthropic.com/v1", "default_model": "claude-3-5-sonnet-20241022", "models": ["claude-3-5-sonnet-20241022","claude-3-opus-20240229","claude-3-haiku-20240307"] },
+          "openai":     { "enabled": true, "priority": 3, "api_base": "https://api.openai.com/v1", "default_model": "gpt-4o-mini", "models": ["gpt-4o","gpt-4o-mini","gpt-3.5-turbo"] },
+          "groq":       { "enabled": true, "priority": 4, "api_base": "https://api.groq.com/openai/v1", "default_model": "llama-3.3-70b-versatile", "models": ["llama-3.3-70b-versatile","mixtral-8x7b-32768","gemma2-9b-it"] },
+          "gemini":     { "enabled": true, "priority": 5, "api_base": "https://generativelanguage.googleapis.com/v1beta", "default_model": "gemini-2.5-flash", "models": ["gemini-2.5-flash","gemini-2.5-pro"] },
+          "ollama":     { "enabled": true, "priority": 6, "api_base": "http://localhost:11434/api", "default_model": "llama2", "models": ["llama2","codellama","mistral","mixtral"] },
+          "claude-cli": { "enabled": true, "priority": 7, "cli_path": "claude", "default_model": "sonnet", "models": ["sonnet","opus","haiku"] }
+        }
+      },
+      {
+        "key": "retry",
+        "tipo": "object",
+        "valor_default": { "max_attempts": 3, "initial_delay_ms": 1000, "max_delay_ms": 10000, "backoff_multiplier": 2 }
+      },
+      {
+        "key": "max_tool_iterations",
+        "tipo": "number",
+        "valor_default": 10
+      },
+      {
+        "key": "tool_timeout_ms",
+        "tipo": "number",
+        "valor_default": 150000
+      }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": { "level": null, "structured": null },
+    "metrics": { "enabled": null, "counters": [], "gauges": [], "timings": [] }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": false,
+    "readme": false,
+    "tests_propios": true
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": true,
+    "ubicacion": "_archived/2026-02-13_otros-modulos/modules/ai-gateway"
+  },
+
+  "quirks": {
+    "eventos_top_level": true,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 2640,
+    "module_json_lineas": 37,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "publishes es array de strings, no array de objetos con {event, description} — descriptions seteadas a null",
+      "subscribes no tienen 'extras' en module.json — extras normalizados a {}",
+      "main ausente en module.json — seteado a null"
+    ]
+  }
+}

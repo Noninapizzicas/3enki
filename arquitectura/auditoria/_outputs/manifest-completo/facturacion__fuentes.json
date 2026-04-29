@@ -1,0 +1,144 @@
+{
+  "_meta": {
+    "modulo": "facturacion/fuentes",
+    "ubicacion": "modules/facturacion/fuentes",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "fuentes",
+    "version": "1.1.0",
+    "description_oficial": "Adaptadores de fuentes de entrada para facturas: Telegram, Gmail, y extensible a más",
+    "author": "Event-Core Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_facturacion",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "factura.entrada", "description": null }
+    ],
+    "subscribes": [
+      { "event": "telegram.photo.received",    "handler": "onTelegramPhoto",    "extras": {} },
+      { "event": "telegram.document.received", "handler": "onTelegramDocument", "extras": {} }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": "handlers",
+    "items": [
+      { "domain": "fuentes", "action": "status",      "handler": "handleStatus" },
+      { "domain": "fuentes", "action": "get-config",  "handler": "handleGetConfig" },
+      { "domain": "fuentes", "action": "save-config", "handler": "handleSaveConfig" },
+      { "domain": "fuentes", "action": "check-gmail", "handler": "handleCheckGmail" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": ["channel-manager"],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      {
+        "key": "telegram",
+        "tipo": "object",
+        "valor_default": {
+          "tipos_permitidos": ["image/jpeg", "image/png", "image/webp", "image/tiff", "application/pdf"]
+        }
+      },
+      {
+        "key": "gmail",
+        "tipo": "object",
+        "valor_default": {
+          "tipos_permitidos": ["application/pdf", "image/jpeg", "image/png"],
+          "query_default": "has:attachment is:unread",
+          "max_results": 20
+        }
+      }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": null,
+      "structured": null
+    },
+    "metrics": {
+      "enabled": null,
+      "counters": [],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "handlers",
+    "module_json_bytes": 1159,
+    "module_json_lineas": 36,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "events.publishes contiene strings, no objetos — description inferida como null",
+      "handlers[].method normalizado a handler en el output"
+    ]
+  }
+}

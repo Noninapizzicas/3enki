@@ -1,0 +1,154 @@
+{
+  "_meta": {
+    "modulo": "facturacion/asesoria",
+    "ubicacion": "modules/facturacion/asesoria",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "asesoria",
+    "version": "1.0.0",
+    "description_oficial": "Generación de paquetes (CSV + originales) para asesoría contable",
+    "author": "Event-Core Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_facturacion",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "asesoria.paquete.generado", "description": null },
+      { "event": "asesoria.paquete.error",    "description": null }
+    ],
+    "subscribes": [],
+    "provides_eventos": []
+  },
+
+  "tools": [
+    {
+      "name": "asesoria.generar-paquete",
+      "description": "Genera paquete CSV + ZIP con facturas procesadas para la asesoría contable",
+      "parameters_required": ["projectId"],
+      "parameters_property_names": ["projectId", "periodo", "incluirOriginales"],
+      "parameters_size_chars": 322,
+      "parameters_full_path_hint": "modules/facturacion/asesoria/module.json → tools[0].parameters"
+    },
+    {
+      "name": "asesoria.historial",
+      "description": "Lista paquetes generados previamente para la asesoría",
+      "parameters_required": ["projectId"],
+      "parameters_property_names": ["projectId"],
+      "parameters_size_chars": 85,
+      "parameters_full_path_hint": "modules/facturacion/asesoria/module.json → tools[1].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "handlers",
+    "items": [
+      { "domain": "asesoria", "action": "generar-paquete", "handler": "handleGenerarPaquete" },
+      { "domain": "asesoria", "action": "historial",       "handler": "handleHistorial" },
+      { "domain": "asesoria", "action": "descargar",       "handler": "handleDescargar" },
+      { "domain": "asesoria", "action": "preview",         "handler": "handlePreview" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "csv.separator",    "tipo": "string",  "valor_default": ";" },
+      { "key": "csv.decimal",      "tipo": "string",  "valor_default": "," },
+      { "key": "csv.bom",          "tipo": "boolean", "valor_default": true },
+      { "key": "timeouts.db",      "tipo": "number",  "valor_default": 30000 },
+      { "key": "timeouts.zip",     "tipo": "number",  "valor_default": 60000 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "asesoria.paquetes.generados.total",
+        "asesoria.paquetes.errores.total"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": true,
+    "ui_handlers_field_name": "handlers",
+    "module_json_bytes": 2191,
+    "module_json_lineas": 80,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "handlers[].method normalizado → handler en ui_handlers.items",
+      "observability usa 'histograms' en lugar de 'timings' (campo no canónico en metrics)",
+      "config es objeto anidado en module.json, aplanado a config_declarada con keys compuestas",
+      "events usa forma top-level (events.publishes / events.subscribes) — quirks.eventos_top_level=true",
+      "events.publishes contiene strings (sin description) — description seteado a null"
+    ]
+  }
+}

@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://2enki/arquitectura/auditoria/_schemas/eventos-emitidos.schema.json",
+  "title": "Eventos emitidos por un módulo (parcela eventos-emitidos v1.0.0)",
+  "description": "Schema estricto. Descriptivo, no prescriptivo. additionalProperties:false en todos los niveles.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_meta", "archivos_analizados", "eventos_emitidos", "consistencia_con_manifest", "patrones_observados", "quirks"],
+
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modulo", "ubicacion", "auditado_en", "parcela", "parcela_version", "manifest_referencia"],
+      "properties": {
+        "modulo":              { "type": "string", "minLength": 1 },
+        "ubicacion":           { "type": "string", "pattern": "^modules/" },
+        "auditado_en":         { "type": "string", "format": "date" },
+        "parcela":             { "const": "eventos-emitidos" },
+        "parcela_version":     { "const": "1.0.0" },
+        "manifest_referencia": { "type": "string", "pattern": "^arquitectura/auditoria/_outputs/manifest-completo/" }
+      }
+    },
+
+    "archivos_analizados": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "lineas", "publishes_count"],
+        "properties": {
+          "path":            { "type": "string", "pattern": "^modules/" },
+          "lineas":          { "type": "integer", "minimum": 0 },
+          "publishes_count": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+
+    "eventos_emitidos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["indice", "nombre", "ubicacion", "contexto", "payload", "canal", "es_await", "es_return", "snippet"],
+        "properties": {
+          "indice": { "type": "integer", "minimum": 1 },
+
+          "nombre": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tipo", "valor", "variables_referenciadas"],
+            "properties": {
+              "tipo":  { "enum": ["literal", "dynamic_template", "variable", "otro"] },
+              "valor": { "type": "string", "minLength": 1 },
+              "variables_referenciadas": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+
+          "ubicacion": {
+            "type": "string",
+            "pattern": "^modules/.*:[0-9]+$"
+          },
+
+          "contexto": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["metodo_contenedor", "es_handler_de", "bloque_logico"],
+            "properties": {
+              "metodo_contenedor": { "type": ["string", "null"] },
+              "es_handler_de":     { "type": ["string", "null"] },
+              "bloque_logico":     { "type": ["string", "null"] }
+            }
+          },
+
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tipo", "campos_visibles", "tiene_request_id", "tiene_correlation_id", "tiene_project_id", "campos_con_template_literal"],
+            "properties": {
+              "tipo":                          { "enum": ["object_literal", "spread", "variable", "sin_payload", "mixto"] },
+              "campos_visibles":               { "type": "array", "items": { "type": "string" } },
+              "tiene_request_id":              { "type": "boolean" },
+              "tiene_correlation_id":          { "type": "boolean" },
+              "tiene_project_id":              { "type": "boolean" },
+              "campos_con_template_literal":   { "type": "array", "items": { "type": "string" } }
+            }
+          },
+
+          "canal": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tipo", "expresion_usada"],
+            "properties": {
+              "tipo":            { "enum": ["eventBus", "mqtt_directo", "otro"] },
+              "expresion_usada": { "type": "string", "minLength": 1 }
+            }
+          },
+
+          "es_await":  { "type": "boolean" },
+          "es_return": { "type": "boolean" },
+          "snippet":   { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "consistencia_con_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publishes_declarados_en_manifest", "literales_unicos_emitidos", "patrones_dinamicos_emitidos", "declarados_no_emitidos_en_codigo", "emitidos_no_declarados_en_manifest"],
+      "properties": {
+        "publishes_declarados_en_manifest":  { "type": "array", "items": { "type": "string" } },
+        "literales_unicos_emitidos":         { "type": "array", "items": { "type": "string" } },
+        "patrones_dinamicos_emitidos":       { "type": "array", "items": { "type": "string" } },
+        "declarados_no_emitidos_en_codigo":  { "type": "array", "items": { "type": "string" } },
+        "emitidos_no_declarados_en_manifest":{ "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "patrones_observados": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canales_usados", "publishes_por_canal", "publishes_con_request_id", "publishes_con_correlation_id", "publishes_con_project_id", "publishes_await", "publishes_return", "publishes_dinamicos", "comentarios_explicativos"],
+      "properties": {
+        "canales_usados": {
+          "type": "array",
+          "items": { "enum": ["eventBus", "mqtt_directo", "otro"] }
+        },
+        "publishes_por_canal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventBus", "mqtt_directo", "otro"],
+          "properties": {
+            "eventBus":     { "type": "integer", "minimum": 0 },
+            "mqtt_directo": { "type": "integer", "minimum": 0 },
+            "otro":         { "type": "integer", "minimum": 0 }
+          }
+        },
+        "publishes_con_request_id":     { "type": "integer", "minimum": 0 },
+        "publishes_con_correlation_id": { "type": "integer", "minimum": 0 },
+        "publishes_con_project_id":     { "type": "integer", "minimum": 0 },
+        "publishes_await":              { "type": "integer", "minimum": 0 },
+        "publishes_return":             { "type": "integer", "minimum": 0 },
+        "publishes_dinamicos":          { "type": "integer", "minimum": 0 },
+        "comentarios_explicativos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ubicacion", "comentario_literal", "publish_relacionado_indice"],
+            "properties": {
+              "ubicacion":                  { "type": "string", "pattern": "^modules/.*:[0-9]+$" },
+              "comentario_literal":         { "type": "string" },
+              "publish_relacionado_indice": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+
+    "quirks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["warnings", "publishes_count_total", "publishes_unicos_literales_count", "archivos_lib_existe", "archivos_services_existe"],
+      "properties": {
+        "warnings":                          { "type": "array", "items": { "type": "string" } },
+        "publishes_count_total":             { "type": "integer", "minimum": 0 },
+        "publishes_unicos_literales_count":  { "type": "integer", "minimum": 0 },
+        "archivos_lib_existe":               { "type": "boolean" },
+        "archivos_services_existe":          { "type": "boolean" }
+      }
+    }
+  }
+}

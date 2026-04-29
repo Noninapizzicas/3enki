@@ -1,0 +1,269 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/menu-generator",
+    "ubicacion": "modules/pizzepos/menu-generator",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__menu-generator.json"
+  },
+
+  "identidad": {
+    "name": "menu-generator",
+    "version": "6.1.0",
+    "description_oficial": "Genera cartas estructuradas en JSON desde cualquier input: fotos, PDF, texto. Pipeline OCR determinista (Google Vision) + agente IA para estructuración. Siempre pregunta el nombre.",
+    "author": "Pizzepos Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/pizzepos/menu-generator/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_6_ui",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "menu.generation.progress", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/menu-generator/index.js:83",
+        "metodo_contenedor": "toolGenerate (probable, vía handleGenerate o onCartaGenerarSolicitada)",
+        "es_handler_de": null,
+        "bloque_logico": "step='extracting' — antes de OCR pipeline",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "nombre", "step", "message"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('menu.generation.progress', {\n        project_id, nombre, step: 'extracting', message: 'Extrayendo texto...'\n      });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "menu.generation.failed", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/menu-generator/index.js:91",
+        "metodo_contenedor": "toolGenerate",
+        "es_handler_de": null,
+        "bloque_logico": "fail path tras error en OCR pipeline",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "nombre", "step", "error"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "        await this.eventBus.publish('menu.generation.failed', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "menu.generation.progress", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/menu-generator/index.js:105",
+        "metodo_contenedor": "toolGenerate",
+        "es_handler_de": null,
+        "bloque_logico": "step='structuring' — antes de invocar agente menu-structurer",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "nombre", "step", "message"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('menu.generation.progress', {\n      project_id, nombre, step: 'structuring', message: 'Estructurando carta con IA...'\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "agent.execute.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/menu-generator/index.js:109",
+        "metodo_contenedor": "toolGenerate",
+        "es_handler_de": null,
+        "bloque_logico": "tras OCR — invoca agente 'menu-structurer' del ai-agent-framework para estructurar el JSON",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["agentName", "context"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('agent.execute.request', {\n      agentName: 'menu-structurer',\n      context: { texto, project_id, nombre }\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.generar.fallida", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/menu-generator/index.js:308",
+        "metodo_contenedor": "onCartaGenerarSolicitada",
+        "es_handler_de": "carta.generar.solicitada (legacy en español)",
+        "bloque_logico": "result.error path tras toolGenerate",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "nombre", "error"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "        await this.eventBus.publish('carta.generar.fallida', {\n          request_id, correlation_id, project_id, nombre, error: result.error\n        });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.generar.iniciada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/menu-generator/index.js:318",
+        "metodo_contenedor": "onCartaGenerarSolicitada",
+        "es_handler_de": "carta.generar.solicitada",
+        "bloque_logico": "tras lanzar pipeline exitosamente — el resultado real se cierra cuando carta-manager emite carta.actualizada (loop explícito documentado en comentario línea 316)",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "nombre", "pipeline", "message"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      // se guarde vía carta.save → carta-manager emite carta.actualizada (ver eventos-dominio.json).\n      // Para cerrar el loop explícitamente, emitimos también carta.generar.iniciada.\n      await this.eventBus.publish('carta.generar.iniciada', {\n        request_id, correlation_id, project_id, nombre,\n        pipeline: result.data?.pipeline, message: result.data?.message\n      });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.generar.fallida", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/menu-generator/index.js:324",
+        "metodo_contenedor": "onCartaGenerarSolicitada",
+        "es_handler_de": "carta.generar.solicitada",
+        "bloque_logico": "catch path",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "nombre", "error"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('carta.generar.fallida', {\n        request_id, correlation_id, project_id, nombre, error: err.message\n      });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "carta.generar.solicitada", "tipo_nombre": "literal", "handler": "onCartaGenerarSolicitada", "handler_ubicacion": "modules/pizzepos/menu-generator/index.js:302", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/pizzepos/menu-generator/index.js:324", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["menu.generation.progress", "menu.generation.failed", "agent.execute.request", "carta.generar.iniciada", "carta.generar.fallida"],
+      "publica_literales_en_codigo": ["agent.execute.request", "carta.generar.fallida", "carta.generar.iniciada", "menu.generation.failed", "menu.generation.progress"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["carta.generar.solicitada"],
+      "subscribes_realmente_registrados": ["carta.generar.solicitada"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [
+    { "name": "menu.generate", "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "handleGenerate", "handler_ubicacion": "modules/pizzepos/menu-generator/index.js:286", "retorno": { "tipo": "object", "shape_inferido": { "data": { "pipeline": "string", "message": "string" }, "error": "string?" }, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["menu.generation.progress", "menu.generation.failed", "agent.execute.request"] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "services", "tipo": "Object", "ubicacion_init": "modules/pizzepos/menu-generator/index.js:41", "se_invalida_con": "instanciado en onLoad — vive con la instancia (interno: pipeline OCR + structurer agent invoker)", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [],
+      "notas_concurrencia": "menu-generator NO persiste — produce JSON estructurado y delega al agente menu-structurer que llama a carta.save (carta-manager). Es PUERTA DE ENTRADA del ecosistema cartas: ingiere input → produce JSON → handoff a agente."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": [
+      { "valor": "menu-structurer (nombre del agente IA)", "ubicacion": "modules/pizzepos/menu-generator/index.js:110", "naturaleza": "otro" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/pizzepos/menu-generator/index.js:44",
+      "acciones": [
+        "guarda this.logger / this.eventBus / this.metrics",
+        "instancia this.services (pipeline OCR + structurer agent invoker)",
+        "logger.info('module.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus", "this.metrics"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/pizzepos/menu-generator/index.js:52",
+      "acciones": ["logger.info('module.unloaded')"],
+      "estado_no_limpiado": ["services (en GC)"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "ai-agent-framework",            "via_evento": "agent.execute.request",                "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/menu-generator/index.js:109", "es_cross_vertical": false },
+    { "modulo_dependido": "pizzepos/carta-manager",        "via_evento": "indirecto: agente menu-structurer llama a tool carta.save",   "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/menu-generator/index.js:316 (comentario explica el handoff)", "es_cross_vertical": false },
+    { "modulo_dependido": "Google Vision (provider externo)", "via_evento": "via this.services (pipeline OCR)",  "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/menu-generator/index.js (services interno)", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "Google Vision OCR",      "que_pasa_si_cae": "logger.warn 'menu.extract.sharp_failed' o similar; pipeline continúa con texto parcial o emite menu.generation.failed.", "evidencia": "modules/pizzepos/menu-generator/index.js:171" },
+    { "dependencia": "agente menu-structurer", "que_pasa_si_cae": "agent.execute.request fire-and-forget; si el agente falla, el JSON nunca se guarda y carta-manager nunca emite carta.actualizada (loop incompleto).", "evidencia": "modules/pizzepos/menu-generator/index.js:109" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('menu.<accion>' | 'module.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "version", "filePath", "project_id", "page", "error"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('module.loaded', { module: this.name, version: this.version });",   "ubicacion": "modules/pizzepos/menu-generator/index.js:49"  },
+        { "snippet": "this.logger.info('menu.generate.extracting', { filePath, project_id });",            "ubicacion": "modules/pizzepos/menu-generator/index.js:81"  },
+        { "snippet": "this.logger.info('menu.generate.structuring', { ... });",                              "ubicacion": "modules/pizzepos/menu-generator/index.js:119" },
+        { "snippet": "this.logger.warn('menu.extract.sharp_failed', { page: img.page, error: prepared.error });", "ubicacion": "modules/pizzepos/menu-generator/index.js:171" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": true,
+      "evidencia": "onCartaGenerarSolicitada extrae correlation_id del payload entrante y lo propaga en payloads de carta.generar.iniciada/.fallida (líneas 308-326). Sin embargo, los publishes de menu.generation.X NO llevan correlation_id."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": true,
+    "ubicacion": "_archived/2026-02-13_otros-modulos/modules/menu-generator",
+    "diferencia_aproximada": "versión anterior archivada en snapshot de febrero 2026"
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/pizzepos/menu-generator/index.js:316", "comentario_literal": "se guarde vía carta.save → carta-manager emite carta.actualizada (ver eventos-dominio.json). Para cerrar el loop explícitamente, emitimos también carta.generar.iniciada.", "contexto": "explica el handoff al ecosistema cartas: el JSON se guarda via carta-manager, este emite el evento canónico carta.actualizada que escuchan carta-digital, carta-impresion, carta-marketing, etc." }
+    ],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 332,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "08f170f",
+      "fecha": "2026-04-22 09:31:19 +0000",
+      "subject": "refactor(prompt-engine): separar context.json de prompt.json por módulo"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": ["pipeline"],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "ECOSISTEMA CARTAS — PUERTA DE ENTRADA: menu-generator es el módulo que ingiere (foto/PDF/audio/dictado/texto) y produce JSON estructurado de carta. A partir de ahí: carta-manager (CRUD), carta-digital (pública), carta-impresion (HTML), carta-design (estilos), tarifas (precios), carta-marketing (agentes), carta-scheduler (programación). Todos comparten el evento canónico carta.actualizada como hub.",
+      "Loop conceptual documentado (comentario línea 316): menu-generator → menu.generate tool → handleGenerate → invoke agent menu-structurer → agente llama tool carta.save → carta-manager guarda y emite carta.actualizada → resto de ecosistema escucha.",
+      "0 drift en publica/subscribes — manifest 100% honesto",
+      "Tracing parcial: legacy carta.generar.X propaga correlation_id, nuevos menu.generation.X no",
+      "Outlier en manifest: 'pipeline' (capturado en outliers — único en repo)",
+      "Versión archivada existe en _archived/2026-02-13"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "ui_handlers (no expone MQTT UI)",
+      "apis_http (no expone HTTP)",
+      "estado.persistencia.* (NO persiste — delega a carta-manager via agente)",
+      "configuracion.env_vars / module_json_config_keys / paths_proyecto",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / workarounds_detectados"
+    ]
+  }
+}

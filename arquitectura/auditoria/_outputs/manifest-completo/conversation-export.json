@@ -1,0 +1,184 @@
+{
+  "_meta": {
+    "modulo": "conversation-export",
+    "ubicacion": "modules/conversation-export",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "conversation-export",
+    "version": "1.0.0",
+    "description_oficial": "Endpoints HTTP públicos para exportar conversaciones completas (mensajes + tool calls + eventos de agentes + errores) en JSON optimizado para análisis por LLMs externos. Autenticación por token.",
+    "author": "Pizzepos Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [],
+    "subscribes": [
+      { "event": "db.query.response", "handler": "_onDbQueryResponse", "extras": {} },
+      { "event": "activity.logged",   "handler": null,                  "extras": {} },
+      { "event": "agent.failed",      "handler": null,                  "extras": {} },
+      { "event": "agent.completed",   "handler": null,                  "extras": {} }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealth",
+      "description": "Health check. Indica si hay token configurado.",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/sessions/:project_id",
+      "handler": "handleListSessions",
+      "description": "Lista las sesiones recientes de un proyecto. Query: ?token=X&limit=20",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/session/:session_id",
+      "handler": "handleGetSession",
+      "description": "Export completo de una sesión. Query: ?token=X&project_id=Y&verbose=true",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/latest/:project_id",
+      "handler": "handleGetLatest",
+      "description": "Export de la sesión más reciente de un proyecto. Query: ?token=X&verbose=true",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": ["database-manager"],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "token",       "tipo": "null",   "valor_default": null },
+      { "key": "_token_note", "tipo": "string", "valor_default": "Configurar token aquí o via ENV CONVERSATION_EXPORT_TOKEN. El token se pasa como ?token=... en las URLs de los endpoints." }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging":  { "level": null, "structured": null },
+    "metrics":  { "enabled": null, "counters": [], "gauges": [], "timings": [] }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": false,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": ["export", "debug", "conversation", "observability"],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {
+      "apis": [
+        {
+          "method": "GET",
+          "path": "/health",
+          "handler": "handleHealth",
+          "description": "Health check. Indica si hay token configurado."
+        },
+        {
+          "method": "GET",
+          "path": "/sessions/:project_id",
+          "handler": "handleListSessions",
+          "description": "Lista las sesiones recientes de un proyecto. Query: ?token=X&limit=20"
+        },
+        {
+          "method": "GET",
+          "path": "/session/:session_id",
+          "handler": "handleGetSession",
+          "description": "Export completo de una sesión. Query: ?token=X&project_id=Y&verbose=true"
+        },
+        {
+          "method": "GET",
+          "path": "/latest/:project_id",
+          "handler": "handleGetLatest",
+          "description": "Export de la sesión más reciente de un proyecto. Query: ?token=X&verbose=true"
+        }
+      ],
+      "config": {
+        "token": null,
+        "_token_note": "Configurar token aquí o via ENV CONVERSATION_EXPORT_TOKEN. El token se pasa como ?token=... en las URLs de los endpoints."
+      }
+    }
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": true,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 1711,
+    "module_json_lineas": 57,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "subscribes declarado top-level (no dentro de events{}): quirk eventos_top_level=true",
+      "2 de 4 subscribers tienen handler=null: activity.logged, agent.failed, agent.completed — posiblemente escucha pasiva sin handler declarado",
+      "config usa clave _token_note (interna/comentario) mezclada con config real — incluida en config_declarada y outliers",
+      "apis es clave no canónica (canónica es routes); mapeado a apis_http para normalización",
+      "No hay agents/, prompts/, schemas/, __tests__/, context.json, prompt.json ni README — módulo muy desnudo"
+    ]
+  }
+}

@@ -1,0 +1,493 @@
+{
+  "_meta": {
+    "modulo": "filesystem",
+    "ubicacion": "modules/filesystem",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/filesystem.json"
+  },
+
+  "identidad": {
+    "name": "filesystem",
+    "version": "1.0.0",
+    "description_oficial": "Core filesystem operations for the entire system",
+    "author": "Aichat Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/filesystem/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_1_infra",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "archivo.listado", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:69",
+        "metodo_contenedor": "onArchivoListarSolicitado",
+        "es_handler_de": "archivo.listar.solicitado (legacy en español)",
+        "bloque_logico": "success path tras handleList",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "path", "files"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('archivo.listado', {\n        request_id, correlation_id, project_id, path: p, files: ...\n      });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "archivo.listar.fallido", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:75",
+        "metodo_contenedor": "onArchivoListarSolicitado",
+        "es_handler_de": "archivo.listar.solicitado (legacy en español)",
+        "bloque_logico": "catch path tras error en handleList",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "path", "error"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('archivo.listar.fallido', {\n        request_id, correlation_id, project_id, path: p, error: err.message\n      });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "archivo.leido", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:87",
+        "metodo_contenedor": "onArchivoLeerSolicitado",
+        "es_handler_de": "archivo.leer.solicitado (legacy en español)",
+        "bloque_logico": "success path tras handleRead",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "path", "content"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('archivo.leido', {\n        request_id, correlation_id, project_id, path: p, content: ...\n      });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "archivo.leer.fallido", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:93",
+        "metodo_contenedor": "onArchivoLeerSolicitado",
+        "es_handler_de": "archivo.leer.solicitado (legacy en español)",
+        "bloque_logico": "catch path",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "path", "error"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('archivo.leer.fallido', { request_id, correlation_id, project_id, path: p, error: err.message });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "archivo.borrado", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:105",
+        "metodo_contenedor": "onArchivoBorrarSolicitado",
+        "es_handler_de": "archivo.borrar.solicitado (legacy en español)",
+        "bloque_logico": "success path",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "path"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('archivo.borrado', { request_id, correlation_id, project_id, path: p });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "archivo.borrar.fallido", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:109",
+        "metodo_contenedor": "onArchivoBorrarSolicitado",
+        "es_handler_de": "archivo.borrar.solicitado (legacy en español)",
+        "bloque_logico": "catch path",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "path", "error"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('archivo.borrar.fallido', { request_id, correlation_id, project_id, path: p, error: err.message });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.write.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:207",
+        "metodo_contenedor": "onWriteRequest",
+        "es_handler_de": "fs.write.request",
+        "bloque_logico": "tras handleWrite — patrón uniforme {request_id, ...result}",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('fs.write.response', { request_id, ...result });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.copy.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:225",
+        "metodo_contenedor": "onCopyRequest",
+        "es_handler_de": "fs.copy.request",
+        "bloque_logico": "tras handleCopy — patrón uniforme",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('fs.copy.response', { request_id, ...result });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.read.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:239",
+        "metodo_contenedor": "onReadRequest",
+        "es_handler_de": "fs.read.request",
+        "bloque_logico": "tras handleRead — patrón uniforme",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('fs.read.response', { request_id, ...result });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.delete.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:253",
+        "metodo_contenedor": "onDeleteRequest",
+        "es_handler_de": "fs.delete.request",
+        "bloque_logico": "tras handleDelete — patrón uniforme",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('fs.delete.response', { request_id, ...result });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.list.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:267",
+        "metodo_contenedor": "onListRequest",
+        "es_handler_de": "fs.list.request",
+        "bloque_logico": "tras handleList — patrón uniforme",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('fs.list.response', { request_id, ...result });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.mkdir.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:281",
+        "metodo_contenedor": "onMkdirRequest",
+        "es_handler_de": "fs.mkdir.request",
+        "bloque_logico": "tras handleMkdir — patrón uniforme",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('fs.mkdir.response', { request_id, ...result });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "variable", "valor": "responseEvent", "variables_referenciadas": ["responseEvent"] },
+        "ubicacion": "modules/filesystem/index.js:300",
+        "metodo_contenedor": "onMoveRequest",
+        "es_handler_de": "fs.move.request | fs.rename.request",
+        "bloque_logico": "responseEvent = event.event.includes('rename') ? 'fs.rename.response' : 'fs.move.response' — un único handler para 2 eventos",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    const responseEvent = event?.event?.includes('rename') ? 'fs.rename.response' : 'fs.move.response';\n    await this.eventBus.publish(responseEvent, { request_id, ...result });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.exists.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:316",
+        "metodo_contenedor": "onExistsRequest",
+        "es_handler_de": "fs.exists.request",
+        "bloque_logico": "success path — archivo existe; reporta type (directory|file)",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "exists", "path", "type"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('fs.exists.response', {\n        request_id, success: true, exists: true, path,\n        type: stats.isDirectory() ? 'directory' : 'file'\n      });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.exists.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:325",
+        "metodo_contenedor": "onExistsRequest",
+        "es_handler_de": "fs.exists.request",
+        "bloque_logico": "ENOENT path — archivo no existe pero respuesta success=true (operación OK)",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "exists", "path"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "        await this.eventBus.publish('fs.exists.response', { request_id, success: true, exists: false, path });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.exists.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:332",
+        "metodo_contenedor": "onExistsRequest",
+        "es_handler_de": "fs.exists.request",
+        "bloque_logico": "error path — error distinto a ENOENT",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "error"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "        await this.eventBus.publish('fs.exists.response', { request_id, success: false, error: error.message });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.info.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:349",
+        "metodo_contenedor": "onInfoRequest",
+        "es_handler_de": "fs.info.request",
+        "bloque_logico": "tras handleInfo — patrón uniforme",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('fs.info.response', { request_id, ...result });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.append.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:372",
+        "metodo_contenedor": "onAppendRequest",
+        "es_handler_de": "fs.append.request",
+        "bloque_logico": "success path — append directo via fs.appendFile",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "message", "path", "size"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": ["message"] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('fs.append.response', {\n        request_id, success: true,\n        message: `Content appended to ${path}`, path, size: stats.size\n      });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.append.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:380",
+        "metodo_contenedor": "onAppendRequest",
+        "es_handler_de": "fs.append.request",
+        "bloque_logico": "catch path",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "error"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('fs.append.response', { request_id, success: false, error: error.message });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.search.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:396",
+        "metodo_contenedor": "onSearchRequest",
+        "es_handler_de": "fs.search.request",
+        "bloque_logico": "tras handleSearch — patrón uniforme",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('fs.search.response', { request_id, ...result });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.stats.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:410",
+        "metodo_contenedor": "onStatsRequest",
+        "es_handler_de": "fs.stats.request",
+        "bloque_logico": "tras handleStats — patrón uniforme",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('fs.stats.response', { request_id, ...result });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "variable", "valor": "eventType", "variables_referenciadas": ["eventType"] },
+        "ubicacion": "modules/filesystem/index.js:736",
+        "metodo_contenedor": "handleWrite",
+        "es_handler_de": null,
+        "bloque_logico": "eventType = isNew ? 'fs.file.created' : 'fs.file.updated' — emite evento de dominio (no response) tras escribir",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["path", "size", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      // Publish event\n      const eventType = isNew ? 'fs.file.created' : 'fs.file.updated';\n      await this.eventBus.publish(eventType, { path: filePath, size: fileSize, timestamp: new Date().toISOString() });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.file.deleted", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:789",
+        "metodo_contenedor": "handleDelete",
+        "es_handler_de": null,
+        "bloque_logico": "evento de dominio tras unlink — distingue file vs directory",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["path", "type", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      // Publish event\n      await this.eventBus.publish('fs.file.deleted', {\n        path: filePath, type: isDirectory ? 'directory' : 'file',\n        timestamp: new Date().toISOString()\n      });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.directory.created", "variables_referenciadas": [] },
+        "ubicacion": "modules/filesystem/index.js:829",
+        "metodo_contenedor": "handleMkdir",
+        "es_handler_de": null,
+        "bloque_logico": "evento de dominio tras fs.mkdir",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["path", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      // Publish event\n      await this.eventBus.publish('fs.directory.created', { path: data.path, timestamp: new Date().toISOString() });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.activated",          "tipo_nombre": "literal", "handler": "onProjectActivated",        "handler_ubicacion": "modules/filesystem/index.js:123", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/filesystem/index.js:123", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.deactivated",        "tipo_nombre": "literal", "handler": "onProjectDeactivated",      "handler_ubicacion": "modules/filesystem/index.js:182", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/filesystem/index.js:182", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "archivo.listar.solicitado",  "tipo_nombre": "literal", "handler": "onArchivoListarSolicitado", "handler_ubicacion": "modules/filesystem/index.js:64",  "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/filesystem/index.js:75",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "archivo.leer.solicitado",    "tipo_nombre": "literal", "handler": "onArchivoLeerSolicitado",   "handler_ubicacion": "modules/filesystem/index.js:82",  "comportamiento_si_falla": "otro",   "evidencia_comportamiento": "modules/filesystem/index.js:93",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "archivo.borrar.solicitado",  "tipo_nombre": "literal", "handler": "onArchivoBorrarSolicitado", "handler_ubicacion": "modules/filesystem/index.js:100", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/filesystem/index.js:109", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.read.request",            "tipo_nombre": "literal", "handler": "onReadRequest",   "handler_ubicacion": "modules/filesystem/index.js:231", "comportamiento_si_falla": "otro",   "evidencia_comportamiento": "modules/filesystem/index.js:239", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.write.request",           "tipo_nombre": "literal", "handler": "onWriteRequest",  "handler_ubicacion": "modules/filesystem/index.js:199", "comportamiento_si_falla": "otro",  "evidencia_comportamiento": "modules/filesystem/index.js:207", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.copy.request",            "tipo_nombre": "literal", "handler": "onCopyRequest",   "handler_ubicacion": "modules/filesystem/index.js:213", "comportamiento_si_falla": "otro",   "evidencia_comportamiento": "modules/filesystem/index.js:225", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.delete.request",          "tipo_nombre": "literal", "handler": "onDeleteRequest", "handler_ubicacion": "modules/filesystem/index.js:245", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/filesystem/index.js:253", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.list.request",            "tipo_nombre": "literal", "handler": "onListRequest",   "handler_ubicacion": "modules/filesystem/index.js:259", "comportamiento_si_falla": "otro",   "evidencia_comportamiento": "modules/filesystem/index.js:267", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.mkdir.request",           "tipo_nombre": "literal", "handler": "onMkdirRequest",  "handler_ubicacion": "modules/filesystem/index.js:273", "comportamiento_si_falla": "otro",  "evidencia_comportamiento": "modules/filesystem/index.js:281", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.move.request",            "tipo_nombre": "literal", "handler": "onMoveRequest",   "handler_ubicacion": "modules/filesystem/index.js:287", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/filesystem/index.js:300", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.rename.request",          "tipo_nombre": "literal", "handler": "onMoveRequest",   "handler_ubicacion": "modules/filesystem/index.js:287", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/filesystem/index.js:299", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.exists.request",          "tipo_nombre": "literal", "handler": "onExistsRequest", "handler_ubicacion": "modules/filesystem/index.js:306", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/filesystem/index.js:332", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.info.request",            "tipo_nombre": "literal", "handler": "onInfoRequest",   "handler_ubicacion": "modules/filesystem/index.js:341", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/filesystem/index.js:349", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.append.request",          "tipo_nombre": "literal", "handler": "onAppendRequest", "handler_ubicacion": "modules/filesystem/index.js:355", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/filesystem/index.js:380", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.search.request",          "tipo_nombre": "literal", "handler": "onSearchRequest", "handler_ubicacion": "modules/filesystem/index.js:388", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/filesystem/index.js:396", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.stats.request",           "tipo_nombre": "literal", "handler": "onStatsRequest",  "handler_ubicacion": "modules/filesystem/index.js:402", "comportamiento_si_falla": "otro", "evidencia_comportamiento": "modules/filesystem/index.js:410", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["fs.file.created", "fs.file.updated", "fs.file.deleted", "fs.directory.created", "fs.workdir.changed", "fs.read.response", "fs.write.response", "fs.copy.response", "fs.delete.response", "fs.list.response", "fs.mkdir.response", "fs.move.response", "fs.rename.response", "fs.exists.response", "fs.info.response", "fs.append.response", "fs.search.response", "fs.stats.response"],
+      "publica_literales_en_codigo": ["archivo.borrado", "archivo.borrar.fallido", "archivo.leer.fallido", "archivo.leido", "archivo.listado", "archivo.listar.fallido", "fs.append.response", "fs.copy.response", "fs.delete.response", "fs.directory.created", "fs.exists.response", "fs.file.deleted", "fs.info.response", "fs.list.response", "fs.mkdir.response", "fs.read.response", "fs.search.response", "fs.stats.response", "fs.write.response"],
+      "publica_patrones_dinamicos": ["responseEvent (variable, fs.move.response | fs.rename.response)", "eventType (variable, fs.file.created | fs.file.updated)"],
+      "publica_declarados_no_emitidos": ["fs.file.created", "fs.file.updated", "fs.move.response", "fs.rename.response", "fs.workdir.changed"],
+      "publica_emitidos_no_declarados": ["archivo.borrado", "archivo.borrar.fallido", "archivo.leer.fallido", "archivo.leido", "archivo.listado", "archivo.listar.fallido"],
+      "subscribes_declarados_en_manifest": ["project.activated", "project.deactivated", "archivo.listar.solicitado", "archivo.leer.solicitado", "archivo.borrar.solicitado", "fs.read.request", "fs.write.request", "fs.copy.request", "fs.delete.request", "fs.list.request", "fs.mkdir.request", "fs.move.request", "fs.rename.request", "fs.exists.request", "fs.info.request", "fs.append.request", "fs.search.request", "fs.stats.request"],
+      "subscribes_realmente_registrados": ["project.activated", "project.deactivated", "archivo.listar.solicitado", "archivo.leer.solicitado", "archivo.borrar.solicitado", "fs.read.request", "fs.write.request", "fs.copy.request", "fs.delete.request", "fs.list.request", "fs.mkdir.request", "fs.move.request", "fs.rename.request", "fs.exists.request", "fs.info.request", "fs.append.request", "fs.search.request", "fs.stats.request"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "activeProjectId",   "tipo": "primitivo", "ubicacion_init": "modules/filesystem/index.js:26",  "se_invalida_con": "onProjectActivated set | onProjectDeactivated set null", "leak_potencial": false },
+      { "campo": "activeProjectPath", "tipo": "primitivo", "ubicacion_init": "modules/filesystem/index.js:27",  "se_invalida_con": "onProjectActivated set | onProjectDeactivated set null", "leak_potencial": false },
+      { "campo": "workingDirectory",  "tipo": "primitivo", "ubicacion_init": "modules/filesystem/index.js:28",  "se_invalida_con": "handleSetWorkDir cambia | onProjectDeactivated set null",  "leak_potencial": false },
+      { "campo": "unsubscribes",      "tipo": "Array",     "ubicacion_init": "modules/filesystem/index.js:32",  "se_invalida_con": "no se observa uso explícito en onUnload",                  "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/projects/{slug}/storage/* (raíz por proyecto activo)", "formato": "raw", "operaciones": ["read", "write", "append", "delete"], "via_evento": null, "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "Operaciones síncronas con fs.promises. Sin locks ni colas. Race conditions teóricas si dos eventos concurrentes operan sobre el mismo archivo. validatePath sanitiza el path para no salir del project storage."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/projects/{slug}/storage/"],
+    "valores_hardcoded_observables": [
+      { "valor": "this.basePath (data/projects/)", "ubicacion": "modules/filesystem/index.js:50", "naturaleza": "path" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/filesystem/index.js:39",
+      "acciones": [
+        "guarda this.logger / this.eventBus / this.uiHandler",
+        "ensureDataDirectory crea data/projects/ si no existe",
+        "logger.info('filesystem.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus", "this.uiHandler"],
+      "puede_fallar_silenciosamente": true
+    },
+    "onUnload": {
+      "ubicacion": "modules/filesystem/index.js:54",
+      "acciones": ["logger.info('filesystem.unloaded')"],
+      "estado_no_limpiado": ["activeProjectId", "activeProjectPath", "workingDirectory", "unsubscribes (no se llaman las funciones unsubscribe almacenadas)"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "Node.js fs/promises",        "via_evento": "require('fs').promises",     "obligatorio_en": "ambos",   "ubicacion_uso": "modules/filesystem/index.js (varias)", "es_cross_vertical": false },
+    { "modulo_dependido": "project-manager",            "via_evento": "project.activated / project.deactivated (subscribes)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/filesystem/index.js:123", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "Node.js fs (errores I/O)",         "que_pasa_si_cae": "cada handler lo captura y publica response con success=false (patrón uniforme).", "evidencia": "modules/filesystem/index.js:323 (catch onExistsRequest)" },
+    { "dependencia": "project-manager (sin activación)", "que_pasa_si_cae": "activeProjectId queda null y onArchivo* falla al construir paths que dependen del proyecto.", "evidencia": "modules/filesystem/index.js:185 (set null en onProjectDeactivated)" },
+    { "dependencia": "validatePath (path traversal)",    "que_pasa_si_cae": "lanza error si el path sale de la base — handler captura y devuelve success=false.", "evidencia": "modules/filesystem/index.js:313 (validatePath en onExistsRequest)" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('fs.<accion>.request', { ...campos })",
+      "campos_estructurados_observados": ["path", "request_id", "from", "to", "query"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('filesystem.loaded', { basePath: this.basePath });", "ubicacion": "modules/filesystem/index.js:49"  },
+        { "snippet": "this.logger.info('fs.write.request', { path, request_id });",        "ubicacion": "modules/filesystem/index.js:203" },
+        { "snippet": "this.logger.info('fs.read.request', { path, request_id });",         "ubicacion": "modules/filesystem/index.js:235" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": true,
+      "evidencia": "modules/filesystem/index.js:69-110 — los handlers archivo.* legacy SÍ propagan correlation_id en el payload de respuesta. Los handlers fs.X (más nuevos, líneas 199-410) NO propagan correlation_id (solo request_id)."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": true,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 1289,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "Drift declarativo grande: 6 publishes legacy archivo.* (en español) emitidos en código pero NO declarados en manifest. Y 5 publishes declarados en manifest (fs.file.created/updated, fs.move.response, fs.rename.response, fs.workdir.changed) NO se emiten como literales — se emiten via variables (eventType, responseEvent) o no se emiten.",
+      "DOS APIs de eventos coexisten: legacy archivo.<accion>.solicitado/.completado/.fallido (en español, 3 accciones) y la nueva fs.<accion>.request/.response (en inglés, 13 acciones)",
+      "publica con nombre VARIABLE en 2 sitios: 'eventType' línea 736 (fs.file.created|updated) y 'responseEvent' línea 300 (fs.move|rename.response)",
+      "fs.workdir.changed declarado pero su emisión no se ve en el grep de .publish (probablemente en handleSetWorkDir vía otro mecanismo o pendiente)",
+      "Tracing parcial: legacy archivo.* propaga correlation_id; fs.X.* nuevos NO lo propagan",
+      "ui_handlers no rellenados (existen handleSetWorkDir, handleGetWorkDir, handleList, handleRead, handleWrite, handleDelete y otros — diferidos por extensión)",
+      "apis_http no rellenadas (similar)"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "tools (filesystem no expone tools al LLM directamente)",
+      "ui_handlers (diferido — ver warnings)",
+      "apis_http (diferido — ver warnings)",
+      "estado.persistencia.sqlite_tablas (no usa SQLite)",
+      "configuracion.env_vars / module_json_config_keys",
+      "observabilidad.metricas_emitidas (no usa metrics.X)",
+      "codigo_intencion.todos / workarounds_detectados",
+      "outliers_capturados"
+    ]
+  }
+}

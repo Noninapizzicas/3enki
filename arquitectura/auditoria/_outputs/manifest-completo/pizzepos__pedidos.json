@@ -1,0 +1,271 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/pedidos",
+    "ubicacion": "modules/pizzepos/pedidos",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "pedidos",
+    "version": "2.0.0",
+    "description_oficial": "Gestión completa de pedidos - Reemplazo de comandero 100% event-driven",
+    "author": "Pizzepos Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_pizzepos",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "pedido.creado",          "description": "Nuevo pedido creado para una cuenta" },
+      { "event": "pedido.item_agregado",   "description": "Item agregado al pedido (con variaciones)" },
+      { "event": "pedido.item_actualizado","description": "Item del pedido actualizado (cantidad, variaciones)" },
+      { "event": "pedido.item_eliminado",  "description": "Item eliminado del pedido" },
+      { "event": "pedido.enviado_cocina",  "description": "Pedido enviado a cocina para preparación" },
+      { "event": "pedido.completado",      "description": "Pedido completado (todos los items servidos)" },
+      { "event": "pedido.cancelado",       "description": "Pedido cancelado" }
+    ],
+    "subscribes": [
+      { "event": "comandero.enviar_cocina",  "handler": "onComanderoEnviarCocina",  "extras": {} },
+      { "event": "variacion.validada",       "handler": "onVariacionValidada",      "extras": {} },
+      { "event": "variacion.rechazada",      "handler": "onVariacionRechazada",     "extras": {} },
+      { "event": "cuenta.creada",            "handler": "onCuentaCreada",           "extras": {} },
+      { "event": "catalogo.actualizado",     "handler": "onCatalogoActualizado",    "extras": {} },
+      { "event": "producto.creado",          "handler": "onProductoActualizado",    "extras": {} },
+      { "event": "producto.actualizado",     "handler": "onProductoActualizado",    "extras": {} },
+      { "event": "caja.cerrada",             "handler": "onCajaCerrada",            "extras": {} },
+      { "event": "dia.iniciado",             "handler": "onDiaIniciado",            "extras": {} }
+    ],
+    "provides_eventos": [
+      "pedido.creado",
+      "pedido.item_agregado",
+      "pedido.item_actualizado",
+      "pedido.item_eliminado",
+      "pedido.enviado_cocina",
+      "pedido.completado",
+      "pedido.cancelado"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "POST",
+      "path": "/pedidos",
+      "handler": "handleCreatePedido",
+      "description": "Crear nuevo pedido para una cuenta",
+      "request_schema_ref": "./schemas/pedido.json#/definitions/create_request",
+      "response_schema_ref": "./schemas/pedido.json#/definitions/pedido"
+    },
+    {
+      "method": "GET",
+      "path": "/pedidos",
+      "handler": "handleListPedidos",
+      "description": "Listar pedidos (filtros: cuenta_id, estado)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/pedidos/:id",
+      "handler": "handleGetPedido",
+      "description": "Obtener pedido por ID",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/:id/items",
+      "handler": "handleAgregarItem",
+      "description": "Agregar item al pedido (publica pedido.item_agregado)",
+      "request_schema_ref": "./schemas/pedido.json#/definitions/agregar_item_request",
+      "response_schema_ref": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/pedidos/:id/items/:item_id",
+      "handler": "handleActualizarItem",
+      "description": "Actualizar item (cantidad, variaciones)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/pedidos/:id/items/:item_id",
+      "handler": "handleEliminarItem",
+      "description": "Eliminar item del pedido",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/:id/enviar-cocina",
+      "handler": "handleEnviarCocina",
+      "description": "Enviar pedido a cocina (publica pedido.enviado_cocina)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/:id/completar",
+      "handler": "handleCompletarPedido",
+      "description": "Marcar pedido como completado",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/pedidos/:id/cancelar",
+      "handler": "handleCancelarPedido",
+      "description": "Cancelar pedido",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/pedidos/:id/total",
+      "handler": "handleCalcularTotal",
+      "description": "Calcular total del pedido",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "pedido.creado.total",
+        "pedido.item_agregado.total",
+        "pedido.enviado_cocina.total",
+        "pedido.completado.total",
+        "pedido.cancelado.total",
+        "pedido.errors.total"
+      ],
+      "gauges": [
+        "pedido.activos.count",
+        "pedido.en_cocina.count",
+        "pedido.items_total.count"
+      ],
+      "timings": [
+        "pedido.create.duration",
+        "pedido.envio_cocina.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Gestión de Pedidos",
+    "icon": "📋",
+    "views_keys": ["main", "create", "edit", "detail"],
+    "section_widget_types": ["dashboard", "fullscreen", "grid"],
+    "permissions_declaradas": ["admin", "camarero", "gerente"],
+    "tamano_bytes": 2728,
+    "endpoints_referenciados": [
+      "/modules/pedidos/pedidos",
+      "/modules/pedidos/pedidos/{id}",
+      "/modules/pedidos/pedidos/{id}"
+    ],
+    "mqtt_topics_declarados": [
+      "pedido.creado",
+      "pedido.item_agregado",
+      "pedido.item_actualizado",
+      "pedido.item_eliminado",
+      "pedido.enviado_cocina",
+      "pedido.completado",
+      "pedido.cancelado"
+    ]
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/pizzepos/pedidos/schemas/events.json",
+      "modules/pizzepos/pedidos/schemas/pedido.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 10650,
+    "module_json_lineas": 388,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "observability.logging tiene campo extra 'correlation_id' no capturado en observability_declarada (no está en schema de salida)",
+      "provides (canónico) declara events[] y queries[] — solapamiento con events.publishes y consultas no capturadas en schema",
+      "ui.description, ui.access_level, ui.components y ui.features son campos extra de ui no previstos en ui_declarativa del schema",
+      "apis usan 'request_schema'/'response_schema' (objetos $ref) en lugar de strings — mapeados a strings extraídos del $ref"
+    ]
+  }
+}

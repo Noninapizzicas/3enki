@@ -1,0 +1,303 @@
+{
+  "_meta": {
+    "modulo": "scheduler",
+    "ubicacion": "modules/scheduler",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/scheduler.json"
+  },
+
+  "identidad": {
+    "name": "scheduler",
+    "version": "1.0.0",
+    "description_oficial": "Advanced job scheduling module with multiple trigger types (cron, interval, datetime, event-based, condition, composite)",
+    "author": "Event-Core",
+    "main_declarado": null,
+    "main_real": "modules/scheduler/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_2_platform",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "scheduler.job.triggered", "variables_referenciadas": [] },
+        "ubicacion": "modules/scheduler/index.js:255",
+        "metodo_contenedor": "(execución de job — invocado por trigger)",
+        "es_handler_de": "trigger fire (cron/interval/datetime/event)",
+        "bloque_logico": "antes de ejecutar las actions del job",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["job_id", "trigger_type", "triggered_at"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('scheduler.job.triggered', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "scheduler.job.completed", "variables_referenciadas": [] },
+        "ubicacion": "modules/scheduler/index.js:306",
+        "metodo_contenedor": "(execución de job — éxito)",
+        "es_handler_de": null,
+        "bloque_logico": "tras ejecutar todas las actions del job exitosamente",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["job_id", "duration", "result"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('scheduler.job.completed', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "scheduler.job.failed", "variables_referenciadas": [] },
+        "ubicacion": "modules/scheduler/index.js:341",
+        "metodo_contenedor": "(execución de job — error)",
+        "es_handler_de": null,
+        "bloque_logico": "catch tras error en alguna action del job",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["job_id", "error"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('scheduler.job.failed', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "variable", "valor": "topic", "variables_referenciadas": ["topic"] },
+        "ubicacion": "modules/scheduler/index.js:434",
+        "metodo_contenedor": "(publish action handler)",
+        "es_handler_de": null,
+        "bloque_logico": "una action de tipo 'publish' del job — emite a un topic dinámico configurado en el job",
+        "payload": { "tipo": "variable", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish(topic, payload, { qos: action.qos || 1 });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "variable", "valor": "requestEvent", "variables_referenciadas": ["requestEvent"] },
+        "ubicacion": "modules/scheduler/index.js:524",
+        "metodo_contenedor": "(request_response action handler)",
+        "es_handler_de": null,
+        "bloque_logico": "una action de tipo 'request_response' del job — request a otro módulo con event dinámico",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false, "es_return": false,
+        "snippet": "      this.eventBus.publish(requestEvent, { request_id, ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "scheduler.job.created", "variables_referenciadas": [] },
+        "ubicacion": "modules/scheduler/index.js:660",
+        "metodo_contenedor": "handleUICreateJob (probable)",
+        "es_handler_de": "ui_handler MQTT scheduler/job/create",
+        "bloque_logico": "tras crear job en jobManager",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["job_id", "name", "trigger_type"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('scheduler.job.created', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "scheduler.job.updated", "variables_referenciadas": [] },
+        "ubicacion": "modules/scheduler/index.js:705",
+        "metodo_contenedor": "handleUIUpdateJob (probable)",
+        "es_handler_de": "ui_handler MQTT scheduler/job/update",
+        "bloque_logico": "tras update en jobManager",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["job_id", "updated_fields"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('scheduler.job.updated', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "scheduler.job.deleted", "variables_referenciadas": [] },
+        "ubicacion": "modules/scheduler/index.js:740",
+        "metodo_contenedor": "handleUIDeleteJob",
+        "es_handler_de": "ui_handler MQTT scheduler/job/delete",
+        "bloque_logico": "tras delete en jobManager",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["job_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('scheduler.job.deleted', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "scheduler.job.enabled", "variables_referenciadas": [] },
+        "ubicacion": "modules/scheduler/index.js:771",
+        "metodo_contenedor": "handleUIEnableJob",
+        "es_handler_de": "ui_handler MQTT scheduler/job/enable",
+        "bloque_logico": "tras enable",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["job_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('scheduler.job.enabled', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "scheduler.job.disabled", "variables_referenciadas": [] },
+        "ubicacion": "modules/scheduler/index.js:802",
+        "metodo_contenedor": "handleUIDisableJob",
+        "es_handler_de": "ui_handler MQTT scheduler/job/disable",
+        "bloque_logico": "tras disable",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["job_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('scheduler.job.disabled', { ... });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "scheduler.trigger.check", "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["scheduler.job.created", "scheduler.job.updated", "scheduler.job.deleted", "scheduler.job.enabled", "scheduler.job.disabled", "scheduler.job.triggered", "scheduler.job.completed", "scheduler.job.failed"],
+      "publica_literales_en_codigo": ["scheduler.job.completed", "scheduler.job.created", "scheduler.job.deleted", "scheduler.job.disabled", "scheduler.job.enabled", "scheduler.job.failed", "scheduler.job.triggered", "scheduler.job.updated"],
+      "publica_patrones_dinamicos": ["topic (variable, action publish)", "requestEvent (variable, action request_response)"],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["scheduler.trigger.check"],
+      "subscribes_realmente_registrados": ["scheduler.trigger.check"],
+      "subscribes_dinamicos": ["dinámicos según jobs configurados con trigger='event' — el handler onEventReceived línea 199 se suscribe a topics dinámicos"]
+    }
+  },
+
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "jobManager",     "tipo": "Object", "ubicacion_init": "modules/scheduler/index.js:34", "se_invalida_con": "instanciado en onLoad — vive con la instancia",                                  "leak_potencial": false },
+      { "campo": "triggerManager", "tipo": "Object", "ubicacion_init": "modules/scheduler/index.js:35", "se_invalida_con": "instanciado en onLoad — vive con la instancia",                                  "leak_potencial": false },
+      { "campo": "unsubscribes",   "tipo": "Array",  "ubicacion_init": "modules/scheduler/index.js:38", "se_invalida_con": "se reasigna en onLoad / vacía en onUnload llamando a cada unsub stored",        "leak_potencial": false },
+      { "campo": "executions",     "tipo": "Array",  "ubicacion_init": "modules/scheduler/index.js:41", "se_invalida_con": "no se observa truncamiento — acumula histórico de ejecuciones in-memory",      "leak_potencial": true  }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/scheduler/jobs.json", "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "jobManager mantiene jobs en memoria + persiste en data/scheduler/jobs.json. triggerManager registra timeouts/intervals/listeners. Sin locks explícitos."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/scheduler/"],
+    "valores_hardcoded_observables": []
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/scheduler/index.js:59",
+      "acciones": [
+        "guarda this.logger / this.metrics / this.eventBus / this.uiHandler / this.config",
+        "instancia jobManager + triggerManager",
+        "carga jobs desde data/scheduler/jobs.json",
+        "registra triggers (cron/interval/datetime/event)"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.metrics", "this.eventBus", "this.uiHandler", "this.config"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/scheduler/index.js:106",
+      "acciones": ["llama a cada unsubscribe en this.unsubscribes (línea 121)", "this.unsubscribes = []"],
+      "estado_no_limpiado": ["jobManager", "triggerManager", "executions (acumulado in-memory)"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": ["el handler onEventReceived (línea 199) se suscribe dinámicamente a topics MQTT cuando un job tiene trigger='event'"]
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "Node.js fs (jobs.json)",       "via_evento": "fs directo",                                "obligatorio_en": "ambos",   "ubicacion_uso": "modules/scheduler/index.js (jobManager interno)", "es_cross_vertical": false },
+    { "modulo_dependido": "node-cron",                    "via_evento": "require('node-cron')",                       "obligatorio_en": "runtime", "ubicacion_uso": "modules/scheduler/index.js (triggerManager interno)", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "data/scheduler/jobs.json (corrupto/missing)", "que_pasa_si_cae": "jobManager carga lista vacía en onLoad. Sin jobs, scheduler no hace nada hasta crear uno via UI.", "evidencia": "modules/scheduler/index.js (loadJobs interno)" },
+    { "dependencia": "action target (módulo destino de un job)",   "que_pasa_si_cae": "Action falla → job.failed publicado con error.",                                                       "evidencia": "modules/scheduler/index.js:341" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('scheduler.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["job_id", "trigger_type", "duration", "error"],
+      "ejemplos": []
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — los publishes scheduler.job.X no llevan correlation_id en payload."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": false,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 1114,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": ["icon", "uiActions"],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Suscripciones MQTT dinámicas según jobs con trigger='event'", "ejemplo": "modules/scheduler/index.js:199 (onEventReceived)", "rareza": "inusual" }
+    ]
+  },
+
+  "quirks": {
+    "warnings": [
+      "publica con nombre VARIABLE en 2 sitios: 'topic' línea 434 (action publish) y 'requestEvent' línea 524 (action request_response). El job CONFIGURA qué evento publicar, scheduler ejecuta — patrón de dispatch genérico.",
+      "Suscripciones dinámicas: jobs con trigger='event' generan subscriptions MQTT que se gestionan en this.unsubscribes para cleanup en onUnload.",
+      "executions Array crece sin límite — leak_potencial=true.",
+      "Manifest declara outliers icon + uiActions (capturados en outliers_capturados).",
+      "ui_handlers + apis_http no rellenados (15+ entre handle*/handleUI* — diferidos)."
+    ],
+    "secciones_vacias_intencionalmente": [
+      "tools (scheduler no expone tools al LLM)",
+      "ui_handlers (diferido)",
+      "apis_http (diferido)",
+      "estado.persistencia.sqlite_tablas (usa archivo JSON, no SQLite)",
+      "configuracion.env_vars / module_json_config_keys",
+      "configuracion.valores_hardcoded_observables (sin timeouts/limits visibles directos)",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / workarounds_detectados",
+      "version_archivada"
+    ]
+  }
+}

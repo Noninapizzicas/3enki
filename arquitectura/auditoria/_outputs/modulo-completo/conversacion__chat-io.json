@@ -1,0 +1,274 @@
+{
+  "_meta": {
+    "modulo": "conversacion/chat-io",
+    "ubicacion": "modules/conversacion/chat-io",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/conversacion__chat-io.json"
+  },
+
+  "identidad": {
+    "name": "chat-io",
+    "version": "1.0.0",
+    "description_oficial": "Chat I/O — entrada/salida del chat: recibe ui/request/conversation/* del frontend, persiste conversaciones y mensajes en SQLite por proyecto vía db.query.request, aplica FIFO de contexto, y reenvía la respuesta del LLM al frontend por MQTT.",
+    "author": "Event Core Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/conversacion/chat-io/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": false,
+    "estado_modulo": "candidato_a_retirada",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "db.query.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/chat-io/index.js:92",
+        "metodo_contenedor": "_db",
+        "es_handler_de": null,
+        "bloque_logico": "dentro de Promise resolver tras pendingDb.set; helper para SQL queries vía database-manager",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "query", "params", "read_only", "request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false, "es_return": false,
+        "snippet": "      this.pendingDb.set(request_id, { resolve, reject, timeout });\n      this.eventBus.publish('db.query.request', { project_id, query, params, read_only, request_id });\n    });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "chat.message.saved", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/chat-io/index.js:263",
+        "metodo_contenedor": "handleSend",
+        "es_handler_de": "ui/request/conversation/send",
+        "bloque_logico": "tras INSERT del mensaje user + UPDATE updated_at + FIFO aplicado",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "page_id", "conversation_id", "context", "settings", "prompt", "attachments", "intencion", "message", "message_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    // Propagar los 9 campos\n    await this.eventBus.publish('chat.message.saved', {\n      project_id, page_id, conversation_id, context, settings, prompt, attachments, intencion, message, message_id\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "chat.assistant.saved", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/chat-io/index.js:502",
+        "metodo_contenedor": "onAiResponse",
+        "es_handler_de": "ai.chat.response",
+        "bloque_logico": "tras INSERT del mensaje assistant; antes del push MQTT al frontend",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "conversation_id", "message_id", "message", "metadata"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('chat.assistant.saved', {\n      project_id, conversation_id, message_id, message: content, metadata\n    });\n",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "dynamic_template", "valor": "conversation/${conversation_id}/message", "variables_referenciadas": ["conversation_id"] },
+        "ubicacion": "modules/conversacion/chat-io/index.js:507",
+        "metodo_contenedor": "onAiResponse",
+        "es_handler_de": "ai.chat.response",
+        "bloque_logico": "tras chat.assistant.saved; SOLO si this.mqtt no es null; push directo al frontend por topic MQTT con JSON.stringify del payload",
+        "payload": { "tipo": "variable", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "mqtt_directo", "expresion_usada": "this.mqtt.publish" },
+        "es_await": false, "es_return": false,
+        "snippet": "    if (this.mqtt) {\n      this.mqtt.publish(\n        `conversation/${conversation_id}/message`,\n        JSON.stringify({\n          id: message_id, role: 'assistant', content, metadata,\n          timestamp: new Date(now).toISOString()\n        }),\n        { qos: 1 }\n      );\n    }",
+        "declarado_en_manifest": false
+      }
+    ],
+    "subscribes": [
+      { "nombre": "ai.chat.response",  "tipo_nombre": "literal", "handler": "onAiResponse",       "handler_ubicacion": "modules/conversacion/chat-io/index.js:469", "comportamiento_si_falla": "log_y_sigue",          "evidencia_comportamiento": "modules/conversacion/chat-io/index.js:498", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "db.query.response", "tipo_nombre": "literal", "handler": "onDbQueryResponse",  "handler_ubicacion": "modules/conversacion/chat-io/index.js:96",  "comportamiento_si_falla": "rejecta_promise_pending","evidencia_comportamiento": "modules/conversacion/chat-io/index.js:96",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.activated", "tipo_nombre": "literal", "handler": "onProjectActivated", "handler_ubicacion": "modules/conversacion/chat-io/index.js:146", "comportamiento_si_falla": "log_y_sigue",          "evidencia_comportamiento": "modules/conversacion/chat-io/index.js:150", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["chat.message.saved", "chat.assistant.saved"],
+      "publica_literales_en_codigo": ["chat.assistant.saved", "chat.message.saved", "db.query.request"],
+      "publica_patrones_dinamicos": ["conversation/${conversation_id}/message"],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": ["db.query.request"],
+      "subscribes_declarados_en_manifest": ["ai.chat.response", "db.query.response", "project.activated"],
+      "subscribes_realmente_registrados": ["ai.chat.response", "db.query.response", "project.activated"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [],
+
+  "ui_handlers": [
+    { "domain": "conversation", "action": "send",            "handler_metodo": "handleSend",           "handler_ubicacion": "modules/conversacion/chat-io/index.js:216", "input_validado": ["project_id (isUUID)", "conversation_id (isUUID)", "message"], "codigos_error": ["PROJECT_REQUIRED", "CONVERSATION_REQUIRED"], "output_shape": { "status_success": 200, "data_keys": ["conversation_id", "message_id"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "conversation", "action": "create",          "handler_metodo": "handleCreate",         "handler_ubicacion": "modules/conversacion/chat-io/index.js:283", "input_validado": ["project_id (isUUID)"],                                          "codigos_error": ["PROJECT_REQUIRED"],                          "output_shape": { "status_success": 200, "data_keys": ["conversation", "conversation_id"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "conversation", "action": "list",            "handler_metodo": "handleList",           "handler_ubicacion": "modules/conversacion/chat-io/index.js:322", "input_validado": ["project_id (isUUID)"],                                          "codigos_error": ["PROJECT_REQUIRED"],                          "output_shape": { "status_success": 200, "data_keys": ["conversations"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "conversation", "action": "load",            "handler_metodo": "handleLoad",           "handler_ubicacion": "modules/conversacion/chat-io/index.js:345", "input_validado": ["project_id (isUUID)", "conversation_id (isUUID)"],              "codigos_error": ["PROJECT_REQUIRED", "CONVERSATION_REQUIRED"], "output_shape": { "status_success": 200, "data_keys": ["conversation", "messages"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "conversation", "action": "delete",          "handler_metodo": "handleDelete",         "handler_ubicacion": "modules/conversacion/chat-io/index.js:375", "input_validado": ["project_id (isUUID)", "conversation_id (isUUID)"],              "codigos_error": ["PROJECT_REQUIRED", "CONVERSATION_REQUIRED"], "output_shape": { "status_success": 200, "data_keys": ["ok"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "conversation", "action": "update_settings", "handler_metodo": "handleUpdateSettings", "handler_ubicacion": "modules/conversacion/chat-io/index.js:391", "input_validado": ["project_id (isUUID)", "conversation_id (isUUID)"],              "codigos_error": ["PROJECT_REQUIRED", "CONVERSATION_REQUIRED"], "output_shape": { "status_success": 200, "data_keys": ["ok", "changed"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "conversation", "action": "toggle_context",  "handler_metodo": "handleToggleContext",  "handler_ubicacion": "modules/conversacion/chat-io/index.js:421", "input_validado": ["project_id (isUUID)", "message_id (presente)", "in_context (boolean)"], "codigos_error": ["PROJECT_REQUIRED", "MESSAGE_ID_REQUIRED"], "output_shape": { "status_success": 200, "data_keys": ["ok", "message_id", "in_context", "manually_toggled"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "conversation", "action": "context_stats",   "handler_metodo": "handleContextStats",   "handler_ubicacion": "modules/conversacion/chat-io/index.js:437", "input_validado": ["project_id (isUUID)", "conversation_id (isUUID)"],              "codigos_error": ["PROJECT_REQUIRED", "CONVERSATION_REQUIRED"], "output_shape": { "status_success": 200, "data_keys": ["total", "active", "manually_toggled", "max_context", "remaining"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" }
+  ],
+
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "pendingDb",          "tipo": "Map", "ubicacion_init": "modules/conversacion/chat-io/index.js:62", "se_invalida_con": "respuesta db.query.response (clearTimeout + delete) | timeout 10s (delete + reject) | onUnload (clearTimeout sobre todos + clear)",                       "leak_potencial": false },
+      { "campo": "schemaReady",        "tipo": "Set", "ubicacion_init": "modules/conversacion/chat-io/index.js:63", "se_invalida_con": "nunca explícitamente — solo se añade tras _ensureSchema completo. onUnload no la limpia",                                                                  "leak_potencial": true  },
+      { "campo": "knownConversations", "tipo": "Map", "ubicacion_init": "modules/conversacion/chat-io/index.js:64", "se_invalida_con": "handleDelete elimina (delete) | onUnload .clear()",                                                                                                       "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [
+        {
+          "nombre": "conversations",
+          "scope_db": "project",
+          "campos": ["id TEXT PRIMARY KEY","project_id TEXT NOT NULL","title TEXT","context_window INTEGER NOT NULL DEFAULT 20","temperature REAL NOT NULL DEFAULT 0.7","max_tokens INTEGER NOT NULL DEFAULT 2000","prompt_id TEXT","created_at INTEGER NOT NULL","updated_at INTEGER NOT NULL"],
+          "indices": ["idx_conversations_project ON (project_id, updated_at DESC)"],
+          "creada_por": "_ensureSchema(project_id)",
+          "ubicacion_create": "modules/conversacion/chat-io/index.js:21",
+          "migraciones_suaves": "_migrateSchema (línea 119) usa PRAGMA table_info + ALTER TABLE ADD COLUMN para prompt_id, context_window, temperature, max_tokens en tablas heredadas. Commit 244cbfa.",
+          "ttl_o_housekeeping": null
+        },
+        {
+          "nombre": "messages",
+          "scope_db": "project",
+          "campos": ["id TEXT PRIMARY KEY","conversation_id TEXT NOT NULL","role TEXT NOT NULL CHECK(role IN ('user','assistant','system','tool'))","content TEXT NOT NULL","in_context INTEGER NOT NULL DEFAULT 1","manually_toggled INTEGER NOT NULL DEFAULT 0","tokens INTEGER","cost REAL","metadata TEXT","created_at INTEGER NOT NULL"],
+          "indices": ["idx_messages_conv ON (conversation_id, created_at)","idx_messages_context ON (conversation_id, in_context)"],
+          "creada_por": "_ensureSchema(project_id)",
+          "ubicacion_create": "modules/conversacion/chat-io/index.js:34",
+          "migraciones_suaves": "_migrateSchema añade in_context, manually_toggled, tokens, cost, metadata via ALTER TABLE.",
+          "ttl_o_housekeeping": "FIFO suave por contexto (_applyContextFIFO marca in_context=0 los más antiguos cuando active >= context_window, respeta manually_toggled=1). NO borra filas. delete de conversación SI borra mensajes."
+        }
+      ],
+      "archivos": [],
+      "notas_concurrencia": "Sin transacciones explícitas. handleSend hace 4-5 _db calls secuenciales (insert, update, count, select, update in_context). Sin lock entre llamadas — race condition teórica si 2 mensajes paralelos al mismo conversation_id. this.pendingDb es Map — race timeout/respuesta protegida con clearTimeout."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": [
+      { "valor": "10000", "ubicacion": "modules/conversacion/chat-io/index.js:87", "naturaleza": "timeout" },
+      { "valor": "context_window=20, temperature=0.7, max_tokens=2000", "ubicacion": "modules/conversacion/chat-io/index.js:53", "naturaleza": "otro" },
+      { "valor": "default page_id='chat'", "ubicacion": "modules/conversacion/chat-io/index.js:216", "naturaleza": "otro" },
+      { "valor": "limit=50", "ubicacion": "modules/conversacion/chat-io/index.js:322", "naturaleza": "limit" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/conversacion/chat-io/index.js:67",
+      "acciones": ["guarda this.logger = context.logger", "guarda this.eventBus = context.eventBus", "guarda this.mqtt = context.uiHandler?.mqtt || null (REF EXTERNA al cliente MQTT del core)", "logger.info('chat-io.loaded')"],
+      "guarda_referencias_externas": ["this.logger=context.logger", "this.eventBus=context.eventBus", "this.mqtt=context.uiHandler?.mqtt"],
+      "puede_fallar_silenciosamente": true
+    },
+    "onUnload": {
+      "ubicacion": "modules/conversacion/chat-io/index.js:74",
+      "acciones": ["for ({ timeout } of this.pendingDb.values()) clearTimeout(timeout)", "this.pendingDb.clear()", "this.knownConversations.clear()"],
+      "estado_no_limpiado": ["schemaReady (Set de project_id; queda en GC al morir la instancia)"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "database-manager",                             "via_evento": "db.query.request → db.query.response",      "obligatorio_en": "runtime", "ubicacion_uso": "modules/conversacion/chat-io/index.js:92",  "es_cross_vertical": false },
+    { "modulo_dependido": "project-manager",                              "via_evento": "project.activated (subscribe)",             "obligatorio_en": "runtime", "ubicacion_uso": "modules/conversacion/chat-io/index.js:146", "es_cross_vertical": false },
+    { "modulo_dependido": "ai-gateway",                                   "via_evento": "ai.chat.response (subscribe)",              "obligatorio_en": "runtime", "ubicacion_uso": "modules/conversacion/chat-io/index.js:469", "es_cross_vertical": false },
+    { "modulo_dependido": "core/gateway/UIRequestHandler (cliente MQTT)", "via_evento": "context.uiHandler.mqtt — referencia directa","obligatorio_en": "onLoad",  "ubicacion_uso": "modules/conversacion/chat-io/index.js:70",  "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "database-manager",                            "que_pasa_si_cae": "Cada _db() rechaza con 'db timeout' tras 10s. _ensureSchema falla → UI handlers propagan error. handleSend lanza throw, frontend ve 400.", "evidencia": "modules/conversacion/chat-io/index.js:87"  },
+    { "dependencia": "project-manager",                             "que_pasa_si_cae": "Sin project.activated, _ensureSchema solo bajo demanda. Módulo sigue, pierde pre-warming. NO crítico.",                                       "evidencia": "modules/conversacion/chat-io/index.js:150" },
+    { "dependencia": "ai-gateway",                                  "que_pasa_si_cae": "Mensajes user persisten y emiten chat.message.saved pero nunca hay ai.chat.response. Frontend cuelga hasta failsafe 180s.",                  "evidencia": "modules/conversacion/chat-io/index.js:502" },
+    { "dependencia": "core/gateway/UIRequestHandler (cliente MQTT)","que_pasa_si_cae": "this.mqtt queda null en onLoad. onAiResponse persiste y emite chat.assistant.saved pero NO publica conversation/{id}/message.",              "evidencia": "modules/conversacion/chat-io/index.js:506" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('chat-io.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["project_id", "table", "column", "error"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('chat-io.loaded');",                                                       "ubicacion": "modules/conversacion/chat-io/index.js:71"  },
+        { "snippet": "this.logger.info('chat-io.schema.migrated', { project_id, table: m.table, column: m.column });", "ubicacion": "modules/conversacion/chat-io/index.js:137" },
+        { "snippet": "this.logger.warn('chat-io.schema.failed', { project_id, error: err.message })",            "ubicacion": "modules/conversacion/chat-io/index.js:150" },
+        { "snippet": "this.logger.error('chat-io.save_assistant.failed', { error: err.message });",              "ubicacion": "modules/conversacion/chat-io/index.js:498" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — chat-io solo genera request_id local con crypto.randomUUID() en _db. NO extrae correlation_id de eventos entrantes ni lo añade a publish salientes."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": false,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/conversacion/chat-io/index.js:118", "comentario_literal": "añade las columnas que faltan (CREATE TABLE IF NOT EXISTS no las añade).", "contexto": "_migrateSchema explica por qué la migración suave es necesaria pese a CREATE TABLE IF NOT EXISTS" },
+      { "ubicacion": "modules/conversacion/chat-io/index.js:262", "comentario_literal": "Propagar los 9 campos",                                                    "contexto": "handleSend propaga el contrato fijo de 9 campos del payload chat-io" },
+      { "ubicacion": "modules/conversacion/chat-io/index.js:273", "comentario_literal": "útil para correlacionar la respuesta",                                    "contexto": "handleSend — message_id sirve para correlacionar la respuesta del LLM con el mensaje user original" }
+    ],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 522,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "f82bc65",
+      "fecha": "2026-04-25 15:13:05 +0000",
+      "subject": "chat-io: serializar fechas a ISO + incluir message_count en list/load"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "this.mqtt.publish directo a topic de conversación además de eventBus", "ejemplo": "modules/conversacion/chat-io/index.js:507", "rareza": "inusual" },
+      { "patron": "ref directa al cliente MQTT del core guardada en onLoad",              "ejemplo": "modules/conversacion/chat-io/index.js:70",  "rareza": "inusual" }
+    ]
+  },
+
+  "quirks": {
+    "warnings": [
+      "estado_modulo='candidato_a_retirada' por inconsistencia del config: 'chat-io' no aparece en config.modules.enabled ni disabled, pero el loader lo carga por discovery recursivo bajo modules/conversacion/.",
+      "publica_emitidos_no_declarados incluye db.query.request — emitido en código pero NO listado en module.json.events.publishes (drift declarativo)."
+    ],
+    "secciones_vacias_intencionalmente": [
+      "tools (módulo de I/O sin tools al LLM)",
+      "apis_http (todo va por ui_handlers MQTT)",
+      "estado.persistencia.archivos (usa SQLite no archivos)",
+      "configuracion.env_vars",
+      "configuracion.module_json_config_keys (manifest sin config)",
+      "configuracion.paths_proyecto_referenciados",
+      "observabilidad.metricas_emitidas (no usa metrics.X)",
+      "archivos_hermanos.* (módulo minimalista: solo index.js)",
+      "version_archivada (no hay versión archivada con nombre 'chat-io')",
+      "codigo_intencion.todos"
+    ]
+  }
+}

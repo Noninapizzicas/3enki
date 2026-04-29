@@ -1,0 +1,358 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/carta-manager",
+    "ubicacion": "modules/pizzepos/carta-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__carta-manager.json"
+  },
+
+  "identidad": {
+    "name": "carta-manager",
+    "version": "1.0.0",
+    "description_oficial": "Dueño de datos de cartas — CRUD, persistencia, versionado, búsqueda, estadísticas",
+    "author": "Pizzepos Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/pizzepos/carta-manager/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.listada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:100",
+        "metodo_contenedor": "onCartaListarSolicitada",
+        "es_handler_de": "carta.listar.solicitada",
+        "bloque_logico": "respuesta success al request_response legacy",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "cartas", "total"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('carta.listada', {\n        request_id, correlation_id, project_id,\n        cartas: result?.data?.cartas || [], total: result?.data?.total || 0\n      });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.listar.fallida", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:106",
+        "metodo_contenedor": "onCartaListarSolicitada",
+        "es_handler_de": "carta.listar.solicitada",
+        "bloque_logico": "catch path",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "error"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('carta.listar.fallida', { ... error: err.message });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.editada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:122",
+        "metodo_contenedor": "onCartaEditarSolicitada",
+        "es_handler_de": "carta.editar.solicitada",
+        "bloque_logico": "respuesta success",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('carta.editada', { request_id, correlation_id, project_id, ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.editar.fallida", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:127",
+        "metodo_contenedor": "onCartaEditarSolicitada",
+        "es_handler_de": "carta.editar.solicitada",
+        "bloque_logico": "catch path",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "error"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('carta.editar.fallida', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.borrada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:139",
+        "metodo_contenedor": "onCartaBorrarSolicitada",
+        "es_handler_de": "carta.borrar.solicitada",
+        "bloque_logico": "respuesta success",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('carta.borrada', { request_id, correlation_id, project_id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.borrar.fallida", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:143",
+        "metodo_contenedor": "onCartaBorrarSolicitada",
+        "es_handler_de": "carta.borrar.solicitada",
+        "bloque_logico": "catch path",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "correlation_id", "project_id", "error"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('carta.borrar.fallida', { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:263",
+        "metodo_contenedor": "toolSave (probable)",
+        "es_handler_de": "tool carta.save",
+        "bloque_logico": "tras saveCartaToDisk — guarda nueva carta",
+        "payload": { "tipo": "spread", "campos_visibles": ["...cartaObj", "project_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    cartaObj.meta.updated_at = new Date().toISOString();\n    await this.saveCartaToDisk(cartaObj, project_id);\n    await this.eventBus.publish('carta.actualizada', { ...cartaObj, project_id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:336",
+        "metodo_contenedor": "toolAddProduct (probable)",
+        "es_handler_de": "tool carta.add_product",
+        "bloque_logico": "tras añadir producto y guardar",
+        "payload": { "tipo": "spread", "campos_visibles": ["...carta", "project_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:350",
+        "metodo_contenedor": "toolRemoveProduct (probable)",
+        "es_handler_de": "tool carta.remove_product",
+        "bloque_logico": "tras quitar producto y guardar",
+        "payload": { "tipo": "spread", "campos_visibles": ["...carta", "project_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:371",
+        "metodo_contenedor": "toolUpdateProduct (probable)",
+        "es_handler_de": "tool carta.update_product",
+        "bloque_logico": "tras actualizar producto",
+        "payload": { "tipo": "spread", "campos_visibles": ["...carta", "project_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:388",
+        "metodo_contenedor": "toolAddCategory (probable)",
+        "es_handler_de": "tool carta.add_category",
+        "bloque_logico": "tras añadir categoría",
+        "payload": { "tipo": "spread", "campos_visibles": ["...carta", "project_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:421",
+        "metodo_contenedor": "toolUpdatePrices (probable)",
+        "es_handler_de": "tool carta.update_prices",
+        "bloque_logico": "tras actualizar precios bulk",
+        "payload": { "tipo": "spread", "campos_visibles": ["...carta", "project_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-manager/index.js:508",
+        "metodo_contenedor": "toolRestore (probable)",
+        "es_handler_de": "tool carta.restore",
+        "bloque_logico": "tras restaurar versión anterior",
+        "payload": { "tipo": "spread", "campos_visibles": ["...carta", "project_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.activated",       "tipo_nombre": "literal", "handler": "onProjectActivated",       "handler_ubicacion": "modules/pizzepos/carta-manager/index.js:69",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-manager/index.js:82",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.deactivated",     "tipo_nombre": "literal", "handler": "onProjectDeactivated",     "handler_ubicacion": "modules/pizzepos/carta-manager/index.js:87",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-manager/index.js:87",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "carta.listar.solicitada", "tipo_nombre": "literal", "handler": "onCartaListarSolicitada", "handler_ubicacion": "modules/pizzepos/carta-manager/index.js:95",  "comportamiento_si_falla": "otro",        "evidencia_comportamiento": "modules/pizzepos/carta-manager/index.js:106", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "carta.editar.solicitada", "tipo_nombre": "literal", "handler": "onCartaEditarSolicitada", "handler_ubicacion": "modules/pizzepos/carta-manager/index.js:113", "comportamiento_si_falla": "otro",        "evidencia_comportamiento": "modules/pizzepos/carta-manager/index.js:127", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "carta.borrar.solicitada", "tipo_nombre": "literal", "handler": "onCartaBorrarSolicitada", "handler_ubicacion": "modules/pizzepos/carta-manager/index.js:134", "comportamiento_si_falla": "otro",        "evidencia_comportamiento": "modules/pizzepos/carta-manager/index.js:143", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["carta.actualizada", "carta.listada", "carta.editada", "carta.borrada", "carta.listar.fallida", "carta.editar.fallida", "carta.borrar.fallida"],
+      "publica_literales_en_codigo": ["carta.actualizada", "carta.borrada", "carta.borrar.fallida", "carta.editada", "carta.editar.fallida", "carta.listada", "carta.listar.fallida"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["project.activated", "project.deactivated", "carta.listar.solicitada", "carta.editar.solicitada", "carta.borrar.solicitada"],
+      "subscribes_realmente_registrados": ["project.activated", "project.deactivated", "carta.listar.solicitada", "carta.editar.solicitada", "carta.borrar.solicitada"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [
+    { "name": "carta.save",            "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolSave",          "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["carta.actualizada"] }, "errores_conocidos": [] },
+    { "name": "carta.get",             "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolGet",           "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "carta.list",            "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolList",          "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": { "cartas": "array", "total": "number" }, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "carta.delete",          "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolDelete",        "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "carta.add_product",     "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolAddProduct",    "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["carta.actualizada"] }, "errores_conocidos": [] },
+    { "name": "carta.remove_product",  "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolRemoveProduct", "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["carta.actualizada"] }, "errores_conocidos": [] },
+    { "name": "carta.update_product",  "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolUpdateProduct", "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["carta.actualizada"] }, "errores_conocidos": [] },
+    { "name": "carta.add_category",    "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolAddCategory",   "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["carta.actualizada"] }, "errores_conocidos": [] },
+    { "name": "carta.update_prices",   "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolUpdatePrices",  "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["carta.actualizada"] }, "errores_conocidos": [] },
+    { "name": "carta.search",          "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolSearch",        "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "carta.stats",           "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolStats",         "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "carta.versions",        "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolVersions",      "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "carta.restore",         "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolRestore",       "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["carta.actualizada"] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "cartasPerProject", "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-manager/index.js:36", "se_invalida_con": "set en onProjectActivated (carga desde disco) | onProjectDeactivated probable",  "leak_potencial": false },
+      { "campo": "projectPaths",     "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-manager/index.js:38", "se_invalida_con": "onProjectActivated set; cache permanente",                                       "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/cartas/{carta_id}.json",                "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" },
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/cartas/.versions/{carta_id}/{ts}.json","formato": "json", "operaciones": ["write"],         "via_evento": null, "atomicidad": "append-only" }
+      ],
+      "notas_concurrencia": "Persiste cartas como archivos JSON por proyecto. Versionado: cada save genera snapshot en .versions/{carta_id}/{timestamp}.json (50 versiones máx según contexto/cartas-ecosystem.json). Sin locks — single-writer por carta."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/projects/{slug}/storage/pizzepos/cartas/"],
+    "valores_hardcoded_observables": []
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/pizzepos/carta-manager/index.js:41",
+      "acciones": [
+        "guarda this.logger / this.eventBus",
+        "logger.info('module.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/pizzepos/carta-manager/index.js:48",
+      "acciones": ["logger.info('module.unloaded')"],
+      "estado_no_limpiado": ["cartasPerProject", "projectPaths"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "project-manager", "via_evento": "project.activated (subscribe)",    "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-manager/index.js:69", "es_cross_vertical": false },
+    { "modulo_dependido": "Node.js fs (lectura/escritura archivos cartas)", "via_evento": "fs directo (no fs.write.request)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-manager/index.js (saveCartaToDisk interno)", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "fs (escritura JSON cartas)",       "que_pasa_si_cae": "logger.warn 'carta-manager.save_failed'; toolSave devuelve error.",                                                              "evidencia": "modules/pizzepos/carta-manager/index.js:171" },
+    { "dependencia": "fs (lectura cartas en onProjectActivated)", "que_pasa_si_cae": "logger.warn 'carta-manager.load_failed' / 'carta-manager.dir_error'; cartasPerProject queda vacío para el proyecto.", "evidencia": "modules/pizzepos/carta-manager/index.js:191" },
+    { "dependencia": "versionado (.versions write fallido)",     "que_pasa_si_cae": "logger.debug 'carta-manager.version.skip'; carta principal se guarda igual aunque la versión histórica no.",            "evidencia": "modules/pizzepos/carta-manager/index.js:228" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('carta-manager.<accion>' | 'module.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "version", "project_id", "error"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('module.loaded', { module: this.name, version: this.version });",  "ubicacion": "modules/pizzepos/carta-manager/index.js:45"  },
+        { "snippet": "this.logger.info('carta-manager.project.activated', { ... });",                       "ubicacion": "modules/pizzepos/carta-manager/index.js:82"  },
+        { "snippet": "this.logger.warn('carta-manager.save_failed', { ... });",                              "ubicacion": "modules/pizzepos/carta-manager/index.js:171" },
+        { "snippet": "this.logger.warn('carta-manager.load_failed', { ... });",                              "ubicacion": "modules/pizzepos/carta-manager/index.js:191" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": true,
+      "evidencia": "Los handlers legacy (onCartaListarSolicitada, etc.) propagan correlation_id en payload de las respuestas. Los publishes de carta.actualizada (línea 263+) NO llevan correlation_id (son eventos de dominio fire-and-forget)."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 593,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "ECOSISTEMA CARTAS — DUEÑO DE DATOS. carta-manager es el HUB del ecosistema cartas. Emite 'carta.actualizada' 7 veces desde 7 tools distintas (save, add/remove/update_product, add_category, update_prices, restore). Todos los demás módulos cartas (carta-digital, carta-impresion, carta-design, carta-marketing, comandero, productos, etc.) escuchan este evento.",
+      "0 drift en publica/subscribes — manifest 100% honesto",
+      "13 tools — handler_ubicacion no inspeccionado a fondo (los métodos toolX viven probablemente en un archivo lib o en index.js entre líneas 200-510, no etiquetadas con prefijo 'tool' en la regex). Diferido.",
+      "Tracing parcial: legacy carta.X.solicitada/fallida/listada propagan correlation_id; carta.actualizada (evento de dominio) NO lo propaga",
+      "Persistencia: archivos JSON con versionado snapshot (.versions/) — patrón único en repo (recetas también usa JSON pero sin versionado nativo)",
+      "ui_handlers + apis_http no rellenados (solo handleList, handleGet, handleHealth visibles — diferidos)"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "ui_handlers (existen pero diferidos)",
+      "apis_http (no expone HTTP directamente)",
+      "estado.persistencia.sqlite_tablas (usa JSON files con versionado)",
+      "configuracion.env_vars / module_json_config_keys / hardcoded",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / workarounds_detectados",
+      "outliers_capturados",
+      "version_archivada"
+    ]
+  }
+}

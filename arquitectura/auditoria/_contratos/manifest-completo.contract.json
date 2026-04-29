@@ -1,0 +1,108 @@
+{
+  "_doc": "Captura el manifiesto completo de UN módulo. Lee module.json + config.json + system.json + listings de archivos hermanos. NO LEE CÓDIGO. Maximalista por diseño: si un campo aparece en module.json, se captura. Lo que sea ruido se descarta en revisión, no en extracción.",
+  "id": "manifest-completo",
+  "version": "2.0.0",
+  "creada": "2026-04-29",
+  "supersedes": "identidad-modulo v1.1.0",
+
+  "objetivo": "Foto fiel del manifest declarado del módulo, normalizado contra los 3 quirks estructurales conocidos del repo (eventos top-level vs envueltos, ui_handlers vs handlers, agents inline vs en archivos).",
+
+  "duracion_esperada_seg": 60,
+  "modelo_recomendado": "claude-haiku-4-5 (extracción puramente mecánica, no necesita razonamiento profundo)",
+
+  "inputs": {
+    "obligatorios": [
+      "{ubicacion}/module.json",
+      "/home/user/2enki/config.json",
+      "/home/user/2enki/contexto/system.json"
+    ],
+    "opcionales_listings": [
+      "ls {ubicacion}/agents/",
+      "ls {ubicacion}/prompts/",
+      "ls {ubicacion}/schemas/",
+      "ls {ubicacion}/__tests__/",
+      "ls /home/user/2enki/_archived/",
+      "ls /home/user/2enki/arquitectura/conversacion-ref/",
+      "wc -c {ubicacion}/module.json",
+      "wc -l {ubicacion}/module.json"
+    ],
+    "prohibido_leer": [
+      ".js", ".ts", ".svelte", "lib/", "services/",
+      "Contenido de agents/*.json (solo se listan paths)",
+      "Contenido de schemas/*.json (solo se listan paths)"
+    ]
+  },
+
+  "lista_canonica_keys_top_level": [
+    "name", "version", "description", "author", "main",
+    "events", "publishes", "subscribes", "provides",
+    "tools", "ui_handlers", "handlers", "apis", "routes",
+    "dependencies", "requires", "replaces", "config",
+    "observability", "tier", "tags",
+    "agents", "intents", "schema", "ui",
+    "enabled", "dev_only"
+  ],
+
+  "reglas_de_extraccion": [
+    "Lectura defensiva eventos: events?.publishes ?? publishes ?? [] (idem subscribes). Marca quirks.eventos_top_level=true si usa la forma top-level.",
+    "Lectura defensiva ui_handlers: ui_handlers ?? handlers ?? []. Marca quirks.ui_handlers_field_name con el campo real ('ui_handlers' | 'handlers' | null). Normaliza handlers[].method → handler en el output.",
+    "description_oficial copia LITERAL (saltos de línea, emojis, errores ortográficos — todo).",
+    "tools.parameters NO se inlinea: se reportan parameters_required[], parameters_property_names[], parameters_size_chars y parameters_full_path_hint para fase 2.",
+    "ui declarativa NO se inlinea: se reporta presente, enabled, views_keys, section_widget_types, permissions_declaradas, tamano_bytes, endpoints_referenciados, mqtt_topics_declarados.",
+    "config_declarada.valor_default: si es primitivo (string|number|boolean|null) se copia literal. Si es object/array se copia tal cual también (decisión v2.0: no escatimar).",
+    "outliers (claves no canónicas): capturar valor literal completo. Su rareza es información a preservar.",
+    "Si module.json no parsea: output = { _meta, error: 'module_json_parse_failed', evidencia, module_json_bytes }. Nada más.",
+    "Si module.json no existe: output = { _meta, estado_modulo: 'fantasma', error: 'module_json_missing' }. Nada más.",
+    "main: capturar EL VALOR del campo, NO resolver el path. Si el módulo dice main='lib/loader.js' eso es información — no normalizar."
+  ],
+
+  "derivaciones": {
+    "estado_modulo": [
+      "no module.json → 'fantasma'",
+      "name en config.modules.disabled → 'dormido_por_diseno'",
+      "name en config.modules.enabled → 'vivo'",
+      "resto → 'candidato_a_retirada'"
+    ],
+    "tier_carga_inferido": [
+      "Recorrer system.json.module_load_order.tiers (objeto). Devolver la primera clave cuyo array contenga el name. null si no aparece en ninguno."
+    ],
+    "tiene_main_no_estandar": "main !== null && main !== 'index.js'"
+  },
+
+  "prohibido": [
+    "Leer archivos de código (.js, .ts, .svelte)",
+    "Leer agents/*.json o schemas/*.json (solo listar paths)",
+    "Reformular description, descriptions de tools/eventos, o cualquier texto literal",
+    "Inferir tools/eventos/handlers que no estén en module.json",
+    "Inlinear ui completo o tools[].parameters completos (referencias por path)",
+    "Opinar, sugerir, refactorizar, proponer renombres"
+  ],
+
+  "salida": {
+    "ruta": "arquitectura/auditoria/_outputs/manifest-completo/{slug}.json",
+    "slug_rule": "modulo.replace('/', '__')",
+    "ejemplos": {
+      "recetas": "arquitectura/auditoria/_outputs/manifest-completo/recetas.json",
+      "conversacion/chat-io": "arquitectura/auditoria/_outputs/manifest-completo/conversacion__chat-io.json"
+    }
+  },
+
+  "validacion_automatica": {
+    "ajv_schema": "arquitectura/auditoria/_schemas/manifest-completo.schema.json",
+    "validator_script": "arquitectura/auditoria/_validators/manifest-completo.validate.js",
+    "checks_cruzados": [
+      "module_json_bytes coincide con wc -c real (±1 por newline final)",
+      "Cada eventos.publica[].event aparece literal en module.json (grep)",
+      "Cada tools[].name aparece literal en module.json",
+      "habilitado_en_config = config.modules.enabled.includes(name)",
+      "estado_modulo deriva correctamente según las 4 reglas",
+      "version_archivada.existe=true ⇒ ubicacion es directorio existente",
+      "outliers_capturados.campos_no_canonicos = Object.keys(module.json) - lista_canonica",
+      "Si error está presente, NO hay otros campos opcionales (solo _meta + error + evidencia)",
+      "ui_handlers.campo_origen coincide con qué clave realmente existe en module.json"
+    ],
+    "exit_code": "0 si pasan todos los checks. 1 si falla cualquiera. Mensaje específico por fallo."
+  },
+
+  "prompt_template_para_subagente": "Tarea: extraer el manifest completo del módulo {MODULO} en {UBICACION}.\n\nLEE EXACTAMENTE estos archivos (en este orden):\n1. /home/user/2enki/{UBICACION}/module.json\n2. /home/user/2enki/config.json\n3. /home/user/2enki/contexto/system.json\n4. ls de: {UBICACION}/agents/ {UBICACION}/prompts/ {UBICACION}/schemas/ {UBICACION}/__tests__/\n5. ls de: /home/user/2enki/_archived/ /home/user/2enki/arquitectura/conversacion-ref/\n6. wc -c y wc -l de {UBICACION}/module.json\n\nPROHIBIDO leer index.js, lib/*, services/*, .ts, .svelte, agents/*.json, schemas/*.json (solo paths).\n\nLEE el contrato completo: /home/user/2enki/arquitectura/auditoria/_contratos/manifest-completo.contract.json\nLEE el schema: /home/user/2enki/arquitectura/auditoria/_schemas/manifest-completo.schema.json\n\nProduce el JSON output siguiendo EXACTAMENTE el shape del schema. Aplica las reglas_de_extraccion del contrato. Aplica las derivaciones.\n\nGuarda el resultado en: /home/user/2enki/arquitectura/auditoria/_outputs/manifest-completo/{SLUG}.json\nDonde {SLUG} = {MODULO}.replace('/', '__').\n\nValida con: node /home/user/2enki/arquitectura/auditoria/_validators/manifest-completo.validate.js {SLUG}\n\nResponde en <80 palabras: ruta escrita, exit code del validador, número de outliers detectados, número de warnings en quirks."
+}

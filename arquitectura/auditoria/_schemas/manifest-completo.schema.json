@@ -1,0 +1,324 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://2enki/arquitectura/auditoria/_schemas/manifest-completo.schema.json",
+  "title": "Manifest Completo de un módulo (parcela manifest-completo v2.0.0)",
+  "description": "Schema estricto. Cualquier campo no declarado aquí hace fallar la validación.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_meta"],
+
+  "oneOf": [
+    {
+      "title": "Output normal (módulo con module.json válido)",
+      "required": ["_meta", "identidad", "estado_en_sistema", "eventos", "tools", "ui_handlers", "apis_http", "config_y_deps", "observability_declarada", "agentes", "intents_declarados", "ui_declarativa", "archivos_hermanos", "tags_declaradas", "outliers_capturados", "version_archivada", "quirks"],
+      "not": { "required": ["error"] }
+    },
+    {
+      "title": "Output de error (module.json inexistente o no parseable)",
+      "required": ["_meta", "error"],
+      "properties": {
+        "error": { "enum": ["module_json_missing", "module_json_parse_failed"] }
+      }
+    }
+  ],
+
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modulo", "ubicacion", "auditado_en", "parcela", "parcela_version"],
+      "properties": {
+        "modulo":          { "type": "string", "minLength": 1 },
+        "ubicacion":       { "type": "string", "pattern": "^modules/" },
+        "auditado_en":     { "type": "string", "format": "date" },
+        "parcela":         { "const": "manifest-completo" },
+        "parcela_version": { "const": "2.0.0" }
+      }
+    },
+
+    "error":     { "type": "string", "enum": ["module_json_missing", "module_json_parse_failed"] },
+    "evidencia": { "type": "string" },
+
+    "identidad": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "description_oficial", "author", "main"],
+      "properties": {
+        "name":                { "type": "string", "minLength": 1 },
+        "version":             { "type": ["string", "null"] },
+        "description_oficial": { "type": ["string", "null"] },
+        "author":              { "type": ["string", "null"] },
+        "main":                { "type": ["string", "null"] }
+      }
+    },
+
+    "estado_en_sistema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["habilitado_en_config", "en_disabled_de_config", "estado_modulo", "tier_carga_inferido", "tier_declarado", "dev_only_declarado", "enabled_declarado"],
+      "properties": {
+        "habilitado_en_config":   { "type": "boolean" },
+        "en_disabled_de_config":  { "type": "boolean" },
+        "estado_modulo":          { "enum": ["vivo", "dormido_por_diseno", "candidato_a_retirada", "fantasma"] },
+        "tier_carga_inferido":    { "type": ["string", "null"] },
+        "tier_declarado":         { "type": ["string", "null"] },
+        "dev_only_declarado":     { "type": "boolean" },
+        "enabled_declarado":      { "type": ["boolean", "null"] }
+      }
+    },
+
+    "eventos": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publica", "subscribes", "provides_eventos"],
+      "properties": {
+        "publica": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["event", "description"],
+            "properties": {
+              "event":       { "type": "string", "minLength": 1 },
+              "description": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "subscribes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["event", "handler", "extras"],
+            "properties": {
+              "event":   { "type": "string", "minLength": 1 },
+              "handler": { "type": ["string", "null"] },
+              "extras":  { "type": "object" }
+            }
+          }
+        },
+        "provides_eventos": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "description", "parameters_required", "parameters_property_names", "parameters_size_chars", "parameters_full_path_hint"],
+        "properties": {
+          "name":                       { "type": "string", "minLength": 1 },
+          "description":                { "type": ["string", "null"] },
+          "parameters_required":        { "type": "array", "items": { "type": "string" } },
+          "parameters_property_names":  { "type": "array", "items": { "type": "string" } },
+          "parameters_size_chars":      { "type": "integer", "minimum": 0 },
+          "parameters_full_path_hint":  { "type": "string" }
+        }
+      }
+    },
+
+    "ui_handlers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campo_origen", "items"],
+      "properties": {
+        "campo_origen": { "enum": ["ui_handlers", "handlers", null] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["domain", "action", "handler"],
+            "properties": {
+              "domain":  { "type": "string" },
+              "action":  { "type": "string" },
+              "handler": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    },
+
+    "apis_http": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["method", "path", "handler", "description", "request_schema_ref", "response_schema_ref"],
+        "properties": {
+          "method":              { "type": "string" },
+          "path":                { "type": "string" },
+          "handler":             { "type": ["string", "null"] },
+          "description":         { "type": ["string", "null"] },
+          "request_schema_ref":  { "type": ["string", "null"] },
+          "response_schema_ref": { "type": ["string", "null"] }
+        }
+      }
+    },
+
+    "config_y_deps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dependencies_declaradas", "requires_declarado", "replaces_declarado", "config_declarada"],
+      "properties": {
+        "dependencies_declaradas": { "type": "array", "items": { "type": "string" } },
+        "requires_declarado":      { "type": "array", "items": { "type": "string" } },
+        "replaces_declarado":      { "type": "array", "items": { "type": "string" } },
+        "config_declarada": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "tipo", "valor_default"],
+            "properties": {
+              "key":           { "type": "string" },
+              "tipo":          { "enum": ["string", "number", "boolean", "object", "array", "null"] },
+              "valor_default": {}
+            }
+          }
+        }
+      }
+    },
+
+    "observability_declarada": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logging", "metrics"],
+      "properties": {
+        "logging": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level", "structured"],
+          "properties": {
+            "level":      { "type": ["string", "null"] },
+            "structured": { "type": ["boolean", "null"] }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "counters", "gauges", "timings"],
+          "properties": {
+            "enabled":  { "type": ["boolean", "null"] },
+            "counters": { "type": "array", "items": { "type": "string" } },
+            "gauges":   { "type": "array", "items": { "type": "string" } },
+            "timings":  { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+
+    "agentes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inline_en_module_json", "archivos_propios", "agents_referenciados_en_intents"],
+      "properties": {
+        "inline_en_module_json": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "description"],
+            "properties": {
+              "name":        { "type": "string" },
+              "description": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "archivos_propios":               { "type": "array", "items": { "type": "string" } },
+        "agents_referenciados_en_intents": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "intents_declarados": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["keywords", "action", "tool", "agent", "description", "multi_turn"],
+        "properties": {
+          "keywords":    { "type": "array", "items": { "type": "string" } },
+          "action":      { "type": "string" },
+          "tool":        { "type": ["string", "null"] },
+          "agent":       { "type": ["string", "null"] },
+          "description": { "type": ["string", "null"] },
+          "multi_turn":  { "type": ["boolean", "null"] }
+        }
+      }
+    },
+
+    "ui_declarativa": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["presente", "enabled", "title", "icon", "views_keys", "section_widget_types", "permissions_declaradas", "tamano_bytes", "endpoints_referenciados", "mqtt_topics_declarados"],
+      "properties": {
+        "presente":                 { "type": "boolean" },
+        "enabled":                  { "type": ["boolean", "null"] },
+        "title":                    { "type": ["string", "null"] },
+        "icon":                     { "type": ["string", "null"] },
+        "views_keys":               { "type": "array", "items": { "type": "string" } },
+        "section_widget_types":     { "type": "array", "items": { "type": "string" } },
+        "permissions_declaradas":   { "type": "array", "items": { "type": "string" } },
+        "tamano_bytes":             { "type": "integer", "minimum": 0 },
+        "endpoints_referenciados":  { "type": "array", "items": { "type": "string" } },
+        "mqtt_topics_declarados":   { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "archivos_hermanos": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agents", "schemas", "prompts", "context", "prompt_module", "readme", "tests_propios"],
+      "properties": {
+        "agents":        { "type": "array", "items": { "type": "string" } },
+        "schemas":       { "type": "array", "items": { "type": "string" } },
+        "prompts":       { "type": "array", "items": { "type": "string" } },
+        "context":       { "type": "boolean" },
+        "prompt_module": { "type": "boolean" },
+        "readme":        { "type": "boolean" },
+        "tests_propios": { "type": "boolean" }
+      }
+    },
+
+    "tags_declaradas": { "type": "array", "items": { "type": "string" } },
+
+    "outliers_capturados": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campos_no_canonicos", "snapshots"],
+      "properties": {
+        "campos_no_canonicos": { "type": "array", "items": { "type": "string" } },
+        "snapshots":           { "type": "object" }
+      }
+    },
+
+    "version_archivada": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existe", "ubicacion"],
+      "properties": {
+        "existe":    { "type": "boolean" },
+        "ubicacion": { "type": ["string", "null"] }
+      }
+    },
+
+    "quirks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eventos_top_level", "ui_handlers_field_name", "module_json_bytes", "module_json_lineas", "tiene_main_no_estandar", "warnings"],
+      "properties": {
+        "eventos_top_level":       { "type": "boolean" },
+        "ui_handlers_field_name":  { "enum": ["ui_handlers", "handlers", null] },
+        "module_json_bytes":       { "type": "integer", "minimum": 0 },
+        "module_json_lineas":      { "type": "integer", "minimum": 0 },
+        "tiene_main_no_estandar":  { "type": "boolean" },
+        "warnings":                { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

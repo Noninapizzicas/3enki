@@ -1,0 +1,115 @@
+{
+  "_doc": "Captura TODA la información necesaria de UN módulo para poder reescribirlo desde cero. Lee manifest-completo previamente extraído + el código real (index.js + lib/ + services/). Descriptivo, NO prescriptivo: registra elecciones, no las juzga. La diversidad capturada es información para el cruce posterior y la decisión del paradigma unificado.",
+  "id": "modulo-completo",
+  "version": "1.0.0",
+  "creada": "2026-04-29",
+  "supersedes_nota": "manifest-completo v2.0.0 sigue válido como referencia previa — modulo-completo lo CRUZA contra el código pero no lo reemplaza. eventos-emitidos v1.0.0 queda absorbido por modulo-completo.eventos.publica[].",
+
+  "objetivo": "Producir UN JSON por módulo, suficiente para reescribirlo en el paradigma unificado sin volver a leer el código viejo. Incluye lo declarado (manifest), lo real (código), y la brecha entre ambos.",
+
+  "duracion_esperada_seg": 240,
+  "modelo_recomendado": "claude-sonnet-4-6 — lectura de código + razonamiento estructural + cross-check con manifest. Opus si el módulo es muy grande (>1500 líneas) o complejo (carta-manager, telegram-service, project-manager).",
+
+  "inputs": {
+    "obligatorios": [
+      "{ubicacion}/index.js",
+      "/home/user/2enki/arquitectura/auditoria/_outputs/manifest-completo/{slug}.json"
+    ],
+    "obligatorios_si_existen": [
+      "{ubicacion}/lib/**/*.js",
+      "{ubicacion}/services/**/*.js"
+    ],
+    "opcionales_para_contexto": [
+      "{ubicacion}/README.md",
+      "{ubicacion}/context.json",
+      "{ubicacion}/prompt.json"
+    ],
+    "prohibido_leer": [
+      "{ubicacion}/__tests__/**",
+      "OTROS módulos (cero cross-module reads)",
+      "node_modules/",
+      "frontend/",
+      "Cualquier .ts, .svelte"
+    ]
+  },
+
+  "filosofia": [
+    "DESCRIPTIVO, no prescriptivo. Si el módulo usa this.mqtt.publish directo, capturar el hecho. NO marcar como 'violación'.",
+    "Cada afirmación con archivo:línea verificable. Sin línea, no se afirma.",
+    "Lo desconocido → null + nota corta en quirks.warnings. Nunca inventar.",
+    "Cruzar contra manifest-completo: declarado vs real. Las divergencias son información, no errores.",
+    "El output debe ser autosuficiente para reescribir el módulo. Si tienes que volver a abrir el código viejo, falta algo."
+  ],
+
+  "lista_canonica_canales_publish": ["eventBus", "mqtt_directo", "otro"],
+
+  "output_shape_resumen": "Ver el JSON Schema en _schemas/modulo-completo.schema.json. Secciones top-level: _meta, identidad, estado_en_sistema, eventos (publica/subscribes/consistencia_con_manifest), tools, ui_handlers, apis_http, estado (memoria/persistencia), configuracion, lifecycle, dependencias_implicitas, modos_de_fallo, observabilidad, archivos_hermanos, version_archivada, codigo_intencion, metricas_fisicas, outliers_capturados, quirks.",
+
+  "reglas_de_extraccion": [
+    "Cargar manifest-completo del slug correspondiente. Si no existe, abortar con error claro.",
+    "Eventos publica: grep -nE '(eventBus|this\\.eventBus|mqtt|this\\.mqtt)\\.publish\\(' en index.js + lib + services. Para cada uno extraer nombre, payload, canal, contexto, snippet 3-5 líneas. Cada match es UNA entrada (no de-duplicar literales con dinámicos).",
+    "Eventos subscribes: 1) los declarados en module.json (auto-wired) van con auto_wired=true. 2) grep adicional 'eventBus.subscribe(' o 'this.eventBus.subscribe(' o 'mqtt.subscribe(' en código para detectar dinámicos.",
+    "Tools handlers: para cada manifest.tools[].name, encontrar el método del módulo que lo maneja (lookup en TOOL_HANDLERS map o subscribes de module.json). Leer su retorno: si devuelve objeto literal, capturar keys. Si devuelve string que parece markdown (líneas '- ', '## ', etc.), marcar es_markdown_formateado=true. Si emite eventos de dominio dentro, listarlos en publica_eventos_de_dominio.",
+    "UI handlers: localizar el método para cada manifest.ui_handlers[].handler. Capturar campos validados explícitamente (isUUID, !x, etc.) y códigos de error que se lanzan (PROJECT_REQUIRED, etc.).",
+    "APIs HTTP: igual, localizar método. Auth observada via verificación de cert / sesión / nada.",
+    "Estado memoria: scan 'this.X = new (Map|Set)\\(\\)' o 'this.X = {}' o 'this.X = []' en constructor / onLoad. Documentar dónde se invalida (con grep por 'this.X.delete', 'this.X.clear', 'this.X = ').",
+    "SQLite: grep 'CREATE TABLE' y 'CREATE INDEX' en cualquier archivo permitido. Para cada uno: nombre tabla, columnas, método contenedor, archivo:línea.",
+    "Archivos: grep 'fs.read.request', 'fs.write.request', 'fs.readFileSync', 'fs.writeFileSync'. Capturar path_pattern y operaciones.",
+    "Hardcoded values: scan setTimeout(fn, NUMBER) → NUMBER es timeout. URLs literales http(s)://. Modelos LLM 'gpt-*', 'claude-*', 'gemini-*'. Limits >10 que parezcan paginación.",
+    "Env vars: grep 'process.env.X'.",
+    "TODOs: grep -inE '(TODO|FIXME|XXX|HACK)'.",
+    "Comentarios 'porque': comentarios cuyo contenido contenga 'porque', 'because', 'evita', 'fix', 'workaround', 'bug', 'arregla'. Capturar literal con archivo:línea.",
+    "Lifecycle onLoad/onUnload: localizar los métodos. Si no existen, marcar ubicacion=null. Para onUnload, identificar qué campos this.X se limpian (clear/delete) — los que NO aparecen son leak_potencial.",
+    "Modos de fallo: por cada dependencia_implicita detectada, buscar el setTimeout o el catch que controla el fallo. Si no hay control visible, que_pasa_si_cae='cuelga sin timeout' o 'desconocido'.",
+    "Logger: detectar firma analizando varios this.logger.X(). Si el primer arg es objeto y el segundo string → estilo pino. Si el primero es string y el segundo objeto → estilo system.json (structured_json).",
+    "Métricas emitidas: grep 'this.metrics.(increment|gauge|timing)\\(' o 'metrics.(increment|gauge|timing)\\('. Capturar el primer arg literal.",
+    "Cross-check declarado vs real: set-difference entre manifest publica/subscribes y los detectados en código.",
+    "Último commit: ejecutar `git log -1 --format='%h|%ci|%s' -- {ubicacion}` y parsear los 3 campos."
+  ],
+
+  "derivaciones": {
+    "estado_modulo": "heredado de manifest-completo (mismo cálculo)",
+    "leak_potencial": "true si campo de estado.memoria no aparece en onUnload ni en ningún clearTimeout/delete/clear visible",
+    "es_cross_vertical": "true si modulo_dependido está en pizzepos/* y self no, o viceversa; o conversacion vs facturacion vs ...",
+    "tools.retorno.es_markdown_formateado": "heurística: el return contiene .map(x => `- ${x}`).join o template literals con ## headers",
+    "publica.declarado_en_manifest": "true si nombre.tipo=literal y nombre.valor in manifest.eventos.publica[].event"
+  },
+
+  "prohibido": [
+    "Marcar nada como 'violación', 'incumple', 'incorrecto'. Descriptivo SIEMPRE.",
+    "Inventar campos que no son visibles en código. Sin evidencia archivo:línea, no se afirma.",
+    "Modificar código del módulo (read-only).",
+    "Leer otros módulos. El cruce cross-module es una parcela posterior.",
+    "Reformular descriptions, comentarios, mensajes de log, etc.",
+    "Sugerir rediseños o refactors.",
+    "Inlinear el JSON Schema completo de tools.parameters (eso ya está en manifest)."
+  ],
+
+  "salida": {
+    "ruta": "arquitectura/auditoria/_outputs/modulo-completo/{slug}.json",
+    "slug_rule": "modulo.replace('/', '__')"
+  },
+
+  "validacion_automatica": {
+    "ajv_schema": "arquitectura/auditoria/_schemas/modulo-completo.schema.json",
+    "validator_script": "arquitectura/auditoria/_validators/modulo-completo.validate.js",
+    "checks_cruzados": [
+      "manifest_referencia apunta a archivo existente y _meta.modulo coincide con su _meta.modulo",
+      "Cada eventos.publica[].ubicacion = 'archivo:línea' contiene literalmente '.publish(' (anti-invención)",
+      "Cada eventos.subscribes[].handler_ubicacion contiene literalmente el nombre del handler como identificador",
+      "Cada tools[].handler_ubicacion contiene literalmente el nombre del método",
+      "Cada estado.memoria[].ubicacion_init contiene 'this.<campo>' literalmente",
+      "Cada estado.persistencia.sqlite_tablas[].ubicacion_create contiene 'CREATE TABLE' literalmente (case insensitive)",
+      "Cada codigo_intencion.todos[].ubicacion contiene el tipo (TODO/FIXME/XXX/HACK) literalmente",
+      "publica.consistencia.publica_declarados_no_emitidos = (manifest.publica - publica_literales_en_codigo)",
+      "publica.consistencia.publica_emitidos_no_declarados = (publica_literales_en_codigo - manifest.publica)",
+      "metricas_fisicas.lineas_index_js coincide con wc -l real (±1)",
+      "ultimo_commit.sha existe en git log si != null",
+      "version_archivada.existe=true ⇒ ubicacion es directorio existente",
+      "Distribución por canal en eventos.publica suma a len(eventos.publica)"
+    ],
+    "exit_code": "0 si pasan todos. 1 si falla cualquiera. Mensaje específico por fallo."
+  },
+
+  "prompt_template_para_subagente": "Tarea: extraer modulo-completo del módulo {MODULO} en {UBICACION}. Una sola pasada produce el JSON comprehensivo.\n\nLEE OBLIGATORIO:\n1. /home/user/2enki/arquitectura/auditoria/_contratos/modulo-completo.contract.json (este contrato)\n2. /home/user/2enki/arquitectura/auditoria/_schemas/modulo-completo.schema.json (shape exacto)\n3. /home/user/2enki/arquitectura/auditoria/_outputs/modulo-completo/recetas.json (FIXTURE CANÓNICO de referencia)\n4. /home/user/2enki/arquitectura/auditoria/_outputs/manifest-completo/{SLUG}.json (cross-check obligatorio)\n\nLEE EL CÓDIGO DEL MÓDULO:\n- /home/user/2enki/{UBICACION}/index.js (íntegro)\n- {UBICACION}/lib/**/*.js si existe (íntegros)\n- {UBICACION}/services/**/*.js si existe (íntegros)\n- {UBICACION}/README.md si existe (para contexto)\n\nPROHIBIDO leer __tests__, otros módulos, .ts, .svelte, frontend/.\n\nEJECUTA las grep que indica el contrato (publishes, subscribes, CREATE TABLE, TODOs, this.X = new Map()) sobre los archivos de código permitidos.\n\nFILOSOFÍA: descriptivo, NO prescriptivo. Cada afirmación con archivo:línea.\n\nLLENA EL JSON COMPLETO según el schema. Aplica TODAS las reglas_de_extraccion y derivaciones.\n\nGUARDA: /home/user/2enki/arquitectura/auditoria/_outputs/modulo-completo/{SLUG}.json\nVALIDA: cd /home/user/2enki && node arquitectura/auditoria/_validators/modulo-completo.validate.js {SLUG}\n\nSi FAIL, arregla hasta PASS.\n\nResponde en <200 palabras: ruta, exit code, número de eventos publica/subscribes, tools con shape, tablas SQLite, archivos persistencia, env vars, hardcoded values, TODOs, modos_de_fallo, declarados_no_emitidos count, emitidos_no_declarados count, correcciones aplicadas si las hubo."
+}

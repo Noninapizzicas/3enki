@@ -1,0 +1,151 @@
+{
+  "_meta": {
+    "modulo": "esp32-dev",
+    "ubicacion": "modules/esp32-dev",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "esp32-dev",
+    "version": "1.0.0",
+    "description_oficial": "Desarrollo ESP32: templates, scaffolding de proyectos y compilación de firmware",
+    "author": "Enki",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": false,
+    "estado_modulo": "candidato_a_retirada",
+    "tier_carga_inferido": null,
+    "tier_declarado": "tier_3_core",
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "esp32.project_created", "description": "Nuevo proyecto de firmware creado desde template" },
+      { "event": "esp32.build_started",   "description": "Compilación iniciada" },
+      { "event": "esp32.build_completed", "description": "Compilación completada exitosamente" },
+      { "event": "esp32.build_failed",    "description": "Compilación falló" }
+    ],
+    "subscribes": [],
+    "provides_eventos": [
+      "esp32.project_created",
+      "esp32.build_started",
+      "esp32.build_completed",
+      "esp32.build_failed"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "esp32", "action": "list-templates",  "handler": "handleListTemplates" },
+      { "domain": "esp32", "action": "create-project",  "handler": "handleCreateProject" },
+      { "domain": "esp32", "action": "list-projects",   "handler": "handleListProjects" },
+      { "domain": "esp32", "action": "get-project",     "handler": "handleGetProject" },
+      { "domain": "esp32", "action": "build",           "handler": "handleBuild" },
+      { "domain": "esp32", "action": "build-status",    "handler": "handleBuildStatus" },
+      { "domain": "esp32", "action": "list-boards",     "handler": "handleListBoards" },
+      { "domain": "esp32", "action": "delete-project",  "handler": "handleDeleteProject" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "data_path",             "tipo": "string",  "valor_default": "./data/esp32-dev" },
+      { "key": "platformio_path",       "tipo": "string",  "valor_default": "platformio" },
+      { "key": "build_timeout_ms",      "tipo": "number",  "valor_default": 300000 },
+      { "key": "max_concurrent_builds", "tipo": "number",  "valor_default": 2 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "esp32.project_created.total",
+        "esp32.build_started.total",
+        "esp32.build_completed.total",
+        "esp32.build_failed.total"
+      ],
+      "gauges": [
+        "esp32.active_builds.count",
+        "esp32.projects.count"
+      ],
+      "timings": [
+        "esp32.build.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": ["esp32.json", "events.json"],
+    "prompts": [],
+    "context": false,
+    "prompt_module": false,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 2981,
+    "module_json_lineas": 104,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "main no declarado (null): no hay entrypoint explícito",
+      "esp32-dev ausente de config.modules.enabled y config.modules.disabled → candidato_a_retirada (fantasma en config)",
+      "tier_declarado='tier_3_core' pero ausente de system.json.module_load_order.tiers → tier_carga_inferido=null",
+      "provides.events duplica events.publishes (4 eventos listados dos veces)",
+      "ui_handlers: 4 de 8 items tienen campo 'schema' con $ref (create-project, get-project, build, delete-project) — campo extra no normalizado en output"
+    ]
+  }
+}

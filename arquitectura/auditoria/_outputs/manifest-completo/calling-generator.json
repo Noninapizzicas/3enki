@@ -1,0 +1,202 @@
+{
+  "_meta": {
+    "modulo": "calling-generator",
+    "ubicacion": "modules/calling-generator",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "calling-generator",
+    "version": "2.0.0",
+    "description_oficial": "Generates executable JavaScript functions from plugin definitions with HTTP and event-based execution",
+    "author": "Aichat Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_4_features",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "function.generated",       "description": "Function generated from plugin" },
+      { "event": "function.executed",         "description": "Function executed successfully" },
+      { "event": "function.failed",           "description": "Function execution failed" },
+      { "event": "function.generation.error", "description": "Error generating function" },
+      { "event": "function.get.response",     "description": "Response with function metadata" },
+      { "event": "function.list.response",    "description": "Response with function list" },
+      { "event": "function.execute.response", "description": "Response with execution result" }
+    ],
+    "subscribes": [
+      { "event": "plugin.loaded",            "handler": "onPluginLoaded",           "extras": {} },
+      { "event": "function.get.request",     "handler": "onGetFunctionRequest",     "extras": {} },
+      { "event": "function.list.request",    "handler": "onListFunctionsRequest",   "extras": {} },
+      { "event": "function.execute.request", "handler": "onExecuteFunctionRequest", "extras": {} }
+    ],
+    "provides_eventos": [
+      "function.generated",
+      "function.executed",
+      "function.failed",
+      "function.generation.error"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/functions",
+      "handler": "handleListFunctions",
+      "description": "List all generated functions",
+      "request_schema_ref": null,
+      "response_schema_ref": "./schemas/function.json#/definitions/list_response"
+    },
+    {
+      "method": "GET",
+      "path": "/functions/:name",
+      "handler": "handleGetFunction",
+      "description": "Get function metadata",
+      "request_schema_ref": null,
+      "response_schema_ref": "./schemas/function.json#/definitions/get_response"
+    },
+    {
+      "method": "POST",
+      "path": "/functions/:name/execute",
+      "handler": "handleExecuteFunction",
+      "description": "Execute function (publishes function.executed/failed)",
+      "request_schema_ref": "./schemas/function.json#/definitions/execute_request",
+      "response_schema_ref": "./schemas/function.json#/definitions/execute_response"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check endpoint",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Module metrics",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "localFunctionTimeout", "tipo": "number",  "valor_default": 5000 },
+      { "key": "httpTimeout",          "tipo": "number",  "valor_default": 30000 },
+      { "key": "maxRetries",           "tipo": "number",  "valor_default": 3 },
+      { "key": "retryDelay",           "tipo": "number",  "valor_default": 1000 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "function.generated.total",
+        "function.executed.total",
+        "function.failed.total",
+        "function.http_call.total",
+        "function.http_call.success",
+        "function.http_call.error",
+        "function.local_call.total",
+        "function.local_call.success",
+        "function.local_call.error"
+      ],
+      "gauges": [
+        "function.count",
+        "function.plugins.count"
+      ],
+      "timings": [
+        "function.generation.duration",
+        "function.execution.duration",
+        "function.http_call.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/calling-generator/schemas/events.json",
+      "modules/calling-generator/schemas/function.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 4653,
+    "module_json_lineas": 158,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "observability.logging.correlation_id=true es campo no estandar en logging (no recogido en schema parcela)",
+      "provides: campo no canónico que duplica parcialmente eventos.publishes y añade queries (suscripciones request/response). Capturado en outliers_capturados.",
+      "apis[].response_schema y request_schema usan clave 'response_schema'/'request_schema' en module.json, no 'response_schema_ref'/'request_schema_ref' — normalizado en apis_http"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "_meta": { "modulo": "ui-designer", "ubicacion": "modules/ui-designer", "auditado_en": "2026-04-30", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/ui-designer.json" },
+  "identidad": { "name": "ui-designer", "version": "1.0.0", "description_oficial": "Diseñador visual de interfaces para módulos Event-Core", "author": "Event Core Team", "main_declarado": null, "main_real": "modules/ui-designer/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": null, "tier_declarado": null, "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.template.created", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:474", "metodo_contenedor": "handleCreateTemplate", "es_handler_de": null, "bloque_logico": "tras templates.set y persistencia", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id", "name", "type"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.template.created', { template_id, name, type });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.template.updated", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:537", "metodo_contenedor": "handleUpdateTemplate", "es_handler_de": null, "bloque_logico": "tras update + persistir", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id", "changes"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.template.updated', { template_id, changes });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.template.deleted", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:564", "metodo_contenedor": "handleDeleteTemplate", "es_handler_de": null, "bloque_logico": "tras templates.delete", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id", "name"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.template.deleted', { template_id, name });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.template.published", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:693", "metodo_contenedor": "handlePublishTemplate", "es_handler_de": null, "bloque_logico": "tras cambio de status draft → published", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.template.published', { template_id });", "declarado_en_manifest": false },
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.export.yaml", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:921", "metodo_contenedor": "handleExportYaml", "es_handler_de": null, "bloque_logico": "tras generar YAML blueprint", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.export.yaml', { template_id });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.export.svelte", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:958", "metodo_contenedor": "handleExportSvelte", "es_handler_de": null, "bloque_logico": "tras generar componente Svelte", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.export.svelte', { template_id });", "declarado_en_manifest": true }
+    ],
+    "subscribes": [],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["ui-designer.template.created", "ui-designer.template.updated", "ui-designer.template.deleted", "ui-designer.export.yaml", "ui-designer.export.svelte", "ui-designer.export.json"],
+      "publica_literales_en_codigo": ["ui-designer.template.created", "ui-designer.template.updated", "ui-designer.template.deleted", "ui-designer.template.published", "ui-designer.export.yaml", "ui-designer.export.svelte"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": ["ui-designer.export.json"],
+      "publica_emitidos_no_declarados": ["ui-designer.template.published"],
+      "subscribes_declarados_en_manifest": [],
+      "subscribes_realmente_registrados": [],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [],
+  "estado": { "memoria": [], "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": null } },
+  "configuracion": { "env_vars": [], "module_json_config_keys": [], "paths_proyecto_referenciados": [], "valores_hardcoded_observables": [] },
+  "lifecycle": { "onLoad": { "ubicacion": null, "acciones": [], "guarda_referencias_externas": [], "puede_fallar_silenciosamente": false }, "onUnload": { "ubicacion": null, "acciones": [], "estado_no_limpiado": [] }, "auto_wired_subscribes": false, "subscribes_dinamicos_en_lifecycle": [] },
+  "dependencias_implicitas": [],
+  "modos_de_fallo": [],
+  "observabilidad": { "logger": { "estilo": "structured_json", "firma_dominante": null, "campos_estructurados_observados": [], "ejemplos": [] }, "metricas_emitidas": [], "metricas_drift_vs_manifest": [], "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" } },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": ["modules/ui-designer/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": false, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": { "todos": [], "comentarios_porque": [], "workarounds_detectados": [] },
+  "metricas_fisicas": { "lineas_index_js": 1280, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": { "campos_no_canonicos_en_manifest": [], "patrones_no_canonicos_en_codigo": [] },
+  "quirks": { "warnings": [], "secciones_vacias_intencionalmente": [] }
+}

@@ -102,11 +102,70 @@
     { "dependencia": "filesystem (data_path/binaries)", "que_pasa_si_cae": "handleRegister falla con 400 (Binario no encontrado) si .bin no existe; _validateCatalogIntegrity reporta missing_files pero no elimina entradas del catálogo.", "evidencia": "modules/firmware-manager/index.js:429" },
     { "dependencia": "device firmware nunca se actualiza", "que_pasa_si_cae": "setTimeout dispara firmware.ota_failed con reason=timeout; safety net _cleanupStaleOtas con 2× timeout cubre setTimeout que no disparara.", "evidencia": "modules/firmware-manager/index.js:836" }
   ],
-  "observabilidad": { "logger": { "estilo": "structured_json", "firma_dominante": null, "campos_estructurados_observados": [], "ejemplos": [] }, "metricas_emitidas": [], "metricas_drift_vs_manifest": [], "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" } },
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('firmware.<accion>', { ...campos })", "campos_estructurados_observados": ["device_id", "type", "version", "sha256", "size", "from", "to", "duration_ms", "error", "driver"], "ejemplos": [{ "snippet": "this.logger.info('firmware.ota.completed', { device_id, from: pending.previous_version, to: pending.target_version, duration_ms: duration });", "ubicacion": "modules/firmware-manager/index.js:207" }, { "snippet": "this.logger.warn('firmware.ota.timeout', { device_id, target_version: pending.target_version, timeout_ms: this.config.ota_timeout_ms });", "ubicacion": "modules/firmware-manager/index.js:859" }] },
+    "metricas_emitidas": [
+      { "nombre": "firmware.ota_completed.total", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:190" },
+      { "nombre": "firmware.ota.duration", "tipo": "timing", "ubicacion": "modules/firmware-manager/index.js:191" },
+      { "nombre": "firmware.pending_otas.count", "tipo": "gauge", "ubicacion": "modules/firmware-manager/index.js:192" },
+      { "nombre": "firmware.ota_failed.total", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:223" },
+      { "nombre": "firmware.device_outdated.total", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:264" },
+      { "nombre": "firmware.catalog_entries.total", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:467" },
+      { "nombre": "firmware.register.duration", "tipo": "timing", "ubicacion": "modules/firmware-manager/index.js:468" },
+      { "nombre": "firmware.ota_requested.total", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:547" },
+      { "nombre": "firmware.rollback.total", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:626" },
+      { "nombre": "firmware.binary_served.total", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:806" },
+      { "nombre": "firmware.binary_served.bytes", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:811" },
+      { "nombre": "firmware.binary_served.errors", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:824" },
+      { "nombre": "firmware.ota_timeout.total", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:843" },
+      { "nombre": "firmware.ota_stale_cleanup.total", "tipo": "counter", "ubicacion": "modules/firmware-manager/index.js:895" },
+      { "nombre": "firmware.catalog_valid_binaries.count", "tipo": "gauge", "ubicacion": "modules/firmware-manager/index.js:1025" },
+      { "nombre": "firmware.catalog_missing_binaries.count", "tipo": "gauge", "ubicacion": "modules/firmware-manager/index.js:1026" },
+      { "nombre": "firmware.catalog_types.count", "tipo": "gauge", "ubicacion": "modules/firmware-manager/index.js:1052" },
+      { "nombre": "firmware.catalog_entries.count", "tipo": "gauge", "ubicacion": "modules/firmware-manager/index.js:1053" }
+    ],
+    "metricas_drift_vs_manifest": [],
+    "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" }
+  },
   "archivos_hermanos": { "agents": [], "schemas": ["modules/firmware-manager/schemas"], "prompts": ["modules/firmware-manager/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": false, "tests_propios_existen": false },
   "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
-  "codigo_intencion": { "todos": [], "comentarios_porque": [], "workarounds_detectados": [] },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/firmware-manager/index.js:15", "comentario_literal": "// NO compila firmware — solo gestiona binarios ya compilados.", "contexto": "doctrina del módulo: separación clara con firmware-builder" },
+      { "ubicacion": "modules/firmware-manager/index.js:218", "comentario_literal": "// No marcar como fallido inmediatamente, el dispositivo puede estar descargando", "contexto": "explica por qué no se cierra OTA al ver previous_version (espera download/flash)" },
+      { "ubicacion": "modules/firmware-manager/index.js:284", "comentario_literal": "// Compatibilidad: \"driver\" (nuevo firmware-builder) o \"project_name\" (legacy esp32-dev)", "contexto": "razón del doble nombre de campo aceptado en onBuildCompleted" },
+      { "ubicacion": "modules/firmware-manager/index.js:411", "comentario_literal": "// Prevenir path traversal", "contexto": "razón de _sanitizeFileName en handleRegister" },
+      { "ubicacion": "modules/firmware-manager/index.js:881", "comentario_literal": "// Limpieza periódica de OTAs que sobrevivieron al timeout (safety net por si el setTimeout falla o se recarga el módulo)", "contexto": "explica por qué hay 2 mecanismos de cleanup: setTimeout + interval" }
+    ],
+    "workarounds_detectados": [
+      { "ubicacion": "modules/firmware-manager/index.js:170", "descripcion": "data = event?.data || event?.payload || event — multi-shape unwrap (mismo patrón que device-shadow/device-health)" },
+      { "ubicacion": "modules/firmware-manager/index.js:285", "descripcion": "driverName = driver || project_name — legacy compat con esp32-dev" },
+      { "ubicacion": "modules/firmware-manager/index.js:931", "descripcion": "this.catalog = data.catalog || data — soporte de manifest.json antiguo (raw catalog) y nuevo (envuelto en {_version, catalog})" },
+      { "ubicacion": "modules/firmware-manager/index.js:891", "descripcion": "_cleanupStaleOtas usa 2× ota_timeout_ms como safety net por si setTimeout no dispara (recarga del módulo)" }
+    ]
+  },
   "metricas_fisicas": { "lineas_index_js": 1093, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
-  "outliers_capturados": { "campos_no_canonicos_en_manifest": [], "patrones_no_canonicos_en_codigo": [] },
-  "quirks": { "warnings": [], "secciones_vacias_intencionalmente": [] }
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Servir binarios via api HTTP integrada (handleServeBinary devuelve { status, headers, body })", "ejemplo": "modules/firmware-manager/index.js:792", "rareza": "inusual" },
+      { "patron": "shadow.set_desired emitido sin estar declarado en manifest.publishes (delegación cross-módulo no documentada)", "ejemplo": "modules/firmware-manager/index.js:526", "rareza": "inusual" },
+      { "patron": "Auto-register de firmware tras evento build_completed con copyFile + _timestampToVersion (YYYY.M.DDHHMM)", "ejemplo": "modules/firmware-manager/index.js:280", "rareza": "inusual" },
+      { "patron": "Doble cleanup: setTimeout por OTA + setInterval safety net cada ota_cleanup_interval_ms con umbral 2× timeout", "ejemplo": "modules/firmware-manager/index.js:885", "rareza": "inusual" },
+      { "patron": "Ack indirecto vía shadow.updated en vez de evento explícito de OTA — depende del ciclo desired/reported de device-shadow", "ejemplo": "modules/firmware-manager/index.js:169", "rareza": "inusual" }
+    ]
+  },
+  "quirks": {
+    "warnings": [
+      "P3 — Firmware Manager IoT (v2.0.0). Gestor de catálogo + orquestador de OTA via device-shadow. NO compila — solo gestiona binarios.",
+      "shadow.set_desired emitido sin estar declarado en manifest.publishes (drift declarativo): es delegación cross-módulo, no evento de dominio propio.",
+      "Acepta 'driver' (nuevo) y 'project_name' (legacy esp32-dev) en el handler onBuildCompleted — workaround de migración.",
+      "Doble cleanup de OTAs: setTimeout por dispositivo + setInterval safety net con 2× timeout por si setTimeout no dispara (recarga de módulo).",
+      "Sirve binarios via API HTTP /firmware/:type/:version/:file con validación anti-path-traversal explícita (sanitize + resolve check).",
+      "Catálogo compatible con dos formatos: {catalog: {...}} (nuevo) o {...} directo (antiguo) — fallback en _loadCatalog.",
+      "_validateConfig al inicio loguea warns y aplica fallbacks si data_path/ota_timeout_ms/ota_cleanup_interval_ms son inválidos."
+    ],
+    "secciones_vacias_intencionalmente": ["estado.persistencia.sqlite_tablas", "configuracion.env_vars", "modos_de_fallo (algunos)", "codigo_intencion.todos", "version_archivada", "outliers_capturados.campos_no_canonicos_en_manifest", "observabilidad.metricas_drift_vs_manifest"]
+  }
 }

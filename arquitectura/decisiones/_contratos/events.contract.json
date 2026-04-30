@@ -1,0 +1,45 @@
+{
+  "_doc": "Captura LA forma canónica de comunicarse entre módulos del sistema event-core: emite y desentiende. Un evento se lanza al espacio. Lo escuchan quienes están suscritos — pueden ser doscientos, uno o ninguno. El emisor sabe qué pasó. El receptor sabe cómo reaccionar. Nadie hilvana a nadie. Caos ordenado. Este contrato es la primera pieza de la base que sirve igual para Casa (un proceso) que Manzana (N cores distribuidos).",
+  "id": "events",
+  "version": "1.0.0",
+  "creada": "2026-04-30",
+  "supersedes_nota": "Primera versión. Recoge el espíritu de event-core (germen del proyecto) y lo formaliza tras haber observado las desviaciones acumuladas en sus evoluciones (Enki, Enki1, 2enki).",
+
+  "objetivo": "Establecer el patrón único, mecánicamente validable, de comunicación entre módulos. Producir UN JSON output (_outputs/events.json) que contiene las reglas concretas: canales permitidos, forma de los topics, QoS por categoría, política de retain, Last-Will, descubrimiento. Servir de espina dorsal para cualquier reescritura: si una decisión técnica contradice este contrato, gana el contrato.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/events.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/events.schema.json",
+      "arquitectura/convenciones/_outputs/naming.json (forma de los nombres)",
+      "arquitectura/convenciones/_outputs/glossary.json (términos canónicos)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/auditoria/_outputs/manifest-completo/*.json — lo declarado por cada módulo",
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json — lo emitido realmente, con archivo:línea",
+      "modules/*/module.json — language declarado, eventos publicados/suscritos"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EMITE Y DESENTIENDE. Tu evento es información que viaja. Tu trabajo es contar lo que ha pasado, claro y completo. Lo que ocurra después no es asunto tuyo.",
+
+    "CARDINALIDAD CERO, UNA O MUCHAS. Tu evento puede tener doscientos oyentes, uno, o ninguno. Las tres cardinalidades son válidas. Tú no decides cuántos te escuchan ni te tiene que importar.",
+
+    "EL EMISOR SABE QUÉ. EL RECEPTOR SABE CÓMO. El emisor describe el qué pasó con datos de su dominio. El receptor decide si reacciona, cómo reacciona y cuándo. No hay coordinación temporal forzada entre ellos.",
+
+    "CADA MÓDULO LLEVA SU RITMO. Nadie hilvana a nadie. Si el receptor tarda, el emisor ya no está esperando. Si el receptor falla, el emisor no se entera (y no debería tener que enterarse).",
+
+    "CAOS ORDENADO. Aparente caos en la superficie (eventos volando, suscripciones diversas, ramificaciones) sobre un orden estricto en la base (un solo canal, un solo formato, un solo paradigma).",
+
+    "MULTI-ESCALA, MISMO CIMIENTO. La API de emitir/suscribir es idéntica en Casa (un proceso), Rascacielos (un core grande con muchos módulos) y Manzana (N cores distribuidos comunicándose). La complejidad sale de ramificar, no de complicar el cimiento.",
+
+    "PROHIBIDO ATAJAR. Si una solución parece más cómoda que el patrón canónico, casi siempre es porque rompe el cimiento. Antes de atajar, se para y se replantea. La fidelidad al cimiento manda sobre la conveniencia local.",
+
+    "EVENT-CORE COMO SEMILLA. Este contrato hereda el espíritu del repo original event-core (v0.5.0 Network): MQTT pub/sub nativo con Aedes embedded, módulos como plugins, IA como ciudadano de primera clase, zero dependencias. Las evoluciones posteriores aprendieron mucho técnicamente y se desviaron filosóficamente. Aquí volvemos al cimiento con lo aprendido.",
+
+    "DESCRIPTIVO PARA HUMANOS. Cualquier principio de este contrato debe poder leerlo alguien sin background técnico y entender qué se está afirmando. Si un principio solo se entiende con jerga, está mal escrito."
+  ]
+}

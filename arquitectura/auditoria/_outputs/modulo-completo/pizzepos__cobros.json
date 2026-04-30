@@ -1,0 +1,64 @@
+{
+  "_meta": { "modulo": "pizzepos/cobros", "ubicacion": "modules/pizzepos/cobros", "auditado_en": "2026-04-29", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__cobros.json" },
+  "identidad": { "name": "cobros", "version": "1.0.0", "description_oficial": "Procesamiento de cobros pizzepos — métodos de pago, reembolsos, integración con periféricos (cajón)", "author": "Pizzepos Team", "main_declarado": "index.js", "main_real": "modules/pizzepos/cobros/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": null, "tier_declarado": null, "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "literal", "valor": "cobro.iniciado",          "variables_referenciadas": [] }, "ubicacion": "modules/pizzepos/cobros/index.js:484", "metodo_contenedor": null, "es_handler_de": null, "bloque_logico": "tras iniciar cobro", "payload": { "tipo": "object_literal", "campos_visibles": ["cobro_id", "cuenta_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('cobro.iniciado', { ... });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "cobro.procesado",         "variables_referenciadas": [] }, "ubicacion": "modules/pizzepos/cobros/index.js:495", "metodo_contenedor": null, "es_handler_de": null, "bloque_logico": "tras procesar cobro exitoso", "payload": { "tipo": "object_literal", "campos_visibles": ["cobro_id", "cuenta_id", "metodo", "total"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('cobro.procesado', { ... });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "cobro.reembolsado",       "variables_referenciadas": [] }, "ubicacion": "modules/pizzepos/cobros/index.js:507", "metodo_contenedor": null, "es_handler_de": null, "bloque_logico": "tras procesar reembolso", "payload": { "tipo": "object_literal", "campos_visibles": ["cobro_id", "motivo"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('cobro.reembolsado', { ... });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "periferico.abrir-cajon",  "variables_referenciadas": [] }, "ubicacion": "modules/pizzepos/cobros/index.js:527", "metodo_contenedor": null, "es_handler_de": null, "bloque_logico": "abre cajón físico tras cobro efectivo", "payload": { "tipo": "object_literal", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish('periferico.abrir-cajon', { ... });", "declarado_en_manifest": true }
+    ],
+    "subscribes": [
+      { "nombre": "cuenta.creada",       "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "cuenta.actualizada",  "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "pedido.completado",   "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "caja.cerrada",        "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "dia.iniciado",        "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["cobro.iniciado", "cobro.procesado", "cobro.reembolsado", "periferico.abrir-cajon"],
+      "publica_literales_en_codigo": ["cobro.iniciado", "cobro.procesado", "cobro.reembolsado", "periferico.abrir-cajon"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["cuenta.creada", "cuenta.actualizada", "pedido.completado", "caja.cerrada", "dia.iniciado"],
+      "subscribes_realmente_registrados": ["cuenta.creada", "cuenta.actualizada", "pedido.completado", "caja.cerrada", "dia.iniciado"],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [], "ui_handlers": [], "apis_http": [],
+  "estado": {
+    "memoria": [
+      { "campo": "refDisplayCache", "tipo": "Map", "ubicacion_init": "modules/pizzepos/cobros/index.js:27", "se_invalida_con": "cache de displays para referencias humanas — sin invalidación explícita", "leak_potencial": false },
+      { "campo": "cobros",          "tipo": "Map", "ubicacion_init": "modules/pizzepos/cobros/index.js:36", "se_invalida_con": "set en handleX — sin clear visible",                                       "leak_potencial": false }
+    ],
+    "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": "Persistencia delegada a persistencia-comandero (probable)." }
+  },
+  "configuracion": { "env_vars": [], "module_json_config_keys": [], "paths_proyecto_referenciados": [], "valores_hardcoded_observables": [] },
+  "lifecycle": {
+    "onLoad":   { "ubicacion": null, "acciones": ["guarda this.logger / this.eventBus"], "guarda_referencias_externas": ["this.logger", "this.eventBus"], "puede_fallar_silenciosamente": false },
+    "onUnload": { "ubicacion": null, "acciones": [], "estado_no_limpiado": [] },
+    "auto_wired_subscribes": true, "subscribes_dinamicos_en_lifecycle": []
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "pizzepos/cuentas",     "via_evento": "cuenta.creada/actualizada (subscribes)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/cobros/index.js", "es_cross_vertical": false },
+    { "modulo_dependido": "pizzepos/pedidos",     "via_evento": "pedido.completado (subscribe)",          "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/cobros/index.js", "es_cross_vertical": false },
+    { "modulo_dependido": "pizzepos/perifericos", "via_evento": "periferico.abrir-cajon (publica)",       "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/cobros/index.js:527", "es_cross_vertical": false }
+  ],
+  "modos_de_fallo": [],
+  "observabilidad": { "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('cobros.<accion>', { ...campos })", "campos_estructurados_observados": [], "ejemplos": [] }, "metricas_emitidas": [], "metricas_drift_vs_manifest": [], "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" } },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": [], "context_json_existe": false, "prompt_json_existe": false, "readme_existe": true, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": { "todos": [], "comentarios_porque": [], "workarounds_detectados": [] },
+  "metricas_fisicas": { "lineas_index_js": 594, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": { "campos_no_canonicos_en_manifest": [], "patrones_no_canonicos_en_codigo": [] },
+  "quirks": {
+    "warnings": [
+      "P3 — Cobros pizzepos. 4 publica + 5 subscribes. 0 drift.",
+      "Manifest declara 'metodos_pago' como outlier (capturado en manifest-completo) — único en repo.",
+      "periferico.abrir-cajon — único módulo que invoca al periférico físico (cajón) tras cobro efectivo"
+    ],
+    "secciones_vacias_intencionalmente": ["tools", "ui_handlers", "apis_http", "estado.persistencia.*", "configuracion.*", "observabilidad.metricas_emitidas", "codigo_intencion.*", "version_archivada"]
+  }
+}

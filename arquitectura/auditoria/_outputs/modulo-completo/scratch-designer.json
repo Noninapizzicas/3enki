@@ -42,16 +42,92 @@
     { "method": "GET", "path": "/health", "handler_metodo": "handleHealthCheck", "handler_ubicacion": "modules/scratch-designer/index.js:343", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "module", "version", "blocks_loaded", "designs"] },
     { "method": "GET", "path": "/metrics", "handler_metodo": "handleGetMetrics", "handler_ubicacion": "modules/scratch-designer/index.js:354", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "module", "stats", "gauges"] }
   ],
-  "estado": { "memoria": [], "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": null } },
-  "configuracion": { "env_vars": [], "module_json_config_keys": [], "paths_proyecto_referenciados": [], "valores_hardcoded_observables": [] },
-  "lifecycle": { "onLoad": { "ubicacion": null, "acciones": [], "guarda_referencias_externas": [], "puede_fallar_silenciosamente": false }, "onUnload": { "ubicacion": null, "acciones": [], "estado_no_limpiado": [] }, "auto_wired_subscribes": false, "subscribes_dinamicos_en_lifecycle": [] },
-  "dependencias_implicitas": [],
-  "modos_de_fallo": [],
-  "observabilidad": { "logger": { "estilo": "structured_json", "firma_dominante": null, "campos_estructurados_observados": [], "ejemplos": [] }, "metricas_emitidas": [], "metricas_drift_vs_manifest": [], "tracing": { "propaga_correlation_id": true, "evidencia": "modules/scratch-designer/index.js:391 — _publishEvent pasa { correlationId } al publish" } },
+  "estado": {
+    "memoria": [
+      { "campo": "this.designManager", "tipo": "Object", "ubicacion_init": "modules/scratch-designer/index.js:26", "se_invalida_con": "instancia DesignManager interna — sin reset; la persistencia (si existe) la maneja el submódulo", "leak_potencial": false },
+      { "campo": "this.exporter", "tipo": "Object", "ubicacion_init": "modules/scratch-designer/index.js:27", "se_invalida_con": "stateless (puede mantener helpers internos)", "leak_potencial": false },
+      { "campo": "this.blocksCache", "tipo": "Object", "ubicacion_init": "modules/scratch-designer/index.js:30", "se_invalida_con": "se carga en onLoad y se nullea en onUnload (this.blocksCache = null)", "leak_potencial": false },
+      { "campo": "this._metrics", "tipo": "Object", "ubicacion_init": "modules/scratch-designer/index.js:33", "se_invalida_con": "nunca", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "INVENTARIO-SISTEMA.json (lectura del inventario para generar bloques)", "formato": "json", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" }
+      ],
+      "notas_concurrencia": "DesignManager interno gestiona los diseños (probable Map en memoria); persistencia detallada vive en lib/designs.js (no auditado en este pase)."
+    }
+  },
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "autosave", "tipo": "boolean", "default_si_primitivo": true },
+      { "key": "autosave_interval_ms", "tipo": "number", "default_si_primitivo": 30000 },
+      { "key": "max_designs", "tipo": "number", "default_si_primitivo": 100 },
+      { "key": "inventory_path", "tipo": "string", "default_si_primitivo": "../../INVENTARIO-SISTEMA.json" }
+    ],
+    "paths_proyecto_referenciados": ["INVENTARIO-SISTEMA.json"],
+    "valores_hardcoded_observables": [
+      { "valor": "INVENTARIO-SISTEMA.json (path absoluto resuelto desde __dirname)", "ubicacion": "modules/scratch-designer/index.js:53", "naturaleza": "path" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/scratch-designer/index.js:45", "acciones": ["this.logger = core.logger", "this.metrics = core.metrics", "this.eventBus = core.eventBus", "instanciar BlockGenerator(inventoryPath)", "blockGenerator.generateAll() → blocksCache"], "guarda_referencias_externas": ["this.logger", "this.metrics", "this.eventBus"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/scratch-designer/index.js:64", "acciones": ["this.blocksCache = null"], "estado_no_limpiado": ["this.designManager", "this.exporter", "this._metrics"] },
+    "auto_wired_subscribes": false,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "INVENTARIO-SISTEMA.json (artefacto del proyecto, no módulo)", "via_evento": "lectura directa para generar bloques en _BlockGenerator", "obligatorio_en": "onLoad", "ubicacion_uso": "modules/scratch-designer/index.js:53", "es_cross_vertical": true }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "INVENTARIO-SISTEMA.json", "que_pasa_si_cae": "BlockGenerator probablemente loguea y deja inventory en null; blocksCache queda incompleto pero no hay throw — endpoints /blocks/* devolverían cache parcial.", "evidencia": "modules/scratch-designer/index.js:60" },
+    { "dependencia": "eventBus.publish", "que_pasa_si_cae": "_publishEvent verifica this.eventBus?.publish y silencia si falta — eventos perdidos sin telemetría (degradado silencioso, mismo patrón que notas).", "evidencia": "modules/scratch-designer/index.js:389" }
+  ],
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('scratch.<accion>', { ...campos })", "campos_estructurados_observados": ["module", "blocks_categories", "inventory_loaded", "error", "correlation_id", "stack"], "ejemplos": [{ "snippet": "this.logger.info('modulo.loaded', { module: this.name, blocks_categories: Object.keys(this.blocksCache).length, inventory_loaded: !!this.blockGenerator.inventory });", "ubicacion": "modules/scratch-designer/index.js:57" }, { "snippet": "this.logger.error(`scratch.${operation}.error`, { error: error.message, stack, correlation_id: context?.correlationId });", "ubicacion": "modules/scratch-designer/index.js:402" }] },
+    "metricas_emitidas": [
+      { "nombre": "scratch.api.calls", "tipo": "counter", "ubicacion": "modules/scratch-designer/index.js:374" },
+      { "nombre": "scratch.${event}.duration (dynamic — design.created/updated/exported)", "tipo": "timing", "ubicacion": "modules/scratch-designer/index.js:381" },
+      { "nombre": "scratch.${event}.total (dynamic — design.created/updated/exported)", "tipo": "counter", "ubicacion": "modules/scratch-designer/index.js:384" },
+      { "nombre": "scratch.errors.total", "tipo": "counter", "ubicacion": "modules/scratch-designer/index.js:399" }
+    ],
+    "metricas_drift_vs_manifest": ["manifest declara 'design.created.total', 'design.exported.total', 'api.calls.total', 'errors.total' pero el código emite con prefijo 'scratch.' — drift de naming"],
+    "tracing": { "propaga_correlation_id": true, "evidencia": "modules/scratch-designer/index.js:391 — _publishEvent pasa { correlationId: context?.correlationId } al publish" }
+  },
   "archivos_hermanos": { "agents": [], "schemas": ["modules/scratch-designer/schemas"], "prompts": ["modules/scratch-designer/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": true, "tests_propios_existen": false },
   "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
-  "codigo_intencion": { "todos": [], "comentarios_porque": [], "workarounds_detectados": [] },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/scratch-designer/index.js:24", "comentario_literal": "// Submódulos", "contexto": "convención del módulo: lógica delegada a 3 subclases (BlockGenerator, DesignManager, DesignExporter) en lib/" }
+    ],
+    "workarounds_detectados": [
+      { "ubicacion": "modules/scratch-designer/index.js:388", "descripcion": "_publishEvent helper que centraliza .publish(...) — consecuencia: cross-check del schema apunta a este wrapper como ubicación, no al call site real" },
+      { "ubicacion": "modules/scratch-designer/index.js:373", "descripcion": "_trackApiCall + _recordMetrics + _publishEvent wrappers + _handleError central — pseudo-aspect pattern" },
+      { "ubicacion": "modules/scratch-designer/index.js:381", "descripcion": "Métricas con nombre dinámico via template literal scratch.${event}.duration / .total — sin enumeración explícita" }
+    ]
+  },
   "metricas_fisicas": { "lineas_index_js": 412, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
-  "outliers_capturados": { "campos_no_canonicos_en_manifest": [], "patrones_no_canonicos_en_codigo": [] },
-  "quirks": { "warnings": [], "secciones_vacias_intencionalmente": [] }
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": ["apis con elementos 'group' (separadores descriptivos) intercalados con métodos HTTP — outlier en module.json"],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Punto único de eventBus.publish — wrapper _publishEvent con eventName variable", "ejemplo": "modules/scratch-designer/index.js:388", "rareza": "unico_en_repo" },
+      { "patron": "Submódulos en lib/ (BlockGenerator, DesignManager, DesignExporter) instanciados como propiedades del módulo", "ejemplo": "modules/scratch-designer/index.js:24", "rareza": "inusual" },
+      { "patron": "Lectura de INVENTARIO-SISTEMA.json (artefacto del proyecto, no módulo) para generar bloques", "ejemplo": "modules/scratch-designer/index.js:53", "rareza": "unico_en_repo" },
+      { "patron": "Métricas con names dinámicos via template literal — sin enumeración estática", "ejemplo": "modules/scratch-designer/index.js:381", "rareza": "inusual" },
+      { "patron": "Drift naming métricas: manifest declara sin prefijo 'scratch.', código las emite con prefijo", "ejemplo": "modules/scratch-designer/index.js:374", "rareza": "inusual" }
+    ]
+  },
+  "quirks": {
+    "warnings": [
+      "P4 — Scratch Designer (v2.0.0). Diseñador visual estilo Scratch que genera JSON consumible por ui-renderer.",
+      "Todos los publishes pasan por wrapper _publishEvent — el cross-check del schema apunta a la línea del wrapper (390), no al call site real (133/174/198/304).",
+      "Los 4 events declarados en manifest se reportan como 'declarados_no_emitidos' en el cross-check porque no aparecen como literales en .publish() (sí como argumentos a _publishEvent).",
+      "Drift métricas: declaradas sin prefijo 'scratch.' en manifest, emitidas con prefijo en código.",
+      "Lee INVENTARIO-SISTEMA.json del root del proyecto para generar bloques (cada vez en onLoad — single shot, sin watch).",
+      "Submódulos lib/blocks.js, lib/designs.js, lib/export.js — lógica externa al index.js, no auditada en este pase.",
+      "module.json mezcla 'group' descriptivos con entries reales en apis — outlier de schema."
+    ],
+    "secciones_vacias_intencionalmente": ["eventos.subscribes", "tools (LLM no expuesto, solo HTTP API)", "ui_handlers (usa apis_http directamente)", "estado.persistencia.sqlite_tablas", "configuracion.env_vars", "codigo_intencion.todos", "version_archivada"]
+  }
 }

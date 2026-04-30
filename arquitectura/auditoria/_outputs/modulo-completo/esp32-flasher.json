@@ -114,11 +114,66 @@
     { "dependencia": "MQTT broker (eventBus.mqtt)", "que_pasa_si_cae": "_startDebugListener early-return silencioso si !mqtt.isConnected — debug remoto deshabilitado sin telemetría hasta reload.", "evidencia": "modules/esp32-flasher/index.js:959" },
     { "dependencia": "long-poll de /debug-stream", "que_pasa_si_cae": "Si el broker se cae mid-poll, los waiters pendientes esperan 30s timeout y se resuelven con [] (no error explícito al cliente).", "evidencia": "modules/esp32-flasher/index.js:1081" }
   ],
-  "observabilidad": { "logger": { "estilo": "structured_json", "firma_dominante": null, "campos_estructurados_observados": [], "ejemplos": [] }, "metricas_emitidas": [], "metricas_drift_vs_manifest": [], "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" } },
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('flash.<accion>', { ...campos })", "campos_estructurados_observados": ["flash_id", "port", "method", "binary", "baud", "duration_ms", "binary_size", "exit_code", "device", "project", "enable", "error"], "ejemplos": [{ "snippet": "this.logger.info('flash.starting', { flash_id: flashId, port, method: flashMethod, binary: binary_path, baud: flashBaud });", "ubicacion": "modules/esp32-flasher/index.js:246" }, { "snippet": "this.logger.info('flash.completed', { flash_id, port, duration_ms, binary_size });", "ubicacion": "modules/esp32-flasher/index.js:735" }, { "snippet": "this.logger.error('flash.spawn_error', { flash_id, error: err.message });", "ubicacion": "modules/esp32-flasher/index.js:806" }, { "snippet": "this.logger.info('flash.debug_listener.started');", "ubicacion": "modules/esp32-flasher/index.js:1009" }] },
+    "metricas_emitidas": [
+      { "nombre": "flash.active.count", "tipo": "gauge", "ubicacion": "modules/esp32-flasher/index.js:73" },
+      { "nombre": "flash.monitors.count", "tipo": "gauge", "ubicacion": "modules/esp32-flasher/index.js:74" },
+      { "nombre": "flash.ports_detected.count", "tipo": "gauge", "ubicacion": "modules/esp32-flasher/index.js:160" },
+      { "nombre": "flash.started.total", "tipo": "counter", "ubicacion": "modules/esp32-flasher/index.js:243" },
+      { "nombre": "flash.cancelled.total", "tipo": "counter", "ubicacion": "modules/esp32-flasher/index.js:383" },
+      { "nombre": "flash.monitor_started.total", "tipo": "counter", "ubicacion": "modules/esp32-flasher/index.js:439" },
+      { "nombre": "flash.completed.total", "tipo": "counter", "ubicacion": "modules/esp32-flasher/index.js:719" },
+      { "nombre": "flash.duration", "tipo": "timing", "ubicacion": "modules/esp32-flasher/index.js:720" },
+      { "nombre": "flash.failed.total", "tipo": "counter", "ubicacion": "modules/esp32-flasher/index.js:748" }
+    ],
+    "metricas_drift_vs_manifest": [],
+    "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" }
+  },
   "archivos_hermanos": { "agents": [], "schemas": ["modules/esp32-flasher/schemas"], "prompts": ["modules/esp32-flasher/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": false, "tests_propios_existen": false },
   "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
-  "codigo_intencion": { "todos": [], "comentarios_porque": [], "workarounds_detectados": [] },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/esp32-flasher/index.js:269", "comentario_literal": "// Validar flash_mode y flash_freq (prevenir argument injection)", "contexto": "razón explícita del whitelist de modos/frecuencias antes de pasar a esptool" },
+      { "ubicacion": "modules/esp32-flasher/index.js:117", "comentario_literal": "// Resolver waiters pendientes de long-poll para que no cuelguen", "contexto": "explica cleanup de promises long-poll en onUnload" },
+      { "ubicacion": "modules/esp32-flasher/index.js:478", "comentario_literal": "// Escribe directamente al puerto serial, no al stdin de cat", "contexto": "razón de fs.writeFile(port,...) en monitor-send (cat solo lee)" },
+      { "ubicacion": "modules/esp32-flasher/index.js:631", "comentario_literal": "// Mapear 0-100% de escritura a 25-90% del total", "contexto": "explica mapeo del progreso de write_flash al rango global de etapas" },
+      { "ubicacion": "modules/esp32-flasher/index.js:822", "comentario_literal": "// Usar stty + cat para leer serial sin dependencias externas, o python -m serial.tools.miniterm si está disponible. // Fallback: usar un script simple con Node serialport o cat directo.", "contexto": "explica decisión de no añadir dependencia node-serialport — solo POSIX tools" }
+    ],
+    "workarounds_detectados": [
+      { "ubicacion": "modules/esp32-flasher/index.js:215", "descripcion": "Regex /^(\\/dev\\/tty(USB|ACM|S|AMA)\\d+|COM\\d+)$/ para validar formato de puerto antes de spawn — defensa contra valores arbitrarios" },
+      { "ubicacion": "modules/esp32-flasher/index.js:272", "descripcion": "Whitelist de flash_mode (qio/qout/dio/dout) y flash_freq (20m/26m/40m/80m) con fallback dio/80m — anti argument-injection en esptool" },
+      { "ubicacion": "modules/esp32-flasher/index.js:135", "descripcion": "data = event?.data || event?.payload || event — multi-shape unwrap (mismo patrón que device-shadow/health)" },
+      { "ubicacion": "modules/esp32-flasher/index.js:139", "descripcion": "driver = data.driver || data.project_name — compat con firmware-builder nuevo y esp32-dev legacy" },
+      { "ubicacion": "modules/esp32-flasher/index.js:491", "descripcion": "monitor-send escribe a fs.promises.writeFile(port, text + '\\n') — bypasea el spawn de cat (que es solo lectura)" },
+      { "ubicacion": "modules/esp32-flasher/index.js:902", "descripcion": "_scanPorts implementa glob manual (readdir + startsWith) en vez de usar librería glob — evita dependencia" }
+    ]
+  },
   "metricas_fisicas": { "lineas_index_js": 1137, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
-  "outliers_capturados": { "campos_no_canonicos_en_manifest": [], "patrones_no_canonicos_en_codigo": [] },
-  "quirks": { "warnings": [], "secciones_vacias_intencionalmente": [] }
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Long-poll HTTP en /debug-stream con waiters[] en buffer y timeout 30s — patrón comet", "ejemplo": "modules/esp32-flasher/index.js:1067", "rareza": "unico_en_repo" },
+      { "patron": "MQTT directo (this.eventBus.mqtt.subscribe/publish + on('message')) en vez de via eventBus.publish/subscribe — bypaseando el bus", "ejemplo": "modules/esp32-flasher/index.js:957", "rareza": "inusual" },
+      { "patron": "Spawn de stty + cat para serial monitor (sin librería serialport)", "ejemplo": "modules/esp32-flasher/index.js:827", "rareza": "unico_en_repo" },
+      { "patron": "Stream de archivo via fs.createReadStream + pipe en handleCliDownload (no req.res.sendFile)", "ejemplo": "modules/esp32-flasher/index.js:1129", "rareza": "inusual" },
+      { "patron": "Validación de port via regex de formato + fs.access pre-spawn — doble guarda", "ejemplo": "modules/esp32-flasher/index.js:215", "rareza": "inusual" },
+      { "patron": "_parseEsptoolProgress también usado por _runPlatformioFlash (PlatformIO usa esptool internamente)", "ejemplo": "modules/esp32-flasher/index.js:676", "rareza": "inusual" }
+    ]
+  },
+  "quirks": {
+    "warnings": [
+      "P3 — ESP32 Flasher IoT (v1.0.0). Flash + monitor serial + debug remoto via MQTT + endpoints HTTP para CLI local.",
+      "Tres caminos de flash.serial_output: monitor local (cat), debug remoto MQTT (enki/+/debug/+) y relay desde CLI local (POST /serial-relay).",
+      "Defensa contra argument injection: whitelist explícito de flash_mode y flash_freq antes de pasar a esptool spawn.",
+      "Defensa contra path injection: regex de port + fs.access pre-spawn — rechaza valores arbitrarios antes de child_process.",
+      "MQTT directo bypasea eventBus para topics IoT (enki/+/debug/+ y enki/{p}/debug/{d}/control) — mismo patrón que device-shadow.",
+      "Long-poll comet en /debug-stream: 30s timeout con waiters[]; en onUnload se resuelven con [] para no colgar conexiones.",
+      "Cancel de flash emite flash.failed con error: 'cancelled' (no flash.cancelled propio) — métrica flash.cancelled.total existe pero el evento es flash.failed.",
+      "Auto-suggest UI: onBuildCompleted guarda lastBuild para que handleListPorts lo incluya — UX para 'tu último build, ¿quieres flashearlo?'.",
+      "monitor-send escribe directamente al device file (no al stdin de cat) — fs.writeFile(port, text+'\\n')."
+    ],
+    "secciones_vacias_intencionalmente": ["estado.persistencia.sqlite_tablas", "configuracion.env_vars (excepto PLATFORMIO_FORCE_COLOR pasado en spawn)", "codigo_intencion.todos", "version_archivada", "outliers_capturados.campos_no_canonicos_en_manifest", "observabilidad.metricas_drift_vs_manifest"]
+  }
 }

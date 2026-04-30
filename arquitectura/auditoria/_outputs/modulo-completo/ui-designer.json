@@ -105,6 +105,7 @@
       { "ubicacion": "modules/ui-designer/index.js:474", "descripcion": "publish dentro del try/catch del handler — si falla, retorna 500 aunque la mutación ya esté persistida en disco (estado inconsistente entre disco y bus)" }
     ]
   },
+  "metricas_fisicas": { "lineas_index_js": 1280, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
   "outliers_capturados": {
     "campos_no_canonicos_en_manifest": ["schema.template.<...> (esquema JSON inline en module.json — único módulo con esta forma de schema embebido)"],
     "patrones_no_canonicos_en_codigo": [

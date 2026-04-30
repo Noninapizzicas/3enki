@@ -46,9 +46,52 @@
     { "domain": "flash", "action": "monitor-send", "handler_metodo": "handleMonitorSend", "handler_ubicacion": "modules/esp32-flasher/index.js:481", "input_validado": ["port", "data"], "codigos_error": ["400", "404", "500"], "output_shape": { "status_success": 200, "data_keys": ["port", "sent"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
     { "domain": "flash", "action": "history", "handler_metodo": "handleHistory", "handler_ubicacion": "modules/esp32-flasher/index.js:501", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["history", "total"], "status_error": null }, "campo_origen_manifest": "ui_handlers" }
   ],
-  "apis_http": [],
-  "estado": { "memoria": [], "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": null } },
-  "configuracion": { "env_vars": [], "module_json_config_keys": [], "paths_proyecto_referenciados": [], "valores_hardcoded_observables": [] },
+  "apis_http": [
+    { "method": "POST", "path": "/debug-control", "handler_metodo": "handleDebugControl", "handler_ubicacion": "modules/esp32-flasher/index.js:1020", "auth_observada": "ninguna", "request_body_keys": ["device", "project", "enable"], "response_keys": ["ok", "device", "enable", "error"] },
+    { "method": "GET", "path": "/debug-stream", "handler_metodo": "handleDebugStream", "handler_ubicacion": "modules/esp32-flasher/index.js:1046", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["lines", "device", "error"] },
+    { "method": "POST", "path": "/serial-relay", "handler_metodo": "handleSerialRelay", "handler_ubicacion": "modules/esp32-flasher/index.js:1094", "auth_observada": "ninguna", "request_body_keys": ["port", "device", "project", "lines"], "response_keys": ["ok", "relayed", "error"] },
+    { "method": "GET", "path": "/cli-download", "handler_metodo": "handleCliDownload", "handler_ubicacion": "modules/esp32-flasher/index.js:1118", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["error (si falla); si éxito stream pipe del archivo)"] }
+  ],
+  "estado": {
+    "memoria": [
+      { "campo": "this.activeFlashes", "tipo": "Map", "ubicacion_init": "modules/esp32-flasher/index.js:42", "se_invalida_con": "delete por flash_id en proc.close/error/onUnload (kill SIGTERM) + handleCancel", "leak_potencial": false },
+      { "campo": "this.activeMonitors", "tipo": "Map", "ubicacion_init": "modules/esp32-flasher/index.js:45", "se_invalida_con": "delete por port en _stopMonitor + clear() en onUnload + cat 'close'/'error'", "leak_potencial": false },
+      { "campo": "this.flashHistory", "tipo": "Array", "ubicacion_init": "modules/esp32-flasher/index.js:48", "se_invalida_con": "FIFO con max_history=200 (length = max_history en _addHistory cuando excede)", "leak_potencial": false },
+      { "campo": "this.lastBuild", "tipo": "Object", "ubicacion_init": "modules/esp32-flasher/index.js:51", "se_invalida_con": "sobreescritura en onBuildCompleted (solo el último)", "leak_potencial": false },
+      { "campo": "this.debugBuffers", "tipo": "Map", "ubicacion_init": "modules/esp32-flasher/index.js:55", "se_invalida_con": "buf.lines.slice(-500) si excede; clear() en onUnload + waiters resueltos con []", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "<port>", "formato": "raw", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "desconocido" },
+        { "path_pattern": "cli/enki-esp32.js", "formato": "raw", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" }
+      ],
+      "notas_concurrencia": "Sin persistencia propia. Los buffers de monitor/debug viven solo en memoria; al unload se pierden. flashHistory tampoco se persiste."
+    }
+  },
+  "configuracion": {
+    "env_vars": ["PLATFORMIO_FORCE_COLOR (set a 'false' en spawn de platformio)"],
+    "module_json_config_keys": [
+      { "key": "esptool_path", "tipo": "string", "default_si_primitivo": "esptool" },
+      { "key": "platformio_path", "tipo": "string", "default_si_primitivo": "platformio" },
+      { "key": "default_baud", "tipo": "number", "default_si_primitivo": 115200 },
+      { "key": "flash_baud", "tipo": "number", "default_si_primitivo": 460800 },
+      { "key": "monitor_baud", "tipo": "number", "default_si_primitivo": 115200 },
+      { "key": "flash_timeout_ms", "tipo": "number", "default_si_primitivo": 120000 },
+      { "key": "serial_patterns", "tipo": "array", "default_si_primitivo": null },
+      { "key": "max_monitor_buffer", "tipo": "number", "default_si_primitivo": 5000 },
+      { "key": "max_history", "tipo": "number", "default_si_primitivo": 200 }
+    ],
+    "paths_proyecto_referenciados": ["cli/enki-esp32.js"],
+    "valores_hardcoded_observables": [
+      { "valor": "30000", "ubicacion": "modules/esp32-flasher/index.js:1081", "naturaleza": "timeout" },
+      { "valor": "0x10000", "ubicacion": "modules/esp32-flasher/index.js:581", "naturaleza": "otro" },
+      { "valor": "qio,qout,dio,dout", "ubicacion": "modules/esp32-flasher/index.js:270", "naturaleza": "otro" },
+      { "valor": "20m,26m,40m,80m", "ubicacion": "modules/esp32-flasher/index.js:271", "naturaleza": "otro" },
+      { "valor": "500", "ubicacion": "modules/esp32-flasher/index.js:984", "naturaleza": "limit" },
+      { "valor": "5000 (timeout stty)", "ubicacion": "modules/esp32-flasher/index.js:828", "naturaleza": "timeout" }
+    ]
+  },
   "lifecycle": { "onLoad": { "ubicacion": null, "acciones": [], "guarda_referencias_externas": [], "puede_fallar_silenciosamente": false }, "onUnload": { "ubicacion": null, "acciones": [], "estado_no_limpiado": [] }, "auto_wired_subscribes": true, "subscribes_dinamicos_en_lifecycle": [] },
   "dependencias_implicitas": [],
   "modos_de_fallo": [],

@@ -3,19 +3,39 @@
   "version": "1.0.0",
   "description": "Construye el system prompt al recibir chat.message.saved. Mantiene en cache los prompt.json y context.json de los módulos (FS) y los prompts del usuario (prompt-manager). Emite chat.prompt.ready con los 9 campos.",
   "author": "Event Core Team",
-
+  "language": "en",
   "publishes": [
     "chat.prompt.ready",
     "prompt.list.request"
   ],
   "subscribes": [
-    { "event": "chat.message.saved",   "handler": "onMessageSaved" },
-    { "event": "prompt.list.response", "handler": "onPromptListResponse" },
-    { "event": "prompt.created",       "handler": "onPromptUpserted" },
-    { "event": "prompt.updated",       "handler": "onPromptUpserted" },
-    { "event": "prompt.deleted",       "handler": "onPromptDeleted" },
-    { "event": "db.query.response",    "handler": "onDbQueryResponse" }
+    {
+      "event": "chat.message.saved",
+      "handler": "onMessageSaved"
+    },
+    {
+      "event": "prompt.list.response",
+      "handler": "onPromptListResponse"
+    },
+    {
+      "event": "prompt.created",
+      "handler": "onPromptUpserted"
+    },
+    {
+      "event": "prompt.updated",
+      "handler": "onPromptUpserted"
+    },
+    {
+      "event": "prompt.deleted",
+      "handler": "onPromptDeleted"
+    },
+    {
+      "event": "db.query.response",
+      "handler": "onDbQueryResponse"
+    }
   ],
-
-  "dependencies": ["database-manager", "prompt-manager"]
+  "dependencies": [
+    "database-manager",
+    "prompt-manager"
+  ]
 }

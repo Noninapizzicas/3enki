@@ -2,11 +2,15 @@
   "name": "system-inspector",
   "version": "1.0.0",
   "description": "Captura estado del sistema (HTTP, MQTT, errores, logs) para consulta por IA",
+  "language": "en",
   "main": "index.js",
   "dev_only": true,
   "provides": {
     "events": [],
-    "queries": ["system.status", "system.errors"]
+    "queries": [
+      "system.status",
+      "system.errors"
+    ]
   },
   "events": {
     "publishes": [],

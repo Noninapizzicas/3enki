@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "description": "Gestión completa de pedidos - Reemplazo de comandero 100% event-driven",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
     "events": [
       "pedido.creado",
@@ -14,9 +14,12 @@
       "pedido.completado",
       "pedido.cancelado"
     ],
-    "queries": ["pedido.obtener", "pedido.listar", "pedido.por_cuenta"]
+    "queries": [
+      "pedido.obtener",
+      "pedido.listar",
+      "pedido.por_cuenta"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -117,7 +120,6 @@
       }
     ]
   },
-
   "ui": {
     "enabled": true,
     "title": "Gestión de Pedidos",
@@ -130,12 +132,10 @@
       "form-order",
       "order-detail"
     ],
-
     "views": {
       "main": {
         "type": "dashboard",
         "layout": "fullwidth",
-
         "header": {
           "title": "📋 Pedidos Activos",
           "subtitle": "Gestión de pedidos en tiempo real",
@@ -146,7 +146,11 @@
               "icon": "➕",
               "action": "open_form",
               "variant": "primary",
-              "permissions": ["admin", "gerente", "camarero"]
+              "permissions": [
+                "admin",
+                "gerente",
+                "camarero"
+              ]
             },
             {
               "type": "button",
@@ -157,7 +161,6 @@
             }
           ]
         },
-
         "content": {
           "id": "orders_grid",
           "type": "grid",
@@ -177,12 +180,10 @@
             "item_component": "order-card"
           }
         },
-
         "sidebar": {
           "enabled": false
         }
       },
-
       "create": {
         "type": "fullscreen",
         "component": "form-order",
@@ -200,7 +201,6 @@
           }
         }
       },
-
       "edit": {
         "type": "fullscreen",
         "component": "form-order",
@@ -219,7 +219,6 @@
           }
         }
       },
-
       "detail": {
         "type": "fullscreen",
         "component": "order-detail",
@@ -228,13 +227,18 @@
           "show_header": true,
           "show_breadcrumbs": true,
           "breadcrumbs": [
-            { "label": "Pedidos", "path": "/pedidos" },
-            { "label": "Mesa {mesa}", "path": "/pedidos/{id}" }
+            {
+              "label": "Pedidos",
+              "path": "/pedidos"
+            },
+            {
+              "label": "Mesa {mesa}",
+              "path": "/pedidos/{id}"
+            }
           ]
         }
       }
     },
-
     "mqtt": {
       "enabled": true,
       "topics": [
@@ -253,15 +257,32 @@
         "pedido.completado": "success"
       }
     },
-
     "permissions": {
-      "view": ["admin", "gerente", "camarero"],
-      "create": ["admin", "gerente", "camarero"],
-      "edit": ["admin", "gerente", "camarero"],
-      "delete": ["admin", "gerente"],
-      "send_kitchen": ["admin", "gerente", "camarero"]
+      "view": [
+        "admin",
+        "gerente",
+        "camarero"
+      ],
+      "create": [
+        "admin",
+        "gerente",
+        "camarero"
+      ],
+      "edit": [
+        "admin",
+        "gerente",
+        "camarero"
+      ],
+      "delete": [
+        "admin",
+        "gerente"
+      ],
+      "send_kitchen": [
+        "admin",
+        "gerente",
+        "camarero"
+      ]
     },
-
     "features": {
       "search": false,
       "filters": true,
@@ -273,7 +294,6 @@
       "sounds": true
     }
   },
-
   "apis": [
     {
       "method": "POST",
@@ -357,7 +377,6 @@
       "description": "Métricas del módulo"
     }
   ],
-
   "observability": {
     "logging": {
       "level": "info",

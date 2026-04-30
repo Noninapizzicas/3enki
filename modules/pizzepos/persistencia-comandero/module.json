@@ -3,12 +3,19 @@
   "version": "3.0.0",
   "description": "Persistencia diaria del comandero - Eventos, cuentas y cierre de caja",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
-    "events": ["caja.cerrada", "cuenta.cerrada_forzada", "dia.iniciado"],
-    "queries": ["persistencia.eventos", "persistencia.ventas", "persistencia.cuadre_caja"]
+    "events": [
+      "caja.cerrada",
+      "cuenta.cerrada_forzada",
+      "dia.iniciado"
+    ],
+    "queries": [
+      "persistencia.eventos",
+      "persistencia.ventas",
+      "persistencia.cuadre_caja"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -17,10 +24,18 @@
         "schema": {
           "type": "object",
           "properties": {
-            "fecha": { "type": "string" },
-            "arqueo": { "type": "object" },
-            "totales": { "type": "object" },
-            "diferencia": { "type": "number" }
+            "fecha": {
+              "type": "string"
+            },
+            "arqueo": {
+              "type": "object"
+            },
+            "totales": {
+              "type": "object"
+            },
+            "diferencia": {
+              "type": "number"
+            }
           }
         }
       },
@@ -30,9 +45,15 @@
         "schema": {
           "type": "object",
           "properties": {
-            "cuenta_id": { "type": "string" },
-            "motivo": { "type": "string" },
-            "cuenta_snapshot": { "type": "object" }
+            "cuenta_id": {
+              "type": "string"
+            },
+            "motivo": {
+              "type": "string"
+            },
+            "cuenta_snapshot": {
+              "type": "object"
+            }
           }
         }
       },
@@ -42,8 +63,12 @@
         "schema": {
           "type": "object",
           "properties": {
-            "fecha": { "type": "string" },
-            "hora_inicio": { "type": "string" }
+            "fecha": {
+              "type": "string"
+            },
+            "hora_inicio": {
+              "type": "string"
+            }
           }
         }
       }
@@ -181,7 +206,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
@@ -256,7 +280,6 @@
       "description": "Métricas del módulo"
     }
   ],
-
   "observability": {
     "logging": {
       "level": "info",
@@ -279,7 +302,6 @@
       ]
     }
   },
-
   "config": {
     "data_dir": "./data",
     "eventos_dir": "./data/eventos",

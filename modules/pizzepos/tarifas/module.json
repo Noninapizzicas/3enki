@@ -3,23 +3,38 @@
   "version": "2.0.0",
   "description": "Asignación carta+canal + registro de variantes. Cada canal tiene su carta con precios finales escritos. Sin cálculos en runtime.",
   "author": "Pizzepos Team",
+  "language": "es",
   "main": "index.js",
-
   "events": {
     "publishes": [
-      { "event": "tarifas.config.actualizada", "description": "Config cambiada (asignación canal, variante registrada)" }
+      {
+        "event": "tarifas.config.actualizada",
+        "description": "Config cambiada (asignación canal, variante registrada)"
+      }
     ],
     "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated"
+      },
+      {
+        "event": "project.deactivated",
+        "handler": "onProjectDeactivated"
+      }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "tarifas", "action": "get", "handler": "handleGet" },
-    { "domain": "tarifas", "action": "health", "handler": "handleHealth" }
+    {
+      "domain": "tarifas",
+      "action": "get",
+      "handler": "handleGet"
+    },
+    {
+      "domain": "tarifas",
+      "action": "health",
+      "handler": "handleHealth"
+    }
   ],
-
   "tools": [
     {
       "name": "tarifas.set_general",
@@ -28,9 +43,14 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id": { "type": "string", "description": "ID de la carta general" }
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta general"
+          }
         },
-        "required": ["carta_id"]
+        "required": [
+          "carta_id"
+        ]
       }
     },
     {
@@ -42,7 +62,14 @@
         "properties": {
           "canal": {
             "type": "string",
-            "enum": ["mesa", "llevar", "telefono", "whatsapp", "glovo", "llevadoo"],
+            "enum": [
+              "mesa",
+              "llevar",
+              "telefono",
+              "whatsapp",
+              "glovo",
+              "llevadoo"
+            ],
             "description": "Canal de venta"
           },
           "carta_id": {
@@ -50,14 +77,19 @@
             "description": "ID de carta a asignar (null = usar general)"
           }
         },
-        "required": ["canal"]
+        "required": [
+          "canal"
+        ]
       }
     },
     {
       "name": "tarifas.get",
       "description": "Config actual: carta general + qué carta usa cada canal + variantes registradas",
       "handler": "toolGet",
-      "parameters": { "type": "object", "properties": {} }
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
     },
     {
       "name": "tarifas.register_variant",
@@ -66,12 +98,23 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id": { "type": "string", "description": "ID de la carta variante" },
-          "base_carta_id": { "type": "string", "description": "ID de la carta base de la que se derivó" },
-          "nombre": { "type": "string", "description": "Nombre descriptivo de la variante" },
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta variante"
+          },
+          "base_carta_id": {
+            "type": "string",
+            "description": "ID de la carta base de la que se derivó"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre descriptivo de la variante"
+          },
           "canales": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Canales que usan esta variante"
           },
           "reglas": {
@@ -79,26 +122,33 @@
             "description": "Reglas de la variante en lenguaje natural. Ej: { precio: '+15%', excluir_categorias: ['ensaladas'], descripcion: 'Carta delivery sin ensaladas' }"
           }
         },
-        "required": ["carta_id", "base_carta_id"]
+        "required": [
+          "carta_id",
+          "base_carta_id"
+        ]
       }
     },
     {
       "name": "tarifas.get_variants",
       "description": "Lista las variantes registradas con sus reglas y canales asignados",
       "handler": "toolGetVariants",
-      "parameters": { "type": "object", "properties": {} }
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
     }
   ],
-
   "agents": {
     "description": "Los agentes crean y sincronizan variantes de carta",
     "tarifas-creator": "Crea variante desde carta base: duplica, ajusta precios, filtra productos, renombra, registra",
     "tarifas-sync": "Cuando la carta base cambia, evalúa cada variante y propaga cambios según reglas"
   },
-
   "observability": {
     "metrics": {
-      "counters": ["tarifas.assign.updated", "tarifas.variant.registered"]
+      "counters": [
+        "tarifas.assign.updated",
+        "tarifas.variant.registered"
+      ]
     }
   }
 }

@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "description": "Formateo ESC/POS y envío directo a impresoras ESP32 via MQTT. Autodescubrimiento de impresoras. Sin capas intermedias.",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
     "events": [
       "impresion.comanda_generada",
@@ -12,7 +12,6 @@
       "impresion.ticket_pieza_generado"
     ]
   },
-
   "events": {
     "publishes": [
       {
@@ -85,17 +84,43 @@
       }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "impresion", "action": "ticket", "handler": "handleImprimirComanda" },
-    { "domain": "impresion", "action": "ticket-venta", "handler": "handleImprimirTicketVenta" },
-    { "domain": "impresion", "action": "estado", "handler": "handleGetEstado" },
-    { "domain": "impresion", "action": "historial", "handler": "handleGetHistorial" },
-    { "domain": "impresion", "action": "health", "handler": "handleHealthCheck" },
-    { "domain": "impresion", "action": "metrics", "handler": "handleGetMetrics" },
-    { "domain": "impresion", "action": "impresoras", "handler": "handleListarImpresoras" }
+    {
+      "domain": "impresion",
+      "action": "ticket",
+      "handler": "handleImprimirComanda"
+    },
+    {
+      "domain": "impresion",
+      "action": "ticket-venta",
+      "handler": "handleImprimirTicketVenta"
+    },
+    {
+      "domain": "impresion",
+      "action": "estado",
+      "handler": "handleGetEstado"
+    },
+    {
+      "domain": "impresion",
+      "action": "historial",
+      "handler": "handleGetHistorial"
+    },
+    {
+      "domain": "impresion",
+      "action": "health",
+      "handler": "handleHealthCheck"
+    },
+    {
+      "domain": "impresion",
+      "action": "metrics",
+      "handler": "handleGetMetrics"
+    },
+    {
+      "domain": "impresion",
+      "action": "impresoras",
+      "handler": "handleListarImpresoras"
+    }
   ],
-
   "apis": [
     {
       "method": "POST",
@@ -140,12 +165,10 @@
       "description": "Lista impresoras ESP32 descubiertas via autodescubrimiento MQTT"
     }
   ],
-
   "config": {
     "ancho": "58mm",
     "destino_default": ""
   },
-
   "observability": {
     "logging": {
       "level": "info",

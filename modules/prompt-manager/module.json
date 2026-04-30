@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "Sistema de gestión de prompts con versionado, slots, presets y analytics. Usa database-manager para persistencia.",
   "author": "Event Core Team",
+  "language": "en",
   "provides": [
     "prompt-management",
     "slot-management",
@@ -11,29 +12,92 @@
     "analytics"
   ],
   "subscribes": [
-    { "event": "db.query.response", "handler": "onQueryResponse" },
-    { "event": "db.schema.init.response", "handler": "onSchemaInitResponse" },
-    { "event": "prompt.get.request", "handler": "onPromptGetRequest" },
-    { "event": "prompt.list.request", "handler": "onPromptListRequest" },
+    {
+      "event": "db.query.response",
+      "handler": "onQueryResponse"
+    },
+    {
+      "event": "db.schema.init.response",
+      "handler": "onSchemaInitResponse"
+    },
+    {
+      "event": "prompt.get.request",
+      "handler": "onPromptGetRequest"
+    },
+    {
+      "event": "prompt.list.request",
+      "handler": "onPromptListRequest"
+    },
     "ai.completion.completed",
     "ai.request.started"
   ],
   "ui_handlers": [
-    { "domain": "prompt", "action": "list", "handler": "handleUIList" },
-    { "domain": "prompt", "action": "get", "handler": "handleUIGet" },
-    { "domain": "prompt", "action": "create", "handler": "handleUICreate" },
-    { "domain": "prompt", "action": "update", "handler": "handleUIUpdate" },
-    { "domain": "prompt", "action": "delete", "handler": "handleUIDelete" },
-    { "domain": "prompt", "action": "versions", "handler": "handleUIVersions" },
-    { "domain": "preset", "action": "list", "handler": "handleUIPresetList" },
-    { "domain": "preset", "action": "get", "handler": "handleUIPresetGet" },
-    { "domain": "preset", "action": "create", "handler": "handleUIPresetCreate" },
-    { "domain": "preset", "action": "delete", "handler": "handleUIPresetDelete" },
-    { "domain": "preset", "action": "apply", "handler": "handleUIPresetApply" },
-    { "domain": "composer", "action": "render", "handler": "handleUIComposerRender" },
-    { "domain": "prompt", "action": "analytics", "handler": "handleUIAnalytics" }
+    {
+      "domain": "prompt",
+      "action": "list",
+      "handler": "handleUIList"
+    },
+    {
+      "domain": "prompt",
+      "action": "get",
+      "handler": "handleUIGet"
+    },
+    {
+      "domain": "prompt",
+      "action": "create",
+      "handler": "handleUICreate"
+    },
+    {
+      "domain": "prompt",
+      "action": "update",
+      "handler": "handleUIUpdate"
+    },
+    {
+      "domain": "prompt",
+      "action": "delete",
+      "handler": "handleUIDelete"
+    },
+    {
+      "domain": "prompt",
+      "action": "versions",
+      "handler": "handleUIVersions"
+    },
+    {
+      "domain": "preset",
+      "action": "list",
+      "handler": "handleUIPresetList"
+    },
+    {
+      "domain": "preset",
+      "action": "get",
+      "handler": "handleUIPresetGet"
+    },
+    {
+      "domain": "preset",
+      "action": "create",
+      "handler": "handleUIPresetCreate"
+    },
+    {
+      "domain": "preset",
+      "action": "delete",
+      "handler": "handleUIPresetDelete"
+    },
+    {
+      "domain": "preset",
+      "action": "apply",
+      "handler": "handleUIPresetApply"
+    },
+    {
+      "domain": "composer",
+      "action": "render",
+      "handler": "handleUIComposerRender"
+    },
+    {
+      "domain": "prompt",
+      "action": "analytics",
+      "handler": "handleUIAnalytics"
+    }
   ],
-
   "tools": [
     {
       "name": "prompt.list",
@@ -44,7 +108,13 @@
         "properties": {
           "slot_type": {
             "type": "string",
-            "enum": ["system", "context", "prefix", "suffix", "format"],
+            "enum": [
+              "system",
+              "context",
+              "prefix",
+              "suffix",
+              "format"
+            ],
             "description": "Filtrar por tipo de slot (opcional)"
           },
           "tag": {
@@ -102,7 +172,6 @@
       }
     }
   ],
-
   "publishes": [
     "prompt.created",
     "prompt.updated",

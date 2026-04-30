@@ -3,8 +3,10 @@
   "version": "3.1.0",
   "description": "Display de cocina en tiempo real - Sistema de preparación de pedidos. Publica periferico.display para pantallas externas.",
   "author": "Pizzepos Team",
-  "routes": ["/cocina"],
-
+  "language": "es",
+  "routes": [
+    "/cocina"
+  ],
   "provides": {
     "events": [
       "cocina.item_preparando",
@@ -13,9 +15,11 @@
       "cocina.item_ticket",
       "periferico.display"
     ],
-    "queries": ["cocina.activos", "cocina.historial"]
+    "queries": [
+      "cocina.activos",
+      "cocina.historial"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -24,11 +28,21 @@
         "schema": {
           "type": "object",
           "properties": {
-            "pedido_id": { "type": "string" },
-            "cuenta_id": { "type": "string" },
-            "item_id": { "type": "string" },
-            "nombre": { "type": "string" },
-            "preparando_at": { "type": "string" }
+            "pedido_id": {
+              "type": "string"
+            },
+            "cuenta_id": {
+              "type": "string"
+            },
+            "item_id": {
+              "type": "string"
+            },
+            "nombre": {
+              "type": "string"
+            },
+            "preparando_at": {
+              "type": "string"
+            }
           }
         }
       },
@@ -56,15 +70,33 @@
         "schema": {
           "type": "object",
           "properties": {
-            "pedido_id": { "type": "string" },
-            "cuenta_id": { "type": "string" },
-            "canal": { "type": "string" },
-            "item_id": { "type": "string" },
-            "nombre": { "type": "string" },
-            "cantidad": { "type": "number" },
-            "categoria": { "type": "string" },
-            "estacion": { "type": "string" },
-            "fases": { "type": "array" }
+            "pedido_id": {
+              "type": "string"
+            },
+            "cuenta_id": {
+              "type": "string"
+            },
+            "canal": {
+              "type": "string"
+            },
+            "item_id": {
+              "type": "string"
+            },
+            "nombre": {
+              "type": "string"
+            },
+            "cantidad": {
+              "type": "number"
+            },
+            "categoria": {
+              "type": "string"
+            },
+            "estacion": {
+              "type": "string"
+            },
+            "fases": {
+              "type": "array"
+            }
           }
         }
       }
@@ -107,7 +139,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
@@ -152,7 +183,6 @@
       "description": "Métricas del módulo"
     }
   ],
-
   "observability": {
     "logging": {
       "level": "info",

@@ -3,58 +3,96 @@
   "version": "1.0.0",
   "description": "Estudio de viabilidad de negocio: punto de equilibrio, proyecciones, escenarios, análisis de rentabilidad.",
   "author": "Event Core Team",
+  "language": "es",
   "main": "index.js",
-
   "intents": [
     {
-      "keywords": ["viabilidad", "estudio de viabilidad", "es viable", "puedo montar", "análisis del negocio"],
+      "keywords": [
+        "viabilidad",
+        "estudio de viabilidad",
+        "es viable",
+        "puedo montar",
+        "análisis del negocio"
+      ],
       "action": "tool_call",
       "tool": "viabilidad.estudio",
       "description": "Generar estudio de viabilidad completo del negocio"
     },
     {
-      "keywords": ["punto de equilibrio", "break even", "cuánto tengo que vender", "para no perder", "mínimo para cubrir"],
+      "keywords": [
+        "punto de equilibrio",
+        "break even",
+        "cuánto tengo que vender",
+        "para no perder",
+        "mínimo para cubrir"
+      ],
       "action": "tool_call",
       "tool": "viabilidad.punto_equilibrio",
       "description": "Calcular punto de equilibrio del negocio"
     },
     {
-      "keywords": ["escenario", "qué pasa si", "simular negocio", "escenario optimista", "escenario conservador"],
+      "keywords": [
+        "escenario",
+        "qué pasa si",
+        "simular negocio",
+        "escenario optimista",
+        "escenario conservador"
+      ],
       "action": "tool_call",
       "tool": "viabilidad.escenario",
       "description": "Calcular un escenario de negocio"
     },
     {
-      "keywords": ["comparar escenarios", "varios escenarios", "escenario vs escenario"],
+      "keywords": [
+        "comparar escenarios",
+        "varios escenarios",
+        "escenario vs escenario"
+      ],
       "action": "tool_call",
       "tool": "viabilidad.comparar_escenarios",
       "description": "Comparar múltiples escenarios de negocio"
     },
     {
-      "keywords": ["proyección", "proyectar", "previsión a meses", "proyección anual", "a 12 meses", "a 6 meses"],
+      "keywords": [
+        "proyección",
+        "proyectar",
+        "previsión a meses",
+        "proyección anual",
+        "a 12 meses",
+        "a 6 meses"
+      ],
       "action": "tool_call",
       "tool": "viabilidad.proyeccion",
       "description": "Proyección financiera a meses vista"
     },
     {
-      "keywords": ["guardar configuración negocio", "guardar gastos fijos", "configurar negocio"],
+      "keywords": [
+        "guardar configuración negocio",
+        "guardar gastos fijos",
+        "configurar negocio"
+      ],
       "action": "tool_call",
       "tool": "viabilidad.guardar_config",
       "description": "Guardar configuración del negocio para futuros cálculos"
     },
     {
-      "keywords": ["analiza la viabilidad completa", "estudio financiero completo", "dime si el negocio es rentable"],
+      "keywords": [
+        "analiza la viabilidad completa",
+        "estudio financiero completo",
+        "dime si el negocio es rentable"
+      ],
       "action": "agent",
       "agent": "viabilidad-receta-analyzer",
       "multi_turn": false,
       "description": "Análisis profundo de viabilidad con cruce de datos de recetas y escandallo"
     }
   ],
-
   "provides": {
-    "events": ["viabilidad.estudio.generado", "viabilidad.escenario.calculado"]
+    "events": [
+      "viabilidad.estudio.generado",
+      "viabilidad.escenario.calculado"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -67,21 +105,49 @@
       }
     ],
     "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "receta.creada", "handler": "onRecetaChanged" },
-      { "event": "receta.actualizada", "handler": "onRecetaChanged" },
-      { "event": "receta.eliminada", "handler": "onRecetaChanged" },
-      { "event": "escandallo.calculado", "handler": "onEscandalloCalculado" }
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated"
+      },
+      {
+        "event": "project.deactivated",
+        "handler": "onProjectDeactivated"
+      },
+      {
+        "event": "receta.creada",
+        "handler": "onRecetaChanged"
+      },
+      {
+        "event": "receta.actualizada",
+        "handler": "onRecetaChanged"
+      },
+      {
+        "event": "receta.eliminada",
+        "handler": "onRecetaChanged"
+      },
+      {
+        "event": "escandallo.calculado",
+        "handler": "onEscandalloCalculado"
+      }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "viabilidad", "action": "estudio", "handler": "handleEstudio" },
-    { "domain": "viabilidad", "action": "escenario", "handler": "handleEscenario" },
-    { "domain": "viabilidad", "action": "config", "handler": "handleConfig" }
+    {
+      "domain": "viabilidad",
+      "action": "estudio",
+      "handler": "handleEstudio"
+    },
+    {
+      "domain": "viabilidad",
+      "action": "escenario",
+      "handler": "handleEscenario"
+    },
+    {
+      "domain": "viabilidad",
+      "action": "config",
+      "handler": "handleConfig"
+    }
   ],
-
   "tools": [
     {
       "name": "viabilidad.estudio",
@@ -119,7 +185,9 @@
             "description": "Objeto {receta_id: precio_venta} con precios de venta por receta"
           }
         },
-        "required": ["gastos_fijos_mensuales"]
+        "required": [
+          "gastos_fijos_mensuales"
+        ]
       }
     },
     {
@@ -146,7 +214,9 @@
             "description": "Días operativos al mes (default: 25)"
           }
         },
-        "required": ["gastos_fijos_mensuales"]
+        "required": [
+          "gastos_fijos_mensuales"
+        ]
       }
     },
     {
@@ -181,7 +251,12 @@
             "description": "Días operativos al mes (default: 25)"
           }
         },
-        "required": ["nombre", "gastos_fijos_mensuales", "comensales_dia", "ticket_medio"]
+        "required": [
+          "nombre",
+          "gastos_fijos_mensuales",
+          "comensales_dia",
+          "ticket_medio"
+        ]
       }
     },
     {
@@ -196,19 +271,38 @@
             "items": {
               "type": "object",
               "properties": {
-                "nombre": { "type": "string" },
-                "gastos_fijos_mensuales": { "type": "number" },
-                "comensales_dia": { "type": "number" },
-                "ticket_medio": { "type": "number" },
-                "food_cost_porcentaje": { "type": "number" },
-                "dias_operacion_mes": { "type": "number" }
+                "nombre": {
+                  "type": "string"
+                },
+                "gastos_fijos_mensuales": {
+                  "type": "number"
+                },
+                "comensales_dia": {
+                  "type": "number"
+                },
+                "ticket_medio": {
+                  "type": "number"
+                },
+                "food_cost_porcentaje": {
+                  "type": "number"
+                },
+                "dias_operacion_mes": {
+                  "type": "number"
+                }
               },
-              "required": ["nombre", "gastos_fijos_mensuales", "comensales_dia", "ticket_medio"]
+              "required": [
+                "nombre",
+                "gastos_fijos_mensuales",
+                "comensales_dia",
+                "ticket_medio"
+              ]
             },
             "description": "Array de escenarios a comparar"
           }
         },
-        "required": ["escenarios"]
+        "required": [
+          "escenarios"
+        ]
       }
     },
     {
@@ -251,7 +345,11 @@
             "description": "Inversión inicial (€) — para calcular ROI"
           }
         },
-        "required": ["gastos_fijos_mensuales", "comensales_dia_inicial", "ticket_medio"]
+        "required": [
+          "gastos_fijos_mensuales",
+          "comensales_dia_inicial",
+          "ticket_medio"
+        ]
       }
     },
     {
@@ -261,20 +359,37 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "nombre_negocio": { "type": "string" },
-          "tipo_negocio": { "type": "string" },
-          "gastos_fijos_mensuales": { "type": "number" },
-          "dias_operacion_mes": { "type": "number" },
-          "comensales_dia_estimados": { "type": "number" },
-          "ticket_medio": { "type": "number" },
-          "food_cost_objetivo": { "type": "number" },
-          "inversion_inicial": { "type": "number" },
-          "notas": { "type": "string" }
+          "nombre_negocio": {
+            "type": "string"
+          },
+          "tipo_negocio": {
+            "type": "string"
+          },
+          "gastos_fijos_mensuales": {
+            "type": "number"
+          },
+          "dias_operacion_mes": {
+            "type": "number"
+          },
+          "comensales_dia_estimados": {
+            "type": "number"
+          },
+          "ticket_medio": {
+            "type": "number"
+          },
+          "food_cost_objetivo": {
+            "type": "number"
+          },
+          "inversion_inicial": {
+            "type": "number"
+          },
+          "notas": {
+            "type": "string"
+          }
         }
       }
     }
   ],
-
   "observability": {
     "metrics": {
       "counters": [

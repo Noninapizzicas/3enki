@@ -3,26 +3,50 @@
   "version": "6.1.0",
   "description": "Genera cartas estructuradas en JSON desde cualquier input: fotos, PDF, texto. Pipeline OCR determinista (Google Vision) + agente IA para estructuración. Siempre pregunta el nombre.",
   "author": "Pizzepos Team",
+  "language": "es",
   "main": "index.js",
-
   "events": {
     "publishes": [
-      { "event": "menu.generation.progress", "description": "Progreso del pipeline: extracting, structuring" },
-      { "event": "menu.generation.failed", "description": "Error en el pipeline de generación" },
-      { "event": "agent.execute.request", "description": "Invoca agente menu-structurer para estructurar carta" },
-      { "event": "carta.generar.iniciada", "description": "Aceptada carta.generar.solicitada — pipeline en marcha" },
-      { "event": "carta.generar.fallida", "description": "Fallo al iniciar generación" }
+      {
+        "event": "menu.generation.progress",
+        "description": "Progreso del pipeline: extracting, structuring"
+      },
+      {
+        "event": "menu.generation.failed",
+        "description": "Error en el pipeline de generación"
+      },
+      {
+        "event": "agent.execute.request",
+        "description": "Invoca agente menu-structurer para estructurar carta"
+      },
+      {
+        "event": "carta.generar.iniciada",
+        "description": "Aceptada carta.generar.solicitada — pipeline en marcha"
+      },
+      {
+        "event": "carta.generar.fallida",
+        "description": "Fallo al iniciar generación"
+      }
     ],
     "subscribes": [
-      { "event": "carta.generar.solicitada", "handler": "onCartaGenerarSolicitada" }
+      {
+        "event": "carta.generar.solicitada",
+        "handler": "onCartaGenerarSolicitada"
+      }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "menu", "action": "generate", "handler": "handleGenerate" },
-    { "domain": "menu", "action": "health", "handler": "handleHealth" }
+    {
+      "domain": "menu",
+      "action": "generate",
+      "handler": "handleGenerate"
+    },
+    {
+      "domain": "menu",
+      "action": "health",
+      "handler": "handleHealth"
+    }
   ],
-
   "tools": [
     {
       "name": "menu.generate",
@@ -48,17 +72,28 @@
             "description": "ID del proyecto (obligatorio)"
           }
         },
-        "required": ["nombre", "project_id"]
+        "required": [
+          "nombre",
+          "project_id"
+        ]
       }
     }
   ],
-
   "pipeline": {
     "extraction": {
       "description": "Pipeline OCR determinista (no usa LLM)",
-      "steps": ["pdfjs.render (si PDF)", "sharp.prepare-ocr", "google-vision.extract"],
+      "steps": [
+        "pdfjs.render (si PDF)",
+        "sharp.prepare-ocr",
+        "google-vision.extract"
+      ],
       "provider": "Google Vision",
-      "timeouts": { "pdfInfo": 15000, "pdfRender": 30000, "sharp": 15000, "ocr": 60000 }
+      "timeouts": {
+        "pdfInfo": 15000,
+        "pdfRender": 30000,
+        "sharp": 15000,
+        "ocr": 60000
+      }
     },
     "structuring": {
       "description": "Agente IA que estructura el texto en carta JSON",
@@ -66,10 +101,12 @@
       "trigger": "menu.text.request"
     }
   },
-
   "observability": {
     "metrics": {
-      "counters": ["menu.generate.requested", "menu.generate.extract_failed"]
+      "counters": [
+        "menu.generate.requested",
+        "menu.generate.extract_failed"
+      ]
     }
   }
 }

@@ -3,12 +3,19 @@
   "version": "2.3.0",
   "description": "Catálogo de productos - Actualizado desde menús generados por IA",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
-    "events": ["producto.creado", "producto.actualizado", "producto.eliminado"],
-    "queries": ["producto.obtener", "producto.listar", "producto.buscar"]
+    "events": [
+      "producto.creado",
+      "producto.actualizado",
+      "producto.eliminado"
+    ],
+    "queries": [
+      "producto.obtener",
+      "producto.listar",
+      "producto.buscar"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -58,7 +65,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
@@ -130,7 +136,6 @@
       "description": "Métricas del módulo"
     }
   ],
-
   "ui": {
     "enabled": true,
     "title": "Catálogo de Productos",
@@ -143,12 +148,10 @@
       "form-product",
       "product-detail"
     ],
-
     "views": {
       "main": {
         "type": "dashboard",
         "layout": "fullwidth",
-
         "header": {
           "title": "📦 Catálogo de Productos",
           "subtitle": "Gestión de productos sincronizados con menús IA",
@@ -159,7 +162,10 @@
               "icon": "➕",
               "action": "open_form",
               "variant": "primary",
-              "permissions": ["admin", "gerente"]
+              "permissions": [
+                "admin",
+                "gerente"
+              ]
             },
             {
               "type": "button",
@@ -168,7 +174,10 @@
               "action": "navigate",
               "target": "/menu-generator",
               "variant": "secondary",
-              "permissions": ["admin", "gerente"]
+              "permissions": [
+                "admin",
+                "gerente"
+              ]
             },
             {
               "type": "button",
@@ -177,11 +186,12 @@
               "action": "download",
               "endpoint": "/modules/productos/export",
               "variant": "outline",
-              "permissions": ["admin"]
+              "permissions": [
+                "admin"
+              ]
             }
           ]
         },
-
         "content": {
           "id": "products_grid",
           "type": "grid",
@@ -198,12 +208,10 @@
             "item_component": "product-card"
           }
         },
-
         "sidebar": {
           "enabled": false
         }
       },
-
       "create": {
         "type": "modal",
         "component": "form-product",
@@ -224,7 +232,6 @@
           }
         }
       },
-
       "edit": {
         "type": "modal",
         "component": "form-product",
@@ -246,7 +253,6 @@
           }
         }
       },
-
       "detail": {
         "type": "fullscreen",
         "component": "product-detail",
@@ -255,13 +261,18 @@
           "show_header": true,
           "show_breadcrumbs": true,
           "breadcrumbs": [
-            { "label": "Productos", "path": "/productos" },
-            { "label": "{nombre}", "path": "/productos/{id}" }
+            {
+              "label": "Productos",
+              "path": "/productos"
+            },
+            {
+              "label": "{nombre}",
+              "path": "/productos/{id}"
+            }
           ]
         }
       }
     },
-
     "mqtt": {
       "enabled": true,
       "topics": [
@@ -272,15 +283,27 @@
       ],
       "auto_refresh": true
     },
-
     "permissions": {
-      "view": ["admin", "gerente", "camarero"],
-      "create": ["admin", "gerente"],
-      "edit": ["admin", "gerente"],
-      "delete": ["admin"],
-      "export": ["admin"]
+      "view": [
+        "admin",
+        "gerente",
+        "camarero"
+      ],
+      "create": [
+        "admin",
+        "gerente"
+      ],
+      "edit": [
+        "admin",
+        "gerente"
+      ],
+      "delete": [
+        "admin"
+      ],
+      "export": [
+        "admin"
+      ]
     },
-
     "features": {
       "search": true,
       "filters": true,
@@ -291,7 +314,6 @@
       "real_time": true
     }
   },
-
   "observability": {
     "logging": {
       "level": "info",

@@ -3,57 +3,181 @@
   "version": "2.0.0",
   "description": "Gestión de recetas con almacenamiento JSON por proyecto (data/projects/{slug}/recetas.json). Cada receta tiene history interno (versionado), incompleta flag y campos_pendientes. Cero SQL, cero schema migrations.",
   "author": "Event Core Team",
+  "language": "es",
   "main": "index.js",
-
   "events": {
     "publishes": [
-      { "event": "receta.creada",                      "description": "Receta nueva guardada en el JSON" },
-      { "event": "receta.actualizada",                 "description": "Receta modificada (nueva versión en history)" },
-      { "event": "receta.eliminada",                   "description": "Receta archivada (estado='archivada')" },
-      { "event": "ingrediente.precio.actualizado",     "description": "Precio de mercado de un ingrediente del catálogo actualizado" },
-      { "event": "fs.read.request",                    "description": "Lee recetas.json del proyecto (vía filesystem)" },
-      { "event": "fs.write.request",                   "description": "Escribe recetas.json del proyecto (vía filesystem)" },
-      { "event": "project.get.request",                "description": "Pide al project-manager el slug del proyecto (vía cache)" }
+      {
+        "event": "receta.creada",
+        "description": "Receta nueva guardada en el JSON"
+      },
+      {
+        "event": "receta.actualizada",
+        "description": "Receta modificada (nueva versión en history)"
+      },
+      {
+        "event": "receta.eliminada",
+        "description": "Receta archivada (estado='archivada')"
+      },
+      {
+        "event": "ingrediente.precio.actualizado",
+        "description": "Precio de mercado de un ingrediente del catálogo actualizado"
+      },
+      {
+        "event": "fs.read.request",
+        "description": "Lee recetas.json del proyecto (vía filesystem)"
+      },
+      {
+        "event": "fs.write.request",
+        "description": "Escribe recetas.json del proyecto (vía filesystem)"
+      },
+      {
+        "event": "project.get.request",
+        "description": "Pide al project-manager el slug del proyecto (vía cache)"
+      }
     ],
     "subscribes": [
-      { "event": "project.activated",            "handler": "onProjectActivated" },
-      { "event": "project.deactivated",          "handler": "onProjectDeactivated" },
-      { "event": "project.get.response",         "handler": "onProjectGetResponse" },
-      { "event": "fs.read.response",             "handler": "onFsReadResponse" },
-      { "event": "fs.write.response",            "handler": "onFsWriteResponse" },
-
-      { "event": "recetas.crear",                "handler": "onToolCrear" },
-      { "event": "recetas.listar",               "handler": "onToolListar" },
-      { "event": "recetas.obtener",              "handler": "onToolObtener" },
-      { "event": "recetas.buscar",               "handler": "onToolBuscar" },
-      { "event": "recetas.actualizar",           "handler": "onToolActualizar" },
-      { "event": "recetas.historial",            "handler": "onToolHistorial" },
-      { "event": "recetas.revertir",             "handler": "onToolRevertir" },
-      { "event": "recetas.eliminar",             "handler": "onToolEliminar" },
-      { "event": "recetas.estadisticas",         "handler": "onToolEstadisticas" },
-      { "event": "recetas.ingredientes",         "handler": "onToolIngredientes" },
-      { "event": "recetas.actualizar_precio",    "handler": "onToolActualizarPrecio" },
-      { "event": "recetas.analizar",             "handler": "onToolAnalizar" },
-      { "event": "recetas.investigar_receta",    "handler": "onToolInvestigarReceta" }
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated"
+      },
+      {
+        "event": "project.deactivated",
+        "handler": "onProjectDeactivated"
+      },
+      {
+        "event": "project.get.response",
+        "handler": "onProjectGetResponse"
+      },
+      {
+        "event": "fs.read.response",
+        "handler": "onFsReadResponse"
+      },
+      {
+        "event": "fs.write.response",
+        "handler": "onFsWriteResponse"
+      },
+      {
+        "event": "recetas.crear",
+        "handler": "onToolCrear"
+      },
+      {
+        "event": "recetas.listar",
+        "handler": "onToolListar"
+      },
+      {
+        "event": "recetas.obtener",
+        "handler": "onToolObtener"
+      },
+      {
+        "event": "recetas.buscar",
+        "handler": "onToolBuscar"
+      },
+      {
+        "event": "recetas.actualizar",
+        "handler": "onToolActualizar"
+      },
+      {
+        "event": "recetas.historial",
+        "handler": "onToolHistorial"
+      },
+      {
+        "event": "recetas.revertir",
+        "handler": "onToolRevertir"
+      },
+      {
+        "event": "recetas.eliminar",
+        "handler": "onToolEliminar"
+      },
+      {
+        "event": "recetas.estadisticas",
+        "handler": "onToolEstadisticas"
+      },
+      {
+        "event": "recetas.ingredientes",
+        "handler": "onToolIngredientes"
+      },
+      {
+        "event": "recetas.actualizar_precio",
+        "handler": "onToolActualizarPrecio"
+      },
+      {
+        "event": "recetas.analizar",
+        "handler": "onToolAnalizar"
+      },
+      {
+        "event": "recetas.investigar_receta",
+        "handler": "onToolInvestigarReceta"
+      }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "recetas", "action": "crear",             "handler": "handleCrear" },
-    { "domain": "recetas", "action": "listar",            "handler": "handleListar" },
-    { "domain": "recetas", "action": "obtener",           "handler": "handleObtener" },
-    { "domain": "recetas", "action": "buscar",            "handler": "handleBuscar" },
-    { "domain": "recetas", "action": "actualizar",        "handler": "handleActualizar" },
-    { "domain": "recetas", "action": "historial",         "handler": "handleHistorial" },
-    { "domain": "recetas", "action": "revertir",          "handler": "handleRevertir" },
-    { "domain": "recetas", "action": "eliminar",          "handler": "handleEliminar" },
-    { "domain": "recetas", "action": "estadisticas",      "handler": "handleEstadisticas" },
-    { "domain": "recetas", "action": "ingredientes",      "handler": "handleIngredientes" },
-    { "domain": "recetas", "action": "actualizar_precio", "handler": "handleActualizarPrecio" },
-    { "domain": "recetas", "action": "analizar",          "handler": "handleAnalizar" },
-    { "domain": "recetas", "action": "investigar_receta", "handler": "handleInvestigarReceta" }
+    {
+      "domain": "recetas",
+      "action": "crear",
+      "handler": "handleCrear"
+    },
+    {
+      "domain": "recetas",
+      "action": "listar",
+      "handler": "handleListar"
+    },
+    {
+      "domain": "recetas",
+      "action": "obtener",
+      "handler": "handleObtener"
+    },
+    {
+      "domain": "recetas",
+      "action": "buscar",
+      "handler": "handleBuscar"
+    },
+    {
+      "domain": "recetas",
+      "action": "actualizar",
+      "handler": "handleActualizar"
+    },
+    {
+      "domain": "recetas",
+      "action": "historial",
+      "handler": "handleHistorial"
+    },
+    {
+      "domain": "recetas",
+      "action": "revertir",
+      "handler": "handleRevertir"
+    },
+    {
+      "domain": "recetas",
+      "action": "eliminar",
+      "handler": "handleEliminar"
+    },
+    {
+      "domain": "recetas",
+      "action": "estadisticas",
+      "handler": "handleEstadisticas"
+    },
+    {
+      "domain": "recetas",
+      "action": "ingredientes",
+      "handler": "handleIngredientes"
+    },
+    {
+      "domain": "recetas",
+      "action": "actualizar_precio",
+      "handler": "handleActualizarPrecio"
+    },
+    {
+      "domain": "recetas",
+      "action": "analizar",
+      "handler": "handleAnalizar"
+    },
+    {
+      "domain": "recetas",
+      "action": "investigar_receta",
+      "handler": "handleInvestigarReceta"
+    }
   ],
-
   "tools": [
     {
       "name": "recetas.crear",
@@ -61,20 +185,64 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":      { "type": "string", "description": "ID del proyecto activo" },
-          "nombre":          { "type": "string", "description": "Nombre de la receta" },
-          "descripcion":     { "type": "string", "description": "Descripción breve (opcional)" },
-          "ingredientes":    { "description": "Array de objetos {nombre, cantidad, unidad, notas?} O texto libre. El backend lo normaliza." },
-          "instrucciones":   { "description": "Array de pasos O texto libre con saltos de línea/puntos" },
-          "porciones":       { "type": "number" },
-          "tiempo_min":      { "type": "number", "description": "Tiempo total de preparación en minutos" },
-          "dificultad":      { "type": "number", "description": "1-10" },
-          "categorias":      { "type": "array", "items": { "type": "string" } },
-          "etiquetas":       { "type": "array", "items": { "type": "string" } },
-          "fuente":          { "type": "string", "enum": ["manual", "investigada", "importada"], "description": "Origen de la receta" },
-          "notas":           { "type": "string" }
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto activo"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre de la receta"
+          },
+          "descripcion": {
+            "type": "string",
+            "description": "Descripción breve (opcional)"
+          },
+          "ingredientes": {
+            "description": "Array de objetos {nombre, cantidad, unidad, notas?} O texto libre. El backend lo normaliza."
+          },
+          "instrucciones": {
+            "description": "Array de pasos O texto libre con saltos de línea/puntos"
+          },
+          "porciones": {
+            "type": "number"
+          },
+          "tiempo_min": {
+            "type": "number",
+            "description": "Tiempo total de preparación en minutos"
+          },
+          "dificultad": {
+            "type": "number",
+            "description": "1-10"
+          },
+          "categorias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "etiquetas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fuente": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "investigada",
+              "importada"
+            ],
+            "description": "Origen de la receta"
+          },
+          "notas": {
+            "type": "string"
+          }
         },
-        "required": ["project_id", "nombre"]
+        "required": [
+          "project_id",
+          "nombre"
+        ]
       }
     },
     {
@@ -83,12 +251,29 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":        { "type": "string" },
-          "estado":            { "type": "string", "enum": ["activa", "archivada", "borrador"] },
-          "solo_incompletas":  { "type": "boolean", "description": "Devolver solo recetas marcadas como incompleta=true" },
-          "limit":             { "type": "number", "default": 100 }
+          "project_id": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "activa",
+              "archivada",
+              "borrador"
+            ]
+          },
+          "solo_incompletas": {
+            "type": "boolean",
+            "description": "Devolver solo recetas marcadas como incompleta=true"
+          },
+          "limit": {
+            "type": "number",
+            "default": 100
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -97,11 +282,21 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "receta_id":  { "type": "string", "description": "UUID de la receta" },
-          "nombre":     { "type": "string", "description": "Nombre exacto o parcial (alternativa a receta_id)" }
+          "project_id": {
+            "type": "string"
+          },
+          "receta_id": {
+            "type": "string",
+            "description": "UUID de la receta"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre exacto o parcial (alternativa a receta_id)"
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -110,18 +305,44 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":      { "type": "string" },
-          "texto":           { "type": "string", "description": "Texto que aparece en nombre, descripción o ingredientes" },
-          "ingrediente":     { "type": "string", "description": "Nombre del ingrediente (busca recetas que lo usen)" },
-          "categoria":       { "type": "string" },
-          "etiqueta":        { "type": "string" },
-          "dificultad_min":  { "type": "number" },
-          "dificultad_max":  { "type": "number" },
-          "tiempo_max":      { "type": "number", "description": "Máximo tiempo de preparación (min)" },
-          "porciones":       { "type": "number" },
-          "limit":           { "type": "number", "default": 50 }
+          "project_id": {
+            "type": "string"
+          },
+          "texto": {
+            "type": "string",
+            "description": "Texto que aparece en nombre, descripción o ingredientes"
+          },
+          "ingrediente": {
+            "type": "string",
+            "description": "Nombre del ingrediente (busca recetas que lo usen)"
+          },
+          "categoria": {
+            "type": "string"
+          },
+          "etiqueta": {
+            "type": "string"
+          },
+          "dificultad_min": {
+            "type": "number"
+          },
+          "dificultad_max": {
+            "type": "number"
+          },
+          "tiempo_max": {
+            "type": "number",
+            "description": "Máximo tiempo de preparación (min)"
+          },
+          "porciones": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number",
+            "default": 50
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -130,14 +351,23 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "receta_id":  { "type": "string", "description": "UUID o nombre" },
-          "cambios":    {
+          "project_id": {
+            "type": "string"
+          },
+          "receta_id": {
+            "type": "string",
+            "description": "UUID o nombre"
+          },
+          "cambios": {
             "type": "object",
             "description": "Solo los campos a cambiar. Mismo schema que recetas.crear (nombre, ingredientes, instrucciones, porciones, etc.)"
           }
         },
-        "required": ["project_id", "receta_id", "cambios"]
+        "required": [
+          "project_id",
+          "receta_id",
+          "cambios"
+        ]
       }
     },
     {
@@ -146,10 +376,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "receta_id":  { "type": "string", "description": "UUID o nombre" }
+          "project_id": {
+            "type": "string"
+          },
+          "receta_id": {
+            "type": "string",
+            "description": "UUID o nombre"
+          }
         },
-        "required": ["project_id", "receta_id"]
+        "required": [
+          "project_id",
+          "receta_id"
+        ]
       }
     },
     {
@@ -158,11 +396,23 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":     { "type": "string" },
-          "receta_id":      { "type": "string", "description": "UUID o nombre" },
-          "target_version": { "type": "number", "description": "Número de versión a restaurar (ej. 1, 2, 3)" }
+          "project_id": {
+            "type": "string"
+          },
+          "receta_id": {
+            "type": "string",
+            "description": "UUID o nombre"
+          },
+          "target_version": {
+            "type": "number",
+            "description": "Número de versión a restaurar (ej. 1, 2, 3)"
+          }
         },
-        "required": ["project_id", "receta_id", "target_version"]
+        "required": [
+          "project_id",
+          "receta_id",
+          "target_version"
+        ]
       }
     },
     {
@@ -171,10 +421,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "receta_id":  { "type": "string", "description": "UUID o nombre" }
+          "project_id": {
+            "type": "string"
+          },
+          "receta_id": {
+            "type": "string",
+            "description": "UUID o nombre"
+          }
         },
-        "required": ["project_id", "receta_id"]
+        "required": [
+          "project_id",
+          "receta_id"
+        ]
       }
     },
     {
@@ -183,9 +441,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" }
+          "project_id": {
+            "type": "string"
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -194,10 +456,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "categoria":  { "type": "string", "description": "Filtrar por categoría (opcional)" }
+          "project_id": {
+            "type": "string"
+          },
+          "categoria": {
+            "type": "string",
+            "description": "Filtrar por categoría (opcional)"
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -206,14 +475,38 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":     { "type": "string" },
-          "nombre":         { "type": "string", "description": "Nombre del ingrediente" },
-          "precio_mercado": { "type": "number", "description": "Precio en € (la unidad la define el campo unidad)" },
-          "unidad":         { "type": "string", "description": "Unidad del precio: litro, kg, ud, etc." },
-          "categoria":      { "type": "string" },
-          "fuente":         { "type": "string", "enum": ["manual", "factura", "investigada"] }
+          "project_id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre del ingrediente"
+          },
+          "precio_mercado": {
+            "type": "number",
+            "description": "Precio en € (la unidad la define el campo unidad)"
+          },
+          "unidad": {
+            "type": "string",
+            "description": "Unidad del precio: litro, kg, ud, etc."
+          },
+          "categoria": {
+            "type": "string"
+          },
+          "fuente": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "factura",
+              "investigada"
+            ]
+          }
         },
-        "required": ["project_id", "nombre", "precio_mercado"]
+        "required": [
+          "project_id",
+          "nombre",
+          "precio_mercado"
+        ]
       }
     },
     {
@@ -222,10 +515,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "receta_id":  { "type": "string", "description": "UUID o nombre" }
+          "project_id": {
+            "type": "string"
+          },
+          "receta_id": {
+            "type": "string",
+            "description": "UUID o nombre"
+          }
         },
-        "required": ["project_id", "receta_id"]
+        "required": [
+          "project_id",
+          "receta_id"
+        ]
       }
     },
     {
@@ -234,15 +535,26 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":    { "type": "string" },
-          "nombre_receta": { "type": "string", "description": "Nombre o concepto de la receta a investigar" }
+          "project_id": {
+            "type": "string"
+          },
+          "nombre_receta": {
+            "type": "string",
+            "description": "Nombre o concepto de la receta a investigar"
+          }
         },
-        "required": ["project_id", "nombre_receta"]
+        "required": [
+          "project_id",
+          "nombre_receta"
+        ]
       }
     }
   ],
-
   "config": {
-    "campos_para_completa": ["ingredientes", "porciones", "instrucciones"]
+    "campos_para_completa": [
+      "ingredientes",
+      "porciones",
+      "instrucciones"
+    ]
   }
 }

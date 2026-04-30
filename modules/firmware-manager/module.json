@@ -3,8 +3,8 @@
   "version": "2.0.0",
   "description": "Registro de firmwares, versionado con checksums, y orquestación de OTA via device-shadow",
   "author": "Enki",
+  "language": "en",
   "tier": "tier_3_core",
-
   "provides": {
     "events": [
       "firmware.ota_requested",
@@ -13,7 +13,6 @@
       "firmware.registered"
     ]
   },
-
   "events": {
     "subscribes": [
       {
@@ -41,54 +40,94 @@
       {
         "event": "firmware.registered",
         "description": "Nuevo firmware registrado en catálogo",
-        "schema": { "$ref": "./schemas/events.json#/definitions/firmware_registered" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/firmware_registered"
+        }
       },
       {
         "event": "firmware.ota_requested",
         "description": "OTA solicitada para un dispositivo via shadow",
-        "schema": { "$ref": "./schemas/events.json#/definitions/ota_requested" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/ota_requested"
+        }
       },
       {
         "event": "firmware.ota_completed",
         "description": "Dispositivo actualizó firmware exitosamente",
-        "schema": { "$ref": "./schemas/events.json#/definitions/ota_completed" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/ota_completed"
+        }
       },
       {
         "event": "firmware.ota_failed",
         "description": "OTA falló para un dispositivo (timeout, version_mismatch, stale_cleanup)",
-        "schema": { "$ref": "./schemas/events.json#/definitions/ota_failed" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/ota_failed"
+        }
       }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "firmware", "action": "list", "handler": "handleList" },
+    {
+      "domain": "firmware",
+      "action": "list",
+      "handler": "handleList"
+    },
     {
       "domain": "firmware",
       "action": "register",
       "handler": "handleRegister",
-      "schema": { "$ref": "./schemas/firmware.json#/definitions/register_request" }
+      "schema": {
+        "$ref": "./schemas/firmware.json#/definitions/register_request"
+      }
     },
     {
       "domain": "firmware",
       "action": "trigger-ota",
       "handler": "handleTriggerOta",
-      "schema": { "$ref": "./schemas/firmware.json#/definitions/trigger_ota_request" }
+      "schema": {
+        "$ref": "./schemas/firmware.json#/definitions/trigger_ota_request"
+      }
     },
-    { "domain": "firmware", "action": "status", "handler": "handleOtaStatus" },
+    {
+      "domain": "firmware",
+      "action": "status",
+      "handler": "handleOtaStatus"
+    },
     {
       "domain": "firmware",
       "action": "rollback",
       "handler": "handleRollback",
-      "schema": { "$ref": "./schemas/firmware.json#/definitions/rollback_request" }
+      "schema": {
+        "$ref": "./schemas/firmware.json#/definitions/rollback_request"
+      }
     },
-    { "domain": "firmware", "action": "device-versions", "handler": "handleDeviceVersions" },
-    { "domain": "firmware", "action": "cleanup-otas", "handler": "handleCleanupOtas" },
-    { "domain": "firmware", "action": "update-meta", "handler": "handleUpdateMeta" },
-    { "domain": "firmware", "action": "info", "handler": "handleGetInfo" },
-    { "domain": "firmware", "action": "list-by-project", "handler": "handleListByProject" }
+    {
+      "domain": "firmware",
+      "action": "device-versions",
+      "handler": "handleDeviceVersions"
+    },
+    {
+      "domain": "firmware",
+      "action": "cleanup-otas",
+      "handler": "handleCleanupOtas"
+    },
+    {
+      "domain": "firmware",
+      "action": "update-meta",
+      "handler": "handleUpdateMeta"
+    },
+    {
+      "domain": "firmware",
+      "action": "info",
+      "handler": "handleGetInfo"
+    },
+    {
+      "domain": "firmware",
+      "action": "list-by-project",
+      "handler": "handleListByProject"
+    }
   ],
-
   "apis": [
     {
       "method": "GET",
@@ -97,7 +136,6 @@
       "description": "Sirve binarios de firmware para descarga por ESP32"
     }
   ],
-
   "tools": [
     {
       "name": "firmware.list",
@@ -115,9 +153,14 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "type": { "type": "string", "description": "Tipo de firmware (ej: print-proxy)" }
+          "type": {
+            "type": "string",
+            "description": "Tipo de firmware (ej: print-proxy)"
+          }
         },
-        "required": ["type"]
+        "required": [
+          "type"
+        ]
       }
     },
     {
@@ -127,9 +170,14 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "ID del proyecto" }
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto"
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -139,16 +187,50 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "type": { "type": "string", "description": "Tipo de firmware (ej: print-proxy)" },
-          "version": { "type": "string", "description": "Versión semver (ej: 3.4.0)" },
-          "file": { "type": "string", "description": "Nombre del archivo .bin" },
-          "changelog": { "type": "string", "description": "Descripción de cambios" },
-          "utility": { "type": "string", "description": "Para qué sirve este firmware" },
-          "board": { "type": "string", "description": "Board target (ej: esp32dev)" },
-          "capabilities": { "type": "array", "items": { "type": "string" }, "description": "Capacidades del firmware" },
-          "projects": { "type": "array", "items": { "type": "string" }, "description": "Proyectos asociados" }
+          "type": {
+            "type": "string",
+            "description": "Tipo de firmware (ej: print-proxy)"
+          },
+          "version": {
+            "type": "string",
+            "description": "Versión semver (ej: 3.4.0)"
+          },
+          "file": {
+            "type": "string",
+            "description": "Nombre del archivo .bin"
+          },
+          "changelog": {
+            "type": "string",
+            "description": "Descripción de cambios"
+          },
+          "utility": {
+            "type": "string",
+            "description": "Para qué sirve este firmware"
+          },
+          "board": {
+            "type": "string",
+            "description": "Board target (ej: esp32dev)"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Capacidades del firmware"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Proyectos asociados"
+          }
         },
-        "required": ["type", "version", "file"]
+        "required": [
+          "type",
+          "version",
+          "file"
+        ]
       }
     },
     {
@@ -158,12 +240,27 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "device_id": { "type": "string", "description": "ID del dispositivo" },
-          "type": { "type": "string", "description": "Tipo de firmware" },
-          "version": { "type": "string", "description": "Versión target (opcional, usa latest si no se indica)" },
-          "project_id": { "type": "string", "description": "ID del proyecto" }
+          "device_id": {
+            "type": "string",
+            "description": "ID del dispositivo"
+          },
+          "type": {
+            "type": "string",
+            "description": "Tipo de firmware"
+          },
+          "version": {
+            "type": "string",
+            "description": "Versión target (opcional, usa latest si no se indica)"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto"
+          }
         },
-        "required": ["device_id", "type"]
+        "required": [
+          "device_id",
+          "type"
+        ]
       }
     },
     {
@@ -173,8 +270,14 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "device_id": { "type": "string", "description": "Filtrar por dispositivo (opcional)" },
-          "limit": { "type": "number", "description": "Límite de entradas en el log (default 20)" }
+          "device_id": {
+            "type": "string",
+            "description": "Filtrar por dispositivo (opcional)"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Límite de entradas en el log (default 20)"
+          }
         }
       }
     },
@@ -185,18 +288,41 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "type": { "type": "string", "description": "Tipo de firmware" },
-          "utility": { "type": "string", "description": "Para qué sirve" },
-          "description": { "type": "string", "description": "Descripción detallada" },
-          "board": { "type": "string", "description": "Board target" },
-          "capabilities": { "type": "array", "items": { "type": "string" } },
-          "projects": { "type": "array", "items": { "type": "string" } }
+          "type": {
+            "type": "string",
+            "description": "Tipo de firmware"
+          },
+          "utility": {
+            "type": "string",
+            "description": "Para qué sirve"
+          },
+          "description": {
+            "type": "string",
+            "description": "Descripción detallada"
+          },
+          "board": {
+            "type": "string",
+            "description": "Board target"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         },
-        "required": ["type"]
+        "required": [
+          "type"
+        ]
       }
     }
   ],
-
   "config": {
     "data_path": "./data/firmware",
     "auto_check_on_register": true,
@@ -204,9 +330,11 @@
     "ota_cleanup_interval_ms": 60000,
     "validate_binaries_on_load": true
   },
-
   "observability": {
-    "logging": { "level": "info", "structured": true },
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [

@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Text editor for MD and JSON files with syntax highlighting and validation",
   "author": "Aichat Team",
+  "language": "en",
   "main": "index.js",
-
   "ui": {
     "enabled": true,
     "title": "Editor de Texto",
@@ -18,7 +18,6 @@
       }
     }
   },
-
   "apis": [
     {
       "method": "GET",
@@ -58,13 +57,24 @@
       "request_schema": "schemas/format-content.json"
     }
   ],
-
   "events": {
     "subscribes": [
-      { "event": "editor.open.request", "handler": "handleOpenRequest" },
-      { "event": "editor.save.request", "handler": "handleSaveRequest" },
-      { "event": "editor.validate.request", "handler": "handleValidateRequest" },
-      { "event": "editor.format.request", "handler": "handleFormatRequest" }
+      {
+        "event": "editor.open.request",
+        "handler": "handleOpenRequest"
+      },
+      {
+        "event": "editor.save.request",
+        "handler": "handleSaveRequest"
+      },
+      {
+        "event": "editor.validate.request",
+        "handler": "handleValidateRequest"
+      },
+      {
+        "event": "editor.format.request",
+        "handler": "handleFormatRequest"
+      }
     ],
     "publishes": [
       "editor.open.response",
@@ -74,25 +84,50 @@
       "editor.error"
     ]
   },
-
   "ui_handlers": [
-    { "domain": "editor", "action": "open", "handler": "handleUIOpen" },
-    { "domain": "editor", "action": "save", "handler": "handleUISave" },
-    { "domain": "editor", "action": "validate", "handler": "handleUIValidate" },
-    { "domain": "editor", "action": "format", "handler": "handleUIFormat" }
+    {
+      "domain": "editor",
+      "action": "open",
+      "handler": "handleUIOpen"
+    },
+    {
+      "domain": "editor",
+      "action": "save",
+      "handler": "handleUISave"
+    },
+    {
+      "domain": "editor",
+      "action": "validate",
+      "handler": "handleUIValidate"
+    },
+    {
+      "domain": "editor",
+      "action": "format",
+      "handler": "handleUIFormat"
+    }
   ],
-
   "dependencies": {
-    "modules": ["file-browser", "project-manager"]
+    "modules": [
+      "file-browser",
+      "project-manager"
+    ]
   },
-
   "config": {
-    "supported_formats": ["md", "json", "txt", "html", "css", "js", "yaml", "yml", "xml"],
+    "supported_formats": [
+      "md",
+      "json",
+      "txt",
+      "html",
+      "css",
+      "js",
+      "yaml",
+      "yml",
+      "xml"
+    ],
     "max_file_size": 5242880,
     "auto_save_interval": 30000,
     "tab_size": 2
   },
-
   "observability": {
     "logging": {
       "level": "info",

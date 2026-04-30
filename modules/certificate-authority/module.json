@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Internal Certificate Authority with mTLS authentication for client portal and device management",
   "author": "Event Core Team",
+  "language": "en",
   "routeCode": "3333",
-
   "apis": [
     {
       "method": "GET",
@@ -73,11 +73,11 @@
       "description": "Health check"
     }
   ],
-
   "provides": {
-    "hooks": ["beforeRequest"]
+    "hooks": [
+      "beforeRequest"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -99,29 +99,74 @@
     ],
     "subscribes": []
   },
-
   "ui_handlers": [
-    { "domain": "certificate-authority", "action": "status", "handler": "handleStatus" },
-    { "domain": "certificate-authority", "action": "ca-cert", "handler": "handleGetCACert" },
-    { "domain": "certificate-authority", "action": "issue", "handler": "handleIssueCertificate" },
-    { "domain": "certificate-authority", "action": "revoke", "handler": "handleRevokeCertificate" },
-    { "domain": "certificate-authority", "action": "renew", "handler": "handleRenewCertificate" },
-    { "domain": "certificate-authority", "action": "list", "handler": "handleListCertificates" },
-    { "domain": "certificate-authority", "action": "verify", "handler": "handleVerifyCertificate" },
-    { "domain": "certificate-authority", "action": "crl", "handler": "handleGetCRL" },
-    { "domain": "certificate-authority", "action": "download-p12", "handler": "handleDownloadP12" },
-    { "domain": "certificate-authority", "action": "stats", "handler": "handleStatus" },
-    { "domain": "certificate-authority", "action": "nginx-config", "handler": "handleGetNginxConfig" },
-    { "domain": "certificate-authority", "action": "health", "handler": "handleHealthCheck" }
+    {
+      "domain": "certificate-authority",
+      "action": "status",
+      "handler": "handleStatus"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "ca-cert",
+      "handler": "handleGetCACert"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "issue",
+      "handler": "handleIssueCertificate"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "revoke",
+      "handler": "handleRevokeCertificate"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "renew",
+      "handler": "handleRenewCertificate"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "list",
+      "handler": "handleListCertificates"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "verify",
+      "handler": "handleVerifyCertificate"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "crl",
+      "handler": "handleGetCRL"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "download-p12",
+      "handler": "handleDownloadP12"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "stats",
+      "handler": "handleStatus"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "nginx-config",
+      "handler": "handleGetNginxConfig"
+    },
+    {
+      "domain": "certificate-authority",
+      "action": "health",
+      "handler": "handleHealthCheck"
+    }
   ],
-
   "ui": {
     "enabled": true,
     "title": "Certificate Authority",
     "icon": "🔐",
     "description": "Gestionar certificados de clientes y dispositivos"
   },
-
   "config": {
     "mtls_enabled": false,
     "mtls_mode": "proxy",
@@ -133,7 +178,6 @@
     "cert_validity_days": 365,
     "key_size": 2048
   },
-
   "observability": {
     "logging": {
       "level": "info",

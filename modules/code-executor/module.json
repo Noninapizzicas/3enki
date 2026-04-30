@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Shell command and script execution for AI with security controls",
   "author": "Event Core Team",
+  "language": "en",
   "main": "index.js",
-
   "provides": {
     "events": [
       "shell.executed",
@@ -13,7 +13,6 @@
       "shell.process.stopped"
     ]
   },
-
   "events": {
     "publishes": [
       {
@@ -40,14 +39,15 @@
       }
     ]
   },
-
   "tools": [
     {
       "name": "shell.exec",
       "description": "Ejecuta un comando shell. Retorna stdout, stderr y exitCode. Timeout por defecto: 30s.",
       "handler": "handleToolExec",
       "requires_confirmation": true,
-      "permissions": ["execute"],
+      "permissions": [
+        "execute"
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -68,7 +68,9 @@
             "description": "Variables de entorno adicionales"
           }
         },
-        "required": ["command"]
+        "required": [
+          "command"
+        ]
       }
     },
     {
@@ -76,7 +78,9 @@
       "description": "Ejecuta un archivo de script (bash, python, node). Detecta intérprete automáticamente.",
       "handler": "handleToolScript",
       "requires_confirmation": true,
-      "permissions": ["execute"],
+      "permissions": [
+        "execute"
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -91,14 +95,19 @@
           "args": {
             "type": "array",
             "description": "Argumentos para el script",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "timeout": {
             "type": "number",
             "description": "Timeout en ms (default: 60000)"
           }
         },
-        "required": ["projectId", "scriptPath"]
+        "required": [
+          "projectId",
+          "scriptPath"
+        ]
       }
     },
     {
@@ -106,7 +115,9 @@
       "description": "Inicia un proceso en segundo plano (ej: servidor dev). Retorna PID para control.",
       "handler": "handleToolBackground",
       "requires_confirmation": true,
-      "permissions": ["execute"],
+      "permissions": [
+        "execute"
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -123,7 +134,9 @@
             "description": "Nombre para identificar el proceso"
           }
         },
-        "required": ["command"]
+        "required": [
+          "command"
+        ]
       }
     },
     {
@@ -154,7 +167,6 @@
       }
     }
   ],
-
   "config": {
     "defaultTimeout": 30000,
     "maxTimeout": 300000,
@@ -185,7 +197,6 @@
     "shell": "/bin/sh",
     "projectsPath": "./data/projects"
   },
-
   "observability": {
     "logging": {
       "level": "info",

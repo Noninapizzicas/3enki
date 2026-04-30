@@ -1,0 +1,223 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/tarifas",
+    "ubicacion": "modules/pizzepos/tarifas",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__tarifas.json"
+  },
+
+  "identidad": {
+    "name": "tarifas",
+    "version": "2.0.0",
+    "description_oficial": "Asignación carta+canal + registro de variantes. Cada canal tiene su carta con precios finales escritos. Sin cálculos en runtime.",
+    "author": "Pizzepos Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/pizzepos/tarifas/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "tarifas.config.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/tarifas/index.js:166",
+        "metodo_contenedor": "toolSetGeneral (probable)",
+        "es_handler_de": "tool tarifas.set_general",
+        "bloque_logico": "tras setear carta general (sin canal específico)",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "config"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('tarifas.config.actualizada', { project_id, config });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "tarifas.config.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/tarifas/index.js:193",
+        "metodo_contenedor": "toolAssign (probable)",
+        "es_handler_de": "tool tarifas.assign",
+        "bloque_logico": "tras asignar carta a canal específico",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "config"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('tarifas.config.actualizada', { project_id, config });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "tarifas.config.actualizada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/tarifas/index.js:270",
+        "metodo_contenedor": "toolRegisterVariant (probable)",
+        "es_handler_de": "tool tarifas.register_variant",
+        "bloque_logico": "tras registrar variante de precios para un canal",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "config"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('tarifas.config.actualizada', { project_id, config });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.activated",   "tipo_nombre": "literal", "handler": "onProjectActivated",   "handler_ubicacion": "modules/pizzepos/tarifas/index.js:55", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/tarifas/index.js:66", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.deactivated", "tipo_nombre": "literal", "handler": "onProjectDeactivated", "handler_ubicacion": "modules/pizzepos/tarifas/index.js:69", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/tarifas/index.js:69", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["tarifas.config.actualizada"],
+      "publica_literales_en_codigo": ["tarifas.config.actualizada"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["project.activated", "project.deactivated"],
+      "subscribes_realmente_registrados": ["project.activated", "project.deactivated"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [
+    { "name": "tarifas.set_general",     "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolSetGeneral",     "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["tarifas.config.actualizada"] }, "errores_conocidos": [] },
+    { "name": "tarifas.assign",          "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolAssign",         "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["tarifas.config.actualizada"] }, "errores_conocidos": [] },
+    { "name": "tarifas.get",             "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolGet",            "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "tarifas.register_variant","description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolRegisterVariant","handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["tarifas.config.actualizada"] }, "errores_conocidos": [] },
+    { "name": "tarifas.get_variants",    "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolGetVariants",    "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "configPerProject", "tipo": "Map", "ubicacion_init": "modules/pizzepos/tarifas/index.js:32", "se_invalida_con": "set en onProjectActivated (carga desde disco) | onProjectDeactivated probable", "leak_potencial": false },
+      { "campo": "projectPaths",     "tipo": "Map", "ubicacion_init": "modules/pizzepos/tarifas/index.js:34", "se_invalida_con": "onProjectActivated set; cache permanente",                                      "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/tarifas/config.json (probable)", "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "Persiste config de tarifas como JSON por proyecto. Cada canal tiene su carta_id asignada y opcionalmente una variante de precios."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/projects/{slug}/storage/pizzepos/tarifas/"],
+    "valores_hardcoded_observables": []
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/pizzepos/tarifas/index.js:38",
+      "acciones": [
+        "guarda this.logger / this.eventBus",
+        "logger.info('module.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/pizzepos/tarifas/index.js:45",
+      "acciones": ["logger.info('module.unloaded')"],
+      "estado_no_limpiado": ["configPerProject", "projectPaths"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "project-manager", "via_evento": "project.activated (subscribe)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/tarifas/index.js:55", "es_cross_vertical": false },
+    { "modulo_dependido": "Node.js fs (config JSON)", "via_evento": "fs directo", "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/tarifas/index.js (saveConfigToDisk interno)", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "fs (carga config)",     "que_pasa_si_cae": "logger.warn 'tarifas.config.load_error'; configPerProject queda vacío para el proyecto.",        "evidencia": "modules/pizzepos/tarifas/index.js:107" },
+    { "dependencia": "fs (guardado config)",  "que_pasa_si_cae": "logger.error 'tarifas.config.save_error'; cambios no se persisten pero NO se publica el evento.", "evidencia": "modules/pizzepos/tarifas/index.js:124" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('tarifas.<accion>' | 'module.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "version", "project_id", "error"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('module.loaded', { module: this.name, version: this.version });",   "ubicacion": "modules/pizzepos/tarifas/index.js:42"  },
+        { "snippet": "this.logger.info('tarifas.project.activated', { project_id });",                       "ubicacion": "modules/pizzepos/tarifas/index.js:66"  },
+        { "snippet": "this.logger.info('tarifas.config.loaded', { project_id: projectId });",                "ubicacion": "modules/pizzepos/tarifas/index.js:104" },
+        { "snippet": "this.logger.error('tarifas.config.save_error', { project_id: projectId, error: err.message });", "ubicacion": "modules/pizzepos/tarifas/index.js:124" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — tarifas no propaga correlation_id."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 308,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "ECOSISTEMA CARTAS — TARIFAS: asigna carta_id a canal (mesa/llevar/telefono/whatsapp/glovo/llevadoo) y registra variantes de precios. CERO cálculos en runtime — los precios finales están escritos en cada variante.",
+      "0 drift — manifest 100% honesto",
+      "Único publish (tarifas.config.actualizada) emitido 3 veces desde tools distintas (set_general, assign, register_variant) — patrón hub minimalista",
+      "Consumidor probable: carta-digital escucha tarifas.config.actualizada según contexto/cartas-ecosystem.json"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "ui_handlers (no expone MQTT UI)",
+      "apis_http (no expone HTTP)",
+      "estado.persistencia.sqlite_tablas (usa JSON files)",
+      "configuracion.env_vars / module_json_config_keys / hardcoded",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / comentarios_porque / workarounds_detectados",
+      "outliers_capturados",
+      "version_archivada"
+    ]
+  }
+}

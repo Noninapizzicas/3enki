@@ -1,0 +1,207 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/carta-marketing",
+    "ubicacion": "modules/pizzepos/carta-marketing",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__carta-marketing.json"
+  },
+
+  "identidad": {
+    "name": "carta-marketing",
+    "version": "1.0.0",
+    "description_oficial": "Equipo de marketing silencioso. Escucha cambios en cartas y automáticamente enriquece, pule y mejora según el perfil de marca del proyecto. Aprende con el tiempo.",
+    "author": "Pizzepos Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/pizzepos/carta-marketing/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "agent.execute.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-marketing/index.js:261",
+        "metodo_contenedor": "onCartaActualizada (probable, vía detectarNecesidades dispatch)",
+        "es_handler_de": "carta.actualizada",
+        "bloque_logico": "tras detectar necesidades; dispatch al agente correspondiente (copywriter/strategist/brand-keeper) según el tipo de necesidad",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["agentName", "context"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('agent.execute.request', { agentName: '...', context: { project_id, carta, necesidad } });",
+        "declarado_en_manifest": false
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.activated",   "tipo_nombre": "literal", "handler": "onProjectActivated",   "handler_ubicacion": "modules/pizzepos/carta-marketing/index.js:60",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-marketing/index.js:70",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.deactivated", "tipo_nombre": "literal", "handler": "onProjectDeactivated", "handler_ubicacion": "modules/pizzepos/carta-marketing/index.js:76",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-marketing/index.js:76",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "carta.actualizada",   "tipo_nombre": "literal", "handler": "onCartaActualizada",   "handler_ubicacion": "modules/pizzepos/carta-marketing/index.js:167", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-marketing/index.js:177", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": [],
+      "publica_literales_en_codigo": ["agent.execute.request"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": ["agent.execute.request"],
+      "subscribes_declarados_en_manifest": ["project.activated", "project.deactivated", "carta.actualizada"],
+      "subscribes_realmente_registrados": ["project.activated", "project.deactivated", "carta.actualizada"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [
+    { "name": "marketing.get_perfil",            "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolGetPerfil",            "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "marketing.update_perfil",         "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolUpdatePerfil",         "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "marketing.completar_onboarding",  "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolCompletarOnboarding", "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "marketing.actividad",             "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolActividad",            "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "perfilesPerProject", "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-marketing/index.js:34", "se_invalida_con": "set en onProjectActivated; toolUpdatePerfil actualiza",                                                                              "leak_potencial": false },
+      { "campo": "projectPaths",       "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-marketing/index.js:36", "se_invalida_con": "onProjectActivated set; cache permanente",                                                                                          "leak_potencial": false },
+      { "campo": "processedHashes",    "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-marketing/index.js:39", "se_invalida_con": "ANTI-LOOP: markProcessed almacena hash de la carta tras dispatch; wasProcessedByMe lo consulta para evitar bucles auto-disparados", "leak_potencial": true  }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/carta-marketing/perfil.json (probable)", "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "Persiste perfil de marca por proyecto. processedHashes es cache anti-loop (no persistente)."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/projects/{slug}/storage/pizzepos/carta-marketing/"],
+    "valores_hardcoded_observables": []
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/pizzepos/carta-marketing/index.js:42",
+      "acciones": [
+        "guarda this.logger / this.eventBus",
+        "logger.info('module.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/pizzepos/carta-marketing/index.js:49",
+      "acciones": ["logger.info('module.unloaded')"],
+      "estado_no_limpiado": ["perfilesPerProject", "projectPaths", "processedHashes"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "pizzepos/carta-manager", "via_evento": "carta.actualizada (subscribe)",      "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-marketing/index.js:167", "es_cross_vertical": false },
+    { "modulo_dependido": "ai-agent-framework",     "via_evento": "agent.execute.request",              "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-marketing/index.js:261", "es_cross_vertical": false },
+    { "modulo_dependido": "project-manager",        "via_evento": "project.activated (subscribe)",      "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-marketing/index.js:60",  "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "fs (perfil de marca)",       "que_pasa_si_cae": "logger.warn 'carta-marketing.perfil.load_error'; perfilesPerProject vacío para proyecto. onCartaActualizada saltará por skip.no_perfil.", "evidencia": "modules/pizzepos/carta-marketing/index.js:118" },
+    { "dependencia": "ai-agent-framework",         "que_pasa_si_cae": "agent.execute.request fire-and-forget; si los agentes fallan no hay refresh del marketing pero la carta sigue válida.",                "evidencia": "modules/pizzepos/carta-marketing/index.js:261" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('carta-marketing.<accion>' | 'module.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "version", "project_id", "carta_id", "necesidades", "error"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('module.loaded', { module: this.name, version: this.version });",       "ubicacion": "modules/pizzepos/carta-marketing/index.js:46"  },
+        { "snippet": "this.logger.debug('carta-marketing.skip.own_change', { carta_id, project_id });",         "ubicacion": "modules/pizzepos/carta-marketing/index.js:177" },
+        { "snippet": "this.logger.debug('carta-marketing.skip.no_perfil', { project_id });",                     "ubicacion": "modules/pizzepos/carta-marketing/index.js:185" },
+        { "snippet": "this.logger.info('carta-marketing.procesando', { carta_id, project_id, necesidades });",   "ubicacion": "modules/pizzepos/carta-marketing/index.js:198" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — carta-marketing no propaga correlation_id."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/pizzepos/carta-marketing/index.js:174", "comentario_literal": "Loop prevention: si el hash no cambió, fui yo", "contexto": "explica el mecanismo anti-loop con processedHashes — evita re-procesar cambios que el propio módulo provocó vía sus agentes (que también emiten carta.actualizada al guardar)" },
+      { "ubicacion": "modules/pizzepos/carta-marketing/index.js:183", "comentario_literal": "Si no hay perfil de marca, no hacer nada (necesita onboarding primero)", "contexto": "skip cuando el proyecto no tiene perfil — onboarding via marketing-onboarding agente debe completarse primero" },
+      { "ubicacion": "modules/pizzepos/carta-marketing/index.js:189", "comentario_literal": "Detectar qué necesita trabajo", "contexto": "detectarNecesidades analiza la carta y devuelve lista de necesidades — base del dispatch a copywriter/strategist/brand-keeper según tipo" }
+    ],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 388,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "ECOSISTEMA CARTAS — MARKETING SILENCIOSO. carta-marketing escucha carta.actualizada y dispatcha agentes (copywriter/strategist/brand-keeper) según necesidades detectadas. CERO eventos de dominio propios.",
+      "ÚNICO módulo del repo con MECANISMO ANTI-LOOP explícito (processedHashes Map): hash de la carta tras dispatch evita re-procesar cambios auto-provocados (los agentes también emiten carta.actualizada al guardar). Patrón propio de módulos que reaccionan a eventos que ellos mismos pueden provocar.",
+      "publica_emitidos_no_declarados: agent.execute.request (cross-módulo a ai-agent-framework, mismo patrón que carta-digital, carta-impresion)",
+      "4 AGENTES INLINE: marketing-onboarding (entrevista perfil), marketing-copywriter (descripciones), marketing-strategist (ingeniería de menú), marketing-brand-keeper (coherencia)",
+      "Skip pattern: si !perfil.onboarding_completado, no hace nada (necesita onboarding primero)",
+      "processedHashes sin invalidación → leak_potencial=true (Map crece con cada carta procesada, sin TTL)"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "ui_handlers (no expone MQTT UI)",
+      "apis_http (no expone HTTP)",
+      "estado.persistencia.sqlite_tablas (usa JSON files)",
+      "configuracion.env_vars / module_json_config_keys / hardcoded",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / workarounds_detectados",
+      "outliers_capturados",
+      "version_archivada"
+    ]
+  }
+}

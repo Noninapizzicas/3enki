@@ -23,13 +23,63 @@
     }
   },
   "tools": [],
-  "ui_handlers": [],
+  "ui_handlers": [
+    { "domain": "esp32", "action": "list-templates", "handler_metodo": "handleListTemplates", "handler_ubicacion": "modules/esp32-dev/index.js:151", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["templates", "total"], "status_error": null }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "create-project", "handler_metodo": "handleCreateProject", "handler_ubicacion": "modules/esp32-dev/index.js:177", "input_validado": ["project_name", "template"], "codigos_error": ["400", "404", "409", "500"], "output_shape": { "status_success": 201, "data_keys": ["project_name", "template", "board", "framework", "path", "files"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "list-projects", "handler_metodo": "handleListProjects", "handler_ubicacion": "modules/esp32-dev/index.js:295", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["projects", "total"], "status_error": null }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "get-project", "handler_metodo": "handleGetProject", "handler_ubicacion": "modules/esp32-dev/index.js:315", "input_validado": ["project_name"], "codigos_error": ["400", "404"], "output_shape": { "status_success": 200, "data_keys": ["project_name", "template", "board", "framework", "path", "files", "last_build", "last_build_status"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "build", "handler_metodo": "handleBuild", "handler_ubicacion": "modules/esp32-dev/index.js:351", "input_validado": ["project_name"], "codigos_error": ["400", "404", "409", "429"], "output_shape": { "status_success": 202, "data_keys": ["project_name", "board", "status", "message"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "build-status", "handler_metodo": "handleBuildStatus", "handler_ubicacion": "modules/esp32-dev/index.js:407", "input_validado": [], "codigos_error": ["404"], "output_shape": { "status_success": 200, "data_keys": ["project_name", "status", "started_at", "elapsed_ms", "log_lines", "log_tail", "active_builds", "count"], "status_error": 404 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "list-boards", "handler_metodo": "handleListBoards", "handler_ubicacion": "modules/esp32-dev/index.js:459", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["boards", "total"], "status_error": null }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "delete-project", "handler_metodo": "handleDeleteProject", "handler_ubicacion": "modules/esp32-dev/index.js:474", "input_validado": ["project_name", "confirm"], "codigos_error": ["400", "404", "409"], "output_shape": { "status_success": 200, "data_keys": ["deleted"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" }
+  ],
   "apis_http": [],
-  "estado": { "memoria": [], "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": null } },
-  "configuracion": { "env_vars": [], "module_json_config_keys": [], "paths_proyecto_referenciados": [], "valores_hardcoded_observables": [] },
-  "lifecycle": { "onLoad": { "ubicacion": null, "acciones": [], "guarda_referencias_externas": [], "puede_fallar_silenciosamente": false }, "onUnload": { "ubicacion": null, "acciones": [], "estado_no_limpiado": [] }, "auto_wired_subscribes": false, "subscribes_dinamicos_en_lifecycle": [] },
-  "dependencias_implicitas": [],
-  "modos_de_fallo": [],
+  "estado": {
+    "memoria": [
+      { "campo": "this.templates", "tipo": "Map", "ubicacion_init": "modules/esp32-dev/index.js:82", "se_invalida_con": "carga estática en _loadTemplates onLoad — no se invalida en runtime", "leak_potencial": false },
+      { "campo": "this.activeBuilds", "tipo": "Map", "ubicacion_init": "modules/esp32-dev/index.js:85", "se_invalida_con": "delete por project_name en proc close/error + clear() onUnload (kill SIGTERM)", "leak_potencial": false },
+      { "campo": "this.projects", "tipo": "Object", "ubicacion_init": "modules/esp32-dev/index.js:88", "se_invalida_con": "delete en handleDeleteProject + _saveProjects tras cada cambio (onLoad lo carga)", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/esp32-dev/projects.json", "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" },
+        { "path_pattern": "data/esp32-dev/projects/<project_name>/...", "formato": "raw", "operaciones": ["read", "write", "delete"], "via_evento": null, "atomicidad": "desconocido" },
+        { "path_pattern": "data/esp32-dev/projects/<project>/.pio/build/<board>/firmware.bin", "formato": "binario", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" }
+      ],
+      "notas_concurrencia": "Índice de proyectos se reescribe completo tras cada handle (no diff). Builds escriben dentro de su propio projectDir."
+    }
+  },
+  "configuracion": {
+    "env_vars": ["PLATFORMIO_FORCE_COLOR=false (set en spawn)"],
+    "module_json_config_keys": [
+      { "key": "data_path", "tipo": "string", "default_si_primitivo": "./data/esp32-dev" },
+      { "key": "platformio_path", "tipo": "string", "default_si_primitivo": "platformio" },
+      { "key": "build_timeout_ms", "tipo": "number", "default_si_primitivo": 300000 },
+      { "key": "max_concurrent_builds", "tipo": "number", "default_si_primitivo": 2 }
+    ],
+    "paths_proyecto_referenciados": ["data/esp32-dev/", "data/esp32-dev/projects/", "data/esp32-dev/projects.json"],
+    "valores_hardcoded_observables": [
+      { "valor": "esp32dev,esp32-s2,esp32-s3,esp32-c3,esp32-c6,esp32-p4", "ubicacion": "modules/esp32-dev/index.js:18", "naturaleza": "otro" },
+      { "valor": "/^[a-z0-9][a-z0-9-]*$/", "ubicacion": "modules/esp32-dev/index.js:184", "naturaleza": "otro" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/esp32-dev/index.js:93", "acciones": ["this.logger = core.logger", "this.metrics = core.metrics", "this.eventBus = core.eventBus", "merge config['esp32-dev']", "path.resolve(data_path)", "_ensureDir data_path + projects/", "_loadTemplates() (built-in templates)", "_loadProjects() lee projects.json", "metrics.gauge esp32.projects.count", "metrics.gauge esp32.active_builds.count = 0"], "guarda_referencias_externas": ["this.logger", "this.metrics", "this.eventBus"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/esp32-dev/index.js:129", "acciones": ["loop activeBuilds: process.kill('SIGTERM')", "this.activeBuilds.clear()", "_saveProjects()"], "estado_no_limpiado": ["this.templates", "this.projects"] },
+    "auto_wired_subscribes": false,
+    "subscribes_dinamicos_en_lifecycle": ["child_process listeners (proc.on close/error/data) por build en _runBuild — terminan al cerrar el spawn"]
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "platformio (CLI externo)", "via_evento": "spawn binario configurable por config.platformio_path", "obligatorio_en": "runtime", "ubicacion_uso": "modules/esp32-dev/index.js:517", "es_cross_vertical": true },
+    { "modulo_dependido": "firmware-manager", "via_evento": "esp32.build_completed (firmware-manager se suscribe a este evento como compat legacy en onBuildCompleted)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/esp32-dev/index.js:564", "es_cross_vertical": false }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "platformio CLI", "que_pasa_si_cae": "proc.on('error') captura ENOENT y emite esp32.build_failed con exit_code=-1; build pasa a estado failed.", "evidencia": "modules/esp32-dev/index.js:602" },
+    { "dependencia": "build_timeout_ms (Node spawn timeout)", "que_pasa_si_cae": "Node mata el proceso; proc.on('close') con code distinto de 0 → esp32.build_failed con exit_code y errorOutput=tail del log.", "evidencia": "modules/esp32-dev/index.js:521" },
+    { "dependencia": "filesystem (data_path)", "que_pasa_si_cae": "_ensureDir/_saveProjects fallidos solo loguean warn — proyectos pueden perderse si se reinicia sin persistir; templates igualmente quedarían sin proyectos persistidos.", "evidencia": "modules/esp32-dev/index.js:107" },
+    { "dependencia": "binario .pio/build/<board>/firmware.bin", "que_pasa_si_cae": "fs.stat con catch silencioso → binarySize=0 pero igual emite esp32.build_completed (firmware-manager filtra bins inexistentes).", "evidencia": "modules/esp32-dev/index.js:546" }
+  ],
   "observabilidad": { "logger": { "estilo": "structured_json", "firma_dominante": null, "campos_estructurados_observados": [], "ejemplos": [] }, "metricas_emitidas": [], "metricas_drift_vs_manifest": [], "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" } },
   "archivos_hermanos": { "agents": [], "schemas": ["modules/esp32-dev/schemas"], "prompts": [], "context_json_existe": false, "prompt_json_existe": false, "readme_existe": false, "tests_propios_existen": false },
   "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },

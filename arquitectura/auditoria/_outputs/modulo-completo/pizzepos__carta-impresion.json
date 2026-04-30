@@ -1,0 +1,218 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/carta-impresion",
+    "ubicacion": "modules/pizzepos/carta-impresion",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__carta-impresion.json"
+  },
+
+  "identidad": {
+    "name": "carta-impresion",
+    "version": "2.0.0",
+    "description_oficial": "Genera versiones imprimibles de cartas en HTML print-ready. Los agentes deciden layout y generan con criterio adaptado a cada carta y marca.",
+    "author": "Pizzepos Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/pizzepos/carta-impresion/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_6_ui",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "agent.execute.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-impresion/index.js:108",
+        "metodo_contenedor": "dispatchGeneracion (probable)",
+        "es_handler_de": null,
+        "bloque_logico": "tras debounce 5s; dispatch a impresion-architect → builder pipeline",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["agentName", "context"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('agent.execute.request', { agentName: 'impresion-architect', context: { ... } });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.impresion.lista", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-impresion/index.js:150",
+        "metodo_contenedor": "(callback tras agente builder probable)",
+        "es_handler_de": null,
+        "bloque_logico": "tras guardar HTML print-ready en disco",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "carta_id", "html_path"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('carta.impresion.lista', { project_id, carta_id, html_path });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.activated",   "tipo_nombre": "literal", "handler": "onProjectActivated",   "handler_ubicacion": "modules/pizzepos/carta-impresion/index.js:58", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-impresion/index.js:67", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.deactivated", "tipo_nombre": "literal", "handler": "onProjectDeactivated", "handler_ubicacion": "modules/pizzepos/carta-impresion/index.js:70", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-impresion/index.js:70", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "carta.actualizada",   "tipo_nombre": "literal", "handler": "onCartaActualizada",   "handler_ubicacion": "modules/pizzepos/carta-impresion/index.js:78", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-impresion/index.js:98", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["carta.impresion.lista"],
+      "publica_literales_en_codigo": ["agent.execute.request", "carta.impresion.lista"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": ["agent.execute.request"],
+      "subscribes_declarados_en_manifest": ["project.activated", "project.deactivated", "carta.actualizada"],
+      "subscribes_realmente_registrados": ["project.activated", "project.deactivated", "carta.actualizada"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [
+    { "name": "impresion.get",       "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolGet",       "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "impresion.generar",   "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolGenerar",   "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["agent.execute.request"] }, "errores_conocidos": [] },
+    { "name": "impresion.save_html", "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolSaveHtml",  "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["carta.impresion.lista"] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "projectPaths",   "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-impresion/index.js:29", "se_invalida_con": "onProjectActivated set; cache permanente",                                              "leak_potencial": false },
+      { "campo": "htmlCache",      "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-impresion/index.js:32", "se_invalida_con": "set tras generar HTML; sin invalidación explícita salvo regeneración",                  "leak_potencial": false },
+      { "campo": "debounceTimers", "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-impresion/index.js:35", "se_invalida_con": "delete dentro del setTimeout callback (línea 93) | clearTimeout en onUnload probable", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/carta-impresion/{carta_id}.html (probable)", "formato": "html", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "Genera HTML print-ready por carta. Debounce 5s evita regenerar en cada cambio pequeño (cuando llegan múltiples carta.actualizada en ráfaga)."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/projects/{slug}/storage/pizzepos/carta-impresion/"],
+    "valores_hardcoded_observables": [
+      { "valor": "this.DEBOUNCE_MS (5000ms según contexto/cartas-ecosystem.json)", "ubicacion": "modules/pizzepos/carta-impresion/index.js:95", "naturaleza": "timeout" },
+      { "valor": "impresion-architect (nombre del agente)", "ubicacion": "modules/pizzepos/carta-impresion/index.js:108", "naturaleza": "otro" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/pizzepos/carta-impresion/index.js:39",
+      "acciones": [
+        "guarda this.logger / this.eventBus",
+        "logger.info('module.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/pizzepos/carta-impresion/index.js:46",
+      "acciones": ["logger.info('module.unloaded')"],
+      "estado_no_limpiado": ["projectPaths", "htmlCache", "debounceTimers (probable: timers no se clearTimeout)"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "pizzepos/carta-manager", "via_evento": "carta.actualizada (subscribe — trigger regeneración con debounce 5s)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-impresion/index.js:78",  "es_cross_vertical": false },
+    { "modulo_dependido": "ai-agent-framework",     "via_evento": "agent.execute.request (dispatch a impresion-architect)",                "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-impresion/index.js:108", "es_cross_vertical": false },
+    { "modulo_dependido": "project-manager",        "via_evento": "project.activated (subscribe)",                                          "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-impresion/index.js:58",  "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "ai-agent-framework",    "que_pasa_si_cae": "agent.execute.request fire-and-forget; si los agentes fallan, no se genera HTML y no se publica carta.impresion.lista. Trigger se reintenta solo si llega nueva carta.actualizada.", "evidencia": "modules/pizzepos/carta-impresion/index.js:108" },
+    { "dependencia": "fs (escritura HTML)",   "que_pasa_si_cae": "el agente builder maneja la escritura; no observable directo aquí.",                                                                                                                  "evidencia": "modules/pizzepos/carta-impresion/index.js:158 (logger html.saved)" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('carta-impresion.<accion>' | 'module.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "version", "project_id", "carta_id", "debounce_ms"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('module.loaded', { module: this.name, version: this.version });",                                "ubicacion": "modules/pizzepos/carta-impresion/index.js:43"  },
+        { "snippet": "this.logger.debug('carta-impresion.regenerate.scheduled', { project_id, carta_id, debounce_ms: this.DEBOUNCE_MS });", "ubicacion": "modules/pizzepos/carta-impresion/index.js:98"  },
+        { "snippet": "this.logger.info('carta-impresion.generacion.iniciada', { ... });",                                                "ubicacion": "modules/pizzepos/carta-impresion/index.js:104" },
+        { "snippet": "this.logger.info('carta-impresion.html.saved', { ... });",                                                          "ubicacion": "modules/pizzepos/carta-impresion/index.js:158" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — carta-impresion no propaga correlation_id."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/pizzepos/carta-impresion/index.js:91", "comentario_literal": "Programar regeneración tras DEBOUNCE_MS sin más cambios", "contexto": "explica por qué hay un setTimeout/debounce: evita regenerar HTML en cada cambio pequeño cuando llegan múltiples carta.actualizada en ráfaga" }
+    ],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 251,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "08f170f",
+      "fecha": "2026-04-22 09:31:19 +0000",
+      "subject": "refactor(prompt-engine): separar context.json de prompt.json por módulo"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "ECOSISTEMA CARTAS — IMPRESIÓN. carta-impresion escucha carta.actualizada y aplica DEBOUNCE 5s antes de dispatch para evitar regeneraciones en ráfaga. Único módulo del ecosistema cartas con debounce explícito.",
+      "publica_emitidos_no_declarados: agent.execute.request (cross-módulo a ai-agent-framework, mismo patrón que carta-digital)",
+      "Pipeline: carta.actualizada → debounce 5s → dispatch impresion-architect (decide layout) → builder (genera HTML+CSS) → carta.impresion.lista publicado",
+      "2 agentes inline (architect + builder) — patrón 'el módulo es shell'",
+      "debounceTimers Map sin clearTimeout en onUnload visible — leak potencial si el módulo se descarga con timers pendientes"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "ui_handlers (no expone MQTT UI)",
+      "apis_http (no expone HTTP)",
+      "estado.persistencia.sqlite_tablas (genera HTML files)",
+      "configuracion.env_vars / module_json_config_keys",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / workarounds_detectados",
+      "outliers_capturados",
+      "version_archivada"
+    ]
+  }
+}

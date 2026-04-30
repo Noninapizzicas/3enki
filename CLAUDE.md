@@ -21,6 +21,17 @@ Cada módulo conoce exactamente una cosa: su dominio. Nada más.
 
 El emisor sabe **qué**. El receptor sabe **cómo**.
 
+## Granularidad
+
+**Un módulo = una responsabilidad acotada. El nombre del directorio describe exactamente qué hace.**
+
+- `carta-design` diseña la apariencia visual
+- `carta-impresion` genera la carta para imprimir
+- `carta-scheduler` decide qué carta está activa por franja
+- `device-registry` / `device-shadow` / `device-health` son 3 responsabilidades, no un mega `device-manager`
+
+No fusionar en mega-módulos "manager". La claridad inmediata del nombre vale más que el ahorro de archivos. Si dos módulos comparten 80% de su lógica, se valora fusionar como excepción razonada, no como regla.
+
 ---
 
 # Cómo trabajo en este repo

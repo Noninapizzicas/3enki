@@ -34,11 +34,53 @@
     { "domain": "builder", "action": "list-boards", "handler_metodo": "handleListBoards", "handler_ubicacion": "modules/firmware-builder/index.js:239", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["boards", "total"], "status_error": null }, "campo_origen_manifest": "ui_handlers" }
   ],
   "apis_http": [],
-  "estado": { "memoria": [], "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": null } },
-  "configuracion": { "env_vars": [], "module_json_config_keys": [], "paths_proyecto_referenciados": [], "valores_hardcoded_observables": [] },
-  "lifecycle": { "onLoad": { "ubicacion": null, "acciones": [], "guarda_referencias_externas": [], "puede_fallar_silenciosamente": false }, "onUnload": { "ubicacion": null, "acciones": [], "estado_no_limpiado": [] }, "auto_wired_subscribes": false, "subscribes_dinamicos_en_lifecycle": [] },
-  "dependencias_implicitas": [],
-  "modos_de_fallo": [],
+  "estado": {
+    "memoria": [
+      { "campo": "this.drivers", "tipo": "Map", "ubicacion_init": "modules/firmware-builder/index.js:47", "se_invalida_con": "this.drivers.clear() en _scanDrivers (cada handleListDrivers/onLoad), preservando last_build/last_build_status via prevState", "leak_potencial": false },
+      { "campo": "this.activeBuilds", "tipo": "Map", "ubicacion_init": "modules/firmware-builder/index.js:50", "se_invalida_con": "delete por driverName en proc close/error + clear() en onUnload con SIGTERM", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "firmware/drivers/<driver>/.pio/build/<env>/firmware.bin", "formato": "binario", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" },
+        { "path_pattern": "firmware/drivers/<driver>/platformio.ini", "formato": "raw", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" },
+        { "path_pattern": "firmware/drivers/<driver>/README.md", "formato": "raw", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" },
+        { "path_pattern": "firmware/drivers/<driver>/driver.json", "formato": "json", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" }
+      ],
+      "notas_concurrencia": "No hay persistencia propia. La compilación produce un .bin que firmware-manager copia/registra a su catálogo via firmware.build_completed."
+    }
+  },
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "firmware_path", "tipo": "string", "default_si_primitivo": "./firmware/drivers" },
+      { "key": "platformio_path", "tipo": "string", "default_si_primitivo": "platformio" },
+      { "key": "build_timeout_ms", "tipo": "number", "default_si_primitivo": 300000 },
+      { "key": "max_concurrent_builds", "tipo": "number", "default_si_primitivo": 2 }
+    ],
+    "paths_proyecto_referenciados": ["firmware/drivers/"],
+    "valores_hardcoded_observables": [
+      { "valor": "esp32dev,esp32-s2,esp32-s3,esp32-c3,esp32-c6", "ubicacion": "modules/firmware-builder/index.js:22", "naturaleza": "otro" },
+      { "valor": "500", "ubicacion": "modules/firmware-builder/index.js:275", "naturaleza": "limit" },
+      { "valor": "60000", "ubicacion": "modules/firmware-builder/index.js:404", "naturaleza": "timeout" },
+      { "valor": "PLATFORMIO_FORCE_COLOR=false", "ubicacion": "modules/firmware-builder/index.js:269", "naturaleza": "otro" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/firmware-builder/index.js:55", "acciones": ["this.logger = core.logger", "this.metrics = core.metrics", "this.eventBus = core.eventBus", "merge config['firmware-builder']", "path.resolve(firmware_path)", "_scanDrivers() lee firmware/drivers/", "metrics.gauge firmware.drivers.count", "metrics.gauge firmware.active_builds.count = 0"], "guarda_referencias_externas": ["this.logger", "this.metrics", "this.eventBus"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/firmware-builder/index.js:82", "acciones": ["loop activeBuilds: process.kill('SIGTERM')", "this.activeBuilds.clear()"], "estado_no_limpiado": ["this.drivers"] },
+    "auto_wired_subscribes": false,
+    "subscribes_dinamicos_en_lifecycle": ["proc.stdout.on('data') + proc.stderr.on('data') + proc.on('close') + proc.on('error') registrados por build en modules/firmware-builder/index.js:276-388 — child_process listeners se eliminan al terminar el proc"]
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "firmware-manager", "via_evento": "firmware.build_completed (emite — firmware-manager auto-registra binario)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/firmware-builder/index.js:321", "es_cross_vertical": false },
+    { "modulo_dependido": "platformio (CLI externo)", "via_evento": "spawn binario configurable por config.platformio_path", "obligatorio_en": "runtime", "ubicacion_uso": "modules/firmware-builder/index.js:267", "es_cross_vertical": true }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "platformio CLI", "que_pasa_si_cae": "spawn proc.on('error') captura ENOENT y emite firmware.build_failed con exit_code=-1; si funciona pero compila mal, sale code!=0 con reason=compilation_error.", "evidencia": "modules/firmware-builder/index.js:362" },
+    { "dependencia": "build_timeout_ms (Node spawn timeout)", "que_pasa_si_cae": "Node mata el proceso (signal SIGTERM por defecto); proc.on('close') recibe code=null, lo que se interpreta como reason=timeout y se emite firmware.build_failed.", "evidencia": "modules/firmware-builder/index.js:297" },
+    { "dependencia": "firmware/drivers/<driver>/.pio/build/<env>/firmware.bin", "que_pasa_si_cae": "fs.statSync falla con catch silencioso → binarySize=0 y has_binary=false; firmware.build_completed se emite con binary_size=0 (firmware-manager debería detectar archivo inexistente).", "evidencia": "modules/firmware-builder/index.js:301" }
+  ],
   "observabilidad": { "logger": { "estilo": "structured_json", "firma_dominante": null, "campos_estructurados_observados": [], "ejemplos": [] }, "metricas_emitidas": [], "metricas_drift_vs_manifest": [], "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" } },
   "archivos_hermanos": { "agents": [], "schemas": [], "prompts": ["modules/firmware-builder/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": false, "tests_propios_existen": false },
   "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },

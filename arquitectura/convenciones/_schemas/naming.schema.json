@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/convenciones/naming.schema.json",
+  "title": "Naming Convention — Output Schema",
+  "description": "Schema strict de la instancia de la convención de naming. Valida arquitectura/convenciones/_outputs/naming.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_meta", "regla", "rules", "languages"],
+
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["convencion", "version", "creado_en", "contrato_referencia"],
+      "properties": {
+        "convencion":           { "const": "naming" },
+        "version":              { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "creado_en":            { "type": "string", "format": "date" },
+        "contrato_referencia":  { "type": "string", "pattern": "^arquitectura/convenciones/_contratos/" },
+        "supersedes_nota":      { "type": ["string", "null"] }
+      }
+    },
+
+    "regla": {
+      "type": "string",
+      "minLength": 50,
+      "description": "Frase maestra que resume toda la convención en una línea."
+    },
+
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["form", "ascii_only", "no_accents", "no_tilde_n", "case_compounds", "languages_canonical"],
+      "properties": {
+        "form": {
+          "type": "string",
+          "description": "Patrón canónico del nombre de evento. Ejemplo: '<module-prefix>.<entity>.<verb>' o '<module-prefix>.<verb>'."
+        },
+        "ascii_only":     { "type": "boolean", "const": true },
+        "no_accents":     { "type": "boolean", "const": true },
+        "no_tilde_n":     { "type": "boolean", "const": true },
+        "case_compounds": { "enum": ["kebab-case"] },
+        "languages_canonical": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "enum": ["es", "en"] }
+        },
+        "form_regex": {
+          "type": "string",
+          "description": "Regex que el validador aplica a cada nombre de evento. Debe casar con `form`."
+        }
+      }
+    },
+
+    "languages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["es", "en"],
+      "properties": {
+        "es": { "$ref": "#/$defs/language_block" },
+        "en": { "$ref": "#/$defs/language_block" }
+      }
+    }
+  },
+
+  "$defs": {
+    "language_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module_json_language_value", "verbs_lifecycle", "verbs_compound_allowed", "directory_hint_words"],
+      "properties": {
+        "module_json_language_value": {
+          "type": "string",
+          "enum": ["es", "en"],
+          "description": "El valor literal que se espera en module.json.language para este idioma."
+        },
+        "verbs_lifecycle": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z]*$",
+            "description": "Verbo atómico del ciclo de vida en past participle masculino singular."
+          }
+        },
+        "verbs_compound_allowed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z]*(_[a-z]+)+$",
+            "description": "Verbo compuesto con snake_case heredado de industria embedded (build_started, ota_failed). Lista cerrada."
+          },
+          "description": "Solo necesario en EN para herencia de embedded/IoT. Vacío en ES."
+        },
+        "directory_hint_words": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "description": "Palabras que, si aparecen en un nombre de directorio de módulo, hint que el idioma es éste. Heurística para warnings, no para validación dura."
+        }
+      }
+    }
+  }
+}

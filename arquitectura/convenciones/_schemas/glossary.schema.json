@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/convenciones/glossary.schema.json",
+  "title": "Glossary — Output Schema",
+  "description": "Schema strict de la instancia del glosario cross-módulo. Valida arquitectura/convenciones/_outputs/glossary.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_meta", "scope", "criterio_inclusion", "concepts"],
+
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["convencion", "version", "creado_en", "contrato_referencia"],
+      "properties": {
+        "convencion":           { "const": "glossary" },
+        "version":              { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "creado_en":            { "type": "string", "format": "date" },
+        "contrato_referencia":  { "type": "string", "pattern": "^arquitectura/convenciones/_contratos/" },
+        "supersedes_nota":      { "type": ["string", "null"] }
+      }
+    },
+
+    "scope": {
+      "type": "string",
+      "minLength": 30,
+      "description": "Frase corta describiendo qué entra en el glosario y qué no."
+    },
+
+    "criterio_inclusion": {
+      "type": "string",
+      "minLength": 30,
+      "description": "Criterio binario para decidir si un término entra al glosario."
+    },
+
+    "concepts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/concept" }
+    }
+  },
+
+  "$defs": {
+    "concept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "domain"],
+      "anyOf": [
+        { "required": ["es"] },
+        { "required": ["en"] }
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "minLength": 2,
+          "description": "Identificador estable del concepto en kebab-case."
+        },
+        "domain": {
+          "enum": ["horeca", "iot", "system", "auth", "ai", "ui", "messaging"]
+        },
+        "es": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "description": "Forma canónica en español. ASCII puro, kebab-case en compuestos. Sin tildes ni ñ."
+            }
+          ]
+        },
+        "en": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "description": "Forma canónica en inglés. ASCII puro, kebab-case en compuestos."
+            }
+          ]
+        },
+        "notes": {
+          "type": ["string", "null"],
+          "description": "Matiz, justificación de la traducción si es lossy, referencia industria. Opcional."
+        },
+        "industry_reference": {
+          "type": ["string", "null"],
+          "description": "Referencia explícita al estándar de industria que origina el término (ej. 'Toast/Square POS', 'AWS IoT Shadow', 'KOT — Kitchen Order Ticket')."
+        }
+      }
+    }
+  }
+}

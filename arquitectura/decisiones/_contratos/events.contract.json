@@ -289,5 +289,108 @@
     "es_anti_patron_rpc_over_pubsub": "true si el nombre del evento termina en '.request' o '.response' Y NO usa el patrón formal del framework (correlation_id explícito en payload + suscripción a topic de respuesta dedicado).",
     "es_anti_patron_generic_verb": "true si el último segmento del nombre del evento ∈ detection_patterns.generic_verbs.",
     "es_anti_patron_imperative_verb": "true si el último segmento NO está en languages[module.language].verbs_lifecycle de naming.json AND está en detection_patterns.imperative_verbs_{module.language}."
-  }
+  },
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "events_json_estructura_valida",
+      "regla": "events.json valida estructuralmente contra events.schema.json (AJV strict, additionalProperties=false en todos los niveles).",
+      "como_detectar": "Cargar el schema, compilar con AJV strict, validar el output. Cualquier error de schema bloquea PASS.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/decisiones/_outputs/events.json", "arquitectura/decisiones/_schemas/events.schema.json"]
+    },
+    {
+      "id": "drift_emit_bypass",
+      "regla": "Ningún módulo usa .emit() sobre el eventBus como mecanismo de emisión.",
+      "como_detectar": "Regex \\.emit\\( en archivos modules/*/index.js (y lib/, services/ si existen). Cruzar con audit modulo-completo.eventos.publica para identificar el módulo y línea.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js", "arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "ejemplo_drift_actual": "modules/staff-manager/index.js:353 (this.core.eventBus.emit)",
+      "viola": "emit_bypass (prohibido), single_emit_api (principio)"
+    },
+    {
+      "id": "drift_silent_catch",
+      "regla": "Ningún publish() del bus se silencia sin loguear.",
+      "como_detectar": "Regex multilínea sobre código de módulos: \\.publish\\([^)]*\\)\\s*\\.catch\\(\\s*\\(?\\s*_?\\s*\\)?\\s*=>\\s*\\{\\s*\\}\\s*\\) o equivalente.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "silent_catch (prohibido), no_shortcuts (principio)"
+    },
+    {
+      "id": "drift_rpc_over_pubsub",
+      "regla": "Ningún evento de dominio termina en '.request' o '.response' fuera del patrón formal request_response_formal del framework.",
+      "como_detectar": "Para cada evento en manifest-completo.events.publica[].event y modulo-completo.eventos.publica[].nombre.valor: si el último segmento ∈ detection_patterns.request_response_suffixes, reportar drift. (Excepción: el patrón formal del framework usa topics ui/request/* y ui/response/{correlation_id}, pero esos NO aparecen como eventos de dominio publicados — usan la API mqttRequest, no eventBus.publish.)",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/manifest-completo/*.json", "arquitectura/auditoria/_outputs/modulo-completo/*.json", "arquitectura/decisiones/_outputs/events.json"],
+      "ejemplo_drift_actual": "calling-generator: function.get.request, function.get.response, function.execute.request, function.execute.response. channel-manager: channel-manager.resolve.response. composition-manager: db.query.request.",
+      "viola": "rpc_over_pubsub (prohibido), no_request_response_disguised (principio)"
+    },
+    {
+      "id": "drift_generic_verb",
+      "regla": "Ningún nombre de evento usa un verbo genérico de detection_patterns.generic_verbs en posición de verbo (último segmento).",
+      "como_detectar": "Para cada nombre de evento publicado: split por '.', último segmento ∈ events.json.detection_patterns.generic_verbs → drift.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "arquitectura/decisiones/_outputs/events.json"],
+      "ejemplo_drift_actual": "admin-panel: admin.action × 5 (verbo 'action' es genérico).",
+      "viola": "generic_verb (prohibido), what_vs_how_separation (principio)"
+    },
+    {
+      "id": "drift_imperative_verb",
+      "regla": "Ningún evento usa verbo imperativo en la posición de verbo (último segmento). Solo past participle del whitelist por idioma.",
+      "como_detectar": "Para cada evento de un módulo con language=L: último segmento NO está en naming.json.languages[L].verbs_lifecycle AND está en events.json.detection_patterns.imperative_verbs_{L} → drift.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "modules/*/module.json", "arquitectura/convenciones/_outputs/naming.json", "arquitectura/decisiones/_outputs/events.json"],
+      "viola": "imperative_event_name (prohibido), what_vs_how_separation (principio)"
+    },
+    {
+      "id": "drift_non_ascii_event_name",
+      "regla": "Ningún nombre de evento publicado contiene caracteres no-ASCII (tildes, ñ, espacios, etc.).",
+      "como_detectar": "Regex [^\\x20-\\x7E] aplicado a cada nombre de evento.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "nota": "Severidad error porque rompe MQTT/JSON/regex. ASCII puro es no-negociable.",
+      "viola": "non_ascii_event_name (prohibido), single_emit_api (principio)"
+    },
+    {
+      "id": "drift_raw_topic_in_publish",
+      "regla": "Ningún publish() o subscribe() en código de módulos toma un topic crudo (con / o prefijo core/).",
+      "como_detectar": "Regex sobre código: argumentos string-literal en .publish(...) o .subscribe(...). Si contienen '/' o empiezan con 'core/' → drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "raw_topic_in_event_name (prohibido), name_to_topic_translation (decisión)"
+    },
+    {
+      "id": "drift_undocumented_dynamic_subscribe",
+      "regla": "Toda suscripción dinámica detectada en código está documentada en lifecycle.subscribes_dinamicos_en_lifecycle de la auditoría del módulo.",
+      "como_detectar": "Cruzar audit modulo-completo.eventos.subscribes (auto_wired=false) con manifest-completo.events.subscribes (declarados auto-wired) Y con modulo-completo.lifecycle.subscribes_dinamicos_en_lifecycle. Las subscripciones que no encajen en ninguna lista son drift no documentado.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "arquitectura/auditoria/_outputs/manifest-completo/*.json"],
+      "viola": "undocumented_dynamic_subscribe (prohibido), single_subscribe_api (principio)"
+    },
+    {
+      "id": "module_uses_publish_api_consistente",
+      "regla": "Cada módulo con this.eventBus en lifecycle.onLoad.guarda_referencias_externas tiene al menos un publish o subscribe documentado en su auditoría. Si guarda la referencia pero no la usa, es código muerto o patrón no detectado.",
+      "como_detectar": "Cruzar lifecycle.onLoad.guarda_referencias_externas con eventos.publica + eventos.subscribes en la auditoría.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"]
+    },
+    {
+      "id": "module_lifecycle_has_lwt_pattern",
+      "regla": "Si un módulo es cliente MQTT separado (no comparte conexión con el core), su lifecycle.onLoad debe documentar el setup del Last-Will Testament.",
+      "como_detectar": "Heurística: si el módulo aparece en lifecycle.subscribes_dinamicos_en_lifecycle con uso de mqtt directo, debería referenciar will/LWT en onLoad.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "nota": "Difícil de detectar mecánicamente; mayormente para revisión manual."
+    }
+  ],
+
+  "salida_validador": "PASS si events.json es estructuralmente válido (AJV strict). Errores cross-system bloquean PASS. Warnings se reportan como drift visible pero no bloquean. Info son señales informativas (no obliga a actuar). Formato coherente con naming.validate.js y glossary.validate.js: banner PASS/FAIL + lista de findings agrupados por severidad, con ubicación archivo:línea cuando aplique.",
+
+  "convenciones_complementarias": [
+    "naming.validate.js valida la forma del nombre del evento (dots, ASCII, kebab-case en compuestos) y el verbo del whitelist por idioma. Cubre lo léxico del nombre.",
+    "glossary.validate.js valida que las entidades cross-módulo (en posición de entity) usen la forma canónica del idioma. Cubre el vocabulario.",
+    "events.validate.js (este contrato) cubre lo específico del paradigma de eventos: drift de RPC disfrazado, generic verbs, emit bypass, silent catch, raw topics en código, suscripciones dinámicas no documentadas.",
+    "modulo-completo.validate.js valida la auditoría per módulo (estructura, archivo:línea verificable, derivaciones internas).",
+    "Los 4 validators son complementarios y no se solapan. Cada uno tiene su scope. Se pueden ejecutar por separado o todos en CI."
+  ]
 }

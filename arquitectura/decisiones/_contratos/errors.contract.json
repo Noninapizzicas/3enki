@@ -1,0 +1,48 @@
+{
+  "_doc": "Captura LA forma canónica en la que el sistema event-core responde cuando algo sale mal: shape de la respuesta de error, códigos estandarizados, distinción entre dominio e infraestructura, telemetría automática, política de propagación. Sin un contrato de errores, cada módulo inventa su forma — los callers no pueden tratar errores uniformemente, los logs son ilegibles, las métricas se confunden, y los secretos se filtran en mensajes. Este contrato es la pareja del de observability: un error que ocurre, un error que se observa, un error que el caller puede tratar.",
+  "id": "errors",
+  "version": "1.0.0",
+  "creada": "2026-04-30",
+  "supersedes_nota": "Primera versión. Recoge la convención de status codes HTTP-like del request/response del framework event-core (heredada en events.contract.json) y la formaliza para todas las respuestas de tools, ui_handlers, APIs HTTP y handlers de mqttRequest.",
+
+  "objetivo": "Producir UN JSON output (_outputs/errors.json) que define: shape canónica de respuesta (éxito y fallo), códigos de status estandarizados con su significado, estructura del campo error (code, message, details opcionales), política de stack traces, política de propagación (cuándo absorber, cuándo throw), telemetría obligatoria al emitir un error (log + métrica), política de exposición externa (qué se ve en respuestas vs qué solo en logs internos), distinción entre errores de dominio vs infraestructura. Validable mecánicamente cruzando contra las auditorías modulo-completo.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/errors.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/errors.schema.json",
+      "arquitectura/decisiones/_outputs/events.json (porque hereda los status_codes_canonical del request_response)",
+      "arquitectura/decisiones/_outputs/observability.json (porque cada error emite log y métrica obligatorios)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json — campos `tools[].errores_conocidos`, `tools[].retorno`, `ui_handlers[].codigos_error`, `ui_handlers[].output_shape`, `apis_http[].response_keys`, `modos_de_fallo`",
+      "arquitectura/auditoria/_outputs/manifest-completo/*.json — declaraciones de schemas de respuesta en module.json"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL ERROR ES INFORMACIÓN, NO EXCEPCIÓN A ESCONDER. Cuando algo falla, eso es un hecho del sistema tan importante como un éxito. Los errores se modelan como datos, se observan, se propagan a quien deba enterarse. Esconderlos es peor que provocarlos.",
+
+    "FORMA CANÓNICA ÚNICA. Toda respuesta de un tool, ui_handler, api HTTP o mqttRequest tiene la misma forma — cambia el contenido según éxito o fallo. El caller siempre sabe dónde buscar el status, dónde el data, dónde el error. Sin sorpresas.",
+
+    "DOS PÚBLICOS, UNA INFORMACIÓN. Cada error tiene un mensaje legible para humanos (que mira un log o un dashboard) y un código procesable por máquinas (para ramas de control en el caller). Los dos coexisten: ni solo string ('algo falló'), ni solo número (404 sin contexto).",
+
+    "DOMINIO vs INFRAESTRUCTURA. Un error de dominio (la receta no existe, el pedido ya está pagado, la tarifa no aplica) es información de negocio — el caller puede actuar sobre ella. Un error de infraestructura (DB caída, broker desconectado, filesystem lleno) es información operativa — el caller poco puede hacer. Distinguir los dos en el código y en la respuesta es clave para que el sistema sea robusto.",
+
+    "AUTO-OBSERVABLE. Cada error que el módulo genera produce automáticamente (a) un log con severidad apropiada, (b) una métrica counter incrementada. No depende de que el módulo se acuerde. La telemetría no es opcional para errores — es lo que distingue un sistema productivo de uno opaco.",
+
+    "STACK TRACES NO SE FILTRAN. El stack trace es información sensible: revela rutas de archivos, nombres de variables, estructura interna del sistema. SOLO aparece en logs (level=error o debug) — JAMÁS en la respuesta que llega a un caller externo. Lo que el caller recibe es { code, message, details? } — limpio, controlado.",
+
+    "PROPAGAR O ABSORBER ES DECISIÓN DEL DOMINIO. Un módulo que recibe un error de otro módulo (ej. via mqttRequest) decide qué hacer: a) propagarlo al caller superior con su propio status; b) traducirlo a un error de dominio propio; c) absorberlo y degradarse (con métrica de degraded). Pero NUNCA traga el error sin telemetría.",
+
+    "RECUPERABLE vs FATAL. El caller necesita saber si reintentar tiene sentido. Algunos errores (timeout transitorio, broker brevemente caído) son recuperables. Otros (input inválido, recurso no encontrado, permiso denegado) no lo son por reintento — el caller debe corregir antes de reintentar. El código de error transmite esto.",
+
+    "SIN SECRETOS EN EL MENSAJE. El mensaje de error nunca contiene tokens, passwords, paths privados ni datos personales. Si necesita referenciar algo sensible, usa metadata (ej. 'credential expired' con credential_id, no con el token). Coherente con no_secrets_in_logs del contrato observability.",
+
+    "EL EMISOR DESCRIBE, EL CALLER DECIDE. El módulo que emite un error describe lo que pasó y por qué. NO instruye al caller qué hacer. El caller, con código y mensaje, decide: reintenta, escala, degrada, log y sigue. Esto coincide con el principio what_vs_how_separation de events.",
+
+    "ERRORES NO INVENTAN CÓDIGOS. Hay una lista cerrada de códigos canónicos (HTTP-like + dominio + infraestructura). El módulo elige el más apropiado de la lista — NO inventa códigos nuevos por capricho. Si la lista no cubre un caso real, se propone PR para extenderla."
+  ]
+}

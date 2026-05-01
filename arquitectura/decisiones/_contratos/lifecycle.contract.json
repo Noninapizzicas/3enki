@@ -247,5 +247,41 @@
       "ejemplo_drift_actual": null,
       "alternativa_correcta": "Confiar en que cuando el core publica el status retained con el módulo en la lista, ese módulo está loaded. Si necesitas señalar algo de tu DOMINIO (no de tu lifecycle), publica un evento de dominio (ej. 'recipe-cache.warmed' con datos)."
     }
-  ]
+  ],
+
+  "output_shape_resumen": "Ver _schemas/lifecycle.schema.json. Top-level: _meta, regla (frase maestra), signatures (onLoad y onUnload — firmas, semántica, timeout), core_api (campos obligatorios y opcionales que el core inyecta), state_machine (5 estados + transiciones + estados de fallo), auto_wiring_sequence (los 10 pasos del module loader), hot_reload_sequence (los 12 pasos), error_handling (políticas de loading y unloading), config_namespacing (cómo accede el módulo a su config), detection_patterns (heurísticas que el validator usa para detectar drift).",
+
+  "reglas_de_extraccion": [
+    "Definir _meta con convencion='lifecycle', version (semver), creado_en (date), contrato_referencia (path al contrato).",
+
+    "Definir regla como frase maestra que resuma toda la decisión arquitectónica del lifecycle en una línea legible para humanos. Ejemplo: 'Cada módulo es un invitado: recibe del core lo que necesita en async onLoad(core), guarda referencias en this.*, libera todo en async onUnload(). Hot-reload safe por construcción. Estado del módulo lo lleva el core (5 estados predecibles).'.",
+
+    "Definir signatures como objeto con dos claves: onLoad y onUnload. Cada una tiene: signature (string literal de la firma esperada), is_async (boolean true), params (array describiendo cada parámetro: nombre, tipo, obligatorio), returns (descripción), semantics (qué garantiza el loader cuando la firma se cumple), timeout_ms (solo onUnload, default 5000).",
+
+    "Definir core_api como objeto con dos claves: required (array de fields que SIEMPRE inyecta el core) y optional (array de fields que el core PUEDE inyectar según contexto). Cada field tiene: name (string), type (string descriptivo), descripcion (humana), ejemplo_uso (snippet corto en el módulo). Required: logger, metrics, eventBus. Optional: uiHandler, config, modules.",
+
+    "Definir state_machine como objeto con dos claves: estados (array de objetos con id, descripcion, es_terminal, es_fallo) y transiciones (array de {desde, hasta, disparada_por, condicion}). Estados: unloaded, loading, loaded, unloading, failed, unloaded_with_errors. Transiciones: las 6 normales + las 2 de fallo.",
+
+    "Definir auto_wiring_sequence como array ORDENADO de los 10 pasos que ejecuta el module loader entre unloaded y loaded. Cada paso tiene: orden (1-10), accion (string descriptivo), responsable ('loader' o 'modulo'), nota (opcional).",
+
+    "Definir hot_reload_sequence como array ORDENADO de los 12 pasos que ejecuta el module loader cuando detecta cambio en el archivo del módulo. Cada paso tiene: orden (1-12), accion, responsable, nota.",
+
+    "Definir error_handling como objeto con dos claves: arranque (política si onLoad falla) y apagado (política si onUnload falla o se cuelga). Cada uno tiene: on_error_actions (array de pasos), observable_event (topic donde se publica), recovery (cómo se recupera, si aplica), timeout_ms (cuando aplica).",
+
+    "Definir config_namespacing como objeto con: access_pattern (string del patrón canónico, ej. 'core.config?.[this.name]'), scope (string descripción del scope), prohibited_patterns (array de patrones prohibidos), merge_pattern (string del patrón recomendado para mergear con defaults).",
+
+    "Definir detection_patterns como objeto con las heurísticas que el validator aplicará para detectar cada anti-patrón de la sección prohibido. Claves: prohibited_signatures (array de nombres de método prohibidos en lugar de onLoad/onUnload), forbidden_core_internals (array de prefijos internos prohibidos como '_broker', '_loader'), module_scope_state_regex (regex para detectar declaraciones let/const con state mutable fuera de clase), silent_catch_in_load_regex (regex para detectar catch sin log en onLoad), state_machine_event_pattern (regex que detecta eventos del tipo module.X.ready emitidos por el propio módulo).",
+
+    "El contrato (este archivo) describe QUÉ campos debe tener el output. El output (_outputs/lifecycle.json) contiene los valores concretos. Si necesitas cambiar la regla → cambias el contrato + bumpeas version. Si necesitas cambiar un valor concreto (ej. añadir un nombre prohibido más al detection_patterns) → cambias el output."
+  ],
+
+  "derivaciones": {
+    "module_signature_es_canonica": "true si la clase del módulo expone exactamente 'async onLoad(core)' Y (opcionalmente) 'async onUnload()'. Si expone init/start/setup/etc., es false.",
+    "module_es_hot_reload_safe": "true si: (a) no hay variables module-scope mutables (state_local_to_module), (b) onLoad no guarda referencias a versiones previas de sí mismo, (c) onUnload libera todo lo que onLoad reservó (symmetric_unload).",
+    "tiene_leak_potencial": "true si lifecycle.onLoad.acciones (auditoría) menciona reserva (setInterval, setTimeout, watch, spawn, subscribe directo) AND lifecycle.onUnload.acciones (auditoría) NO contiene la liberación correspondiente. Equivalente a: lifecycle.onUnload.estado_no_limpiado no vacío.",
+    "viola_core_internal_access": "true si código del módulo accede a core.X donde X NO está en core_api.required ni core_api.optional.",
+    "viola_module_scope_state": "true si análisis estático del archivo encuentra declaraciones let/var/const fuera de la clase con valor objeto/array/Map/Set mutable.",
+    "viola_module_publishes_own_state_machine": "true si el módulo publica un evento cuyo nombre coincide con el patrón state_machine_event_pattern Y el evento se refiere al propio módulo (no a un dominio).",
+    "estado_actual_del_modulo_segun_core": "uno de los 5 estados (unloaded, loading, loaded, unloading, failed, unloaded_with_errors). Lo lleva el core; visible via core/{core-id}/status."
+  }
 }

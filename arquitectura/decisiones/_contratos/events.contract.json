@@ -41,5 +41,58 @@
     "EVENT-CORE COMO SEMILLA. Este contrato hereda el espíritu del repo original event-core (v0.5.0 Network): MQTT pub/sub nativo con Aedes embedded, módulos como plugins, IA como ciudadano de primera clase, zero dependencias. Las evoluciones posteriores aprendieron mucho técnicamente y se desviaron filosóficamente. Aquí volvemos al cimiento con lo aprendido.",
 
     "DESCRIPTIVO PARA HUMANOS. Cualquier principio de este contrato debe poder leerlo alguien sin background técnico y entender qué se está afirmando. Si un principio solo se entiende con jerga, está mal escrito."
+  ],
+
+  "principios": [
+    {
+      "id": "fire_and_forget",
+      "regla": "El emisor publica el evento y continúa sin esperar respuesta. No hay espera por confirmación de los suscriptores.",
+      "razon": "Desacoplamiento temporal. Si el emisor esperara, se acoplaría al receptor — pero no sabe ni cuántos receptores hay ni cuánto tardan ni si fallarán. La espera contradice el paradigma. Si necesitas respuesta sincrónica, usa una tool del LLM, una API HTTP, o el patrón formal request_id+correlation+timeout del framework."
+    },
+    {
+      "id": "cardinality_agnostic",
+      "regla": "El emisor no asume cuántos suscriptores recibirán el evento. Las cardinalidades cero, una y muchas son todas válidas y esperadas.",
+      "razon": "Si el emisor asume que alguien escucha, el sistema falla silenciosamente cuando ese alguien deja de escuchar. Si asume que solo uno escucha, no escala. La indiferencia a la cardinalidad es lo que permite ramificar libremente sin tocar al emisor."
+    },
+    {
+      "id": "what_vs_how_separation",
+      "regla": "El emisor describe QUÉ ha pasado en términos de su dominio. El receptor decide CÓMO reacciona. Un evento jamás contiene instrucciones, solo descripción de un hecho consumado.",
+      "razon": "La instrucción acopla, la descripción libera. Si emites 'guarda esta receta' estás dictando comportamiento; si emites 'receta.creada' estás contando un hecho. Cualquier persistencia, indexación o notificación es decisión del receptor — el emisor no tiene voz ahí."
+    },
+    {
+      "id": "no_temporal_coupling",
+      "regla": "El emisor no controla, conoce ni espera el ritmo del receptor. Cada módulo procesa eventos según su propia lógica temporal.",
+      "razon": "El acoplamiento temporal es origen de cascadas de fallo. Si el receptor tarda 5 minutos en reaccionar, el emisor sigue su trabajo sin enterarse. Si el receptor falla, el emisor tampoco se entera (y no debería). Esto es deliberado y necesario para la robustez del sistema."
+    },
+    {
+      "id": "single_emit_api",
+      "regla": "Hay UNA forma canónica de emitir un evento desde un módulo: la API del bus inyectada en el module (this.eventBus.publish o equivalente). No se permite acceder al primitivo subyacente (EventEmitter de Node, cliente MQTT directo) salvo casos documentados como excepciones explícitas.",
+      "razon": "Múltiples canales = múltiples reglas = drift. Una sola API hace el sistema observable, validable y refactorable. Las excepciones (topics IoT retained externos hacia dispositivos físicos) deben justificarse y documentarse explícitamente en la auditoría del módulo."
+    },
+    {
+      "id": "single_subscribe_api",
+      "regla": "Hay UNA forma canónica de suscribirse: declararlo en module.json (auto-wired por el module loader) o registrarlo en onLoad vía la API del bus. No se permite acceder al primitivo subyacente.",
+      "razon": "Mismo razonamiento que single_emit_api. Además, las suscripciones declaradas en module.json son visibles por la auditoría y validables mecánicamente — las dinámicas requieren documentación expresa."
+    },
+    {
+      "id": "same_api_all_scales",
+      "regla": "El código del módulo no cambia entre escalas (Casa, Rascacielos, Manzana). La diferencia entre un proceso standalone y N cores distribuidos se resuelve por configuración del transporte, no por código del módulo.",
+      "razon": "Si el módulo tiene que saber 'estoy en Casa o en Manzana', se rompe el principio multi-escala. La escala es decisión del despliegue, no del autor del módulo. La transparencia de localización es lo que permite que la base sirva igual para algo simple que para algo complejo."
+    },
+    {
+      "id": "no_request_response_disguised",
+      "regla": "Los eventos no se usan como mecanismo de RPC disfrazado. No se publica 'X.request' esperando un 'X.response' por el mismo bus de eventos. Si necesitas request/response sincrónico, usa el patrón formal del framework (request_id + correlation_id + timeout) o una tool/API HTTP.",
+      "razon": "El pub/sub disfrazado de RPC pierde lo mejor de los dos mundos: no tiene la garantía de RPC ni la libertad del pub/sub. Y rompe la cardinalidad cero/una/muchas — si esperas respuesta, asumes uno y solo uno. El framework event-core ya tiene un patrón request/response formal con correlation_id, timeout y status codes; ése es el camino, no inventar pares request/response sobre eventos de dominio."
+    },
+    {
+      "id": "idempotent_handlers",
+      "regla": "Los handlers de eventos asumen que pueden recibir el mismo evento más de una vez. La lógica del handler debe ser idempotente o tolerar duplicados de forma controlada.",
+      "razon": "MQTT QoS 1 garantiza at-least-once, no exactly-once. Reintentos del cliente, hot-reloads de módulos, bridges entre brokers, y desconexiones temporales pueden producir duplicados. La idempotencia es la única defensa robusta — confiar en QoS 2 (exactly-once) no es viable por su coste."
+    },
+    {
+      "id": "no_shortcuts",
+      "regla": "Si una solución parece más cómoda que el patrón canónico, casi siempre es porque rompe el cimiento. Antes de atajar, se para y se pregunta. Si el atajo está justificado, se documenta como excepción explícita en el código del módulo y en su auditoría.",
+      "razon": "Los atajos individuales son baratos; la suma de atajos es lo que ha llevado a la 'esponjosidad' que ha forzado renombrar el repo varias veces (event-core → Enki → Enki1 → 2enki). Cada atajo paga interés compuesto. Esta regla es la defensa explícita contra la repetición del patrón."
+    }
   ]
 }

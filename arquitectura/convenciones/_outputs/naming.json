@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "naming",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "creado_en": "2026-04-30",
     "contrato_referencia": "arquitectura/convenciones/_contratos/naming.contract.json",
-    "supersedes_nota": null
+    "supersedes_nota": "v1.1.0: clarificaciones documentales en el contrato (POC iteration). Sin cambios en output."
   },
 
   "regla": "Cada módulo es monolingüe. El idioma se declara en module.json.language ∈ {es, en}. Eventos siguen <module-prefix>.<entity>.<verb> (3 partes) o <module-prefix>.<verb> (2 partes cuando entity == module). Solo verbos del whitelist del idioma del módulo. ASCII puro, kebab-case en compuestos. Convención: el nombre del directorio del módulo debe casar con su idioma.",

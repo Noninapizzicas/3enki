@@ -232,5 +232,88 @@
       "restart_resilient": "true (depende del persistidor)",
       "supports_concurrency": "según el persistidor"
     }
+  ],
+
+  "prohibido": [
+    {
+      "id": "cross_module_persistence_access",
+      "regla": "Acceder directamente a la persistencia de otro módulo: leer un archivo de su data_path, hacer query a su SQLite, inspeccionar su estado en memoria. La persistencia de un módulo es PRIVADA — la comunicación cross-módulo va por bus (eventBus/mqttRequest).",
+      "viola_principios": ["absolute_isolation_between_modules"],
+      "como_detectar": "Análisis estático: regex en código de módulos buscando lecturas de paths que pertenecen a otros módulos (e.g., 'data/recetas/...' en el código de un módulo que NO es recetas). También: imports de archivos en otros modules/* directorios.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Pedir los datos via mqttRequest('otro-modulo', 'obtener', { id }) o suscribirse a sus eventos. El módulo dueño es el único que toca su persistencia."
+    },
+    {
+      "id": "non_atomic_write",
+      "regla": "Usar fs.writeFile (o equivalente) directamente sobre el archivo final de persistencia, sin pasar por tempFile + fs.rename. Esto deja el archivo corrupto si el proceso muere durante el write.",
+      "viola_principios": ["atomic_writes_mandatory"],
+      "como_detectar": "Regex en código: 'fs\\.(promises\\.)?writeFile\\([^,]+,' donde el primer argumento NO es un path con sufijo .tmp o .new (heurística). Cruzar con audit estado.persistencia.archivos.",
+      "ejemplo_drift_actual": "Múltiples módulos del repo escriben directamente sin atomicidad. Solo ui-designer y notas-poc usan el patrón canónico tempFile + rename antes de este contrato.",
+      "alternativa_correcta": "const tmp = `${this._dataFile}.tmp`; await fs.promises.writeFile(tmp, data); await fs.promises.rename(tmp, this._dataFile); — patrón validado en POC notas."
+    },
+    {
+      "id": "secrets_in_plain_storage",
+      "regla": "Persistir tokens, passwords, API keys, claves privadas o cualquier credencial en archivos JSON/YAML/SQLite en plano accesible. Tampoco en variables de entorno persistidas en module.json o config.",
+      "viola_principios": ["no_plain_secrets_on_disk", "no_secrets_in_logs (observability)", "no_secrets_in_messages (errors)"],
+      "como_detectar": "Análisis estático: detectar escrituras a disco/DB cuyo payload contenga keys de la lista canónica de campos sensibles (token, password, api_key, secret, etc.). Cruzar también auditoría observabilidad.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Delegar al credential-manager via mqttRequest('credential-manager', 'almacenar', { id, value }) — el módulo dedicado se encarga del cifrado/almacenamiento seguro. Si necesitas cifrado in-process, usa un módulo cifrador y deja la clave maestra en variable de entorno protegida."
+    },
+    {
+      "id": "undeclared_persistence_pattern",
+      "regla": "Un módulo que persiste estado (archivos, DB, in-memory acotado) SIN declarar config.persistence.pattern en su module.json. La auditoría no puede saber qué persiste sin abrir el código.",
+      "viola_principios": ["explicit_declaration_in_manifest"],
+      "como_detectar": "Cruzar audit modulo-completo.estado.persistencia (archivos, sqlite_tablas) o estado.memoria con manifest config.persistence.pattern. Si el módulo persiste pero no declara, drift.",
+      "ejemplo_drift_actual": "La mayoría de módulos auditados NO tienen config.persistence en module.json — declaración pendiente sistemática.",
+      "alternativa_correcta": "Añadir a module.json:\n  \"config\": {\n    \"persistence\": {\n      \"pattern\": \"json-file\",\n      \"data_path\": \"./data/notas.json\",\n      \"restart_resilient\": true\n    }\n  }"
+    },
+    {
+      "id": "enoent_treated_as_error",
+      "regla": "En onLoad, fallar el módulo (throw, log error, abort) cuando el archivo de persistencia no existe (ENOENT). Primer arranque o eliminación manual es caso normal — el módulo arranca con estado vacío.",
+      "viola_principios": ["enoent_is_info_not_error", "non_blocking_load (lifecycle)"],
+      "como_detectar": "Análisis estático: en onLoad, buscar try/catch alrededor de fs.readFile que NO discrimine err.code === 'ENOENT'. Si todos los errores van a logger.error o throw, drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "try { const raw = await fs.promises.readFile(file, 'utf8'); /* parse */ } catch (err) { if (err.code === 'ENOENT') { this.logger.info('module.persistencia.archivo_inexistente'); /* arranca vacío */ } else { this.logger.warn('module.persistencia.error_carga', { error: err.message }); /* corrupto, arranca limpio */ } } — patrón validado en POC notas."
+    },
+    {
+      "id": "silent_io_failure",
+      "regla": "try/catch alrededor de read/write/query de persistencia que NO loguea + NO incrementa métrica. El error de I/O se traga, el módulo cree que escribió bien cuando no, los datos se pierden silenciosamente.",
+      "viola_principios": ["mandatory_telemetry_on_io", "no_silent_catch (events)"],
+      "como_detectar": "Regex multi-línea: 'catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}' (catch vacío) o catch con return default sin this.logger ni this.metrics, alrededor de operaciones I/O conocidas.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "catch (err) { this.logger.error('module.persistencia.error_escritura', { error: err.message, stack: err.stack, path: this._dataFile }); this.metrics?.increment(`${this.name}.persistir.errors`, 1, { kind: 'infrastructure' }); /* opcional: throw o degradar según el patrón */ }"
+    },
+    {
+      "id": "assumed_concurrency_no_locking",
+      "regla": "Módulo que tolera múltiples escritores concurrentes (multi-writer real, no Node EventLoop) sin declarar el modelo de concurrencia ni usar locking. La race condition silenciosa es de los bugs más difíciles de reproducir.",
+      "viola_principios": ["concurrency_documented_or_single_writer"],
+      "como_detectar": "Heurística: módulos con persistencia y subscriptions múltiples que pueden ejecutar handlers en paralelo (await en handler que escribe + nuevo handler entra antes de que termine el primero). Difícil de detectar mecánicamente — requiere revisión manual.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Si single-writer: declarar config.persistence.concurrency='single-writer' y diseñar handlers como serializados (sin operaciones de escritura concurrentes). Si multi-writer: usar locking apropiado al patrón (file lock para JSON, WAL+transaction para SQLite, optimistic concurrency con version field)."
+    },
+    {
+      "id": "schema_drift_undeclared",
+      "regla": "Módulo SQLite que ejecuta CREATE TABLE / ALTER TABLE en código SIN declarar las tablas/migraciones en module.json.config.persistence.tables y .migrations. La auditoría no puede saber el esquema sin parsear el código.",
+      "viola_principios": ["explicit_declaration_in_manifest"],
+      "como_detectar": "Regex 'CREATE TABLE' o 'ALTER TABLE' en código de módulos. Cruzar tablas detectadas con manifest.config.persistence.tables. Si hay tablas en código que no están declaradas, drift.",
+      "ejemplo_drift_actual": "staff-manager delega a sublib (lib/employees, lib/sessions) que ejecutan CREATE TABLE pero no se declaran en module.json — la auditoría tuvo que documentarlas como 'no auditadas en este pase'.",
+      "alternativa_correcta": "Declarar en module.json:\n  \"config\": {\n    \"persistence\": {\n      \"pattern\": \"sqlite\",\n      \"db_path\": \"./data/X.sqlite\",\n      \"tables\": [\n        { \"name\": \"empleados\", \"columns\": [...], \"indices\": [...] }\n      ],\n      \"migrations\": [\n        { \"version\": \"1.0.0\", \"description\": \"initial schema\", \"sql\": \"...\" }\n      ]\n    }\n  }"
+    },
+    {
+      "id": "unbounded_growth_no_eviction",
+      "regla": "Estado en memoria (Map, Set, Array, cache) que crece sin límite ni política de eviction declarada. Memory leak garantizado a largo plazo.",
+      "viola_principios": ["module_chooses_persistence", "restart_resilient_default"],
+      "como_detectar": "Audit de modulo-completo.estado.memoria — campos con leak_potencial=true. Heurística adicional: this.X.set/push sin clear/delete/eviction visible en el código del módulo.",
+      "ejemplo_drift_actual": "ai-gateway: pendingFsReads, providers, credentialCache sin TTL ni eviction (audit detectó leaks). prompt-manager: pendingRequests con timers no clearTimeout. Múltiples carta-* con projectPaths cache sin invalidación.",
+      "alternativa_correcta": "Para caches: declarar TTL (this.cache.set(key, { value, expiresAt: Date.now() + TTL })) y limpiar en intervalo o al acceder. Para colas: max_size con FIFO eviction. Para projectPaths: invalidación cuando el proyecto se elimina (subscribe a project.eliminado)."
+    },
+    {
+      "id": "hard_coupled_to_external_module",
+      "regla": "Módulo external-delegation que asume que el módulo persistidor SIEMPRE responde — sin timeout, sin fallback, sin manejo de degradación. Si el persistidor cae, el módulo no funciona y arrastra al sistema.",
+      "viola_principios": ["module_chooses_persistence (decisión robusta)"],
+      "como_detectar": "Análisis: módulos que llaman mqttRequest a 'credential-manager' / 'database-manager' / equivalentes SIN manejo del error de respuesta. Si .data se asume sin chequear .error, drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "const resp = await mqttRequest('credential-manager', 'resolve', { id }); if (resp.error) { this.logger.warn('module.credencial.no_disponible', { code: resp.error.code }); return this._buildErrorResponse({ status: 503, code: 'DEPENDENCY_UNAVAILABLE', message: 'Credential manager unavailable' }); } /* usar resp.data */ — patrón propagate del contrato errors."
+    }
   ]
 }

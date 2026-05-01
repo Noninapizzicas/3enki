@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/observability.schema.json",
+  "title": "Observability Convention — Output Schema",
+  "description": "Schema strict de la instancia observability.json. Valida arquitectura/decisiones/_outputs/observability.json. additionalProperties=false en todos los niveles.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_meta",
+    "regla",
+    "logger",
+    "metrics",
+    "tracing",
+    "correlation_id",
+    "secrets",
+    "detection_patterns"
+  ],
+
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["convencion", "version", "creado_en", "contrato_referencia"],
+      "properties": {
+        "convencion":          { "const": "observability" },
+        "version":             { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "creado_en":           { "type": "string", "format": "date" },
+        "contrato_referencia": { "type": "string", "pattern": "^arquitectura/decisiones/_contratos/" },
+        "supersedes_nota":     { "type": ["string", "null"] }
+      }
+    },
+
+    "regla": {
+      "type": "string",
+      "minLength": 80
+    },
+
+    "logger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry_shape", "levels", "signature", "transport", "fields_added_by_logger", "fields_provided_by_module"],
+      "properties": {
+        "entry_shape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identifier", "level", "timestamp", "module", "domain_fields"],
+          "properties": {
+            "identifier":     { "type": "string", "minLength": 5 },
+            "level":          { "type": "string", "minLength": 5 },
+            "timestamp":      { "type": "string", "minLength": 5 },
+            "module":         { "type": "string", "minLength": 5 },
+            "domain_fields":  { "type": "string", "minLength": 5 }
+          }
+        },
+        "levels": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "enum": ["debug", "info", "warn", "error"] }
+        },
+        "signature": { "type": "string", "minLength": 20 },
+        "transport": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["topic_pattern", "qos", "retain"],
+          "properties": {
+            "topic_pattern": { "type": "string", "pattern": "^core/" },
+            "qos":           { "enum": [0, 1] },
+            "retain":        { "type": "boolean" }
+          }
+        },
+        "fields_added_by_logger": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 3 }
+        },
+        "fields_provided_by_module": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 3 }
+        }
+      }
+    },
+
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["types", "naming_pattern", "canonical_suffixes", "canonical_dimensions", "prefix_per_module", "example_metrics"],
+      "properties": {
+        "types": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "descripcion", "when_to_use", "signature"],
+            "properties": {
+              "name":         { "enum": ["counter", "gauge", "timing"] },
+              "descripcion":  { "type": "string", "minLength": 10 },
+              "when_to_use":  { "type": "string", "minLength": 10 },
+              "signature":    { "type": "string", "minLength": 10 }
+            }
+          }
+        },
+        "naming_pattern": { "type": "string", "minLength": 10 },
+        "canonical_suffixes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [".total", ".count", ".duration", ".bytes", ".errors"],
+          "properties": {
+            ".total":    { "type": "string", "minLength": 5 },
+            ".count":    { "type": "string", "minLength": 5 },
+            ".duration": { "type": "string", "minLength": 5 },
+            ".bytes":    { "type": "string", "minLength": 5 },
+            ".errors":   { "type": "string", "minLength": 5 }
+          }
+        },
+        "canonical_dimensions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "descripcion"],
+            "properties": {
+              "name":         { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+              "descripcion":  { "type": "string", "minLength": 10 }
+            }
+          }
+        },
+        "prefix_per_module": { "const": true },
+        "example_metrics": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 5 }
+        }
+      }
+    },
+
+    "tracing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v1_status", "api_signature_when_present", "propagation_pattern_v1"],
+      "properties": {
+        "v1_status":                 { "const": "optional" },
+        "api_signature_when_present": { "type": "string", "minLength": 10 },
+        "propagation_pattern_v1":    { "type": "string", "minLength": 20 },
+        "v2_plans":                  { "type": ["string", "null"] }
+      }
+    },
+
+    "correlation_id": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field_name", "when_required", "propagation_pattern", "format"],
+      "properties": {
+        "field_name":          { "const": "correlation_id" },
+        "when_required":       { "type": "string", "minLength": 10 },
+        "propagation_pattern": { "type": "string", "minLength": 20 },
+        "format":              { "type": "string", "minLength": 10 }
+      }
+    },
+
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_sensitive_field_names", "policy", "exception_handling"],
+      "properties": {
+        "canonical_sensitive_field_names": {
+          "type": "array",
+          "minItems": 8,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$" }
+        },
+        "policy":             { "type": "string", "minLength": 20 },
+        "exception_handling": { "type": "string", "minLength": 20 }
+      }
+    },
+
+    "detection_patterns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "console_log_regex",
+        "prohibited_logger_imports",
+        "sensitive_field_names",
+        "template_literal_in_logger_regex",
+        "concat_in_logger_regex"
+      ],
+      "properties": {
+        "console_log_regex": {
+          "type": "string",
+          "minLength": 5
+        },
+        "prohibited_logger_imports": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+        },
+        "sensitive_field_names": {
+          "type": "array",
+          "minItems": 8,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$" }
+        },
+        "template_literal_in_logger_regex": {
+          "type": "string",
+          "minLength": 5
+        },
+        "concat_in_logger_regex": {
+          "type": "string",
+          "minLength": 5
+        }
+      }
+    }
+  }
+}

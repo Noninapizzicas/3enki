@@ -1,0 +1,44 @@
+{
+  "_doc": "Captura LA forma canónica en la que un módulo nace y muere dentro del core. Cuándo se carga, qué recibe del core, dónde guarda referencias, qué timers/listeners reserva, cómo los suelta cuando se descarga. Es la 'ignición' y el 'apagado' del módulo. Sin esto, el core no sabe instanciarlo y el módulo no sabe limpiarse — y los hot-reloads se vuelven una pesadilla de fugas. Este contrato es la pareja del de events: un módulo nace, recibe el bus, publica/se suscribe, vive, y se apaga limpio.",
+  "id": "lifecycle",
+  "version": "1.0.0",
+  "creada": "2026-04-30",
+  "supersedes_nota": "Primera versión. Recoge el espíritu del Module Loader de event-core (autodescubrimiento + hot-reload + onLoad/onUnload) y formaliza las decisiones que en las evoluciones (Enki, Enki1, 2enki) se tomaron de forma ad-hoc por cada módulo.",
+
+  "objetivo": "Establecer la 'ignición y apagado' canónico de un módulo. Producir UN JSON output (_outputs/lifecycle.json) con: forma del onLoad y onUnload, qué inyecta el core en cada módulo, política de captura de referencias, política de cleanup obligatorio, comportamiento esperado en hot-reload, máquina de estados del módulo, política de errores en arranque/apagado. Validable mecánicamente cruzando contra las auditorías modulo-completo de los 66 módulos.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/lifecycle.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/lifecycle.schema.json",
+      "arquitectura/decisiones/_outputs/events.json (porque el bus es lo que el core inyecta)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json — campo `lifecycle` de cada módulo (onLoad.acciones, onLoad.guarda_referencias_externas, onUnload.acciones, onUnload.estado_no_limpiado, subscribes_dinamicos_en_lifecycle)",
+      "arquitectura/auditoria/_outputs/manifest-completo/*.json — declaraciones de eventos/tools/handlers que el module loader usa para auto-wiring",
+      "modules/*/module.json — language declarado y declaraciones del module loader"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL MÓDULO ES UN INVITADO. El core es el anfitrión. Cuando el core te invita (te llama a onLoad), te entrega lo que necesitas para vivir en su casa: el bus para hablar con los demás, el logger para contar lo tuyo, las métricas para que se te observe. Tú aceptas lo que recibes y lo guardas en this.* — no rebuscas en sus cajones.",
+
+    "DECLARA, NO PIDAS. Lo que un módulo necesita de eventos lo declara en module.json (events.subscribes, tools, ui_handlers, apis). El core lee la declaración y hace el cableado. El módulo NO va por libre montando subscripciones en su onLoad — salvo casos justificados que se documentan.",
+
+    "ONLOAD NO ES SUPLICA. onLoad NO espera respuestas de otros módulos. NO publica un evento y se queda escuchando una respuesta. NO hace requests sincrónicos a peers. Si necesitas algo de otro módulo en arranque, pide referencias al core y úsalas, o suscríbete al evento que indica que el otro está listo y reacciona cuando aparezca.",
+
+    "LO QUE SE RESERVA SE LIBERA. Si en onLoad reservaste algo (un timer, un listener MQTT directo, un subproceso, un file watcher, un buffer grande, una conexión externa), en onUnload lo sueltas. La auditoría es la única verdad: si reservaste y no liberaste, queda como leak_potencial.",
+
+    "EL ESTADO ES TUYO. El estado interno del módulo (this.X = new Map(), this.config, this.activeBuilds) es del módulo. El core no lo conoce ni le importa. Cuando el módulo se descarga, el estado se va con él. Hot-reload = estado fresco. Si necesitas persistir, usa el bus (emite el evento) o filesystem.",
+
+    "HOT-RELOAD ES CIUDADANO DE PRIMERA. El módulo debe poder cargarse, descargarse, recargarse en runtime sin contaminar al sistema. Eso significa: cero estado global, cero singletons, cero referencias a versión vieja del propio módulo. Cada onLoad es como si fuera la primera vez.",
+
+    "ARRANQUE NO BLOQUEANTE. onLoad no bloquea el loader. Si tienes que cargar 500MB de disco, lo haces async. Si tienes que conectar a un broker externo lento, lo haces async. El loader carga muchos módulos en paralelo; ningún módulo puede secuestrar el arranque del sistema.",
+
+    "ERRORES VISIBLES. Si onLoad falla, el módulo lo registra (logger) y propaga al core (throw). El core decide qué hacer (deshabilitar el módulo, reintentar, marcar degradado). El módulo NO traga errores en silencio. Pero TAMPOCO se cae el sistema entero porque un módulo no arrancó.",
+
+    "FLUJO PREDECIBLE. La máquina de estados del módulo es: unloaded → loading → loaded → unloading → unloaded. Sin atajos, sin estados intermedios inventados. El core llama onLoad, espera la promesa, marca loaded. Llama onUnload, espera la promesa, marca unloaded. Lineal."
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "_doc": "Captura los patrones de persistencia disponibles para los módulos del sistema event-core. A diferencia de events/lifecycle/observability/errors (que imponen UNA forma canónica), este contrato es un CATÁLOGO de patrones aceptados — cada módulo elige según su dominio. La uniformidad viene de las reglas mínimas comunes (write atómico, aislamiento, telemetría) que aplican independientemente del patrón elegido. La libertad viene de que NO hay un tipo de persistencia único impuesto al sistema entero.",
+  "id": "persistence",
+  "version": "1.0.0",
+  "creada": "2026-04-30",
+  "supersedes_nota": "Primera versión. Recoge los patrones detectados en los 66 audits (in-memory, JSON file, SQLite, append-only) y los formaliza con sus reglas mínimas. Validado parcialmente por POC notas (JSON file con write atómico).",
+
+  "objetivo": "Producir UN JSON output (_outputs/persistence.json) que enumera los PATRONES DE PERSISTENCIA aceptados, las reglas mínimas comunes que aplican a TODOS los patrones (write atómico, aislamiento, telemetría, declaración en module.json), y las reglas específicas por patrón (transacciones para SQLite, ENOENT graceful para JSON, etc.). Validable mecánicamente cruzando contra las auditorías modulo-completo.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/persistence.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/persistence.schema.json",
+      "arquitectura/decisiones/_outputs/observability.json (porque toda escritura/lectura emite log + métrica en errores)",
+      "arquitectura/decisiones/_outputs/errors.json (porque los fallos de persistencia son errores canónicos)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json — campos `estado.persistencia.sqlite_tablas`, `estado.persistencia.archivos`, `estado.memoria`",
+      "arquitectura/auditoria/_outputs/manifest-completo/*.json — config.data_path declarado",
+      "modules/*/module.json — config.data_path, config.persistence_strategy, etc."
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "CADA MÓDULO ELIGE SU PERSISTENCIA. No hay UN sistema único impuesto al repo entero. Un módulo de notas puede usar JSON file; un módulo de auditoría SQLite con transacciones; un módulo de gateway in-memory porque su estado es ephimeral. La elección es del dominio del módulo, no del repo.",
+
+    "EL CONTRATO ES CATÁLOGO, NO MANDATO. Listamos qué patrones de persistencia están aceptados y qué reglas mínimas cumple cada uno. NO obligamos a todos a usar el mismo. La uniformidad sale de que TODOS los patrones respetan reglas comunes, no de que todos elijan el mismo patrón.",
+
+    "AISLAMIENTO ABSOLUTO ENTRE MÓDULOS. La persistencia de un módulo es PRIVADA. Otros módulos NO leen sus archivos directamente, NO consultan su SQLite, NO inspeccionan su estado en memoria. Si necesitan datos del módulo, los piden via eventBus. La persistencia es interna.",
+
+    "DECLARACIÓN EXPLÍCITA EN MODULE.JSON. El módulo declara su patrón de persistencia en su module.json (config.persistence o equivalente). Esto hace la persistencia introspectable: la auditoría sabe qué tipos de archivos/tablas tiene cada módulo sin inspeccionar el código.",
+
+    "WRITE ATÓMICO ES NO-NEGOCIABLE. Escribir un archivo en disco SIN tempFile + rename es invitar a corrupción ante caída/cierre abrupto. La consistencia básica del filesystem la garantiza el patrón atómico. NUNCA un fs.writeFile directo sobre el archivo final, salvo en logs append-only donde el modelo es distinto.",
+
+    "ENOENT ES INFORMACIÓN, NO FALLO. Si un módulo intenta cargar persistencia y el archivo no existe (primer arranque, eliminación manual), eso es un caso normal — el módulo arranca con estado vacío y loguea info. NO es un error que bloquee onLoad.",
+
+    "TELEMETRÍA EN PERSISTENCIA OBLIGATORIA. Toda operación de persistencia que falle (read, write, query, transaction) emite log + métrica via los patrones canónicos del contrato observability+errors. Cero fallos silenciosos en disco/DB.",
+
+    "PERSISTENCIA NO ES DOMINIO. El módulo persiste estado de su dominio, NO lógica de otros dominios. Si un módulo necesita persistir algo que NO es suyo (resultado de una integración externa, métrica agregada de otro módulo), eso es señal de que esa data debería vivir en otro módulo.",
+
+    "RESTART-RESILIENT POR DEFECTO. Tras un restart del core, el módulo recupera su estado desde la persistencia (si la tiene). Si NO tiene persistencia (in-memory), el módulo lo declara explícitamente en module.json para que el operador entienda qué se pierde. Sorpresas operativas son bugs.",
+
+    "CONCURRENCIA DOCUMENTADA O EVITADA. Si el patrón de persistencia tolera múltiples escritores concurrentes (proyecto multi-tenant), el módulo lo documenta y usa locking apropiado. Si no, el módulo declara explícitamente single-writer y se asegura de no tener race conditions.",
+
+    "SECRETOS NO EN DISCO PLANO. Tokens, passwords, claves privadas que el módulo necesite persistir van CIFRADOS o referenciados via credential-manager. NUNCA en JSON plano accesible. Coherente con no_secrets_in_logs y no_secrets_in_messages."
+  ]
+}

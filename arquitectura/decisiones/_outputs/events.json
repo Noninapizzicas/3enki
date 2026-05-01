@@ -1,0 +1,271 @@
+{
+  "_meta": {
+    "convencion": "events",
+    "version": "1.0.0",
+    "creado_en": "2026-04-30",
+    "contrato_referencia": "arquitectura/decisiones/_contratos/events.contract.json",
+    "supersedes_nota": null
+  },
+
+  "regla": "Eventos viajan por MQTT (Aedes embedded por defecto). Bus híbrido transparente al módulo. Topics jerárquicos por categoría: core/{core-id}/<categoria>/.... Cardinalidad libre (cero, uno o muchos suscriptores). Fire-and-forget. Idempotencia obligatoria en handlers. Mismo código del módulo de Casa a Manzana — la escala se decide por configuración del transporte, no por código.",
+
+  "transport": {
+    "protocol": "mqtt",
+    "default_broker": "aedes_embedded",
+    "external_broker_supported": true,
+    "bridge_strategy": "Aedes embedded actúa como bridge a un broker MQTT externo (Mosquitto, EMQX, otros) en despliegues Manzana. Los módulos no perciben la diferencia — la API publish/subscribe es idéntica. La elección broker embedded vs externo se hace por configuración del core, no por código del módulo."
+  },
+
+  "bus_internals": {
+    "mode": "hybrid",
+    "mechanisms": [
+      {
+        "name": "EventEmitter",
+        "scope": "intra-proceso",
+        "purpose": "Suscripciones dentro del mismo core. Latencia óptima sin serialización JSON ni red. Es el camino rápido para el caso común (módulos del mismo proceso hablándose entre sí)."
+      },
+      {
+        "name": "MQTT",
+        "scope": "inter-core",
+        "purpose": "Suscripciones entre cores distintos (despliegues Manzana). Pasa por el broker (embedded o externo). Permite distribución transparente — el módulo no sabe si el suscriptor está local o remoto."
+      },
+      {
+        "name": "Hooks",
+        "scope": "cross-cutting",
+        "purpose": "Interceptación de todos los eventos para logging, métricas, tracing y auditoría. Cero acoplamiento al payload del evento — los hooks operan sobre metadata."
+      }
+    ],
+    "transparent_to_module": true
+  },
+
+  "categorias_canonicas": [
+    {
+      "id": "events",
+      "topic_pattern": "core/{core-id}/events/{module}/{entity}/{verb}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Eventos de dominio. Algo ha pasado en el sistema y se cuenta. Sin retain — los suscriptores tardíos no deben recibir eventos viejos como si fueran nuevos. QoS 1 garantiza entrega; los handlers son idempotentes para tolerar duplicados.",
+      "derivado_de": ["transport_mqtt", "topic_structure", "qos_strategy", "retain_policy"]
+    },
+    {
+      "id": "state",
+      "topic_pattern": "core/{core-id}/state/{entity}/{id}",
+      "qos": 1,
+      "retain": true,
+      "descripcion": "Estado actual de algo (un dispositivo, un módulo, una configuración). Retained porque los suscriptores tardíos necesitan saber el estado actual al conectar — sin retain, un nuevo suscriptor tendría que esperar al próximo cambio para enterarse del estado.",
+      "derivado_de": ["topic_structure", "qos_strategy", "retain_policy"]
+    },
+    {
+      "id": "commands",
+      "topic_pattern": "core/{core-id}/commands/{target}/{action}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Comandos dirigidos a un destinatario específico (ej. restart de un device). Sin retain — no se reproducen en reconexión, no quieres que un device reciba un viejo restart al volver. QoS 1 garantiza entrega.",
+      "derivado_de": ["topic_structure", "qos_strategy", "retain_policy"]
+    },
+    {
+      "id": "api/request",
+      "topic_pattern": "core/{core-id}/api/request/{service}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Request inter-core dentro del patrón formal request/response. Lleva correlation_id en el payload para casar con la respuesta. Se usa cuando un core necesita pedir algo a otro core con respuesta sincrónica desde el lado del caller.",
+      "derivado_de": ["request_response_formal", "qos_strategy"]
+    },
+    {
+      "id": "api/response",
+      "topic_pattern": "core/{core-id}/api/response/{correlation_id}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Respuesta del patrón formal request/response inter-core. El correlation_id en el topic permite al caller suscribirse específicamente a su respuesta sin recibir respuestas de otros callers.",
+      "derivado_de": ["request_response_formal", "qos_strategy"]
+    },
+    {
+      "id": "status",
+      "topic_pattern": "core/{core-id}/status",
+      "qos": 1,
+      "retain": true,
+      "descripcion": "Estado de presencia y descripción de un core (state, version, módulos cargados, APIs expuestas). Retained: los nuevos peers reciben el status actual al conectar al broker. Combinado con LWT detecta caídas automáticamente.",
+      "derivado_de": ["last_will_obligatorio", "discovery_via_retained", "retain_policy"]
+    },
+    {
+      "id": "heartbeat",
+      "topic_pattern": "core/{core-id}/heartbeat",
+      "qos": 0,
+      "retain": false,
+      "descripcion": "Pulso periódico para indicar 'sigo vivo'. QoS 0 — la pérdida ocasional se compensa con el siguiente pulso. Sin retain — es transitorio. Complementa LWT con un signal positivo activo.",
+      "derivado_de": ["qos_strategy", "retain_policy"]
+    },
+    {
+      "id": "logs",
+      "topic_pattern": "core/{core-id}/logs/{level}",
+      "qos": 0,
+      "retain": false,
+      "descripcion": "Logs estructurados por nivel (info, warn, error, debug). QoS 0 — los logs son alta frecuencia y la pérdida ocasional es aceptable. Sin retain.",
+      "derivado_de": ["qos_strategy", "retain_policy"]
+    },
+    {
+      "id": "ui/request",
+      "topic_pattern": "ui/request/{domain}/{action}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Request del frontend (UI) al backend. Sin prefijo core/ porque la UI no sabe a qué core específico habla — el broker rutea al core que tenga el handler. Lleva correlation_id en el payload para correlacionar con la respuesta.",
+      "derivado_de": ["request_response_formal", "qos_strategy"]
+    },
+    {
+      "id": "ui/response",
+      "topic_pattern": "ui/response/{correlation_id}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Respuesta del backend al frontend. correlation_id en el topic permite al frontend suscribirse exclusivamente a su propia respuesta sin recibir las de otras requests.",
+      "derivado_de": ["request_response_formal", "qos_strategy"]
+    }
+  ],
+
+  "last_will": {
+    "obligatorio": true,
+    "topic_pattern": "core/{core-id}/status",
+    "payload_template": {
+      "state": "offline",
+      "timestamp": "{iso8601}"
+    },
+    "qos": 1,
+    "retain": true,
+    "nota": "El cliente publica state='online' al conectar (mismo topic, retain=true). El LWT (con state='offline') se dispara automáticamente si la conexión muere abruptamente sin desconexión limpia. Combinado con retain, los nuevos suscriptores reciben inmediatamente el estado actual de todos los peers al conectar."
+  },
+
+  "discovery": {
+    "mecanismo": "retained_status",
+    "subscribe_pattern": "core/+/status",
+    "publish_pattern": "core/{core-id}/status",
+    "payload_template": {
+      "state": "online | offline",
+      "version": "semver del core",
+      "modules_loaded": "array de módulos cargados",
+      "apis_exposed": "array de APIs públicas",
+      "subscriptions": "array de topics suscritos",
+      "started_at": "timestamp ISO 8601 del arranque"
+    },
+    "qos": 1,
+    "retain": true
+  },
+
+  "request_response": {
+    "api_signature": "mqttRequest(domain, action, payload, options?) — options puede incluir timeout_ms",
+    "returns": "Promise<{ status: number, data?: any, error?: string }>",
+    "request_topic_patterns": [
+      "ui/request/{domain}/{action}",
+      "core/{core-id}/api/request/{service}"
+    ],
+    "response_topic_pattern": "ui/response/{correlation_id} | core/{core-id}/api/response/{correlation_id}",
+    "correlation_id_field": "correlation_id",
+    "default_timeout_ms": 5000,
+    "status_codes_canonical": [200, 201, 202, 400, 404, 409, 500],
+    "notas": "El caller llama mqttRequest y recibe una Promise. Internamente: genera correlation_id, se suscribe a la response topic, publica la request, espera o falla por timeout. Los handlers responden publicando a la response topic con status code HTTP-like. La 'sincronicidad' es del lado del caller; el handler sigue siendo asíncrono y desacoplado."
+  },
+
+  "payload_canonical_fields": {
+    "timestamp": {
+      "politica": "recomendado",
+      "formato": "ISO 8601 (ejemplo: 2026-04-30T15:30:00.123Z)",
+      "valores_comunes": [],
+      "nota": "Útil para tracing temporal cross-módulo. Cuando aplica auditoría o debugging temporal, casi siempre se quiere. Recomendado por defecto."
+    },
+    "correlation_id": {
+      "politica": "obligatorio_en_respuestas",
+      "formato": "string opaco generado por el caller (UUID, timestamp+random, etc.)",
+      "valores_comunes": [],
+      "nota": "Solo necesario en el patrón request/response del framework. Eventos de dominio normales no lo necesitan — son fire-and-forget puros."
+    },
+    "project_id": {
+      "politica": "obligatorio_si_multitenant",
+      "formato": "string identificador del proyecto/tenant",
+      "valores_comunes": [],
+      "nota": "Para sistemas multi-tenant donde el handler necesita filtrar por proyecto. Si el dominio del módulo es global o no multi-tenant, no aplica."
+    },
+    "source": {
+      "politica": "opcional",
+      "formato": "string corto identificando el origen",
+      "valores_comunes": ["cli", "ui", "auto", "agent", "system"],
+      "nota": "Indica el origen del evento cuando sea relevante para debugging o métricas por origen. No todos los eventos lo necesitan."
+    }
+  },
+
+  "publish_semantics": {
+    "returns": "Promise<void> | Promise<MessageId>",
+    "resolves_when": "El broker (Aedes embedded o externo) ha aceptado el mensaje en su cola para entrega.",
+    "does_not_imply": "Que los suscriptores hayan procesado o recibido el mensaje. La promesa solo afirma 'el bus tiene el mensaje', no 'el handler ya actuó'. Esto es deliberado: el emisor no controla ni espera al receptor.",
+    "error_significa": "El broker no aceptó el mensaje. Causas posibles: broker desconectado, queue llena, timeout de connect, payload mal formado. Es un error de transporte, no de dominio.",
+    "uso_recomendado": "Default: await this.eventBus.publish(...) en handlers async — propaga el error al caller. En callbacks no-async (setTimeout, on close): this.eventBus.publish(...).catch(err => this.logger.error('publish.failed', { event: 'x.y.z', error: err.message })) — logea sin propagar. NUNCA: .catch(() => {}) sin log — silencia y rompe la observabilidad."
+  },
+
+  "detection_patterns": {
+    "generic_verbs": [
+      "action",
+      "event",
+      "data",
+      "info",
+      "update",
+      "change",
+      "do",
+      "stuff",
+      "thing",
+      "response",
+      "request",
+      "result"
+    ],
+    "request_response_suffixes": [
+      ".request",
+      ".response"
+    ],
+    "emit_bypass_regex": "\\.emit\\s*\\(",
+    "silent_catch_regex": "\\.publish\\s*\\([^)]*\\)\\s*\\.catch\\s*\\(\\s*\\(?\\s*_?\\s*\\)?\\s*=>\\s*\\{\\s*\\}\\s*\\)",
+    "raw_topic_indicators": [
+      "/",
+      "core/"
+    ],
+    "imperative_verbs_es": [
+      "guardar",
+      "actualizar",
+      "eliminar",
+      "crear",
+      "cargar",
+      "enviar",
+      "recibir",
+      "procesar",
+      "cancelar",
+      "iniciar",
+      "registrar",
+      "publicar",
+      "archivar",
+      "abrir",
+      "cerrar",
+      "asignar",
+      "liberar",
+      "validar",
+      "exportar",
+      "importar"
+    ],
+    "imperative_verbs_en": [
+      "save",
+      "update",
+      "delete",
+      "create",
+      "load",
+      "send",
+      "receive",
+      "process",
+      "cancel",
+      "start",
+      "register",
+      "publish",
+      "archive",
+      "open",
+      "close",
+      "assign",
+      "release",
+      "validate",
+      "export",
+      "import"
+    ]
+  }
+}

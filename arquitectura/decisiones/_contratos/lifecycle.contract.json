@@ -283,5 +283,96 @@
     "viola_module_scope_state": "true si análisis estático del archivo encuentra declaraciones let/var/const fuera de la clase con valor objeto/array/Map/Set mutable.",
     "viola_module_publishes_own_state_machine": "true si el módulo publica un evento cuyo nombre coincide con el patrón state_machine_event_pattern Y el evento se refiere al propio módulo (no a un dominio).",
     "estado_actual_del_modulo_segun_core": "uno de los 5 estados (unloaded, loading, loaded, unloading, failed, unloaded_with_errors). Lo lleva el core; visible via core/{core-id}/status."
-  }
+  },
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "lifecycle_json_estructura_valida",
+      "regla": "lifecycle.json valida estructuralmente contra lifecycle.schema.json (AJV strict, additionalProperties=false en todos los niveles).",
+      "como_detectar": "Cargar el schema, compilar con AJV strict, validar el output. Cualquier error de schema bloquea PASS.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/decisiones/_outputs/lifecycle.json", "arquitectura/decisiones/_schemas/lifecycle.schema.json"]
+    },
+    {
+      "id": "drift_signature_no_canonica",
+      "regla": "Los módulos exponen exclusivamente 'async onLoad(core)' y 'async onUnload()'. Cualquier otro nombre del ciclo de vida (init, start, setup, boot, initialize, shutdown, stop, teardown, destroy) es drift.",
+      "como_detectar": "Buscar definiciones de método en código de módulos (modules/*/index.js): si la clase declara métodos cuyo nombre coincida con la lista detection_patterns.prohibited_signatures, reportar drift. Si la clase no tiene onLoad pero sí init (o equivalente), drift evidente.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js"],
+      "viola": "signature_no_canonica (prohibido), canonical_signatures (principio)"
+    },
+    {
+      "id": "drift_missing_onUnload_with_reservations",
+      "regla": "Si un módulo tiene reservas en onLoad (timers, listeners directos, subprocesos, file watchers, conexiones), debe tener onUnload que las libere.",
+      "como_detectar": "Cruzar audit modulo-completo: si lifecycle.onLoad.acciones contiene términos clave (setInterval, setTimeout, watch, spawn, mqtt.subscribe directo, subscribe directo) Y lifecycle.onUnload.acciones NO contiene la liberación correspondiente (clearInterval, clearTimeout, unwatch, kill, unsubscribe), reportar drift. Equivalente a: lifecycle.onUnload.estado_no_limpiado no vacío.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "viola": "missing_onUnload_with_reservations (prohibido), symmetric_unload (principio), hot_reload_safety (principio)"
+    },
+    {
+      "id": "drift_module_scope_state",
+      "regla": "Variables fuera de la clase del módulo (a nivel de archivo) que retienen estado mutable entre llamadas.",
+      "como_detectar": "Análisis estático del archivo modules/<slug>/index.js: declaraciones let/var (siempre warning) o const con valor objeto/array/Map/Set/new X() ANTES de la declaración de class y FUERA de funciones. Constantes inmutables (string, number, array de strings literal) no son drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js"],
+      "viola": "module_scope_state (prohibido), state_local_to_module (principio), hot_reload_safety (principio)"
+    },
+    {
+      "id": "drift_core_internal_access",
+      "regla": "Acceso a propiedades del core que no formen parte de la API canónica (logger, metrics, eventBus, uiHandler, config, modules).",
+      "como_detectar": "Regex en código de módulos: 'core\\.[a-zA-Z_]+' o 'this\\.core\\.[a-zA-Z_]+' donde el nombre tras el punto NO esté en core_api.required ∪ core_api.optional. Frecuente: core._broker, core._loader, core.eventBus._internal.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "core_internal_access (prohibido), guest_relationship (principio)"
+    },
+    {
+      "id": "drift_directly_require_other_module",
+      "regla": "Importar otro módulo del repo via require/import directo (cross-module require).",
+      "como_detectar": "Regex en código de módulos: require\\(['\\\"]\\.\\.\\/[^'\\\"]+['\\\"]\\) o import desde rutas que apunten a otros módulos. Filtrar imports legítimos (lib propio, core, módulos de Node/npm).",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "directly_require_other_module (prohibido), guest_relationship (principio), hot_reload_safety (principio)"
+    },
+    {
+      "id": "drift_cross_module_config_access",
+      "regla": "Lectura de configuración de OTRO módulo via core.config['otro-modulo'] o equivalente.",
+      "como_detectar": "Regex en código de módulos: 'core\\.config\\[[^\\]]+\\]' o 'core\\.config\\.[a-zA-Z_-]+'. Si el nombre del slug accedido NO coincide con this.name del propio módulo, es drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js"],
+      "viola": "cross_module_config_access (prohibido), config_namespacing (decisión), guest_relationship (principio)"
+    },
+    {
+      "id": "drift_silent_catch_in_onLoad",
+      "regla": "Bloque try/catch en onLoad que captura error sin loguear ni propagar.",
+      "como_detectar": "Análisis del método onLoad: si contiene un patrón 'catch \\([^)]*\\)\\s*\\{\\s*\\}' o 'catch \\([^)]*\\)\\s*\\{\\s*//[^}]*\\s*\\}' (catch vacío o solo con comentario), reportar drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js"],
+      "viola": "silent_catch_in_onLoad (prohibido), errors_propagate_to_core (principio)"
+    },
+    {
+      "id": "drift_module_publishes_own_state_machine",
+      "regla": "Módulo publica eventos de su propio ciclo de vida (module.X.ready, X.initialized, X.started) usurpando el rol del core.",
+      "como_detectar": "Para cada evento publicado por un módulo: si el nombre matchea state_machine_event_pattern (ej. /^module\\..*\\.(ready|initialized|started|loaded)$/) Y el módulo se refiere a sí mismo (no a un dominio), reportar drift.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "viola": "module_publishes_own_state_machine (prohibido), predictable_state_machine (principio)"
+    },
+    {
+      "id": "module_lifecycle_audit_completeness",
+      "regla": "La auditoría modulo-completo de cada módulo tiene los campos lifecycle.onLoad.acciones, lifecycle.onLoad.guarda_referencias_externas, lifecycle.onUnload.acciones y lifecycle.onUnload.estado_no_limpiado completos (no nulos, no vacíos cuando aplique).",
+      "como_detectar": "Inspeccionar la auditoría: si lifecycle.onLoad.acciones es vacío Y el módulo tiene método onLoad, es señal de auditoría incompleta. Idem para onUnload.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "nota": "No es drift del código, sino de la auditoría. Si aparece, hay que re-auditar el módulo (modulo-completo.validate.js)."
+    }
+  ],
+
+  "salida_validador": "PASS si lifecycle.json es estructuralmente válido (AJV strict). Errores cross-system bloquean PASS. Warnings se reportan como drift visible pero no bloquean. Info son señales informativas. Formato coherente con naming.validate.js, glossary.validate.js y events.validate.js: banner PASS/FAIL + lista de findings agrupados por severidad, con ubicación archivo:línea cuando aplique.",
+
+  "convenciones_complementarias": [
+    "events.validate.js cubre lo específico del bus (qué se publica, cómo). lifecycle.validate.js cubre cómo nace/muere el módulo y la disciplina de cleanup. Son complementarios y no se solapan.",
+    "naming.validate.js valida la forma léxica de los nombres. lifecycle.validate.js valida la forma de los métodos canónicos del módulo. No hay solapamiento.",
+    "modulo-completo.validate.js valida la AUDITORÍA per módulo. lifecycle.validate.js valida que la auditoría refleje patrones canónicos del lifecycle, y cruza el código real con la auditoría.",
+    "Los 4 validators son complementarios. Cada uno tiene su scope. Se ejecutan por separado o todos en CI."
+  ]
 }

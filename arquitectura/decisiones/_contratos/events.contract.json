@@ -94,5 +94,80 @@
       "regla": "Si una solución parece más cómoda que el patrón canónico, casi siempre es porque rompe el cimiento. Antes de atajar, se para y se pregunta. Si el atajo está justificado, se documenta como excepción explícita en el código del módulo y en su auditoría.",
       "razon": "Los atajos individuales son baratos; la suma de atajos es lo que ha llevado a la 'esponjosidad' que ha forzado renombrar el repo varias veces (event-core → Enki → Enki1 → 2enki). Cada atajo paga interés compuesto. Esta regla es la defensa explícita contra la repetición del patrón."
     }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "transport_mqtt",
+      "decision": "El transporte canónico de eventos es MQTT. Por defecto el broker es Aedes embedded (corriendo en el mismo proceso que el core). En despliegues Manzana (multi-core distribuido), Aedes embedded actúa como bridge a un broker MQTT externo compartido entre cores.",
+      "derivado_de": ["single_emit_api", "same_api_all_scales", "cardinality_agnostic"],
+      "razon": "MQTT es el único transporte que se mantiene idéntico de Casa (un proceso, Aedes embedded sin red) a Manzana (N cores compartiendo broker). Aedes embedded da latencia sub-ms en local; Aedes externo permite escala distribuida. Mismo código del módulo, distinta configuración de transporte. La elección es deliberada: no hay un 'bus interno' separado del 'bus IoT' — todo es el mismo MQTT, simplemente con backbone distinto según escala.",
+      "notas": "Aedes ya está implementado en event-core v0.5.0. Esta decisión formaliza lo existente."
+    },
+    {
+      "id": "hybrid_bus_internals",
+      "decision": "El bus es híbrido por dentro: usa EventEmitter para suscripciones intra-proceso (latencia óptima, sin serialización), MQTT para suscripciones inter-core, y Hooks para interceptación cross-cutting (logging, métricas, tracing). La elección del mecanismo es responsabilidad interna del bus; el módulo solo ve la API publish/subscribe.",
+      "derivado_de": ["single_emit_api", "single_subscribe_api", "same_api_all_scales"],
+      "razon": "El módulo llama eventBus.publish('x', payload) y el bus decide internamente si entrega vía EventEmitter (mismo proceso, sin serialización JSON, sin red) o MQTT (otro core, con serialización). Esto da latencia mínima en local y transparencia de localización en remoto. El módulo no decide ni sabe.",
+      "notas": "Patrón heredado de event-core v0.5.0 ('Híbrido EventEmitter + MQTT + Hooks')."
+    },
+    {
+      "id": "topic_structure",
+      "decision": "Los topics MQTT siguen la estructura jerárquica: 'core/{core-id}/<categoria>/<...detalle>'. Categorías canónicas: 'events', 'state', 'commands', 'api/request', 'api/response', 'status', 'heartbeat', 'logs'. Adicionalmente, hay un namespace 'ui/' (sin core-id) para comunicación frontend↔backend: 'ui/request/{domain}/{action}', 'ui/response/{request_id}'. Dentro de la categoría, el separador es '/'.",
+      "derivado_de": ["single_emit_api", "same_api_all_scales"],
+      "razon": "Slashes son el separador estándar MQTT y habilitan wildcards (+, #). El prefijo 'core/{core-id}/' permite namespacing por core sin que los módulos sepan de él. Las categorías son las de event-core: separan eventos transitorios de estado retained de comandos dirigidos.",
+      "notas": "Heredado del README de event-core v0.5.0. Se mantiene literalmente."
+    },
+    {
+      "id": "name_to_topic_translation",
+      "decision": "El módulo emite y se suscribe usando nombres de evento con dots ('recipe.created', forma definida en naming.json). El bus traduce internamente al topic MQTT con slashes y prefijo de categoría: 'recipe.created' (código) → 'core/{core-id}/events/recipe/created' (transporte). El módulo nunca ve un topic crudo.",
+      "derivado_de": ["single_emit_api", "single_subscribe_api"],
+      "razon": "Compatibilidad con naming.json (dots para legibilidad humana, alineado con la convención del repo) + aprovechamiento de slashes en MQTT (wildcards). La traducción la hace el bus al publicar/suscribir. El desarrollador del módulo trabaja con la forma legible; el transporte usa la forma estructurada."
+    },
+    {
+      "id": "qos_strategy",
+      "decision": "QoS 1 (at-least-once) para: events/*, state/*, commands/*, api/request/*, api/response/*, status, ui/request/*, ui/response/*. QoS 0 (at-most-once) para: heartbeat, logs/*, métricas. QoS 2 (exactly-once) NO se usa.",
+      "derivado_de": ["idempotent_handlers", "no_temporal_coupling"],
+      "razon": "QoS 1 garantiza entrega pero permite duplicados — la idempotencia del handler resuelve los duplicados. QoS 2 es lento (4-way handshake) y la garantía exactly-once raramente justifica su coste; idempotencia + QoS 1 es siempre mejor trade-off. QoS 0 es para señales transitorias donde la pérdida ocasional no rompe el sistema (un heartbeat perdido se compensa con el siguiente).",
+      "notas": "Estrategia documentada en README de event-core: 'QoS 1 → eventos críticos, comandos, state changes; QoS 0 → logs, métricas, telemetría'."
+    },
+    {
+      "id": "retain_policy",
+      "decision": "Topics retained (broker guarda último mensaje, suscriptores tardíos lo reciben al conectar): state/*, status, configuración inicial. NO retained: events/*, commands/*, heartbeat, logs/*, api/request/*, api/response/*, ui/request/*, ui/response/*.",
+      "derivado_de": ["cardinality_agnostic", "no_temporal_coupling"],
+      "razon": "Retain está pensado para 'el último valor importa'. State actual de un dispositivo, status de un core: sí — un suscriptor que aparece debe saber el estado actual. Eventos transitorios: no — un suscriptor tardío no debe recibir eventos viejos como si fueran nuevos. Comandos: no — no quieres que un device reciba un viejo restart al reconectar."
+    },
+    {
+      "id": "last_will_obligatorio",
+      "decision": "Todo cliente MQTT (cada core, cada módulo si es cliente separado, cada device físico) declara un Last-Will Testament al conectar. Patrón canónico: topic 'core/{core-id}/status' con payload {state: 'offline', timestamp: <iso>} y retain: true. El cliente publica su 'state: online' al conectar y su LWT se dispara automáticamente si la conexión muere abruptamente.",
+      "derivado_de": ["cardinality_agnostic", "no_temporal_coupling"],
+      "razon": "Detección automática de caídas. Si un core muere abruptamente sin desconectarse limpio, el broker publica su LWT y los suscriptores se enteran sin polling. Esto habilita health monitoring por suscripción ('quiero saber cuando algo se cae'), no por sondeo periódico. Combinado con retain en status, también garantiza que los nuevos suscriptores ven el estado actual de todos los peers."
+    },
+    {
+      "id": "discovery_via_retained",
+      "decision": "Los cores publican su 'status' a 'core/{core-id}/status' con retain: true al conectar. El payload incluye state, version, módulos cargados, APIs expuestas, suscripciones activas. Otros cores se suscriben a 'core/+/status' para descubrir peers automáticamente.",
+      "derivado_de": ["cardinality_agnostic", "same_api_all_scales"],
+      "razon": "Descubrimiento sin coordinación central — el broker es el directorio. Un core nuevo recibe inmediatamente los status retained de todos los peers existentes (gracias al retain). Combinado con LWT, también detecta cuándo un peer cae. Cero infraestructura adicional (no service registry externo, no Zookeeper, no Consul).",
+      "notas": "Patrón estándar en sistemas IoT (AWS IoT, Azure IoT). En event-core ya está implementado y funcional."
+    },
+    {
+      "id": "request_response_formal",
+      "decision": "El framework provee un patrón formal request/response sobre MQTT cuando se necesita comunicación sincrónica genuina. API: 'mqttRequest(domain, action, payload)' devuelve una Promise. Internamente publica a 'ui/request/{domain}/{action}' (o 'core/{core-id}/api/request/{service}') con un correlation_id, suscribe a la respuesta correspondiente, resuelve cuando llega o rechaza por timeout (default ~5s). Los handlers responden publicando a 'ui/response/{correlation_id}' (o equivalente) con status code HTTP-like (200/400/404/500) y datos.",
+      "derivado_de": ["no_request_response_disguised", "single_emit_api"],
+      "razon": "Cuando el caller necesita respuesta sincrónica genuina (UI esperando datos para renderizar, tool del LLM esperando resultado), hay UN patrón formal con correlation_id, timeout y status codes — no una invención por módulo. Esto cubre el caso request/response sin disfrazarlo de pub/sub de dominio. La promesa es del lado del caller (el receptor sigue siendo asíncrono y desacoplado del caller).",
+      "notas": "Implementado en event-core v0.5.0. La UI lo usa. Patrón documentado: 'Una sola conexión MQTT para todo, respuestas garantizadas (o timeout), status codes HTTP-like'."
+    },
+    {
+      "id": "publish_returns_promise",
+      "decision": "eventBus.publish() devuelve una Promise. Resolverla significa que el broker (Aedes embedded o externo) ha aceptado el mensaje en su cola. NO significa que los suscriptores lo hayan procesado. El emisor puede 'await' por la aceptación del broker (típico) o no (fire-and-forget puro).",
+      "derivado_de": ["fire_and_forget", "no_temporal_coupling"],
+      "razon": "El await garantiza que el evento entró en el sistema — si fallara la entrada (broker desconectado, queue llena), el emisor lo sabe y puede actuar. Pero NO espera al procesamiento de los suscriptores — eso violaría fire_and_forget. Distinción importante: 'aceptado por el bus' ≠ 'procesado por los handlers'. El emisor solo puede afirmar lo primero."
+    },
+    {
+      "id": "no_silent_catch",
+      "decision": "Si la publicación de un evento falla, el error debe loguearse explícitamente. Patrones permitidos: (a) 'await this.eventBus.publish(...)' — propaga el error al caller; (b) 'this.eventBus.publish(...).catch(err => this.logger.error(\"publish.failed\", { error: err.message }))' — logea sin propagar (útil en callbacks no-async). Patrón PROHIBIDO: 'this.eventBus.publish(...).catch(() => {})' — silenciador sin telemetría.",
+      "derivado_de": ["no_shortcuts"],
+      "razon": "Silenciar fallos de publish es ceguera operativa. Si el broker se cae cinco minutos, el sistema necesita saberlo — no puede haber eventos perdidos sin ningún rastro. Si no se quiere que el error suba (callback no-async donde no hay caller a quien propagar), al menos se loguea para que la observabilidad lo capture."
+    }
   ]
 }

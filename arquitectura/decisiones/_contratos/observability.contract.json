@@ -1,0 +1,46 @@
+{
+  "_doc": "Captura LA forma canónica de hacer observable un módulo: cómo loguea, qué métricas emite, cómo nombra esas métricas, cómo propaga correlation_id, qué severidades usa. Sin observabilidad disciplinada, el sistema funciona pero es opaco — no se sabe qué pasa, dónde se traba, qué se ralentiza. Este contrato establece la mínima ergonomía operativa: los 4 validators previos detectan drift estructural; los logs y métricas detectan drift de comportamiento en runtime.",
+  "id": "observability",
+  "version": "1.0.0",
+  "creada": "2026-04-30",
+  "supersedes_nota": "Primera versión. Recoge el espíritu de la Observability incluida en event-core v0.5.0 (Logger + Tracer + Metrics, 19 tests) y formaliza patrones que en las evoluciones se aplicaron de forma desigual módulo a módulo.",
+
+  "objetivo": "Producir UN JSON output (_outputs/observability.json) que define: forma canónica del logger (estructura de cada log entry, campos obligatorios/recomendados), naming de métricas (prefijos por módulo, sufijos por tipo, dimensiones canónicas), propagación de correlation_id, política de severidad, secretos prohibidos en logs, política de tracing (spans, atributos, sampling). Validable mecánicamente cruzando contra las auditorías modulo-completo.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/observability.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/observability.schema.json",
+      "arquitectura/decisiones/_outputs/events.json (porque los logs viajan por core/{core-id}/logs/<level> y las métricas también son eventos)",
+      "arquitectura/decisiones/_outputs/lifecycle.json (porque el logger/metrics se inyectan en onLoad)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json — campo `observabilidad` de cada módulo (logger.estilo, logger.firma_dominante, metricas_emitidas, tracing.propaga_correlation_id)",
+      "arquitectura/auditoria/_outputs/manifest-completo/*.json — declaraciones de observability en module.json"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "OBSERVABLE POR DEFECTO. Un módulo bien escrito deja huella de cada acción importante: lo loguea, lo cuenta, lo cronometra. Sin huella, el sistema funciona pero es opaco — y un sistema opaco es un sistema que tarde o temprano falla en silencio.",
+
+    "ESTRUCTURADO, NO PROSA. Cada log entry es JSON con campos predecibles. El mensaje principal es un identificador estable ('module.action.result'), los detalles son campos del objeto. Buscar, filtrar, agregar es trivial. La concatenación de strings ('Failed to do X with Y') es para humanos leyendo logs en local, no para sistemas observables.",
+
+    "CADA EVENTO LLEVA SU CONTEXTO. Un log/métrica/span sin contexto es ruido. El contexto canónico incluye: módulo emisor (this.name), severity (info/warn/error/debug), timestamp, correlation_id (cuando aplique), project_id (cuando aplique). Sin contexto, no hay trazabilidad cross-módulo.",
+
+    "EL MÓDULO USA LO INYECTADO. El logger, el metrics y el tracer los inyecta el core en onLoad. El módulo NO instancia su propio logger (this.logger = pino()), NO escribe a console.log directo, NO crea sus propios contadores fuera de la API canónica. Una sola superficie observable, un solo lugar donde el operador mira.",
+
+    "SECRETOS FUERA DEL LOG. Tokens, passwords, API keys, datos personales, contenidos privados — NUNCA en logs ni en payloads de eventos observables. Si un módulo necesita loguear algo sobre una credencial, loguea metadata (tipo, vencimiento, si está activa) NO el valor. Esta regla no admite excepciones.",
+
+    "SEVERIDAD SIGNIFICATIVA. info para flujo normal observable. warn para condiciones inesperadas pero recuperables. error para fallos que requieren atención. debug para detalles que solo importan en investigación. Cada nivel tiene un significado y se respeta — todo info es ruido, nada warn es ceguera.",
+
+    "MÉTRICAS POR HECHO, NO POR LÍNEA. Cada métrica representa un hecho de negocio o un evento operativo medible (creación, fallo, duración, conteo, tamaño). NO se emite una métrica por cada operación interna (cada loop, cada cálculo) — eso es debug, no métrica. Granularidad correcta: el operador quiere medir el dominio, no la implementación.",
+
+    "TRAZABILIDAD CROSS-MÓDULO. correlation_id viaja con el evento o request a lo largo de todos los módulos que reaccionan. Si pos.pedido.creado dispara cocina.comanda.recibida y impresion.ticket.solicitado, los tres comparten correlation_id. Sin esto, los logs y métricas se ven aislados; con esto, el sistema cuenta su propia historia.",
+
+    "AUTODESCRIBIBLE. El nombre del log y de la métrica describe qué pasa sin tener que mirar el código. 'firmware.build_completed.total' se entiende. 'fb.bc.t' no. Si el nombre necesita explicación, el nombre está mal.",
+
+    "COSTE CONSCIENTE. Cada log, métrica y span tiene coste (CPU, red, disco). Spam de logs en bucles o métricas por cada elemento de un array degrada el sistema. Granularidad mínima viable: lo justo para diagnosticar. Cuando dudes, no lo logues — es más fácil añadir un log que quitarlo de un sistema que ya lo lleva."
+  ]
+}

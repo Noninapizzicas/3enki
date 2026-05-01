@@ -44,5 +44,58 @@
     "EL EMISOR DESCRIBE, EL CALLER DECIDE. El módulo que emite un error describe lo que pasó y por qué. NO instruye al caller qué hacer. El caller, con código y mensaje, decide: reintenta, escala, degrada, log y sigue. Esto coincide con el principio what_vs_how_separation de events.",
 
     "ERRORES NO INVENTAN CÓDIGOS. Hay una lista cerrada de códigos canónicos (HTTP-like + dominio + infraestructura). El módulo elige el más apropiado de la lista — NO inventa códigos nuevos por capricho. Si la lista no cubre un caso real, se propone PR para extenderla."
+  ],
+
+  "principios": [
+    {
+      "id": "canonical_response_shape",
+      "regla": "Toda respuesta de tool/ui_handler/api_http/handler de mqttRequest sigue UN ÚNICO shape: { status: integer, data?: object, error?: { code: string, message: string, details?: object } }. Cuando el resultado es éxito, hay 'data' y NO hay 'error'. Cuando es fallo, hay 'error' y NO hay 'data'. status (HTTP-like) está siempre.",
+      "razon": "Una sola forma elimina el bikeshed por módulo (algunos devolvían { ok: true }, otros { success: true }, otros raw data). Con shape único, los callers (UI, otras módulos, LLM) tratan respuestas de cualquier módulo igual. La auditoría puede validarlo mecánicamente."
+    },
+    {
+      "id": "human_message_machine_code",
+      "regla": "Cuando hay error, el campo error tiene SIEMPRE dos sub-campos: code (string corto, identificador estable, procesable por máquinas) y message (string libre, legible por humanos). Opcionalmente details (object con metadata estructurada).",
+      "razon": "code es para que el caller ramifique (if (error.code === 'PROJECT_NOT_FOUND') redirect_to_creation()). message es para que el operador o el usuario final entienda qué pasó. Sin code, el caller tiene que parsear el message — frágil. Sin message, el log es críptico. Coexisten."
+    },
+    {
+      "id": "domain_vs_infrastructure",
+      "regla": "Cada error se clasifica explícitamente como 'domain' o 'infrastructure'. Domain: la lógica de negocio rechazó la operación (input inválido, no encontrado, conflicto, permiso denegado). Infrastructure: el sistema falló por debajo (DB caída, broker desconectado, filesystem lleno, timeout). La clasificación viaja en error.details.kind o se infiere por el código.",
+      "razon": "El caller actúa distinto en cada caso. Frente a un error de dominio, puede mostrar mensaje al usuario y pedir corrección. Frente a uno de infraestructura, puede reintentar, fallar con dignidad, alertar. Sin distinción, el caller mezcla 'tu input está mal' con 'el sistema está caído' — UX y operativa rotas."
+    },
+    {
+      "id": "auto_observable_errors",
+      "regla": "Cada vez que un módulo emite un error (devuelve respuesta con error), automáticamente: (a) emite this.logger.X con severity apropiada (warn si recuperable/dominio, error si fatal/infraestructura), (b) incrementa una métrica counter '<module>.<entidad>.errors' o '<module>.<accion>.errors'. NO depende de que el módulo se acuerde — es parte de la API.",
+      "razon": "Sin telemetría automática, los errores son invisibles hasta que un usuario se queja. Con telemetría automática, el operador VE el aumento de errores en tiempo real (alerts, dashboards). La auto-observabilidad es la diferencia entre un sistema productivo y uno opaco."
+    },
+    {
+      "id": "no_stack_in_response",
+      "regla": "El stack trace JAMÁS aparece en la respuesta que devuelve el módulo al caller. El stack solo va al log (this.logger.error('module.action.failed', { error: err.message, stack: err.stack })). Lo que el caller recibe es { code, message, details? } — limpio.",
+      "razon": "Stack traces revelan rutas internas del sistema, nombres de variables, estructura de directorios — info útil para atacantes, ruido para callers legítimos. Mantener la respuesta limpia + el log con stack completo es estándar de seguridad y de UX."
+    },
+    {
+      "id": "propagate_or_absorb_with_telemetry",
+      "regla": "Cuando un módulo recibe un error de otro módulo (vía mqttRequest u otra forma de comunicación), tiene tres opciones legítimas: (a) propagarlo al caller superior con su propio status; (b) traducirlo a un error de dominio propio (con código nuevo); (c) absorberlo y degradarse (devolver éxito parcial). En las TRES opciones, el módulo emite log + métrica obligatoriamente. NO hay cuarta opción 'tragar sin telemetría'.",
+      "razon": "Propagar, traducir, absorber son decisiones legítimas del dominio. Tragar silenciosamente NO lo es — pierde la información del fallo. La telemetría obligatoria garantiza que el sistema sigue siendo observable independientemente de la decisión del módulo."
+    },
+    {
+      "id": "recoverable_signal",
+      "regla": "El código de error transmite si reintentar la misma operación tiene sentido. Errores recuperables (timeout, broker brevemente desconectado, lock contention) llevan códigos del rango 5xx + retry hint. Errores no-recuperables (input inválido, permission denied, not found) llevan 4xx — el caller debe corregir antes de reintentar.",
+      "razon": "Sin esta señal, los callers reintentan ciegos: o no reintentan nunca (pierden recuperaciones triviales), o reintentan siempre (saturan el sistema con requests inválidas que nunca van a pasar). El código de error es la señal."
+    },
+    {
+      "id": "no_secrets_in_messages",
+      "regla": "El campo error.message y error.details NUNCA contienen secretos: tokens, passwords, API keys, datos personales (PII), paths privados del filesystem, contenidos privados de clientes. Si el error está relacionado con una credencial, se usa metadata (credential_id, type, expired_at), NO el valor.",
+      "razon": "Coherente con no_secrets_in_logs del contrato observability. Los errores viajan por el mismo bus que los logs — un secreto en error.message es un secreto filtrado. Riesgo de compliance (GDPR, PCI), de seguridad. Sin excepciones."
+    },
+    {
+      "id": "describe_dont_instruct",
+      "regla": "El error describe LO QUE PASÓ, no le dice al caller QUÉ HACER. message='Recipe not found' (descripción), no 'Please create the recipe first' (instrucción). El caller tiene contexto que el módulo emisor no — decide qué hacer con la descripción.",
+      "razon": "Coincide con el principio what_vs_how_separation de events. El módulo emisor de un error sabe el qué; el caller sabe el cómo. Una instrucción pegada al error acopla el comportamiento del caller al dominio del emisor — anti-paradigma. Si el caller necesita recomendaciones, las pone su capa de UI/UX, no el módulo backend."
+    },
+    {
+      "id": "closed_code_list",
+      "regla": "Los códigos de error pertenecen a una lista cerrada y canónica definida en errors.json (HTTP-like estándar + lista de códigos de dominio + lista de códigos de infraestructura). El módulo elige el más apropiado de la lista — NO inventa códigos. Si la lista no cubre un caso real, se propone PR para extenderla.",
+      "razon": "Códigos inventados ad-hoc generan drift léxico (un módulo dice 'NOT_FOUND', otro 'NOTFOUND', otro '404'). El caller no puede ramificar. Lista cerrada + extensión por PR = vocabulario controlado del sistema. Mismo razonamiento que glossary y verbs_lifecycle de naming."
+    }
   ]
 }

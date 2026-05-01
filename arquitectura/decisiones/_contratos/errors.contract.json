@@ -245,5 +245,41 @@
       "ejemplo_drift_actual": null,
       "alternativa_correcta": "Describir el hecho, no instruir. 'Recipe not found' (descripción) en lugar de 'Please create the recipe first' (instrucción). Las instrucciones al usuario las añade la capa de UI según el código del error, no el módulo backend."
     }
-  ]
+  ],
+
+  "output_shape_resumen": "Ver _schemas/errors.schema.json. Top-level: _meta, regla (frase maestra), response_shape (success_shape + error_shape canónicos con campos detallados), status_codes (array cerrado HTTP-like con kind y retryable por código), codes_domain (lista UPPER_SNAKE_CASE de códigos de errores de dominio), codes_infrastructure (idem para infra), details_canonical_fields (objeto describiendo campos canónicos opcionales de details), auto_telemetry (patrones de log y metric obligatorios), propagation_options (las 3 opciones cuando el módulo recibe un error de otro módulo), detection_patterns (heurísticas para el validator).",
+
+  "reglas_de_extraccion": [
+    "Definir _meta con convencion='errors', version (semver), creado_en (date), contrato_referencia (path al contrato).",
+
+    "Definir regla como frase maestra que resuma toda la decisión arquitectónica de errores en una línea legible. Ejemplo: 'Toda respuesta sigue { status, data?, error? }. Códigos cerrados HTTP-like (4xx dominio, 5xx infraestructura). Cada error genera log + métrica automáticos. Stack solo en logs. Sin secretos en mensajes.'.",
+
+    "Definir response_shape como objeto con dos sub-objetos: success_shape (campos esperados cuando hay éxito: status, data) y error_shape (campos esperados cuando hay fallo: status, error.code, error.message, error.details opcional). Cada campo tiene tipo y descripción. Indicar mutual exclusion: 'data y error nunca coexisten'.",
+
+    "Definir status_codes como array de objetos. Cada objeto tiene: code (integer), name (string corto), kind (enum 'success'|'domain'|'infrastructure'), retryable (boolean — sugerencia explícita de si reintentar tiene sentido), descripcion (humana). Códigos: 200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504. Ej: {code: 404, name: 'Not Found', kind: 'domain', retryable: false, descripcion: 'El recurso solicitado no existe.'}.",
+
+    "Definir codes_domain como array de objetos canónicos UPPER_SNAKE_CASE para errores de dominio (que el caller puede actuar). Cada objeto: code (string), status_typical (integer 4xx — el status HTTP que típicamente acompaña), descripcion (humana), ejemplo_uso (cuándo usar este código). Lista inicial: PROJECT_NOT_FOUND, RECIPE_NOT_FOUND, INVALID_INPUT, MISSING_FIELD, FIELD_TOO_LONG, ALREADY_EXISTS, CONFLICT_STATE, PERMISSION_DENIED, RATE_LIMITED, INVALID_VERSION, etc. Lista extensible vía PR.",
+
+    "Definir codes_infrastructure como array de objetos canónicos UPPER_SNAKE_CASE para errores de infraestructura (sistema falla por debajo). Cada objeto: code, status_typical (5xx), descripcion, ejemplo_uso. Lista inicial: DATABASE_DOWN, BROKER_DISCONNECTED, FILESYSTEM_ERROR, EXTERNAL_API_FAILED, TIMEOUT, MQTT_NOT_AVAILABLE, OUT_OF_MEMORY, etc.",
+
+    "Definir details_canonical_fields como objeto describiendo cada campo canónico opcional de error.details. Claves: kind (enum 'domain'|'infrastructure', cuando no es claro por status), retryable (boolean), retry_after_ms (number), entity_type (string), entity_id (string). Para cada uno: politica (obligatorio_cuando | opcional | recomendado), formato, valores_comunes.",
+
+    "Definir auto_telemetry como objeto con dos sub-objetos: log_pattern (qué emite el módulo automáticamente al construir un error: signature, level mapping por status, fields incluidos) y metric_pattern (signature de this.metrics.increment, naming, labels canónicos).",
+
+    "Definir propagation_options como array con las 3 opciones cuando un módulo recibe un error de otro módulo: propagate (mantener mismo status/code/message), translate (nuevo código del dominio del caller), absorb (devolver default + log warning). Cada uno: id, descripcion, ejemplo_codigo (snippet), telemetria_obligatoria.",
+
+    "Definir detection_patterns como objeto con las heurísticas que el validator aplicará. Claves: non_canonical_response_keys (array: ['ok', 'success', 'result' como top-level keys de respuesta), prohibited_imperative_message_words (lista en EN+ES: 'please', 'try', 'contact', 'use', 'check', 'intenta', 'contacta', 'usa', 'verifica', 'por favor'), stack_in_response_indicators (array de patrones que sugieren stack en respuesta: 'message: err.stack', 'details: { stack:'), sensitive_field_names (heredado de observability — misma lista), error_string_in_field_regex (detecta 'error: \\\"...\\\"' en lugar de objeto).",
+
+    "El contrato (este archivo) describe QUÉ campos debe tener el output. El output (_outputs/errors.json) contiene los valores concretos. Si necesitas cambiar la regla → cambias el contrato + bumpeas version. Si necesitas añadir un código nuevo (ej. RATE_LIMITED en codes_domain) → cambias el output con justificación."
+  ],
+
+  "derivaciones": {
+    "response_es_canonica": "true si la respuesta tiene exactamente las claves del shape canónico: 'status' (siempre), Y 'data' XOR 'error' (mutuamente excluyentes). Cualquier otra clave top-level (ok, success, result, raw...) → false.",
+    "error_kind_inferido_por_status": "Si error.details.kind no está presente: 'domain' si status ∈ [400, 499]; 'infrastructure' si status ∈ [500, 599]; undefined en otros casos.",
+    "error_es_recuperable": "true si: (a) status ∈ [500, 599] AND (status_codes[status].retryable=true), O (b) error.details.retryable=true explícito.",
+    "contiene_campo_sensible_en_error": "true si keys del error.details intersecan con detection_patterns.sensitive_field_names, OR si error.message contiene substring que coincida con esos campos.",
+    "tiene_telemetria_completa": "true si: en proximidad al return de error, hay this.logger.<level>(...) AND this.metrics.increment(...errors...). Heurística de proximidad: ~10 líneas previas en el mismo bloque.",
+    "topic_de_error_log": "core/{core-id}/logs/{level} — heredado de events.json categoria 'logs'. Level=warn si status 4xx, level=error si status 5xx.",
+    "instruccion_en_message_detectada": "true si error.message contiene cualquier substring de detection_patterns.prohibited_imperative_message_words."
+  }
 }

@@ -20,6 +20,8 @@
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",
     "validate:glossary:system": "node arquitectura/convenciones/_validators/glossary.validate.js --check-system",
+    "validate:events": "node arquitectura/decisiones/_validators/events.validate.js",
+    "validate:events:system": "node arquitectura/decisiones/_validators/events.validate.js --check-system",
     "start": "node index.js",
     "dev": "node index.js --log-level debug",
     "plop": "plop",

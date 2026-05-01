@@ -245,5 +245,37 @@
       "ejemplo_drift_actual": null,
       "alternativa_correcta": "'firmware.build_completed' es un buen identifier. 'fb.bc' no. Inversión mínima en nombrar bien que se paga la primera vez que el operador busca un log."
     }
-  ]
+  ],
+
+  "output_shape_resumen": "Ver _schemas/observability.schema.json. Top-level: _meta, regla (frase maestra), logger (entry_shape canónico, levels permitidos, signature, transport, fields_added_by_logger), metrics (types, naming_pattern, canonical_suffixes, canonical_dimensions), tracing (status v1, propagation_pattern), correlation_id (field_name, when_required, propagation_pattern, format), secrets (canonical_sensitive_field_names + policy), detection_patterns (heurísticas que el validator usa para detectar drift).",
+
+  "reglas_de_extraccion": [
+    "Definir _meta con convencion='observability', version (semver), creado_en (date), contrato_referencia (path al contrato).",
+
+    "Definir regla como frase maestra que resuma toda la decisión arquitectónica de observabilidad en una línea legible. Ejemplo: 'Logs estructurados (identifier + fields), métricas por hecho de negocio con prefix de módulo, correlation_id propaga en cadenas de eventos. Secrets nunca en payloads. Severidad significativa.'.",
+
+    "Definir logger como bloque con: entry_shape (objeto describiendo campos canónicos del log entry final), levels (array enum: debug, info, warn, error), signature (string del patrón canónico de uso), transport (objeto: topic_pattern heredado de events.json categoria 'logs', qos: 0), fields_added_by_logger (lista de campos que el logger inyectado añade automáticamente: timestamp, module, level), fields_provided_by_module (lista: identifier, ...domain_fields).",
+
+    "Definir metrics como bloque con: types (array de objetos {name, descripcion, when_to_use, signature}), naming_pattern (string del patrón), canonical_suffixes (objeto {sufijo: significado}), canonical_dimensions (array de dimensiones recomendadas con descripción), prefix_per_module (boolean true), example_metrics (array de ejemplos válidos).",
+
+    "Definir tracing como bloque con: v1_status='optional' (literal), api_signature_when_present (string), propagation_pattern_v1 (string describiendo cómo correlation_id sustituye al span en v1), v2_plans (string opcional con dirección futura).",
+
+    "Definir correlation_id como bloque con: field_name='correlation_id' (snake_case, dentro del payload del evento), when_required (cuándo el módulo debe propagarlo), propagation_pattern (snippet de cómo se propaga), format (string opaco generado por el caller, sin formato impuesto, ej. UUID/ULID/timestamp+random).",
+
+    "Definir secrets como bloque con: canonical_sensitive_field_names (array de nombres de campo prohibidos en payloads observables — lista cerrada), policy (string describiendo la doctrina), exception_handling (qué hacer cuando se necesita loguear algo derivado de un secreto — usar metadata).",
+
+    "Definir detection_patterns como objeto con las heurísticas que el validator aplicará para detectar cada anti-patrón. Claves: console_log_regex (regex para detectar console.log/error/warn/info/debug), prohibited_logger_imports (array de paquetes de logging que no se permiten: pino, winston, bunyan, debug, log4js, loglevel, signale), sensitive_field_names (lista cerrada — misma que secrets), template_literal_in_logger_regex (regex para detectar template literal con variable como primer arg de logger), concat_in_logger_regex (regex para detectar string + variable en primer arg).",
+
+    "El contrato (este archivo) describe QUÉ campos debe tener el output. El output (_outputs/observability.json) contiene los valores concretos. Si necesitas cambiar la regla → cambias el contrato + bumpeas version. Si necesitas cambiar un valor concreto (ej. añadir un campo sensible más) → cambias el output."
+  ],
+
+  "derivaciones": {
+    "log_es_estructurado": "true si la llamada this.logger.X(arg1, arg2): arg1 es string literal SIN template variables ni concat con variables; arg2 es object literal o variable que sea object.",
+    "metric_tiene_prefix_modulo": "true si el name de la métrica empieza con this.name (o un prefijo declarado del módulo en module.json).",
+    "correlation_id_se_propaga": "true si: (a) el handler accede a payload.correlation_id, AND (b) cualquier this.eventBus.publish posterior incluye correlation_id en su payload, AND (c) cualquier this.logger.X posterior incluye correlation_id en sus fields.",
+    "contiene_campo_sensible": "true si las keys del objeto fields (segundo argumento de this.logger.X) intersecan con detection_patterns.sensitive_field_names.",
+    "severity_es_apropiada": "heurística — true si: identifier termina en created/completed/succeeded/started → level=info; identifier termina en failed/error/timeout → level=error o warn; identifier termina en fallback/retry/skipped → level=warn.",
+    "nombre_es_descriptivo": "true si el identifier sigue patrón <module>.<entity>.<action_or_result> con cada parte ≥3 chars y NO solo siglas (al menos una parte tiene ≥6 chars).",
+    "topic_de_log_entry": "core/{core-id}/logs/{level} — heredado de events.json categoria 'logs'."
+  }
 }

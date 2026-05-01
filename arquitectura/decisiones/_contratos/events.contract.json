@@ -252,5 +252,42 @@
       "ejemplo_drift_actual": null,
       "alternativa_correcta": "Default: declarar en module.json.events.subscribes (auto-wired por el module loader). Si tiene que ser dinámico (depende de runtime, project_id, device_id), documentarlo expresamente en la auditoría."
     }
-  ]
+  ],
+
+  "output_shape_resumen": "Ver _schemas/events.schema.json. Top-level: _meta, regla (string maestra), transport (protocol, broker default), bus_internals (mode híbrido, mecanismos), categorias_canonicas (object con 10 categorías de topic, cada una con topic_pattern, qos, retain, descripcion, derivado_de), last_will (patrón canónico obligatorio), discovery (patrón retained_status), request_response (patrón formal del framework con correlation_id+timeout), payload_canonical_fields (campos transversales del payload con su política), publish_semantics (qué significa que la promesa resuelva), detection_patterns (heurísticas que el validator usa para detectar drift).",
+
+  "reglas_de_extraccion": [
+    "Definir _meta con convencion='events', version (semver), creado_en (date), contrato_referencia (path al contrato).",
+
+    "Definir regla como frase maestra que resuma toda la decisión arquitectónica de eventos en una línea legible para humanos. Ejemplo: 'Eventos viajan por MQTT (Aedes embedded). Bus híbrido transparente. Topics jerárquicos por categoría. Cardinalidad libre. Fire-and-forget.'.",
+
+    "Definir transport como bloque con: protocol='mqtt', default_broker='aedes_embedded' (Casa/Rascacielos), external_broker_supported=true (Manzana usa broker externo compartido), bridge_strategy describiendo cómo Aedes embedded se conecta al broker externo en Manzana.",
+
+    "Definir bus_internals como bloque con: mode='hybrid', mechanisms (array describiendo las 3 vías internas: EventEmitter intra-proceso, MQTT inter-core, Hooks cross-cutting), transparent_to_module=true (el módulo no decide ni conoce el mecanismo).",
+
+    "Listar las 10 categorías canónicas en categorias_canonicas (array). Cada categoría tiene: id (string), topic_pattern (con placeholders {core-id}, {domain}, {action}, {service}, {correlation_id}, {level}), qos (0|1), retain (true|false), descripcion (humana, sin jerga), derivado_de (lista de ids de decisiones_arquitectonicas). Las 10 categorías son: events, state, commands, api/request, api/response, status, heartbeat, logs, ui/request, ui/response.",
+
+    "Definir last_will como bloque con: obligatorio=true, topic_pattern='core/{core-id}/status' (o equivalente para módulos/devices), payload_template ({state: 'offline', timestamp: <iso>}), qos=1, retain=true. Incluir nota de que el cliente publica state='online' al conectar y el LWT se dispara automáticamente al perder conexión.",
+
+    "Definir discovery como bloque con: mecanismo='retained_status', subscribe_pattern='core/+/status' (suscriptor), publish_pattern='core/{core-id}/status' (publicador), payload_template (campos state, version, modules_loaded, apis_exposed, subscriptions, started_at), retain=true, qos=1.",
+
+    "Definir request_response como bloque con: api_signature='mqttRequest(domain, action, payload, options?)', returns='Promise<response>', request_topic_patterns (lista de patrones canónicos: 'ui/request/{domain}/{action}' para UI, 'core/{core-id}/api/request/{service}' para inter-core), response_topic_pattern='ui/response/{correlation_id}' (o equivalente), correlation_id_field='correlation_id' (en payload), default_timeout_ms=5000, status_codes_canonical=[200, 400, 404, 500], notas describiendo que el caller espera la Promise (la simetría sincrónica es del lado del caller; el handler sigue siendo asíncrono y desacoplado).",
+
+    "Definir payload_canonical_fields como objeto donde cada clave es un campo transversal y su valor describe la política. Campos: timestamp (politica='recomendado siempre', formato='ISO 8601'), correlation_id (politica='obligatorio en respuestas, opcional en otros'), project_id (politica='obligatorio si el dominio es multi-tenant'), source (politica='opcional', valores_comunes=['cli', 'ui', 'auto', 'agent']). Indicar que campos no listados son del dominio del evento (libres) pero deben ser JSON-serializables.",
+
+    "Definir publish_semantics como bloque que clarifica el contrato de publish(): returns='Promise', resolves_when='broker (aedes embedded o externo) ha aceptado el mensaje en su cola', does_not_imply='los suscriptores han procesado el mensaje', error_significa='broker desconectado, queue llena, o problema de transporte', uso_recomendado='await en handlers async; .catch(err => log) en callbacks no-async; nunca .catch(()=>{})'.",
+
+    "Definir detection_patterns como objeto con las heurísticas mecánicas que el validator aplicará para detectar cada anti-patrón de la sección prohibido. Claves: generic_verbs (lista cerrada de strings), request_response_suffixes (lista: ['.request', '.response']), emit_bypass_regex (regex string), silent_catch_regex (regex string), raw_topic_indicators (lista de substrings que NO deben aparecer en argumentos de publish/subscribe del módulo: ['/', 'core/']), imperative_verbs_es (lista corta de imperativos comunes en español: ['guardar', 'actualizar', 'eliminar', 'crear', 'cargar']), imperative_verbs_en (idem en inglés: ['save', 'update', 'delete', 'create', 'load']).",
+
+    "El contrato (este archivo) describe QUÉ campos debe tener el output. El output (_outputs/events.json) contiene los valores concretos de cada campo. Si necesitas cambiar la regla, cambias el contrato + bumpeas version. Si necesitas cambiar un valor concreto (ej. añadir un verbo genérico al detection_patterns.generic_verbs), cambias el output."
+  ],
+
+  "derivaciones": {
+    "topic_de_event_name": "El bus traduce nombre de evento (con dots) a topic MQTT (con slashes) anteponiendo prefijo de categoría. Ejemplo: 'recipe.created' (en código) + categoría 'events' → 'core/{core-id}/events/recipe/created' (en transporte).",
+    "qos_aplicada_a_un_publish": "Se determina por la categoría del topic: si el evento va a 'events/*', qos=1; si va a 'logs/*', qos=0. Hereda de categorias_canonicas[categoria].qos.",
+    "retain_aplicada_a_un_publish": "Idem, deriva de categorias_canonicas[categoria].retain.",
+    "es_anti_patron_rpc_over_pubsub": "true si el nombre del evento termina en '.request' o '.response' Y NO usa el patrón formal del framework (correlation_id explícito en payload + suscripción a topic de respuesta dedicado).",
+    "es_anti_patron_generic_verb": "true si el último segmento del nombre del evento ∈ detection_patterns.generic_verbs.",
+    "es_anti_patron_imperative_verb": "true si el último segmento NO está en languages[module.language].verbs_lifecycle de naming.json AND está en detection_patterns.imperative_verbs_{module.language}."
+  }
 }

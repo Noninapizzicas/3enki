@@ -162,5 +162,88 @@
       "razon": "Distributed tracing añade complejidad operativa (jaeger/tempo/honeycomb backend, sampling rules, propagación de trace_id). En v1.0 el correlation_id en logs cubre el 80% de necesidades de trazabilidad. v2 puede formalizar tracing como obligatorio si la necesidad operativa justifica la inversión.",
       "notas": "Decisión deliberada de no formalizar todavía: mejor un sistema funcional sin tracing que un sistema con tracing roto o mal usado."
     }
+  ],
+
+  "prohibido": [
+    {
+      "id": "console_log_directo",
+      "regla": "Llamar a console.log, console.error, console.warn, console.info, console.debug directamente en código de módulo. La salida de console NO pasa por el logger central, NO se enruta a core/{core-id}/logs/{level}, NO es procesable por agregadores.",
+      "viola_principios": ["inject_dont_instantiate", "structured_logs_only"],
+      "como_detectar": "Regex en código de módulos: console\\.(log|error|warn|info|debug)\\s*\\(. Excluir tests y scripts de migración.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "this.logger.info('module.action', { ...fields }) o this.logger.error/warn/debug. Si necesitas debug rápido en desarrollo, this.logger.debug es la vía — el operador puede silenciarlo con un nivel."
+    },
+    {
+      "id": "logger_propio_instanciado",
+      "regla": "Instanciar un logger propio en lugar de usar this.logger inyectado. Ejemplos prohibidos: 'const log = require(\\'debug\\')(this.name)', 'const pino = require(\\'pino\\'); const log = pino()', 'const winston = require(\\'winston\\'); ...'.",
+      "viola_principios": ["inject_dont_instantiate"],
+      "como_detectar": "Regex sobre imports/requires en módulos: require\\(['\\\"](pino|winston|bunyan|debug|log4js|loglevel|signale)['\\\"]\\) o equivalente import.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "this.logger inyectado por el core. Si crees que necesitas un logger propio (ej. para un caso especial), lo planteas como extensión a core_api_canonica del contrato lifecycle — no atajas instanciando."
+    },
+    {
+      "id": "secrets_en_payload_log",
+      "regla": "Incluir en el segundo argumento de this.logger.<level>() campos cuyo nombre coincida con la lista canónica de campos sensibles: password, token, api_key, apiKey, secret, authorization, cookie, session_token, sessionToken, private_key, privateKey, refresh_token, refreshToken, access_token, accessToken.",
+      "viola_principios": ["no_secrets_in_logs"],
+      "como_detectar": "Análisis estático: en cada llamada a this.logger.X(identifier, fields), inspeccionar las keys del segundo argumento. Si alguna está en detection_patterns.sensitive_field_names, es drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Loguear metadata del secreto, NO el valor. Ej: this.logger.info('credential.validated', { credential_id, type, valid_until }) en lugar de incluir el token. Si necesitas trazar uso de un token, usa el ID/hash, no el valor."
+    },
+    {
+      "id": "mensaje_sin_estructura",
+      "regla": "Pasar como primer argumento del logger una cadena con datos concatenados o template literals con variables: this.logger.info(`Failed to process ${id}`) o this.logger.info('Failed: ' + id). El primer argumento es un identifier estable, los datos van en el objeto del segundo argumento.",
+      "viola_principios": ["structured_logs_only", "self_describing_names"],
+      "como_detectar": "Regex en código de módulos: this\\.logger\\.\\w+\\s*\\(\\s*[`'\\\"][^`'\\\"]*\\$\\{ (template literal con variable como primer arg) o this\\.logger\\.\\w+\\s*\\(\\s*[`'\\\"][^`'\\\"]*\\s*\\+ (concatenación con +).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "this.logger.info('module.process.failed', { id, reason }). El identifier es buscable, los datos son filtrables, los dashboards funcionan."
+    },
+    {
+      "id": "metrica_sin_prefix_modulo",
+      "regla": "Emitir una métrica cuyo nombre NO empiece con el nombre del módulo (this.name). Las métricas sin prefix de módulo se mezclan en el namespace global y se vuelven imposibles de agrupar/agregar por módulo.",
+      "viola_principios": ["self_describing_names", "metrics_by_business_event"],
+      "como_detectar": "Para cada this.metrics.X(name, ...) detectado en código: si name no empieza con this.name (o un prefijo aceptado del módulo), reportar drift.",
+      "ejemplo_drift_actual": "Algunos módulos emiten métricas con prefijo distinto del nombre del módulo (revisar audits con metricas_drift_vs_manifest).",
+      "alternativa_correcta": "Si this.name = 'firmware-builder', las métricas empiezan con 'firmware.' (prefijo del namespace canónico del módulo). Si necesitas un namespace distinto, declárato en module.json para que sea visible."
+    },
+    {
+      "id": "correlation_id_no_propagado",
+      "regla": "Un handler que recibe un evento con correlation_id en el payload, pero NO incluye ese correlation_id en (a) los eventos que publica como reacción, ni en (b) los logs que emite durante su procesamiento. Romper la cadena de correlation_id rompe la trazabilidad.",
+      "viola_principios": ["correlation_id_propagation", "context_in_every_emission"],
+      "como_detectar": "Análisis del flujo: si un handler accede a payload.correlation_id, debe aparecer en sus this.eventBus.publish y en sus this.logger.X. Si NO aparece, drift.",
+      "ejemplo_drift_actual": "La mayoría de módulos auditados no propagan correlation_id (ver tracing.propaga_correlation_id=false en los audits). Solo notas y scratch-designer lo hacen.",
+      "alternativa_correcta": "Patrón: const { correlation_id } = event.payload; this.logger.info('x.received', { ..., correlation_id }); this.eventBus.publish('y.processed', { ..., correlation_id })."
+    },
+    {
+      "id": "severity_invertida",
+      "regla": "Usar this.logger.error en flujo normal sin error real (ej. al completar una operación exitosa) o this.logger.info en fallos genuinos que requieren atención (ej. tras un catch sin recuperación). Las severidades han de reflejar la naturaleza del evento.",
+      "viola_principios": ["severity_meaningful"],
+      "como_detectar": "Heurística difícil de mecanizar: revisar identifiers que sugieren éxito (created, completed, succeeded) emitidos con .error o .warn; identifiers que sugieren fallo (failed, error, timeout) emitidos con .info o .debug.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "info para flujo normal exitoso. warn para condiciones recuperables o inesperadas. error para fallos que requieren atención humana. debug para detalles que solo importan en investigación."
+    },
+    {
+      "id": "log_spam_en_bucle",
+      "regla": "Llamar a this.logger.X dentro de un bucle de alta frecuencia (for/while/forEach sobre arrays grandes, callbacks que se invocan por cada chunk, handlers de stream). Cada iteración produce un log, lo que satura la pipeline y degrada el sistema.",
+      "viola_principios": ["cost_aware"],
+      "como_detectar": "Heurística: llamadas a this.logger.X dentro de cuerpos de for/while/forEach/.map/.filter/etc. Riesgo alto si el bucle itera sobre datos potencialmente grandes (lecturas de filesystem, registros de DB, mensajes MQTT en burst).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Loguear UNA vez al inicio (con conteo total), UNA al final (con resultado agregado). Si se necesita debug por iteración, usar this.logger.debug (silenciable) y solo en desarrollo. NUNCA logger.info por iteración en código de producción."
+    },
+    {
+      "id": "metrica_por_operacion_atomica",
+      "regla": "Emitir una métrica por cada operación atómica de implementación (cada función llamada, cada byte escrito, cada elemento de un array procesado). Las métricas son por hechos de negocio, no por mecánica interna.",
+      "viola_principios": ["metrics_by_business_event", "cost_aware"],
+      "como_detectar": "Heurística: this.metrics.increment dentro de bucles, o emisión de gauges con valores que cambian más de una vez por segundo de forma sistemática.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Una métrica al completar la operación (ej. al terminar el batch: 'batch.completed.total' increment 1, 'batch.items.count' gauge con tamaño total). NO una por elemento del batch."
+    },
+    {
+      "id": "nombre_log_metric_critico",
+      "regla": "Usar identifiers de log o nombres de métrica genéricos, abreviados o crípticos: 'event.X', 'do.it', 'metric_1', 'fb.bc.t', 'log_a'. Los nombres deben ser descriptivos sin necesidad de mirar el código.",
+      "viola_principios": ["self_describing_names"],
+      "como_detectar": "Para cada identifier de log y nombre de métrica detectado en código: aplicar heurística de longitud mínima (>=10 chars), no solo siglas, contiene al menos un punto separador con tres partes (<modulo>.<entidad>.<acción>).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "'firmware.build_completed' es un buen identifier. 'fb.bc' no. Inversión mínima en nombrar bien que se paga la primera vez que el operador busca un log."
+    }
   ]
 }

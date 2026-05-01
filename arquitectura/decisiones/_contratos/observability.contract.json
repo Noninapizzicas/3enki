@@ -277,5 +277,109 @@
     "severity_es_apropiada": "heurística — true si: identifier termina en created/completed/succeeded/started → level=info; identifier termina en failed/error/timeout → level=error o warn; identifier termina en fallback/retry/skipped → level=warn.",
     "nombre_es_descriptivo": "true si el identifier sigue patrón <module>.<entity>.<action_or_result> con cada parte ≥3 chars y NO solo siglas (al menos una parte tiene ≥6 chars).",
     "topic_de_log_entry": "core/{core-id}/logs/{level} — heredado de events.json categoria 'logs'."
-  }
+  },
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "observability_json_estructura_valida",
+      "regla": "observability.json valida estructuralmente contra observability.schema.json (AJV strict, additionalProperties=false en todos los niveles).",
+      "como_detectar": "Cargar el schema, compilar con AJV strict, validar el output. Cualquier error de schema bloquea PASS.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/decisiones/_outputs/observability.json", "arquitectura/decisiones/_schemas/observability.schema.json"]
+    },
+    {
+      "id": "drift_console_log_directo",
+      "regla": "Ningún módulo usa console.log/error/warn/info/debug directamente.",
+      "como_detectar": "Regex en código de módulos (modules/*/index.js + lib/ + services/): console\\.(log|error|warn|info|debug)\\s*\\(. Excluir líneas dentro de comentarios. Excluir tests si los hubiera.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js", "modules/*/services/**/*.js"],
+      "viola": "console_log_directo (prohibido), inject_dont_instantiate (principio)"
+    },
+    {
+      "id": "drift_logger_propio_instanciado",
+      "regla": "Ningún módulo importa o instancia un logger propio (pino, winston, bunyan, debug, log4js, loglevel, signale).",
+      "como_detectar": "Regex en código de módulos: require\\(['\\\"](pino|winston|bunyan|debug|log4js|loglevel|signale)['\\\"]\\) o equivalente import. La lista canónica vive en detection_patterns.prohibited_logger_imports.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "logger_propio_instanciado (prohibido), inject_dont_instantiate (principio)"
+    },
+    {
+      "id": "drift_secrets_en_payload_log",
+      "regla": "Ningún payload de this.logger.X (segundo argumento) contiene keys cuyo nombre coincida con la lista canónica de campos sensibles (password, token, api_key, secret, authorization, cookie, session_token, private_key, refresh_token, access_token y variantes camelCase).",
+      "como_detectar": "Análisis estático: para cada llamada a this.logger.<level>(identifier, fields), inspeccionar las keys del segundo argumento. Si alguna key (o substring de key) aparece en detection_patterns.sensitive_field_names, reportar drift. Severidad ERROR porque es riesgo de seguridad/compliance.",
+      "severidad": "error",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "secrets_en_payload_log (prohibido), no_secrets_in_logs (principio)"
+    },
+    {
+      "id": "drift_mensaje_sin_estructura",
+      "regla": "Ningún this.logger.X usa template literal con variables o string concatenation con + en el primer argumento. El identifier debe ser literal estable.",
+      "como_detectar": "Regex en código de módulos: this\\.logger\\.\\w+\\s*\\(\\s*[`][^`]*\\$\\{ (template literal con interpolación como primer arg) o this\\.logger\\.\\w+\\s*\\(\\s*['\"][^'\"]*\\s*\\+ (concatenación con + como primer arg).",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "mensaje_sin_estructura (prohibido), structured_logs_only (principio)"
+    },
+    {
+      "id": "drift_metrica_sin_prefix_modulo",
+      "regla": "Cada métrica emitida (this.metrics.<type>(name, ...)) tiene un name que empieza con this.name del módulo o un prefijo declarado en module.json. Si no, drift.",
+      "como_detectar": "Análisis estático: para cada this.metrics.<increment|gauge|timing>(name, ...), comparar name.split('.')[0] con this.name. Si NO coincide y NO está en una lista declarada de prefijos del módulo, reportar drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "metrica_sin_prefix_modulo (prohibido), self_describing_names (principio)"
+    },
+    {
+      "id": "drift_correlation_id_no_propagado",
+      "regla": "Cada handler que recibe un evento debe propagar correlation_id (si existe en el payload) en (a) los publishes posteriores, y (b) los logs emitidos durante el procesamiento.",
+      "como_detectar": "Cruzar audit modulo-completo: si tracing.propaga_correlation_id=false PERO el módulo tiene subscribes (eventos.subscribes no vacío) que reciben payloads con correlation_id, reportar drift. Heurística adicional: detectar handler que accede a 'event.data.correlation_id' o 'payload.correlation_id' y NO lo incluye en sus this.eventBus.publish posteriores.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "modules/*/index.js"],
+      "ejemplo_drift_actual": "La mayoría de módulos auditados tienen tracing.propaga_correlation_id=false. Solo notas y scratch-designer lo hacen — más de 60 módulos con drift conocido.",
+      "viola": "correlation_id_no_propagado (prohibido), correlation_id_propagation (principio)"
+    },
+    {
+      "id": "drift_severity_invertida",
+      "regla": "Heurística: identifiers de log con sufijo de éxito (created/completed/succeeded) emitidos con .error o .warn; identifiers con sufijo de fallo (failed/error/timeout) emitidos con .info o .debug.",
+      "como_detectar": "Análisis estático: para cada this.logger.<level>(identifier, ...): si identifier ∈ heuristica_exito_regex Y level ∈ {error, warn} → drift. Si identifier ∈ heuristica_fallo_regex Y level ∈ {info, debug} → drift.",
+      "severidad": "info",
+      "fuentes": ["modules/*/index.js"],
+      "viola": "severity_invertida (prohibido), severity_meaningful (principio)",
+      "nota": "Heurística difícil de mecanizar perfectamente. Severidad info para no inundar el output — mayormente útil en revisión manual."
+    },
+    {
+      "id": "drift_log_spam_en_bucle",
+      "regla": "Heurística: detectar this.logger.<level> dentro de cuerpos de bucles (for/while/forEach/.map/.filter) en módulos cuyos handlers procesan datos potencialmente grandes.",
+      "como_detectar": "Análisis estático: parser AST o regex sobre estructura de bucles + presencia de this.logger.X dentro. Heurística aproximada con regex sobre líneas que contengan 'forEach' o 'for (' seguidas de líneas con this.logger.X.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js"],
+      "viola": "log_spam_en_bucle (prohibido), cost_aware (principio)",
+      "nota": "Heurística aproximada. Requiere revisión manual para casos legítimos (debug en desarrollo)."
+    },
+    {
+      "id": "drift_nombre_log_metric_critico",
+      "regla": "Identifiers de log y nombres de métrica que sean genéricos, abreviados crípticos o no descriptivos.",
+      "como_detectar": "Para cada identifier de log (primer arg de this.logger.X) y nombre de métrica (primer arg de this.metrics.X): chequear longitud mínima ≥10 chars, presencia de al menos un punto separador, y al menos una parte con ≥6 chars (no solo siglas).",
+      "severidad": "info",
+      "fuentes": ["modules/*/index.js"],
+      "viola": "nombre_log_metric_critico (prohibido), self_describing_names (principio)",
+      "nota": "Heurística — algunos identifiers cortos legítimos (ej. 'core.ready') pueden generar falsos positivos. Severidad info."
+    },
+    {
+      "id": "module_observability_audit_completeness",
+      "regla": "La auditoría modulo-completo de cada módulo tiene los campos observabilidad.logger.estilo, observabilidad.logger.firma_dominante, observabilidad.metricas_emitidas y observabilidad.tracing.propaga_correlation_id completos.",
+      "como_detectar": "Inspeccionar audit: si observabilidad.logger.estilo es null o ausente, o si metricas_emitidas es null (no array), reportar info para re-auditar.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "nota": "No es drift del código sino de la auditoría. Si aparece, hay que re-auditar el módulo."
+    }
+  ],
+
+  "salida_validador": "PASS si observability.json es estructuralmente válido (AJV strict). Errores cross-system bloquean PASS — secretos en logs son ERROR (riesgo de seguridad). Warnings se reportan como drift visible pero no bloquean. Info son heurísticas para revisión manual. Formato coherente con naming/glossary/events/lifecycle.validate.js: banner PASS/FAIL + lista de findings agrupados por severidad, con ubicación archivo:línea cuando aplique.",
+
+  "convenciones_complementarias": [
+    "events.validate.js cubre la disciplina del bus (qué se publica, cómo). observability.validate.js cubre cómo el módulo se hace visible al operador (logs, métricas, correlation_id).",
+    "naming.validate.js valida la forma léxica de los nombres de eventos. observability comparte conceptos pero aplica a identifiers de logs y nombres de métricas, no a topics MQTT.",
+    "lifecycle.validate.js valida cómo nace/muere el módulo. observability valida cómo se observa durante su vida.",
+    "modulo-completo.validate.js valida la AUDITORÍA per módulo. observability.validate.js cruza patrones de logging/métricas con la auditoría.",
+    "Los 5 validators son complementarios. Cada uno tiene su scope. Se ejecutan por separado o todos en CI."
+  ]
 }

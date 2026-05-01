@@ -26,6 +26,8 @@
     "validate:lifecycle:system": "node arquitectura/decisiones/_validators/lifecycle.validate.js --check-system",
     "validate:observability": "node arquitectura/decisiones/_validators/observability.validate.js",
     "validate:observability:system": "node arquitectura/decisiones/_validators/observability.validate.js --check-system",
+    "validate:errors": "node arquitectura/decisiones/_validators/errors.validate.js",
+    "validate:errors:system": "node arquitectura/decisiones/_validators/errors.validate.js --check-system",
     "start": "node index.js",
     "dev": "node index.js --log-level debug",
     "plop": "plop",

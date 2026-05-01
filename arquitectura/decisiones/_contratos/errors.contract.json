@@ -1,9 +1,9 @@
 {
   "_doc": "Captura LA forma canónica en la que el sistema event-core responde cuando algo sale mal: shape de la respuesta de error, códigos estandarizados, distinción entre dominio e infraestructura, telemetría automática, política de propagación. Sin un contrato de errores, cada módulo inventa su forma — los callers no pueden tratar errores uniformemente, los logs son ilegibles, las métricas se confunden, y los secretos se filtran en mensajes. Este contrato es la pareja del de observability: un error que ocurre, un error que se observa, un error que el caller puede tratar.",
   "id": "errors",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-04-30",
-  "supersedes_nota": "Primera versión. Recoge la convención de status codes HTTP-like del request/response del framework event-core (heredada en events.contract.json) y la formaliza para todas las respuestas de tools, ui_handlers, APIs HTTP y handlers de mqttRequest.",
+  "supersedes_nota": "v1.1.0 (POC iteration): (F3) deprecadas entradas específicas PROJECT_NOT_FOUND y RECIPE_NOT_FOUND de codes_domain — reemplazadas por RESOURCE_NOT_FOUND + details.entity_type. (F5) añadidos campos canónicos 'field' y 'all_errors' a details_canonical_fields para errores de validación. (F7) añadida sección recommended_helpers en output con patrón canónico _buildErrorResponse (auto log + auto metric + sin stack en respuesta). Validado en modules/notas-poc/.",
 
   "objetivo": "Producir UN JSON output (_outputs/errors.json) que define: shape canónica de respuesta (éxito y fallo), códigos de status estandarizados con su significado, estructura del campo error (code, message, details opcionales), política de stack traces, política de propagación (cuándo absorber, cuándo throw), telemetría obligatoria al emitir un error (log + métrica), política de exposición externa (qué se ve en respuestas vs qué solo en logs internos), distinción entre errores de dominio vs infraestructura. Validable mecánicamente cruzando contra las auditorías modulo-completo.",
 

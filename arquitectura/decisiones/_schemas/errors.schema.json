@@ -114,13 +114,15 @@
     "details_canonical_fields": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "retryable", "retry_after_ms", "entity_type", "entity_id"],
+      "required": ["kind", "retryable", "retry_after_ms", "entity_type", "entity_id", "field", "all_errors"],
       "properties": {
         "kind":           { "$ref": "#/$defs/details_field_policy" },
         "retryable":      { "$ref": "#/$defs/details_field_policy" },
         "retry_after_ms": { "$ref": "#/$defs/details_field_policy" },
         "entity_type":    { "$ref": "#/$defs/details_field_policy" },
-        "entity_id":      { "$ref": "#/$defs/details_field_policy" }
+        "entity_id":      { "$ref": "#/$defs/details_field_policy" },
+        "field":          { "$ref": "#/$defs/details_field_policy" },
+        "all_errors":     { "$ref": "#/$defs/details_field_policy" }
       }
     },
 
@@ -228,10 +230,30 @@
           "minLength": 5
         }
       }
+    },
+
+    "recommended_helpers": {
+      "type": "array",
+      "minItems": 0,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/helper_pattern" }
     }
   },
 
   "$defs": {
+    "helper_pattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "purpose", "applies_to", "snippet_canonico"],
+      "properties": {
+        "id":               { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "purpose":          { "type": "string", "minLength": 20 },
+        "applies_to":       { "type": "string", "minLength": 10 },
+        "snippet_canonico": { "type": "string", "minLength": 30 },
+        "uso_en_handler":   { "type": "string", "minLength": 5 },
+        "validado_en_poc":  { "type": "string", "minLength": 5 }
+      }
+    },
     "shape_field": {
       "type": "object",
       "additionalProperties": false,

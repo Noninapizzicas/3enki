@@ -169,5 +169,88 @@
       "derivado_de": ["no_shortcuts"],
       "razon": "Silenciar fallos de publish es ceguera operativa. Si el broker se cae cinco minutos, el sistema necesita saberlo — no puede haber eventos perdidos sin ningún rastro. Si no se quiere que el error suba (callback no-async donde no hay caller a quien propagar), al menos se loguea para que la observabilidad lo capture."
     }
+  ],
+
+  "prohibido": [
+    {
+      "id": "emit_bypass",
+      "regla": "Usar this.eventBus.emit() o cualquier acceso al primitivo EventEmitter de Node como mecanismo de emisión desde un módulo.",
+      "viola_principios": ["single_emit_api"],
+      "como_detectar": "Regex \\.emit\\( en código de módulos. El bus puede tener .emit por herencia interna pero los módulos NO deben usarlo.",
+      "ejemplo_drift_actual": "modules/staff-manager/index.js:353 — this.core.eventBus.emit(`staff.session.${type}`, ...)",
+      "alternativa_correcta": "this.eventBus.publish('staff.session.x', payload) — la API canónica del bus."
+    },
+    {
+      "id": "silent_catch",
+      "regla": "Capturar el error de un publish() con un handler vacío que no loguea: .catch(() => {}), .catch(_ => {}), o equivalente.",
+      "viola_principios": ["no_shortcuts"],
+      "como_detectar": "Regex \\.catch\\(\\s*(_?)\\s*=>\\s*\\{\\s*\\}\\s*\\) precedido cerca por \\.publish\\(.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "this.eventBus.publish(...).catch(err => this.logger.error('publish.failed', { event: 'x.y.z', error: err.message })) — al menos loguear."
+    },
+    {
+      "id": "rpc_over_pubsub",
+      "regla": "Publicar un evento <algo>.request esperando un evento <algo>.response por el mismo bus de eventos de dominio. Esto es RPC sincrónico disfrazado de pub/sub.",
+      "viola_principios": ["no_request_response_disguised", "fire_and_forget", "cardinality_agnostic"],
+      "como_detectar": "Nombres de evento con sufijo .request o .response cuando NO usan el patrón formal del framework (mqttRequest con correlation_id explícito en el payload).",
+      "ejemplo_drift_actual": "modules/calling-generator: function.get.request, function.get.response, function.execute.request, function.execute.response. modules/channel-manager: channel-manager.resolve.response. modules/composition-manager: db.query.request.",
+      "alternativa_correcta": "Si necesitas respuesta sincrónica genuina, usa el patrón formal del framework: mqttRequest(domain, action, payload) que devuelve Promise con correlation_id+timeout (decisión request_response_formal). Alternativa: una tool del LLM o una API HTTP."
+    },
+    {
+      "id": "generic_verb",
+      "regla": "Verbos genéricos en posición de verbo del nombre del evento: action, event, data, info, update, change, do, stuff. El verbo debe describir QUÉ pasó, no algo abstracto.",
+      "viola_principios": ["what_vs_how_separation"],
+      "como_detectar": "Último segmento del nombre del evento ∈ lista de verbos genéricos prohibidos: ['action', 'event', 'data', 'info', 'update', 'change', 'do', 'stuff', 'thing', 'response', 'request'].",
+      "ejemplo_drift_actual": "modules/admin-panel publica admin.action × 5. ¿Qué acción exactamente? Pierde información.",
+      "alternativa_correcta": "Sustituir por un verbo concreto del whitelist canónico (naming.json): admin.module-toggled, admin.module-loaded, admin.config-changed, etc. Si no encaja en el whitelist, proponer extensión vía PR a naming.json."
+    },
+    {
+      "id": "imperative_event_name",
+      "regla": "Verbo del evento en imperativo o gerundio: save, update, delete, creating, guardar, actualizar, crear. El verbo debe ser past participle (hecho consumado): saved, updated, deleted, creado, actualizado, creado.",
+      "viola_principios": ["what_vs_how_separation"],
+      "como_detectar": "Último segmento del evento NO está en verbs_lifecycle ni verbs_compound_allowed del idioma del módulo (cruce con naming.json).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "El imperativo es instrucción ('haz X'); el past participle es descripción ('X ha pasado'). El paradigma exige descripciones de hechos consumados, no órdenes."
+    },
+    {
+      "id": "non_ascii_event_name",
+      "regla": "Caracteres no-ASCII (tildes, ñ, espacios, caracteres especiales) en cualquier segmento del nombre del evento.",
+      "viola_principios": ["single_emit_api"],
+      "como_detectar": "Regex [^\\x20-\\x7E] aplicado a cada nombre de evento publicado.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "ASCII puro. confirmacion, no confirmación. Las tildes viven en strings UI, no en nombres de evento. Coherente con naming.json."
+    },
+    {
+      "id": "raw_topic_in_event_name",
+      "regla": "Pasar un topic MQTT crudo (con / y prefijos como core/{id}/) como argumento de eventBus.publish() o eventBus.subscribe(). La API del bus toma nombres de evento (con dots), no topics; la traducción es responsabilidad del bus.",
+      "viola_principios": ["single_emit_api", "name_to_topic_translation"],
+      "como_detectar": "Literal de string en publish/subscribe que contenga / o empiece con core/.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Usar el nombre del evento con dots: eventBus.publish('recipe.created', payload). La traducción a topic 'core/{id}/events/recipe/created' la hace el bus."
+    },
+    {
+      "id": "primitive_payload",
+      "regla": "Payload del evento que no es un object literal: string suelto, number, boolean, null, array directo.",
+      "viola_principios": ["what_vs_how_separation"],
+      "como_detectar": "Heurística sobre el segundo argumento de publish(): si es un literal primitivo (\"x\", 42, true, null, []), warning. Si es una variable, no se puede detectar estáticamente.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Envolver siempre en object literal: eventBus.publish('x.y.created', { value: 42 }). Esto permite añadir campos transversales (timestamp, correlationId, project_id) sin romper compatibilidad de payload."
+    },
+    {
+      "id": "wait_for_handler_side_effect",
+      "regla": "Tras publicar un evento, esperar/comprobar que un handler haya hecho su trabajo (típicamente con setTimeout, polling de un estado, o asunción de orden temporal con respecto al publish).",
+      "viola_principios": ["fire_and_forget", "no_temporal_coupling", "cardinality_agnostic"],
+      "como_detectar": "No siempre detectable mecánicamente — requiere inspección de código. Heurística: tras un publish, el código del mismo método lee un estado que solo el handler podría haber actualizado, o usa setTimeout para 'esperar' al handler.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Si necesitas confirmación, usa request_response_formal del framework. Si no la necesitas (caso típico), confía en el paradigma: el emisor describe el qué, no controla el cómo ni el cuándo."
+    },
+    {
+      "id": "undocumented_dynamic_subscribe",
+      "regla": "Suscribirse dinámicamente en onLoad o en runtime (eventBus.subscribe(...), mqtt.subscribe(...) directo) sin documentarlo en lifecycle.subscribes_dinamicos_en_lifecycle de la auditoría del módulo.",
+      "viola_principios": ["single_subscribe_api"],
+      "como_detectar": "Cruzar suscripciones detectadas en código (audit modulo-completo) con las declaradas en manifest + las dinámicas documentadas. Las que no encajen son drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Default: declarar en module.json.events.subscribes (auto-wired por el module loader). Si tiene que ser dinámico (depende de runtime, project_id, device_id), documentarlo expresamente en la auditoría."
+    }
   ]
 }

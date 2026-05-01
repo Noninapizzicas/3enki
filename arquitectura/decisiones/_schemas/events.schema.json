@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/events.schema.json",
+  "title": "Events Convention — Output Schema",
+  "description": "Schema strict de la instancia events.json. Valida arquitectura/decisiones/_outputs/events.json. additionalProperties=false en todos los niveles.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_meta",
+    "regla",
+    "transport",
+    "bus_internals",
+    "categorias_canonicas",
+    "last_will",
+    "discovery",
+    "request_response",
+    "payload_canonical_fields",
+    "publish_semantics",
+    "detection_patterns"
+  ],
+
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["convencion", "version", "creado_en", "contrato_referencia"],
+      "properties": {
+        "convencion":          { "const": "events" },
+        "version":             { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "creado_en":           { "type": "string", "format": "date" },
+        "contrato_referencia": { "type": "string", "pattern": "^arquitectura/decisiones/_contratos/" },
+        "supersedes_nota":     { "type": ["string", "null"] }
+      }
+    },
+
+    "regla": {
+      "type": "string",
+      "minLength": 80,
+      "description": "Frase maestra que resume la decisión arquitectónica de eventos en una línea legible."
+    },
+
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "default_broker", "external_broker_supported", "bridge_strategy"],
+      "properties": {
+        "protocol":                  { "const": "mqtt" },
+        "default_broker":            { "type": "string", "minLength": 1 },
+        "external_broker_supported": { "type": "boolean" },
+        "bridge_strategy":           { "type": "string", "minLength": 10 }
+      }
+    },
+
+    "bus_internals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "mechanisms", "transparent_to_module"],
+      "properties": {
+        "mode": { "enum": ["hybrid"] },
+        "mechanisms": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "scope", "purpose"],
+            "properties": {
+              "name":    { "type": "string", "minLength": 1 },
+              "scope":   { "type": "string", "minLength": 1 },
+              "purpose": { "type": "string", "minLength": 10 }
+            }
+          }
+        },
+        "transparent_to_module": { "const": true }
+      }
+    },
+
+    "categorias_canonicas": {
+      "type": "array",
+      "minItems": 10,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/categoria" }
+    },
+
+    "last_will": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["obligatorio", "topic_pattern", "payload_template", "qos", "retain", "nota"],
+      "properties": {
+        "obligatorio":   { "const": true },
+        "topic_pattern": { "type": "string", "minLength": 5 },
+        "payload_template": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "timestamp"],
+          "properties": {
+            "state":     { "type": "string", "description": "Valor del estado al momento del LWT, típicamente 'offline'." },
+            "timestamp": { "type": "string", "description": "Placeholder para timestamp ISO 8601." }
+          }
+        },
+        "qos":    { "const": 1 },
+        "retain": { "const": true },
+        "nota":   { "type": "string", "minLength": 10 }
+      }
+    },
+
+    "discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mecanismo", "subscribe_pattern", "publish_pattern", "payload_template", "qos", "retain"],
+      "properties": {
+        "mecanismo":         { "const": "retained_status" },
+        "subscribe_pattern": { "type": "string", "pattern": "^core/\\+/" },
+        "publish_pattern":   { "type": "string", "pattern": "^core/\\{core-id\\}/" },
+        "payload_template": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "version", "modules_loaded", "apis_exposed"],
+          "properties": {
+            "state":          { "type": "string" },
+            "version":        { "type": "string" },
+            "modules_loaded": { "type": "string" },
+            "apis_exposed":   { "type": "string" },
+            "subscriptions":  { "type": "string" },
+            "started_at":     { "type": "string" }
+          }
+        },
+        "qos":    { "const": 1 },
+        "retain": { "const": true }
+      }
+    },
+
+    "request_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "api_signature",
+        "returns",
+        "request_topic_patterns",
+        "response_topic_pattern",
+        "correlation_id_field",
+        "default_timeout_ms",
+        "status_codes_canonical",
+        "notas"
+      ],
+      "properties": {
+        "api_signature":          { "type": "string", "minLength": 5 },
+        "returns":                { "type": "string", "minLength": 5 },
+        "request_topic_patterns": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 5 }
+        },
+        "response_topic_pattern": { "type": "string", "minLength": 5 },
+        "correlation_id_field":   { "type": "string", "minLength": 1 },
+        "default_timeout_ms":     { "type": "integer", "minimum": 100 },
+        "status_codes_canonical": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 100, "maximum": 599 }
+        },
+        "notas": { "type": "string", "minLength": 10 }
+      }
+    },
+
+    "payload_canonical_fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timestamp", "correlation_id", "project_id", "source"],
+      "properties": {
+        "timestamp":      { "$ref": "#/$defs/payload_field_policy" },
+        "correlation_id": { "$ref": "#/$defs/payload_field_policy" },
+        "project_id":     { "$ref": "#/$defs/payload_field_policy" },
+        "source":         { "$ref": "#/$defs/payload_field_policy" }
+      }
+    },
+
+    "publish_semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "returns",
+        "resolves_when",
+        "does_not_imply",
+        "error_significa",
+        "uso_recomendado"
+      ],
+      "properties": {
+        "returns":          { "type": "string", "minLength": 5 },
+        "resolves_when":    { "type": "string", "minLength": 10 },
+        "does_not_imply":   { "type": "string", "minLength": 10 },
+        "error_significa":  { "type": "string", "minLength": 10 },
+        "uso_recomendado":  { "type": "string", "minLength": 10 }
+      }
+    },
+
+    "detection_patterns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generic_verbs",
+        "request_response_suffixes",
+        "emit_bypass_regex",
+        "silent_catch_regex",
+        "raw_topic_indicators",
+        "imperative_verbs_es",
+        "imperative_verbs_en"
+      ],
+      "properties": {
+        "generic_verbs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z]*$" }
+        },
+        "request_response_suffixes": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^\\." }
+        },
+        "emit_bypass_regex": {
+          "type": "string",
+          "minLength": 5,
+          "description": "Regex que detecta bypass por .emit() en código de módulos."
+        },
+        "silent_catch_regex": {
+          "type": "string",
+          "minLength": 10,
+          "description": "Regex que detecta .catch(()=>{}) silenciador tras publish."
+        },
+        "raw_topic_indicators": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "imperative_verbs_es": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z]*$" }
+        },
+        "imperative_verbs_en": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z]*$" }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "categoria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "topic_pattern", "qos", "retain", "descripcion", "derivado_de"],
+      "properties": {
+        "id": {
+          "enum": [
+            "events",
+            "state",
+            "commands",
+            "api/request",
+            "api/response",
+            "status",
+            "heartbeat",
+            "logs",
+            "ui/request",
+            "ui/response"
+          ]
+        },
+        "topic_pattern": {
+          "type": "string",
+          "minLength": 5,
+          "description": "Patrón del topic con placeholders como {core-id}, {domain}, {action}, {service}, {correlation_id}, {level}."
+        },
+        "qos": { "enum": [0, 1] },
+        "retain": { "type": "boolean" },
+        "descripcion": {
+          "type": "string",
+          "minLength": 10,
+          "description": "Descripción humana de para qué es esta categoría."
+        },
+        "derivado_de": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z_]*[a-z]$" }
+        }
+      }
+    },
+
+    "payload_field_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["politica"],
+      "properties": {
+        "politica": {
+          "enum": [
+            "obligatorio",
+            "obligatorio_en_respuestas",
+            "obligatorio_si_multitenant",
+            "recomendado",
+            "opcional"
+          ]
+        },
+        "formato": { "type": ["string", "null"] },
+        "valores_comunes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "nota": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

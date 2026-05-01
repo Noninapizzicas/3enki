@@ -315,5 +315,33 @@
       "ejemplo_drift_actual": null,
       "alternativa_correcta": "const resp = await mqttRequest('credential-manager', 'resolve', { id }); if (resp.error) { this.logger.warn('module.credencial.no_disponible', { code: resp.error.code }); return this._buildErrorResponse({ status: 503, code: 'DEPENDENCY_UNAVAILABLE', message: 'Credential manager unavailable' }); } /* usar resp.data */ — patrón propagate del contrato errors."
     }
-  ]
+  ],
+
+  "output_shape_resumen": "Ver _schemas/persistence.schema.json. Top-level: _meta, regla (frase maestra), patrones (catálogo de los 6 con shape canónico: id, nombre, descripcion, when_to_use, reglas_minimas, ejemplo_uso, ejemplo_modulos_audit, riesgos, restart_resilient, supports_concurrency), reglas_universales (que aplican a todos los patrones aunque cada uno tenga sus reglas_minimas específicas), module_declaration_shape (cómo declarar config.persistence en module.json — la forma canónica del manifest), detection_patterns (heurísticas que el validator usa para detectar drift).",
+
+  "reglas_de_extraccion": [
+    "Definir _meta con convencion='persistence', version (semver), creado_en (date), contrato_referencia (path al contrato).",
+
+    "Definir regla como frase maestra que resuma toda la decisión arquitectónica de persistencia en una línea legible. Ejemplo: 'Cada módulo elige su patrón de persistencia (in-memory, json-file, sqlite, etc.) y lo declara en module.json. Reglas universales aplican a todos: aislamiento, write atómico, ENOENT graceful, telemetría obligatoria, no secretos en plano. Catálogo de 6 patrones canónicos.'.",
+
+    "Definir patrones como array de los 6 patrones del catálogo del contrato (in-memory, json-file, json-file-per-project, sqlite, append-only-log, external-delegation). Cada uno tiene: id (string kebab-case), nombre (display), descripcion, when_to_use, reglas_minimas (array de strings — específicas de este patrón), ejemplo_uso (snippet de código), ejemplo_modulos_audit (array de slugs reales), riesgos (array), restart_resilient (boolean | string descriptivo), supports_concurrency (string descriptivo).",
+
+    "Definir reglas_universales como array de reglas que aplican a TODOS los patrones aunque cada patrón tenga sus reglas_minimas específicas. Cada regla: id, descripcion, viola_si_no_se_cumple (id del principio o prohibición). Ejemplos: 'declarar pattern en module.json' (de undeclared_persistence_pattern), 'cero acceso cruzado' (de cross_module_persistence_access), 'cero secretos en plano' (de secrets_in_plain_storage), 'telemetría en errores' (de silent_io_failure).",
+
+    "Definir module_declaration_shape como objeto describiendo el shape canónico del config.persistence en module.json. Campos: pattern (enum de los 6 ids), data_path (opcional según patrón), tables (array opcional para sqlite), migrations (array opcional para sqlite), restart_resilient (boolean), lost_on_restart (array opcional para in-memory), concurrency (enum: 'single-writer' | 'multi-writer-locked' | 'multi-writer-optimistic'), delegated_to (array opcional para external-delegation).",
+
+    "Definir detection_patterns como objeto con las heurísticas del validator. Claves: non_atomic_write_regex (regex para detectar fs.writeFile sobre archivo final sin tempFile+rename), secret_in_persistence_field_names (lista de campos sensibles que NO deben aparecer en payloads de write — heredada de errors.detection_patterns.sensitive_field_names), silent_io_catch_regex (regex de catch sin log), cross_module_path_indicators (lista de prefijos que indican acceso a paths de otros módulos), schema_drift_keywords (array: ['CREATE TABLE', 'CREATE INDEX', 'ALTER TABLE'])."
+  ],
+
+  "derivaciones": {
+    "patron_es_valido": "true si module.json.config.persistence.pattern ∈ patrones[*].id (uno de los 6 canónicos).",
+    "requiere_write_atomico": "true si patron ∈ {json-file, json-file-per-project}. False para append-only-log (modelo distinto), in-memory (sin disco), sqlite (transacciones, no write atómico de archivo), external-delegation (no persiste localmente).",
+    "requiere_transacciones_explicitas": "true si patron='sqlite' y la operación toca múltiples tablas o múltiples filas atómicas.",
+    "estado_declarado_correctamente": "true si: (a) module.json tiene config.persistence.pattern, AND (b) audit.estado.persistencia coincide con el pattern declarado.",
+    "viola_aislamiento": "true si código del módulo X accede a paths o tablas que pertenecen al patrón persistence de un módulo Y distinto.",
+    "contiene_secreto_en_persistencia": "true si una operación de write incluye campos cuyas keys ∈ detection_patterns.secret_in_persistence_field_names.",
+    "tiene_telemetria_en_io": "true si todo catch alrededor de read/write/query tiene this.logger + this.metrics en proximidad.",
+    "schema_declarado_completo": "true si para patron=sqlite, todas las tablas detectadas en código (CREATE TABLE) están en module.json.config.persistence.tables.",
+    "riesgo_unbounded_growth": "true si audit.estado.memoria contiene campos con leak_potencial=true que NO tienen TTL/eviction declarados en code o config."
+  }
 }

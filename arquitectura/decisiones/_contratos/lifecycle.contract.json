@@ -164,5 +164,88 @@
       "derivado_de": ["declarative_wiring", "symmetric_unload"],
       "razon": "Las suscripciones dinámicas son válidas pero opacas — el module loader no puede auto-wire algo que aparece en mitad de onLoad. Documentarlas las hace introspectables. La cancelación en onUnload sigue siendo obligatoria (symmetric_unload), porque el loader no puede unwire automáticamente lo que no auto-wireó."
     }
+  ],
+
+  "prohibido": [
+    {
+      "id": "signature_no_canonica",
+      "regla": "Usar nombres de método distintos a 'onLoad' y 'onUnload' para el ciclo de vida del módulo: init(), start(), setup(), initialize(), boot(), shutdown(), stop(), teardown(), destroy().",
+      "viola_principios": ["canonical_signatures"],
+      "como_detectar": "Buscar definiciones de métodos del módulo (clases en modules/*/index.js) que coincidan con la lista de nombres prohibidos. Si existen y onLoad/onUnload no, es drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "async onLoad(core) { ... } y async onUnload() { ... }. Si tienes lógica que parece más init/start, vive dentro de onLoad."
+    },
+    {
+      "id": "missing_onUnload_with_reservations",
+      "regla": "El módulo tiene reservas en onLoad (setInterval, setTimeout, fs.watch, mqtt.subscribe directo, child_process spawn, conexiones externas) pero NO tiene método onUnload o tiene un onUnload vacío que no las libera.",
+      "viola_principios": ["symmetric_unload", "hot_reload_safety"],
+      "como_detectar": "Cruzar lifecycle.onLoad.acciones (auditoría) con lifecycle.onUnload.acciones. Si onLoad menciona setInterval/setTimeout/watch/spawn/subscribe pero onUnload no menciona clearInterval/clearTimeout/unwatch/kill/unsubscribe, es drift. También: lifecycle.onUnload.estado_no_limpiado no vacío es señal directa.",
+      "ejemplo_drift_actual": "Multiple módulos auditados con timers en onLoad y onUnload vacío — ver lifecycle.onUnload.estado_no_limpiado en cada audit.",
+      "alternativa_correcta": "Para cada cosa que reserves en onLoad, libera en onUnload. clearInterval(this._timer); mqtt.removeListener('message', this._handler); proc.kill('SIGTERM')."
+    },
+    {
+      "id": "module_scope_state",
+      "regla": "Variables o estado mutable declarados FUERA de la clase del módulo (a nivel de módulo Node), que retienen valores entre llamadas. Ej.: 'let cache = {};' al principio del archivo, o 'const counter = { value: 0 }', o 'let isInitialized = false'.",
+      "viola_principios": ["state_local_to_module", "hot_reload_safety"],
+      "como_detectar": "Análisis estático del archivo: declaraciones let/var/const fuera de la clase que sean objetos/arrays/Maps/Sets mutables. Constantes inmutables (const COLORS = ['red','blue']) están bien.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Mover el estado a propiedades de la instancia: this.cache = new Map() en constructor o onLoad. Solo así sobrevive el hot-reload limpiamente (la nueva instancia es fresca)."
+    },
+    {
+      "id": "core_internal_access",
+      "regla": "Acceder a propiedades internas del core que no formen parte de la API canónica (core.logger, core.metrics, core.eventBus, core.uiHandler?, core.config?, core.modules?). Ej.: core._broker, core._loader, core.modules.algunModulo.privateField, core.eventBus._internalRouter.",
+      "viola_principios": ["guest_relationship", "core_injection_minimal"],
+      "como_detectar": "Buscar accesos del tipo core.X o core['X'] en código de módulos donde X no esté en la lista canónica. Filtrar accesos legítimos (core.logger, core.metrics, etc.).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Si necesitas algo que no esté en la API canónica del core, lo pides via eventBus.publish (otro módulo te responde) o lo recibes inyectado (proponer extensión de core_api_canonica con justificación)."
+    },
+    {
+      "id": "directly_require_other_module",
+      "regla": "Importar otro módulo del repo directamente con require/import: const otroModulo = require('../otro-modulo/index.js'). Esto crea acoplamiento estático del que el bus está pensado para liberar.",
+      "viola_principios": ["guest_relationship", "hot_reload_safety"],
+      "como_detectar": "Regex en código de módulos: require('../[^']+') o require('../../modules/[^']+') o import desde modules/. Filtrar imports legítimos (core, lib propio del módulo).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Comunicación entre módulos via eventBus.publish/subscribe. Si necesitas funciones puras del otro módulo, sácalas a una librería compartida (lib/) y ambos módulos la usan."
+    },
+    {
+      "id": "cross_module_config_access",
+      "regla": "Leer la configuración de OTRO módulo: core.config['otro-modulo'].algo. Cada módulo solo lee su propia slice: core.config?.[this.name].",
+      "viola_principios": ["config_namespacing", "guest_relationship"],
+      "como_detectar": "Regex: core.config['<otra-cadena>'] donde la cadena no coincida con this.name del módulo que lo escribe.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Si necesitas un dato que está en config de otro módulo, ese módulo lo expone via API/evento. La config es privada por módulo."
+    },
+    {
+      "id": "wait_for_other_module_in_onLoad",
+      "regla": "Publicar un evento en onLoad y esperar bloqueando una respuesta sincrónica de otro módulo (publish + await del .response). El arranque del módulo NO depende de respuestas en vivo de peers.",
+      "viola_principios": ["non_blocking_load", "no_request_response_disguised (events)"],
+      "como_detectar": "En onLoad: presencia de await sobre this.eventBus.subscribe(...) que espera, o pattern publish + await mqttRequest dentro de onLoad antes de marcar listo.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Si necesitas algo de otro módulo en runtime, suscríbete (declarativamente) a eventos del otro y reacciona cuando lleguen. Tu módulo arranca en estado 'esperando' y se vuelve 'operativo' cuando llegue la primera señal — pero NO bloquea el loader."
+    },
+    {
+      "id": "silent_catch_in_onLoad",
+      "regla": "try { ... } catch { } o try { ... } catch (e) {} en onLoad sin log, sin throw, sin nada. El error se traga y el loader cree que el módulo cargó bien cuando en realidad falló silencio.",
+      "viola_principios": ["errors_propagate_to_core", "no_shortcuts (events)"],
+      "como_detectar": "Regex en onLoad: catch \\(.*\\)\\s*\\{\\s*\\} o catch sin uso del error parameter ni this.logger.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "try { ... } catch (err) { this.logger.error('module.load_failed', { error: err.message, stack: err.stack }); throw err; }. Loguear y propagar."
+    },
+    {
+      "id": "long_synchronous_io_in_onLoad",
+      "regla": "Operaciones de IO bloqueantes/sincrónicas en onLoad: fs.readFileSync de archivos grandes, JSON.parse de blobs grandes sin async, loops con sleep, conexiones síncronas a recursos externos. Bloquean el loader y serializan accidentalmente la carga del sistema.",
+      "viola_principios": ["non_blocking_load"],
+      "como_detectar": "Heurística: fs.<algo>Sync en onLoad, o for/while con setTimeout y await artificial. Los casos pequeños (leer 100 bytes de config) son aceptables; los grandes son drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Usar fs.promises.* (async). Si el procesamiento es pesado, partirlo y dejar que arranque en background — el módulo puede marcar internamente 'no listo aún' y rechazar requests hasta que termine."
+    },
+    {
+      "id": "module_publishes_own_state_machine",
+      "regla": "El módulo publica eventos del tipo 'module.<nombre>.ready', 'module.<nombre>.initialized', 'module.<nombre>.started' por su cuenta como señal de su estado en el ciclo de vida. Ese rol es del core, que publica 'core/{core-id}/status' incluyendo qué módulos están loaded.",
+      "viola_principios": ["predictable_state_machine", "guest_relationship"],
+      "como_detectar": "Buscar eventos publicados por módulos cuyo nombre incluya 'ready', 'initialized', 'started', 'loaded' y que se refieran al propio módulo (no a un dominio).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Confiar en que cuando el core publica el status retained con el módulo en la lista, ese módulo está loaded. Si necesitas señalar algo de tu DOMINIO (no de tu lifecycle), publica un evento de dominio (ej. 'recipe-cache.warmed' con datos)."
+    }
   ]
 }

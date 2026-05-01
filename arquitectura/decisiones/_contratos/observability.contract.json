@@ -95,5 +95,72 @@
       "regla": "Cada log, métrica y span tiene coste real (CPU para serializar, ancho de banda para transmitir, disco para persistir). Bucles que loguean cada elemento, métricas por cada byte procesado, spans por cada función llamada — todos esos patrones degradan el sistema. Granularidad mínima viable: lo justo para diagnosticar.",
       "razon": "Sistemas observados a muerte se ralentizan. Si la observabilidad cuesta más que el trabajo del módulo, está mal calibrada. Cuando dudes entre loguear o no, no lo loguees — es más barato añadir un log cuando se necesita que quitarlo de un sistema que ya lo lleva en producción."
     }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "log_entry_shape",
+      "decision": "Cada log entry tiene la forma: { identifier (string), level (debug|info|warn|error), timestamp (ISO 8601, lo añade el logger), module (lo añade el logger desde this.name), ...fields (campos del segundo argumento del módulo) }. Identifier sigue patrón <module>.<entity>.<action_or_result>.",
+      "derivado_de": ["structured_logs_only", "context_in_every_emission", "self_describing_names"],
+      "razon": "Una forma fija + identifier consistente hace los logs procesables por máquinas (queries, alertas, agregadores). El logger inyectado añade timestamp/module automáticamente; el módulo solo aporta identifier + fields del dominio.",
+      "notas": "Ejemplo: this.logger.info('firmware.build_completed', { build_id, duration_ms, binary_size_bytes }) → log entry final: { identifier: 'firmware.build_completed', level: 'info', timestamp: '2026-04-30T...', module: 'firmware-builder', build_id: ..., duration_ms: ..., binary_size_bytes: ... }."
+    },
+    {
+      "id": "logger_levels",
+      "decision": "Cuatro niveles canónicos (sin más): debug, info, warn, error. NO se usan: trace, fatal, verbose, silly. El nivel se selecciona por método: this.logger.debug(), this.logger.info(), this.logger.warn(), this.logger.error().",
+      "derivado_de": ["severity_meaningful"],
+      "razon": "Cuatro niveles cubren todas las necesidades operativas sin fragmentar. Más niveles = más confusión sobre cuál usar. Trace y fatal son redundantes con debug y error respectivamente. La simpleza paga: el operador filtra por warn+ y captura todo lo importante."
+    },
+    {
+      "id": "logger_signature",
+      "decision": "Firma canónica: 'this.logger.<level>(identifier, fields)'. Donde <level> ∈ {debug, info, warn, error}, identifier es string en formato '<module>.<entity>.<action>', fields es un object con datos del dominio. El logger inyectado añade timestamp y module automáticamente.",
+      "derivado_de": ["structured_logs_only", "logger_levels", "inject_dont_instantiate"],
+      "razon": "Firma única hace el código predecible y validable. El identifier-primero, fields-segundo es el patrón estándar (pino, bunyan, structured-loggers en general). Permite indexar logs por identifier y filtrar por field."
+    },
+    {
+      "id": "metrics_types",
+      "decision": "Tres tipos canónicos: counter (sumable monotónico — eventos contables, totals), gauge (valor instantáneo — counts actuales, sizes, statuses), timing (duración medida en ms). NO se usa histogram en v1.0 (mayor complejidad, opcional para v2). Los métodos: this.metrics.increment(name, [delta], [labels]), this.metrics.gauge(name, value, [labels]), this.metrics.timing(name, ms, [labels]).",
+      "derivado_de": ["metrics_by_business_event", "inject_dont_instantiate"],
+      "razon": "Counter + gauge + timing cubren el 95% de necesidades reales. Histogram es valioso para latencias percentil-based pero añade complejidad operativa (buckets) que retrasaría el rollout. Se puede añadir en v2 sin breaking change."
+    },
+    {
+      "id": "metrics_naming_pattern",
+      "decision": "Patrón canónico: '<module>.<entity>.<accion_pasado>.<sufijo>'. Sufijos canónicos: '.total' (counter sumable), '.count' (gauge actual), '.duration' (timing en ms), '.bytes' (counter de bytes), '.errors' (counter de errores). Ejemplo: 'firmware.build_completed.total', 'firmware.pending_otas.count', 'firmware.ota.duration'.",
+      "derivado_de": ["self_describing_names", "metrics_by_business_event"],
+      "razon": "Patrón consistente permite a herramientas externas (Grafana, Prometheus exporters) procesar nombres con regex y agruparlos por módulo. Los sufijos estandarizados dicen qué tipo de métrica es sin tener que inspeccionar el tipo. Coherente con naming convention de eventos (también past participle)."
+    },
+    {
+      "id": "metrics_dimensions_canonicas",
+      "decision": "Dimensiones (labels) canónicas que se aplican a métricas cuando son relevantes: project_id (multi-tenant), source (cli|ui|auto|agent|system), core_id (multi-core, lo añade el core automáticamente), type/category (subset dentro de la métrica, ej. type='offline' en alerts). Otras dimensiones específicas del módulo permitidas si suman valor — bajo coste mental.",
+      "derivado_de": ["context_in_every_emission", "metrics_by_business_event"],
+      "razon": "Dimensiones permiten agregaciones útiles (cuántos pedidos por proyecto, cuántas alertas por tipo). Pero cada dimensión multiplica la cardinalidad de series temporales — exceso de dimensiones tira el rendimiento del backend de métricas. Lista corta de canónicas + criterio para módulo-específicas."
+    },
+    {
+      "id": "logs_transport",
+      "decision": "Los logs se transportan via MQTT en el topic 'core/{core-id}/logs/{level}' (heredado del contrato events.json — categoría 'logs'). QoS 0 (fire-and-forget, ligero). Sin retain. El logger inyectado encapsula este transport — el módulo solo llama this.logger.<level>().",
+      "derivado_de": ["inject_dont_instantiate"],
+      "razon": "Mismo transport que el resto del sistema (MQTT). Topics por nivel permiten suscripción selectiva (un agregador solo escucha logs/error+). QoS 0 porque los logs son alta frecuencia y la pérdida ocasional es aceptable (declarado en events.json: 'QoS 0 → logs, métricas, telemetría').",
+      "notas": "El logger del core puede tener fallback (escribir a stdout si MQTT no disponible) — el módulo no se entera."
+    },
+    {
+      "id": "correlation_id_propagation_pattern",
+      "decision": "Cuando un handler recibe un evento con correlation_id en el payload, ese correlation_id se incluye OBLIGATORIAMENTE en (a) cualquier evento que el handler publique como reacción, y (b) los logs que el handler emita durante su procesamiento. Patrón canónico: 'this.logger.info(\\'x.y.received\\', { ...data, correlation_id: event.payload.correlation_id })'. Si el evento original no trae correlation_id, no se inventa.",
+      "derivado_de": ["correlation_id_propagation"],
+      "razon": "La propagación es lo que convierte logs aislados en historias coherentes. Si el handler omite correlation_id, la cadena se rompe en ese punto y el operador no puede seguir el viaje del request. Obligar la propagación en logs y publishes es la única forma de garantizar trazabilidad cross-módulo."
+    },
+    {
+      "id": "secret_scrubbing_responsibility",
+      "decision": "El módulo es RESPONSABLE de no incluir secretos en sus logs/payloads. NO hay capa automática de scrubbing por defecto en v1.0 — se confía en disciplina del módulo + revisión de auditoría + lista canónica de campos sensibles que el linter detecta. Lista canónica (en detection_patterns del output): password, token, api_key, secret, authorization, cookie, session_token, private_key, refresh_token, access_token.",
+      "derivado_de": ["no_secrets_in_logs"],
+      "razon": "Scrubbing automático centralizado es deseable pero costoso y fácil de bypass (se confía en serializadores que respeten una lista). En v1.0: linter detecta campos prohibidos en payloads de logs; auditoría manual revisa casos sospechosos. v2 puede añadir scrubbing centralizado en el logger del core.",
+      "notas": "Si un módulo absolutamente debe loguear algo derivado de un secreto (ej. status de validación), loguea metadata (ej. token_id, valid_until) NO el valor."
+    },
+    {
+      "id": "tracer_v1_optional",
+      "decision": "El tracer (spans, distributed tracing OpenTelemetry-style) es OPCIONAL en v1.0. Si el core lo expone, está en core.tracer; los módulos que lo usen pueden crear spans con this.tracer.startSpan(name, { ...attrs }). Si no está, el módulo NO falla — el ciclo de vida sigue funcionando sin tracer.",
+      "derivado_de": ["inject_dont_instantiate", "cost_aware"],
+      "razon": "Distributed tracing añade complejidad operativa (jaeger/tempo/honeycomb backend, sampling rules, propagación de trace_id). En v1.0 el correlation_id en logs cubre el 80% de necesidades de trazabilidad. v2 puede formalizar tracing como obligatorio si la necesidad operativa justifica la inversión.",
+      "notas": "Decisión deliberada de no formalizar todavía: mejor un sistema funcional sin tracing que un sistema con tracing roto o mal usado."
+    }
   ]
 }

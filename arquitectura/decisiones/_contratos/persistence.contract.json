@@ -343,5 +343,111 @@
     "tiene_telemetria_en_io": "true si todo catch alrededor de read/write/query tiene this.logger + this.metrics en proximidad.",
     "schema_declarado_completo": "true si para patron=sqlite, todas las tablas detectadas en código (CREATE TABLE) están en module.json.config.persistence.tables.",
     "riesgo_unbounded_growth": "true si audit.estado.memoria contiene campos con leak_potencial=true que NO tienen TTL/eviction declarados en code o config."
-  }
+  },
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "persistence_json_estructura_valida",
+      "regla": "persistence.json valida estructuralmente contra persistence.schema.json (AJV strict, additionalProperties=false en todos los niveles).",
+      "como_detectar": "Cargar el schema, compilar con AJV strict, validar el output. Cualquier error de schema bloquea PASS.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/decisiones/_outputs/persistence.json", "arquitectura/decisiones/_schemas/persistence.schema.json"]
+    },
+    {
+      "id": "drift_undeclared_persistence_pattern",
+      "regla": "Cada módulo que persiste estado (audit detecta archivos, sqlite_tablas o estado.memoria con leak_potencial) tiene declarado config.persistence.pattern en su module.json.",
+      "como_detectar": "Cruzar audit modulo-completo: si estado.persistencia.archivos no vacío OR sqlite_tablas no vacío OR estado.memoria con campos no triviales, comprobar que module.json del módulo tiene config.persistence.pattern declarado y coincide con lo detectado.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "modules/*/module.json"],
+      "viola": "undeclared_persistence_pattern (prohibido), explicit_declaration_in_manifest (principio)",
+      "ejemplo_drift_actual": "Sistemático: la mayoría de los 66 módulos NO tienen config.persistence en module.json — declaración pendiente."
+    },
+    {
+      "id": "drift_non_atomic_write",
+      "regla": "Ningún módulo con patrón json-file o json-file-per-project escribe directamente sobre el archivo final con fs.writeFile sin pasar por tempFile + fs.rename.",
+      "como_detectar": "Regex en código: 'fs\\.(promises\\.)?writeFile\\([^,]+,' donde el primer argumento NO termina en .tmp / .new / .swp. Cruzar con audit estado.persistencia.archivos para identificar módulos con json-file pattern.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "non_atomic_write (prohibido), atomic_writes_mandatory (principio)",
+      "ejemplo_drift_actual": "Múltiples módulos del repo escriben directamente sin atomicidad. Solo ui-designer y notas-poc usan el patrón canónico."
+    },
+    {
+      "id": "drift_secrets_in_plain_storage",
+      "regla": "Ningún payload de write a disco/DB contiene campos sensibles (token, password, api_key, etc.) en plano. Coherente con drift_secrets_en_payload_log de observability/errors.",
+      "como_detectar": "Análisis estático: localizar fs.writeFile, sqlite INSERT/UPDATE, etc. y verificar que las keys del payload NO intersecan con detection_patterns.secret_in_persistence_field_names. Severidad ERROR — riesgo de seguridad.",
+      "severidad": "error",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "secrets_in_plain_storage (prohibido), no_plain_secrets_on_disk (principio)"
+    },
+    {
+      "id": "drift_cross_module_persistence_access",
+      "regla": "Ningún módulo lee/escribe paths o tablas que pertenecen a la persistencia de otro módulo. La comunicación cross-módulo va por bus.",
+      "como_detectar": "Análisis estático: para cada operación I/O del módulo X, verificar que el path NO empieza por <data_path declarado por OTRO módulo Y en su module.json>. Heurística: rutas con prefijos 'data/recetas/', 'data/firmware/' usadas por módulos que no son el dueño.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/module.json"],
+      "viola": "cross_module_persistence_access (prohibido), absolute_isolation_between_modules (principio)"
+    },
+    {
+      "id": "drift_silent_io_failure",
+      "regla": "Ningún catch alrededor de operaciones I/O (read, write, query) carece de this.logger + this.metrics en el bloque del catch. Telemetría obligatoria en fallos de persistencia.",
+      "como_detectar": "Regex multi-línea: localizar try/catch que envuelven fs.* o db.* operations. Para cada catch: verificar presencia de this.logger.X dentro del bloque, AND this.metrics.X con sufijo .errors.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "silent_io_failure (prohibido), mandatory_telemetry_on_io (principio)"
+    },
+    {
+      "id": "drift_schema_drift_undeclared",
+      "regla": "Para módulos con patrón sqlite, todas las tablas creadas en código (CREATE TABLE) están declaradas en module.json.config.persistence.tables.",
+      "como_detectar": "Regex en código: 'CREATE TABLE\\s+(\\w+)' — capturar nombres de tabla. Cruzar con manifest.config.persistence.tables[*].name. Diferencias = drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js", "modules/*/module.json"],
+      "viola": "schema_drift_undeclared (prohibido), explicit_declaration_in_manifest (principio)",
+      "ejemplo_drift_actual": "staff-manager delega a sublib (lib/employees, lib/sessions) que ejecutan CREATE TABLE sin declarar en module.json — la auditoría tuvo que documentar 'no auditado en este pase'."
+    },
+    {
+      "id": "drift_unbounded_growth_no_eviction",
+      "regla": "Estado en memoria que crece sin TTL/eviction declarados. Detectado en audit.estado.memoria como leak_potencial=true.",
+      "como_detectar": "Inspeccionar audit modulo-completo.estado.memoria: si algún campo tiene leak_potencial=true Y NO hay declaración de TTL/eviction en config, drift.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "modules/*/module.json"],
+      "viola": "unbounded_growth_no_eviction (prohibido)",
+      "ejemplo_drift_actual": "ai-gateway: pendingFsReads, providers, credentialCache. prompt-manager: pendingRequests con timers no clearTimeout. carta-* con projectPaths sin invalidación."
+    },
+    {
+      "id": "drift_enoent_treated_as_error",
+      "regla": "En onLoad de módulos con patrón json-file*, el read inicial NO debe fallar el módulo si ENOENT. Heurística aproximada.",
+      "como_detectar": "Análisis del onLoad: try/catch alrededor de fs.readFile que NO discrimine err.code === 'ENOENT'. Si todo el catch va a logger.error o throw, drift.",
+      "severidad": "info",
+      "fuentes": ["modules/*/index.js"],
+      "viola": "enoent_treated_as_error (prohibido), enoent_is_info_not_error (principio)",
+      "nota": "Heurística difícil de mecanizar perfectamente. Severidad info — útil mayormente en revisión manual."
+    },
+    {
+      "id": "drift_hard_coupled_to_external_module",
+      "regla": "Módulos external-delegation deben tolerar caída del persistidor (handle error de mqttRequest).",
+      "como_detectar": "Regex en código: 'await mqttRequest\\(' seguido de uso del .data sin chequear .error. Si .data se asume sin verificación, drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js"],
+      "viola": "hard_coupled_to_external_module (prohibido)"
+    },
+    {
+      "id": "module_persistence_audit_completeness",
+      "regla": "La auditoría modulo-completo de cada módulo tiene los campos estado.persistencia.archivos, estado.persistencia.sqlite_tablas y estado.memoria completos cuando aplican.",
+      "como_detectar": "Inspeccionar audit: módulos con código de I/O detectado pero estado.persistencia.archivos vacío, o módulos con SQLite sin sqlite_tablas. Severidad info — apunta a re-auditar.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "nota": "No es drift del código sino de la auditoría. Si aparece, hay que re-auditar el módulo con foco en persistencia."
+    }
+  ],
+
+  "salida_validador": "PASS si persistence.json es estructuralmente válido (AJV strict). Errores cross-system bloquean PASS — secretos en persistencia plana son ERROR (riesgo de compliance/seguridad). Warnings son drift visible que no bloquea. Info son heurísticas para revisión manual. Formato coherente con los 5 validators previos: banner PASS/FAIL + lista de findings agrupados por severidad, con ubicación archivo:línea cuando aplique.",
+
+  "convenciones_complementarias": [
+    "events.validate.js cubre la disciplina del bus. persistence.validate.js cubre la disciplina del estado del módulo.",
+    "lifecycle.validate.js valida onLoad/onUnload + estado_no_limpiado (leak_potencial). persistence.validate.js cruza eso con el patrón de persistencia declarado para detectar 'in-memory sin restart_resilient declarado' o 'json-file sin _persistirADisco en onUnload'.",
+    "observability.validate.js valida log/metric format. persistence.validate.js especifica la regla de telemetría OBLIGATORIA para I/O específicamente (mandatory_telemetry_on_io).",
+    "errors.validate.js valida shape de respuesta y códigos. persistence.validate.js asegura que los errores de I/O usen códigos canónicos (DATABASE_DOWN, FILESYSTEM_ERROR, etc. de errors.json.codes_infrastructure).",
+    "modulo-completo.validate.js valida la AUDITORÍA. persistence.validate.js cruza el patrón declarado en module.json con lo realmente detectado en estado.persistencia / estado.memoria del audit.",
+    "Los 7 validators (naming, glossary, events, lifecycle, observability, errors, persistence) son complementarios y no se solapan en su scope. Se ejecutan por separado o todos en CI."
+  ]
 }

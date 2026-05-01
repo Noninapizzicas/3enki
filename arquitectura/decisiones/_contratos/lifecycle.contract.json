@@ -93,5 +93,76 @@
       "regla": "El ciclo de vida tiene 5 estados: unloaded → loading → loaded → unloading → unloaded. El core lleva la cuenta. El módulo NO inventa estados intermedios propios ('initializing', 'ready', 'started') visibles al core — esos pueden ser estado interno del módulo (this.*) pero no parte del contrato con el loader.",
       "razon": "Una máquina de estados simple y conocida hace el sistema observable: el core sabe en cada momento qué módulos están loaded y cuáles unloaded. Si cada módulo invent ase su propio ciclo, el loader no podría tomar decisiones consistentes (cuándo enrutar mensajes, cuándo descargar, etc.)."
     }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "signature_onLoad",
+      "decision": "Firma canónica: 'async onLoad(core)'. Parámetro único, async (devuelve Promise). El loader hace 'await module.onLoad(core)' y solo después marca el módulo como loaded. Si la promesa rechaza, marca failed.",
+      "derivado_de": ["canonical_signatures", "non_blocking_load", "errors_propagate_to_core"],
+      "razon": "Async permite IO no bloqueante. Una sola firma elimina la lógica especial en el loader. Que el loader haga await garantiza que cuando un módulo está marcado loaded, su estado interno está realmente listo (no a medias).",
+      "notas": "Variantes prohibidas: init(), start(), setup(), constructor(deps), onLoad sin parámetros, onLoad sincrónico."
+    },
+    {
+      "id": "signature_onUnload",
+      "decision": "Firma canónica: 'async onUnload()'. Sin parámetros. Async. El loader hace 'await module.onUnload()' antes de marcar unloaded. Si rechaza o se cuelga (>5s timeout), el loader fuerza el unload y registra el problema.",
+      "derivado_de": ["canonical_signatures", "symmetric_unload", "errors_propagate_to_core"],
+      "razon": "El loader necesita garantía de que cuando marca unloaded, los recursos están liberados. El timeout protege contra módulos que se cuelgan en cleanup — el sistema no puede quedar bloqueado por un mal módulo.",
+      "notas": "Si onUnload no existe en el módulo, el loader asume nada que limpiar. Si existe pero está vacío y onLoad reservó cosas, es leak — la auditoría lo marca."
+    },
+    {
+      "id": "core_api_canonica",
+      "decision": "El objeto 'core' inyectado en onLoad expone exactamente: logger (siempre), metrics (siempre), eventBus (siempre), uiHandler (opcional, presente si hay UI), config (opcional, namespaced por módulo), modules (opcional, registry de otros módulos para inspector-like cases). NO expone: clientes DB directos, cliente MQTT crudo, instancias de servicios concretos, handles a otros módulos.",
+      "derivado_de": ["guest_relationship", "core_injection_minimal"],
+      "razon": "Esta API mínima es la única superficie de contacto módulo↔core. Si un módulo necesita más (DB, otro módulo), va via eventBus.publish — y otro módulo lo resuelve. Mantener la API mínima evita que los módulos se acoplen al esquema interno del core.",
+      "notas": "core.config se accede como core.config?.[this.name] — namespaced por nombre del módulo. NUNCA core.config['otro-modulo']."
+    },
+    {
+      "id": "config_namespacing",
+      "decision": "Cada módulo lee su configuración SOLO de 'core.config?.[this.name]'. El módulo merge esa slice con sus defaults: 'this.config = { ...defaults, ...core.config?.[this.name] }'. NO accede a config de otros módulos. NO modifica core.config en runtime.",
+      "derivado_de": ["guest_relationship", "state_local_to_module"],
+      "razon": "Namespacing por nombre evita choques entre módulos distintos. Un módulo no debe saber qué configuración usa otro — ni siquiera leerla. Si necesita coordinar parámetros, va via eventBus."
+    },
+    {
+      "id": "module_state_machine",
+      "decision": "5 estados llevados por el core (no por el módulo): unloaded (inicial) → loading (durante onLoad) → loaded (tras await onLoad y auto-wiring) → unloading (durante onUnload) → unloaded (tras await onUnload). Estados de fallo: failed (loading rechazado), unloaded_with_errors (onUnload rechazado/timeout).",
+      "derivado_de": ["predictable_state_machine"],
+      "razon": "Estados simples y enumerables permiten al core tomar decisiones consistentes (cuándo rutear eventos, cuándo descargar, cuándo reportar drift). Estados privados del módulo (initializing, warming-up) son estado interno (this.*) y no parte del contrato con el loader.",
+      "notas": "Transiciones disparadas por el core, no por el módulo. El módulo NO publica eventos del tipo 'module.X.ready' por su cuenta — el core lo hace tras marcar loaded."
+    },
+    {
+      "id": "auto_wiring_orden",
+      "decision": "Secuencia que ejecuta el module loader entre unloaded y loaded: (1) leer module.json, (2) instanciar la clase del módulo, (3) marcar loading, (4) await onLoad(core), (5) auto-wire subscribes de manifest.events.subscribes, (6) auto-wire tools, (7) auto-wire ui_handlers, (8) auto-wire HTTP routes, (9) marcar loaded, (10) publicar status retained con el módulo añadido.",
+      "derivado_de": ["declarative_wiring", "predictable_state_machine"],
+      "razon": "onLoad va ANTES del auto-wiring para que cuando lleguen los primeros eventos, el módulo tenga el estado listo (this.config cargado, this.X = new Map() inicializado, conexiones abiertas). Si el wiring fuera primero, podríamos recibir eventos en una instancia a medio inicializar.",
+      "notas": "Si onLoad reserva timers/listeners propios (no auto-wired), eso ocurre dentro del onLoad — paso 4. El paso 5+ es solo para lo declarado en manifest."
+    },
+    {
+      "id": "hot_reload_protocol",
+      "decision": "Secuencia de hot-reload disparada por fs.watch: (1) marcar unloading, (2) auto-unwire subscribes/tools/handlers, (3) await onUnload(), (4) descartar instancia y referencia a la clase, (5) clear require.cache para el archivo, (6) re-require fresh, (7) instanciar la nueva clase, (8) marcar loading, (9) await onLoad(core), (10) auto-wire, (11) marcar loaded, (12) publicar status update.",
+      "derivado_de": ["hot_reload_safety", "symmetric_unload"],
+      "razon": "El protocolo es estricto para garantizar que NO queden referencias a la versión vieja: descartar instancia + clear require.cache + re-require. Si el módulo tiene state module-scope (lo prohibido), aquí se rompe — esa es la auditoría natural del principio state_local_to_module.",
+      "notas": "El estado de la instancia anterior se PIERDE en hot-reload (es deliberado). Si se necesita persistir entre versiones, se persiste a disco/bus en onUnload y se recarga en onLoad."
+    },
+    {
+      "id": "error_handling_arranque",
+      "decision": "Si onLoad rechaza (throw o Promise reject): (1) el loader captura el error, (2) loguea con stack trace completo, (3) marca el módulo como failed (estado terminal), (4) publica 'core/{core-id}/module/{name}/load_failed' con detalles, (5) NO auto-wire (handlers no existen, eventos a este módulo se pierden o causan warning), (6) continúa cargando otros módulos. Operador puede reintentar manualmente.",
+      "derivado_de": ["errors_propagate_to_core", "non_blocking_load"],
+      "razon": "Un módulo que falla en arranque NO puede romper el sistema entero — los demás módulos siguen su vida. Pero el fallo es visible (log + evento de status) para que el operador o un módulo de health monitoring lo detecte. El módulo failed queda inactivo hasta retry manual.",
+      "notas": "Diferente de 'unloaded': failed indica intento fallido, unloaded indica nunca cargado o descargado limpiamente."
+    },
+    {
+      "id": "error_handling_apagado",
+      "decision": "Si onUnload rechaza o no resuelve en 5s (timeout): (1) loguear el error/timeout, (2) marcar el módulo como unloaded_with_errors, (3) forzar liberación de referencias del módulo (let GC collect), (4) publicar 'core/{core-id}/module/{name}/unload_error' con detalles, (5) los recursos NO liberados (timers, listeners, subprocesos) quedan como leaks aceptados — el operador decide reiniciar el core si el problema se repite.",
+      "derivado_de": ["symmetric_unload", "errors_propagate_to_core"],
+      "razon": "El sistema no puede quedar bloqueado por un módulo malo en cleanup. El timeout 5s es generoso (suficiente para flush de buffers, close de conexiones razonables). Pasado eso, mejor un leak controlado y visible que un sistema colgado.",
+      "notas": "Los leaks reportados deberían bajar drásticamente si los módulos respetan symmetric_unload. Si un módulo aparece repetidamente con unload_error, es candidato prioritario a refactor."
+    },
+    {
+      "id": "subscribes_dinamicos_documentacion",
+      "decision": "Las suscripciones dinámicas (registradas en runtime en lugar de declarativamente en module.json) están permitidas SOLO si: (a) dependen de valores runtime (project_id, device_id, topic dinámico MQTT), Y (b) están explícitamente documentadas. Documentación: en module.json bajo events.subscribes_dynamic[] (con descripción de la condición), o en la auditoría modulo-completo en lifecycle.subscribes_dinamicos_en_lifecycle. La auditoría detecta drift: subscribes presentes en código pero no en ninguna de esas dos vías.",
+      "derivado_de": ["declarative_wiring", "symmetric_unload"],
+      "razon": "Las suscripciones dinámicas son válidas pero opacas — el module loader no puede auto-wire algo que aparece en mitad de onLoad. Documentarlas las hace introspectables. La cancelación en onUnload sigue siendo obligatoria (symmetric_unload), porque el loader no puede unwire automáticamente lo que no auto-wireó."
+    }
   ]
 }

@@ -97,5 +97,70 @@
       "regla": "Los códigos de error pertenecen a una lista cerrada y canónica definida en errors.json (HTTP-like estándar + lista de códigos de dominio + lista de códigos de infraestructura). El módulo elige el más apropiado de la lista — NO inventa códigos. Si la lista no cubre un caso real, se propone PR para extenderla.",
       "razon": "Códigos inventados ad-hoc generan drift léxico (un módulo dice 'NOT_FOUND', otro 'NOTFOUND', otro '404'). El caller no puede ramificar. Lista cerrada + extensión por PR = vocabulario controlado del sistema. Mismo razonamiento que glossary y verbs_lifecycle de naming."
     }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "response_shape_exact",
+      "decision": "Toda respuesta de tool/ui_handler/api_http/handler de mqttRequest tiene la forma exacta: { status: integer (HTTP-like), data?: object (presente en éxito, ausente en fallo), error?: { code: string UPPER_SNAKE_CASE, message: string libre, details?: object opcional } (presente en fallo, ausente en éxito) }. Mutuamente excluyentes: si hay error, NO hay data. Si hay data, NO hay error. status SIEMPRE presente.",
+      "derivado_de": ["canonical_response_shape", "human_message_machine_code"],
+      "razon": "Forma estricta y predecible permite a callers procesar respuestas uniformemente sin try/catch defensivos por cada call. La auditoría puede validar el shape mecánicamente.",
+      "notas": "Esto es lo que recibe el caller. El status es HTTP-like (200/400/500), el code es la subdivisión léxica del error específico ('RECIPE_NOT_FOUND', 'DATABASE_DOWN')."
+    },
+    {
+      "id": "status_codes_canonical",
+      "decision": "Status integer de la respuesta sigue convención HTTP-like. Lista cerrada heredada de events.json.request_response.status_codes_canonical y extendida si necesario: 200 (OK), 201 (Created), 202 (Accepted, async), 204 (No Content), 400 (Bad Request — input inválido), 401 (Unauthorized), 403 (Forbidden), 404 (Not Found), 409 (Conflict), 422 (Unprocessable Entity), 429 (Too Many Requests), 500 (Internal Server Error — infraestructura), 502 (Bad Gateway — dependencia externa), 503 (Service Unavailable — temporal), 504 (Gateway Timeout). Códigos 4xx = error de dominio (caller debe corregir). Códigos 5xx = error de infraestructura (puede ser recuperable).",
+      "derivado_de": ["recoverable_signal", "domain_vs_infrastructure", "closed_code_list"],
+      "razon": "HTTP-like es lingua franca entendida por todos los callers (UIs, otros módulos, herramientas externas). La división 4xx/5xx codifica la distinción dominio/infraestructura sin inventar nada. El caller sabe inmediatamente: 4xx = corregí input antes de reintentar, 5xx = reintenta con backoff."
+    },
+    {
+      "id": "error_code_naming",
+      "decision": "El campo error.code es un string en UPPER_SNAKE_CASE: 'PROJECT_NOT_FOUND', 'INVALID_INPUT', 'DATABASE_DOWN', 'CREDENTIAL_EXPIRED'. Tres a cinco palabras como mucho. Identifica la causa específica dentro de la categoría del status. Lista cerrada en errors.json — no se inventan.",
+      "derivado_de": ["closed_code_list", "human_message_machine_code"],
+      "razon": "UPPER_SNAKE_CASE es convención industria para constantes/códigos (HTTP, gRPC, proto). Distingue visualmente del status numérico y del message en prosa. Estable en el tiempo (cambiar un code es breaking change). El caller hace 'switch (error.code)' sin parsear strings.",
+      "notas": "Códigos canónicos viven en errors.json bajo dos categorías: codes_domain (4xx-related) y codes_infrastructure (5xx-related)."
+    },
+    {
+      "id": "details_structure",
+      "decision": "El campo error.details es un object opcional con metadata adicional. Campos canónicos cuando aplican: kind ('domain' | 'infrastructure' — si no se infiere por status), retryable (boolean — sugerencia explícita), retry_after_ms (number, en infraestructura recuperable), entity_type (string — qué tipo de entidad falló: 'recipe', 'project'), entity_id (string — identificador específico). Otros campos son módulo-específicos pero documentables.",
+      "derivado_de": ["domain_vs_infrastructure", "recoverable_signal"],
+      "razon": "details permite enriquecer el error con contexto útil para el caller sin contaminar message (que es prosa). Estructurado, NO concatenación de strings. retry_after_ms es ejemplo de campo que el caller usa directamente en su lógica de backoff."
+    },
+    {
+      "id": "auto_log_on_error",
+      "decision": "Cada vez que un módulo construye una respuesta con error, antes de devolverla emite automáticamente: this.logger.<level>(`${this.name}.${action}.failed`, { error_code, error_message, error_details, stack: errOriginal?.stack, ...contextoRelevante }). Level: warn si status 4xx (recuperable/dominio), error si status 5xx (infraestructura). Esta llamada es PARTE de la respuesta — no se omite.",
+      "derivado_de": ["auto_observable_errors", "severity_meaningful (observability)"],
+      "razon": "Sin telemetría automática, los errores son invisibles. Forzando que esté en la API de respuesta (un helper buildErrorResponse() que loguea + devuelve), nadie puede emitirlo sin telemetría. El level apropiado al status mantiene severidad significativa (observability principio)."
+    },
+    {
+      "id": "auto_metric_on_error",
+      "decision": "Junto al log, automáticamente: this.metrics.increment(`${this.name}.<action>.errors`, 1, { code: error.code, kind: 'domain'|'infrastructure' }). El nombre de la métrica usa el sufijo canónico .errors (de observability.metrics.canonical_suffixes). El label 'code' permite agrupar errores por causa.",
+      "derivado_de": ["auto_observable_errors", "metrics_naming_pattern (observability)"],
+      "razon": "Una métrica por error permite ver tendencias (¿este código está aumentando? ¿errores de infra suben este mes?). El label 'code' en el counter da granularidad sin multiplicar nombres de métrica. Coherente con el patrón <module>.<entity>.<accion>.errors."
+    },
+    {
+      "id": "stack_in_logs_only",
+      "decision": "El campo .stack del Error original (si existe) se incluye SOLO en this.logger. JAMÁS en error.message, error.details, ni en ningún otro campo de la respuesta que devuelve el módulo al caller. La respuesta lleva exclusivamente { code, message, details? }.",
+      "derivado_de": ["no_stack_in_response", "no_secrets_in_messages"],
+      "razon": "Stack revela paths de filesystem, nombres internos, estructura del proyecto — útil para atacantes, ruido para callers legítimos. Mantener el stack EN logs (donde el operador puede consultarlo) y FUERA de respuestas (que llegan a callers potencialmente externos) es estándar de seguridad y de UX limpia."
+    },
+    {
+      "id": "mqttRequest_error_propagation",
+      "decision": "Cuando un módulo llama mqttRequest('domain', 'action', payload) y la respuesta es un error (status >= 400), el caller decide entre 3 opciones: (a) PROPAGAR — devolver el mismo error con el mismo code/message del peer (mismo status, mismo error.code, mismo message); (b) TRADUCIR — devolver un error propio con código del dominio del caller (ej. el peer dice 'CREDENTIAL_NOT_FOUND', el caller traduce a 'AUTHENTICATION_FAILED'); (c) ABSORBER — devolver éxito con datos parciales o defaults, registrando degradado en log+métrica. En las 3 opciones: log + métrica obligatorios.",
+      "derivado_de": ["propagate_or_absorb_with_telemetry"],
+      "razon": "Cuando un error cruza fronteras de módulos, el caller decide cómo presentárselo a sus propios callers. Propagación literal expone códigos del peer (acoplamiento). Traducción aísla. Absorción mantiene UX. Las 3 son válidas; lo que NO es válido es no decidir o tragar sin telemetría."
+    },
+    {
+      "id": "http_endpoint_error_format",
+      "decision": "Para endpoints HTTP (apis_http), el módulo devuelve { status, body }. El status es el HTTP status code. El body es JSON con la misma estructura canónica: { status (int — debe coincidir con el status HTTP), error: { code, message, details? } } cuando hay error. Headers Content-Type: application/json.",
+      "derivado_de": ["canonical_response_shape"],
+      "razon": "HTTP nativo soporta status code. El body en JSON con la misma estructura del response interno mantiene coherencia: el caller HTTP procesa errores igual que el caller interno. Duplicar status (en HTTP header y en body) es redundante pero práctico — algunos middlewares solo miran el body, otros solo el header."
+    },
+    {
+      "id": "tool_response_format",
+      "decision": "Para tools del LLM (manifest.tools), el handler devuelve la misma forma canónica { status, data?, error? }. El LLM consume esto como JSON estándar. NO se devuelve string suelto, NO se devuelve { ok: true }, NO se devuelve raw data. El LLM ramifica por status (>= 400 = problema, 2xx = ok).",
+      "derivado_de": ["canonical_response_shape"],
+      "razon": "Una sola forma para handlers internos, HTTP, mqttRequest y tools del LLM. El LLM se beneficia especialmente: con shape canónico aprende UNA convención, no una por módulo. Tools que devolvían string libre o { success } generan drift léxico que el LLM tiene que parsear caso por caso."
+    }
   ]
 }

@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/errors.schema.json",
+  "title": "Errors Convention — Output Schema",
+  "description": "Schema strict de la instancia errors.json. Valida arquitectura/decisiones/_outputs/errors.json. additionalProperties=false en todos los niveles.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_meta",
+    "regla",
+    "response_shape",
+    "status_codes",
+    "codes_domain",
+    "codes_infrastructure",
+    "details_canonical_fields",
+    "auto_telemetry",
+    "propagation_options",
+    "detection_patterns"
+  ],
+
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["convencion", "version", "creado_en", "contrato_referencia"],
+      "properties": {
+        "convencion":          { "const": "errors" },
+        "version":             { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "creado_en":           { "type": "string", "format": "date" },
+        "contrato_referencia": { "type": "string", "pattern": "^arquitectura/decisiones/_contratos/" },
+        "supersedes_nota":     { "type": ["string", "null"] }
+      }
+    },
+
+    "regla": {
+      "type": "string",
+      "minLength": 80
+    },
+
+    "response_shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["success_shape", "error_shape", "mutual_exclusion"],
+      "properties": {
+        "success_shape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required_fields", "optional_fields", "ejemplo"],
+          "properties": {
+            "required_fields": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/shape_field" }
+            },
+            "optional_fields": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/shape_field" }
+            },
+            "ejemplo": { "type": "string", "minLength": 10 }
+          }
+        },
+        "error_shape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required_fields", "error_object_required", "error_object_optional", "ejemplo"],
+          "properties": {
+            "required_fields": {
+              "type": "array",
+              "minItems": 2,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/shape_field" }
+            },
+            "error_object_required": {
+              "type": "array",
+              "minItems": 2,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/shape_field" }
+            },
+            "error_object_optional": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/shape_field" }
+            },
+            "ejemplo": { "type": "string", "minLength": 10 }
+          }
+        },
+        "mutual_exclusion": { "type": "string", "minLength": 20 }
+      }
+    },
+
+    "status_codes": {
+      "type": "array",
+      "minItems": 10,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/status_code_entry" }
+    },
+
+    "codes_domain": {
+      "type": "array",
+      "minItems": 5,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/code_entry" }
+    },
+
+    "codes_infrastructure": {
+      "type": "array",
+      "minItems": 5,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/code_entry" }
+    },
+
+    "details_canonical_fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "retryable", "retry_after_ms", "entity_type", "entity_id"],
+      "properties": {
+        "kind":           { "$ref": "#/$defs/details_field_policy" },
+        "retryable":      { "$ref": "#/$defs/details_field_policy" },
+        "retry_after_ms": { "$ref": "#/$defs/details_field_policy" },
+        "entity_type":    { "$ref": "#/$defs/details_field_policy" },
+        "entity_id":      { "$ref": "#/$defs/details_field_policy" }
+      }
+    },
+
+    "auto_telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["log_pattern", "metric_pattern"],
+      "properties": {
+        "log_pattern": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["signature", "level_mapping", "fields_included"],
+          "properties": {
+            "signature": { "type": "string", "minLength": 20 },
+            "level_mapping": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status_4xx", "status_5xx"],
+              "properties": {
+                "status_4xx": { "enum": ["debug", "info", "warn", "error"] },
+                "status_5xx": { "enum": ["debug", "info", "warn", "error"] }
+              }
+            },
+            "fields_included": {
+              "type": "array",
+              "minItems": 3,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 3 }
+            }
+          }
+        },
+        "metric_pattern": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["signature", "naming", "labels_canonicas"],
+          "properties": {
+            "signature": { "type": "string", "minLength": 20 },
+            "naming":    { "type": "string", "minLength": 20 },
+            "labels_canonicas": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+            }
+          }
+        }
+      }
+    },
+
+    "propagation_options": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "descripcion", "ejemplo_codigo", "telemetria_obligatoria"],
+        "properties": {
+          "id":                     { "enum": ["propagate", "translate", "absorb"] },
+          "descripcion":            { "type": "string", "minLength": 20 },
+          "ejemplo_codigo":         { "type": "string", "minLength": 20 },
+          "telemetria_obligatoria": { "const": true }
+        }
+      }
+    },
+
+    "detection_patterns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "non_canonical_response_keys",
+        "prohibited_imperative_message_words",
+        "stack_in_response_indicators",
+        "sensitive_field_names",
+        "error_string_in_field_regex"
+      ],
+      "properties": {
+        "non_canonical_response_keys": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]*$" }
+        },
+        "prohibited_imperative_message_words": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 2 }
+        },
+        "stack_in_response_indicators": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 5 }
+        },
+        "sensitive_field_names": {
+          "type": "array",
+          "minItems": 8,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$" }
+        },
+        "error_string_in_field_regex": {
+          "type": "string",
+          "minLength": 5
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "shape_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "descripcion"],
+      "properties": {
+        "name":        { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]*$" },
+        "type":        { "type": "string", "minLength": 3 },
+        "descripcion": { "type": "string", "minLength": 5 }
+      }
+    },
+    "status_code_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "name", "kind", "retryable", "descripcion"],
+      "properties": {
+        "code":        { "type": "integer", "minimum": 100, "maximum": 599 },
+        "name":        { "type": "string", "minLength": 2 },
+        "kind":        { "enum": ["success", "domain", "infrastructure"] },
+        "retryable":   { "type": "boolean" },
+        "descripcion": { "type": "string", "minLength": 10 }
+      }
+    },
+    "code_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "status_typical", "descripcion", "ejemplo_uso"],
+      "properties": {
+        "code":           { "type": "string", "pattern": "^[A-Z][A-Z_]*[A-Z]$" },
+        "status_typical": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "descripcion":    { "type": "string", "minLength": 10 },
+        "ejemplo_uso":    { "type": "string", "minLength": 10 }
+      }
+    },
+    "details_field_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["politica"],
+      "properties": {
+        "politica": {
+          "enum": [
+            "obligatorio",
+            "obligatorio_cuando_aplica",
+            "recomendado",
+            "opcional"
+          ]
+        },
+        "formato":           { "type": ["string", "null"] },
+        "valores_comunes":   { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "nota":              { "type": ["string", "null"] }
+      }
+    }
+  }
+}

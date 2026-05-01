@@ -1,0 +1,221 @@
+{
+  "_meta": {
+    "convencion": "errors",
+    "version": "1.0.0",
+    "creado_en": "2026-04-30",
+    "contrato_referencia": "arquitectura/decisiones/_contratos/errors.contract.json",
+    "supersedes_nota": null
+  },
+
+  "regla": "Toda respuesta sigue { status, data?, error? } — mutuamente excluyentes data y error. Status HTTP-like (4xx dominio, 5xx infraestructura). error.code en UPPER_SNAKE_CASE de lista cerrada. Cada error genera log + métrica automáticos. Stack jamás en respuesta. Sin secretos en mensajes. Describir, no instruir.",
+
+  "response_shape": {
+    "success_shape": {
+      "required_fields": [
+        { "name": "status", "type": "integer", "descripcion": "HTTP-like status code de éxito (200/201/202/204)." },
+        { "name": "data",   "type": "object",  "descripcion": "Datos de la respuesta. Cuando hay éxito, este campo está presente." }
+      ],
+      "optional_fields": [],
+      "ejemplo": "{ status: 201, data: { id: 'abc-123', name: 'Tortilla' } }"
+    },
+    "error_shape": {
+      "required_fields": [
+        { "name": "status", "type": "integer", "descripcion": "HTTP-like status code de fallo (4xx dominio, 5xx infraestructura)." },
+        { "name": "error",  "type": "object",  "descripcion": "Objeto error con code y message obligatorios, details opcional." }
+      ],
+      "error_object_required": [
+        { "name": "code",    "type": "string", "descripcion": "UPPER_SNAKE_CASE de lista cerrada (codes_domain o codes_infrastructure)." },
+        { "name": "message", "type": "string", "descripcion": "Descripción legible del error (NO instrucción, NO secretos, NO stack trace)." }
+      ],
+      "error_object_optional": [
+        { "name": "details", "type": "object", "descripcion": "Metadata estructurada adicional. Campos canónicos: kind, retryable, retry_after_ms, entity_type, entity_id." }
+      ],
+      "ejemplo": "{ status: 404, error: { code: 'RECIPE_NOT_FOUND', message: 'Recipe with id abc-123 does not exist', details: { entity_type: 'recipe', entity_id: 'abc-123' } } }"
+    },
+    "mutual_exclusion": "data y error son mutuamente excluyentes — nunca ambos en la misma respuesta. status SIEMPRE presente, en éxito y en fallo."
+  },
+
+  "status_codes": [
+    { "code": 200, "name": "OK",                    "kind": "success",        "retryable": false, "descripcion": "La operación se completó con éxito." },
+    { "code": 201, "name": "Created",               "kind": "success",        "retryable": false, "descripcion": "Se creó un recurso nuevo. Usar tras un create successful." },
+    { "code": 202, "name": "Accepted",              "kind": "success",        "retryable": false, "descripcion": "La operación se aceptó pero es async; el resultado real llegará después." },
+    { "code": 204, "name": "No Content",            "kind": "success",        "retryable": false, "descripcion": "Operación exitosa sin contenido en respuesta (típico de delete)." },
+    { "code": 400, "name": "Bad Request",           "kind": "domain",         "retryable": false, "descripcion": "El input es inválido. El caller debe corregir antes de reintentar." },
+    { "code": 401, "name": "Unauthorized",          "kind": "domain",         "retryable": false, "descripcion": "Falta autenticación o credencial inválida." },
+    { "code": 403, "name": "Forbidden",             "kind": "domain",         "retryable": false, "descripcion": "Autenticado pero sin permiso para esta operación." },
+    { "code": 404, "name": "Not Found",             "kind": "domain",         "retryable": false, "descripcion": "El recurso solicitado no existe." },
+    { "code": 409, "name": "Conflict",              "kind": "domain",         "retryable": false, "descripcion": "Conflicto con el estado actual del recurso (ej. ya existe, version conflict)." },
+    { "code": 422, "name": "Unprocessable Entity",  "kind": "domain",         "retryable": false, "descripcion": "Input semánticamente inválido aunque sintácticamente correcto." },
+    { "code": 429, "name": "Too Many Requests",     "kind": "domain",         "retryable": true,  "descripcion": "Rate limit superado. Reintentar tras retry_after_ms." },
+    { "code": 500, "name": "Internal Server Error", "kind": "infrastructure", "retryable": true,  "descripcion": "Fallo de infraestructura genérico. Idealmente sustituible por un código más específico." },
+    { "code": 502, "name": "Bad Gateway",           "kind": "infrastructure", "retryable": true,  "descripcion": "Una dependencia externa devolvió respuesta inválida o no accesible." },
+    { "code": 503, "name": "Service Unavailable",   "kind": "infrastructure", "retryable": true,  "descripcion": "Servicio temporalmente no disponible. Reintentar tras backoff." },
+    { "code": 504, "name": "Gateway Timeout",       "kind": "infrastructure", "retryable": true,  "descripcion": "Timeout esperando respuesta de una dependencia." }
+  ],
+
+  "codes_domain": [
+    { "code": "PROJECT_NOT_FOUND",       "status_typical": 404, "descripcion": "Proyecto referenciado no existe.",                                  "ejemplo_uso": "Cuando se busca por project_id y no aparece en el registry." },
+    { "code": "RECIPE_NOT_FOUND",        "status_typical": 404, "descripcion": "Receta referenciada no existe.",                                    "ejemplo_uso": "GET de receta con id inexistente." },
+    { "code": "RESOURCE_NOT_FOUND",      "status_typical": 404, "descripcion": "Recurso genérico no encontrado (cuando no hay code específico).",    "ejemplo_uso": "Recurso del dominio del módulo no específico todavía en la lista." },
+    { "code": "INVALID_INPUT",           "status_typical": 400, "descripcion": "Input semántica o sintácticamente inválido.",                       "ejemplo_uso": "Campo obligatorio ausente, valor fuera de rango, tipo incorrecto." },
+    { "code": "MISSING_FIELD",           "status_typical": 400, "descripcion": "Campo obligatorio no proporcionado en la request.",                 "ejemplo_uso": "Validación de payload donde falta una key." },
+    { "code": "FIELD_TOO_LONG",          "status_typical": 400, "descripcion": "Campo excede longitud máxima permitida.",                           "ejemplo_uso": "title supera 100 caracteres en notas." },
+    { "code": "INVALID_FORMAT",          "status_typical": 400, "descripcion": "Formato del campo inválido (regex/patrón fallido).",                "ejemplo_uso": "email mal formado, slug con caracteres prohibidos." },
+    { "code": "ALREADY_EXISTS",          "status_typical": 409, "descripcion": "Ya existe un recurso con la clave proporcionada.",                  "ejemplo_uso": "Crear proyecto con nombre que ya existe." },
+    { "code": "CONFLICT_STATE",          "status_typical": 409, "descripcion": "El estado actual del recurso no permite la operación.",             "ejemplo_uso": "Cobrar un pedido ya pagado, eliminar un módulo cargado." },
+    { "code": "VERSION_CONFLICT",        "status_typical": 409, "descripcion": "Optimistic locking failed — la versión local difiere de la remota.", "ejemplo_uso": "Update con version=2 cuando el servidor tiene version=3." },
+    { "code": "PERMISSION_DENIED",       "status_typical": 403, "descripcion": "El caller autenticado no tiene permiso para esta operación.",        "ejemplo_uso": "Usuario sin role de admin intenta eliminar." },
+    { "code": "AUTHENTICATION_REQUIRED", "status_typical": 401, "descripcion": "Falta credencial o credencial inválida.",                           "ejemplo_uso": "Request sin token o con token expirado." },
+    { "code": "RATE_LIMITED",            "status_typical": 429, "descripcion": "Cuota de requests excedida — esperar y reintentar.",                "ejemplo_uso": "El caller ha hecho demasiados requests en una ventana corta." },
+    { "code": "INVALID_VERSION",         "status_typical": 400, "descripcion": "Versión proporcionada no es semver válida.",                        "ejemplo_uso": "Registrar firmware con version='abc'." },
+    { "code": "MIN_VERSION_NOT_MET",     "status_typical": 400, "descripcion": "Versión actual no cumple la mínima requerida.",                     "ejemplo_uso": "OTA target requiere min_version 2.0 pero device está en 1.5." },
+    { "code": "QUOTA_EXCEEDED",          "status_typical": 429, "descripcion": "Capacidad/cuota del recurso excedida.",                             "ejemplo_uso": "max_concurrent_builds alcanzado." },
+    { "code": "PRECONDITION_FAILED",     "status_typical": 422, "descripcion": "Una precondición lógica no se cumple (más específica que INVALID_INPUT).", "ejemplo_uso": "Intentar trigger-ota sin firmware en catalogo." }
+  ],
+
+  "codes_infrastructure": [
+    { "code": "DATABASE_DOWN",           "status_typical": 503, "descripcion": "Conexión a la base de datos no disponible.",                       "ejemplo_uso": "SQLite locked, conexión externa caída." },
+    { "code": "BROKER_DISCONNECTED",     "status_typical": 503, "descripcion": "Broker MQTT no disponible.",                                        "ejemplo_uso": "Aedes embedded falló o broker externo desconectado." },
+    { "code": "FILESYSTEM_ERROR",        "status_typical": 500, "descripcion": "Error de filesystem (lectura/escritura/permisos).",                 "ejemplo_uso": "ENOENT, EACCES, EIO al leer/escribir." },
+    { "code": "EXTERNAL_API_FAILED",     "status_typical": 502, "descripcion": "Una API externa devolvió error o no respondió.",                   "ejemplo_uso": "Llamada a Telegram API falló, OAuth provider down." },
+    { "code": "TIMEOUT",                 "status_typical": 504, "descripcion": "Operación excedió el timeout configurado.",                        "ejemplo_uso": "OTA no completó en ota_timeout_ms, build no terminó." },
+    { "code": "MQTT_NOT_AVAILABLE",      "status_typical": 503, "descripcion": "Cliente MQTT no conectado al broker.",                              "ejemplo_uso": "Antes de que conecte por primera vez o tras desconexión." },
+    { "code": "OUT_OF_MEMORY",           "status_typical": 500, "descripcion": "Recurso de memoria insuficiente para la operación.",                "ejemplo_uso": "Procesar archivo demasiado grande, queue saturada." },
+    { "code": "DISK_FULL",               "status_typical": 500, "descripcion": "Filesystem sin espacio libre.",                                     "ejemplo_uso": "Escribir log, persist data sin espacio disponible." },
+    { "code": "DEPENDENCY_UNAVAILABLE",  "status_typical": 503, "descripcion": "Una dependencia interna del módulo no está disponible.",            "ejemplo_uso": "El módulo necesita otro módulo que no está cargado." },
+    { "code": "UNKNOWN_ERROR",           "status_typical": 500, "descripcion": "Error capturado pero no clasificable. Usar como último recurso.",   "ejemplo_uso": "catch (err) sin que el módulo pueda determinar la causa específica." }
+  ],
+
+  "details_canonical_fields": {
+    "kind": {
+      "politica": "obligatorio_cuando_aplica",
+      "formato": "string enum: 'domain' | 'infrastructure'",
+      "valores_comunes": ["domain", "infrastructure"],
+      "nota": "Solo si NO es claro por status (heurística: 4xx=domain, 5xx=infrastructure). Permite explicitar la clasificación cuando ambigua."
+    },
+    "retryable": {
+      "politica": "recomendado",
+      "formato": "boolean",
+      "valores_comunes": [],
+      "nota": "Sugerencia explícita al caller de si reintentar tiene sentido. Override del default por status."
+    },
+    "retry_after_ms": {
+      "politica": "obligatorio_cuando_aplica",
+      "formato": "integer (milisegundos)",
+      "valores_comunes": [],
+      "nota": "Cuando retryable=true, indica cuánto esperar antes del próximo intento. Especialmente útil con 429 y 503."
+    },
+    "entity_type": {
+      "politica": "recomendado",
+      "formato": "string corto identificando el tipo de entidad afectada",
+      "valores_comunes": ["recipe", "project", "device", "credential", "module", "user"],
+      "nota": "Útil cuando el error se refiere a una entidad concreta del dominio."
+    },
+    "entity_id": {
+      "politica": "recomendado",
+      "formato": "string identificador de la entidad",
+      "valores_comunes": [],
+      "nota": "Junto con entity_type permite al caller saber a qué entidad concreta se refiere el error."
+    }
+  },
+
+  "auto_telemetry": {
+    "log_pattern": {
+      "signature": "this.logger.<level>(`${this.name}.${action}.failed`, { error_code, error_message, error_details, stack: errOriginal?.stack, ...contextoRelevante })",
+      "level_mapping": {
+        "status_4xx": "warn",
+        "status_5xx": "error"
+      },
+      "fields_included": [
+        "error_code",
+        "error_message",
+        "error_details",
+        "stack",
+        "context"
+      ]
+    },
+    "metric_pattern": {
+      "signature": "this.metrics.increment(`${this.name}.<action>.errors`, 1, { code: error.code, kind: 'domain'|'infrastructure' })",
+      "naming": "<module>.<action>.errors — sufijo .errors de observability.metrics.canonical_suffixes",
+      "labels_canonicas": [
+        "code",
+        "kind"
+      ]
+    }
+  },
+
+  "propagation_options": [
+    {
+      "id": "propagate",
+      "descripcion": "Devolver al caller superior la misma estructura de error que devolvió el peer (mismo status, mismo code, mismo message). Acopla al caller al vocabulario del peer pero es la opción más simple.",
+      "ejemplo_codigo": "const peerResp = await mqttRequest('peer', 'get', payload); if (peerResp.error) { this.logger.warn('peer.get.failed', { code: peerResp.error.code }); this.metrics.increment(`${this.name}.proxy.errors`, 1, { code: peerResp.error.code }); return peerResp; }",
+      "telemetria_obligatoria": true
+    },
+    {
+      "id": "translate",
+      "descripcion": "Traducir el error del peer a un código del dominio del propio módulo. Aísla los callers del vocabulario del peer pero requiere mantener un mapeo.",
+      "ejemplo_codigo": "const peerResp = await mqttRequest('credentials', 'resolve', { id }); if (peerResp.error?.code === 'CREDENTIAL_NOT_FOUND') { this.logger.warn('auth.failed', { reason: 'credential_missing' }); this.metrics.increment(`${this.name}.auth.errors`, 1, { code: 'AUTHENTICATION_REQUIRED', kind: 'domain' }); return { status: 401, error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication failed' } }; }",
+      "telemetria_obligatoria": true
+    },
+    {
+      "id": "absorb",
+      "descripcion": "Devolver éxito con datos parciales o defaults, registrando degradado. Solo cuando la lógica del dominio acepta funcionar sin el peer (caché, fallback, valor neutro).",
+      "ejemplo_codigo": "const cachedResp = await mqttRequest('cache', 'get', payload); if (cachedResp.error) { this.logger.warn('cache.unavailable.degraded', { fallback: 'compute_fresh' }); this.metrics.increment(`${this.name}.cache.errors`, 1, { kind: 'absorbed' }); /* compute fresh */ return { status: 200, data: freshData }; }",
+      "telemetria_obligatoria": true
+    }
+  ],
+
+  "detection_patterns": {
+    "non_canonical_response_keys": [
+      "ok",
+      "success",
+      "result",
+      "isOk",
+      "succeeded"
+    ],
+    "prohibited_imperative_message_words": [
+      "please",
+      "try",
+      "contact",
+      "use",
+      "check",
+      "ensure",
+      "make sure",
+      "intenta",
+      "contacta",
+      "usa",
+      "verifica",
+      "comprueba",
+      "asegurate",
+      "por favor",
+      "vuelve a intentar"
+    ],
+    "stack_in_response_indicators": [
+      "message: err.stack",
+      "message: error.stack",
+      "details: { stack:",
+      "details: { ...err",
+      "stack: err.stack"
+    ],
+    "sensitive_field_names": [
+      "password",
+      "token",
+      "api_key",
+      "apiKey",
+      "secret",
+      "authorization",
+      "cookie",
+      "session_token",
+      "sessionToken",
+      "private_key",
+      "privateKey",
+      "refresh_token",
+      "refreshToken",
+      "access_token",
+      "accessToken",
+      "client_secret",
+      "clientSecret"
+    ],
+    "error_string_in_field_regex": "error\\s*:\\s*['\"`][^'\"`]+['\"`]\\s*[,}]"
+  }
+}

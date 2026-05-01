@@ -162,5 +162,88 @@
       "derivado_de": ["canonical_response_shape"],
       "razon": "Una sola forma para handlers internos, HTTP, mqttRequest y tools del LLM. El LLM se beneficia especialmente: con shape canónico aprende UNA convención, no una por módulo. Tools que devolvían string libre o { success } generan drift léxico que el LLM tiene que parsear caso por caso."
     }
+  ],
+
+  "prohibido": [
+    {
+      "id": "respuesta_no_canonica",
+      "regla": "Devolver una respuesta con shape distinto del canónico: { ok: true, ... }, { success: false, ... }, { result: ... }, raw data sin status, etc. La forma canónica obliga: { status: integer, data?: object, error?: { code, message, details? } }.",
+      "viola_principios": ["canonical_response_shape"],
+      "como_detectar": "Regex en código de módulos sobre returns dentro de handlers (handle*, on*): patterns que detecten 'return { ok:', 'return { success:', 'return { result:', 'return [datos primitivos]'.",
+      "ejemplo_drift_actual": "Algunos módulos auditados usan { ok: true } o { success: true } en lugar de { status: 200, data: ... }.",
+      "alternativa_correcta": "return { status: 200, data: { ... } } en éxito; return { status: 400, error: { code: 'INVALID_INPUT', message: '...' } } en fallo. Forma única y predecible."
+    },
+    {
+      "id": "inventar_status_no_canonico",
+      "regla": "Usar status numéricos fuera de la lista canónica HTTP-like (200/201/202/204/400/401/403/404/409/422/429/500/502/503/504). Status como 0, 250, 999, -1 son drift.",
+      "viola_principios": ["status_codes_canonical (decisión)", "closed_code_list"],
+      "como_detectar": "Regex en código: 'return { status:' seguido de número. Cruzar el número con la lista canónica de errors.json. Si no está, drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Si el caso no encaja en ningún status canónico, usar el más cercano semánticamente o proponer extensión de la lista en errors.json (PR con justificación)."
+    },
+    {
+      "id": "inventar_error_code",
+      "regla": "Usar códigos de error fuera de la lista cerrada de errors.json.codes_domain ∪ codes_infrastructure. Inventar códigos como 'NOTFOUND' (sin underscore), 'project_not_found' (lowercase), 'PROJ_NF' (siglas), 'ERROR_42' (genérico).",
+      "viola_principios": ["closed_code_list", "error_code_naming (decisión)"],
+      "como_detectar": "Regex en código: 'code:' o 'code =' en respuestas error. Cruzar el valor con la lista canónica. Si no está, drift. Heurística adicional: códigos que NO son UPPER_SNAKE_CASE.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Elegir el más apropiado de errors.json.codes_domain o codes_infrastructure. Si falta uno, PR a errors.json con justificación."
+    },
+    {
+      "id": "respuesta_con_stack_trace",
+      "regla": "Incluir el stack trace (string multilínea con file paths y line numbers) en error.message, error.details o cualquier otro campo de la respuesta que devuelve el módulo al caller.",
+      "viola_principios": ["no_stack_in_response", "no_secrets_in_messages"],
+      "como_detectar": "Regex en código: 'message: err.stack', 'details: { stack:', 'error: error.stack', y similares. Stack siempre se reconoce por contener '\\n at ' o paths con '/' o 'file://'.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "El stack va al log: this.logger.error('module.action.failed', { error: err.message, code, stack: err.stack }). La respuesta lleva solo { code, message: err.message, details? }."
+    },
+    {
+      "id": "error_sin_log",
+      "regla": "Devolver una respuesta con error (status >= 400) sin emitir antes this.logger.X correspondiente. La telemetría es parte de la API de error, no opcional.",
+      "viola_principios": ["auto_observable_errors", "auto_log_on_error (decisión)"],
+      "como_detectar": "Análisis estático: 'return { status: <4xx|5xx>, error: ...' que NO tiene this.logger.X dentro de las ~10 líneas previas en el mismo bloque.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Usar un helper buildErrorResponse() que loguea + devuelve, o garantizar manualmente: this.logger.warn/error(...) ANTES del return error. La auditoría detecta el patrón."
+    },
+    {
+      "id": "error_sin_metric",
+      "regla": "Devolver una respuesta con error sin incrementar la métrica counter <module>.<action>.errors. La métrica es la que da observabilidad agregada — sin ella el sistema es opaco respecto a qué errores ocurren con qué frecuencia.",
+      "viola_principios": ["auto_observable_errors", "auto_metric_on_error (decisión)"],
+      "como_detectar": "Análisis estático similar al de error_sin_log: 'return { status: <4xx|5xx>, error:' que no tiene this.metrics.increment(...errors...) en proximidad.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Helper buildErrorResponse() debe llamar this.metrics.increment(`${this.name}.<action>.errors`, 1, { code }) automáticamente."
+    },
+    {
+      "id": "mensaje_de_error_con_secreto",
+      "regla": "Incluir en error.message o error.details campos sensibles (password, token, api_key, authorization, secret, private_key, refresh_token, access_token, cookie, session_token y variantes camelCase). También: paths absolutos del filesystem, URLs internas con tokens en query, IPs internas.",
+      "viola_principios": ["no_secrets_in_messages"],
+      "como_detectar": "Análisis estático del segundo argumento de error: chequear keys del objeto details O substrings del message contra la lista detection_patterns.sensitive_field_names. Severidad ERROR — riesgo de seguridad/compliance.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Loguear metadata, NO valores. error.message='Credential expired' + error.details={ credential_id, expired_at }. Coherente con secret_scrubbing del contrato observability."
+    },
+    {
+      "id": "error_como_string_suelto",
+      "regla": "Devolver el campo error como string en lugar de object: { status: 400, error: 'Project not found' }. La forma canónica exige error como objeto: { code, message, details? }.",
+      "viola_principios": ["canonical_response_shape", "human_message_machine_code"],
+      "como_detectar": "Regex en código: 'error: [\\\"\\']' (error con valor string literal) o 'error: variable_string'. Cruzar con shape canónico.",
+      "ejemplo_drift_actual": "Algunos módulos auditados devuelven { status: 400, error: 'mensaje plano' }. Drift conocido en ui_handlers.codigos_error de varios audits.",
+      "alternativa_correcta": "{ status: 400, error: { code: 'PROJECT_NOT_FOUND', message: 'Project with id X does not exist' } }. El caller puede ramificar por code, mostrar message al usuario."
+    },
+    {
+      "id": "swallow_error_silently",
+      "regla": "try { ... } catch (e) { } sin log + sin propagación + sin métrica. El error se traga y nadie se entera. Variante: catch (e) { return null } o { return [] } — devolver default sin telemetría.",
+      "viola_principios": ["propagate_or_absorb_with_telemetry", "auto_observable_errors"],
+      "como_detectar": "Regex multi-línea: 'catch \\([^)]*\\)\\s*\\{\\s*\\}' (vacío) o 'catch \\([^)]*\\)\\s*\\{\\s*return (null|undefined|\\[\\]|\\{\\});\\s*\\}' (default sin log).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Si decides absorber: catch (err) { this.logger.warn('module.action.absorbed', { error: err.message }); this.metrics.increment(`${this.name}.<action>.errors`, 1, { kind: 'absorbed' }); return defaultValue; }. Absorber con telemetría es legítimo."
+    },
+    {
+      "id": "instruccion_en_message",
+      "regla": "El campo error.message contiene una instrucción al caller en lugar de una descripción del hecho. 'Please create the recipe first', 'Try again later', 'Contact administrator', 'Use trigger-ota instead'.",
+      "viola_principios": ["describe_dont_instruct", "what_vs_how_separation (events)"],
+      "como_detectar": "Heurística sobre mensajes: regex sobre 'message:' valores que contengan verbos imperativos en inglés ('please', 'try', 'contact', 'use', 'check') o español ('intenta', 'contacta', 'usa', 'verifica', 'por favor').",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Describir el hecho, no instruir. 'Recipe not found' (descripción) en lugar de 'Please create the recipe first' (instrucción). Las instrucciones al usuario las añade la capa de UI según el código del error, no el módulo backend."
+    }
   ]
 }

@@ -45,5 +45,58 @@
     "CONCURRENCIA DOCUMENTADA O EVITADA. Si el patrón de persistencia tolera múltiples escritores concurrentes (proyecto multi-tenant), el módulo lo documenta y usa locking apropiado. Si no, el módulo declara explícitamente single-writer y se asegura de no tener race conditions.",
 
     "SECRETOS NO EN DISCO PLANO. Tokens, passwords, claves privadas que el módulo necesite persistir van CIFRADOS o referenciados via credential-manager. NUNCA en JSON plano accesible. Coherente con no_secrets_in_logs y no_secrets_in_messages."
+  ],
+
+  "principios": [
+    {
+      "id": "module_chooses_persistence",
+      "regla": "Cada módulo decide su patrón de persistencia según su dominio. El sistema acepta cualquiera de los patrones canónicos del catálogo (in-memory, JSON file, JSON file por proyecto, SQLite, append-only log, external delegation). NO hay un patrón único impuesto a todos.",
+      "razon": "Imponer una sola forma de persistencia (todos SQLite, todos JSON) optimiza para algunos módulos y rompe a otros. Un módulo de auditoría necesita transacciones y queries (SQLite); uno de configuración necesita lectura rápida y dump human-readable (JSON); uno de cache puede ser in-memory. La diversidad de necesidades de dominio justifica la diversidad de patrones."
+    },
+    {
+      "id": "absolute_isolation_between_modules",
+      "regla": "La persistencia de un módulo es PRIVADA. Otros módulos NO leen sus archivos directamente, NO consultan su SQLite ni acceden a su estado en memoria. Si necesitan datos del módulo, los piden via eventBus (publish/subscribe o mqttRequest).",
+      "razon": "Acceso cruzado a la persistencia de otro módulo crea acoplamiento estructural opaco — si el módulo cambia su esquema interno, los lectores rompen sin aviso. La comunicación via bus mantiene los esquemas internos como detalle de implementación. Es lo que permite que un módulo migre de JSON a SQLite sin que nadie se entere."
+    },
+    {
+      "id": "explicit_declaration_in_manifest",
+      "regla": "El módulo declara su patrón de persistencia en module.json bajo config.persistence (o equivalente). Como mínimo: el patrón canónico elegido (in-memory|json-file|sqlite|...), las rutas/tablas que usa, si es por-proyecto o global, y si es restart-resilient.",
+      "razon": "Sin declaración, la auditoría tiene que leer el código para saber qué archivos/tablas usa el módulo. Con declaración, la persistencia es introspectable mecánicamente — la auditoría/CI/operador saben qué se persiste sin abrir código. Igual que events.subscribes auto-wired, esta es la analogía para persistencia."
+    },
+    {
+      "id": "atomic_writes_mandatory",
+      "regla": "Toda escritura de un archivo de persistencia (JSON, YAML, ini, etc.) usa el patrón write atómico: write a tempFile + fs.rename a la ruta final. NUNCA un fs.writeFile directo sobre el archivo final. Excepción documentada: append-only logs donde el modelo es distinto (solo añadir al final).",
+      "razon": "Sin write atómico, una caída/cierre abrupto durante el write deja el archivo corrupto (parcial). El patrón tempFile + rename garantiza que el archivo final siempre está consistente — o tiene la versión vieja, o tiene la nueva. Validado en POC notas y ui-designer; F6 del POC: write atómico es REQUISITO en JSON-file persistence."
+    },
+    {
+      "id": "enoent_is_info_not_error",
+      "regla": "Si en onLoad un módulo intenta leer su persistencia y el archivo/tabla no existe (ENOENT, table not found), eso es un caso normal — primer arranque o eliminación manual. El módulo arranca con estado vacío y emite log info, NO log error ni excepción.",
+      "razon": "Tratar ENOENT como error fuerza al módulo a tener lógica especial 'si no existe, crear vacío' en cada call site. La asunción correcta es: leer falla con ENOENT → arranca limpio + log info → escribir genera el archivo. El módulo nunca tiene que comprobar si existe; solo intenta leer y maneja ENOENT como caso esperado."
+    },
+    {
+      "id": "mandatory_telemetry_on_io",
+      "regla": "Toda operación de persistencia que falle (read, write, query, transaction commit) emite log + métrica via los patrones canónicos del contrato observability+errors. Nunca .catch silencioso, nunca return default sin log.",
+      "razon": "Los fallos de persistencia son señales operativas críticas (disco lleno, permisos, DB caída). Sin telemetría son ceguera. Coherente con auto_observable_errors del contrato errors: cada fallo I/O genera log warn/error + métrica counter '<module>.persistir.errors' con label kind=infrastructure."
+    },
+    {
+      "id": "persistence_is_internal_state",
+      "regla": "El módulo persiste estado de SU dominio, NO lógica de otros dominios. Si necesita persistir algo derivado de otro módulo (resultado de integración externa, métrica agregada), eso es señal de que la data debería vivir en el módulo dueño y obtenerse via bus.",
+      "razon": "Un módulo que persiste data ajena se vuelve responsable de una verdad que no es suya — si el dueño cambia el shape, el cache obsoleto miente. La regla previene caches mal mantenidos disfrazados de persistencia. Excepción legítima: caches de RESPUESTAS de otro módulo con TTL explícito y eviction documentada."
+    },
+    {
+      "id": "restart_resilient_default",
+      "regla": "Por defecto, tras restart del core, el módulo recupera su estado desde la persistencia (si la tiene). Si el módulo es deliberadamente in-memory (estado ephimeral), lo declara explícitamente en module.json (config.persistence.pattern='in-memory', restart_resilient=false) para que el operador entienda qué se pierde al reiniciar.",
+      "razon": "Sin esta regla, el operador no sabe qué módulos pierden estado al reiniciar — sorpresa operativa. Con declaración explícita, el operador puede planificar (no reiniciar durante un build largo en firmware-builder, por ejemplo). La transparencia operativa es lo que valida el principio."
+    },
+    {
+      "id": "concurrency_documented_or_single_writer",
+      "regla": "Si el patrón de persistencia tolera múltiples escritores concurrentes (multi-tenant, cluster), el módulo documenta el modelo de concurrencia y usa locking apropiado (SQLite WAL, file locks, optimistic concurrency con version). Si NO tolera, declara explícitamente single-writer en module.json.",
+      "razon": "La asunción tácita 'no hay concurrencia' es la fuente de race conditions cuando el sistema crece. Forzando declaración explícita, cada módulo se enfrenta a la pregunta: ¿qué pasa si dos handlers concurrentes escriben? Si la respuesta es 'no puede pasar' (single-writer), se documenta. Si puede pasar, se documenta CÓMO se resuelve."
+    },
+    {
+      "id": "no_plain_secrets_on_disk",
+      "regla": "Tokens, passwords, claves privadas que el módulo necesite persistir van cifrados o referenciados via credential-manager (módulo dedicado a esto). NUNCA aparecen en archivos JSON/YAML/SQLite en plano legibles por cualquiera con acceso al disco.",
+      "razon": "Coherente con no_secrets_in_logs (observability) y no_secrets_in_messages (errors). Los logs son canales temporales; los archivos persistidos son canales permanentes — fugar un secreto en disco es peor. Si el módulo requiere acceder a un secreto, lo hace via credential-manager (que se encarga del cifrado/almacenamiento seguro)."
+    }
   ]
 }

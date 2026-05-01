@@ -1,0 +1,34 @@
+{
+  "name": "notas",
+  "version": "2.0.0",
+  "description": "Módulo de notas rápidas con persistencia JSON. POC del rewrite aplicando contratos arquitectónicos.",
+  "author": "Enki",
+  "language": "es",
+  "tier": "tier_4_dominio",
+
+  "events": {
+    "publishes": [
+      { "event": "notas.creado",      "description": "Una nota fue creada." },
+      { "event": "notas.actualizado", "description": "Una nota fue actualizada (incluye toggle de pin)." },
+      { "event": "notas.eliminado",   "description": "Una nota fue eliminada." }
+    ],
+    "subscribes": []
+  },
+
+  "apis": [
+    { "method": "GET",    "path": "/notas",         "handler": "handleListar",     "description": "Listar notas con filtros opcionales." },
+    { "method": "GET",    "path": "/notas/:id",     "handler": "handleObtener",    "description": "Obtener una nota por id." },
+    { "method": "POST",   "path": "/notas",         "handler": "handleCrear",      "description": "Crear una nota nueva." },
+    { "method": "PATCH",  "path": "/notas/:id",     "handler": "handleActualizar", "description": "Actualizar una nota existente (parcial)." },
+    { "method": "DELETE", "path": "/notas/:id",     "handler": "handleEliminar",   "description": "Eliminar una nota." },
+    { "method": "POST",   "path": "/notas/:id/pin", "handler": "handleFijar",      "description": "Fijar o desfijar una nota." }
+  ],
+
+  "config": {
+    "data_path":            "./data/notas.json",
+    "max_titulo_length":    100,
+    "max_contenido_length": 5000,
+    "valid_colors":         ["yellow", "green", "blue", "pink", "purple", "orange"],
+    "default_color":        "yellow"
+  }
+}

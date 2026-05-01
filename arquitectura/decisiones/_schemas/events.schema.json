@@ -251,10 +251,30 @@
           "items": { "type": "string", "pattern": "^[a-z][a-z]*$" }
         }
       }
+    },
+
+    "recommended_helpers": {
+      "type": "array",
+      "minItems": 0,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/helper_pattern" }
     }
   },
 
   "$defs": {
+    "helper_pattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "purpose", "applies_to", "snippet_canonico"],
+      "properties": {
+        "id":               { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "purpose":          { "type": "string", "minLength": 20 },
+        "applies_to":       { "type": "string", "minLength": 10 },
+        "snippet_canonico": { "type": "string", "minLength": 30 },
+        "uso_en_handler":   { "type": "string", "minLength": 5 },
+        "validado_en_poc":  { "type": "string", "minLength": 5 }
+      }
+    },
     "categoria": {
       "type": "object",
       "additionalProperties": false,

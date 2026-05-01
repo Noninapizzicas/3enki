@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "events",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "creado_en": "2026-04-30",
     "contrato_referencia": "arquitectura/decisiones/_contratos/events.contract.json",
-    "supersedes_nota": null
+    "supersedes_nota": "v1.1.0 (POC iteration): añadida sección recommended_helpers con patrón canónico _publicarEvento(). Clarificación 2v3 partes en topic_structure del contrato. Validado en modules/notas-poc/."
   },
 
   "regla": "Eventos viajan por MQTT (Aedes embedded por defecto). Bus híbrido transparente al módulo. Topics jerárquicos por categoría: core/{core-id}/<categoria>/.... Cardinalidad libre (cero, uno o muchos suscriptores). Fire-and-forget. Idempotencia obligatoria en handlers. Mismo código del módulo de Casa a Manzana — la escala se decide por configuración del transporte, no por código.",
@@ -267,5 +267,16 @@
       "export",
       "import"
     ]
-  }
+  },
+
+  "recommended_helpers": [
+    {
+      "id": "publicar_evento",
+      "purpose": "Wrapper canónico para publicar eventos del módulo. Centraliza: añadir timestamp, propagar correlation_id (cuando aplique), early-return si bus no disponible, .catch con log si publish rechaza.",
+      "applies_to": "Todo módulo que emita eventos (publishes en module.json).",
+      "snippet_canonico": "async _publicarEvento(nombre, payload, correlation_id) {\n  if (!this.eventBus) {\n    this.logger.warn(`${this.name}.publicar.bus_no_disponible`, { evento: nombre, correlation_id });\n    return;\n  }\n  const finalPayload = {\n    ...payload,\n    timestamp: new Date().toISOString(),\n    ...(correlation_id ? { correlation_id } : {})\n  };\n  try {\n    await this.eventBus.publish(nombre, finalPayload);\n  } catch (err) {\n    this.logger.error(`${this.name}.publicar.fallido`, {\n      evento: nombre,\n      error_message: err.message,\n      stack: err.stack,\n      correlation_id\n    });\n    this.metrics?.increment(`${this.name}.publicar.errors`, 1, { evento: nombre });\n  }\n}",
+      "uso_en_handler": "await this._publicarEvento('notas.creado', { nota_id, titulo }, context?.correlationId);",
+      "validado_en_poc": "modules/notas-poc/index.js _publicarEvento (línea ~390)"
+    }
+  ]
 }

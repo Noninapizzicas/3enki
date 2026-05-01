@@ -22,6 +22,8 @@
     "validate:glossary:system": "node arquitectura/convenciones/_validators/glossary.validate.js --check-system",
     "validate:events": "node arquitectura/decisiones/_validators/events.validate.js",
     "validate:events:system": "node arquitectura/decisiones/_validators/events.validate.js --check-system",
+    "validate:lifecycle": "node arquitectura/decisiones/_validators/lifecycle.validate.js",
+    "validate:lifecycle:system": "node arquitectura/decisiones/_validators/lifecycle.validate.js --check-system",
     "start": "node index.js",
     "dev": "node index.js --log-level debug",
     "plop": "plop",

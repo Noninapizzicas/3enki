@@ -281,5 +281,116 @@
     "tiene_telemetria_completa": "true si: en proximidad al return de error, hay this.logger.<level>(...) AND this.metrics.increment(...errors...). Heurística de proximidad: ~10 líneas previas en el mismo bloque.",
     "topic_de_error_log": "core/{core-id}/logs/{level} — heredado de events.json categoria 'logs'. Level=warn si status 4xx, level=error si status 5xx.",
     "instruccion_en_message_detectada": "true si error.message contiene cualquier substring de detection_patterns.prohibited_imperative_message_words."
-  }
+  },
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "errors_json_estructura_valida",
+      "regla": "errors.json valida estructuralmente contra errors.schema.json (AJV strict, additionalProperties=false en todos los niveles).",
+      "como_detectar": "Cargar el schema, compilar con AJV strict, validar el output. Cualquier error de schema bloquea PASS.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/decisiones/_outputs/errors.json", "arquitectura/decisiones/_schemas/errors.schema.json"]
+    },
+    {
+      "id": "drift_respuesta_no_canonica",
+      "regla": "Ningún handler devuelve respuestas con shape distinto del canónico { status, data?, error? }. Patrones drift: { ok: ... }, { success: ... }, { result: ... }, { ...raw_data sin status }.",
+      "como_detectar": "Regex en código de módulos sobre returns dentro de handlers (handle*, on*): patrones que detecten 'return\\s*\\{\\s*ok\\s*:', 'return\\s*\\{\\s*success\\s*:', 'return\\s*\\{\\s*result\\s*:', 'return\\s*\\{[^}]*\\}' sin la clave 'status'.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "respuesta_no_canonica (prohibido), canonical_response_shape (principio)",
+      "ejemplo_drift_actual": "Algunos módulos auditados devuelven { ok: true } o { success: true }."
+    },
+    {
+      "id": "drift_inventar_status_no_canonico",
+      "regla": "Todos los integers usados en 'status:' de respuestas pertenecen a la lista canónica de status_codes.",
+      "como_detectar": "Regex: 'status\\s*:\\s*([0-9]+)'. Capturar el número y cruzar con la lista de status_codes en errors.json. Si no está, drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "inventar_status_no_canonico (prohibido), status_codes_canonical (decisión), closed_code_list (principio)"
+    },
+    {
+      "id": "drift_inventar_error_code",
+      "regla": "Todos los códigos en error.code son UPPER_SNAKE_CASE Y pertenecen a codes_domain ∪ codes_infrastructure.",
+      "como_detectar": "Regex: 'code\\s*:\\s*[\\\"\\\\']([A-Z_]+)[\\\"\\\\']'. Capturar el código, verificar UPPER_SNAKE_CASE (regex ^[A-Z][A-Z_]*[A-Z]$), y cruzar con la lista canónica.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "inventar_error_code (prohibido), error_code_naming (decisión), closed_code_list (principio)"
+    },
+    {
+      "id": "drift_respuesta_con_stack_trace",
+      "regla": "Ningún campo de la respuesta (error.message, error.details) contiene stack trace. Solo el log puede llevar stack.",
+      "como_detectar": "Regex en código: en proximidad a 'return ... error:', detectar 'message: ([^,}]*\\.stack)', 'details: \\{[^}]*stack:', 'message: err\\.stack'. Severidad ERROR — riesgo de seguridad.",
+      "severidad": "error",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "respuesta_con_stack_trace (prohibido), no_stack_in_response (principio)"
+    },
+    {
+      "id": "drift_error_sin_log",
+      "regla": "Cada return de respuesta con error (status >= 400) tiene this.logger.<level> en proximidad (~10 líneas previas en el mismo bloque).",
+      "como_detectar": "Análisis estático: localizar 'return\\s*\\{[^}]*status\\s*:\\s*([4-5][0-9][0-9])' (status 400-599). Para cada match, buscar this.logger.X en las 10 líneas previas. Si no aparece, drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "error_sin_log (prohibido), auto_observable_errors (principio)"
+    },
+    {
+      "id": "drift_error_sin_metric",
+      "regla": "Cada return de respuesta con error tiene this.metrics.increment con sufijo .errors en proximidad.",
+      "como_detectar": "Análisis estático similar a drift_error_sin_log: buscar this.metrics.increment con name que termine en '.errors' en las 10 líneas previas al return de error.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "error_sin_metric (prohibido), auto_observable_errors (principio)"
+    },
+    {
+      "id": "drift_mensaje_de_error_con_secreto",
+      "regla": "Ningún error.message ni error.details contiene campos sensibles (password, token, api_key, etc.) — coherente con drift_secrets_en_payload_log de observability.",
+      "como_detectar": "Análisis estático: para cada respuesta con error: { message, details? }, inspeccionar keys de details y substrings relevantes de message contra detection_patterns.sensitive_field_names. Severidad ERROR — riesgo de compliance/seguridad.",
+      "severidad": "error",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "mensaje_de_error_con_secreto (prohibido), no_secrets_in_messages (principio)"
+    },
+    {
+      "id": "drift_error_como_string_suelto",
+      "regla": "El campo error de la respuesta es siempre un objeto con { code, message, details? }, NUNCA un string suelto.",
+      "como_detectar": "Regex en código: 'error\\s*:\\s*[\\\"\\\\']' (error con valor string literal directamente) o 'error\\s*:\\s*[a-z_]+\\s*[,}]' donde la variable es claramente string. Cruzar con shape canónico.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "error_como_string_suelto (prohibido), canonical_response_shape (principio)",
+      "ejemplo_drift_actual": "Algunos módulos auditados devuelven { status: 400, error: 'mensaje plano' }."
+    },
+    {
+      "id": "drift_swallow_error_silently",
+      "regla": "Ningún try/catch traga errores silenciosamente. Cada catch tiene log + propagación o log + métrica + recuperación documentada.",
+      "como_detectar": "Regex multi-línea: 'catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}' (vacío) o 'catch\\s*\\([^)]*\\)\\s*\\{\\s*return\\s+(null|undefined|\\[\\]|\\{\\})\\s*;?\\s*\\}' (default sin log).",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "swallow_error_silently (prohibido), propagate_or_absorb_with_telemetry (principio)"
+    },
+    {
+      "id": "drift_instruccion_en_message",
+      "regla": "Heurística: el campo error.message no contiene verbos imperativos ('please', 'try', 'contact', 'use', 'check', 'intenta', 'contacta', 'usa', 'verifica', 'por favor').",
+      "como_detectar": "Para cada error.message detectado en respuestas: case-insensitive substring match contra detection_patterns.prohibited_imperative_message_words. Severidad info — heurística aproximada.",
+      "severidad": "info",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "instruccion_en_message (prohibido), describe_dont_instruct (principio)"
+    },
+    {
+      "id": "module_errors_audit_completeness",
+      "regla": "La auditoría modulo-completo de cada módulo tiene los campos tools[].errores_conocidos, ui_handlers[].codigos_error y modos_de_fallo completos.",
+      "como_detectar": "Inspeccionar audit: módulos con tools que carecen de errores_conocidos array, ui_handlers que carecen de codigos_error array, o que tienen modos_de_fallo vacío cuando claramente puede haber errores. Severidad info — apunta a re-auditar.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "nota": "No es drift del código sino de la auditoría. Si aparece, hay que re-auditar el módulo con foco en errores."
+    }
+  ],
+
+  "salida_validador": "PASS si errors.json es estructuralmente válido (AJV strict). Errores cross-system bloquean PASS — stack en response y secretos en mensajes son ERROR (riesgo de seguridad). Warnings son drift visible que no bloquea. Info son heurísticas para revisión manual. Formato coherente con naming/glossary/events/lifecycle/observability.validate.js: banner PASS/FAIL + lista de findings agrupados por severidad, con ubicación archivo:línea cuando aplique.",
+
+  "convenciones_complementarias": [
+    "events.validate.js cubre la disciplina del bus (qué se publica). errors.validate.js cubre cómo se construyen las respuestas que devuelven los handlers — incluyendo los handlers de mqttRequest del framework.",
+    "observability.validate.js cubre logger/metrics/correlation_id en todo contexto. errors.validate.js especifica la regla de telemetría OBLIGATORIA para errores específicamente (auto_log_on_error, auto_metric_on_error).",
+    "naming.validate.js valida la forma léxica de eventos. errors.validate.js valida la forma léxica de error.code (UPPER_SNAKE_CASE, lista cerrada).",
+    "lifecycle.validate.js valida cómo nace/muere un módulo. errors.validate.js valida cómo el módulo responde cuando algo sale mal durante su vida.",
+    "modulo-completo.validate.js valida la AUDITORÍA. errors.validate.js cruza patrones de respuestas-con-error contra la auditoría para detectar tools/ui_handlers/apis sin documentar errores.",
+    "Los 6 validators son complementarios. Cada uno tiene su scope. Se ejecutan por separado o todos en CI."
+  ]
 }

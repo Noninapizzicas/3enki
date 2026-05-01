@@ -42,5 +42,58 @@
     "AUTODESCRIBIBLE. El nombre del log y de la métrica describe qué pasa sin tener que mirar el código. 'firmware.build_completed.total' se entiende. 'fb.bc.t' no. Si el nombre necesita explicación, el nombre está mal.",
 
     "COSTE CONSCIENTE. Cada log, métrica y span tiene coste (CPU, red, disco). Spam de logs en bucles o métricas por cada elemento de un array degrada el sistema. Granularidad mínima viable: lo justo para diagnosticar. Cuando dudes, no lo logues — es más fácil añadir un log que quitarlo de un sistema que ya lo lleva."
+  ],
+
+  "principios": [
+    {
+      "id": "observable_by_default",
+      "regla": "Cada acción de dominio significativa del módulo deja huella observable (log, métrica o span — al menos uno). 'Significativa' significa: creación/modificación/eliminación de entidad, fallo, comunicación cross-módulo, decisión de negocio relevante.",
+      "razon": "Sin huella, el sistema funciona pero es opaco. Cuando algo va mal (y va a ir mal), el operador necesita saber qué pasó y dónde. La observabilidad es la diferencia entre 'no sabemos qué pasó' y 'pasó X en Y a las Z'."
+    },
+    {
+      "id": "structured_logs_only",
+      "regla": "Cada log es JSON con campos canónicos. Primer argumento: identificador estable ('module.action.result'). Segundo argumento: objeto con campos. NO concatenación de strings con datos en el mensaje principal.",
+      "razon": "Los logs estructurados son buscables, filtrables, agregables. La prosa concatenada solo es legible por humanos en local. El sistema observable necesita máquinas (alertas, dashboards, queries) que puedan procesarlo. 'Failed to process X' vs 'process.failed' + { item_id: X }: el segundo es operativo."
+    },
+    {
+      "id": "context_in_every_emission",
+      "regla": "Cada log, métrica y span lleva su contexto canónico: nombre del módulo emisor (this.name), severity, timestamp (lo añade el logger), correlation_id (si aplica — eventos en cadena), project_id (si aplica — multi-tenant).",
+      "razon": "Un log sin contexto es ruido. ¿Qué módulo lo emitió? ¿En qué request? ¿De qué proyecto? El contexto es lo que permite cruzar logs de varios módulos para entender una sola historia."
+    },
+    {
+      "id": "inject_dont_instantiate",
+      "regla": "El módulo usa exclusivamente los handles inyectados por el core: this.logger, this.metrics, this.tracer (cuando exista). NO instancia su propio logger (pino, winston, custom), NO escribe a console.log/console.error directamente, NO crea contadores fuera de this.metrics.",
+      "razon": "Múltiples superficies observables = múltiples lugares donde el operador tiene que mirar. Una sola superficie hace los logs/métricas centralizables (un solo topic MQTT logs/, una sola pipeline de métricas). Los desvíos fragmentan la observabilidad."
+    },
+    {
+      "id": "no_secrets_in_logs",
+      "regla": "Tokens, passwords, API keys, datos personales (PII), contenidos privados de clientes — NUNCA aparecen en payloads de logs, métricas ni eventos observables. Cuando se necesite loguear algo sobre una credencial, se loguea metadata (tipo, vencimiento, último uso, status), nunca el valor.",
+      "razon": "Los logs viajan por canales que pueden persistirse (disco, broker MQTT, agregador). Un secreto en log = secreto filtrado. Riesgo de compliance (GDPR, PCI), de seguridad (credencial en logs históricos = credencial comprometida), y de confianza con usuarios. Sin excepciones."
+    },
+    {
+      "id": "severity_meaningful",
+      "regla": "Cada nivel de severidad tiene un significado claro y se respeta. info: flujo normal observable (creación de receta, OTA completada). warn: condición inesperada pero recuperable (reintento, fallback). error: fallo que requiere atención humana (no se pudo persistir, integración caída). debug: detalles para investigación (valores intermedios, pasos de algoritmo).",
+      "razon": "Si todo es info, el operador no sabe qué importa. Si nada es warn, los problemas pasan desapercibidos. Si todo es error, las alertas se ignoran. Niveles bien usados son la primera línea de filtrado para encontrar lo importante en una marea de logs."
+    },
+    {
+      "id": "metrics_by_business_event",
+      "regla": "Cada métrica representa un hecho de negocio o un evento operativo medible (creación, fallo, duración, conteo, tamaño). NO se emite una métrica por cada iteración de un loop interno o por cada operación atómica de implementación.",
+      "razon": "Las métricas tienen coste (memoria, transmisión, agregación). Una métrica por línea de código satura el sistema y confunde al operador. Granularidad correcta: el dominio (cuántos pedidos, cuánto tarda un build, cuántos errores hay), no la implementación."
+    },
+    {
+      "id": "correlation_id_propagation",
+      "regla": "Cuando un evento de un módulo desencadena handlers en otros módulos (cadena de causalidad), el correlation_id (si existe en el evento original) se propaga a los logs y eventos posteriores. Patrón: el handler que recibe correlation_id lo incluye en sus propios publish() y en sus logs.",
+      "razon": "Sin correlation_id propagado, las cadenas de eventos se ven como hechos aislados en los logs. Con correlation_id, el operador puede seguir 'el viaje' de un request del usuario a través de N módulos. Es la base de cualquier debugging serio en sistemas distribuidos."
+    },
+    {
+      "id": "self_describing_names",
+      "regla": "El nombre de un log identifier o de una métrica describe qué representa sin necesidad de mirar el código. Patrón canónico: <modulo>.<entidad>.<accion-en-pasado>.<resultado-opcional>. Ejemplos: 'firmware.build_completed', 'recipe.created', 'pos.order.received'.",
+      "razon": "Logs y métricas son consumidos por humanos (dashboards, alertas) y por sistemas externos (Grafana, Prometheus, Loki). Un nombre claro evita tener que abrir el código fuente para entender qué significa. Las abreviaturas crípticas y los placeholders genéricos ('event.X.Y') destruyen el valor de la observabilidad."
+    },
+    {
+      "id": "cost_aware",
+      "regla": "Cada log, métrica y span tiene coste real (CPU para serializar, ancho de banda para transmitir, disco para persistir). Bucles que loguean cada elemento, métricas por cada byte procesado, spans por cada función llamada — todos esos patrones degradan el sistema. Granularidad mínima viable: lo justo para diagnosticar.",
+      "razon": "Sistemas observados a muerte se ralentizan. Si la observabilidad cuesta más que el trabajo del módulo, está mal calibrada. Cuando dudes entre loguear o no, no lo loguees — es más barato añadir un log cuando se necesita que quitarlo de un sistema que ya lo lleva en producción."
+    }
   ]
 }

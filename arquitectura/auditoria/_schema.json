@@ -1,0 +1,307 @@
+{
+  "_doc": "Esquema estricto que DEBE seguir cada arquitectura/auditoria/<modulo>.json. Cualquier campo sin dato verificable → null + nota corta en observaciones_libres. Prohibido inventar.",
+  "_version": "2.0.0",
+  "_created": "2026-04-28",
+  "_changelog": [
+    "2.0.0 (2026-04-28) — añadido contratos por evento/tool/ui_handler/api, contratos_transversales, observabilidad, modos_de_fallo, configuracion_externa, historial_fixes, tests, seguridad, y sub-campos TTL/concurrencia/cross-vertical."
+  ],
+
+  "_meta": {
+    "modulo": "string — kebab-case. Ej: 'chat-io', 'pizzepos/cobros'.",
+    "ubicacion": "string — path relativo desde la raíz del repo.",
+    "auditado_en": "string ISO date",
+    "version_modulo": "string — campo `version` de module.json. null si no existe.",
+    "habilitado_en_config": "boolean",
+    "tier_carga": "string|null — tier_1_infra | tier_2_platform | tier_3_core | tier_4_features | tier_5_domain_* | tier_6_ui",
+    "estado_modulo": "vivo | dormido_por_diseno | candidato_a_retirada | fantasma — fantasma = en config pero el directorio no existe, o al revés"
+  },
+
+  "responsabilidad": {
+    "una_frase": "string — el dominio único en 1-2 líneas.",
+    "subdominios_internos": ["lista opcional"]
+  },
+
+  "como_se_invoca": {
+    "via_tools_llm": ["lista de tools que expone"],
+    "via_ui_handlers": ["lista 'domain.action'"],
+    "via_apis_http": ["lista 'METHOD /path'"],
+    "via_eventos_externos": ["eventos a los que se suscribe que vienen de OTROS módulos"],
+    "via_otros_modulos_directamente": "VIOLACIÓN — listar si algún otro módulo le hace require/llamada directa."
+  },
+
+  "scope": {
+    "tipo": "global | project_scoped | mixto",
+    "como_recibe_project_id": "string — 'cache via project.activated' | 'en cada payload' | 'no aplica' | otra"
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": "string",
+        "categoria": "dominio | request_response | tool_llm | tool_llm_response | legacy",
+        "contrato": {
+          "input": {
+            "campo": "tipo — obligatorio|opcional — descripción"
+          },
+          "output_response": {
+            "_doc": "Solo si es request_response o tool_llm. Shape de la response correspondiente.",
+            "campo": "tipo — descripción"
+          },
+          "errores": [
+            {
+              "evento_o_campo": "string — '<nombre>.failed' o 'response.error'",
+              "shape": { "campo": "tipo" },
+              "codigos": ["string"]
+            }
+          ],
+          "invariantes": [
+            "string — qué tiene que ser cierto antes/después. Ej: 'project_id ya activado antes de emitir', 'el registro está en SQLite tras .response success'"
+          ],
+          "idempotencia": "string — 'idempotente | no_idempotente | no_aplica' + breve razón",
+          "timeout_esperado_ms": "number|null — solo para .request"
+        },
+        "consumidores_conocidos": ["módulos que lo escuchan según grep del repo"],
+        "huerfano": "boolean — true si nadie lo escucha"
+      }
+    ],
+    "subscribes": [
+      {
+        "nombre": "string",
+        "handler": "string — método del módulo",
+        "emisor_conocido": "string|null",
+        "huerfano": "boolean",
+        "comportamiento_si_falla": "string — qué hace el handler si su lógica falla (log y sigue, throw, retry, …)"
+      }
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "string",
+      "categoria": "read | write | destructive | sin_clasificar",
+      "fuente_categoria": "arquitectura/agentes-tools.json | inferida | sin clasificar",
+      "contrato": {
+        "input": "JSON Schema completo de parameters (no resumen)",
+        "output_success": "shape de lo que la tool devuelve al LLM. Importante: si devuelve objetos crudos vs markdown formateado anotarlo (gotcha histórico ingredientes_formateados)",
+        "output_error": { "campo": "tipo" },
+        "efectos_secundarios": ["eventos de dominio que emite como consecuencia"]
+      },
+      "handler": "string — método"
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "string",
+      "action": "string",
+      "handler": "string",
+      "contrato": {
+        "input": { "campo": "tipo — obligatorio|opcional" },
+        "output_success": { "status": "number", "data": "shape concreto" },
+        "output_error": { "status": "number", "error": "string", "codigo": "string?" },
+        "codigos_error_conocidos": ["PROJECT_REQUIRED | CONVERSATION_REQUIRED | otros"]
+      }
+    }
+  ],
+
+  "apis_http": [
+    {
+      "method": "string",
+      "path": "string",
+      "handler": "string",
+      "contrato": {
+        "request_body": { "campo": "tipo" },
+        "query_params": { "campo": "tipo" },
+        "response_success": { "status": "number", "body": "shape" },
+        "response_error": { "status": "number", "body": "shape" },
+        "auth_required": "boolean | mTLS | none"
+      }
+    }
+  ],
+
+  "contratos_transversales": {
+    "_doc": "Acuerdos sistema-wide — marcar cumple|incumple|no_aplica con breve evidencia. Se contrastan contra arquitectura/eventos.json y CLAUDE.md.",
+    "envelope_data": {
+      "estado": "cumple | incumple | no_aplica",
+      "evidencia": "archivo:linea o cita corta"
+    },
+    "request_id_uuid_v4": { "estado": "...", "evidencia": "..." },
+    "correlation_id_propagado": { "estado": "...", "evidencia": "..." },
+    "payload_snake_case": { "estado": "...", "evidencia": "..." },
+    "fechas_iso_al_frontend": { "estado": "...", "evidencia": "..." },
+    "errores_con_campo_error_humano": { "estado": "...", "evidencia": "..." },
+    "progreso_intermedio_si_5s": { "estado": "...", "evidencia": "..." },
+    "project_id_obligatorio_si_project_scoped": { "estado": "...", "evidencia": "..." },
+    "cero_require_entre_modulos": { "estado": "...", "evidencia": "..." },
+    "events_naming_norma_3_categorias": { "estado": "...", "evidencia": "..." }
+  },
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json | string_concat | mixto | otro",
+      "fields_requeridos_cumplidos": "boolean — module/action/outcome según system.json",
+      "ejemplos": ["snippet corto de logger.info(...) del módulo"],
+      "violaciones": ["snippets que usan estilo pino o [object Object]"]
+    },
+    "metricas": {
+      "counters": ["nombres declarados/emitidos"],
+      "gauges": ["nombres"],
+      "timings": ["nombres"]
+    },
+    "tracing": {
+      "propaga_correlation_id": "boolean",
+      "evidencia": "archivo:linea"
+    }
+  },
+
+  "modos_de_fallo": [
+    {
+      "dependencia": "string — credential-manager | database-manager | filesystem | ai-gateway | provider externo | otro",
+      "que_pasa_si_cae": "string — 'cuelga sin timeout' | 'timeout 10s y devuelve error' | 'fallback a X' | 'crash' | desconocido",
+      "evidencia": "archivo:linea o 'no observable en código'"
+    }
+  ],
+
+  "configuracion_externa": {
+    "env_vars": ["VAR_NAME — uso breve"],
+    "module_json_config_keys": ["clave de module.json.config y para qué se usa"],
+    "config_proyecto_paths": ["paths bajo data/projects/{id}/config/"],
+    "valores_hardcoded_que_deberian_ser_config": ["string — observación si se detecta"]
+  },
+
+  "estado_persistente": {
+    "tablas_sqlite": [
+      {
+        "nombre": "string",
+        "scope_db": "system | project | _prompts | otro",
+        "campos": ["columna TIPO"],
+        "creada_por": "string",
+        "migraciones_suaves": "string|null",
+        "ttl_o_housekeeping": "string|null — política de purga si la hay"
+      }
+    ],
+    "archivos": [
+      {
+        "path": "string",
+        "formato": "json | jsonl | raw | otro",
+        "descripcion": "string",
+        "ttl_o_housekeeping": "string|null"
+      }
+    ],
+    "atomicidad_y_concurrencia": "string|null — transacciones, locks, idempotencia explícita observada en código"
+  },
+
+  "estado_memoria": [
+    {
+      "campo": "string — ej: 'this.activeProjectCache'",
+      "tipo": "Map | Set | Object | array | otros",
+      "se_invalida_con": "string"
+    }
+  ],
+
+  "dependencias_implicitas": [
+    {
+      "modulo_dependido": "string",
+      "via_evento": "string",
+      "obligatorio_en": "onLoad | runtime | ambos",
+      "que_pasa_si_no_esta": "string",
+      "es_cross_vertical": "boolean — true si pertenece a un vertical distinto al del módulo auditado"
+    }
+  ],
+
+  "lifecycle": {
+    "onLoad_resumen": "string",
+    "onUnload_resumen": "string|null",
+    "depende_de_orden_de_carga": "string|null",
+    "auto_wired_subscribes": "boolean",
+    "wildcards_o_dinamicos": ["suscripciones no auto-wireables"]
+  },
+
+  "agentes_propios": [
+    {
+      "name": "string",
+      "ubicacion": "string",
+      "scope": "string",
+      "tools_declaradas": ["lista"],
+      "tools_destructive_declaradas": ["VIOLACIÓN si no vacío"],
+      "rol_breve": "string"
+    }
+  ],
+
+  "violaciones_paradigma": [
+    {
+      "tipo": "require_entre_modulos | persistencia_propia | espera_respuesta_de_lo_emitido | dominio_mezclado_con_infraestructura | RPC_directo | controla_flujo_post_emit | mas_de_un_dominio | rompe_envelope_data | rompe_naming_eventos | rompe_snake_case | otro",
+      "ubicacion": "string — archivo:linea",
+      "descripcion": "string",
+      "gravedad": "alta | media | baja",
+      "regla_violada": "string — referencia a CLAUDE.md / arquitectura/eventos.json / arquitectura/agentes-tools.json"
+    }
+  ],
+
+  "eventos_huerfanos": {
+    "emitidos_sin_consumidor": ["lista verificada por grep"],
+    "subscritos_sin_emisor": ["lista verificada por grep"]
+  },
+
+  "eventos_legacy_a_renombrar": [
+    {
+      "actual": "string",
+      "propuesto": "string",
+      "motivo": "snake_case | inglés_en_dominio | singular_plural_invertido | sin_punto | otro",
+      "es_publica_o_subscribe": "publica | subscribe | ambos"
+    }
+  ],
+
+  "version_archivada": {
+    "existe": "boolean",
+    "ubicacion": "string|null",
+    "razon_de_archivo_segun_repo": "string|null"
+  },
+
+  "frontend_acoplados": {
+    "stores": ["frontend/src/lib/stores/<name>.ts"],
+    "rutas": ["routes/..."],
+    "componentes": ["componentes Svelte críticos"]
+  },
+
+  "tests": {
+    "ubicacion": ["paths bajo tests/ que cubren este módulo"],
+    "tipo": ["unit | integration | e2e"],
+    "cobertura_subjetiva": "alta | media | baja | inexistente",
+    "que_cubre": "string corto",
+    "que_NO_cubre": "string corto"
+  },
+
+  "historial_fixes": {
+    "_doc": "Últimos commits relevantes que tocan el módulo, especialmente fix*, bug*, hotfix*. Extraídos con git log -- <ubicacion>.",
+    "ventana": "ultimo_anio | desde_creacion",
+    "items": [
+      {
+        "sha": "string",
+        "fecha": "ISO",
+        "subject": "string",
+        "causa_segun_commit": "string|null"
+      }
+    ]
+  },
+
+  "seguridad": {
+    "asume_mtls_actualmente": "boolean — solo true si el código lo verifica explícitamente",
+    "asume_certificate_authority": "boolean",
+    "expone_endpoints_sin_auth": ["lista de APIs/UI handlers sin verificación"],
+    "que_cambia_al_reactivar_ca": "string|null — qué del contrato del módulo cambiará cuando certificate-authority esté activa",
+    "datos_sensibles_que_maneja": ["credenciales | tokens | PII | nada"]
+  },
+
+  "todos_e_incompletos": [
+    { "ubicacion": "string", "tipo": "TODO | FIXME | XXX | aspiracional", "descripcion": "string" }
+  ],
+
+  "metricas": {
+    "lineas_de_codigo": "number",
+    "archivos": "number",
+    "fecha_ultimo_commit_relevante": "string|null"
+  },
+
+  "observaciones_libres": "string — SOLO HECHOS notables del código. PROHIBIDO sugerir rediseño, fusiones, opinar."
+}

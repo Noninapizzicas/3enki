@@ -1,0 +1,143 @@
+{
+  "_doc": "Índice de módulos a auditar. Cada entrada representa un módulo del repo con module.json. La auditoría empieza por los 4 módulos del chat con LLM (foco de rediseño) y avanza por dependencias luego por verticales.",
+  "_version": "1.0.0",
+  "_updated": "2026-04-28",
+  "_total_modulos": 66,
+  "_estados_validos": ["pendiente", "en_curso", "auditado", "skip"],
+
+  "_leyenda_prioridad": {
+    "P0": "Foco actual del rediseño — chat con LLM. Auditar primero.",
+    "P1": "Dependencias técnicas que el chat usa (DB, credenciales, filesystem, project-manager, scheduler).",
+    "P2": "Módulos de dominio con tools al LLM + dormidos por diseño (CA, security-p2p, dashboard, metricas). Su contrato importa para el rediseño.",
+    "P3": "Resto de módulos activos.",
+    "P4": "Candidatos a retirada — disabled sin documentación que los defienda. Auditoría superficial para confirmar borrado."
+  },
+
+  "modulos": [
+    {
+      "modulo": "conversacion/chat-io",
+      "ubicacion": "modules/conversacion/chat-io",
+      "salida": "arquitectura/auditoria/conversacion__chat-io.json",
+      "prioridad": "P0",
+      "estado": "pendiente",
+      "habilitado": true,
+      "razon_prioridad": "Entry point del chat. Decide contrato con frontend, persistencia y reenvío al LLM."
+    },
+    {
+      "modulo": "conversacion/prompt-builder",
+      "ubicacion": "modules/conversacion/prompt-builder",
+      "salida": "arquitectura/auditoria/conversacion__prompt-builder.json",
+      "prioridad": "P0",
+      "estado": "pendiente",
+      "habilitado": true,
+      "razon_prioridad": "Ensambla system prompt — punto donde se cruza contexto del módulo + prompt del usuario."
+    },
+    {
+      "modulo": "conversacion/ai-gateway",
+      "ubicacion": "modules/conversacion/ai-gateway",
+      "salida": "arquitectura/auditoria/conversacion__ai-gateway.json",
+      "prioridad": "P0",
+      "estado": "pendiente",
+      "habilitado": true,
+      "razon_prioridad": "Agentic loop + filtrado de tools por page_id + 7 providers. Núcleo del contrato tool_llm."
+    },
+    {
+      "modulo": "conversacion/ai-agent-framework",
+      "ubicacion": "modules/conversacion/ai-agent-framework",
+      "salida": "arquitectura/auditoria/conversacion__ai-agent-framework.json",
+      "prioridad": "P0",
+      "estado": "pendiente",
+      "habilitado": true,
+      "razon_prioridad": "Agentes especialistas — define cómo se cargan y validan tools (read/write/destructive)."
+    },
+
+    { "modulo": "credential-manager", "ubicacion": "modules/credential-manager", "salida": "arquitectura/auditoria/credential-manager.json", "prioridad": "P1", "estado": "pendiente", "habilitado": true, "razon_prioridad": "credential.resolve.request — todos los providers dependen de él." },
+    { "modulo": "database-manager", "ubicacion": "modules/database-manager", "salida": "arquitectura/auditoria/database-manager.json", "prioridad": "P1", "estado": "pendiente", "habilitado": true, "razon_prioridad": "db.query.request/.response — backbone de persistencia. Envelope `data`." },
+    { "modulo": "filesystem", "ubicacion": "modules/filesystem", "salida": "arquitectura/auditoria/filesystem.json", "prioridad": "P1", "estado": "pendiente", "habilitado": true, "razon_prioridad": "fs.read.request — usado por ai-gateway para attachments." },
+    { "modulo": "project-manager", "ubicacion": "modules/project-manager", "salida": "arquitectura/auditoria/project-manager.json", "prioridad": "P1", "estado": "pendiente", "habilitado": true, "razon_prioridad": "project.activated — base del scoping; cache en chat-io, scheduler, recetas." },
+    { "modulo": "prompt-manager", "ubicacion": "modules/prompt-manager", "salida": "arquitectura/auditoria/prompt-manager.json", "prioridad": "P1", "estado": "pendiente", "habilitado": true, "razon_prioridad": "prompt.list.request — prompt-builder lo cachea y depende de él." },
+    { "modulo": "scheduler", "ubicacion": "modules/scheduler", "salida": "arquitectura/auditoria/scheduler.json", "prioridad": "P1", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Project-scoped. Patrón de jobs con eventos. Integración con flow-engine." },
+    { "modulo": "composition-manager", "ubicacion": "modules/composition-manager", "salida": "arquitectura/auditoria/composition-manager.json", "prioridad": "P1", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Composición de proyectos — afecta contexto compartido del chat." },
+    { "modulo": "system-inspector", "ubicacion": "modules/system-inspector", "salida": "arquitectura/auditoria/system-inspector.json", "prioridad": "P1", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Lectura de estado del sistema. Útil para auditoría de eventos en runtime." },
+    { "modulo": "conversation-export", "ubicacion": "modules/conversation-export", "salida": "arquitectura/auditoria/conversation-export.json", "prioridad": "P1", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Consumidor de db.query.response — toca el envelope `data`." },
+
+    { "modulo": "recetas", "ubicacion": "modules/recetas", "salida": "arquitectura/auditoria/recetas.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "13 tools categorizadas read/write/destructive — referencia del contrato tool_llm." },
+    { "modulo": "escandallo", "ubicacion": "modules/escandallo", "salida": "arquitectura/auditoria/escandallo.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Tools del LLM. Ecosistema negocio_alimentario." },
+    { "modulo": "viabilidad", "ubicacion": "modules/viabilidad", "salida": "arquitectura/auditoria/viabilidad.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Tools del LLM. Ecosistema negocio_alimentario." },
+    { "modulo": "pizzepos/carta-manager", "ubicacion": "modules/pizzepos/carta-manager", "salida": "arquitectura/auditoria/pizzepos__carta-manager.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Dueño de datos de cartas. carta.actualizada con muchos consumidores." },
+    { "modulo": "pizzepos/menu-generator", "ubicacion": "modules/pizzepos/menu-generator", "salida": "arquitectura/auditoria/pizzepos__menu-generator.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Tool menu.generate + pipeline OCR + agente menu-structurer." },
+    { "modulo": "pizzepos/tarifas", "ubicacion": "modules/pizzepos/tarifas", "salida": "arquitectura/auditoria/pizzepos__tarifas.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Asignación canal→carta. Cero cálculos runtime — referencia de write puro." },
+    { "modulo": "pizzepos/carta-marketing", "ubicacion": "modules/pizzepos/carta-marketing", "salida": "arquitectura/auditoria/pizzepos__carta-marketing.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Dispatcha agentes en cadena cuando cambia carta." },
+    { "modulo": "pizzepos/carta-digital", "ubicacion": "modules/pizzepos/carta-digital", "salida": "arquitectura/auditoria/pizzepos__carta-digital.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Backoffice. Listens carta.actualizada + tarifas.config.actualizada." },
+    { "modulo": "pizzepos/carta-impresion", "ubicacion": "modules/pizzepos/carta-impresion", "salida": "arquitectura/auditoria/pizzepos__carta-impresion.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Debounce 5s. Usa agentes architect+builder." },
+    { "modulo": "pizzepos/carta-scheduler", "ubicacion": "modules/pizzepos/carta-scheduler", "salida": "arquitectura/auditoria/pizzepos__carta-scheduler.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Programación con confirmación humana — ejemplo de write con guardrail." },
+    { "modulo": "pizzepos/carta-design", "ubicacion": "modules/pizzepos/carta-design", "salida": "arquitectura/auditoria/pizzepos__carta-design.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Logger informativo de carta.actualizada." },
+    { "modulo": "facturas", "ubicacion": "modules/facturas", "salida": "arquitectura/auditoria/facturas.json", "prioridad": "P2", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Pipeline OCR + IA + CSV. Vertical principal de facturación." },
+
+    { "modulo": "pizzepos/cuentas", "ubicacion": "modules/pizzepos/cuentas", "salida": "arquitectura/auditoria/pizzepos__cuentas.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Vertical pizzepos." },
+    { "modulo": "pizzepos/cuentas-canales", "ubicacion": "modules/pizzepos/cuentas-canales", "salida": "arquitectura/auditoria/pizzepos__cuentas-canales.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Strategy pattern (5 canales). 2 TODOs en strategies/." },
+    { "modulo": "pizzepos/pedidos", "ubicacion": "modules/pizzepos/pedidos", "salida": "arquitectura/auditoria/pizzepos__pedidos.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Vertical pizzepos." },
+    { "modulo": "pizzepos/cobros", "ubicacion": "modules/pizzepos/cobros", "salida": "arquitectura/auditoria/pizzepos__cobros.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Vertical pizzepos." },
+    { "modulo": "pizzepos/cocina", "ubicacion": "modules/pizzepos/cocina", "salida": "arquitectura/auditoria/pizzepos__cocina.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Vertical pizzepos." },
+    { "modulo": "pizzepos/comandero", "ubicacion": "modules/pizzepos/comandero", "salida": "arquitectura/auditoria/pizzepos__comandero.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Cache por carta_id. Consumidor carta.actualizada." },
+    { "modulo": "pizzepos/productos", "ubicacion": "modules/pizzepos/productos", "salida": "arquitectura/auditoria/pizzepos__productos.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Sync catalogo desde carta.actualizada." },
+    { "modulo": "pizzepos/categorias", "ubicacion": "modules/pizzepos/categorias", "salida": "arquitectura/auditoria/pizzepos__categorias.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Sync desde carta.actualizada." },
+    { "modulo": "pizzepos/ingredientes", "ubicacion": "modules/pizzepos/ingredientes", "salida": "arquitectura/auditoria/pizzepos__ingredientes.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Sync desde carta.actualizada." },
+    { "modulo": "pizzepos/variaciones", "ubicacion": "modules/pizzepos/variaciones", "salida": "arquitectura/auditoria/pizzepos__variaciones.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Vertical pizzepos." },
+    { "modulo": "pizzepos/persistencia-comandero", "ubicacion": "modules/pizzepos/persistencia-comandero", "salida": "arquitectura/auditoria/pizzepos__persistencia-comandero.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Project-scoped (data/projects/{id}/persistencia/)." },
+    { "modulo": "pizzepos/impresion", "ubicacion": "modules/pizzepos/impresion", "salida": "arquitectura/auditoria/pizzepos__impresion.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "v3.0 MQTT directo a ESP32. Sistema multi-destino parcial." },
+
+    { "modulo": "facturacion/asesoria", "ubicacion": "modules/facturacion/asesoria", "salida": "arquitectura/auditoria/facturacion__asesoria.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Vertical facturación." },
+    { "modulo": "facturacion/fuentes", "ubicacion": "modules/facturacion/fuentes", "salida": "arquitectura/auditoria/facturacion__fuentes.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Strategy pattern (Telegram, Gmail, manual)." },
+
+    { "modulo": "bot-manager", "ubicacion": "modules/bot-manager", "salida": "arquitectura/auditoria/bot-manager.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Storage de archivos de bots. Códigos R/P/V/A/X/E/D." },
+    { "modulo": "telegram-service", "ubicacion": "modules/telegram-service", "salida": "arquitectura/auditoria/telegram-service.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "13 eventos publish telegram.*. Punto de entrada externo." },
+    { "modulo": "channel-manager", "ubicacion": "modules/channel-manager", "salida": "arquitectura/auditoria/channel-manager.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Consumidor de db.query.response." },
+    { "modulo": "calling-generator", "ubicacion": "modules/calling-generator", "salida": "arquitectura/auditoria/calling-generator.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Activo en config." },
+    { "modulo": "code-executor", "ubicacion": "modules/code-executor", "salida": "arquitectura/auditoria/code-executor.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Tier 4. Ejecución de código." },
+    { "modulo": "plugin-manager", "ubicacion": "modules/plugin-manager", "salida": "arquitectura/auditoria/plugin-manager.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Tier 2. Carga plugins JSON." },
+    { "modulo": "log-manager", "ubicacion": "modules/log-manager", "salida": "arquitectura/auditoria/log-manager.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Recomendación: retirar tras auditoría superficial. core/observability ya provee Logger+Tracer+Metrics+ActivityLogger; log-manager parece capa duplicada. Lleva disabled tiempo sin que nada se rompa." },
+
+    { "modulo": "admin-panel", "ubicacion": "modules/admin-panel", "salida": "arquitectura/auditoria/admin-panel.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "UI. 2 TODOs (toggle, agent creation)." },
+    { "modulo": "pdf-viewer", "ubicacion": "modules/pdf-viewer", "salida": "arquitectura/auditoria/pdf-viewer.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Consumidor de db.query.response." },
+    { "modulo": "text-editor", "ubicacion": "modules/text-editor", "salida": "arquitectura/auditoria/text-editor.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "UI auxiliar." },
+
+    { "modulo": "perifericos", "ubicacion": "modules/perifericos", "salida": "arquitectura/auditoria/perifericos.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "Tier 2. IoT periféricos." },
+    { "modulo": "device-registry", "ubicacion": "modules/device-registry", "salida": "arquitectura/auditoria/device-registry.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "IoT — registro de dispositivos." },
+    { "modulo": "device-shadow", "ubicacion": "modules/device-shadow", "salida": "arquitectura/auditoria/device-shadow.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "IoT — desired/reported/delta." },
+    { "modulo": "device-health", "ubicacion": "modules/device-health", "salida": "arquitectura/auditoria/device-health.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "IoT — liveness." },
+    { "modulo": "gateway-manager", "ubicacion": "modules/gateway-manager", "salida": "arquitectura/auditoria/gateway-manager.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "IoT — traducción MQTT↔nativo." },
+    { "modulo": "firmware-manager", "ubicacion": "modules/firmware-manager", "salida": "arquitectura/auditoria/firmware-manager.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "IoT — catálogo firmware + OTA." },
+    { "modulo": "firmware-builder", "ubicacion": "modules/firmware-builder", "salida": "arquitectura/auditoria/firmware-builder.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "IoT — compila drivers ESP32 (reemplaza esp32-dev)." },
+    { "modulo": "esp32-flasher", "ubicacion": "modules/esp32-flasher", "salida": "arquitectura/auditoria/esp32-flasher.json", "prioridad": "P3", "estado": "pendiente", "habilitado": true, "razon_prioridad": "IoT — flash USB y monitor serial." },
+
+    { "modulo": "certificate-authority", "ubicacion": "modules/certificate-authority", "salida": "arquitectura/auditoria/certificate-authority.json", "prioridad": "P2", "estado": "pendiente", "habilitado": false, "razon_prioridad": "DORMIDO POR DISEÑO. Modelo de seguridad mTLS del sistema. Aunque disabled, su contrato es la spec contra la que el resto de módulos hablarán cuando se reactive. Auditar a fondo." },
+    { "modulo": "security-p2p", "ubicacion": "modules/security-p2p", "salida": "arquitectura/auditoria/security-p2p.json", "prioridad": "P2", "estado": "pendiente", "habilitado": false, "razon_prioridad": "DORMIDO POR DISEÑO. Cifrado E2E entre cores. Parte del modelo de seguridad junto con CA." },
+    { "modulo": "dashboard", "ubicacion": "modules/dashboard", "salida": "arquitectura/auditoria/dashboard.json", "prioridad": "P2", "estado": "pendiente", "habilitado": false, "razon_prioridad": "DORMIDO POR DISEÑO. UI a revivir." },
+    { "modulo": "metricas", "ubicacion": "modules/metricas", "salida": "arquitectura/auditoria/metricas.json", "prioridad": "P2", "estado": "pendiente", "habilitado": false, "razon_prioridad": "DORMIDO POR DISEÑO. Métricas del sistema en UI." },
+
+    { "modulo": "esp32-dev", "ubicacion": "modules/esp32-dev", "salida": "arquitectura/auditoria/esp32-dev.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Fantasma — existe en disco pero no en config.enabled ni en config.disabled. Documentado como deprecado por firmware-builder. Candidato a retirada." },
+    { "modulo": "notas", "ubicacion": "modules/notas", "salida": "arquitectura/auditoria/notas.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Disabled, sin uso aparente. Candidato a retirada." },
+    { "modulo": "scratch-designer", "ubicacion": "modules/scratch-designer", "salida": "arquitectura/auditoria/scratch-designer.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "UI placeholder nunca shipped. Candidato a retirada." },
+    { "modulo": "ui-designer", "ubicacion": "modules/ui-designer", "salida": "arquitectura/auditoria/ui-designer.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "UI placeholder nunca shipped. Candidato a retirada." },
+    { "modulo": "staff-manager", "ubicacion": "modules/staff-manager", "salida": "arquitectura/auditoria/staff-manager.json", "prioridad": "P4", "estado": "pendiente", "habilitado": false, "razon_prioridad": "Nunca terminado. Candidato a retirada." }
+  ],
+
+  "resumen_por_prioridad": {
+    "P0": 4,
+    "P1": 9,
+    "P2": 16,
+    "P3": 31,
+    "P4": 6,
+    "_total": 66
+  },
+
+  "decisiones_2026_04_28": [
+    "P2 ampliado con 4 dormidos por diseño (certificate-authority, security-p2p, dashboard, metricas) — sus contratos importan para el rediseño aunque estén disabled.",
+    "log-manager bajado a P4 (candidato a retirada): core/observability ya cubre Logger+Tracer+Metrics+ActivityLogger. Auditoría confirma si tenía función única o era capa duplicada.",
+    "P4 reducido a 6 candidatos a retirada: log-manager, esp32-dev (fantasma), notas, scratch-designer, ui-designer, staff-manager.",
+    "conversation-manager listado en config.disabled pero el directorio no existe — fantasma, no se audita."
+  ],
+
+  "siguiente_paso": "Lanzar el agente auditor v2 para los 4 módulos P0 en paralelo (chat-io, prompt-builder, ai-gateway, ai-agent-framework). Cuando terminen, validar las 4 salidas contra _schema.json v2.0.0, revisar patrón emergente y decidir si pasar a P1 o ajustar el schema."
+}

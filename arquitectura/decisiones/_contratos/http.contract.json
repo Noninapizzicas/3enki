@@ -53,5 +53,68 @@
     "EL CLI ES UN CLIENTE COMO CUALQUIER OTRO. cli/client.js no tiene privilegios especiales. Hace requests HTTP al gateway igual que un browser. La autoridad sobre el core es la misma que tiene cualquier consumidor. Si el CLI puede llamar GET /modules/X/Y, el browser también — la auth se decide por endpoint, no por cliente.",
 
     "HTTP NO SUSTITUYE AL BUS. Un endpoint HTTP que el gateway sirve PUEDE traducirse internamente a un eventBus.publish o a un mqttRequest — esa es decisión del módulo, no del gateway. El módulo recibe el request HTTP (ya parseado por el gateway), hace su trabajo (que puede involucrar publicar eventos para que otros módulos hagan algo) y devuelve la response. HTTP no es atajo para saltarse el bus internamente."
+  ],
+
+  "principios": [
+    {
+      "id": "http_only_crosses_process_boundary",
+      "regla": "HTTP solo aparece cuando se cruza la frontera externa del core (proceso de Node). Si remitente y destinatario viven en el mismo proceso, MQTT obligatorio. Si uno de los dos vive fuera (CLI, browser, servicio externo), HTTP es legítimo.",
+      "razon": "El paradigma event-core ('emite evento, quien sabe hace, tú no sabes cómo') presupone bus, no fetch. HTTP intra-proceso introduce acoplamiento síncrono que el bus diseñado precisamente para evitar. Mantener HTTP solo en frontera preserva la propiedad clave del sistema: los módulos no se conocen entre sí, solo conocen el bus."
+    },
+    {
+      "id": "mqtt_for_intra_core_communication",
+      "regla": "Un módulo NUNCA llama a otro módulo del mismo core via HTTP, ni siquiera con localhost. La comunicación intra-core es 100% MQTT (eventBus.publish/subscribe o mqttRequest). HTTP entre módulos del mismo core es drift estructural, no optimización ni atajo.",
+      "razon": "Si un módulo A llama a B via HTTP, B se vuelve crítico para A en runtime — si B cae, A rompe. Con bus, B puede caer y A solo nota que su evento no se procesa (visibilidad operativa, no fallo en cascada). Además HTTP intra-proceso paga overhead de serialización + parsing innecesario cuando el bus ya pasa el objeto en memoria."
+    },
+    {
+      "id": "three_legitimate_cases_for_http",
+      "regla": "HTTP es legítimo en exactamente tres casos: (1) CLI — operador humano que interactúa con el core desde otra terminal/proceso, (2) UI WEB — dashboard, configuradores, herramientas servidas a un browser que no habla MQTT nativo, (3) INTEGRACIÓN EXTERNA — webhooks entrantes de servicios que ya hablan HTTP, o llamadas salientes a APIs de terceros que ya hablan HTTP.",
+      "razon": "Los tres casos comparten una propiedad: el otro extremo NO es parte del core ni del bus. CLI vive en otra terminal. Browser no habla MQTT. APIs externas (OpenAI, Telegram, WooCommerce) viven en otra empresa. En los tres, HTTP no es elección sino obligación del medio. Cualquier cuarto caso requiere justificación explícita en el contrato — la lista cerrada previene drift."
+    },
+    {
+      "id": "single_http_server_in_core",
+      "regla": "El core tiene UN único HTTP-server (core/gateway/http.js). Los módulos NO levantan listeners propios (ni express, ni fastify, ni http.createServer). Declaran apis en module.json y el gateway las enruta. Cors, compression, cache, auth se gestionan en el gateway, no por módulo.",
+      "razon": "Múltiples servers HTTP en el mismo proceso multiplican configuración (cors policy distinto por módulo, ports distintos, telemetría fragmentada). Un solo gateway canaliza toda la frontera HTTP, garantiza política coherente, y permite añadir middleware (auth, rate-limit, cache) sin tocar los módulos. Validado: core/gateway/http.js ya implementa este patrón."
+    },
+    {
+      "id": "canonical_routing_modules_slug_path",
+      "regla": "Toda URL servida por el gateway sigue el patrón /modules/<slug>/<path>. El slug es el nombre canónico del módulo (kebab-case, según naming.json). El path es el recurso o acción específica del módulo. El verbo NO va en la URL — el método HTTP ya es el verbo. Sin prefijos extra (/api, /v1) salvo decisión explícita del contrato.",
+      "razon": "El routing por dueño (modules/<slug>) hace explícita la responsabilidad: viendo la URL sabes a qué módulo va. Sin verbo en la URL, evitas el ruido /modules/notas/crear-nota cuando POST /modules/notas/notas ya lo dice. Coherente con events naming (verbo canónico ya está separado de la entidad)."
+    },
+    {
+      "id": "response_uses_canonical_error_shape",
+      "regla": "Toda response del HTTP-server usa el response_shape canónico de errors.json: { status, data | error } mutuamente excluyentes. El status del JSON coincide con el HTTP status code. NO hay { ok }, NO hay { result }, NO hay { success } — esos son drift que el validator de errors detecta.",
+      "razon": "Una sola forma de respuesta a través de todo el sistema (HTTP, mqttRequest, eventBus) significa que el cliente (CLI, browser, otro módulo) tiene UN único parser, UN único manejo de error. Sin esto, cada endpoint es una sorpresa. Coherente y reusa el contrato de errors sin duplicar reglas."
+    },
+    {
+      "id": "mandatory_timeout_in_http_client",
+      "regla": "Todo HTTP-client (módulo llamando a un externo, cli/client.js llamando al core) declara timeout explícito en cada request. fetch / http.request sin timeout NO se commitea. El timeout es por llamada (puede variar entre endpoints), no global.",
+      "razon": "Sin timeout, una llamada a un externo que cuelga deja el handler bloqueado indefinidamente — ocupa el event loop, agota retries del caller, propaga deadlock. Con timeout explícito, el módulo decide cuánto espera y emite un error canónico (UPSTREAM_TIMEOUT) cuando expira. Es la versión HTTP del 'no_silent_catch' del bus: hacer explícito el peor caso."
+    },
+    {
+      "id": "mandatory_telemetry_on_http",
+      "regla": "Cada request HTTP entrante (server) emite log + métrica (duración, status, ruta). Cada call saliente (client) emite log + métrica (duración, status del externo, host). Sin telemetría HTTP no se commitea ningún endpoint ni cliente. Coherente con observability.contract y errors auto_observable_errors.",
+      "razon": "HTTP es donde el sistema toca el mundo exterior — la información de qué tarda, qué falla y desde dónde es operativamente crítica. Sin métricas HTTP no detectas degradación de upstream (OpenAI responde más lento), pico de carga en el dashboard, o un cliente atacando un endpoint. Es ceguera evitable."
+    },
+    {
+      "id": "secret_redaction_in_urls_and_headers",
+      "regla": "Tokens, claves, passwords NUNCA aparecen en URL query params (van en headers Authorization / X-API-Key). Los headers de auth (Authorization, X-API-Key, Cookie, Set-Cookie) se redactan ANTES de loguear. La URL completa que aparece en logs/métricas no contiene credenciales.",
+      "razon": "URLs aparecen en muchos sitios: logs del proxy, logs del módulo, métricas con label 'path', browser history, server access logs de upstream. Un token en query param se filtra a TODOS esos canales. Headers son más fáciles de redactar consistentemente. Coherente con no_secrets_in_logs (observability), no_secrets_in_messages (errors), no_plain_secrets_on_disk (persistence) — la disciplina del secreto es transversal."
+    },
+    {
+      "id": "external_errors_mapped_to_canonical_codes",
+      "regla": "Cuando un módulo HTTP-client recibe un error de un externo (4xx, 5xx, timeout, network error), NO propaga 'OpenAI dijo X' al caller del bus. Lo traduce al vocabulario canónico de errors.codes_infrastructure: UPSTREAM_TIMEOUT, UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, UPSTREAM_AUTH_FAILED, etc. El módulo es adaptador, no proxy transparente.",
+      "razon": "Si cada módulo propaga el error tal cual lo recibe, el caller (otro módulo en el bus, el CLI, una UI) tiene que conocer la idiosincrasia de cada upstream. Con mapeo canónico, el caller maneja UPSTREAM_RATE_LIMITED igual venga de OpenAI, Anthropic o Twilio. La diversidad de externos se aplana en la frontera, no se propaga al sistema."
+    },
+    {
+      "id": "auth_explicitly_declared_per_endpoint",
+      "regla": "Cada endpoint HTTP del módulo declara su requisito de auth en module.json (config.apis[*].auth_required: 'none' | 'mtls' | 'bearer' | 'basic'). Sin declaración explícita, el endpoint se considera público. La auth se decide por endpoint, no por cliente.",
+      "razon": "Sin declaración explícita, los endpoints quedan accidentalmente expuestos o accidentalmente cerrados. La declaración por endpoint en el manifest hace que la auditoría/CI vea de un vistazo qué está expuesto. Decidir por cliente (CLI vs browser) en lugar de por endpoint mezcla policy con identidad — un browser puede ser tan legítimo como un CLI si tiene token."
+    },
+    {
+      "id": "http_does_not_replace_bus",
+      "regla": "Un endpoint HTTP que el gateway sirve PUEDE traducirse internamente a uno o más eventBus.publish o mqttRequest. Esa traducción es decisión del módulo. Pero el endpoint HTTP NO sustituye al bus para acciones cross-módulo: el módulo recibe el request HTTP, hace su trabajo (que probablemente publica eventos), y devuelve la response.",
+      "razon": "Si tienes /modules/recetas/crear que hace un INSERT directo, y otra acción del sistema necesita reaccionar a 'receta creada', acabas duplicando la lógica de notificación en HTTP y en bus. Si en cambio /modules/recetas/crear publica receta.creado, todos los reactivos siguen funcionando. HTTP es solo el mensajero del input externo; el bus es la espina dorsal del core."
+    }
   ]
 }

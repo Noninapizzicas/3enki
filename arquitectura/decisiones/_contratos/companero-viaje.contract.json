@@ -273,5 +273,186 @@
         "respuesta": "Si — pero entonces es probablemente NUCLEO o INFRAESTRUCTURA, no extension. Ejemplos: ai-gateway (motor del LLM), broker MQTT, gateway HTTP del core, prompt-builder. Estos son piezas que sostienen el sistema, no extensiones del compañero. Si una necesidad nueva pretende ser nucleo, requiere replantear el modelo — no se mete sin justificacion."
       }
     ]
+  },
+
+  "protocolos_canonicos": {
+    "descripcion": "Los eventos del bus son la espina dorsal del subsistema. Cualquier modulo que se enchufe — del tipo que sea — usa estos eventos canonicos para integrarse. Esta seccion declara QUE eventos existen y QUE campos canonicos viajan en sus payloads. El SHAPE EXACTO de cada evento (validable con JSON Schema) se define en los contratos derivados (chat-flow.contract, agent-flow.contract, channel-flow.contract). Aqui se establece el CATALOGO INMUTABLE: añadir un modulo nuevo NO añade eventos canonicos; usa los existentes.",
+
+    "campos_canonicos_de_payload": {
+      "descripcion": "Campos que viajan en los payloads de todos (o casi todos) los eventos del subsistema. Son los CARRILES por los que circula la trazabilidad y el contexto. Si un modulo los omite, rompe propiedades del modelo (memoria, especializacion, agnosticismo de canal).",
+      "campos": [
+        {
+          "name": "correlation_id",
+          "obligatorio": "siempre",
+          "proposito": "Hilo causal de una cadena de eventos. Generado por el originador (canal o cron) y propagado SIN modificar a traves de toda la cadena. Permite reconstruir 'que paso a partir de este input del usuario' incluso si pasaron por 5 modulos y 3 agentes.",
+          "drift_si_falta": "Cuando algo se rompe en produccion no hay forma de saber que evento original lo desencadeno. Sin correlation_id la observabilidad colapsa."
+        },
+        {
+          "name": "request_id",
+          "obligatorio": "en patrones request/response (mqttRequest, llm.complete.request)",
+          "proposito": "Id unico de UN request especifico para correlacionar su response. Generado por el caller del request, devuelto en el response. NO es lo mismo que correlation_id (este puede agrupar muchos request_ids dentro de una misma cadena causal).",
+          "drift_si_falta": "Sin request_id, los responses no se pueden correlacionar con sus requests. El caller no sabe que respuesta es de su llamada."
+        },
+        {
+          "name": "conversation_id",
+          "obligatorio": "en eventos del flujo del chat (chat.*, ai.chat.*)",
+          "proposito": "Identifica el VIAJE — la conversacion sostenida que el compañero mantiene con el usuario. Sin conversation_id no hay viaje, hay pregunta suelta. Es lo que enlaza el FIFO de memoria.",
+          "drift_si_falta": "Pierdes la propiedad fundamental del compañero (memoria sostenida). El sistema se degrada a request/response stateless."
+        },
+        {
+          "name": "project_id",
+          "obligatorio": "siempre que aplique multi-tenancy o existan multiples proyectos del usuario",
+          "proposito": "Identifica el PROYECTO ACTIVO que da contexto a la interaccion. Determina que tools, prompts, archivos y agentes estan disponibles. La especializacion por proyecto depende de este campo.",
+          "drift_si_falta": "El compañero pierde una de las dos formas de especializacion (la otra es por agente). Se vuelve generico — no conoce TU proyecto."
+        },
+        {
+          "name": "user_id",
+          "obligatorio": "siempre que el sistema tenga multi-usuario o cuente con identidad para auth/personalizacion/aislamiento",
+          "proposito": "Identifica al humano. Necesario para: aislamiento de memoria por usuario, permisos diferentes por usuario, costes por usuario, multi-personalidad (el compañero adapta su tono al usuario), auditoria de acciones.",
+          "drift_si_falta": "Imposible distinguir conversaciones/memorias/permisos entre usuarios. Imposible facturar por usuario. Cuando el sistema se mueve de single-user a multi-user, fallo masivo."
+        },
+        {
+          "name": "channel",
+          "obligatorio": "en eventos originados por o destinados a un canal (chat-io, telegram, voz, etc.)",
+          "proposito": "Identifica el canal POR EL QUE LLEGO el input o por el que debe SALIR la respuesta. Ej: 'web', 'telegram', 'voice', 'whatsapp'. Sin esto, una respuesta no sabe a donde volver.",
+          "drift_si_falta": "Perdida del agnosticismo de canal. Cuando llegue la respuesta del LLM, no se sabe si devolverla por web, telegram o voz. Toda la promesa multi-canal se rompe."
+        },
+        {
+          "name": "channel_context",
+          "obligatorio": "siempre que channel este presente",
+          "proposito": "Datos especificos del canal necesarios para devolver la respuesta al mismo humano que lo origino. Ej: para telegram { chat_id, message_id }; para web { session_id, sse_client_id }; para voz { call_id, audio_format }. El contenido es opaco para el resto del sistema — solo el modulo del canal lo entiende.",
+          "drift_si_falta": "El canal no puede devolver la respuesta al humano correcto. Mensajes se pierden o llegan a la persona equivocada."
+        },
+        {
+          "name": "timestamp",
+          "obligatorio": "recomendado",
+          "proposito": "ISO 8601. Permite ordenacion temporal, debugging, analytics, deteccion de eventos viejos retrasados. Generado por el modulo emisor, NO modificado en transito.",
+          "drift_si_falta": "Debugging temporal imposible. Eventos retrasados (broker congestionado, modulo cae) no se distinguen de actuales."
+        }
+      ]
+    },
+
+    "eventos_canonicos": {
+      "descripcion": "Catalogo INMUTABLE de eventos del subsistema chat/agentes. Cualquier extension nueva usa estos eventos — no inventa categorias propias. Si una necesidad real exige un evento nuevo, primero se replantea si encaja en uno existente; solo si no, se añade al catalogo (con justificacion documentada).",
+      "categorias": [
+        {
+          "id": "channel_io",
+          "descripcion": "Eventos que mueven informacion entre el mundo humano (canales) y el bus interno. Son el limite del sistema con el exterior.",
+          "eventos": [
+            {
+              "name": "channel.input.received",
+              "publicado_por": "modulo de canal (chat-io, telegram-service, voice-input, etc.)",
+              "consumido_por": "infraestructura del compañero (tipicamente desemboca en chat.message.saved)",
+              "proposito": "Notificar que llego un input humano por un canal. NIVEL BAJO: antes de procesarlo como mensaje del chat (puede ser comando, archivo, audio sin transcribir, etc.).",
+              "campos_minimos": ["correlation_id", "user_id", "channel", "channel_context", "raw_input (estructura libre segun canal)", "timestamp"]
+            },
+            {
+              "name": "channel.output.sent",
+              "publicado_por": "modulo de canal (despues de entregar al humano)",
+              "consumido_por": "observabilidad, auditoria, modulos de seguimiento",
+              "proposito": "Confirmar que la respuesta llego al humano por su canal. Cierra el ciclo iniciado en channel.input.received.",
+              "campos_minimos": ["correlation_id", "user_id", "channel", "channel_context", "delivered_at", "status"]
+            }
+          ]
+        },
+        {
+          "id": "chat_flow",
+          "descripcion": "Eventos del flujo de conversacion del compañero. La cadena tipica: chat.message.saved → (memorias enriquecen) → chat.prompt.ready → ai.chat.response (o ai.chat.failed).",
+          "eventos": [
+            {
+              "name": "chat.message.saved",
+              "publicado_por": "chat-io (o futuro: cualquier canal cuando el input es 'mensaje al compañero')",
+              "consumido_por": "prompt-builder (siempre); memorias (RAG, long-term, etc. — opcional)",
+              "proposito": "El usuario ha mandado un mensaje al compañero, persistido en la conversacion. Es el TRIGGER del razonamiento del compañero.",
+              "campos_minimos": ["correlation_id", "conversation_id", "project_id", "user_id", "channel", "channel_context", "message_id", "message (texto del usuario)", "attachments (opcional)", "intencion (opcional, hint sobre que quiere el usuario)", "settings (config del LLM si la conversacion la lleva)", "page_id (opcional, contexto de pagina)", "timestamp"]
+            },
+            {
+              "name": "chat.context.enriched",
+              "publicado_por": "modulos de memoria (memory-rag, memory-user-profile, memory-long-term, etc.)",
+              "consumido_por": "prompt-builder",
+              "proposito": "Aporta contexto adicional al system prompt del compañero. Multiples memorias pueden publicar para una misma conversacion; prompt-builder agrega. ESTO ES NUEVO: hoy las memorias estan integradas dentro de prompt-builder; este evento abre la puerta a memorias modulares externas.",
+              "campos_minimos": ["correlation_id", "conversation_id", "message_id (de chat.message.saved al que enriquece)", "source (id de la memoria, ej. 'memory-rag')", "context_addition (texto a incluir en el system prompt)", "priority (orden de inclusion)"]
+            },
+            {
+              "name": "chat.prompt.ready",
+              "publicado_por": "prompt-builder",
+              "consumido_por": "ai-gateway",
+              "proposito": "El system prompt completo esta construido (con todas las memorias incluidas). Ya se puede invocar al LLM.",
+              "campos_minimos": ["correlation_id", "conversation_id", "project_id", "user_id", "channel", "channel_context", "message_id", "system_prompt (texto completo enriquecido)", "messages (historial FIFO + el mensaje actual)", "tools_disponibles (subset segun proyecto)", "settings (model, temperature, max_tokens)", "intencion", "attachments", "timestamp"]
+            },
+            {
+              "name": "ai.chat.response",
+              "publicado_por": "ai-gateway (cuando el LLM termino exitosamente, incluyendo todo su agentic loop)",
+              "consumido_por": "chat-io (para reenviar al canal de origen); observabilidad; otros modulos que reaccionen al output del compañero",
+              "proposito": "El compañero produjo una respuesta. Cierra el flujo iniciado en chat.message.saved.",
+              "campos_minimos": ["correlation_id", "conversation_id", "project_id", "user_id", "channel", "channel_context", "message_id_user (el id del mensaje del usuario)", "message_id_assistant (id NUEVO del mensaje del compañero)", "assistant_message (texto que dijo el compañero)", "tool_calls_executed", "iterations", "tokens", "cost", "model", "provider", "timestamp"]
+            },
+            {
+              "name": "ai.chat.failed",
+              "publicado_por": "ai-gateway (cuando algo fallo: timeout LLM, todos los providers caidos, error de credencial, etc.)",
+              "consumido_por": "chat-io (para informar al usuario); observabilidad; alerting",
+              "proposito": "Cierra el flujo iniciado en chat.message.saved con resultado de error. Sin esto, los flujos quedan colgados sin respuesta.",
+              "campos_minimos": ["correlation_id", "conversation_id", "user_id", "channel", "channel_context", "message_id_user", "error: { code (UPSTREAM_TIMEOUT, CREDENTIAL_NOT_FOUND, etc.), message, details }", "timestamp"]
+            }
+          ]
+        },
+        {
+          "id": "agent_flow",
+          "descripcion": "Eventos para invocar agentes especialistas. Reactivos: el agente actua cuando llega su evento, no se llama como funcion.",
+          "eventos": [
+            {
+              "name": "agent.execute.request",
+              "publicado_por": "cualquier modulo que necesite invocar un agente (ai-gateway via tool invoke_agent, otro modulo del dominio, scheduler/cron, etc.)",
+              "consumido_por": "ai-agent-framework",
+              "proposito": "Disparar la ejecucion de un agente especialista. La unica via canonica de activar agentes.",
+              "campos_minimos": ["correlation_id", "request_id (para correlacionar con la response)", "conversation_id (opcional, si nace de conversacion)", "project_id", "user_id", "agentName (cual agente)", "context (datos del caso)", "task (instruccion en lenguaje natural opcional)", "timestamp"]
+            },
+            {
+              "name": "agent.execute.response",
+              "publicado_por": "ai-agent-framework (cuando el agente termina exitosamente)",
+              "consumido_por": "el modulo que origino el request (lo identifica por request_id) + observabilidad",
+              "proposito": "El agente termino y produjo resultado. Cierra el ciclo iniciado en agent.execute.request.",
+              "campos_minimos": ["correlation_id", "request_id", "conversation_id (si aplica)", "agentName", "result (estructura libre del agente)", "tool_calls_executed", "iterations", "tokens", "cost", "duration_ms", "timestamp"]
+            },
+            {
+              "name": "agent.execute.failed",
+              "publicado_por": "ai-agent-framework (cuando el agente fallo: timeout, error LLM, error de tool, etc.)",
+              "consumido_por": "el modulo que origino el request + observabilidad",
+              "proposito": "Cierra el ciclo en error. Sin esto, los requests de agente colgados sin respuesta.",
+              "campos_minimos": ["correlation_id", "request_id", "agentName", "error: { code, message, details }", "duration_ms", "timestamp"]
+            }
+          ]
+        },
+        {
+          "id": "llm_generic",
+          "descripcion": "Eventos genericos para invocar al LLM SIN pasar por el flujo del chat. Usados por agentes y modulos que necesitan razonamiento del LLM para sus tareas (no asociadas a una conversacion del usuario).",
+          "eventos": [
+            {
+              "name": "llm.complete.request",
+              "publicado_por": "ai-agent-framework (cuando ejecuta un agente); cualquier modulo que necesite razonamiento del LLM sin contexto de chat",
+              "consumido_por": "ai-gateway",
+              "proposito": "Solicitud generica al LLM. NO es chat — es 'dame razonamiento sobre esto'. Usado para tareas internas del sistema.",
+              "campos_minimos": ["correlation_id", "request_id", "system_prompt", "messages (los messages a enviar)", "tools_disponibles (opcional)", "settings (model, temperature, max_tokens)", "timestamp"]
+            },
+            {
+              "name": "llm.complete.response",
+              "publicado_por": "ai-gateway",
+              "consumido_por": "el modulo que origino el request (por request_id)",
+              "proposito": "Resultado del LLM para una solicitud generica.",
+              "campos_minimos": ["correlation_id", "request_id", "result: { content, tool_calls?, finish_reason }", "tokens", "cost", "model", "provider", "duration_ms", "timestamp"]
+            },
+            {
+              "name": "llm.complete.failed",
+              "publicado_por": "ai-gateway",
+              "consumido_por": "el modulo que origino el request",
+              "proposito": "Cierra el ciclo en error.",
+              "campos_minimos": ["correlation_id", "request_id", "error: { code (UPSTREAM_*, CREDENTIAL_NOT_FOUND), message, details }", "duration_ms", "timestamp"]
+            }
+          ]
+        }
+      ]
+    },
+
+    "regla_de_oro_de_los_protocolos": "Estos eventos son INMUTABLES en su catalogo (existen estos, no se inventan otros sin justificacion). Su SHAPE EXACTO se valida con JSON Schemas en los contratos derivados. Cualquier modulo del sistema, presente o futuro, se enchufa via subscribe/publish a estos eventos cumpliendo el shape. Si una capacidad nueva no encaja en ningun evento canonico, primero se intenta encajar — solo en ultimo extremo se añade un evento al catalogo, y siempre con un contrato derivado nuevo que lo formaliza."
   }
 }

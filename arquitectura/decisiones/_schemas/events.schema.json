@@ -315,6 +315,54 @@
           }
         }
       }
+    },
+
+    "module_dependencies_shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["descripcion", "interaction_types", "shape_per_dependency"],
+      "properties": {
+        "descripcion": { "type": "string", "minLength": 30 },
+        "interaction_types": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "descripcion", "implica_publish_o_subscribe"],
+            "properties": {
+              "id":          { "enum": ["mqttRequest", "subscribe_only", "publish_only", "bidirectional"] },
+              "descripcion": { "type": "string", "minLength": 20 },
+              "implica_publish_o_subscribe": { "type": "string", "minLength": 10 }
+            }
+          }
+        },
+        "shape_per_dependency": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["campos", "ejemplo_json"],
+          "properties": {
+            "campos": {
+              "type": "array",
+              "minItems": 2,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "type", "obligatorio_si", "descripcion"],
+                "properties": {
+                  "name":           { "type": "string", "pattern": "^[a-z][a-z_]*$" },
+                  "type":           { "type": "string", "minLength": 3 },
+                  "obligatorio_si": { "type": "string", "minLength": 5 },
+                  "descripcion":    { "type": "string", "minLength": 10 }
+                }
+              }
+            },
+            "ejemplo_json":         { "type": "string", "minLength": 30 }
+          }
+        }
+      }
     }
   },
 

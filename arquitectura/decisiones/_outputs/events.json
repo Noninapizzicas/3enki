@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "events",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/events.contract.json",
-    "supersedes_nota": "v1.5.0 (POC3 carta-scheduler, finding F5): formalizada request_response.context_injection. Documenta que el core inyecta mqttRequest via context.mqttRequest en onLoad, prohibe explicitamente el acceso directo via this.moduleLoader.getModule(slug).instance.toolX(...), incluye drift_indicators (regex) para que el validator detecte el patron prohibido. Validado en POC3 (carta-scheduler-poc usa mqttRequest exclusivamente para scheduler/tarifas).\n\nv1.4.0 (POC2 F5): subscribes_declaration_shape con 6 campos canonicos.\n\nv1.3.0 (POC2 F2): _publicarEvento canonico unificado.\n\nv1.2.0 (POC2 F1): event_naming_subforms (domain_event vs protocol_event).\n\nv1.1.0 (POC1): recommended_helpers."
+    "supersedes_nota": "v1.6.0 (POC3 finding F2 + POC4 finding F5): añadida module_dependencies_shape que formaliza el campo config.module_dependencies de module.json. Define 4 interaction_types canonicos (mqttRequest, subscribe_only, publish_only, bidirectional) + shape de cada dependency entry (interaction, actions, events, descripcion). Habilita validador cross-modulo: si el modulo invoca un peer no declarado o con interaction distinta, drift.\n\nv1.5.0 (POC3 F5): request_response.context_injection (anti moduleLoader directo).\n\nv1.4.0 (POC2 F5): subscribes_declaration_shape.\n\nv1.3.0 (POC2 F2): _publicarEvento canonico unificado.\n\nv1.2.0 (POC2 F1): event_naming_subforms.\n\nv1.1.0 (POC1): recommended_helpers."
   },
 
   "regla": "Eventos viajan por MQTT (Aedes embedded por defecto). Bus híbrido transparente al módulo. Topics jerárquicos por categoría: core/{core-id}/<categoria>/.... Cardinalidad libre (cero, uno o muchos suscriptores). Fire-and-forget. Idempotencia obligatoria en handlers. Mismo código del módulo de Casa a Manzana — la escala se decide por configuración del transporte, no por código.",
@@ -371,5 +371,60 @@
         "descripcion": "Path al JSON Schema de la response que el handler publica. Permite validacion automatica de salida y autodocumentacion del protocolo."
       }
     ]
+  },
+
+  "module_dependencies_shape": {
+    "descripcion": "Shape canonico del campo config.module_dependencies en module.json. Documenta de forma introspectable las dependencias del modulo hacia otros modulos del sistema. La auditoria/validator puede comparar el codigo real con esta declaracion: si el modulo invoca a un peer no declarado o usa interaction distinta a la declarada, drift.",
+    "interaction_types": [
+      {
+        "id":          "mqttRequest",
+        "descripcion": "El modulo llama a un peer via context.mqttRequest(domain, action, payload, options?) y espera respuesta canonica.",
+        "implica_publish_o_subscribe": "El framework (mqttRequest interno) publica al request topic y se suscribe a la response topic — el modulo no declara explicitamente."
+      },
+      {
+        "id":          "subscribe_only",
+        "descripcion": "El modulo escucha eventos publicados por el peer pero NO le habla. Relacion unidireccional receptor.",
+        "implica_publish_o_subscribe": "Los eventos escuchados aparecen en events.subscribes (con event de la forma <peer>.<entity>.<verb>)."
+      },
+      {
+        "id":          "publish_only",
+        "descripcion": "El modulo emite eventos que el peer escucha. Relacion unidireccional emisor. Raro como categoria explicita; usualmente es subscribe_only invertido (el peer lo declara, no este).",
+        "implica_publish_o_subscribe": "Los eventos emitidos aparecen en events.publishes."
+      },
+      {
+        "id":          "bidirectional",
+        "descripcion": "Combinacion: el modulo escucha eventos del peer Y le hace mqttRequest. Por ejemplo carta-scheduler escucha scheduler.job.triggered Y hace mqttRequest('scheduler', 'addJob', ...).",
+        "implica_publish_o_subscribe": "Ambos: aparece en subscribes (el evento) Y se llama via mqttRequest."
+      }
+    ],
+    "shape_per_dependency": {
+      "campos": [
+        {
+          "name":           "interaction",
+          "type":           "string (enum)",
+          "obligatorio_si": "siempre",
+          "descripcion":    "Tipo de interaccion: mqttRequest | subscribe_only | publish_only | bidirectional. Validador detecta drift si el codigo no coincide."
+        },
+        {
+          "name":           "actions",
+          "type":           "array de strings (action names)",
+          "obligatorio_si": "interaction in {mqttRequest, bidirectional}",
+          "descripcion":    "Lista de actions (segundo arg de mqttRequest) que el modulo invoca. Ej: ['addJob', 'deleteJob'] para scheduler. Validador detecta si el modulo llama una action no declarada."
+        },
+        {
+          "name":           "events",
+          "type":           "array de strings (event names)",
+          "obligatorio_si": "interaction in {subscribe_only, publish_only, bidirectional}",
+          "descripcion":    "Eventos del peer escuchados/publicados. Cruzable con events.subscribes/publishes."
+        },
+        {
+          "name":           "descripcion",
+          "type":           "string",
+          "obligatorio_si": "siempre",
+          "descripcion":    "Por que el modulo depende del peer. Que utilidad le da."
+        }
+      ],
+      "ejemplo_json": "{\"module_dependencies\":{\"scheduler\":{\"interaction\":\"mqttRequest\",\"actions\":[\"addJob\",\"deleteJob\"],\"descripcion\":\"Registra/elimina jobs cron en el scheduler central.\"},\"pedidos\":{\"interaction\":\"subscribe_only\",\"events\":[\"pedido.enviado_cocina\",\"pedido.cancelado\"],\"descripcion\":\"Recibimos pedidos para mostrar en cocina. NO llamamos a Pedidos.\"}}}"
+    }
   }
 }

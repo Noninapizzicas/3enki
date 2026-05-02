@@ -180,6 +180,43 @@
           "items": { "type": "string", "minLength": 5 }
         }
       }
+    },
+
+    "handler_signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regla", "firma", "req_shape", "return_shape", "ejemplo"],
+      "properties": {
+        "regla": { "type": "string", "minLength": 30 },
+        "firma": { "type": "string", "minLength": 30 },
+        "req_shape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["descripcion", "campos"],
+          "properties": {
+            "descripcion": { "type": "string", "minLength": 20 },
+            "campos": {
+              "type": "array",
+              "minItems": 4,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "type", "obligatorio_si", "descripcion"],
+                "properties": {
+                  "name":           { "type": "string", "pattern": "^[a-z][a-z_]*$" },
+                  "type":           { "type": "string", "minLength": 3 },
+                  "obligatorio_si": { "type": "string", "minLength": 5 },
+                  "descripcion":    { "type": "string", "minLength": 10 }
+                }
+              }
+            }
+          }
+        },
+        "return_shape":     { "type": "string", "minLength": 30 },
+        "ejemplo":          { "type": "string", "minLength": 30 },
+        "validado_en_poc":  { "type": "string", "minLength": 5 }
+      }
     }
   },
 

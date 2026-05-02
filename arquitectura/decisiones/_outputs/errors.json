@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "errors",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/errors.contract.json",
-    "supersedes_nota": "v1.2.0 (POC2 ai-gateway, finding F3): añadidos al catálogo codes_infrastructure: CREDENTIAL_NOT_FOUND y los 8 UPSTREAM_* (AUTH_FAILED, NOT_FOUND, RATE_LIMITED, 5XX, TIMEOUT, UNREACHABLE, INVALID_RESPONSE, PAYLOAD_TOO_LARGE) — referenciados por http.contract.status_code_mapping_to_canonical pero ausentes hasta ahora. Cierra incoherencia entre errors.json y http.json.\n\nv1.1.0 (POC1 notas): codes_domain deprecó PROJECT_NOT_FOUND y RECIPE_NOT_FOUND. Añadidos field y all_errors a details_canonical_fields. recommended_helpers con _buildErrorResponse."
+    "supersedes_nota": "v1.3.0 (POC2 ai-gateway, finding F2): añadido recommended_helpers.build_success_response (helper canonico { status, data }, mutuamente excluyente con error). Validado en ai-gateway-poc.\n\nv1.2.0 (POC2 finding F3): añadidos CREDENTIAL_NOT_FOUND y 8 UPSTREAM_* al catalogo codes_infrastructure.\n\nv1.1.0 (POC1 notas): deprecadas PROJECT_NOT_FOUND/RECIPE_NOT_FOUND. Añadidos field y all_errors. recommended_helpers con _buildErrorResponse."
   },
 
   "regla": "Toda respuesta sigue { status, data?, error? } — mutuamente excluyentes data y error. Status HTTP-like (4xx dominio, 5xx infraestructura). error.code en UPPER_SNAKE_CASE de lista cerrada. Cada error genera log + métrica automáticos. Stack jamás en respuesta. Sin secretos en mensajes. Describir, no instruir.",
@@ -246,6 +246,14 @@
       "snippet_canonico": "_buildErrorResponse({ action, status, code, message, details, cause, correlation_id }) {\n  const isInfra = status >= 500;\n  const level   = isInfra ? 'error' : 'warn';\n  const kind    = isInfra ? 'infrastructure' : 'domain';\n\n  // Auto-log con stack interno (NUNCA en respuesta)\n  this.logger[level](`${this.name}.${action}.fallido`, {\n    error_code:    code,\n    error_message: message,\n    error_details: details || {},\n    stack:         cause?.stack || null,\n    correlation_id\n  });\n\n  // Auto-metric con label code\n  this.metrics?.increment(`${this.name}.${action}.errors`, 1, { code, kind });\n\n  // Respuesta limpia (sin stack)\n  return {\n    status,\n    error: {\n      code,\n      message,\n      ...(details ? { details } : {})\n    }\n  };\n}",
       "uso_en_handler": "return this._buildErrorResponse({ action: 'obtener', status: 404, code: 'RESOURCE_NOT_FOUND', message: 'Nota con id X no existe', details: { entity_type: 'nota', entity_id: 'X' }, correlation_id });",
       "validado_en_poc": "modules/notas-poc/index.js _buildErrorResponse (línea ~360)"
+    },
+    {
+      "id": "build_success_response",
+      "purpose": "Helper canónico que construye la respuesta de éxito con shape { status, data } — mutuamente excluyente con error. Garantiza que data NUNCA aparece junto a error y que el status es coherente con la operación (200/201/202/204).",
+      "applies_to": "Todo módulo que devuelva respuestas de éxito desde un handler (tools, ui_handlers, apis_http, handlers de mqttRequest, handlers de protocol_event response).",
+      "snippet_canonico": "_buildSuccessResponse({ status, data }) {\n  return {\n    status: status || 200,\n    data\n  };\n}",
+      "uso_en_handler": "return this._buildSuccessResponse({ status: 200, data: { id, titulo } });\n// Para creación:\nreturn this._buildSuccessResponse({ status: 201, data: nuevoRecurso });\n// Para tareas en background (acceptado pero no completado):\nreturn this._buildSuccessResponse({ status: 202, data: { request_id } });",
+      "validado_en_poc": "modules/conversacion/ai-gateway-poc/index.js _buildSuccessResponse"
     }
   ]
 }

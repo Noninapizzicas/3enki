@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "events",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/events.contract.json",
-    "supersedes_nota": "v1.2.0 (POC2 ai-gateway, finding F1): añadida sección event_naming_subforms que distingue 'domain_event' (verbo pasado, hecho consumado) de 'protocol_event' (request/response sobre bus normal). Sin esta distincion el validator marcaria drift en módulos legitimos como ai-gateway (llm.complete.request) y credential-manager (credential.resolve.request).\n\nv1.1.0 (POC1 notas): añadida sección recommended_helpers con _publicarEvento. Clarificación 2v3 partes en topic_structure."
+    "supersedes_nota": "v1.3.0 (POC2 ai-gateway, finding F2): _publicarEvento canonico unificado — soporta variante 1 (correlation_id explicito, notas-poc) y variante 2 (auto-extract de sourcePayload, ai-gateway-poc). Sin elegir entre ambas, el helper acepta las dos formas.\n\nv1.2.0 (POC2 finding F1): añadida event_naming_subforms (domain_event vs protocol_event).\n\nv1.1.0 (POC1 notas): recommended_helpers con _publicarEvento."
   },
 
   "regla": "Eventos viajan por MQTT (Aedes embedded por defecto). Bus híbrido transparente al módulo. Topics jerárquicos por categoría: core/{core-id}/<categoria>/.... Cardinalidad libre (cero, uno o muchos suscriptores). Fire-and-forget. Idempotencia obligatoria en handlers. Mismo código del módulo de Casa a Manzana — la escala se decide por configuración del transporte, no por código.",
@@ -272,11 +272,11 @@
   "recommended_helpers": [
     {
       "id": "publicar_evento",
-      "purpose": "Wrapper canónico para publicar eventos del módulo. Centraliza: añadir timestamp, propagar correlation_id (cuando aplique), early-return si bus no disponible, .catch con log si publish rechaza.",
-      "applies_to": "Todo módulo que emita eventos (publishes en module.json).",
-      "snippet_canonico": "async _publicarEvento(nombre, payload, correlation_id) {\n  if (!this.eventBus) {\n    this.logger.warn(`${this.name}.publicar.bus_no_disponible`, { evento: nombre, correlation_id });\n    return;\n  }\n  const finalPayload = {\n    ...payload,\n    timestamp: new Date().toISOString(),\n    ...(correlation_id ? { correlation_id } : {})\n  };\n  try {\n    await this.eventBus.publish(nombre, finalPayload);\n  } catch (err) {\n    this.logger.error(`${this.name}.publicar.fallido`, {\n      evento: nombre,\n      error_message: err.message,\n      stack: err.stack,\n      correlation_id\n    });\n    this.metrics?.increment(`${this.name}.publicar.errors`, 1, { evento: nombre });\n  }\n}",
-      "uso_en_handler": "await this._publicarEvento('notas.creado', { nota_id, titulo }, context?.correlationId);",
-      "validado_en_poc": "modules/notas-poc/index.js _publicarEvento (línea ~390)"
+      "purpose": "Wrapper canónico para publicar eventos del módulo. Centraliza: añadir timestamp, propagar correlation_id automáticamente desde el sourcePayload del handler entrante (o aceptarlo explícito), early-return si bus no disponible, log estructurado del publish, telemetría en errores.",
+      "applies_to": "Todo módulo que emita eventos (publishes en module.json). Validado en notas-poc (correlation_id explícito) y ai-gateway-poc (auto-extraído de sourcePayload).",
+      "snippet_canonico": "async _publicarEvento(eventName, payload, sourcePayload = null) {\n  if (!this.eventBus) {\n    this.logger.warn(`${this.name}.event.bus_unavailable`, { event: eventName });\n    return;\n  }\n  // Auto-extraer correlation_id: prioridad sourcePayload > payload.correlation_id > null\n  const correlation_id =\n    sourcePayload?.correlation_id ||\n    payload?.correlation_id ||\n    null;\n  const finalPayload = {\n    ...(correlation_id ? { correlation_id } : {}),\n    ...payload,\n    timestamp: payload.timestamp || new Date().toISOString()\n  };\n  try {\n    await this.eventBus.publish(eventName, finalPayload);\n    this.logger.info(`${this.name}.event.published`, {\n      event: eventName,\n      correlation_id\n    });\n  } catch (err) {\n    this.logger.error(`${this.name}.event.publish.failed`, {\n      event: eventName,\n      error_message: err.message,\n      stack: err.stack,\n      correlation_id\n    });\n    this.metrics?.increment(`${this.name}.event.errors`, 1, { event: eventName });\n  }\n}",
+      "uso_en_handler": "// Variante 1 (notas-poc): correlation_id explicito\nawait this._publicarEvento('notas.creado', { nota_id, titulo });\n\n// Variante 2 (ai-gateway-poc): auto-extraer del sourcePayload del handler\nasync onLlmCompleteRequest(payload) {\n  // ...lógica...\n  await this._publicarEvento('llm.complete.response', { request_id, status, data }, payload);\n}",
+      "validado_en_poc": "modules/notas-poc/index.js (variante 1) y modules/conversacion/ai-gateway-poc/index.js (variante 2)"
     }
   ],
 

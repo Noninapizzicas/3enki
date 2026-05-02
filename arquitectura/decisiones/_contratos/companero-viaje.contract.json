@@ -80,5 +80,198 @@
     ],
 
     "consecuencia": "Estas 4 capacidades juntas definen QUE ES el compañero de viaje. Cualquier modulo del subsistema (presente o futuro) que las debilite — un chat sin memoria, un compañero que no se especializa, un LLM que no accede a tools, un nucleo que crece con cada nueva integracion — viola el modelo. Los contratos derivados (chat-flow, agent-flow, channel-flow, etc.) traducen estas 4 capacidades a reglas validables mecanicamente."
+  },
+
+  "modelo_de_extension": {
+    "regla_maestra": "El nucleo es INVARIANTE. Todo lo demas entra como MODULO cumpliendo el contrato del tipo canonico al que pertenece. Sin excepciones. Si una necesidad nueva no encaja en ningun tipo canonico, primero se replantea el tipo (o se crea uno nuevo) — nunca se modifica el nucleo para encajarla.",
+
+    "principios": [
+      {
+        "id": "nucleo_pequeno_modulos_infinitos",
+        "afirmacion": "El nucleo es deliberadamente pequeño. La cantidad de cosas que el sistema puede hacer crece por modulos, no por nucleo.",
+        "razon": "Un nucleo pequeño es mantenible. Un nucleo grande se convierte en SAP (rigido, dificil de cambiar, integraciones rotas). Si cada nueva capacidad obliga a tocar el nucleo, en 50 capacidades el nucleo es ingobernable. La modularidad infinita SOLO funciona si el nucleo es pequeño."
+      },
+      {
+        "id": "extension_por_contrato",
+        "afirmacion": "Cada modulo nuevo declara que tipo canonico cumple y respeta el contrato de ese tipo. No basta con 'el bus es publico' — hay que cumplir la disciplina del tipo.",
+        "razon": "Sin disciplina, cada modulo inventa su forma. Con N modulos, NxN convenciones implicitas que se rompen. Con disciplina, hay un solo modelo a aprender por tipo. La disciplina es un coste pequeño que paga reduccion exponencial de fragilidad."
+      },
+      {
+        "id": "un_modulo_puede_cumplir_varios_tipos",
+        "afirmacion": "Un modulo puede cumplir mas de un tipo canonico simultaneamente. Lo que importa es que respete el contrato de cada tipo que cumple.",
+        "razon": "telegram-service es a la vez canal (usuarios humanos hablan por telegram con el compañero) e integracion (el sistema manda notificaciones por telegram a usuarios). No tiene sentido obligar a separarlo en dos modulos. Un modulo cumple varios roles si es coherente — siempre que respete el contrato de cada rol."
+      },
+      {
+        "id": "el_bus_es_la_unica_via_legitima",
+        "afirmacion": "Toda interaccion entre modulo y nucleo (o entre modulo y modulo) pasa por el bus de eventos. Acceso directo a otro modulo via moduleLoader.getModule() o equivalente esta prohibido — es drift estructural.",
+        "razon": "El bus es lo que permite la modularidad. Cualquier acceso directo crea acoplamiento que rompe la promesa de 'añade un modulo sin tocar nada mas'. Esta regla la hereda este modelo del paradigma event-core."
+      },
+      {
+        "id": "lo_que_no_existe_se_crea_pero_como_modulo",
+        "afirmacion": "Si una capacidad no existe todavia, se crea — pero como modulo cumpliendo un tipo canonico. NUNCA como excepcion al nucleo.",
+        "razon": "La frase 'todo se puede hacer' es verdadera SOLO si la disciplina se mantiene. Lo contrario lleva a 'todo se puede hacer pero el sistema se cae cada mes'. La disciplina convierte la promesa en realidad."
+      }
+    ]
+  },
+
+  "tipos_canonicos_de_extension": {
+    "descripcion": "Hay CINCO tipos de cosas que pueden añadirse al compañero. Cualquier capacidad imaginable cae en uno (o varios) de estos tipos. Cada uno tiene su contrato propio. Si una necesidad no cabe en ninguno, primero se replantea el modelo — no se inventa un sexto tipo informalmente.",
+
+    "tipos": [
+      {
+        "id": "canal",
+        "nombre": "Canal de entrada y salida (channel)",
+        "descripcion": "Modulo que CONECTA UN HUMANO con el compañero. Traduce la comunicacion humana (texto, voz, mensajes de telegram, llamadas, gestos en pantalla) en eventos del bus, y traduce los eventos de respuesta del compañero en algo que el humano percibe.",
+        "responsabilidad": "Bidireccional. Recibe input humano → publica evento canonico al bus. Escucha evento de respuesta → entrega al humano por su canal.",
+        "contrato_minimo": [
+          "Publica el input humano como evento canonico (chat.message.saved o equivalente del flujo correspondiente).",
+          "Preserva contexto de canal en el evento (chat_id de telegram, session_id de voz, project_id, user_id) para que la respuesta vuelva al mismo humano por el mismo canal.",
+          "Escucha el evento de respuesta y traduce de vuelta al canal. Sin contexto del canal preservado, la respuesta se pierde — drift de modelo.",
+          "El canal NO razona. NO modifica el contenido. Solo traduce formato. Cualquier inteligencia esta en el compañero o en agentes — nunca en el canal."
+        ],
+        "ejemplos_actuales": [
+          "chat-io (canal del chat web del propio sistema)",
+          "telegram-service (canal de telegram)"
+        ],
+        "ejemplos_futuros": [
+          "voice-input + voice-output (canal de voz con STT/TTS)",
+          "whatsapp-service",
+          "discord-service / slack-service",
+          "email-input (recibir emails como mensajes)",
+          "sms-service",
+          "instagram-dm-service"
+        ],
+        "via_de_integracion": "El canal publica al bus eventos del flujo del chat (chat.message.saved tipicamente) y se suscribe a los eventos de respuesta. Cualquier canal nuevo se enchufa sin tocar el nucleo del compañero."
+      },
+
+      {
+        "id": "tool",
+        "nombre": "Tool (capacidad concreta del LLM)",
+        "descripcion": "Modulo (o pieza dentro de un modulo) que expone UNA accion concreta que el LLM puede invocar dentro de su agentic loop. Una tool es una funcion bien definida: parametros, ejecucion, resultado. NO razona — ejecuta.",
+        "responsabilidad": "Hacer UNA cosa concreta cuando el LLM la invoca. Devolver resultado estructurado.",
+        "contrato_minimo": [
+          "Declarada en module.json.tools con name (kebab-case prefijado por modulo: 'pdf.extract'), description (legible por el LLM), parameters (JSON Schema).",
+          "Handler ejecutable que recibe los parametros validados y devuelve resultado canonico { status, data | error: { code, message, details } }.",
+          "Sin razonamiento propio. Una tool no decide nada de alto nivel — solo ejecuta lo que se le pide. Si necesita razonar, es agente, no tool.",
+          "Acceso a otros modulos via mqttRequest, no acceso directo (regla heredada del nucleo)."
+        ],
+        "ejemplos_actuales": [
+          "tarifas.assign (asignar carta a canal)",
+          "scheduler.create / scheduler.delete (jobs cron)",
+          "carta-scheduler.crear_regla (crear regla de programacion)",
+          "credential.resolve (resolver api key)",
+          "fs.read.request (leer archivo del proyecto)"
+        ],
+        "ejemplos_futuros": [
+          "pdf.extract (extraer texto de PDF)",
+          "image.generate (generar imagen con DALL-E/SD)",
+          "image.describe (multimodal LLM describe imagen)",
+          "calendar.create_event (crear evento en Google Calendar)",
+          "iot.set_state (cambiar estado de un dispositivo domotico)",
+          "voice.synthesize (generar audio TTS para canal de voz)"
+        ],
+        "via_de_integracion": "Las tools se registran via module.json.tools. ai-gateway las pone a disposicion del LLM. El LLM decide invocarlas dentro de su agentic loop. ai-gateway las ejecuta (directo si es local, via mqttRequest/bus si es de otro modulo) y devuelve resultado al LLM."
+      },
+
+      {
+        "id": "agente",
+        "nombre": "Agente (especialista reactivo)",
+        "descripcion": "Configuracion declarativa que define una PERSONALIDAD ESPECIALIZADA del compañero. Tiene system prompt propio, tools acotadas, identidad. NO es codigo JS — es archivo de configuracion + prompt en lenguaje natural. Lo ejecuta ai-agent-framework cuando llega un evento dirigido al agente.",
+        "responsabilidad": "Razonar y actuar como especialista de un dominio cuando es invocado. Recibe contexto, usa sus tools, produce resultado, publica eventos de salida.",
+        "contrato_minimo": [
+          "Declarado en agents/<nombre>.json (configuracion: nombre, descripcion, tools_disponibles, output_event opcional) + prompts/<nombre>-system.md (system prompt en lenguaje natural).",
+          "Activado SIEMPRE por evento (agent.execute.request con agentName=<nombre>). NUNCA llamado directamente como funcion.",
+          "Las tools del agente son un SUBSET acotado del total — el agente NO tiene acceso a todas las capacidades del sistema, solo a las relevantes para su rol.",
+          "El agente publica al menos un evento de salida cuando termina (resultado, error, o estado intermedio). El llamador escucha ese evento — nunca espera un return.",
+          "Preserva el contexto del invocador (correlation_id, conversation_id, canal de origen, user_id) en su evento de salida — sin esto, la respuesta se pierde."
+        ],
+        "ejemplos_actuales": [
+          "scheduler-planner (conversa con el usuario para crear reglas de programacion)",
+          "scheduler-dispatcher (avisa al usuario cuando un cambio dispara y pide confirmacion)",
+          "los 14 agentes que el ai-agent-framework ya carga (architect, cartadigital-composer, escandallo-analyzer, etc.)"
+        ],
+        "ejemplos_futuros": [
+          "abogado (revisar contratos, dar opinion legal)",
+          "consultor-marketing (campañas, contenido, estrategia)",
+          "experto-fiscal (cuestiones de impuestos, IVA, modelos)",
+          "diseñador-grafico (cuando se integra image.generate y vision)",
+          "coach-personal (motivacion, objetivos, productividad personal)",
+          "investigador (busqueda en web + analisis + sintesis)",
+          "agentes verticales por sector: agente-calidad-fabrica, agente-trazabilidad-fruta, agente-tecnico-taller, etc."
+        ],
+        "via_de_integracion": "ai-agent-framework escucha agent.execute.request. Cuando llega, carga la configuracion del agente nombrado, prepara el system prompt + tools, llama al LLM via ai-gateway, recoge resultado, publica el evento de salida. Añadir un agente nuevo es añadir dos archivos (config + prompt). Cero codigo."
+      },
+
+      {
+        "id": "memoria",
+        "nombre": "Memoria (capa de informacion que enriquece el contexto)",
+        "descripcion": "Modulo que guarda informacion del compañero (mensajes, hechos del usuario, conocimiento del proyecto, embeddings semanticos) y la pone disponible cuando hace falta para enriquecer una interaccion. Cada tipo de memoria tiene su semantica propia.",
+        "responsabilidad": "Guardar y recuperar informacion segun una politica clara. Hacer disponible esa informacion al compañero (via prompt-builder o equivalente) cuando corresponde.",
+        "contrato_minimo": [
+          "Declara su tipo de memoria: short_term (FIFO conversacion), long_term (hechos persistentes), semantic (RAG, busqueda por significado), user_profile (preferencias del usuario), project_knowledge (informacion del proyecto activo), etc.",
+          "Define politica de escritura (cuando guarda, que descarta) y politica de lectura (cuando se incluye, en que evento).",
+          "Aislamiento por usuario y por proyecto OBLIGATORIO. Una memoria no puede leer la memoria de otro usuario o de otro proyecto sin autorizacion explicita.",
+          "Se enchufa al flujo del chat via subscribe a chat.message.saved (o equivalente) y enriquece el system prompt o el payload. NO modifica el contenido del usuario — añade contexto."
+        ],
+        "ejemplos_actuales": [
+          "chat-io con SQLite por proyecto (memoria short_term + history FIFO)",
+          "prompt-builder cache de prompts y context.json de modulos (memoria de configuracion)"
+        ],
+        "ejemplos_futuros": [
+          "memory-rag (vector DB con embeddings — busqueda semantica de conversaciones pasadas)",
+          "memory-user-profile (gustos, hábitos, preferencias — el compañero APRENDE de ti)",
+          "memory-long-term (hechos importantes recordados mas alla del FIFO)",
+          "memory-project-knowledge (todo lo que se sabe del proyecto activo — facturas, recetas, contratos, etc.)",
+          "memory-team (cuando hay multi-usuario, conocimiento compartido del equipo)"
+        ],
+        "via_de_integracion": "Las memorias se enchufan en el flujo entre chat-io y prompt-builder. Cuando llega un mensaje, el prompt-builder consulta las memorias relevantes y enriquece el system prompt con la informacion. Añadir una nueva memoria es añadir un modulo que escuche chat.message.saved y publique chat.context.enriched (o equivalente) con la informacion aportada."
+      },
+
+      {
+        "id": "integracion",
+        "nombre": "Integracion (sistema externo)",
+        "descripcion": "Modulo que CONECTA EL COMPAÑERO CON UN SERVICIO EXTERNO no humano. APIs de terceros, dispositivos IoT, webhooks de servicios web, sistemas legacy de la empresa. Diferencia con canal: la integracion habla con UN SISTEMA, no con un humano.",
+        "responsabilidad": "Mediar entre el compañero y el servicio externo. Traducir requests del compañero en llamadas API/protocolo del servicio, y traducir notificaciones del servicio en eventos canonicos del bus.",
+        "contrato_minimo": [
+          "Cumple las reglas del contrato HTTP-client (timeout obligatorio, retry policy declarada, telemetria, redaccion de secretos en URL/headers, mapeo de errores externos a UPSTREAM_*).",
+          "Declara sus dependencias externas en module.json.config.http_clients (host, base_url, timeout_ms, retry, tls_verify, auth_method, credential_ref).",
+          "Expone su capacidad al compañero como TOOLS (no como acceso directo). Ej: si integra Stripe, expone tools como 'stripe.create_payment', 'stripe.refund'. El LLM las invoca; nunca toca Stripe directo.",
+          "Cuando el servicio externo notifica (webhooks), la integracion publica un evento canonico al bus para que otros modulos reaccionen. NUNCA llama directamente al modulo destinatario.",
+          "Maneja la disponibilidad del servicio externo: timeouts, fallbacks, degradacion documentada. La integracion no asume always-available."
+        ],
+        "ejemplos_actuales": [
+          "ai-gateway providers (OpenAI, Anthropic, DeepSeek, Groq, Gemini — son integraciones con LLMs externos)",
+          "credential-manager (gestiona credenciales de servicios externos)",
+          "telegram-service (tambien es integracion: recibe webhooks de Telegram, manda mensajes via API)"
+        ],
+        "ejemplos_futuros": [
+          "stripe-service (pagos online)",
+          "google-calendar-service (eventos, citas)",
+          "github-service (PRs, issues, code review)",
+          "notion-service / trello-service (gestion de proyectos)",
+          "iot-bridge (MQTT externo / Zigbee / Z-Wave)",
+          "woocommerce-service / shopify-service (e-commerce)",
+          "supplier-X (integraciones con proveedores especificos del sector)",
+          "trazabilidad-aenor (certificacion alimentaria, fabrica de fruta)",
+          "registro-mercantil (consultas legales, oficina de abogados)"
+        ],
+        "via_de_integracion": "La integracion se enchufa al bus como cualquier modulo: declara tools, declara http_clients, declara module_dependencies, registra ui_handlers. El LLM la usa via tools. Otros modulos reaccionan a los eventos que publica. Añadir una integracion nueva NO requiere tocar el nucleo."
+      }
+    ],
+
+    "decisiones_de_clasificacion": [
+      {
+        "pregunta": "¿Un modulo puede ser canal Y integracion al mismo tiempo?",
+        "respuesta": "Si. telegram-service es ambos: canal (humanos hablan al compañero por telegram) e integracion (el sistema manda notificaciones por telegram a humanos). Lo importante es que cumpla el contrato de ambos roles."
+      },
+      {
+        "pregunta": "¿Un agente expone tools propias?",
+        "respuesta": "Generalmente no. El agente USA tools (las del sistema). Si una capacidad concreta del agente debe ser invocable, se expone como tool independiente, no como parte del agente. Excepcion: la tool 'invoke_agent' es una fachada del LLM hacia un agente — esta sí es una tool especial del sistema, no de un agente concreto."
+      },
+      {
+        "pregunta": "¿Puede haber un modulo que no encaje en ninguno de los 5 tipos?",
+        "respuesta": "Si — pero entonces es probablemente NUCLEO o INFRAESTRUCTURA, no extension. Ejemplos: ai-gateway (motor del LLM), broker MQTT, gateway HTTP del core, prompt-builder. Estos son piezas que sostienen el sistema, no extensiones del compañero. Si una necesidad nueva pretende ser nucleo, requiere replantear el modelo — no se mete sin justificacion."
+      }
+    ]
   }
 }

@@ -1,0 +1,84 @@
+{
+  "_doc": "Documento maestro del subsistema chat/agentes. Captura la vision de producto del 'compañero de viaje' como modelo arquitectonico inmutable, no como un chat o asistente generico. Es la piedra angular conceptual de la que se derivan los contratos especificos del subsistema (chat-flow, agent-flow, channel-flow, memory-flow, tool-flow). Si una decision tecnica contradice este documento, gana este documento.",
+  "id": "companero-viaje",
+  "version": "1.0.0",
+  "creada": "2026-05-02",
+  "supersedes_nota": "Primera version. Captura la vision del producto en palabras del autor: compañero de viaje + especialistas reactivos (agentes). Modelo abierto a cualquier extension futura sin tocar el nucleo. Validado parcialmente por los modulos existentes del subsistema conversacion (chat-io, ai-gateway, prompt-builder, ai-agent-framework) — su mapeo se documenta en seccion 8 cuando se complete el documento.",
+
+  "esencia": {
+    "afirmacion": "El subsistema chat/agentes NO es un chat. Es un compañero de viaje con especialistas reactivos. La distincion no es semantica — define como se piensa, modela y evoluciona TODO el subsistema.",
+
+    "no_es": [
+      "Un chatbot que responde preguntas sueltas.",
+      "Un asistente que ejecuta comandos puntuales.",
+      "Una interfaz mas con un LLM detras.",
+      "Un sustituto del Google search con conversacion."
+    ],
+
+    "es": [
+      "Un compañero de viaje. Acompaña a la persona a lo largo de un proyecto, una busqueda, una pregunta, una jornada cotidiana. Tiene memoria del viaje. Aporta compañia, intercambio de ideas, valor y otro punto de vision. Es una figura enriquecedora, no una utilidad.",
+      "Un especialista que se especializa segun el contexto. Si hablas de musica, entiende musica; si hablas de marketing, sabe del general y de tus campañas concretas; si hablas de ALOT, sabes del ALOT que estas montando. La especializacion es por dominio Y por proyecto.",
+      "Un gabinete profesional virtual. Detras del compañero general hay especialistas (los agentes): abogado, consultor tecnico, maestro de marketing, dispatcher de tareas, planificador. El compañero llama al especialista cuando hace falta, lo trae a la conversacion, recoge su trabajo, y sigue.",
+      "Un sistema con acceso real al mundo. No solo lee y responde — accede a los archivadores del proyecto, lee PDFs, mira imagenes, ejecuta acciones, se conecta a integraciones externas (telegram, instagram, domotica, lo que venga), trabaja con cualquier herramienta que se le añada como modulo.",
+      "Un sistema modular sin fin. Cada nueva capacidad (canal de entrada nuevo, tool nueva, integracion nueva, agente especialista nuevo) entra como un modulo adicional. El nucleo no se reescribe. La extension es la regla, no la excepcion."
+    ],
+
+    "porque_importa": "Si se piensa el subsistema como un chat, se diseña como una utilidad: input → output → fin. Cada nueva capacidad rompe asumciones previas porque no hay invariantes claros. Si se piensa como compañero de viaje, se diseña como un sistema vivo: memoria persistente, especializacion contextual, gabinete extensible, integraciones intercambiables. El modelo determina las decisiones de diseño que se toman dia a dia."
+  },
+
+  "nucleo_invariante": {
+    "descripcion": "Las 4 capacidades fundamentales del compañero de viaje. Son el ESQUELETO del modelo. Toda extension del sistema (un canal nuevo, un agente nuevo, una memoria de mas largo plazo, un tipo de tool nuevo) PRESERVA estas 4 capacidades — nunca las debilita ni las contradice. Si una decision tecnica las debilita, no se hace, se replantea.",
+
+    "capacidades": [
+      {
+        "id": "memoria_sostenida",
+        "afirmacion": "El compañero recuerda el viaje. No es una serie de preguntas sueltas — es una conversacion con historia.",
+        "definicion": "Cada interaccion vive dentro de una conversation_id. Las conversaciones son persistentes. Dentro de cada conversacion hay memoria limitada (FIFO) que evita explosion de contexto pero preserva continuidad. Mas alla del FIFO puede haber capas de memoria adicionales (largo plazo, semantica/RAG, conocimiento del usuario) que el modelo deja preparadas para añadir como extensiones.",
+        "implicaciones": [
+          "Toda interaccion debe poder asociarse a una conversation_id. Sin conversation_id no hay viaje, hay pregunta suelta — y el modelo no es eso.",
+          "El historial es PARTE DEL CONTEXTO que viaja al LLM. No es opcional. No se puede 'descartar' por simplicidad.",
+          "La memoria FIFO es politica del sistema, no decision por modulo. Tiene un patron canonico (declarado en el contrato chat-flow derivado).",
+          "Memorias adicionales (largo plazo, RAG, etc.) entran como modulos sin tocar el nucleo. El compañero no se reescribe — se enriquece."
+        ]
+      },
+
+      {
+        "id": "especializacion_por_contexto",
+        "afirmacion": "El compañero adapta su comportamiento segun donde estas y de que se habla. No es UN unico personaje — es un MOTOR que adopta personajes.",
+        "definicion": "La especializacion ocurre en dos planos. (1) Por proyecto: el compañero conoce el proyecto activo (project_id), sus archivos, su contexto, sus modulos cargados. Su system prompt y sus tools disponibles dependen del proyecto. (2) Por dominio (especialistas / agentes): cuando una tarea requiere un experto, el compañero invoca al agente especialista (abogado, marketing, dispatcher, etc.). El agente actua dentro del mismo motor LLM pero con un papel especifico (system prompt + tools propias del rol). El compañero general orquesta y resume.",
+        "implicaciones": [
+          "El compañero NO es un solo prompt fijo. Es un motor (LLM) que se especializa por configuracion.",
+          "Los agentes son los especialistas. Cada agente es una configuracion + system prompt + tools acotadas. No es codigo JS — es declaracion.",
+          "El proyecto activo influye en TODA la conversacion. El compañero sabe que estas en proyecto X, sus tools, sus prompts, sus archivos. Cambiar de proyecto cambia el compañero efectivo.",
+          "Especializarse es un patron, no una excepcion. La proxima capacidad (multi-personalidad por usuario, modo formal vs casual, multi-idioma, etc.) usa el mismo mecanismo: configuracion que cambia el papel del motor."
+        ]
+      },
+
+      {
+        "id": "acceso_al_sistema",
+        "afirmacion": "El compañero NO es solo conversacion. Tiene manos. Lee archivos del proyecto, ejecuta tools, dispara integraciones, mueve cosas en el mundo.",
+        "definicion": "El compañero accede al sistema mediante DOS mecanismos canonicos. (1) Tools: capacidades concretas registradas en el sistema (leer PDF, generar imagen, mandar telegram, ejecutar query, abrir cajon de dinero, lo que sea). El LLM, dentro de ai-gateway, decide invocar la tool que necesita y ai-gateway la ejecuta. (2) Agentes: especialistas que el compañero invoca cuando una tarea requiere experticia particular. Los agentes a su vez usan sus propias tools. Ambos mecanismos pasan por el bus de eventos — nada accede a otro modulo de forma directa.",
+        "implicaciones": [
+          "Toda capacidad nueva del sistema (nueva integracion, nueva accion, nuevo formato de archivo) se expone al compañero como tool. NO como acceso directo desde el LLM.",
+          "Los agentes son las tools 'inteligentes' del compañero. La diferencia con una tool simple: el agente tiene su propio razonamiento (otra invocacion al LLM con su prompt). Una tool simple es una funcion deterministica.",
+          "El acceso es mediado: el LLM decide, ai-gateway ejecuta, el bus enrutea, el modulo destinatario actua. El LLM nunca toca codigo directo.",
+          "Cualquier herramienta nueva que aparezca en el mundo (nueva API, nuevo dispositivo, nuevo formato de datos) se enchufa al compañero añadiendo un modulo que registre tools. Sin reescribir el compañero."
+        ]
+      },
+
+      {
+        "id": "modularidad_infinita",
+        "afirmacion": "El compañero crece sin fin sin reescribirse. Cada capacidad nueva es un modulo mas. El nucleo permanece.",
+        "definicion": "El compañero esta diseñado como un nucleo minimo (memoria + motor LLM + bus de eventos + framework de agentes) rodeado de modulos extensibles. Cualquier capacidad nueva — un canal de entrada (voz, telegram, instagram), un tipo de tool (visual, audio, hardware), una memoria nueva (RAG, semantica), un especialista nuevo (otro agente), una integracion (otro servicio externo) — entra como modulo. El modulo declara sus eventos publicados, sus subscribes, sus tools, sus apis, su persistencia. Se enchufa al bus. Funciona. El nucleo no se entera de su existencia mas alla del bus.",
+        "implicaciones": [
+          "Cualquier capacidad imaginable (las que pude listar y las que no se han imaginado todavia) cabe en el modelo, porque la modularidad es la regla.",
+          "El nucleo (chat-io + ai-gateway + ai-agent-framework + prompt-builder + bus + memoria) es PEQUEÑO y NO crece con nuevas capacidades. Solo crece la coleccion de modulos.",
+          "Añadir una capacidad nunca obliga a tocar el nucleo. Si un modulo nuevo necesita modificar chat-io, es señal de que el modelo no encaja — se replantea, no se rompe.",
+          "El sistema es resiliente al cambio: la api de OpenAI cambia, se actualiza ai-gateway. Aparece un canal nuevo (Discord), se añade un modulo discord-service. Aparece una nueva forma de memoria, se añade un modulo memory-X. Todo sin tocar el resto."
+        ]
+      }
+    ],
+
+    "consecuencia": "Estas 4 capacidades juntas definen QUE ES el compañero de viaje. Cualquier modulo del subsistema (presente o futuro) que las debilite — un chat sin memoria, un compañero que no se especializa, un LLM que no accede a tools, un nucleo que crece con cada nueva integracion — viola el modelo. Los contratos derivados (chat-flow, agent-flow, channel-flow, etc.) traducen estas 4 capacidades a reglas validables mecanicamente."
+  }
+}

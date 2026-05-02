@@ -116,5 +116,73 @@
       "regla": "Un endpoint HTTP que el gateway sirve PUEDE traducirse internamente a uno o más eventBus.publish o mqttRequest. Esa traducción es decisión del módulo. Pero el endpoint HTTP NO sustituye al bus para acciones cross-módulo: el módulo recibe el request HTTP, hace su trabajo (que probablemente publica eventos), y devuelve la response.",
       "razon": "Si tienes /modules/recetas/crear que hace un INSERT directo, y otra acción del sistema necesita reaccionar a 'receta creada', acabas duplicando la lógica de notificación en HTTP y en bus. Si en cambio /modules/recetas/crear publica receta.creado, todos los reactivos siguen funcionando. HTTP es solo el mensajero del input externo; el bus es la espina dorsal del core."
     }
+  ],
+
+  "modos": [
+    {
+      "id": "http-server",
+      "nombre": "HTTP server (el core acepta requests externos)",
+      "descripcion": "El gateway HTTP único del core (core/gateway/http.js) acepta requests externos de CLI, browsers o webhooks, los enruta a las apis declaradas en module.json de cada módulo, y devuelve la response usando el shape canónico. El módulo nunca abre su propio listener.",
+      "donde_aplica": "Todo módulo que declara apis en module.json. Endpoints visibles en audits modulo-completo.apis_http.",
+      "reglas": [
+        "Routing canónico: /modules/<slug>/<path>. El slug es el nombre del módulo (kebab-case). El path es el recurso o acción dentro del módulo. Sin /api ni /v1 salvo decisión explícita.",
+        "Método HTTP refleja el verbo: GET (consulta sin efectos), POST (acción/creación), PUT (reemplazo idempotente), DELETE (baja). El verbo NO va en la URL.",
+        "Response shape canónico: { status, data | error } mutuamente excluyentes. status del JSON coincide con HTTP status. Coherente con response_shape de errors.json.",
+        "Codes HTTP canónicos: usar SOLO los listados en errors.json.status_codes. Nunca inventar status (ej. 222, 280, 600).",
+        "Validation: si module.json declara request/response schemas, el gateway valida ANTES de pasar al handler y ANTES de responder. ValidationError → 400 con error canónico.",
+        "Auth: declarada por endpoint en module.json (config.apis[*].auth_required). El gateway aplica antes del handler. Sin declaración, público.",
+        "CORS: política única en el gateway (no por módulo). Configurable por entorno.",
+        "Telemetría obligatoria por request: log nivel info (200-399) o warn/error (4xx/5xx) + métrica de duración con labels {modulo, ruta, status}.",
+        "Body limit: configurable en el gateway (default 1MB). Requests excediendo → 413 con error canónico PAYLOAD_TOO_LARGE.",
+        "Timeout de request: configurable en el gateway (default 30s). Exceder → 504 con UPSTREAM_TIMEOUT (el gateway es upstream del cliente HTTP)."
+      ],
+      "ejemplo_request": "POST /modules/notas/crear\\nContent-Type: application/json\\n\\n{\"titulo\":\"x\",\"contenido\":\"y\"}",
+      "ejemplo_response_ok": "HTTP/1.1 201 Created\\nContent-Type: application/json\\n\\n{\"status\":201,\"data\":{\"id\":\"abc\",\"titulo\":\"x\"}}",
+      "ejemplo_response_error": "HTTP/1.1 400 Bad Request\\nContent-Type: application/json\\n\\n{\"status\":400,\"error\":{\"code\":\"VALIDATION_FAILED\",\"message\":\"titulo es requerido\",\"details\":{\"field\":\"titulo\"}}}",
+      "ejemplo_modulos_audit": [
+        "scratch-designer (20 endpoints)",
+        "ui-designer (18 endpoints)",
+        "staff-manager (15 endpoints)",
+        "certificate-authority (10 endpoints, mTLS)",
+        "database-manager (8 endpoints)",
+        "notas (8 endpoints)",
+        "metricas (7 endpoints)",
+        "security-p2p (6 endpoints)",
+        "dashboard (5 endpoints, sirve UI a browser)",
+        "conversation-export (4 endpoints)",
+        "esp32-flasher (4 endpoints)",
+        "system-inspector (4 endpoints)",
+        "firmware-manager (1 endpoint)"
+      ],
+      "infraestructura_existente": "core/gateway/http.js (1170 LOC) con compression.js, cache.js, ui.js. Soporta validation, hooks, cors, mTLS via certificate-authority."
+    },
+    {
+      "id": "http-client",
+      "nombre": "HTTP client (un módulo llama a un externo)",
+      "descripcion": "Un módulo realiza requests HTTP salientes a APIs de terceros (OpenAI, Telegram, WooCommerce, etc.) o, en el caso del CLI, al propio gateway HTTP del core. La lógica de retry, timeout, redacción de secretos y mapeo de errores está en el módulo cliente, no centralizada.",
+      "donde_aplica": "Módulos con dependencias HTTP externas (audits con campo dependencias_externas tipo http) y el binario CLI (cli/client.js).",
+      "reglas": [
+        "Timeout obligatorio en cada request. Sin timeout NO se commitea. Default sugerido: 10s para CLI→core, 30s para llamadas a externos (configurable por endpoint).",
+        "Retry policy declarada en config (config.http_clients[*].retry: { max_attempts, backoff_ms, retryable_status }). Por defecto 0 reintentos. Sólo idempotentes pueden tener retry > 0.",
+        "Telemetría obligatoria por call: log + métrica de duración con labels {host, status, modulo}. Errores upstream emiten métrica adicional con label 'kind=upstream'.",
+        "Redacción de secretos: tokens en headers Authorization / X-API-Key / Cookie. NUNCA en URL query params. Logs y métricas redactan estos headers ANTES de loguear.",
+        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_AUTH_FAILED, 429→UPSTREAM_RATE_LIMITED, 5xx→UPSTREAM_5XX, network/DNS→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT. Lista completa en errors.codes_infrastructure.",
+        "Body limit en respuesta: configurable. Respuestas excediendo se descartan con UPSTREAM_PAYLOAD_TOO_LARGE.",
+        "TLS: validación de certificado activa por defecto. Saltarla (rejectUnauthorized:false) requiere justificación documentada en module.json (config.http_clients[*].tls_verify=false con motivo).",
+        "Cache opcional: si el módulo cachea respuestas, debe declarar TTL y política de invalidación en config (similar a eviction_strategy de persistence)."
+      ],
+      "ejemplo_request": "const resp = await fetch(url, {\\n  method:'POST',\\n  headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },\\n  body: JSON.stringify(payload),\\n  signal: AbortSignal.timeout(this.config.http_clients.openai.timeout_ms)\\n});",
+      "ejemplo_response_ok": "Si externo devuelve 200: parsea, valida shape esperado, devuelve { status: 200, data: parsed } al caller del bus.",
+      "ejemplo_response_error": "Si externo devuelve 429: devuelve { status: 503, error: { code: 'UPSTREAM_RATE_LIMITED', message: 'Upstream rate limit', details: { kind: 'infrastructure', retryable: true, retry_after_ms: 60000 } } }",
+      "ejemplo_modulos_audit": [
+        "conversacion/ai-gateway (providers/* — OpenAI, Anthropic, etc.)",
+        "telegram-service (probable, llama a Telegram Bot API)",
+        "woocommerce service provider (services/providers/local/woocommerce)",
+        "url-data service (services/providers/local/url-data)",
+        "calling-generator (probable, llama a servicio de llamadas)",
+        "cli/client.js (caso especial: cliente HTTP del propio core)"
+      ],
+      "infraestructura_existente": "Cada módulo implementa su propio cliente. NO hay helper canónico aún — POC pendiente para un _httpRequest helper análogo a _publicarEvento (events) y _buildErrorResponse (errors)."
+    }
   ]
 }

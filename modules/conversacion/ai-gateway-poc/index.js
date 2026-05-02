@@ -85,23 +85,171 @@ class AiGateway {
 
   // ----------------------------------------------------------------- handlers
 
-  // Implementacion real en parcela 4. Aqui solo stubs para que el modulo cargue.
-
+  /**
+   * Handler de `llm.complete.request`. Entry point del POC.
+   *
+   * Payload esperado: { request_id, messages, model?, project_id?, max_tokens?,
+   * temperature?, correlation_id? }.
+   *
+   * Publica `llm.complete.response` con el mismo request_id, en shape canonico
+   * { request_id, status, data | error } (mutuamente excluyentes).
+   */
   async onLlmCompleteRequest(payload) {
-    throw new Error('onLlmCompleteRequest: not implemented (parcela 4)');
+    const t0 = Date.now();
+    const requestId = payload?.request_id;
+
+    // Validacion estructural — sin request_id no hay manera de correlacionar
+    const validation = this._validateRequest(payload);
+    if (!validation.ok) {
+      const errResp = this._buildErrorResponse({
+        status: 400, code: 'VALIDATION_FAILED',
+        message: validation.message,
+        details: { kind: 'domain', retryable: false, field: validation.field }
+      });
+      this.logger.warn(`${this.name}.llm.request.invalid`, {
+        request_id: requestId || null, code: 'VALIDATION_FAILED', field: validation.field
+      });
+      this._emitMetric(`${this.name}.llm.errors`, 1, {
+        code: 'VALIDATION_FAILED', kind: 'domain'
+      });
+      await this._publicarEvento('llm.complete.response',
+        { request_id: requestId || null, ...errResp },
+        payload
+      );
+      return;
+    }
+
+    const { messages, model, project_id, max_tokens, temperature } = payload;
+    const provider = this.providers.get('deepseek');
+
+    let result;
+    try {
+      result = await provider.chatCompletion({
+        messages,
+        model,
+        projectId:   project_id || null,
+        maxTokens:   max_tokens,
+        temperature,
+        requestId
+      });
+    } catch (err) {
+      // Excepcion inesperada del cliente — no deberia ocurrir, pero blindamos.
+      this.logger.error(`${this.name}.llm.unexpected_error`, {
+        request_id: requestId, error: err.message, stack: err.stack
+      });
+      this._emitMetric(`${this.name}.llm.errors`, 1, {
+        code: 'INTERNAL_ERROR', kind: 'domain'
+      });
+      const errResp = this._buildErrorResponse({
+        status: 500, code: 'INTERNAL_ERROR',
+        message: 'Unexpected error during chat completion',
+        details: { kind: 'domain', retryable: false }
+      });
+      await this._publicarEvento('llm.complete.response',
+        { request_id: requestId, ...errResp },
+        payload
+      );
+      return;
+    }
+
+    const dur = Date.now() - t0;
+    this._emitMetric(`${this.name}.llm.duration`, dur, {
+      provider: 'deepseek', status: result.ok ? 'ok' : 'error'
+    });
+
+    if (result.ok) {
+      this.logger.info(`${this.name}.llm.completed`, {
+        request_id: requestId, dur_ms: dur,
+        provider: 'deepseek', model: result.data.model,
+        tokens: result.data.usage?.total_tokens
+      });
+      const okResp = this._buildSuccessResponse({ status: 200, data: result.data });
+      await this._publicarEvento('llm.complete.response',
+        { request_id: requestId, ...okResp },
+        payload
+      );
+      return;
+    }
+
+    // result.ok === false: el cliente ya emitio metric/log de la causa upstream.
+    // Aqui solo trasladamos el shape interno al canonico.
+    this._emitMetric(`${this.name}.llm.errors`, 1, {
+      code: result.error.code, kind: result.error.details?.kind || 'infrastructure'
+    });
+    const errResp = this._buildErrorResponse({
+      status:  result.error.status,
+      code:    result.error.code,
+      message: result.error.message,
+      details: result.error.details
+    });
+    await this._publicarEvento('llm.complete.response',
+      { request_id: requestId, ...errResp },
+      payload
+    );
   }
 
+  /**
+   * Handler de `credential.resolve.response`. Resuelve la promise pendiente
+   * que disparo `_resolveCredential`. Payload: { request_id, api_key?, error? }.
+   */
   async onCredentialResponse(payload) {
-    // Stub minimo: el flujo real (resolver pending + cachear) viene en parcela 4.
-    // Lo dejo no-op para que credential-manager pueda emitir sin romper tests.
+    const requestId = payload?.request_id;
+    if (!requestId) return; // ignore — no correlation possible
+
+    const pending = this.pendingCredentials.get(requestId);
+    if (!pending) return;  // timeout ya disparo o response duplicada — drop silencioso
+
+    this.pendingCredentials.delete(requestId);
+    if (pending.timeout) clearTimeout(pending.timeout);
+
+    if (payload.api_key) {
+      pending.resolve(payload.api_key);
+    } else {
+      const reason = payload.error || 'credential not provided';
+      this.logger.warn(`${this.name}.credential.resolve.failed`, {
+        request_id: requestId, reason
+      });
+      this._emitMetric(`${this.name}.credential.errors`, 1, {
+        code: 'CREDENTIAL_NOT_FOUND', kind: 'rejected'
+      });
+      pending.reject(new Error(reason));
+    }
   }
 
+  /**
+   * Handler de `credential.saved` y `credential.updated`. Invalida la entrada
+   * de cache del provider afectado (si project_id especificado, solo esa;
+   * si no, todas las del provider).
+   */
   async onCredentialSaved(payload) {
-    // Stub: invalidacion de cache viene en parcela 4.
+    const { provider, project_id } = payload || {};
+    if (!provider) return;
+    const removed = this._invalidateCacheForProvider(provider, project_id || null);
+    if (removed > 0) {
+      this.logger.info(`${this.name}.credential.cache.invalidated`, {
+        provider, project_id: project_id || null, removed_entries: removed,
+        reason: 'saved_or_updated'
+      });
+      this._emitMetric(`${this.name}.credential.cache.invalidations`, removed,
+        { provider, reason: 'saved_or_updated' });
+    }
   }
 
+  /**
+   * Handler de `credential.deleted`. Misma logica que saved/updated.
+   */
   async onCredentialDeleted(payload) {
-    // Stub: invalidacion de cache viene en parcela 4.
+    const { provider, project_id } = payload || {};
+    if (!provider) return;
+    const removed = this._invalidateCacheForProvider(provider, project_id || null);
+    if (removed > 0) {
+      this.logger.info(`${this.name}.credential.cache.invalidated`, {
+        provider, project_id: project_id || null, removed_entries: removed,
+        reason: 'deleted'
+      });
+      this._emitMetric(`${this.name}.credential.cache.invalidations`, removed,
+        { provider, reason: 'deleted' });
+    }
   }
 
   // ----------------------------------------------------------------- helpers (canonicos)
@@ -196,6 +344,57 @@ class AiGateway {
         project_id: projectId || null
       });
     });
+  }
+
+  /**
+   * Valida el payload de `llm.complete.request`. Retorna { ok: true } o
+   * { ok: false, message, field }.
+   */
+  _validateRequest(payload) {
+    if (!payload || typeof payload !== 'object') {
+      return { ok: false, message: 'payload missing or invalid', field: 'payload' };
+    }
+    if (!payload.request_id || typeof payload.request_id !== 'string') {
+      return { ok: false, message: 'request_id is required (string)', field: 'request_id' };
+    }
+    if (!Array.isArray(payload.messages) || payload.messages.length === 0) {
+      return { ok: false, message: 'messages must be a non-empty array', field: 'messages' };
+    }
+    const maxMsgs = this.config.max_messages_per_request || 100;
+    if (payload.messages.length > maxMsgs) {
+      return { ok: false, message: `messages exceeds limit (${maxMsgs})`, field: 'messages' };
+    }
+    const maxLen = this.config.max_message_length || 100000;
+    for (let i = 0; i < payload.messages.length; i++) {
+      const m = payload.messages[i];
+      if (!m || typeof m !== 'object') {
+        return { ok: false, message: `messages[${i}] must be an object`, field: `messages[${i}]` };
+      }
+      if (typeof m.content === 'string' && m.content.length > maxLen) {
+        return { ok: false, message: `messages[${i}].content exceeds limit (${maxLen})`, field: `messages[${i}].content` };
+      }
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Invalida entradas de credentialCache para un provider. Si projectId se
+   * especifica, solo borra esa entrada; si no, borra todas las del provider.
+   * Retorna el numero de entradas eliminadas.
+   */
+  _invalidateCacheForProvider(provider, projectId) {
+    let removed = 0;
+    const exactKey = projectId ? `${provider}:${projectId}` : null;
+    for (const key of Array.from(this.credentialCache.keys())) {
+      const matches = exactKey
+        ? key === exactKey
+        : key.startsWith(`${provider}:`);
+      if (matches) {
+        this.credentialCache.delete(key);
+        removed++;
+      }
+    }
+    return removed;
   }
 
   /**

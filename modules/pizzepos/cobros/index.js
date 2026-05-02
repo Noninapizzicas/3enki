@@ -193,17 +193,33 @@ class CobrosModule {
 
       // Validar campos requeridos
       if (!cuenta_id) {
-        return { status: 400, error: 'cuenta_id es requerido' };
+        return this._buildErrorResponse({
+          status: 400, code: 'MISSING_FIELD',
+          message: 'cuenta_id es requerido',
+          details: { kind: 'domain', field: 'cuenta_id' }
+        });
       }
       // Llevadoo paga externamente, no se cobra por caja
       if (cuenta_id.startsWith('llevadoo_')) {
-        return { status: 400, error: 'Las cuentas Llevadoo se pagan externamente, no se pueden cobrar por caja' };
+        return this._buildErrorResponse({
+          status: 400, code: 'INVALID_INPUT',
+          message: 'Las cuentas Llevadoo se pagan externamente, no se pueden cobrar por caja',
+          details: { kind: 'domain', field: 'cuenta_id', cuenta_id_prefix: 'llevadoo_' }
+        });
       }
       if (monto === undefined || monto <= 0) {
-        return { status: 400, error: 'monto debe ser mayor que 0' };
+        return this._buildErrorResponse({
+          status: 400, code: 'INVALID_INPUT',
+          message: 'monto debe ser mayor que 0',
+          details: { kind: 'domain', field: 'monto', value: monto }
+        });
       }
       if (!metodo_pago || !this.metodosPago.includes(metodo_pago)) {
-        return { status: 400, error: `Método de pago no soportado: ${metodo_pago}. Válidos: ${this.metodosPago.join(', ')}` };
+        return this._buildErrorResponse({
+          status: 400, code: 'INVALID_INPUT',
+          message: `Método de pago no soportado: ${metodo_pago}. Válidos: ${this.metodosPago.join(', ')}`,
+          details: { kind: 'domain', field: 'metodo_pago', valid_values: this.metodosPago }
+        });
       }
 
       // Guardia de idempotencia: rechazar si ya existe un cobro activo para esta cuenta
@@ -216,11 +232,11 @@ class CobrosModule {
           cobro_existente_id: cobroExistente.id,
           cobro_existente_estado: cobroExistente.estado
         });
-        return {
-          status: 409,
-          error: `Ya existe un cobro ${cobroExistente.estado} para esta cuenta`,
-          data: { cobro_id: cobroExistente.id, estado: cobroExistente.estado }
-        };
+        return this._buildErrorResponse({
+          status: 409, code: 'ALREADY_EXISTS',
+          message: `Ya existe un cobro ${cobroExistente.estado} para esta cuenta`,
+          details: { kind: 'domain', entity_type: 'cobro', cuenta_id, cobro_id: cobroExistente.id, estado_actual: cobroExistente.estado }
+        });
       }
 
       const cobro_id = crypto.randomUUID();
@@ -244,15 +260,25 @@ class CobrosModule {
         cobro.cambio = monto_recibido - monto_total;
 
         if (cobro.cambio < 0) {
-          return { status: 400, error: 'Monto recibido insuficiente', data: { monto_faltante: Math.abs(cobro.cambio) } };
+          return this._buildErrorResponse({
+            status: 400, code: 'INVALID_INPUT',
+            message: 'Monto recibido insuficiente',
+            details: { kind: 'domain', field: 'monto_recibido', monto_faltante: Math.abs(cobro.cambio) }
+          });
         }
       }
 
-      // Pago mixto (split payment)
+      // Pago mixto (split payment) — el helper procesarPagoMixto usa shape interno
+      // { error: 'string' } legitimo (errors.contract internal_vs_canonical_shapes,
+      // F6 del POC2). Aqui en la frontera lo traducimos a canonico.
       if (metodo_pago === 'mixto') {
         const result = this.procesarPagoMixto(desglose, monto_total);
         if (result.error) {
-          return { status: 400, error: result.error };
+          return this._buildErrorResponse({
+            status: 400, code: 'INVALID_INPUT',
+            message: result.error,
+            details: { kind: 'domain', field: 'desglose' }
+          });
         }
         cobro.desglose = result.desglose;
       }
@@ -325,7 +351,11 @@ class CobrosModule {
     const cobro = this.cobros.get(id);
 
     if (!cobro) {
-      return { status: 404, error: 'Cobro no encontrado' };
+      return this._buildErrorResponse({
+        status: 404, code: 'RESOURCE_NOT_FOUND',
+        message: `Cobro "${id}" no encontrado`,
+        details: { kind: 'domain', entity_type: 'cobro', entity_id: id }
+      });
     }
 
     return { status: 200, data: cobro };
@@ -336,11 +366,19 @@ class CobrosModule {
 
     const cobro = this.cobros.get(id);
     if (!cobro) {
-      return { status: 404, error: 'Cobro no encontrado' };
+      return this._buildErrorResponse({
+        status: 404, code: 'RESOURCE_NOT_FOUND',
+        message: `Cobro "${id}" no encontrado`,
+        details: { kind: 'domain', entity_type: 'cobro', entity_id: id }
+      });
     }
 
     if (cobro.estado !== 'pendiente' && cobro.estado !== 'procesando') {
-      return { status: 400, error: `No se puede confirmar cobro en estado: ${cobro.estado}` };
+      return this._buildErrorResponse({
+        status: 409, code: 'CONFLICT_STATE',
+        message: `No se puede confirmar cobro en estado: ${cobro.estado}`,
+        details: { kind: 'domain', entity_type: 'cobro', entity_id: id, estado_actual: cobro.estado, estados_validos: ['pendiente', 'procesando'] }
+      });
     }
 
     cobro.estado = 'completado';
@@ -373,11 +411,19 @@ class CobrosModule {
 
     const cobro = this.cobros.get(id);
     if (!cobro) {
-      return { status: 404, error: 'Cobro no encontrado' };
+      return this._buildErrorResponse({
+        status: 404, code: 'RESOURCE_NOT_FOUND',
+        message: `Cobro "${id}" no encontrado`,
+        details: { kind: 'domain', entity_type: 'cobro', entity_id: id }
+      });
     }
 
     if (cobro.estado !== 'completado') {
-      return { status: 400, error: 'Solo se pueden reembolsar cobros completados' };
+      return this._buildErrorResponse({
+        status: 409, code: 'CONFLICT_STATE',
+        message: 'Solo se pueden reembolsar cobros completados',
+        details: { kind: 'domain', entity_type: 'cobro', entity_id: id, estado_actual: cobro.estado, estado_requerido: 'completado' }
+      });
     }
 
     cobro.estado = 'reembolsado';
@@ -588,6 +634,26 @@ class CobrosModule {
       qr: 'Código QR'
     };
     return nombres[metodo] || metodo;
+  }
+
+  // ==========================================
+  // Helper canonico (errors.contract recommended_helpers)
+  // ==========================================
+
+  /**
+   * Construye respuesta de error con shape canonico { status, error: { code, message, details? } }.
+   * Mutuamente excluyente con data. NUNCA incluye stack en respuesta.
+   * Sucesor del patron 'return { status, error: "string" }' (drift cerrado).
+   */
+  _buildErrorResponse({ status, code, message, details }) {
+    return {
+      status,
+      error: {
+        code,
+        message,
+        ...(details ? { details } : {})
+      }
+    };
   }
 }
 

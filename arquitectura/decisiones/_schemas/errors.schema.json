@@ -281,7 +281,7 @@
       "additionalProperties": false,
       "required": ["code", "status_typical", "descripcion", "ejemplo_uso"],
       "properties": {
-        "code":           { "type": "string", "pattern": "^[A-Z][A-Z_]*[A-Z]$" },
+        "code":           { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*[A-Z0-9]$" },
         "status_typical": { "type": "integer", "minimum": 100, "maximum": 599 },
         "descripcion":    { "type": "string", "minLength": 10 },
         "ejemplo_uso":    { "type": "string", "minLength": 10 }

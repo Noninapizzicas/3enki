@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "errors",
-    "version": "1.1.0",
-    "creado_en": "2026-04-30",
+    "version": "1.2.0",
+    "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/errors.contract.json",
-    "supersedes_nota": "v1.1.0 (POC iteration): codes_domain deprecó PROJECT_NOT_FOUND y RECIPE_NOT_FOUND (usar RESOURCE_NOT_FOUND + entity_type). Añadidos 'field' y 'all_errors' a details_canonical_fields. Añadida sección recommended_helpers con _buildErrorResponse."
+    "supersedes_nota": "v1.2.0 (POC2 ai-gateway, finding F3): añadidos al catálogo codes_infrastructure: CREDENTIAL_NOT_FOUND y los 8 UPSTREAM_* (AUTH_FAILED, NOT_FOUND, RATE_LIMITED, 5XX, TIMEOUT, UNREACHABLE, INVALID_RESPONSE, PAYLOAD_TOO_LARGE) — referenciados por http.contract.status_code_mapping_to_canonical pero ausentes hasta ahora. Cierra incoherencia entre errors.json y http.json.\n\nv1.1.0 (POC1 notas): codes_domain deprecó PROJECT_NOT_FOUND y RECIPE_NOT_FOUND. Añadidos field y all_errors a details_canonical_fields. recommended_helpers con _buildErrorResponse."
   },
 
   "regla": "Toda respuesta sigue { status, data?, error? } — mutuamente excluyentes data y error. Status HTTP-like (4xx dominio, 5xx infraestructura). error.code en UPPER_SNAKE_CASE de lista cerrada. Cada error genera log + métrica automáticos. Stack jamás en respuesta. Sin secretos en mensajes. Describir, no instruir.",
@@ -75,12 +75,21 @@
     { "code": "DATABASE_DOWN",           "status_typical": 503, "descripcion": "Conexión a la base de datos no disponible.",                       "ejemplo_uso": "SQLite locked, conexión externa caída." },
     { "code": "BROKER_DISCONNECTED",     "status_typical": 503, "descripcion": "Broker MQTT no disponible.",                                        "ejemplo_uso": "Aedes embedded falló o broker externo desconectado." },
     { "code": "FILESYSTEM_ERROR",        "status_typical": 500, "descripcion": "Error de filesystem (lectura/escritura/permisos).",                 "ejemplo_uso": "ENOENT, EACCES, EIO al leer/escribir." },
-    { "code": "EXTERNAL_API_FAILED",     "status_typical": 502, "descripcion": "Una API externa devolvió error o no respondió.",                   "ejemplo_uso": "Llamada a Telegram API falló, OAuth provider down." },
+    { "code": "EXTERNAL_API_FAILED",     "status_typical": 502, "descripcion": "Una API externa devolvió error o no respondió. Genérico cuando el detalle no encaja en UPSTREAM_*.", "ejemplo_uso": "Llamada a Telegram API falló sin mapeo HTTP claro." },
     { "code": "TIMEOUT",                 "status_typical": 504, "descripcion": "Operación excedió el timeout configurado.",                        "ejemplo_uso": "OTA no completó en ota_timeout_ms, build no terminó." },
     { "code": "MQTT_NOT_AVAILABLE",      "status_typical": 503, "descripcion": "Cliente MQTT no conectado al broker.",                              "ejemplo_uso": "Antes de que conecte por primera vez o tras desconexión." },
     { "code": "OUT_OF_MEMORY",           "status_typical": 500, "descripcion": "Recurso de memoria insuficiente para la operación.",                "ejemplo_uso": "Procesar archivo demasiado grande, queue saturada." },
     { "code": "DISK_FULL",               "status_typical": 500, "descripcion": "Filesystem sin espacio libre.",                                     "ejemplo_uso": "Escribir log, persist data sin espacio disponible." },
     { "code": "DEPENDENCY_UNAVAILABLE",  "status_typical": 503, "descripcion": "Una dependencia interna del módulo no está disponible.",            "ejemplo_uso": "El módulo necesita otro módulo que no está cargado." },
+    { "code": "CREDENTIAL_NOT_FOUND",    "status_typical": 503, "descripcion": "Credencial requerida para llamar a un upstream no disponible: credential-manager caído, credencial no configurada para el provider/proyecto, o rechazada.", "ejemplo_uso": "ai-gateway no obtuvo api_key de deepseek desde credential-manager." },
+    { "code": "UPSTREAM_AUTH_FAILED",    "status_typical": 503, "descripcion": "Upstream HTTP rechazó la credencial (401/403). El módulo es indisponible hasta que se renueve el token.", "ejemplo_uso": "OpenAI devuelve 401 porque la api_key expiró." },
+    { "code": "UPSTREAM_NOT_FOUND",      "status_typical": 502, "descripcion": "Upstream HTTP devolvió 404 para un recurso esperado. Drift de configuración o el externo cambió su API.", "ejemplo_uso": "Endpoint /v1/chat/completions devuelve 404 (provider deprecó la ruta)." },
+    { "code": "UPSTREAM_RATE_LIMITED",   "status_typical": 503, "descripcion": "Upstream HTTP devolvió 429. retry_after_ms en details si el upstream lo provee (header Retry-After).", "ejemplo_uso": "OpenAI 429: rate limit por minuto excedido." },
+    { "code": "UPSTREAM_5XX",            "status_typical": 503, "descripcion": "Upstream HTTP falló internamente (5xx). retryable=true por convención (suele ser transitorio).", "ejemplo_uso": "Anthropic devuelve 502 o 503 momentáneamente." },
+    { "code": "UPSTREAM_TIMEOUT",        "status_typical": 504, "descripcion": "La llamada HTTP saliente excedió el timeout declarado en config.http_clients[*].timeout_ms.", "ejemplo_uso": "fetch a OpenAI con AbortSignal.timeout que expira a los 30s." },
+    { "code": "UPSTREAM_UNREACHABLE",    "status_typical": 503, "descripcion": "No se pudo establecer conexión con el upstream HTTP (DNS, firewall, ECONNREFUSED, ECONNRESET).", "ejemplo_uso": "DNS no resuelve api.openai.com, firewall bloquea, upstream caído." },
+    { "code": "UPSTREAM_INVALID_RESPONSE","status_typical": 502, "descripcion": "Upstream HTTP respondió pero el cuerpo no parsea o no coincide con el shape esperado.", "ejemplo_uso": "Provider devuelve HTML en vez de JSON; choices[0].message ausente." },
+    { "code": "UPSTREAM_PAYLOAD_TOO_LARGE","status_typical": 502, "descripcion": "Respuesta del upstream HTTP supera el body limit configurado en el cliente.", "ejemplo_uso": "Provider devuelve un blob mayor que el limite del cliente." },
     { "code": "UNKNOWN_ERROR",           "status_typical": 500, "descripcion": "Error capturado pero no clasificable. Usar como último recurso.",   "ejemplo_uso": "catch (err) sin que el módulo pueda determinar la causa específica." }
   ],
 

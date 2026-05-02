@@ -1,9 +1,9 @@
 {
   "_doc": "Captura LA forma canónica en la que el sistema event-core responde cuando algo sale mal: shape de la respuesta de error, códigos estandarizados, distinción entre dominio e infraestructura, telemetría automática, política de propagación. Sin un contrato de errores, cada módulo inventa su forma — los callers no pueden tratar errores uniformemente, los logs son ilegibles, las métricas se confunden, y los secretos se filtran en mensajes. Este contrato es la pareja del de observability: un error que ocurre, un error que se observa, un error que el caller puede tratar.",
   "id": "errors",
-  "version": "1.1.0",
-  "creada": "2026-04-30",
-  "supersedes_nota": "v1.1.0 (POC iteration): (F3) deprecadas entradas específicas PROJECT_NOT_FOUND y RECIPE_NOT_FOUND de codes_domain — reemplazadas por RESOURCE_NOT_FOUND + details.entity_type. (F5) añadidos campos canónicos 'field' y 'all_errors' a details_canonical_fields para errores de validación. (F7) añadida sección recommended_helpers en output con patrón canónico _buildErrorResponse (auto log + auto metric + sin stack en respuesta). Validado en modules/notas-poc/.",
+  "version": "1.2.0",
+  "creada": "2026-05-02",
+  "supersedes_nota": "v1.2.0 (POC2 ai-gateway, finding F3): añadidos al output codes_infrastructure: CREDENTIAL_NOT_FOUND y los 8 UPSTREAM_* (AUTH_FAILED, NOT_FOUND, RATE_LIMITED, 5XX, TIMEOUT, UNREACHABLE, INVALID_RESPONSE, PAYLOAD_TOO_LARGE) — referenciados por http.contract.status_code_mapping_to_canonical pero ausentes hasta ahora. Schema fix: pattern de code admite digitos (^[A-Z][A-Z0-9_]*[A-Z0-9]$) para soportar UPSTREAM_5XX. Cierra incoherencia entre errors.json y http.json.\n\nv1.1.0 (POC1 notas): deprecadas PROJECT_NOT_FOUND/RECIPE_NOT_FOUND (usar RESOURCE_NOT_FOUND + entity_type). Añadidos field y all_errors a details_canonical_fields. Añadida sección recommended_helpers con _buildErrorResponse.",
 
   "objetivo": "Producir UN JSON output (_outputs/errors.json) que define: shape canónica de respuesta (éxito y fallo), códigos de status estandarizados con su significado, estructura del campo error (code, message, details opcionales), política de stack traces, política de propagación (cuándo absorber, cuándo throw), telemetría obligatoria al emitir un error (log + métrica), política de exposición externa (qué se ve en respuestas vs qué solo en logs internos), distinción entre errores de dominio vs infraestructura. Validable mecánicamente cruzando contra las auditorías modulo-completo.",
 

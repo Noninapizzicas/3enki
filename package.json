@@ -17,6 +17,7 @@
     "test:security": "node tests/unit/security-p2p.test.js",
     "test:integration": "node tests/integration/full-stack.test.js",
     "test:ai-gateway-poc": "node tests/unit/ai-gateway-poc.test.js",
+    "test:carta-scheduler-poc": "node tests/unit/carta-scheduler-poc.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

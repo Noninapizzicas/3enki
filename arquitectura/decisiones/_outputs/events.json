@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "events",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/events.contract.json",
-    "supersedes_nota": "v1.4.0 (POC2 ai-gateway, finding F5): añadida subscribes_declaration_shape que documenta los 6 campos canonicos de subscribes[*] en module.json. Los campos request_schema_ref / response_event / response_schema_ref son opcionales pero recomendados para protocol_event handlers — paralelos a apis[*].request_schema_ref del contrato http. Habilitan validacion declarativa del bus.\n\nv1.3.0 (POC2 F2): _publicarEvento canonico unificado.\n\nv1.2.0 (POC2 F1): event_naming_subforms (domain_event vs protocol_event).\n\nv1.1.0 (POC1): recommended_helpers."
+    "supersedes_nota": "v1.5.0 (POC3 carta-scheduler, finding F5): formalizada request_response.context_injection. Documenta que el core inyecta mqttRequest via context.mqttRequest en onLoad, prohibe explicitamente el acceso directo via this.moduleLoader.getModule(slug).instance.toolX(...), incluye drift_indicators (regex) para que el validator detecte el patron prohibido. Validado en POC3 (carta-scheduler-poc usa mqttRequest exclusivamente para scheduler/tarifas).\n\nv1.4.0 (POC2 F5): subscribes_declaration_shape con 6 campos canonicos.\n\nv1.3.0 (POC2 F2): _publicarEvento canonico unificado.\n\nv1.2.0 (POC2 F1): event_naming_subforms (domain_event vs protocol_event).\n\nv1.1.0 (POC1): recommended_helpers."
   },
 
   "regla": "Eventos viajan por MQTT (Aedes embedded por defecto). Bus híbrido transparente al módulo. Topics jerárquicos por categoría: core/{core-id}/<categoria>/.... Cardinalidad libre (cero, uno o muchos suscriptores). Fire-and-forget. Idempotencia obligatoria en handlers. Mismo código del módulo de Casa a Manzana — la escala se decide por configuración del transporte, no por código.",
@@ -160,7 +160,19 @@
     "correlation_id_field": "correlation_id",
     "default_timeout_ms": 5000,
     "status_codes_canonical": [200, 201, 202, 400, 404, 409, 500],
-    "notas": "El caller llama mqttRequest y recibe una Promise. Internamente: genera correlation_id, se suscribe a la response topic, publica la request, espera o falla por timeout. Los handlers responden publicando a la response topic con status code HTTP-like. La 'sincronicidad' es del lado del caller; el handler sigue siendo asíncrono y desacoplado."
+    "notas": "El caller llama mqttRequest y recibe una Promise. Internamente: genera correlation_id, se suscribe a la response topic, publica la request, espera o falla por timeout. Los handlers responden publicando a la response topic con status code HTTP-like. La 'sincronicidad' es del lado del caller; el handler sigue siendo asíncrono y desacoplado.",
+    "context_injection": {
+      "regla": "El core inyecta mqttRequest al modulo via context.mqttRequest en onLoad(context). El modulo lo guarda en this.mqttRequest y lo usa para llamar a otros modulos del sistema. NUNCA accede a otros modulos via this.moduleLoader.getModule(slug).instance.toolX(...) — eso rompe el paradigma event-core (acoplamiento sincronico, sin telemetria, sin desacople).",
+      "firma_canonica": "context.mqttRequest(domain: string, action: string, payload: object, options?: { timeout_ms?: number }) => Promise<{ status, data | error }>",
+      "drift_indicators": [
+        "this\\.moduleLoader\\.getModule\\s*\\(",
+        "\\.instance\\.tool[A-Z]\\w*\\s*\\(",
+        "\\.instance\\.handle[A-Z]\\w*\\s*\\(",
+        "core\\.modules\\.\\w+\\.instance\\."
+      ],
+      "alternativa_canonica": "// EN VEZ DE:\nconst sched = this.moduleLoader.getModule('scheduler');\nawait sched.instance.addJob(payload);\n\n// HACER:\nconst resp = await this.mqttRequest('scheduler', 'addJob', payload, { timeout_ms: 5000 });\nif (resp.error) { /* manejar error canonico */ }",
+      "validado_en_poc": "modules/pizzepos/carta-scheduler-poc/index.js (POC3) usa context.mqttRequest exclusivamente para scheduler.addJob/deleteJob y tarifas.assign — cero accesos directos a moduleLoader."
+    }
   },
 
   "payload_canonical_fields": {

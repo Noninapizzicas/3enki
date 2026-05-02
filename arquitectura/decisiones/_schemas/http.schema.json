@@ -279,7 +279,7 @@
       "required": ["upstream_status_or_kind", "canonical_code", "canonical_status", "descripcion"],
       "properties": {
         "upstream_status_or_kind": { "type": "string", "minLength": 2 },
-        "canonical_code":          { "type": "string", "pattern": "^[A-Z][A-Z_]*[A-Z]$" },
+        "canonical_code":          { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*[A-Z0-9]$" },
         "canonical_status":        { "type": "integer", "minimum": 100, "maximum": 599 },
         "descripcion":             { "type": "string", "minLength": 10 }
       }

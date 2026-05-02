@@ -1,0 +1,362 @@
+{
+  "_meta": {
+    "convencion": "http",
+    "version": "1.0.0",
+    "creado_en": "2026-05-02",
+    "contrato_referencia": "arquitectura/decisiones/_contratos/http.contract.json",
+    "supersedes_nota": "Primera versión. Recoge el patrón ya implementado en core/gateway/http.js (HTTP server único) y los clientes HTTP de los módulos (cli/client.js, ai-gateway providers, etc.) y formaliza la regla 'HTTP solo en frontera, MQTT internamente'."
+  },
+
+  "regla": "HTTP es la frontera externa del core. Cruza el límite del proceso. Internamente, MQTT. Tres casos legítimos: CLI, UI web, integración externa. Routing canónico /modules/<slug>/<path>. Response usa shape canónico de errors.json. Timeouts y telemetría obligatorios en cliente. Errores externos mapeados a códigos canónicos. Un único HTTP server en el core.",
+
+  "modos": [
+    {
+      "id": "http-server",
+      "nombre": "HTTP server (el core acepta requests externos)",
+      "descripcion": "El gateway HTTP único del core (core/gateway/http.js) acepta requests externos de CLI, browsers o webhooks, los enruta a las apis declaradas en module.json de cada módulo, y devuelve la response usando el shape canónico. El módulo nunca abre su propio listener.",
+      "donde_aplica": "Todo módulo que declara apis en module.json. Endpoints visibles en audits modulo-completo.apis_http.",
+      "reglas": [
+        "Routing canónico: /modules/<slug>/<path>. Slug en kebab-case. Sin /api ni /v1 salvo decisión explícita.",
+        "Método HTTP refleja el verbo: GET (consulta), POST (acción), PUT (reemplazo), DELETE (baja). El verbo NO va en la URL.",
+        "Response shape canónico: { status, data | error } mutuamente excluyentes. status del JSON coincide con HTTP status.",
+        "Codes HTTP canónicos: usar SOLO los listados en errors.json.status_codes. Nunca inventar status.",
+        "Validation: si module.json declara request/response schemas, el gateway valida ANTES y DESPUÉS del handler.",
+        "Auth declarada por endpoint en module.json (config.apis[*].auth_required). Sin declaración, público.",
+        "CORS: política única en el gateway (no por módulo). Configurable por entorno.",
+        "Telemetría obligatoria por request: log nivel info (200-399) o warn/error (4xx/5xx) + métrica de duración.",
+        "Body limit configurable (default 1MB). Excediendo → 413 PAYLOAD_TOO_LARGE.",
+        "Timeout de request configurable (default 30s). Excediendo → 504 UPSTREAM_TIMEOUT."
+      ],
+      "ejemplo_request": "POST /modules/notas/crear\nContent-Type: application/json\n\n{\"titulo\":\"x\",\"contenido\":\"y\"}",
+      "ejemplo_response_ok": "HTTP/1.1 201 Created\nContent-Type: application/json\n\n{\"status\":201,\"data\":{\"id\":\"abc\",\"titulo\":\"x\"}}",
+      "ejemplo_response_error": "HTTP/1.1 400 Bad Request\nContent-Type: application/json\n\n{\"status\":400,\"error\":{\"code\":\"VALIDATION_FAILED\",\"message\":\"titulo es requerido\",\"details\":{\"field\":\"titulo\"}}}",
+      "ejemplo_modulos_audit": [
+        "scratch-designer (20 endpoints)",
+        "ui-designer (18 endpoints)",
+        "staff-manager (15 endpoints)",
+        "certificate-authority (10 endpoints, mTLS)",
+        "database-manager (8 endpoints)",
+        "notas (8 endpoints)",
+        "metricas (7 endpoints)",
+        "security-p2p (6 endpoints)",
+        "dashboard (5 endpoints, sirve UI a browser)",
+        "conversation-export (4 endpoints)",
+        "esp32-flasher (4 endpoints)",
+        "system-inspector (4 endpoints)",
+        "firmware-manager (1 endpoint)"
+      ],
+      "infraestructura_existente": "core/gateway/http.js (1170 LOC) con compression.js, cache.js, ui.js. Soporta validation, hooks, cors, mTLS via certificate-authority."
+    },
+    {
+      "id": "http-client",
+      "nombre": "HTTP client (un módulo llama a un externo)",
+      "descripcion": "Un módulo realiza requests HTTP salientes a APIs de terceros (OpenAI, Telegram, WooCommerce, etc.) o, en el caso del CLI, al propio gateway HTTP del core. La lógica de retry, timeout, redacción de secretos y mapeo de errores está en el módulo cliente.",
+      "donde_aplica": "Módulos con dependencias HTTP externas (audits con campo dependencias_externas tipo http) y el binario CLI (cli/client.js).",
+      "reglas": [
+        "Timeout obligatorio en cada request. Sin timeout NO se commitea. Default sugerido: 10s para CLI→core, 30s para externos.",
+        "Retry policy declarada en config (max_attempts, backoff_ms, retryable_status). Por defecto 0 reintentos. Solo idempotentes pueden retry > 0.",
+        "Telemetría obligatoria por call: log + métrica de duración con labels {host, status, modulo}.",
+        "Redacción de secretos: tokens en headers (Authorization, X-API-Key, Cookie). NUNCA en URL query params. Logs y métricas redactan headers ANTES de loguear.",
+        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_AUTH_FAILED, 429→UPSTREAM_RATE_LIMITED, 5xx→UPSTREAM_5XX, network→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT.",
+        "Body limit en respuesta: configurable. Excediendo → UPSTREAM_PAYLOAD_TOO_LARGE.",
+        "TLS validation activa por defecto. rejectUnauthorized:false requiere justificación documentada en module.json.",
+        "Cache opcional con TTL e invalidación declarada (similar a eviction_strategy de persistence)."
+      ],
+      "ejemplo_request": "const resp = await fetch(url, {\n  method:'POST',\n  headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },\n  body: JSON.stringify(payload),\n  signal: AbortSignal.timeout(this.config.http_clients.openai.timeout_ms)\n});",
+      "ejemplo_response_ok": "Si externo devuelve 200: parsea, valida shape esperado, devuelve { status: 200, data: parsed } al caller del bus.",
+      "ejemplo_response_error": "Si externo devuelve 429: devuelve { status: 503, error: { code: 'UPSTREAM_RATE_LIMITED', message: 'Upstream rate limit', details: { kind: 'infrastructure', retryable: true, retry_after_ms: 60000 } } }",
+      "ejemplo_modulos_audit": [
+        "conversacion/ai-gateway (providers/* — OpenAI, Anthropic, etc.)",
+        "telegram-service (probable, llama a Telegram Bot API)",
+        "woocommerce service provider (services/providers/local/woocommerce)",
+        "url-data service (services/providers/local/url-data)",
+        "calling-generator (probable, llama a servicio de llamadas)",
+        "cli/client.js (caso especial: cliente HTTP del propio core)"
+      ],
+      "infraestructura_existente": "Cada módulo implementa su propio cliente. NO hay helper canónico aún — POC pendiente para un _httpRequest helper análogo a _publicarEvento (events) y _buildErrorResponse (errors)."
+    }
+  ],
+
+  "reglas_universales": [
+    {
+      "id": "no_intra_core_http",
+      "descripcion": "Un módulo del core nunca llama a otro módulo del mismo core via HTTP, ni siquiera localhost. La comunicación intra-core es 100% MQTT (eventBus.publish/subscribe o mqttRequest).",
+      "viola_si_no_se_cumple": ["mqtt_for_intra_core_communication", "intra_core_http_call"],
+      "aplica_a_modos": ["http-client"]
+    },
+    {
+      "id": "single_listener_in_core",
+      "descripcion": "Solo el gateway central (core/gateway/http.js) abre un puerto HTTP. Los módulos NO levantan listeners propios.",
+      "viola_si_no_se_cumple": ["single_http_server_in_core", "module_owns_http_listener"],
+      "aplica_a_modos": ["http-server"]
+    },
+    {
+      "id": "canonical_response_shape_always",
+      "descripcion": "Toda response HTTP del core (server) y todo error devuelto por un módulo cliente al caller del bus sigue el shape canónico { status, data | error } de errors.json.",
+      "viola_si_no_se_cumple": ["response_uses_canonical_error_shape", "non_canonical_response_shape"],
+      "aplica_a_modos": ["*"]
+    },
+    {
+      "id": "telemetry_on_every_http_operation",
+      "descripcion": "Cada request entrante (server) y cada call saliente (client) emite log + métrica con duración y status. Cero operaciones HTTP silenciosas.",
+      "viola_si_no_se_cumple": ["mandatory_telemetry_on_http", "no_telemetry_on_http_request"],
+      "aplica_a_modos": ["*"]
+    },
+    {
+      "id": "secrets_never_in_url_or_unredacted_logs",
+      "descripcion": "Tokens/keys/passwords nunca en URL query params (van en headers). Logs y métricas redactan headers Authorization/X-API-Key/Cookie antes de imprimir.",
+      "viola_si_no_se_cumple": ["secret_redaction_in_urls_and_headers", "secret_in_url_query_param", "log_authorization_header_unredacted"],
+      "aplica_a_modos": ["*"]
+    },
+    {
+      "id": "timeout_on_every_outgoing_call",
+      "descripcion": "Toda llamada HTTP saliente declara timeout explícito (signal/AbortSignal/timeout). Sin timeout no se commitea.",
+      "viola_si_no_se_cumple": ["mandatory_timeout_in_http_client", "fetch_without_timeout"],
+      "aplica_a_modos": ["http-client"]
+    },
+    {
+      "id": "external_errors_translated",
+      "descripcion": "Errores HTTP recibidos del externo (4xx, 5xx, timeout, network) se mapean a códigos canónicos del catálogo errors.codes_infrastructure (UPSTREAM_*). El módulo es adaptador, no proxy.",
+      "viola_si_no_se_cumple": ["external_errors_mapped_to_canonical_codes", "external_error_propagated_raw"],
+      "aplica_a_modos": ["http-client"]
+    }
+  ],
+
+  "routing_canonical": {
+    "patron": "/modules/<slug>/<path>",
+    "reglas_de_mapeo_verbo_metodo": [
+      {
+        "metodo": "GET",
+        "verbo_semantico": "consultar / listar / obtener",
+        "descripcion": "Operación de lectura sin efectos secundarios. Idempotente."
+      },
+      {
+        "metodo": "POST",
+        "verbo_semantico": "crear / accionar / ejecutar",
+        "descripcion": "Operación con efecto: crea recurso o ejecuta acción. NO necesariamente idempotente."
+      },
+      {
+        "metodo": "PUT",
+        "verbo_semantico": "reemplazar / sobrescribir",
+        "descripcion": "Reemplazo idempotente del recurso completo. Si no existe, lo crea."
+      },
+      {
+        "metodo": "PATCH",
+        "verbo_semantico": "actualizar parcialmente",
+        "descripcion": "Modificación parcial del recurso. Idempotente si el patch es sobreescritura por campo."
+      },
+      {
+        "metodo": "DELETE",
+        "verbo_semantico": "eliminar / dar de baja",
+        "descripcion": "Elimina el recurso. Idempotente (segunda llamada devuelve 404 o 204 según política)."
+      }
+    ],
+    "prefijos_prohibidos": [
+      "/api",
+      "/api/v1",
+      "/v1",
+      "/handler",
+      "/rpc",
+      "/graphql"
+    ],
+    "slug_format": "kebab-case según naming.json. Coincide con el directorio del módulo (ej: 'staff-manager', 'pizzepos__carta-design').",
+    "path_format": "kebab-case. Sin verbos imperativos (crear/eliminar/actualizar) — esos van en el método HTTP. Recursos en singular o plural según convención del módulo."
+  },
+
+  "module_declaration_shape": {
+    "apis_shape": {
+      "descripcion": "Shape canónico del campo config.apis dentro de module.json. Cada entry describe un endpoint HTTP servido por el módulo a través del gateway central.",
+      "campos": [
+        {
+          "name": "name",
+          "type": "string (kebab-case)",
+          "obligatorio_si": "siempre",
+          "descripcion": "Identificador único del endpoint dentro del módulo (ej: 'crear', 'listar', 'eliminar')."
+        },
+        {
+          "name": "ruta",
+          "type": "string (path)",
+          "obligatorio_si": "siempre",
+          "descripcion": "Path canónico /modules/<slug>/<path>. El gateway lo enruta automáticamente."
+        },
+        {
+          "name": "metodo",
+          "type": "string (enum)",
+          "obligatorio_si": "siempre",
+          "descripcion": "Método HTTP (verbo semántico).",
+          "valores_permitidos": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+        },
+        {
+          "name": "auth_required",
+          "type": "string (enum)",
+          "obligatorio_si": "siempre (sin declaración explícita = público)",
+          "descripcion": "Requisito de autenticación para acceder al endpoint.",
+          "valores_permitidos": ["none", "mtls", "bearer", "basic"]
+        },
+        {
+          "name": "request_schema_ref",
+          "type": "string (path al schema)",
+          "obligatorio_si": "metodo in {POST, PUT, PATCH} y se espera body",
+          "descripcion": "Ruta al JSON Schema del request body. El gateway lo valida antes del handler."
+        },
+        {
+          "name": "response_schema_ref",
+          "type": "string (path al schema)",
+          "obligatorio_si": "recomendado siempre",
+          "descripcion": "Ruta al JSON Schema de la response. El gateway lo valida antes de devolver (modo strict)."
+        },
+        {
+          "name": "descripcion",
+          "type": "string",
+          "obligatorio_si": "siempre",
+          "descripcion": "Descripción humana del endpoint (qué hace, cuándo usarlo)."
+        }
+      ],
+      "ejemplo_json": "{\"apis\":[{\"name\":\"crear\",\"ruta\":\"/modules/notas/notas\",\"metodo\":\"POST\",\"auth_required\":\"none\",\"request_schema_ref\":\"./schemas/crear-request.json\",\"response_schema_ref\":\"./schemas/crear-response.json\",\"descripcion\":\"Crea una nota nueva\"}]}"
+    },
+    "http_clients_shape": {
+      "descripcion": "Shape canónico del campo config.http_clients dentro de module.json. Cada entry describe una dependencia HTTP saliente del módulo (un upstream externo).",
+      "campos": [
+        {
+          "name": "name",
+          "type": "string (kebab-case)",
+          "obligatorio_si": "siempre",
+          "descripcion": "Identificador del cliente (ej: 'openai', 'telegram', 'woocommerce')."
+        },
+        {
+          "name": "host",
+          "type": "string (hostname)",
+          "obligatorio_si": "siempre",
+          "descripcion": "Host del upstream (ej: 'api.openai.com', 'api.telegram.org')."
+        },
+        {
+          "name": "base_url",
+          "type": "string (URL)",
+          "obligatorio_si": "siempre",
+          "descripcion": "URL base sobre la que se construyen las llamadas. Sin secretos."
+        },
+        {
+          "name": "timeout_ms",
+          "type": "integer",
+          "obligatorio_si": "siempre",
+          "descripcion": "Timeout por request en milisegundos. Sin valor por defecto: declaración obligatoria."
+        },
+        {
+          "name": "retry",
+          "type": "object {max_attempts, backoff_ms, retryable_status[]}",
+          "obligatorio_si": "siempre (puede ser {max_attempts:0} para no retry)",
+          "descripcion": "Política de reintentos. Solo idempotentes pueden tener max_attempts > 0."
+        },
+        {
+          "name": "tls_verify",
+          "type": "boolean",
+          "obligatorio_si": "recomendado (default true si ausente)",
+          "descripcion": "Validar certificado TLS del upstream. false requiere justificación documentada."
+        },
+        {
+          "name": "auth_method",
+          "type": "string (enum)",
+          "obligatorio_si": "si el upstream requiere auth",
+          "descripcion": "Método de autenticación con el upstream.",
+          "valores_permitidos": ["none", "bearer", "basic", "api_key_header", "mtls", "oauth2"]
+        },
+        {
+          "name": "credential_ref",
+          "type": "string (id en credential-manager)",
+          "obligatorio_si": "auth_method != none",
+          "descripcion": "Referencia a la credencial gestionada por credential-manager. NUNCA el valor en plano."
+        },
+        {
+          "name": "descripcion",
+          "type": "string",
+          "obligatorio_si": "siempre",
+          "descripcion": "Descripción humana del upstream (qué servicio es, para qué se usa)."
+        }
+      ],
+      "ejemplo_json": "{\"http_clients\":[{\"name\":\"openai\",\"host\":\"api.openai.com\",\"base_url\":\"https://api.openai.com/v1\",\"timeout_ms\":30000,\"retry\":{\"max_attempts\":3,\"backoff_ms\":1000,\"retryable_status\":[429,502,503,504]},\"tls_verify\":true,\"auth_method\":\"bearer\",\"credential_ref\":\"openai-api-key\",\"descripcion\":\"OpenAI Chat Completions\"}]}"
+    }
+  },
+
+  "status_code_mapping_to_canonical": {
+    "from_http_to_errors_json": [
+      {
+        "upstream_status_or_kind": "401 / 403",
+        "canonical_code": "UPSTREAM_AUTH_FAILED",
+        "canonical_status": 503,
+        "descripcion": "Upstream rechazó nuestra credencial. El módulo es indisponible hasta que se renueve el token."
+      },
+      {
+        "upstream_status_or_kind": "404",
+        "canonical_code": "UPSTREAM_NOT_FOUND",
+        "canonical_status": 502,
+        "descripcion": "Upstream devuelve 404 para un recurso esperado. Drift de configuración o externo cambió su API."
+      },
+      {
+        "upstream_status_or_kind": "429",
+        "canonical_code": "UPSTREAM_RATE_LIMITED",
+        "canonical_status": 503,
+        "descripcion": "Upstream rate limit excedido. retry_after_ms en details si el upstream lo provee (header Retry-After)."
+      },
+      {
+        "upstream_status_or_kind": "500-599",
+        "canonical_code": "UPSTREAM_5XX",
+        "canonical_status": 503,
+        "descripcion": "Upstream falla internamente. retryable=true por convención (suele ser transitorio)."
+      },
+      {
+        "upstream_status_or_kind": "timeout",
+        "canonical_code": "UPSTREAM_TIMEOUT",
+        "canonical_status": 504,
+        "descripcion": "La llamada excedió el timeout declarado. Posible degradación del upstream."
+      },
+      {
+        "upstream_status_or_kind": "network / DNS / ECONNREFUSED",
+        "canonical_code": "UPSTREAM_UNREACHABLE",
+        "canonical_status": 503,
+        "descripcion": "No se pudo establecer conexión con el upstream. DNS, firewall, o upstream caído."
+      },
+      {
+        "upstream_status_or_kind": "respuesta inválida (no parseable / shape inesperado)",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
+        "canonical_status": 502,
+        "descripcion": "Upstream respondió pero el cuerpo no parsea o no coincide con el shape esperado."
+      },
+      {
+        "upstream_status_or_kind": "respuesta excede body limit",
+        "canonical_code": "UPSTREAM_PAYLOAD_TOO_LARGE",
+        "canonical_status": 502,
+        "descripcion": "Respuesta del upstream supera el body limit configurado en el cliente."
+      }
+    ],
+    "local_status_codes_used": [200, 201, 202, 204, 400, 401, 403, 404, 409, 413, 422, 429, 500, 502, 503, 504]
+  },
+
+  "detection_patterns": {
+    "localhost_target_regex": "(fetch|http\\.request|axios\\.\\w+|got\\.\\w+)\\s*\\(\\s*['\"`](https?://)?(localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)",
+    "module_owns_listener_regex": "(http\\.createServer|express\\(\\)|fastify\\(|new\\s+Server\\()",
+    "non_canonical_response_keys": ["ok", "success", "result"],
+    "fetch_without_timeout_regex": "fetch\\s*\\(",
+    "secret_in_query_param_keys": [
+      "token",
+      "api_key",
+      "apikey",
+      "access_token",
+      "password",
+      "secret",
+      "client_secret",
+      "session_token"
+    ],
+    "authorization_header_log_regex": "logger\\.\\w+\\([^)]*headers",
+    "unmapped_upstream_error_indicators": [
+      "error.message",
+      "response.text()",
+      "response.statusText",
+      "err.toString()"
+    ],
+    "bus_replaced_by_http_indicators": [
+      "/modules/",
+      "localhost:3000",
+      "fetch.*modules"
+    ]
+  }
+}

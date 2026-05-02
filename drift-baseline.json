@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-02T14:40:07.297Z",
-  "total": 2862,
+  "generated_at": "2026-05-02T15:03:41.048Z",
+  "total": 2854,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -8,11 +8,11 @@
     "lifecycle": 59,
     "observability": 273,
     "errors": 1899,
-    "persistence": 201,
+    "persistence": 193,
     "http": 191
   },
   "by_severity": {
-    "warning": 2790,
+    "warning": 2782,
     "info": 91
   },
   "signatures": [
@@ -2836,14 +2836,9 @@
     "persistence|drift_unbounded_growth_no_eviction|security-p2p — campo \"_sharedSecrets\" con leak_potencial=true sin eviction_strategy declarada",
     "persistence|drift_unbounded_growth_no_eviction|viabilidad — campo \"escenarios\" con leak_potencial=true sin eviction_strategy declarada",
     "persistence|drift_undeclared_persistence_pattern|certificate-authority — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
-    "persistence|drift_undeclared_persistence_pattern|composition-manager — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|conversacion/ai-agent-framework — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
-    "persistence|drift_undeclared_persistence_pattern|conversacion/ai-gateway — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|conversacion/chat-io — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
-    "persistence|drift_undeclared_persistence_pattern|conversacion/prompt-builder — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
-    "persistence|drift_undeclared_persistence_pattern|conversation-export — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|credential-manager — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
-    "persistence|drift_undeclared_persistence_pattern|dashboard — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|database-manager — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|device-health — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|device-shadow — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
@@ -2854,7 +2849,6 @@
     "persistence|drift_undeclared_persistence_pattern|filesystem — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|firmware-builder — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|firmware-manager — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
-    "persistence|drift_undeclared_persistence_pattern|gateway-manager — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|metricas — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|notas — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|pizzepos/carta-design — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
@@ -2862,9 +2856,7 @@
     "persistence|drift_undeclared_persistence_pattern|pizzepos/carta-impresion — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|pizzepos/carta-manager — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|pizzepos/carta-marketing — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
-    "persistence|drift_undeclared_persistence_pattern|pizzepos/cobros — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|pizzepos/cuentas — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
-    "persistence|drift_undeclared_persistence_pattern|pizzepos/menu-generator — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|pizzepos/pedidos — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|pizzepos/persistencia-comandero — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|pizzepos/tarifas — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",

@@ -25,7 +25,13 @@
   ],
   "config": {
     "token": null,
-    "_token_note": "Configurar token aquí o via ENV CONVERSATION_EXPORT_TOKEN. El token se pasa como ?token=... en las URLs de los endpoints."
+    "_token_note": "Configurar token aquí o via ENV CONVERSATION_EXPORT_TOKEN. El token se pasa como ?token=... en las URLs de los endpoints.",
+    "persistence": {
+      "pattern":           "in-memory",
+      "restart_resilient": false,
+      "concurrency":       "single-writer",
+      "lost_on_restart":   ["pendingDbRequests"]
+    }
   },
   "apis": [
     {

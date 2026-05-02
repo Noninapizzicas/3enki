@@ -37,5 +37,13 @@
   "dependencies": [
     "database-manager",
     "prompt-manager"
-  ]
+  ],
+  "config": {
+    "persistence": {
+      "pattern":           "in-memory",
+      "restart_resilient": false,
+      "concurrency":       "single-writer",
+      "lost_on_restart":   ["_modulePrompts", "_moduleContexts", "_userPrompts", "pendingDb"]
+    }
+  }
 }

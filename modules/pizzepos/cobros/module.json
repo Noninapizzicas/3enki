@@ -346,5 +346,13 @@
         "cobro.procesamiento.duration"
       ]
     }
+  },
+  "config": {
+    "persistence": {
+      "pattern":           "in-memory",
+      "restart_resilient": false,
+      "concurrency":       "single-writer",
+      "lost_on_restart":   ["refDisplayCache", "cobros"]
+    }
   }
 }

@@ -168,6 +168,12 @@
     }
   },
   "config": {
-    "dbTimeout": 10000
+    "dbTimeout": 10000,
+    "persistence": {
+      "pattern":           "in-memory",
+      "restart_resilient": false,
+      "concurrency":       "single-writer",
+      "lost_on_restart":   ["pendingDbRequests"]
+    }
   }
 }

@@ -127,6 +127,12 @@
       "backoff_multiplier": 2
     },
     "max_tool_iterations": 10,
-    "tool_timeout_ms": 150000
+    "tool_timeout_ms": 150000,
+    "persistence": {
+      "pattern":           "in-memory",
+      "restart_resilient": false,
+      "concurrency":       "single-writer",
+      "lost_on_restart":   ["providers", "credentialCache", "pendingCredentials", "pendingFsReads", "pagePrefixes"]
+    }
   }
 }

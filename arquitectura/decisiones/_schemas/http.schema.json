@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/http.schema.json",
+  "title": "HTTP Convention — Output Schema",
+  "description": "Schema strict de la instancia http.json. Valida arquitectura/decisiones/_outputs/http.json. additionalProperties=false en todos los niveles. HTTP es la frontera externa del core; el schema formaliza los dos modos (server y client) y las reglas comunes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_meta",
+    "regla",
+    "modos",
+    "reglas_universales",
+    "routing_canonical",
+    "module_declaration_shape",
+    "status_code_mapping_to_canonical",
+    "detection_patterns"
+  ],
+
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["convencion", "version", "creado_en", "contrato_referencia"],
+      "properties": {
+        "convencion":          { "const": "http" },
+        "version":             { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "creado_en":           { "type": "string", "format": "date" },
+        "contrato_referencia": { "type": "string", "pattern": "^arquitectura/decisiones/_contratos/" },
+        "supersedes_nota":     { "type": ["string", "null"] }
+      }
+    },
+
+    "regla": {
+      "type": "string",
+      "minLength": 80
+    },
+
+    "modos": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/modo" }
+    },
+
+    "reglas_universales": {
+      "type": "array",
+      "minItems": 4,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/regla_universal" }
+    },
+
+    "routing_canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patron",
+        "reglas_de_mapeo_verbo_metodo",
+        "prefijos_prohibidos",
+        "slug_format",
+        "path_format"
+      ],
+      "properties": {
+        "patron":      { "type": "string", "minLength": 10 },
+        "reglas_de_mapeo_verbo_metodo": {
+          "type": "array",
+          "minItems": 4,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/verbo_metodo_rule" }
+        },
+        "prefijos_prohibidos": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 2 }
+        },
+        "slug_format": { "type": "string", "minLength": 5 },
+        "path_format": { "type": "string", "minLength": 5 }
+      }
+    },
+
+    "module_declaration_shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["apis_shape", "http_clients_shape"],
+      "properties": {
+        "apis_shape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["descripcion", "campos", "ejemplo_json"],
+          "properties": {
+            "descripcion": { "type": "string", "minLength": 20 },
+            "campos": {
+              "type": "array",
+              "minItems": 4,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/manifest_field" }
+            },
+            "ejemplo_json": { "type": "string", "minLength": 30 }
+          }
+        },
+        "http_clients_shape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["descripcion", "campos", "ejemplo_json"],
+          "properties": {
+            "descripcion": { "type": "string", "minLength": 20 },
+            "campos": {
+              "type": "array",
+              "minItems": 4,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/manifest_field" }
+            },
+            "ejemplo_json": { "type": "string", "minLength": 30 }
+          }
+        }
+      }
+    },
+
+    "status_code_mapping_to_canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_http_to_errors_json", "local_status_codes_used"],
+      "properties": {
+        "from_http_to_errors_json": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/upstream_mapping" }
+        },
+        "local_status_codes_used": {
+          "type": "array",
+          "minItems": 6,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 100, "maximum": 599 }
+        }
+      }
+    },
+
+    "detection_patterns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "localhost_target_regex",
+        "module_owns_listener_regex",
+        "non_canonical_response_keys",
+        "fetch_without_timeout_regex",
+        "secret_in_query_param_keys",
+        "authorization_header_log_regex",
+        "unmapped_upstream_error_indicators",
+        "bus_replaced_by_http_indicators"
+      ],
+      "properties": {
+        "localhost_target_regex":       { "type": "string", "minLength": 10 },
+        "module_owns_listener_regex":   { "type": "string", "minLength": 10 },
+        "non_canonical_response_keys": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]*$" }
+        },
+        "fetch_without_timeout_regex":  { "type": "string", "minLength": 10 },
+        "secret_in_query_param_keys": {
+          "type": "array",
+          "minItems": 4,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$" }
+        },
+        "authorization_header_log_regex": { "type": "string", "minLength": 10 },
+        "unmapped_upstream_error_indicators": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 5 }
+        },
+        "bus_replaced_by_http_indicators": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 5 }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "modo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "nombre",
+        "descripcion",
+        "donde_aplica",
+        "reglas",
+        "ejemplo_request",
+        "ejemplo_response_ok",
+        "ejemplo_response_error",
+        "ejemplo_modulos_audit",
+        "infraestructura_existente"
+      ],
+      "properties": {
+        "id":          { "enum": ["http-server", "http-client"] },
+        "nombre":      { "type": "string", "minLength": 5 },
+        "descripcion": { "type": "string", "minLength": 30 },
+        "donde_aplica":{ "type": "string", "minLength": 15 },
+        "reglas": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 15 }
+        },
+        "ejemplo_request":        { "type": "string", "minLength": 15 },
+        "ejemplo_response_ok":    { "type": "string", "minLength": 15 },
+        "ejemplo_response_error": { "type": "string", "minLength": 15 },
+        "ejemplo_modulos_audit": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 3 }
+        },
+        "infraestructura_existente": { "type": "string", "minLength": 20 }
+      }
+    },
+
+    "regla_universal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "descripcion", "viola_si_no_se_cumple"],
+      "properties": {
+        "id":          { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "descripcion": { "type": "string", "minLength": 20 },
+        "viola_si_no_se_cumple": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+        },
+        "aplica_a_modos": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["http-server", "http-client", "*"] }
+        }
+      }
+    },
+
+    "verbo_metodo_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metodo", "verbo_semantico", "descripcion"],
+      "properties": {
+        "metodo":          { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+        "verbo_semantico": { "type": "string", "minLength": 5 },
+        "descripcion":     { "type": "string", "minLength": 10 }
+      }
+    },
+
+    "manifest_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "obligatorio_si", "descripcion"],
+      "properties": {
+        "name":          { "type": "string", "pattern": "^[a-z][a-z_]*$" },
+        "type":          { "type": "string", "minLength": 3 },
+        "obligatorio_si":{ "type": "string", "minLength": 5 },
+        "descripcion":   { "type": "string", "minLength": 10 },
+        "valores_permitidos": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "upstream_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["upstream_status_or_kind", "canonical_code", "canonical_status", "descripcion"],
+      "properties": {
+        "upstream_status_or_kind": { "type": "string", "minLength": 2 },
+        "canonical_code":          { "type": "string", "pattern": "^[A-Z][A-Z_]*[A-Z]$" },
+        "canonical_status":        { "type": "integer", "minimum": 100, "maximum": 599 },
+        "descripcion":             { "type": "string", "minLength": 10 }
+      }
+    }
+  }
+}

@@ -137,9 +137,48 @@ npm run test:cocina-poc          # 23 tests
 3. Usar los snippets canónicos de `_outputs/events.json#recommended_helpers` y `_outputs/errors.json#recommended_helpers` (no inventar tu propio `_publicarEvento` / `_buildErrorResponse`).
 4. `npm run validate:ci` debe pasar.
 
+## `mqttRequest` para comunicación cross-módulo
+
+El loader inyecta `context.mqttRequest(domain, action, payload, options?)` en `onLoad` de cada módulo (events v1.5.0 `context_injection`). Es el patrón canónico para que un módulo llame a otro:
+
+```js
+async onLoad(context) {
+  this.mqttRequest = context.mqttRequest;
+}
+
+async algo() {
+  const resp = await this.mqttRequest('scheduler', 'addJob', { ... });
+  if (resp.error) { /* manejar UPSTREAM_* canonico */ }
+  return resp.data;
+}
+```
+
+El módulo **destinatario** declara handlers en `module.json.ui_handlers`:
+
+```json
+"ui_handlers": [
+  { "domain": "scheduler", "action": "addJob", "handler": "handleAddJob" }
+]
+```
+
+El loader auto-wirea el handler. La implementación interna actual delega a `uiHandler.handle()` (single-process). Cuando se active multi-core, la misma firma se traduce a publish/subscribe MQTT real **sin tocar callers**.
+
+Lo que **NO** se debe hacer (drift estructural, detectado por validator):
+
+```js
+// PROHIBIDO: acceso directo via moduleLoader
+const sched = this.moduleLoader.getModule('scheduler');
+await sched.instance.addJob(payload);
+```
+
+Tests que validan el flujo:
+- `npm run test:mqtt-request` (5 casos unitarios del loader)
+- `npm run test:integration:carta-scheduler` (carta-scheduler-poc + scheduler/tarifas mock end-to-end)
+
 ## Glosario rápido
 
 - **drift**: incumplimiento de un contrato detectado por un validator
 - **baseline**: snapshot del drift actual, capturado para que CI no falle por deuda histórica
 - **POC**: módulo reescrito como ejemplo vivo del patrón canónico
 - **finding**: una fricción concreta detectada al aplicar un contrato a código real, llamada F1, F2, etc. en los `POC_FINDINGS.md`
+- **mqttRequest**: función inyectada al moduleContext que permite llamadas cross-módulo via `uiHandler.handle()` sin acceso directo a `moduleLoader.getModule(...)`

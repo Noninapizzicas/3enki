@@ -19,6 +19,8 @@
     "test:ai-gateway-poc": "node tests/unit/ai-gateway-poc.test.js",
     "test:carta-scheduler-poc": "node tests/unit/carta-scheduler-poc.test.js",
     "test:cocina-poc": "node tests/unit/cocina-poc.test.js",
+    "test:mqtt-request": "node tests/unit/mqtt-request.test.js",
+    "test:integration:carta-scheduler": "node tests/integration/carta-scheduler-mqtt-request.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

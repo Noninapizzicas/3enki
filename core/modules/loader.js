@@ -327,7 +327,19 @@ class ModuleLoader {
       const moduleContext = {
         ...this.core,
         moduleConfig: manifest.config || {},  // Config específica del module.json
-        moduleLoader: this  // Referencia al loader para acceso a tools
+        moduleLoader: this,                   // Referencia al loader (legacy; preferir mqttRequest)
+        // mqttRequest canónico (events v1.5.0 context_injection): el módulo llama a otros
+        // peers via context.mqttRequest(domain, action, payload). Internamente delega al
+        // uiHandler.handle() que invoca el handler registrado por el módulo destinatario
+        // (auto-wired desde manifest.ui_handlers). Patrón cross-process aún single-process —
+        // cuando se active multi-core, esta función se reemplaza por publish/subscribe MQTT
+        // real sobre topics 'core/api/request/{domain}/{action}' SIN cambiar callers.
+        mqttRequest: async (domain, action, payload = {}, options = {}) => {
+          if (!this.core?.uiHandler) {
+            throw new Error('mqttRequest unavailable: core.uiHandler not initialized');
+          }
+          return this.core.uiHandler.handle(domain, action, payload);
+        }
       };
 
       try {

@@ -1,0 +1,311 @@
+{
+  "_meta": {
+    "modulo": "scratch-designer",
+    "ubicacion": "modules/scratch-designer",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "scratch-designer",
+    "version": "2.0.0",
+    "description_oficial": "Diseñador visual tipo Scratch - Bloques arrastrables que generan JSON",
+    "author": "Event Core Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": true,
+    "estado_modulo": "dormido_por_diseno",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "scratch.design.created",  "description": "Nuevo diseño creado" },
+      { "event": "scratch.design.updated",  "description": "Diseño actualizado" },
+      { "event": "scratch.design.deleted",  "description": "Diseño eliminado" },
+      { "event": "scratch.design.exported", "description": "Diseño exportado a JSON" }
+    ],
+    "subscribes": [],
+    "provides_eventos": [
+      "scratch.design.created",
+      "scratch.design.updated",
+      "scratch.design.deleted",
+      "scratch.design.exported"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/blocks/all",
+      "handler": "handleGetAllBlocks",
+      "description": "Obtener todos los bloques disponibles organizados por categoria",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/modules",
+      "handler": "handleGetModuleBlocks",
+      "description": "Bloques de modulos del sistema",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/events",
+      "handler": "handleGetEventBlocks",
+      "description": "Bloques de eventos (publish/subscribe)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/actions",
+      "handler": "handleGetActionBlocks",
+      "description": "Bloques de acciones (APIs, navegacion, UI)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/components",
+      "handler": "handleGetComponentBlocks",
+      "description": "Bloques de componentes UI",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/containers",
+      "handler": "handleGetContainerBlocks",
+      "description": "Bloques contenedores (layouts, panels)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/data",
+      "handler": "handleGetDataBlocks",
+      "description": "Bloques de datos (endpoints, variables)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/conditions",
+      "handler": "handleGetConditionBlocks",
+      "description": "Bloques de logica (if, loops, comparaciones)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/designs",
+      "handler": "handleListDesigns",
+      "description": "Listar todos los diseños guardados",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/designs",
+      "handler": "handleCreateDesign",
+      "description": "Crear nuevo diseño (publica scratch.design.created)",
+      "request_schema_ref": "./schemas/design.json#/definitions/create_request",
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/designs/:id",
+      "handler": "handleGetDesign",
+      "description": "Obtener diseño por ID",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "PUT",
+      "path": "/designs/:id",
+      "handler": "handleUpdateDesign",
+      "description": "Actualizar diseño (publica scratch.design.updated)",
+      "request_schema_ref": "./schemas/design.json#/definitions/update_request",
+      "response_schema_ref": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/designs/:id",
+      "handler": "handleDeleteDesign",
+      "description": "Eliminar diseño (publica scratch.design.deleted)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/designs/:id/duplicate",
+      "handler": "handleDuplicateDesign",
+      "description": "Duplicar diseño existente",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/validate/connection",
+      "handler": "handleValidateConnection",
+      "description": "Validar si dos bloques pueden conectarse",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/validate/design",
+      "handler": "handleValidateDesign",
+      "description": "Validar diseño completo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/export/json",
+      "handler": "handleExportJSON",
+      "description": "Exportar diseño como JSON para ui-renderer (publica scratch.design.exported)",
+      "request_schema_ref": "./schemas/design.json#/definitions/export_request",
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/export/module-ui",
+      "handler": "handleExportModuleUI",
+      "description": "Exportar como seccion UI de module.json",
+      "request_schema_ref": "./schemas/design.json#/definitions/export_request",
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del modulo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Metricas del modulo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "autosave",             "tipo": "boolean", "valor_default": true },
+      { "key": "autosave_interval_ms", "tipo": "number",  "valor_default": 30000 },
+      { "key": "max_designs",          "tipo": "number",  "valor_default": 100 },
+      { "key": "inventory_path",       "tipo": "string",  "valor_default": "../../INVENTARIO-SISTEMA.json" }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "design.created.total",
+        "design.exported.total",
+        "api.calls.total",
+        "errors.total"
+      ],
+      "gauges": [
+        "designs.active.count",
+        "blocks.categories.count"
+      ],
+      "timings": [
+        "design.created.duration",
+        "design.updated.duration",
+        "design.exported.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Scratch Designer",
+    "icon": "🧩",
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 259,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/scratch-designer/schemas/design.json",
+      "modules/scratch-designer/schemas/events.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 6459,
+    "module_json_lineas": 240,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "main ausente en module.json (campo no declarado)",
+      "apis[] contiene 5 entradas group-only sin method/path — omitidas de apis_http",
+      "provides.events duplica events.publishes — posible redundancia",
+      "ui.version='2.0' es campo no estándar dentro de ui{} (no afecta schema top-level)",
+      "observability.logging.correlation_id=true es campo extra no declarado en schema observability"
+    ]
+  }
+}

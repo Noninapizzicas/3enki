@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "description": "Gestión de pedidos - Añadir productos a cuentas",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
     "events": [
       "comandero.item_agregado",
@@ -12,7 +12,6 @@
       "comandero.enviar_cocina"
     ]
   },
-
   "events": {
     "publishes": [
       {
@@ -67,7 +66,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
@@ -105,17 +103,19 @@
       "handler": "handleHealthCheck"
     }
   ],
-
   "ui": {
     "enabled": true,
     "title": "Comandero",
     "icon": "📝",
-    "components": ["comandero-header", "producto-button", "pedido-item"],
+    "components": [
+      "comandero-header",
+      "producto-button",
+      "pedido-item"
+    ],
     "views": {
       "main": {
         "layout": "three-panel",
         "title": "Comandero",
-
         "header": {
           "show": true,
           "component": "comandero-header",
@@ -124,7 +124,6 @@
             "endpoint": "/modules/cuentas/cuentas/{cuenta_id}"
           }
         },
-
         "topbar": {
           "type": "categories",
           "position": "top",
@@ -136,7 +135,6 @@
             "item_component": "categoria-button-compact"
           }
         },
-
         "sidebar": {
           "type": "action-bar",
           "position": "right",
@@ -210,7 +208,6 @@
             }
           ]
         },
-
         "content": {
           "type": "grid",
           "component": "grid-productos",
@@ -236,7 +233,6 @@
             }
           }
         },
-
         "panel_bottom": {
           "id": "panel-cobros",
           "type": "edicion-cobro",
@@ -248,7 +244,11 @@
               "component": "pedido-list-editable",
               "config": {
                 "endpoint": "/modules/comandero/pedido/{cuenta_id}",
-                "mqtt_topics": ["comandero.item_agregado", "comandero.item_eliminado", "pedido.item_actualizado"],
+                "mqtt_topics": [
+                  "comandero.item_agregado",
+                  "comandero.item_eliminado",
+                  "pedido.item_actualizado"
+                ],
                 "item_component": "pedido-item-editable",
                 "actions_per_item": [
                   {
@@ -256,14 +256,18 @@
                     "action": "increment-quantity",
                     "endpoint": "/modules/comandero/pedido/{cuenta_id}/items/{item_id}/quantity",
                     "method": "PUT",
-                    "body": { "delta": 1 }
+                    "body": {
+                      "delta": 1
+                    }
                   },
                   {
                     "icon": "➖",
                     "action": "decrement-quantity",
                     "endpoint": "/modules/comandero/pedido/{cuenta_id}/items/{item_id}/quantity",
                     "method": "PUT",
-                    "body": { "delta": -1 }
+                    "body": {
+                      "delta": -1
+                    }
                   },
                   {
                     "icon": "🗑️",
@@ -375,7 +379,6 @@
       }
     }
   },
-
   "observability": {
     "logging": {
       "level": "info",

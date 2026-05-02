@@ -1,0 +1,235 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/cobros",
+    "ubicacion": "modules/pizzepos/cobros",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "cobros",
+    "version": "2.1.0",
+    "description_oficial": "Gestión unificada de cobros - 7 métodos de pago: efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr. Abre cajón via periferico.abrir-cajon.",
+    "author": "Pizzepos Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_pizzepos",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "cobro.iniciado",         "description": "Cobro iniciado para una cuenta" },
+      { "event": "cobro.procesado",        "description": "Cobro procesado exitosamente" },
+      { "event": "cobro.reembolsado",      "description": "Cobro reembolsado al cliente" },
+      { "event": "periferico.abrir-cajon", "description": "Abre cajón de dinero al confirmar pago en efectivo" }
+    ],
+    "subscribes": [
+      { "event": "cuenta.creada",      "handler": "onCuentaCreada",      "extras": { "description": "Cachear ref_display para tickets de cobro" } },
+      { "event": "cuenta.actualizada", "handler": "onCuentaActualizada", "extras": { "description": "Actualizar ref_display en cache" } },
+      { "event": "pedido.completado",  "handler": "onPedidoCompletado",  "extras": { "description": "Pedido completado - permitir cobro" } },
+      { "event": "caja.cerrada",       "handler": "onCajaCerrada",       "extras": { "description": "Cierre de caja - limpiar cobros del día" } },
+      { "event": "dia.iniciado",       "handler": "onDiaIniciado",       "extras": { "description": "Nuevo día - limpiar cobros stale" } }
+    ],
+    "provides_eventos": [
+      "cobro.iniciado",
+      "cobro.procesado",
+      "cobro.reembolsado",
+      "periferico.abrir-cajon"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "POST",
+      "path": "/cobros",
+      "handler": "handleIniciarCobro",
+      "description": "Iniciar cobro para una cuenta",
+      "request_schema_ref": "./schemas/cobro.json#/definitions/iniciar_cobro_request",
+      "response_schema_ref": "./schemas/cobro.json#/definitions/cobro"
+    },
+    {
+      "method": "GET",
+      "path": "/cobros",
+      "handler": "handleListCobros",
+      "description": "Listar cobros (filtros: cuenta_id, metodo, estado)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/cobros/:id",
+      "handler": "handleGetCobro",
+      "description": "Obtener cobro por ID",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/cobros/:id/confirmar",
+      "handler": "handleConfirmarCobro",
+      "description": "Confirmar cobro (marca como completado)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/cobros/:id/reembolsar",
+      "handler": "handleReembolsarCobro",
+      "description": "Reembolsar cobro",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metodos-pago",
+      "handler": "handleListMetodosPago",
+      "description": "Listar métodos de pago disponibles",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/cajones",
+      "handler": "handleListarCajones",
+      "description": "Lista dispositivos con cajón de dinero disponibles para selección",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "cobro.iniciado.total",
+        "cobro.procesado.total",
+        "cobro.reembolsado.total"
+      ],
+      "gauges": [
+        "cobro.pendiente.count",
+        "cobro.monto_total.sum"
+      ],
+      "timings": [
+        "cobro.procesamiento.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Sistema de Cobros",
+    "icon": "💰",
+    "views_keys": ["main", "create", "detail"],
+    "section_widget_types": ["dashboard", "modal", "fullscreen", "table"],
+    "permissions_declaradas": ["admin", "camarero", "gerente"],
+    "tamano_bytes": 1897,
+    "endpoints_referenciados": [
+      "/modules/cobros/cobros",
+      "/modules/cobros/cobros/{id}"
+    ],
+    "mqtt_topics_declarados": [
+      "cobro.iniciado",
+      "cobro.procesado",
+      "cobro.reembolsado"
+    ]
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": ["cobro.json", "events.json"],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": ["metodos_pago"],
+    "snapshots": {
+      "metodos_pago": {
+        "efectivo":      { "enabled": true,  "nombre": "Efectivo",      "icono": "💵", "requiere_confirmacion": true,  "permite_cambio": true },
+        "tarjeta":       { "enabled": true,  "nombre": "Tarjeta",       "icono": "💳", "requiere_confirmacion": false, "soporta_contactless": true, "proveedores": ["redsys", "stripe"] },
+        "bizum":         { "enabled": true,  "nombre": "Bizum",         "icono": "📱", "requiere_confirmacion": false, "telefono_comercio": "+34600000000" },
+        "transferencia": { "enabled": false, "nombre": "Transferencia", "icono": "🏦", "requiere_confirmacion": true },
+        "mixto":         { "enabled": true,  "nombre": "Pago Mixto",    "icono": "🔀", "requiere_confirmacion": true,  "requiere_desglose": true, "descripcion": "Split payment entre múltiples métodos" },
+        "link_pago":     { "enabled": true,  "nombre": "Link de Pago",  "icono": "🔗", "requiere_confirmacion": false, "expiracion_horas": 24, "descripcion": "Link de pago para pedidos online/delivery" },
+        "qr":            { "enabled": true,  "nombre": "Código QR",     "icono": "📲", "requiere_confirmacion": false, "expiracion_minutos": 30, "descripcion": "QR de pago rápido para Bizum/wallets" }
+      }
+    }
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 8409,
+    "module_json_lineas": 329,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "provides top-level declara events y queries (campo 'provides' es canónico pero contiene estructura propia no normalizada en eventos.publica/provides_eventos)",
+      "observability.logging.correlation_id es campo extra no capturado en schema de observability",
+      "apis[0] usa request_schema/response_schema con $ref embebido — capturado como string del $ref en request_schema_ref/response_schema_ref",
+      "ui.description y ui.access_level y ui.components y ui.features son sub-campos de ui no normalizados en ui_declarativa",
+      "context.json ausente en el directorio del módulo"
+    ]
+  }
+}

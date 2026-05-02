@@ -1,0 +1,224 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/carta-digital",
+    "ubicacion": "modules/pizzepos/carta-digital",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__carta-digital.json"
+  },
+
+  "identidad": {
+    "name": "carta-digital",
+    "version": "2.0.0",
+    "description_oficial": "Backoffice de la carta pública. Configura branding, compone carta final (datos + marketing + ofertas), genera PWA. Los agentes hacen el trabajo.",
+    "author": "Pizzepos Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/pizzepos/carta-digital/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_6_ui",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "agent.execute.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-digital/index.js:120",
+        "metodo_contenedor": "onCartaActualizada",
+        "es_handler_de": "carta.actualizada",
+        "bloque_logico": "tras invalidar cartaCompuestaCache; dispatch a cartadigital-composer para recomponer carta pública",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["agentName", "context"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    // Dispatch composer para recomponer\n    await this.eventBus.publish('agent.execute.request', { agentName: 'cartadigital-composer', context: { project_id: projectId, ... } });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "agent.execute.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-digital/index.js:147",
+        "metodo_contenedor": "onTarifasActualizada",
+        "es_handler_de": "tarifas.config.actualizada",
+        "bloque_logico": "tras invalidar cache por cambio de tarifas; dispatch composer",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["agentName", "context"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('agent.execute.request', { agentName: 'cartadigital-composer', context: { ... } });",
+        "declarado_en_manifest": false
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.activated",          "tipo_nombre": "literal", "handler": "onProjectActivated",     "handler_ubicacion": "modules/pizzepos/carta-digital/index.js:87",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-digital/index.js:98",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.deactivated",        "tipo_nombre": "literal", "handler": "onProjectDeactivated",   "handler_ubicacion": "modules/pizzepos/carta-digital/index.js:101", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-digital/index.js:101", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "carta.actualizada",          "tipo_nombre": "literal", "handler": "onCartaActualizada",     "handler_ubicacion": "modules/pizzepos/carta-digital/index.js:109", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-digital/index.js:117", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "tarifas.config.actualizada", "tipo_nombre": "literal", "handler": "onTarifasActualizada",   "handler_ubicacion": "modules/pizzepos/carta-digital/index.js:136", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-digital/index.js:144", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": [],
+      "publica_literales_en_codigo": ["agent.execute.request"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": ["agent.execute.request"],
+      "subscribes_declarados_en_manifest": ["project.activated", "project.deactivated", "carta.actualizada", "tarifas.config.actualizada"],
+      "subscribes_realmente_registrados": ["project.activated", "project.deactivated", "carta.actualizada", "tarifas.config.actualizada"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [
+    { "name": "cartadigital.get_config",         "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolGetConfig",         "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "cartadigital.update_config",      "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolUpdateConfig",      "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "cartadigital.get_carta_publica",  "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolGetCartaPublica",   "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "cartadigital.set_carta_compuesta","description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolSetCartaCompuesta","handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "configPerProject",        "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-digital/index.js:36", "se_invalida_con": "set en onProjectActivated; toolUpdateConfig actualiza",                                          "leak_potencial": false },
+      { "campo": "projectPaths",            "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-digital/index.js:37", "se_invalida_con": "onProjectActivated set; cache permanente",                                                       "leak_potencial": false },
+      { "campo": "cartaCompuestaCache",     "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-digital/index.js:40", "se_invalida_con": "onCartaActualizada delete (línea 115) | onTarifasActualizada delete | toolSetCartaCompuesta set",  "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/carta-digital/config.json (probable)",        "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" },
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/carta-digital/compuesta.json (probable)",     "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "Persiste config y carta compuesta como JSON. Sin locks. Cache invalidation por eventos."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/projects/{slug}/storage/pizzepos/carta-digital/"],
+    "valores_hardcoded_observables": [
+      { "valor": "cartadigital-composer (nombre del agente)", "ubicacion": "modules/pizzepos/carta-digital/index.js:120", "naturaleza": "otro" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/pizzepos/carta-digital/index.js:69",
+      "acciones": [
+        "guarda this.logger / this.eventBus",
+        "logger.info('module.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/pizzepos/carta-digital/index.js:76",
+      "acciones": ["logger.info('module.unloaded')"],
+      "estado_no_limpiado": ["configPerProject", "projectPaths", "cartaCompuestaCache"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "pizzepos/carta-manager",  "via_evento": "carta.actualizada (subscribe — invalida cache + dispatch composer)",          "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-digital/index.js:109", "es_cross_vertical": false },
+    { "modulo_dependido": "pizzepos/tarifas",        "via_evento": "tarifas.config.actualizada (subscribe — invalida cache + dispatch composer)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-digital/index.js:136", "es_cross_vertical": false },
+    { "modulo_dependido": "ai-agent-framework",      "via_evento": "agent.execute.request (publica para 4 agentes inline)",                       "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-digital/index.js:120", "es_cross_vertical": false },
+    { "modulo_dependido": "project-manager",         "via_evento": "project.activated (subscribe)",                                                 "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-digital/index.js:87",  "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "fs (config carga)",          "que_pasa_si_cae": "logger.warn 'carta-digital.config.load_error'; configPerProject vacío para el proyecto.", "evidencia": "modules/pizzepos/carta-digital/index.js:178" },
+    { "dependencia": "fs (config guardado)",       "que_pasa_si_cae": "logger.error 'carta-digital.config.save_error'; cambios no se persisten.",                "evidencia": "modules/pizzepos/carta-digital/index.js:193" },
+    { "dependencia": "ai-agent-framework",         "que_pasa_si_cae": "agent.execute.request fire-and-forget; si los agentes fallan, la carta pública queda desactualizada hasta el próximo cambio.", "evidencia": "modules/pizzepos/carta-digital/index.js:120" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('carta-digital.<accion>' | 'module.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "version", "project_id", "error"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('module.loaded', { module: this.name, version: this.version });",            "ubicacion": "modules/pizzepos/carta-digital/index.js:73"  },
+        { "snippet": "this.logger.info('carta-digital.carta.invalidada', { project_id: projectId });",                "ubicacion": "modules/pizzepos/carta-digital/index.js:117" },
+        { "snippet": "this.logger.info('carta-digital.tarifas_changed.invalidate', { project_id: projectId });",      "ubicacion": "modules/pizzepos/carta-digital/index.js:144" },
+        { "snippet": "this.logger.info('carta-digital.carta_compuesta.set', { project_id });",                         "ubicacion": "modules/pizzepos/carta-digital/index.js:257" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — carta-digital no propaga correlation_id."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/pizzepos/carta-digital/index.js:114", "comentario_literal": "Invalidar carta compuesta en caché", "contexto": "explicar por qué el handler de carta.actualizada invalida cache antes de dispatch" },
+      { "ubicacion": "modules/pizzepos/carta-digital/index.js:119", "comentario_literal": "Dispatch composer para recomponer", "contexto": "intención del dispatch al agente cartadigital-composer" }
+    ],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 288,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "08f170f",
+      "fecha": "2026-04-22 09:31:19 +0000",
+      "subject": "refactor(prompt-engine): separar context.json de prompt.json por módulo"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "ECOSISTEMA CARTAS — BACKOFFICE público. carta-digital v2 NO emite eventos propios de dominio (publica solo agent.execute.request). Reacciona a carta.actualizada y tarifas.config.actualizada → invalida cache + dispatch agente cartadigital-composer.",
+      "publica_emitidos_no_declarados: agent.execute.request (es cross-módulo a ai-agent-framework, no evento de dominio carta-digital — discutible si debería declararse en manifest)",
+      "Manifest declara 4 AGENTES INLINE (cartadigital-composer + pwa-builder + ofertas + reviewer) — el patrón es 'el módulo es shell, los agentes hacen el trabajo' tal como dice la descripción oficial.",
+      "ÚNICO consumidor de tarifas.config.actualizada visto hasta ahora",
+      "Cache invalidation event-driven limpia: cartaCompuestaCache se invalida automáticamente cuando cambia carta o tarifas",
+      "0 eventos de dominio propios — toda la lógica de negocio está delegada a 4 agentes IA"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "ui_handlers (no expone MQTT UI)",
+      "apis_http (no expone HTTP)",
+      "estado.persistencia.sqlite_tablas (usa JSON files)",
+      "configuracion.env_vars / module_json_config_keys",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / workarounds_detectados",
+      "outliers_capturados",
+      "version_archivada"
+    ]
+  }
+}

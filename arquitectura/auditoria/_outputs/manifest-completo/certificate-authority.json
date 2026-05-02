@@ -1,0 +1,168 @@
+{
+  "_meta": {
+    "modulo": "certificate-authority",
+    "ubicacion": "modules/certificate-authority",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "certificate-authority",
+    "version": "1.0.0",
+    "description_oficial": "Internal Certificate Authority with mTLS authentication for client portal and device management",
+    "author": "Event Core Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": true,
+    "estado_modulo": "dormido_por_diseno",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "certificate.issued",  "description": "New certificate issued for client or device" },
+      { "event": "certificate.revoked", "description": "Certificate revoked (compromised, lost device, etc.)" },
+      { "event": "certificate.renewed", "description": "Certificate renewed (old revoked, new issued)" },
+      { "event": "certificate.expired", "description": "Certificate reached expiration date" }
+    ],
+    "subscribes": [],
+    "provides_eventos": []
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "certificate-authority", "action": "status",        "handler": "handleStatus" },
+      { "domain": "certificate-authority", "action": "ca-cert",       "handler": "handleGetCACert" },
+      { "domain": "certificate-authority", "action": "issue",         "handler": "handleIssueCertificate" },
+      { "domain": "certificate-authority", "action": "revoke",        "handler": "handleRevokeCertificate" },
+      { "domain": "certificate-authority", "action": "renew",         "handler": "handleRenewCertificate" },
+      { "domain": "certificate-authority", "action": "list",          "handler": "handleListCertificates" },
+      { "domain": "certificate-authority", "action": "verify",        "handler": "handleVerifyCertificate" },
+      { "domain": "certificate-authority", "action": "crl",           "handler": "handleGetCRL" },
+      { "domain": "certificate-authority", "action": "download-p12",  "handler": "handleDownloadP12" },
+      { "domain": "certificate-authority", "action": "stats",         "handler": "handleStatus" },
+      { "domain": "certificate-authority", "action": "nginx-config",  "handler": "handleGetNginxConfig" },
+      { "domain": "certificate-authority", "action": "health",        "handler": "handleHealthCheck" }
+    ]
+  },
+
+  "apis_http": [
+    { "method": "GET",  "path": "/status",        "handler": "handleStatus",             "description": "Get CA status, certificate stats, and mTLS middleware stats", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",  "path": "/ca-cert",        "handler": "handleGetCACert",          "description": "Download CA root certificate (public - for client/device installation)", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST", "path": "/issue",          "handler": "handleIssueCertificate",   "description": "Issue a new client or device certificate", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST", "path": "/revoke",         "handler": "handleRevokeCertificate",  "description": "Revoke a certificate by serial number", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST", "path": "/renew",          "handler": "handleRenewCertificate",   "description": "Renew a certificate (revokes old, issues new)", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",  "path": "/list",           "handler": "handleListCertificates",   "description": "List all issued certificates with optional filters", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "POST", "path": "/verify",         "handler": "handleVerifyCertificate",  "description": "Verify a certificate against the CA", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",  "path": "/crl",            "handler": "handleGetCRL",             "description": "Get Certificate Revocation List", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",  "path": "/download-p12",   "handler": "handleDownloadP12",        "description": "Download .p12 bundle for a certificate", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",  "path": "/nginx-config",   "handler": "handleGetNginxConfig",     "description": "Get nginx mTLS configuration template", "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",  "path": "/health",         "handler": "handleHealthCheck",        "description": "Health check", "request_schema_ref": null, "response_schema_ref": null }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "mtls_enabled",          "tipo": "boolean", "valor_default": false },
+      { "key": "mtls_mode",             "tipo": "string",  "valor_default": "proxy" },
+      { "key": "cert_header",           "tipo": "string",  "valor_default": "x-client-cert" },
+      { "key": "allow_unauthenticated", "tipo": "boolean", "valor_default": true },
+      { "key": "ca_cn",                 "tipo": "string",  "valor_default": "Event Core Internal CA" },
+      { "key": "ca_org",                "tipo": "string",  "valor_default": "Event Core" },
+      { "key": "ca_validity_days",      "tipo": "number",  "valor_default": 3650 },
+      { "key": "cert_validity_days",    "tipo": "number",  "valor_default": 365 },
+      { "key": "key_size",              "tipo": "number",  "valor_default": 2048 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "ca.certificates_issued",
+        "ca.certificates_revoked",
+        "ca.certificates_renewed",
+        "ca.verification_requests",
+        "mtls.authenticated",
+        "mtls.rejected",
+        "mtls.bypassed",
+        "mtls.errors"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Certificate Authority",
+    "icon": "🔐",
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 126,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": true,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": ["routeCode"],
+    "snapshots": {
+      "routeCode": "3333"
+    }
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 4763,
+    "module_json_lineas": 156,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "ui_declarativa.tamano_bytes estimado (campo 'ui' es objeto inline sin archivo separado)",
+      "provides.hooks=['beforeRequest'] es campo no canónico — módulo actúa como middleware HTTP"
+    ]
+  }
+}

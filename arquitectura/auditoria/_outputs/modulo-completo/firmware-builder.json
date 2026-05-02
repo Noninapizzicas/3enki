@@ -1,0 +1,136 @@
+{
+  "_meta": { "modulo": "firmware-builder", "ubicacion": "modules/firmware-builder", "auditado_en": "2026-04-30", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/firmware-builder.json" },
+  "identidad": { "name": "firmware-builder", "version": "1.1.0", "description_oficial": "Compilación de firmware ESP32 con arquitectura BASE + LÓGICA. Detecta drivers en firmware/drivers/, compila via PlatformIO", "author": "Enki", "main_declarado": null, "main_real": "modules/firmware-builder/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": "tier_3_core", "tier_declarado": "tier_3_core", "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "literal", "valor": "firmware.build_started", "variables_referenciadas": [] }, "ubicacion": "modules/firmware-builder/index.js:263", "metodo_contenedor": "_runBuild", "es_handler_de": null, "bloque_logico": "antes de spawn platformio", "payload": { "tipo": "object_literal", "campos_visibles": ["driver", "board", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": false, "es_return": false, "snippet": "      this.eventBus.publish('firmware.build_started', { driver: driverName, board, timestamp: buildInfo.started_at }).catch(...);", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "firmware.build_completed", "variables_referenciadas": [] }, "ubicacion": "modules/firmware-builder/index.js:321", "metodo_contenedor": "_runBuild (proc close code===0)", "es_handler_de": null, "bloque_logico": "spawn cerró con exit 0", "payload": { "tipo": "object_literal", "campos_visibles": ["driver", "board", "binary_path", "binary_size", "duration_ms", "utility", "description", "capabilities"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": false, "es_return": false, "snippet": "          this.eventBus.publish('firmware.build_completed', { driver, board, binary_path, binary_size, duration_ms, utility, description, capabilities }).catch(...);", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "firmware.build_failed", "variables_referenciadas": [] }, "ubicacion": "modules/firmware-builder/index.js:349", "metodo_contenedor": "_runBuild (proc close code!=0)", "es_handler_de": null, "bloque_logico": "spawn cerró con error o timeout", "payload": { "tipo": "object_literal", "campos_visibles": ["driver", "board", "error", "exit_code", "reason", "duration_ms"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": false, "es_return": false, "snippet": "          this.eventBus.publish('firmware.build_failed', { driver, board, error, exit_code, reason, duration_ms }).catch(...);", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "firmware.build_failed", "variables_referenciadas": [] }, "ubicacion": "modules/firmware-builder/index.js:379", "metodo_contenedor": "_runBuild (proc on error)", "es_handler_de": null, "bloque_logico": "spawn no se pudo ejecutar (binary inexistente, etc.)", "payload": { "tipo": "object_literal", "campos_visibles": ["driver", "board", "error", "exit_code", "duration_ms"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": false, "es_return": false, "snippet": "        this.eventBus.publish('firmware.build_failed', { driver, board, error: `No se pudo ejecutar '${platformio_path}': ${err.message}`, exit_code: -1, duration_ms }).catch(...);", "declarado_en_manifest": true }
+    ],
+    "subscribes": [],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["firmware.build_started", "firmware.build_completed", "firmware.build_failed"],
+      "publica_literales_en_codigo": ["firmware.build_started", "firmware.build_completed", "firmware.build_failed"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": [],
+      "subscribes_realmente_registrados": [],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [
+    { "name": "builder.list_drivers", "description_para_llm": "Lista los drivers ESP32 disponibles para compilar, con metadatos (utility, board, capabilities, archivos fuente)", "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 38, "handler_metodo": "handleListDrivers", "handler_ubicacion": "modules/firmware-builder/index.js:101", "retorno": { "tipo": "object", "shape_inferido": { "status": "number", "data": "{ drivers: [{ id, name, description, utility, board, capabilities, path, has_binary, binary_size, last_build, is_building, source_files }], total }" }, "es_markdown_formateado": false, "ejemplos_observados": ["return { status: 200, data: { drivers: list, total: list.length } };"], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "builder.build", "description_para_llm": "Compila un driver ESP32 via PlatformIO. Asíncrono: retorna inmediatamente, usa builder.build_status para seguir el progreso.", "parameters_required": ["driver"], "parameters_property_names": ["driver", "board", "clean"], "parameters_size_chars": 410, "handler_metodo": "handleBuild", "handler_ubicacion": "modules/firmware-builder/index.js:132", "retorno": { "tipo": "object", "shape_inferido": { "status": "number", "data": "{ driver, board, status: 'building', message }" }, "es_markdown_formateado": false, "ejemplos_observados": ["return { status: 202, data: { driver, board, status: 'building', message: 'Compilación iniciada...' } };"], "publica_eventos_de_dominio": ["firmware.build_started", "firmware.build_completed", "firmware.build_failed"] }, "errores_conocidos": [{ "condicion": "driver missing", "respuesta_shape": { "status": 400, "error": "driver requerido" }, "ubicacion": "modules/firmware-builder/index.js:134" }, { "condicion": "driver no encontrado", "respuesta_shape": { "status": 404, "error": "Driver no encontrado" }, "ubicacion": "modules/firmware-builder/index.js:137" }, { "condicion": "ya compilando", "respuesta_shape": { "status": 409, "error": "Driver ya está compilando" }, "ubicacion": "modules/firmware-builder/index.js:140" }, { "condicion": "max concurrent", "respuesta_shape": { "status": 429, "error": "Máximo de builds concurrentes alcanzado" }, "ubicacion": "modules/firmware-builder/index.js:144" }, { "condicion": "board no soportado", "respuesta_shape": { "status": 400, "error": "Board no soportado" }, "ubicacion": "modules/firmware-builder/index.js:150" }] },
+    { "name": "builder.build_status", "description_para_llm": "Estado del build actual o último build de un driver. Incluye log de compilación.", "parameters_required": [], "parameters_property_names": ["driver"], "parameters_size_chars": 200, "handler_metodo": "handleBuildStatus", "handler_ubicacion": "modules/firmware-builder/index.js:187", "retorno": { "tipo": "object", "shape_inferido": { "status": "number", "data": "{ driver, status, started_at, elapsed_ms, log_lines, log_tail } | { active_builds, count }" }, "es_markdown_formateado": false, "ejemplos_observados": ["return { status: 200, data: { driver, status: 'building', started_at, elapsed_ms, log_lines, log_tail } };"], "publica_eventos_de_dominio": [] }, "errores_conocidos": [{ "condicion": "driver no encontrado", "respuesta_shape": { "status": 404, "error": "Driver no encontrado" }, "ubicacion": "modules/firmware-builder/index.js:207" }] },
+    { "name": "builder.list_boards", "description_para_llm": "Lista los boards ESP32 soportados (esp32dev, esp32-s3, esp32-c3, etc.)", "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 38, "handler_metodo": "handleListBoards", "handler_ubicacion": "modules/firmware-builder/index.js:239", "retorno": { "tipo": "object", "shape_inferido": { "status": "number", "data": "{ boards: [{ id, name, platform, mcu, flash, psram }], total }" }, "es_markdown_formateado": false, "ejemplos_observados": ["return { status: 200, data: { boards, total: boards.length } };"], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [
+    { "domain": "builder", "action": "list-drivers", "handler_metodo": "handleListDrivers", "handler_ubicacion": "modules/firmware-builder/index.js:101", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["drivers", "total"], "status_error": null }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "builder", "action": "build", "handler_metodo": "handleBuild", "handler_ubicacion": "modules/firmware-builder/index.js:132", "input_validado": ["driver"], "codigos_error": ["400", "404", "409", "429"], "output_shape": { "status_success": 202, "data_keys": ["driver", "board", "status", "message"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "builder", "action": "build-status", "handler_metodo": "handleBuildStatus", "handler_ubicacion": "modules/firmware-builder/index.js:187", "input_validado": [], "codigos_error": ["404"], "output_shape": { "status_success": 200, "data_keys": ["driver", "status", "started_at", "elapsed_ms", "log_lines", "log_tail", "active_builds", "count"], "status_error": 404 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "builder", "action": "list-boards", "handler_metodo": "handleListBoards", "handler_ubicacion": "modules/firmware-builder/index.js:239", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["boards", "total"], "status_error": null }, "campo_origen_manifest": "ui_handlers" }
+  ],
+  "apis_http": [],
+  "estado": {
+    "memoria": [
+      { "campo": "this.drivers", "tipo": "Map", "ubicacion_init": "modules/firmware-builder/index.js:47", "se_invalida_con": "this.drivers.clear() en _scanDrivers (cada handleListDrivers/onLoad), preservando last_build/last_build_status via prevState", "leak_potencial": false },
+      { "campo": "this.activeBuilds", "tipo": "Map", "ubicacion_init": "modules/firmware-builder/index.js:50", "se_invalida_con": "delete por driverName en proc close/error + clear() en onUnload con SIGTERM", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "firmware/drivers/<driver>/.pio/build/<env>/firmware.bin", "formato": "binario", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" },
+        { "path_pattern": "firmware/drivers/<driver>/platformio.ini", "formato": "raw", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" },
+        { "path_pattern": "firmware/drivers/<driver>/README.md", "formato": "raw", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" },
+        { "path_pattern": "firmware/drivers/<driver>/driver.json", "formato": "json", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" }
+      ],
+      "notas_concurrencia": "No hay persistencia propia. La compilación produce un .bin que firmware-manager copia/registra a su catálogo via firmware.build_completed."
+    }
+  },
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "firmware_path", "tipo": "string", "default_si_primitivo": "./firmware/drivers" },
+      { "key": "platformio_path", "tipo": "string", "default_si_primitivo": "platformio" },
+      { "key": "build_timeout_ms", "tipo": "number", "default_si_primitivo": 300000 },
+      { "key": "max_concurrent_builds", "tipo": "number", "default_si_primitivo": 2 }
+    ],
+    "paths_proyecto_referenciados": ["firmware/drivers/"],
+    "valores_hardcoded_observables": [
+      { "valor": "esp32dev,esp32-s2,esp32-s3,esp32-c3,esp32-c6", "ubicacion": "modules/firmware-builder/index.js:22", "naturaleza": "otro" },
+      { "valor": "500", "ubicacion": "modules/firmware-builder/index.js:275", "naturaleza": "limit" },
+      { "valor": "60000", "ubicacion": "modules/firmware-builder/index.js:404", "naturaleza": "timeout" },
+      { "valor": "PLATFORMIO_FORCE_COLOR=false", "ubicacion": "modules/firmware-builder/index.js:269", "naturaleza": "otro" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/firmware-builder/index.js:55", "acciones": ["this.logger = core.logger", "this.metrics = core.metrics", "this.eventBus = core.eventBus", "merge config['firmware-builder']", "path.resolve(firmware_path)", "_scanDrivers() lee firmware/drivers/", "metrics.gauge firmware.drivers.count", "metrics.gauge firmware.active_builds.count = 0"], "guarda_referencias_externas": ["this.logger", "this.metrics", "this.eventBus"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/firmware-builder/index.js:82", "acciones": ["loop activeBuilds: process.kill('SIGTERM')", "this.activeBuilds.clear()"], "estado_no_limpiado": ["this.drivers"] },
+    "auto_wired_subscribes": false,
+    "subscribes_dinamicos_en_lifecycle": ["proc.stdout.on('data') + proc.stderr.on('data') + proc.on('close') + proc.on('error') registrados por build en modules/firmware-builder/index.js:276-388 — child_process listeners se eliminan al terminar el proc"]
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "firmware-manager", "via_evento": "firmware.build_completed (emite — firmware-manager auto-registra binario)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/firmware-builder/index.js:321", "es_cross_vertical": false },
+    { "modulo_dependido": "platformio (CLI externo)", "via_evento": "spawn binario configurable por config.platformio_path", "obligatorio_en": "runtime", "ubicacion_uso": "modules/firmware-builder/index.js:267", "es_cross_vertical": true }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "platformio CLI", "que_pasa_si_cae": "spawn proc.on('error') captura ENOENT y emite firmware.build_failed con exit_code=-1; si funciona pero compila mal, sale code!=0 con reason=compilation_error.", "evidencia": "modules/firmware-builder/index.js:362" },
+    { "dependencia": "build_timeout_ms (Node spawn timeout)", "que_pasa_si_cae": "Node mata el proceso (signal SIGTERM por defecto); proc.on('close') recibe code=null, lo que se interpreta como reason=timeout y se emite firmware.build_failed.", "evidencia": "modules/firmware-builder/index.js:297" },
+    { "dependencia": "firmware/drivers/<driver>/.pio/build/<env>/firmware.bin", "que_pasa_si_cae": "fs.statSync falla con catch silencioso → binarySize=0 y has_binary=false; firmware.build_completed se emite con binary_size=0 (firmware-manager debería detectar archivo inexistente).", "evidencia": "modules/firmware-builder/index.js:301" }
+  ],
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('firmware.<accion>', { ...campos })", "campos_estructurados_observados": ["driver", "board", "buildEnv", "duration_ms", "binary_size", "exit_code", "reason", "error", "source_files"], "ejemplos": [{ "snippet": "this.logger.info('firmware.build.completed', { driver: driverName, duration_ms: duration, binary_size: binarySize });", "ubicacion": "modules/firmware-builder/index.js:317" }, { "snippet": "this.logger.error('firmware.build.failed', { driver: driverName, exit_code: code, reason, duration_ms: duration });", "ubicacion": "modules/firmware-builder/index.js:345" }, { "snippet": "this.logger.info('firmware.driver.detected', { driver: entry.name, board, buildEnv, source_files: sourceFiles.length });", "ubicacion": "modules/firmware-builder/index.js:517" }] },
+    "metricas_emitidas": [
+      { "nombre": "firmware.drivers.count", "tipo": "gauge", "ubicacion": "modules/firmware-builder/index.js:71" },
+      { "nombre": "firmware.active_builds.count", "tipo": "gauge", "ubicacion": "modules/firmware-builder/index.js:72" },
+      { "nombre": "firmware.build_started.total", "tipo": "counter", "ubicacion": "modules/firmware-builder/index.js:261" },
+      { "nombre": "firmware.build_completed.total", "tipo": "counter", "ubicacion": "modules/firmware-builder/index.js:314" },
+      { "nombre": "firmware.build.duration", "tipo": "timing", "ubicacion": "modules/firmware-builder/index.js:315" },
+      { "nombre": "firmware.build_failed.total", "tipo": "counter", "ubicacion": "modules/firmware-builder/index.js:342" }
+    ],
+    "metricas_drift_vs_manifest": [],
+    "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" }
+  },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": ["modules/firmware-builder/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": false, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/firmware-builder/index.js:3", "comentario_literal": "// Reemplaza al antiguo esp32-dev. En vez de templates y scaffolding, detecta drivers en firmware/drivers/ y compila directamente via PlatformIO.", "contexto": "doctrina del módulo: simplificación radical sobre esp32-dev (legacy)" },
+      { "ubicacion": "modules/firmware-builder/index.js:157", "comentario_literal": "// Si clean, primero limpiar y luego compilar (clean solo no compila)", "contexto": "explica por qué clean=true ejecuta dos comandos pio en serie" },
+      { "ubicacion": "modules/firmware-builder/index.js:252", "comentario_literal": "// Evitar doble resolución por error+close", "contexto": "razón del flag resolved en _runBuild (proc.on close + proc.on error pueden disparar ambos)" },
+      { "ubicacion": "modules/firmware-builder/index.js:427", "comentario_literal": "// Preservar estado de builds anteriores antes de re-escanear", "contexto": "explica por qué se hace prevState antes de drivers.clear()" }
+    ],
+    "workarounds_detectados": [
+      { "ubicacion": "modules/firmware-builder/index.js:252", "descripcion": "Flag 'resolved' para evitar double-resolve si proc dispara 'error' y 'close' (Node child_process puede disparar ambos en spawn fallidos)" },
+      { "ubicacion": "modules/firmware-builder/index.js:269", "descripcion": "PLATFORMIO_FORCE_COLOR=false pasado en env del spawn — evita códigos ANSI que romperían el parsing del log" },
+      { "ubicacion": "modules/firmware-builder/index.js:297", "descripcion": "isTimeout = code === null — Node spawn con timeout mata el proceso y emite close con code=null; este check distingue timeout de exit explícito" },
+      { "ubicacion": "modules/firmware-builder/index.js:279", "descripcion": "buildLog.splice(0, buildLog.length - MAX_LOG_LINES) — sliding window de log en memoria" }
+    ]
+  },
+  "metricas_fisicas": { "lineas_index_js": 525, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "child_process.spawn de un binario externo (platformio CLI) con timeout + sliding-window log + ev close/error con dedupe", "ejemplo": "modules/firmware-builder/index.js:267", "rareza": "inusual" },
+      { "patron": "Build asíncrono fire-and-forget con 202 Accepted + status check separado (handleBuildStatus)", "ejemplo": "modules/firmware-builder/index.js:168", "rareza": "inusual" },
+      { "patron": "_scanDrivers parsea platformio.ini con regex simples (board=, [env:...]) sin librería ini", "ejemplo": "modules/firmware-builder/index.js:458", "rareza": "inusual" },
+      { "patron": "Convención de driver: subdirectorio con platformio.ini → driver compilable; metadata opcional via driver.json y README.md", "ejemplo": "modules/firmware-builder/index.js:444", "rareza": "inusual" }
+    ]
+  },
+  "quirks": {
+    "warnings": [
+      "P3 — Firmware Builder IoT (v1.1.0). Reemplazo del legacy esp32-dev — sin templates/scaffolding, solo compilación de drivers detectados por convención.",
+      "Sin subscribes — solo emite (build_started/completed/failed); el upstream es la UI/tool que llama handleBuild.",
+      "Compilación asíncrona: handleBuild devuelve 202 inmediatamente, build se hace en background; el cliente sondea con builder.build_status.",
+      "Detecta drivers re-escaneando el FS en cada handleListDrivers (no caché — siempre fresh) preservando last_build/last_build_status via prevState.",
+      "Acopla a PlatformIO via spawn — config.platformio_path por defecto 'platformio'; si no está en PATH falla con spawn ENOENT y emite firmware.build_failed exit_code=-1.",
+      "build_failed se publica con .catch() para evitar UnhandledPromiseRejection si eventBus rechaza — mismo patrón en los 3 publishes.",
+      "buildEnv = envName (de [env:xxx] del platformio.ini) || board — el binario sale en .pio/build/<env>/firmware.bin."
+    ],
+    "secciones_vacias_intencionalmente": ["eventos.subscribes", "tools.errores_conocidos (algunos)", "apis_http", "estado.persistencia.sqlite_tablas", "configuracion.env_vars", "codigo_intencion.todos", "version_archivada", "outliers_capturados.campos_no_canonicos_en_manifest", "observabilidad.metricas_drift_vs_manifest"]
+  }
+}

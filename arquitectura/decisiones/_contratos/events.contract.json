@@ -1,0 +1,396 @@
+{
+  "_doc": "Captura LA forma canónica de comunicarse entre módulos del sistema event-core: emite y desentiende. Un evento se lanza al espacio. Lo escuchan quienes están suscritos — pueden ser doscientos, uno o ninguno. El emisor sabe qué pasó. El receptor sabe cómo reaccionar. Nadie hilvana a nadie. Caos ordenado. Este contrato es la primera pieza de la base que sirve igual para Casa (un proceso) que Manzana (N cores distribuidos).",
+  "id": "events",
+  "version": "1.2.0",
+  "creada": "2026-05-02",
+  "supersedes_nota": "v1.2.0 (POC2 ai-gateway, finding F1): añadida sección event_naming_subforms al output que distingue 'domain_event' (<module>.<entity>.<verb-pasado>) de 'protocol_event' (<module>.<intent>.<protocol-state>). Los protocol_events son legitimos sobre el bus normal (eventBus.publish): patrón request/response que credential-manager, filesystem y ai-gateway ya usan en producción. Sin esta distincion el validator marcaria como drift los nombres tipo 'llm.complete.request' que son canónicos.\n\nv1.1.0 (POC1 notas): clarificación 2-partes vs 3-partes en topic_structure. Añadida recommended_helpers con _publicarEvento.",
+
+  "objetivo": "Establecer el patrón único, mecánicamente validable, de comunicación entre módulos. Producir UN JSON output (_outputs/events.json) que contiene las reglas concretas: canales permitidos, forma de los topics, QoS por categoría, política de retain, Last-Will, descubrimiento. Servir de espina dorsal para cualquier reescritura: si una decisión técnica contradice este contrato, gana el contrato.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/events.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/events.schema.json",
+      "arquitectura/convenciones/_outputs/naming.json (forma de los nombres)",
+      "arquitectura/convenciones/_outputs/glossary.json (términos canónicos)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/auditoria/_outputs/manifest-completo/*.json — lo declarado por cada módulo",
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json — lo emitido realmente, con archivo:línea",
+      "modules/*/module.json — language declarado, eventos publicados/suscritos"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EMITE Y DESENTIENDE. Tu evento es información que viaja. Tu trabajo es contar lo que ha pasado, claro y completo. Lo que ocurra después no es asunto tuyo.",
+
+    "CARDINALIDAD CERO, UNA O MUCHAS. Tu evento puede tener doscientos oyentes, uno, o ninguno. Las tres cardinalidades son válidas. Tú no decides cuántos te escuchan ni te tiene que importar.",
+
+    "EL EMISOR SABE QUÉ. EL RECEPTOR SABE CÓMO. El emisor describe el qué pasó con datos de su dominio. El receptor decide si reacciona, cómo reacciona y cuándo. No hay coordinación temporal forzada entre ellos.",
+
+    "CADA MÓDULO LLEVA SU RITMO. Nadie hilvana a nadie. Si el receptor tarda, el emisor ya no está esperando. Si el receptor falla, el emisor no se entera (y no debería tener que enterarse).",
+
+    "CAOS ORDENADO. Aparente caos en la superficie (eventos volando, suscripciones diversas, ramificaciones) sobre un orden estricto en la base (un solo canal, un solo formato, un solo paradigma).",
+
+    "MULTI-ESCALA, MISMO CIMIENTO. La API de emitir/suscribir es idéntica en Casa (un proceso), Rascacielos (un core grande con muchos módulos) y Manzana (N cores distribuidos comunicándose). La complejidad sale de ramificar, no de complicar el cimiento.",
+
+    "PROHIBIDO ATAJAR. Si una solución parece más cómoda que el patrón canónico, casi siempre es porque rompe el cimiento. Antes de atajar, se para y se replantea. La fidelidad al cimiento manda sobre la conveniencia local.",
+
+    "EVENT-CORE COMO SEMILLA. Este contrato hereda el espíritu del repo original event-core (v0.5.0 Network): MQTT pub/sub nativo con Aedes embedded, módulos como plugins, IA como ciudadano de primera clase, zero dependencias. Las evoluciones posteriores aprendieron mucho técnicamente y se desviaron filosóficamente. Aquí volvemos al cimiento con lo aprendido.",
+
+    "DESCRIPTIVO PARA HUMANOS. Cualquier principio de este contrato debe poder leerlo alguien sin background técnico y entender qué se está afirmando. Si un principio solo se entiende con jerga, está mal escrito."
+  ],
+
+  "principios": [
+    {
+      "id": "fire_and_forget",
+      "regla": "El emisor publica el evento y continúa sin esperar respuesta. No hay espera por confirmación de los suscriptores.",
+      "razon": "Desacoplamiento temporal. Si el emisor esperara, se acoplaría al receptor — pero no sabe ni cuántos receptores hay ni cuánto tardan ni si fallarán. La espera contradice el paradigma. Si necesitas respuesta sincrónica, usa una tool del LLM, una API HTTP, o el patrón formal request_id+correlation+timeout del framework."
+    },
+    {
+      "id": "cardinality_agnostic",
+      "regla": "El emisor no asume cuántos suscriptores recibirán el evento. Las cardinalidades cero, una y muchas son todas válidas y esperadas.",
+      "razon": "Si el emisor asume que alguien escucha, el sistema falla silenciosamente cuando ese alguien deja de escuchar. Si asume que solo uno escucha, no escala. La indiferencia a la cardinalidad es lo que permite ramificar libremente sin tocar al emisor."
+    },
+    {
+      "id": "what_vs_how_separation",
+      "regla": "El emisor describe QUÉ ha pasado en términos de su dominio. El receptor decide CÓMO reacciona. Un evento jamás contiene instrucciones, solo descripción de un hecho consumado.",
+      "razon": "La instrucción acopla, la descripción libera. Si emites 'guarda esta receta' estás dictando comportamiento; si emites 'receta.creada' estás contando un hecho. Cualquier persistencia, indexación o notificación es decisión del receptor — el emisor no tiene voz ahí."
+    },
+    {
+      "id": "no_temporal_coupling",
+      "regla": "El emisor no controla, conoce ni espera el ritmo del receptor. Cada módulo procesa eventos según su propia lógica temporal.",
+      "razon": "El acoplamiento temporal es origen de cascadas de fallo. Si el receptor tarda 5 minutos en reaccionar, el emisor sigue su trabajo sin enterarse. Si el receptor falla, el emisor tampoco se entera (y no debería). Esto es deliberado y necesario para la robustez del sistema."
+    },
+    {
+      "id": "single_emit_api",
+      "regla": "Hay UNA forma canónica de emitir un evento desde un módulo: la API del bus inyectada en el module (this.eventBus.publish o equivalente). No se permite acceder al primitivo subyacente (EventEmitter de Node, cliente MQTT directo) salvo casos documentados como excepciones explícitas.",
+      "razon": "Múltiples canales = múltiples reglas = drift. Una sola API hace el sistema observable, validable y refactorable. Las excepciones (topics IoT retained externos hacia dispositivos físicos) deben justificarse y documentarse explícitamente en la auditoría del módulo."
+    },
+    {
+      "id": "single_subscribe_api",
+      "regla": "Hay UNA forma canónica de suscribirse: declararlo en module.json (auto-wired por el module loader) o registrarlo en onLoad vía la API del bus. No se permite acceder al primitivo subyacente.",
+      "razon": "Mismo razonamiento que single_emit_api. Además, las suscripciones declaradas en module.json son visibles por la auditoría y validables mecánicamente — las dinámicas requieren documentación expresa."
+    },
+    {
+      "id": "same_api_all_scales",
+      "regla": "El código del módulo no cambia entre escalas (Casa, Rascacielos, Manzana). La diferencia entre un proceso standalone y N cores distribuidos se resuelve por configuración del transporte, no por código del módulo.",
+      "razon": "Si el módulo tiene que saber 'estoy en Casa o en Manzana', se rompe el principio multi-escala. La escala es decisión del despliegue, no del autor del módulo. La transparencia de localización es lo que permite que la base sirva igual para algo simple que para algo complejo."
+    },
+    {
+      "id": "no_request_response_disguised",
+      "regla": "Los eventos no se usan como mecanismo de RPC disfrazado. No se publica 'X.request' esperando un 'X.response' por el mismo bus de eventos. Si necesitas request/response sincrónico, usa el patrón formal del framework (request_id + correlation_id + timeout) o una tool/API HTTP.",
+      "razon": "El pub/sub disfrazado de RPC pierde lo mejor de los dos mundos: no tiene la garantía de RPC ni la libertad del pub/sub. Y rompe la cardinalidad cero/una/muchas — si esperas respuesta, asumes uno y solo uno. El framework event-core ya tiene un patrón request/response formal con correlation_id, timeout y status codes; ése es el camino, no inventar pares request/response sobre eventos de dominio."
+    },
+    {
+      "id": "idempotent_handlers",
+      "regla": "Los handlers de eventos asumen que pueden recibir el mismo evento más de una vez. La lógica del handler debe ser idempotente o tolerar duplicados de forma controlada.",
+      "razon": "MQTT QoS 1 garantiza at-least-once, no exactly-once. Reintentos del cliente, hot-reloads de módulos, bridges entre brokers, y desconexiones temporales pueden producir duplicados. La idempotencia es la única defensa robusta — confiar en QoS 2 (exactly-once) no es viable por su coste."
+    },
+    {
+      "id": "no_shortcuts",
+      "regla": "Si una solución parece más cómoda que el patrón canónico, casi siempre es porque rompe el cimiento. Antes de atajar, se para y se pregunta. Si el atajo está justificado, se documenta como excepción explícita en el código del módulo y en su auditoría.",
+      "razon": "Los atajos individuales son baratos; la suma de atajos es lo que ha llevado a la 'esponjosidad' que ha forzado renombrar el repo varias veces (event-core → Enki → Enki1 → 2enki). Cada atajo paga interés compuesto. Esta regla es la defensa explícita contra la repetición del patrón."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "transport_mqtt",
+      "decision": "El transporte canónico de eventos es MQTT. Por defecto el broker es Aedes embedded (corriendo en el mismo proceso que el core). En despliegues Manzana (multi-core distribuido), Aedes embedded actúa como bridge a un broker MQTT externo compartido entre cores.",
+      "derivado_de": ["single_emit_api", "same_api_all_scales", "cardinality_agnostic"],
+      "razon": "MQTT es el único transporte que se mantiene idéntico de Casa (un proceso, Aedes embedded sin red) a Manzana (N cores compartiendo broker). Aedes embedded da latencia sub-ms en local; Aedes externo permite escala distribuida. Mismo código del módulo, distinta configuración de transporte. La elección es deliberada: no hay un 'bus interno' separado del 'bus IoT' — todo es el mismo MQTT, simplemente con backbone distinto según escala.",
+      "notas": "Aedes ya está implementado en event-core v0.5.0. Esta decisión formaliza lo existente."
+    },
+    {
+      "id": "hybrid_bus_internals",
+      "decision": "El bus es híbrido por dentro: usa EventEmitter para suscripciones intra-proceso (latencia óptima, sin serialización), MQTT para suscripciones inter-core, y Hooks para interceptación cross-cutting (logging, métricas, tracing). La elección del mecanismo es responsabilidad interna del bus; el módulo solo ve la API publish/subscribe.",
+      "derivado_de": ["single_emit_api", "single_subscribe_api", "same_api_all_scales"],
+      "razon": "El módulo llama eventBus.publish('x', payload) y el bus decide internamente si entrega vía EventEmitter (mismo proceso, sin serialización JSON, sin red) o MQTT (otro core, con serialización). Esto da latencia mínima en local y transparencia de localización en remoto. El módulo no decide ni sabe.",
+      "notas": "Patrón heredado de event-core v0.5.0 ('Híbrido EventEmitter + MQTT + Hooks')."
+    },
+    {
+      "id": "topic_structure",
+      "decision": "Los topics MQTT siguen la estructura jerárquica: 'core/{core-id}/<categoria>/<...detalle>'. Categorías canónicas: 'events', 'state', 'commands', 'api/request', 'api/response', 'status', 'heartbeat', 'logs'. Adicionalmente, hay un namespace 'ui/' (sin core-id) para comunicación frontend↔backend: 'ui/request/{domain}/{action}', 'ui/response/{request_id}'. Dentro de la categoría, el separador es '/'.",
+      "derivado_de": ["single_emit_api", "same_api_all_scales"],
+      "razon": "Slashes son el separador estándar MQTT y habilitan wildcards (+, #). El prefijo 'core/{core-id}/' permite namespacing por core sin que los módulos sepan de él. Las categorías son las de event-core: separan eventos transitorios de estado retained de comandos dirigidos. NOTA SOBRE 2-PARTES VS 3-PARTES (validado en POC notas): el patrón completo en events/ permite tanto '<module>/<verb>' (single-entity, ej. 'events/notas/creado') como '<module>/<entity>/<verb>' (multi-entity, ej. 'events/cocina/comanda/recibida'). La convención en código (con dots) la define naming.json.principios.form_canonical: el módulo elige según si maneja una o varias entidades.",
+      "notas": "Heredado del README de event-core v0.5.0. Se mantiene literalmente."
+    },
+    {
+      "id": "name_to_topic_translation",
+      "decision": "El módulo emite y se suscribe usando nombres de evento con dots ('recipe.created', forma definida en naming.json). El bus traduce internamente al topic MQTT con slashes y prefijo de categoría: 'recipe.created' (código) → 'core/{core-id}/events/recipe/created' (transporte). El módulo nunca ve un topic crudo.",
+      "derivado_de": ["single_emit_api", "single_subscribe_api"],
+      "razon": "Compatibilidad con naming.json (dots para legibilidad humana, alineado con la convención del repo) + aprovechamiento de slashes en MQTT (wildcards). La traducción la hace el bus al publicar/suscribir. El desarrollador del módulo trabaja con la forma legible; el transporte usa la forma estructurada."
+    },
+    {
+      "id": "qos_strategy",
+      "decision": "QoS 1 (at-least-once) para: events/*, state/*, commands/*, api/request/*, api/response/*, status, ui/request/*, ui/response/*. QoS 0 (at-most-once) para: heartbeat, logs/*, métricas. QoS 2 (exactly-once) NO se usa.",
+      "derivado_de": ["idempotent_handlers", "no_temporal_coupling"],
+      "razon": "QoS 1 garantiza entrega pero permite duplicados — la idempotencia del handler resuelve los duplicados. QoS 2 es lento (4-way handshake) y la garantía exactly-once raramente justifica su coste; idempotencia + QoS 1 es siempre mejor trade-off. QoS 0 es para señales transitorias donde la pérdida ocasional no rompe el sistema (un heartbeat perdido se compensa con el siguiente).",
+      "notas": "Estrategia documentada en README de event-core: 'QoS 1 → eventos críticos, comandos, state changes; QoS 0 → logs, métricas, telemetría'."
+    },
+    {
+      "id": "retain_policy",
+      "decision": "Topics retained (broker guarda último mensaje, suscriptores tardíos lo reciben al conectar): state/*, status, configuración inicial. NO retained: events/*, commands/*, heartbeat, logs/*, api/request/*, api/response/*, ui/request/*, ui/response/*.",
+      "derivado_de": ["cardinality_agnostic", "no_temporal_coupling"],
+      "razon": "Retain está pensado para 'el último valor importa'. State actual de un dispositivo, status de un core: sí — un suscriptor que aparece debe saber el estado actual. Eventos transitorios: no — un suscriptor tardío no debe recibir eventos viejos como si fueran nuevos. Comandos: no — no quieres que un device reciba un viejo restart al reconectar."
+    },
+    {
+      "id": "last_will_obligatorio",
+      "decision": "Todo cliente MQTT (cada core, cada módulo si es cliente separado, cada device físico) declara un Last-Will Testament al conectar. Patrón canónico: topic 'core/{core-id}/status' con payload {state: 'offline', timestamp: <iso>} y retain: true. El cliente publica su 'state: online' al conectar y su LWT se dispara automáticamente si la conexión muere abruptamente.",
+      "derivado_de": ["cardinality_agnostic", "no_temporal_coupling"],
+      "razon": "Detección automática de caídas. Si un core muere abruptamente sin desconectarse limpio, el broker publica su LWT y los suscriptores se enteran sin polling. Esto habilita health monitoring por suscripción ('quiero saber cuando algo se cae'), no por sondeo periódico. Combinado con retain en status, también garantiza que los nuevos suscriptores ven el estado actual de todos los peers."
+    },
+    {
+      "id": "discovery_via_retained",
+      "decision": "Los cores publican su 'status' a 'core/{core-id}/status' con retain: true al conectar. El payload incluye state, version, módulos cargados, APIs expuestas, suscripciones activas. Otros cores se suscriben a 'core/+/status' para descubrir peers automáticamente.",
+      "derivado_de": ["cardinality_agnostic", "same_api_all_scales"],
+      "razon": "Descubrimiento sin coordinación central — el broker es el directorio. Un core nuevo recibe inmediatamente los status retained de todos los peers existentes (gracias al retain). Combinado con LWT, también detecta cuándo un peer cae. Cero infraestructura adicional (no service registry externo, no Zookeeper, no Consul).",
+      "notas": "Patrón estándar en sistemas IoT (AWS IoT, Azure IoT). En event-core ya está implementado y funcional."
+    },
+    {
+      "id": "request_response_formal",
+      "decision": "El framework provee un patrón formal request/response sobre MQTT cuando se necesita comunicación sincrónica genuina. API: 'mqttRequest(domain, action, payload)' devuelve una Promise. Internamente publica a 'ui/request/{domain}/{action}' (o 'core/{core-id}/api/request/{service}') con un correlation_id, suscribe a la respuesta correspondiente, resuelve cuando llega o rechaza por timeout (default ~5s). Los handlers responden publicando a 'ui/response/{correlation_id}' (o equivalente) con status code HTTP-like (200/400/404/500) y datos.",
+      "derivado_de": ["no_request_response_disguised", "single_emit_api"],
+      "razon": "Cuando el caller necesita respuesta sincrónica genuina (UI esperando datos para renderizar, tool del LLM esperando resultado), hay UN patrón formal con correlation_id, timeout y status codes — no una invención por módulo. Esto cubre el caso request/response sin disfrazarlo de pub/sub de dominio. La promesa es del lado del caller (el receptor sigue siendo asíncrono y desacoplado del caller).",
+      "notas": "Implementado en event-core v0.5.0. La UI lo usa. Patrón documentado: 'Una sola conexión MQTT para todo, respuestas garantizadas (o timeout), status codes HTTP-like'."
+    },
+    {
+      "id": "publish_returns_promise",
+      "decision": "eventBus.publish() devuelve una Promise. Resolverla significa que el broker (Aedes embedded o externo) ha aceptado el mensaje en su cola. NO significa que los suscriptores lo hayan procesado. El emisor puede 'await' por la aceptación del broker (típico) o no (fire-and-forget puro).",
+      "derivado_de": ["fire_and_forget", "no_temporal_coupling"],
+      "razon": "El await garantiza que el evento entró en el sistema — si fallara la entrada (broker desconectado, queue llena), el emisor lo sabe y puede actuar. Pero NO espera al procesamiento de los suscriptores — eso violaría fire_and_forget. Distinción importante: 'aceptado por el bus' ≠ 'procesado por los handlers'. El emisor solo puede afirmar lo primero."
+    },
+    {
+      "id": "no_silent_catch",
+      "decision": "Si la publicación de un evento falla, el error debe loguearse explícitamente. Patrones permitidos: (a) 'await this.eventBus.publish(...)' — propaga el error al caller; (b) 'this.eventBus.publish(...).catch(err => this.logger.error(\"publish.failed\", { error: err.message }))' — logea sin propagar (útil en callbacks no-async). Patrón PROHIBIDO: 'this.eventBus.publish(...).catch(() => {})' — silenciador sin telemetría.",
+      "derivado_de": ["no_shortcuts"],
+      "razon": "Silenciar fallos de publish es ceguera operativa. Si el broker se cae cinco minutos, el sistema necesita saberlo — no puede haber eventos perdidos sin ningún rastro. Si no se quiere que el error suba (callback no-async donde no hay caller a quien propagar), al menos se loguea para que la observabilidad lo capture."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "emit_bypass",
+      "regla": "Usar this.eventBus.emit() o cualquier acceso al primitivo EventEmitter de Node como mecanismo de emisión desde un módulo.",
+      "viola_principios": ["single_emit_api"],
+      "como_detectar": "Regex \\.emit\\( en código de módulos. El bus puede tener .emit por herencia interna pero los módulos NO deben usarlo.",
+      "ejemplo_drift_actual": "modules/staff-manager/index.js:353 — this.core.eventBus.emit(`staff.session.${type}`, ...)",
+      "alternativa_correcta": "this.eventBus.publish('staff.session.x', payload) — la API canónica del bus."
+    },
+    {
+      "id": "silent_catch",
+      "regla": "Capturar el error de un publish() con un handler vacío que no loguea: .catch(() => {}), .catch(_ => {}), o equivalente.",
+      "viola_principios": ["no_shortcuts"],
+      "como_detectar": "Regex \\.catch\\(\\s*(_?)\\s*=>\\s*\\{\\s*\\}\\s*\\) precedido cerca por \\.publish\\(.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "this.eventBus.publish(...).catch(err => this.logger.error('publish.failed', { event: 'x.y.z', error: err.message })) — al menos loguear."
+    },
+    {
+      "id": "rpc_over_pubsub",
+      "regla": "Publicar un evento <algo>.request esperando un evento <algo>.response por el mismo bus de eventos de dominio. Esto es RPC sincrónico disfrazado de pub/sub.",
+      "viola_principios": ["no_request_response_disguised", "fire_and_forget", "cardinality_agnostic"],
+      "como_detectar": "Nombres de evento con sufijo .request o .response cuando NO usan el patrón formal del framework (mqttRequest con correlation_id explícito en el payload).",
+      "ejemplo_drift_actual": "modules/calling-generator: function.get.request, function.get.response, function.execute.request, function.execute.response. modules/channel-manager: channel-manager.resolve.response. modules/composition-manager: db.query.request.",
+      "alternativa_correcta": "Si necesitas respuesta sincrónica genuina, usa el patrón formal del framework: mqttRequest(domain, action, payload) que devuelve Promise con correlation_id+timeout (decisión request_response_formal). Alternativa: una tool del LLM o una API HTTP."
+    },
+    {
+      "id": "generic_verb",
+      "regla": "Verbos genéricos en posición de verbo del nombre del evento: action, event, data, info, update, change, do, stuff. El verbo debe describir QUÉ pasó, no algo abstracto.",
+      "viola_principios": ["what_vs_how_separation"],
+      "como_detectar": "Último segmento del nombre del evento ∈ lista de verbos genéricos prohibidos: ['action', 'event', 'data', 'info', 'update', 'change', 'do', 'stuff', 'thing', 'response', 'request'].",
+      "ejemplo_drift_actual": "modules/admin-panel publica admin.action × 5. ¿Qué acción exactamente? Pierde información.",
+      "alternativa_correcta": "Sustituir por un verbo concreto del whitelist canónico (naming.json): admin.module-toggled, admin.module-loaded, admin.config-changed, etc. Si no encaja en el whitelist, proponer extensión vía PR a naming.json."
+    },
+    {
+      "id": "imperative_event_name",
+      "regla": "Verbo del evento en imperativo o gerundio: save, update, delete, creating, guardar, actualizar, crear. El verbo debe ser past participle (hecho consumado): saved, updated, deleted, creado, actualizado, creado.",
+      "viola_principios": ["what_vs_how_separation"],
+      "como_detectar": "Último segmento del evento NO está en verbs_lifecycle ni verbs_compound_allowed del idioma del módulo (cruce con naming.json).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "El imperativo es instrucción ('haz X'); el past participle es descripción ('X ha pasado'). El paradigma exige descripciones de hechos consumados, no órdenes."
+    },
+    {
+      "id": "non_ascii_event_name",
+      "regla": "Caracteres no-ASCII (tildes, ñ, espacios, caracteres especiales) en cualquier segmento del nombre del evento.",
+      "viola_principios": ["single_emit_api"],
+      "como_detectar": "Regex [^\\x20-\\x7E] aplicado a cada nombre de evento publicado.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "ASCII puro. confirmacion, no confirmación. Las tildes viven en strings UI, no en nombres de evento. Coherente con naming.json."
+    },
+    {
+      "id": "raw_topic_in_event_name",
+      "regla": "Pasar un topic MQTT crudo (con / y prefijos como core/{id}/) como argumento de eventBus.publish() o eventBus.subscribe(). La API del bus toma nombres de evento (con dots), no topics; la traducción es responsabilidad del bus.",
+      "viola_principios": ["single_emit_api", "name_to_topic_translation"],
+      "como_detectar": "Literal de string en publish/subscribe que contenga / o empiece con core/.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Usar el nombre del evento con dots: eventBus.publish('recipe.created', payload). La traducción a topic 'core/{id}/events/recipe/created' la hace el bus."
+    },
+    {
+      "id": "primitive_payload",
+      "regla": "Payload del evento que no es un object literal: string suelto, number, boolean, null, array directo.",
+      "viola_principios": ["what_vs_how_separation"],
+      "como_detectar": "Heurística sobre el segundo argumento de publish(): si es un literal primitivo (\"x\", 42, true, null, []), warning. Si es una variable, no se puede detectar estáticamente.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Envolver siempre en object literal: eventBus.publish('x.y.created', { value: 42 }). Esto permite añadir campos transversales (timestamp, correlationId, project_id) sin romper compatibilidad de payload."
+    },
+    {
+      "id": "wait_for_handler_side_effect",
+      "regla": "Tras publicar un evento, esperar/comprobar que un handler haya hecho su trabajo (típicamente con setTimeout, polling de un estado, o asunción de orden temporal con respecto al publish).",
+      "viola_principios": ["fire_and_forget", "no_temporal_coupling", "cardinality_agnostic"],
+      "como_detectar": "No siempre detectable mecánicamente — requiere inspección de código. Heurística: tras un publish, el código del mismo método lee un estado que solo el handler podría haber actualizado, o usa setTimeout para 'esperar' al handler.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Si necesitas confirmación, usa request_response_formal del framework. Si no la necesitas (caso típico), confía en el paradigma: el emisor describe el qué, no controla el cómo ni el cuándo."
+    },
+    {
+      "id": "undocumented_dynamic_subscribe",
+      "regla": "Suscribirse dinámicamente en onLoad o en runtime (eventBus.subscribe(...), mqtt.subscribe(...) directo) sin documentarlo en lifecycle.subscribes_dinamicos_en_lifecycle de la auditoría del módulo.",
+      "viola_principios": ["single_subscribe_api"],
+      "como_detectar": "Cruzar suscripciones detectadas en código (audit modulo-completo) con las declaradas en manifest + las dinámicas documentadas. Las que no encajen son drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Default: declarar en module.json.events.subscribes (auto-wired por el module loader). Si tiene que ser dinámico (depende de runtime, project_id, device_id), documentarlo expresamente en la auditoría."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/events.schema.json. Top-level: _meta, regla (string maestra), transport (protocol, broker default), bus_internals (mode híbrido, mecanismos), categorias_canonicas (object con 10 categorías de topic, cada una con topic_pattern, qos, retain, descripcion, derivado_de), last_will (patrón canónico obligatorio), discovery (patrón retained_status), request_response (patrón formal del framework con correlation_id+timeout), payload_canonical_fields (campos transversales del payload con su política), publish_semantics (qué significa que la promesa resuelva), detection_patterns (heurísticas que el validator usa para detectar drift).",
+
+  "reglas_de_extraccion": [
+    "Definir _meta con convencion='events', version (semver), creado_en (date), contrato_referencia (path al contrato).",
+
+    "Definir regla como frase maestra que resuma toda la decisión arquitectónica de eventos en una línea legible para humanos. Ejemplo: 'Eventos viajan por MQTT (Aedes embedded). Bus híbrido transparente. Topics jerárquicos por categoría. Cardinalidad libre. Fire-and-forget.'.",
+
+    "Definir transport como bloque con: protocol='mqtt', default_broker='aedes_embedded' (Casa/Rascacielos), external_broker_supported=true (Manzana usa broker externo compartido), bridge_strategy describiendo cómo Aedes embedded se conecta al broker externo en Manzana.",
+
+    "Definir bus_internals como bloque con: mode='hybrid', mechanisms (array describiendo las 3 vías internas: EventEmitter intra-proceso, MQTT inter-core, Hooks cross-cutting), transparent_to_module=true (el módulo no decide ni conoce el mecanismo).",
+
+    "Listar las 10 categorías canónicas en categorias_canonicas (array). Cada categoría tiene: id (string), topic_pattern (con placeholders {core-id}, {domain}, {action}, {service}, {correlation_id}, {level}), qos (0|1), retain (true|false), descripcion (humana, sin jerga), derivado_de (lista de ids de decisiones_arquitectonicas). Las 10 categorías son: events, state, commands, api/request, api/response, status, heartbeat, logs, ui/request, ui/response.",
+
+    "Definir last_will como bloque con: obligatorio=true, topic_pattern='core/{core-id}/status' (o equivalente para módulos/devices), payload_template ({state: 'offline', timestamp: <iso>}), qos=1, retain=true. Incluir nota de que el cliente publica state='online' al conectar y el LWT se dispara automáticamente al perder conexión.",
+
+    "Definir discovery como bloque con: mecanismo='retained_status', subscribe_pattern='core/+/status' (suscriptor), publish_pattern='core/{core-id}/status' (publicador), payload_template (campos state, version, modules_loaded, apis_exposed, subscriptions, started_at), retain=true, qos=1.",
+
+    "Definir request_response como bloque con: api_signature='mqttRequest(domain, action, payload, options?)', returns='Promise<response>', request_topic_patterns (lista de patrones canónicos: 'ui/request/{domain}/{action}' para UI, 'core/{core-id}/api/request/{service}' para inter-core), response_topic_pattern='ui/response/{correlation_id}' (o equivalente), correlation_id_field='correlation_id' (en payload), default_timeout_ms=5000, status_codes_canonical=[200, 400, 404, 500], notas describiendo que el caller espera la Promise (la simetría sincrónica es del lado del caller; el handler sigue siendo asíncrono y desacoplado).",
+
+    "Definir payload_canonical_fields como objeto donde cada clave es un campo transversal y su valor describe la política. Campos: timestamp (politica='recomendado siempre', formato='ISO 8601'), correlation_id (politica='obligatorio en respuestas, opcional en otros'), project_id (politica='obligatorio si el dominio es multi-tenant'), source (politica='opcional', valores_comunes=['cli', 'ui', 'auto', 'agent']). Indicar que campos no listados son del dominio del evento (libres) pero deben ser JSON-serializables.",
+
+    "Definir publish_semantics como bloque que clarifica el contrato de publish(): returns='Promise', resolves_when='broker (aedes embedded o externo) ha aceptado el mensaje en su cola', does_not_imply='los suscriptores han procesado el mensaje', error_significa='broker desconectado, queue llena, o problema de transporte', uso_recomendado='await en handlers async; .catch(err => log) en callbacks no-async; nunca .catch(()=>{})'.",
+
+    "Definir detection_patterns como objeto con las heurísticas mecánicas que el validator aplicará para detectar cada anti-patrón de la sección prohibido. Claves: generic_verbs (lista cerrada de strings), request_response_suffixes (lista: ['.request', '.response']), emit_bypass_regex (regex string), silent_catch_regex (regex string), raw_topic_indicators (lista de substrings que NO deben aparecer en argumentos de publish/subscribe del módulo: ['/', 'core/']), imperative_verbs_es (lista corta de imperativos comunes en español: ['guardar', 'actualizar', 'eliminar', 'crear', 'cargar']), imperative_verbs_en (idem en inglés: ['save', 'update', 'delete', 'create', 'load']).",
+
+    "El contrato (este archivo) describe QUÉ campos debe tener el output. El output (_outputs/events.json) contiene los valores concretos de cada campo. Si necesitas cambiar la regla, cambias el contrato + bumpeas version. Si necesitas cambiar un valor concreto (ej. añadir un verbo genérico al detection_patterns.generic_verbs), cambias el output."
+  ],
+
+  "derivaciones": {
+    "topic_de_event_name": "El bus traduce nombre de evento (con dots) a topic MQTT (con slashes) anteponiendo prefijo de categoría. Ejemplo: 'recipe.created' (en código) + categoría 'events' → 'core/{core-id}/events/recipe/created' (en transporte).",
+    "qos_aplicada_a_un_publish": "Se determina por la categoría del topic: si el evento va a 'events/*', qos=1; si va a 'logs/*', qos=0. Hereda de categorias_canonicas[categoria].qos.",
+    "retain_aplicada_a_un_publish": "Idem, deriva de categorias_canonicas[categoria].retain.",
+    "es_anti_patron_rpc_over_pubsub": "true si el nombre del evento termina en '.request' o '.response' Y NO usa el patrón formal del framework (correlation_id explícito en payload + suscripción a topic de respuesta dedicado).",
+    "es_anti_patron_generic_verb": "true si el último segmento del nombre del evento ∈ detection_patterns.generic_verbs.",
+    "es_anti_patron_imperative_verb": "true si el último segmento NO está en languages[module.language].verbs_lifecycle de naming.json AND está en detection_patterns.imperative_verbs_{module.language}."
+  },
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "events_json_estructura_valida",
+      "regla": "events.json valida estructuralmente contra events.schema.json (AJV strict, additionalProperties=false en todos los niveles).",
+      "como_detectar": "Cargar el schema, compilar con AJV strict, validar el output. Cualquier error de schema bloquea PASS.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/decisiones/_outputs/events.json", "arquitectura/decisiones/_schemas/events.schema.json"]
+    },
+    {
+      "id": "drift_emit_bypass",
+      "regla": "Ningún módulo usa .emit() sobre el eventBus como mecanismo de emisión.",
+      "como_detectar": "Regex \\.emit\\( en archivos modules/*/index.js (y lib/, services/ si existen). Cruzar con audit modulo-completo.eventos.publica para identificar el módulo y línea.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js", "arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "ejemplo_drift_actual": "modules/staff-manager/index.js:353 (this.core.eventBus.emit)",
+      "viola": "emit_bypass (prohibido), single_emit_api (principio)"
+    },
+    {
+      "id": "drift_silent_catch",
+      "regla": "Ningún publish() del bus se silencia sin loguear.",
+      "como_detectar": "Regex multilínea sobre código de módulos: \\.publish\\([^)]*\\)\\s*\\.catch\\(\\s*\\(?\\s*_?\\s*\\)?\\s*=>\\s*\\{\\s*\\}\\s*\\) o equivalente.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "silent_catch (prohibido), no_shortcuts (principio)"
+    },
+    {
+      "id": "drift_rpc_over_pubsub",
+      "regla": "Ningún evento de dominio termina en '.request' o '.response' fuera del patrón formal request_response_formal del framework.",
+      "como_detectar": "Para cada evento en manifest-completo.events.publica[].event y modulo-completo.eventos.publica[].nombre.valor: si el último segmento ∈ detection_patterns.request_response_suffixes, reportar drift. (Excepción: el patrón formal del framework usa topics ui/request/* y ui/response/{correlation_id}, pero esos NO aparecen como eventos de dominio publicados — usan la API mqttRequest, no eventBus.publish.)",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/manifest-completo/*.json", "arquitectura/auditoria/_outputs/modulo-completo/*.json", "arquitectura/decisiones/_outputs/events.json"],
+      "ejemplo_drift_actual": "calling-generator: function.get.request, function.get.response, function.execute.request, function.execute.response. channel-manager: channel-manager.resolve.response. composition-manager: db.query.request.",
+      "viola": "rpc_over_pubsub (prohibido), no_request_response_disguised (principio)"
+    },
+    {
+      "id": "drift_generic_verb",
+      "regla": "Ningún nombre de evento usa un verbo genérico de detection_patterns.generic_verbs en posición de verbo (último segmento).",
+      "como_detectar": "Para cada nombre de evento publicado: split por '.', último segmento ∈ events.json.detection_patterns.generic_verbs → drift.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "arquitectura/decisiones/_outputs/events.json"],
+      "ejemplo_drift_actual": "admin-panel: admin.action × 5 (verbo 'action' es genérico).",
+      "viola": "generic_verb (prohibido), what_vs_how_separation (principio)"
+    },
+    {
+      "id": "drift_imperative_verb",
+      "regla": "Ningún evento usa verbo imperativo en la posición de verbo (último segmento). Solo past participle del whitelist por idioma.",
+      "como_detectar": "Para cada evento de un módulo con language=L: último segmento NO está en naming.json.languages[L].verbs_lifecycle AND está en events.json.detection_patterns.imperative_verbs_{L} → drift.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "modules/*/module.json", "arquitectura/convenciones/_outputs/naming.json", "arquitectura/decisiones/_outputs/events.json"],
+      "viola": "imperative_event_name (prohibido), what_vs_how_separation (principio)"
+    },
+    {
+      "id": "drift_non_ascii_event_name",
+      "regla": "Ningún nombre de evento publicado contiene caracteres no-ASCII (tildes, ñ, espacios, etc.).",
+      "como_detectar": "Regex [^\\x20-\\x7E] aplicado a cada nombre de evento.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "nota": "Severidad error porque rompe MQTT/JSON/regex. ASCII puro es no-negociable.",
+      "viola": "non_ascii_event_name (prohibido), single_emit_api (principio)"
+    },
+    {
+      "id": "drift_raw_topic_in_publish",
+      "regla": "Ningún publish() o subscribe() en código de módulos toma un topic crudo (con / o prefijo core/).",
+      "como_detectar": "Regex sobre código: argumentos string-literal en .publish(...) o .subscribe(...). Si contienen '/' o empiezan con 'core/' → drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "raw_topic_in_event_name (prohibido), name_to_topic_translation (decisión)"
+    },
+    {
+      "id": "drift_undocumented_dynamic_subscribe",
+      "regla": "Toda suscripción dinámica detectada en código está documentada en lifecycle.subscribes_dinamicos_en_lifecycle de la auditoría del módulo.",
+      "como_detectar": "Cruzar audit modulo-completo.eventos.subscribes (auto_wired=false) con manifest-completo.events.subscribes (declarados auto-wired) Y con modulo-completo.lifecycle.subscribes_dinamicos_en_lifecycle. Las subscripciones que no encajen en ninguna lista son drift no documentado.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "arquitectura/auditoria/_outputs/manifest-completo/*.json"],
+      "viola": "undocumented_dynamic_subscribe (prohibido), single_subscribe_api (principio)"
+    },
+    {
+      "id": "module_uses_publish_api_consistente",
+      "regla": "Cada módulo con this.eventBus en lifecycle.onLoad.guarda_referencias_externas tiene al menos un publish o subscribe documentado en su auditoría. Si guarda la referencia pero no la usa, es código muerto o patrón no detectado.",
+      "como_detectar": "Cruzar lifecycle.onLoad.guarda_referencias_externas con eventos.publica + eventos.subscribes en la auditoría.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"]
+    },
+    {
+      "id": "module_lifecycle_has_lwt_pattern",
+      "regla": "Si un módulo es cliente MQTT separado (no comparte conexión con el core), su lifecycle.onLoad debe documentar el setup del Last-Will Testament.",
+      "como_detectar": "Heurística: si el módulo aparece en lifecycle.subscribes_dinamicos_en_lifecycle con uso de mqtt directo, debería referenciar will/LWT en onLoad.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "nota": "Difícil de detectar mecánicamente; mayormente para revisión manual."
+    }
+  ],
+
+  "salida_validador": "PASS si events.json es estructuralmente válido (AJV strict). Errores cross-system bloquean PASS. Warnings se reportan como drift visible pero no bloquean. Info son señales informativas (no obliga a actuar). Formato coherente con naming.validate.js y glossary.validate.js: banner PASS/FAIL + lista de findings agrupados por severidad, con ubicación archivo:línea cuando aplique.",
+
+  "convenciones_complementarias": [
+    "naming.validate.js valida la forma del nombre del evento (dots, ASCII, kebab-case en compuestos) y el verbo del whitelist por idioma. Cubre lo léxico del nombre.",
+    "glossary.validate.js valida que las entidades cross-módulo (en posición de entity) usen la forma canónica del idioma. Cubre el vocabulario.",
+    "events.validate.js (este contrato) cubre lo específico del paradigma de eventos: drift de RPC disfrazado, generic verbs, emit bypass, silent catch, raw topics en código, suscripciones dinámicas no documentadas.",
+    "modulo-completo.validate.js valida la auditoría per módulo (estructura, archivo:línea verificable, derivaciones internas).",
+    "Los 4 validators son complementarios y no se solapan. Cada uno tiene su scope. Se pueden ejecutar por separado o todos en CI."
+  ]
+}

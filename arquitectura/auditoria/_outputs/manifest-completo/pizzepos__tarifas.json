@@ -1,0 +1,167 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/tarifas",
+    "ubicacion": "modules/pizzepos/tarifas",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "tarifas",
+    "version": "2.0.0",
+    "description_oficial": "Asignación carta+canal + registro de variantes. Cada canal tiene su carta con precios finales escritos. Sin cálculos en runtime.",
+    "author": "Pizzepos Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "tarifas.config.actualizada", "description": "Config cambiada (asignación canal, variante registrada)" }
+    ],
+    "subscribes": [
+      { "event": "project.activated",   "handler": "onProjectActivated",   "extras": {} },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated", "extras": {} }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [
+    {
+      "name": "tarifas.set_general",
+      "description": "Establece la carta general (la que usan los canales sin carta propia)",
+      "parameters_required": ["carta_id"],
+      "parameters_property_names": ["carta_id"],
+      "parameters_size_chars": 124,
+      "parameters_full_path_hint": "modules/pizzepos/tarifas/module.json → tools[0].parameters"
+    },
+    {
+      "name": "tarifas.assign",
+      "description": "Asigna una carta a un canal. Si carta_id es null, el canal vuelve a usar la general. Canales: mesa, llevar, telefono, whatsapp, glovo, llevadoo.",
+      "parameters_required": ["canal"],
+      "parameters_property_names": ["canal", "carta_id"],
+      "parameters_size_chars": 265,
+      "parameters_full_path_hint": "modules/pizzepos/tarifas/module.json → tools[1].parameters"
+    },
+    {
+      "name": "tarifas.get",
+      "description": "Config actual: carta general + qué carta usa cada canal + variantes registradas",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 33,
+      "parameters_full_path_hint": "modules/pizzepos/tarifas/module.json → tools[2].parameters"
+    },
+    {
+      "name": "tarifas.register_variant",
+      "description": "Registra una variante de carta con sus reglas y la asigna a canales. Las reglas describen cómo se creó (para que tarifas-sync pueda reproducir los cambios cuando la base cambie).",
+      "parameters_required": ["carta_id", "base_carta_id"],
+      "parameters_property_names": ["carta_id", "base_carta_id", "nombre", "canales", "reglas"],
+      "parameters_size_chars": 597,
+      "parameters_full_path_hint": "modules/pizzepos/tarifas/module.json → tools[3].parameters"
+    },
+    {
+      "name": "tarifas.get_variants",
+      "description": "Lista las variantes registradas con sus reglas y canales asignados",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 33,
+      "parameters_full_path_hint": "modules/pizzepos/tarifas/module.json → tools[4].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "tarifas", "action": "get",    "handler": "handleGet" },
+      { "domain": "tarifas", "action": "health", "handler": "handleHealth" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": { "level": null, "structured": null },
+    "metrics": {
+      "enabled": null,
+      "counters": ["tarifas.assign.updated", "tarifas.variant.registered"],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [
+      { "name": "tarifas-creator", "description": "Crea variante desde carta base: duplica, ajusta precios, filtra productos, renombra, registra" },
+      { "name": "tarifas-sync",    "description": "Cuando la carta base cambia, evalúa cada variante y propaga cambios según reglas" }
+    ],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": false,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 3915,
+    "module_json_lineas": 104,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "tier_carga_inferido=null: 'tarifas' no aparece en ningún tier de system.json.module_load_order.tiers",
+      "agents en module.json es un objeto con description+named-keys (no array) — interpretado como inline_en_module_json",
+      "observability.metrics no tiene campo 'enabled'; logging no declarado en module.json"
+    ]
+  }
+}

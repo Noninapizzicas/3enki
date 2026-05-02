@@ -1,0 +1,119 @@
+{
+  "_doc": "Captura el GLOSARIO de términos cross-módulo del sistema event-core: una sola forma canónica por concepto por idioma. Su scope es estrecho: solo conceptos compartidos entre dos o más módulos. Las entidades internas de un único módulo no entran. Sinónimos prohibidos.",
+  "id": "glossary",
+  "version": "1.0.0",
+  "creada": "2026-04-30",
+  "supersedes_nota": "Primera versión.",
+
+  "objetivo": "Eliminar drift de sinónimos entre módulos. Si dos módulos hablan del mismo concepto (orden/pedido, factura/recibo, customer/cliente), DEBEN usar el mismo término. El glosario fija ese término por idioma. Validable cruzando glosario contra eventos publicados.",
+
+  "duracion_esperada_seg": 5,
+  "modelo_recomendado": "ninguno — el output es estático, mantenido por humanos via PR.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/convenciones/_contratos/glossary.contract.json (este archivo)",
+      "arquitectura/convenciones/_schemas/glossary.schema.json",
+      "arquitectura/convenciones/_outputs/naming.json (define los idiomas válidos)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/auditoria/_outputs/manifest-completo/*.json",
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json",
+      "modules/*/module.json (campo `language`)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "MÍNIMO. Solo entran términos cross-módulo. Si un término vive en un único módulo, NO va al glosario — el módulo lo decide internamente.",
+    "BILINGÜE OPCIONAL. Algunos conceptos solo tienen forma EN (device, firmware, shadow): se declaran solo `en`. Otros solo ES si hay justificación. Pero la mayoría tiene ambos.",
+    "DOMINIO CLASIFICADO. Cada término pertenece a un dominio (horeca, iot, system, auth, ai, ui, messaging). El dominio orienta dónde se usa pero no es restrictivo.",
+    "TRADUCCIONES LOSSY DOCUMENTADAS. Cuando ES↔EN no son 1:1, el campo `notes` captura el matiz. Ejemplo: `escandallo↔recipe-costing` — escandallo incluye mermas + ratio coste-PVP, recipe-costing es el término industria pero el matiz queda en notes.",
+    "SINÓNIMOS PROHIBIDOS. No se aceptan dos entradas para el mismo concepto. Si surge ambigüedad, se renombra el id o se fusiona — NO se duplica.",
+    "ESTABILIDAD. Una vez publicado un término, su forma canónica es estable. Cambios = migración masiva del sistema. Por eso no se añaden términos a la ligera."
+  ],
+
+  "principios": [
+    {
+      "id": "canonical_per_concept",
+      "regla": "Cada concepto tiene UNA forma canónica por idioma. Sinónimos prohibidos.",
+      "razon": "Coherencia cross-módulo. Si pedido ↔ order, ningún módulo puede llamar 'orden' al pedido."
+    },
+    {
+      "id": "cross_module_only",
+      "regla": "Solo entran términos que cruzan módulos. Entidades internas de un único módulo no van al glosario.",
+      "razon": "Mantiene el glosario corto y manejable. Cada módulo conserva libertad léxica interna."
+    },
+    {
+      "id": "bilingual_optional",
+      "regla": "Cada concepto declara `es` y/o `en`. Al menos uno presente.",
+      "razon": "Algunos conceptos solo viven en inglés (industria embedded/IoT). Otros pueden tener solo ES si así lo decidimos."
+    },
+    {
+      "id": "domain_classified",
+      "regla": "Cada concepto declara `domain` ∈ {horeca, iot, system, auth, ai, ui, messaging}.",
+      "razon": "Permite filtrar/agrupar el glosario, y orienta a desarrolladores nuevos."
+    },
+    {
+      "id": "lossy_translations_documented",
+      "regla": "Cuando la traducción ES↔EN no es 1:1 exacta, el campo `notes` describe el matiz.",
+      "razon": "El nombre canónico del concepto puede empobrecer el modelo si nadie documenta el matiz. Notes es el rescate."
+    },
+    {
+      "id": "id_kebab_case",
+      "regla": "El campo `id` es un identificador estable en kebab-case ASCII puro. No se cambia salvo migración masiva.",
+      "razon": "El id es la clave para herramientas y validators. Las formas canónicas (es/en) son strings legibles para humanos."
+    }
+  ],
+
+  "lista_canonica_dominios": [
+    "horeca",
+    "iot",
+    "system",
+    "auth",
+    "ai",
+    "ui",
+    "messaging"
+  ],
+
+  "output_shape_resumen": "Ver _schemas/glossary.schema.json. Top-level: _meta, scope (string), criterio_inclusion (string), concepts (array de { id, domain, es?, en?, notes? }).",
+
+  "reglas_de_extraccion": [
+    "Para cada concepto que aparece en dos o más módulos del sistema, crear UNA entrada con id único en kebab-case.",
+    "Declarar `domain` del concepto.",
+    "Declarar formas `es` y `en` (al menos una). Las formas son strings ASCII puros (sin tildes ni ñ — coherente con naming.json).",
+    "Si la traducción es lossy o si hay matiz industria-específico, añadir `notes` con la explicación.",
+    "Si dos módulos usan términos diferentes para el mismo concepto, decidir UNA forma canónica e incluirla. Los otros se considerarán drift y se migrarán."
+  ],
+
+  "criterio_inclusion_glosario": "Solo entra al glosario un término si: (1) más de un módulo lo usa o podría usarlo, Y (2) hay riesgo de sinónimo histórico o presente. Si el término es único de un módulo, NO entra.",
+
+  "derivaciones": {
+    "concept_uses_in_system": "lista de módulos donde aparece el concepto (calculada por el validator a partir de los audits).",
+    "drift_potencial": "ocurre si un módulo publica un evento <prefix>.<entity>.<verb> donde <entity> está en el glosario pero el módulo usa una forma no-canónica del idioma del módulo."
+  },
+
+  "prohibido": [
+    "Crear sinónimos. Si dos términos significan lo mismo, se elige uno y el otro es drift.",
+    "Mezclar formas dentro de un mismo idioma para un mismo concepto. `pedido` y `orden` no pueden ambos ser ES de `client_order`.",
+    "Incluir entidades internas de un único módulo. El glosario no es un diccionario exhaustivo del sistema — solo cross-módulo.",
+    "Eliminar términos del glosario sin migración. Si un término ya no se usa, primero se quita de los módulos, después del glosario."
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    "glossary.json valida estructuralmente contra glossary.schema.json (AJV strict).",
+    "Cada `id` es único en el array.",
+    "Cada concepto tiene al menos uno de {es, en} no-null.",
+    "Las formas canónicas (es, en) son ASCII puros — no tienen tildes ni ñ — coherente con naming.json.",
+    "Para cada módulo con auditoría modulo-completo y module.json.language declarado: si un evento publicado contiene un segmento que coincide con la forma canónica del idioma de un concepto del glosario, el segmento DEBE ser exactamente la forma canónica del idioma del módulo (no la del otro idioma, ni una variante).",
+    "El dominio declarado de cada concepto está en lista_canonica_dominios.",
+    "Si un evento de un módulo language=es contiene una entidad que aparece en el glosario pero solo tiene forma `en`, se marca warning (uso de término EN en módulo ES sin forma ES disponible)."
+  ],
+
+  "salida_validador": "PASS si glossary.json es estructuralmente válido y los ids son únicos. FAIL si hay errores de schema o duplicados. Cross-checks contra módulos del repo se reportan como warnings/findings — drift del sistema, no fallos del contrato.",
+
+  "convenciones_complementarias": [
+    "Esta convención asume coexistencia con `naming` (arquitectura/convenciones/_outputs/naming.json) que define los idiomas válidos y los whitelists de verbos. El glosario aporta el vocabulario de entidades, naming aporta la estructura del nombre y los verbos."
+  ]
+}

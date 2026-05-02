@@ -3,20 +3,55 @@
   "version": "2.0.0",
   "description": "Procesamiento comercial de facturas: pipeline step-based con agentes IA, validación y observabilidad",
   "author": "Event-Core Team",
+  "language": "es",
   "main": "index.js",
-
   "handlers": [
-    { "domain": "facturas", "action": "procesar", "method": "handleProcesar" },
-    { "domain": "facturas", "action": "subir", "method": "handleSubir" },
-    { "domain": "facturas", "action": "reprocesar", "method": "handleReprocesar" },
-    { "domain": "facturas", "action": "listar", "method": "handleListar" },
-    { "domain": "facturas", "action": "obtener", "method": "handleObtener" },
-    { "domain": "facturas", "action": "actualizar", "method": "handleActualizar" },
-    { "domain": "facturas", "action": "estadisticas", "method": "handleEstadisticas" },
-    { "domain": "facturas", "action": "exportar", "method": "handleExportar" },
-    { "domain": "facturas", "action": "pipeline-metrics", "method": "handlePipelineMetrics" }
+    {
+      "domain": "facturas",
+      "action": "procesar",
+      "method": "handleProcesar"
+    },
+    {
+      "domain": "facturas",
+      "action": "subir",
+      "method": "handleSubir"
+    },
+    {
+      "domain": "facturas",
+      "action": "reprocesar",
+      "method": "handleReprocesar"
+    },
+    {
+      "domain": "facturas",
+      "action": "listar",
+      "method": "handleListar"
+    },
+    {
+      "domain": "facturas",
+      "action": "obtener",
+      "method": "handleObtener"
+    },
+    {
+      "domain": "facturas",
+      "action": "actualizar",
+      "method": "handleActualizar"
+    },
+    {
+      "domain": "facturas",
+      "action": "estadisticas",
+      "method": "handleEstadisticas"
+    },
+    {
+      "domain": "facturas",
+      "action": "exportar",
+      "method": "handleExportar"
+    },
+    {
+      "domain": "facturas",
+      "action": "pipeline-metrics",
+      "method": "handlePipelineMetrics"
+    }
   ],
-
   "tools": [
     {
       "name": "facturas.procesar",
@@ -25,11 +60,28 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "projectId": { "type": "string", "description": "ID del proyecto" },
-          "filePath": { "type": "string", "description": "Ruta al archivo (PDF, JPG, PNG, WebP, TIFF)" },
-          "source": { "type": "string", "enum": ["telegram", "gmail", "manual"], "default": "manual" }
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Ruta al archivo (PDF, JPG, PNG, WebP, TIFF)"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "telegram",
+              "gmail",
+              "manual"
+            ],
+            "default": "manual"
+          }
         },
-        "required": ["projectId", "filePath"]
+        "required": [
+          "projectId",
+          "filePath"
+        ]
       }
     },
     {
@@ -39,11 +91,28 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "projectId": { "type": "string", "description": "ID del proyecto" },
-          "estado": { "type": "string", "enum": ["pendiente", "procesando", "procesada", "error", "exportada"] },
-          "limit": { "type": "number", "default": 50 }
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "procesando",
+              "procesada",
+              "error",
+              "exportada"
+            ]
+          },
+          "limit": {
+            "type": "number",
+            "default": 50
+          }
         },
-        "required": ["projectId"]
+        "required": [
+          "projectId"
+        ]
       }
     },
     {
@@ -53,13 +122,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "projectId": { "type": "string", "description": "ID del proyecto" }
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          }
         },
-        "required": ["projectId"]
+        "required": [
+          "projectId"
+        ]
       }
     }
   ],
-
   "events": {
     "publishes": [
       "factura.recibida",
@@ -68,18 +141,28 @@
       "factura.exportada"
     ],
     "subscribes": [
-      { "event": "factura.entrada", "handler": "onFacturaEntrada" }
+      {
+        "event": "factura.entrada",
+        "handler": "onFacturaEntrada"
+      }
     ]
   },
-
   "config": {
     "ocr": {
       "provider": "local.google-vision",
       "hint": "DOCUMENT_TEXT_DETECTION",
-      "languages": ["es", "en"]
+      "languages": [
+        "es",
+        "en"
+      ]
     },
     "ai": {
-      "providers": ["deepseek", "anthropic", "openai", "gemini"],
+      "providers": [
+        "deepseek",
+        "anthropic",
+        "openai",
+        "gemini"
+      ],
       "temperature": 0.1,
       "maxTokens": 2000
     },
@@ -101,7 +184,6 @@
       "db": 30000
     }
   },
-
   "observability": {
     "logging": {
       "level": "info",

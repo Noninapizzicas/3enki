@@ -1,0 +1,208 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/comandero",
+    "ubicacion": "modules/pizzepos/comandero",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "comandero",
+    "version": "2.0.0",
+    "description_oficial": "Gestión de pedidos - Añadir productos a cuentas",
+    "author": "Pizzepos Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_pizzepos",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "comandero.item_agregado",  "description": "Item añadido al buffer del comandero" },
+      { "event": "comandero.item_eliminado", "description": "Item eliminado del buffer del comandero" },
+      { "event": "comandero.item_actualizado", "description": "Cantidad o notas de item actualizado en el buffer" },
+      { "event": "comandero.enviar_cocina",  "description": "Comandero solicita enviar pedido a cocina — Pedidos recoge y crea pedido formal" }
+    ],
+    "subscribes": [
+      { "event": "cuenta.creada",        "handler": "onCuentaCreada",        "extras": {} },
+      { "event": "cuenta.actualizada",   "handler": "onCuentaActualizada",   "extras": {} },
+      { "event": "caja.cerrada",         "handler": "onCajaCerrada",         "extras": {} },
+      { "event": "dia.iniciado",         "handler": "onDiaIniciado",         "extras": {} },
+      { "event": "catalogo.actualizado", "handler": "onCatalogoActualizado", "extras": {} },
+      { "event": "producto.creado",      "handler": "onProductoActualizado", "extras": {} },
+      { "event": "producto.actualizado", "handler": "onProductoActualizado", "extras": {} },
+      { "event": "carta.actualizada",    "handler": "onCartaActualizada",    "extras": {} }
+    ],
+    "provides_eventos": [
+      "comandero.item_agregado",
+      "comandero.item_eliminado",
+      "comandero.item_actualizado",
+      "comandero.enviar_cocina"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/pedido/:cuenta_id",
+      "handler": "handleGetPedido",
+      "description": "Obtener pedido de una cuenta",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/pedido/:cuenta_id/items",
+      "handler": "handleAddItem",
+      "description": "Añadir item al pedido",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/pedido/:cuenta_id/items/:item_id",
+      "handler": "handleRemoveItem",
+      "description": "Eliminar item del pedido",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "PUT",
+      "path": "/pedido/:cuenta_id/items/:item_id",
+      "handler": "handleUpdateItem",
+      "description": "Actualizar cantidad o notas de un item",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/pedido/:cuenta_id/enviar",
+      "handler": "handleEnviarCocina",
+      "description": "Enviar pedido a cocina",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": null,
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "comandero.item_agregado.total",
+        "comandero.item_eliminado.total",
+        "comandero.enviado.total"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Comandero",
+    "icon": "📝",
+    "views_keys": ["main"],
+    "section_widget_types": ["categories", "action-bar", "grid", "edicion-cobro"],
+    "permissions_declaradas": [],
+    "tamano_bytes": 4320,
+    "endpoints_referenciados": [
+      "/modules/cuentas/cuentas/{cuenta_id}",
+      "/modules/productos/categorias",
+      "/modules/cuentas/cuentas",
+      "/modules/ui-renderer/ui/comandero/main?cuenta_id={new_id}",
+      "/modules/comandero/pedido/{cuenta_id}/enviar",
+      "/modules/ui-renderer/ui/cuentas/main",
+      "/modules/productos/productos",
+      "/modules/comandero/pedido/{cuenta_id}/items",
+      "/modules/comandero/pedido/{cuenta_id}",
+      "/modules/comandero/pedido/{cuenta_id}/items/{item_id}/quantity",
+      "/modules/comandero/pedido/{cuenta_id}/items/{item_id}",
+      "/modules/cobros/cobros",
+      "/modules/impresion/ticket"
+    ],
+    "mqtt_topics_declarados": [
+      "comandero.item_agregado",
+      "comandero.item_eliminado",
+      "pedido.item_actualizado"
+    ]
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": true,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 11822,
+    "module_json_lineas": 393,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "provides.events duplica los 4 eventos de events.publishes como array de strings — campo provides es canónico pero su uso interno como alias de publishes es atípico",
+      "apis[5] (/health) no tiene description en module.json — seteado a null",
+      "No declara ui_handlers ni handlers — sin registro de UI handler en module.json (UI declarativa sí presente)"
+    ]
+  }
+}

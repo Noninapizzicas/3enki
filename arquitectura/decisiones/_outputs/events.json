@@ -1,0 +1,430 @@
+{
+  "_meta": {
+    "convencion": "events",
+    "version": "1.6.0",
+    "creado_en": "2026-05-02",
+    "contrato_referencia": "arquitectura/decisiones/_contratos/events.contract.json",
+    "supersedes_nota": "v1.6.0 (POC3 finding F2 + POC4 finding F5): añadida module_dependencies_shape que formaliza el campo config.module_dependencies de module.json. Define 4 interaction_types canonicos (mqttRequest, subscribe_only, publish_only, bidirectional) + shape de cada dependency entry (interaction, actions, events, descripcion). Habilita validador cross-modulo: si el modulo invoca un peer no declarado o con interaction distinta, drift.\n\nv1.5.0 (POC3 F5): request_response.context_injection (anti moduleLoader directo).\n\nv1.4.0 (POC2 F5): subscribes_declaration_shape.\n\nv1.3.0 (POC2 F2): _publicarEvento canonico unificado.\n\nv1.2.0 (POC2 F1): event_naming_subforms.\n\nv1.1.0 (POC1): recommended_helpers."
+  },
+
+  "regla": "Eventos viajan por MQTT (Aedes embedded por defecto). Bus híbrido transparente al módulo. Topics jerárquicos por categoría: core/{core-id}/<categoria>/.... Cardinalidad libre (cero, uno o muchos suscriptores). Fire-and-forget. Idempotencia obligatoria en handlers. Mismo código del módulo de Casa a Manzana — la escala se decide por configuración del transporte, no por código.",
+
+  "transport": {
+    "protocol": "mqtt",
+    "default_broker": "aedes_embedded",
+    "external_broker_supported": true,
+    "bridge_strategy": "Aedes embedded actúa como bridge a un broker MQTT externo (Mosquitto, EMQX, otros) en despliegues Manzana. Los módulos no perciben la diferencia — la API publish/subscribe es idéntica. La elección broker embedded vs externo se hace por configuración del core, no por código del módulo."
+  },
+
+  "bus_internals": {
+    "mode": "hybrid",
+    "mechanisms": [
+      {
+        "name": "EventEmitter",
+        "scope": "intra-proceso",
+        "purpose": "Suscripciones dentro del mismo core. Latencia óptima sin serialización JSON ni red. Es el camino rápido para el caso común (módulos del mismo proceso hablándose entre sí)."
+      },
+      {
+        "name": "MQTT",
+        "scope": "inter-core",
+        "purpose": "Suscripciones entre cores distintos (despliegues Manzana). Pasa por el broker (embedded o externo). Permite distribución transparente — el módulo no sabe si el suscriptor está local o remoto."
+      },
+      {
+        "name": "Hooks",
+        "scope": "cross-cutting",
+        "purpose": "Interceptación de todos los eventos para logging, métricas, tracing y auditoría. Cero acoplamiento al payload del evento — los hooks operan sobre metadata."
+      }
+    ],
+    "transparent_to_module": true
+  },
+
+  "categorias_canonicas": [
+    {
+      "id": "events",
+      "topic_pattern": "core/{core-id}/events/{module}/{entity}/{verb}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Eventos de dominio. Algo ha pasado en el sistema y se cuenta. Sin retain — los suscriptores tardíos no deben recibir eventos viejos como si fueran nuevos. QoS 1 garantiza entrega; los handlers son idempotentes para tolerar duplicados.",
+      "derivado_de": ["transport_mqtt", "topic_structure", "qos_strategy", "retain_policy"]
+    },
+    {
+      "id": "state",
+      "topic_pattern": "core/{core-id}/state/{entity}/{id}",
+      "qos": 1,
+      "retain": true,
+      "descripcion": "Estado actual de algo (un dispositivo, un módulo, una configuración). Retained porque los suscriptores tardíos necesitan saber el estado actual al conectar — sin retain, un nuevo suscriptor tendría que esperar al próximo cambio para enterarse del estado.",
+      "derivado_de": ["topic_structure", "qos_strategy", "retain_policy"]
+    },
+    {
+      "id": "commands",
+      "topic_pattern": "core/{core-id}/commands/{target}/{action}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Comandos dirigidos a un destinatario específico (ej. restart de un device). Sin retain — no se reproducen en reconexión, no quieres que un device reciba un viejo restart al volver. QoS 1 garantiza entrega.",
+      "derivado_de": ["topic_structure", "qos_strategy", "retain_policy"]
+    },
+    {
+      "id": "api/request",
+      "topic_pattern": "core/{core-id}/api/request/{service}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Request inter-core dentro del patrón formal request/response. Lleva correlation_id en el payload para casar con la respuesta. Se usa cuando un core necesita pedir algo a otro core con respuesta sincrónica desde el lado del caller.",
+      "derivado_de": ["request_response_formal", "qos_strategy"]
+    },
+    {
+      "id": "api/response",
+      "topic_pattern": "core/{core-id}/api/response/{correlation_id}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Respuesta del patrón formal request/response inter-core. El correlation_id en el topic permite al caller suscribirse específicamente a su respuesta sin recibir respuestas de otros callers.",
+      "derivado_de": ["request_response_formal", "qos_strategy"]
+    },
+    {
+      "id": "status",
+      "topic_pattern": "core/{core-id}/status",
+      "qos": 1,
+      "retain": true,
+      "descripcion": "Estado de presencia y descripción de un core (state, version, módulos cargados, APIs expuestas). Retained: los nuevos peers reciben el status actual al conectar al broker. Combinado con LWT detecta caídas automáticamente.",
+      "derivado_de": ["last_will_obligatorio", "discovery_via_retained", "retain_policy"]
+    },
+    {
+      "id": "heartbeat",
+      "topic_pattern": "core/{core-id}/heartbeat",
+      "qos": 0,
+      "retain": false,
+      "descripcion": "Pulso periódico para indicar 'sigo vivo'. QoS 0 — la pérdida ocasional se compensa con el siguiente pulso. Sin retain — es transitorio. Complementa LWT con un signal positivo activo.",
+      "derivado_de": ["qos_strategy", "retain_policy"]
+    },
+    {
+      "id": "logs",
+      "topic_pattern": "core/{core-id}/logs/{level}",
+      "qos": 0,
+      "retain": false,
+      "descripcion": "Logs estructurados por nivel (info, warn, error, debug). QoS 0 — los logs son alta frecuencia y la pérdida ocasional es aceptable. Sin retain.",
+      "derivado_de": ["qos_strategy", "retain_policy"]
+    },
+    {
+      "id": "ui/request",
+      "topic_pattern": "ui/request/{domain}/{action}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Request del frontend (UI) al backend. Sin prefijo core/ porque la UI no sabe a qué core específico habla — el broker rutea al core que tenga el handler. Lleva correlation_id en el payload para correlacionar con la respuesta.",
+      "derivado_de": ["request_response_formal", "qos_strategy"]
+    },
+    {
+      "id": "ui/response",
+      "topic_pattern": "ui/response/{correlation_id}",
+      "qos": 1,
+      "retain": false,
+      "descripcion": "Respuesta del backend al frontend. correlation_id en el topic permite al frontend suscribirse exclusivamente a su propia respuesta sin recibir las de otras requests.",
+      "derivado_de": ["request_response_formal", "qos_strategy"]
+    }
+  ],
+
+  "last_will": {
+    "obligatorio": true,
+    "topic_pattern": "core/{core-id}/status",
+    "payload_template": {
+      "state": "offline",
+      "timestamp": "{iso8601}"
+    },
+    "qos": 1,
+    "retain": true,
+    "nota": "El cliente publica state='online' al conectar (mismo topic, retain=true). El LWT (con state='offline') se dispara automáticamente si la conexión muere abruptamente sin desconexión limpia. Combinado con retain, los nuevos suscriptores reciben inmediatamente el estado actual de todos los peers al conectar."
+  },
+
+  "discovery": {
+    "mecanismo": "retained_status",
+    "subscribe_pattern": "core/+/status",
+    "publish_pattern": "core/{core-id}/status",
+    "payload_template": {
+      "state": "online | offline",
+      "version": "semver del core",
+      "modules_loaded": "array de módulos cargados",
+      "apis_exposed": "array de APIs públicas",
+      "subscriptions": "array de topics suscritos",
+      "started_at": "timestamp ISO 8601 del arranque"
+    },
+    "qos": 1,
+    "retain": true
+  },
+
+  "request_response": {
+    "api_signature": "mqttRequest(domain, action, payload, options?) — options puede incluir timeout_ms",
+    "returns": "Promise<{ status: number, data?: any, error?: string }>",
+    "request_topic_patterns": [
+      "ui/request/{domain}/{action}",
+      "core/{core-id}/api/request/{service}"
+    ],
+    "response_topic_pattern": "ui/response/{correlation_id} | core/{core-id}/api/response/{correlation_id}",
+    "correlation_id_field": "correlation_id",
+    "default_timeout_ms": 5000,
+    "status_codes_canonical": [200, 201, 202, 400, 404, 409, 500],
+    "notas": "El caller llama mqttRequest y recibe una Promise. Internamente: genera correlation_id, se suscribe a la response topic, publica la request, espera o falla por timeout. Los handlers responden publicando a la response topic con status code HTTP-like. La 'sincronicidad' es del lado del caller; el handler sigue siendo asíncrono y desacoplado.",
+    "context_injection": {
+      "regla": "El core inyecta mqttRequest al modulo via context.mqttRequest en onLoad(context). El modulo lo guarda en this.mqttRequest y lo usa para llamar a otros modulos del sistema. NUNCA accede a otros modulos via this.moduleLoader.getModule(slug).instance.toolX(...) — eso rompe el paradigma event-core (acoplamiento sincronico, sin telemetria, sin desacople).",
+      "firma_canonica": "context.mqttRequest(domain: string, action: string, payload: object, options?: { timeout_ms?: number }) => Promise<{ status, data | error }>",
+      "drift_indicators": [
+        "this\\.moduleLoader\\.getModule\\s*\\(",
+        "\\.instance\\.tool[A-Z]\\w*\\s*\\(",
+        "\\.instance\\.handle[A-Z]\\w*\\s*\\(",
+        "core\\.modules\\.\\w+\\.instance\\."
+      ],
+      "alternativa_canonica": "// EN VEZ DE:\nconst sched = this.moduleLoader.getModule('scheduler');\nawait sched.instance.addJob(payload);\n\n// HACER:\nconst resp = await this.mqttRequest('scheduler', 'addJob', payload, { timeout_ms: 5000 });\nif (resp.error) { /* manejar error canonico */ }",
+      "validado_en_poc": "modules/pizzepos/carta-scheduler-poc/index.js (POC3) usa context.mqttRequest exclusivamente para scheduler.addJob/deleteJob y tarifas.assign — cero accesos directos a moduleLoader."
+    }
+  },
+
+  "payload_canonical_fields": {
+    "timestamp": {
+      "politica": "recomendado",
+      "formato": "ISO 8601 (ejemplo: 2026-04-30T15:30:00.123Z)",
+      "valores_comunes": [],
+      "nota": "Útil para tracing temporal cross-módulo. Cuando aplica auditoría o debugging temporal, casi siempre se quiere. Recomendado por defecto."
+    },
+    "correlation_id": {
+      "politica": "obligatorio_en_respuestas",
+      "formato": "string opaco generado por el caller (UUID, timestamp+random, etc.)",
+      "valores_comunes": [],
+      "nota": "Solo necesario en el patrón request/response del framework. Eventos de dominio normales no lo necesitan — son fire-and-forget puros."
+    },
+    "project_id": {
+      "politica": "obligatorio_si_multitenant",
+      "formato": "string identificador del proyecto/tenant",
+      "valores_comunes": [],
+      "nota": "Para sistemas multi-tenant donde el handler necesita filtrar por proyecto. Si el dominio del módulo es global o no multi-tenant, no aplica."
+    },
+    "source": {
+      "politica": "opcional",
+      "formato": "string corto identificando el origen",
+      "valores_comunes": ["cli", "ui", "auto", "agent", "system"],
+      "nota": "Indica el origen del evento cuando sea relevante para debugging o métricas por origen. No todos los eventos lo necesitan."
+    }
+  },
+
+  "publish_semantics": {
+    "returns": "Promise<void> | Promise<MessageId>",
+    "resolves_when": "El broker (Aedes embedded o externo) ha aceptado el mensaje en su cola para entrega.",
+    "does_not_imply": "Que los suscriptores hayan procesado o recibido el mensaje. La promesa solo afirma 'el bus tiene el mensaje', no 'el handler ya actuó'. Esto es deliberado: el emisor no controla ni espera al receptor.",
+    "error_significa": "El broker no aceptó el mensaje. Causas posibles: broker desconectado, queue llena, timeout de connect, payload mal formado. Es un error de transporte, no de dominio.",
+    "uso_recomendado": "Default: await this.eventBus.publish(...) en handlers async — propaga el error al caller. En callbacks no-async (setTimeout, on close): this.eventBus.publish(...).catch(err => this.logger.error('publish.failed', { event: 'x.y.z', error: err.message })) — logea sin propagar. NUNCA: .catch(() => {}) sin log — silencia y rompe la observabilidad."
+  },
+
+  "detection_patterns": {
+    "generic_verbs": [
+      "action",
+      "event",
+      "data",
+      "info",
+      "update",
+      "change",
+      "do",
+      "stuff",
+      "thing",
+      "response",
+      "request",
+      "result"
+    ],
+    "request_response_suffixes": [
+      ".request",
+      ".response"
+    ],
+    "emit_bypass_regex": "\\.emit\\s*\\(",
+    "silent_catch_regex": "\\.publish\\s*\\([^)]*\\)\\s*\\.catch\\s*\\(\\s*\\(?\\s*_?\\s*\\)?\\s*=>\\s*\\{\\s*\\}\\s*\\)",
+    "raw_topic_indicators": [
+      "/",
+      "core/"
+    ],
+    "imperative_verbs_es": [
+      "guardar",
+      "actualizar",
+      "eliminar",
+      "crear",
+      "cargar",
+      "enviar",
+      "recibir",
+      "procesar",
+      "cancelar",
+      "iniciar",
+      "registrar",
+      "publicar",
+      "archivar",
+      "abrir",
+      "cerrar",
+      "asignar",
+      "liberar",
+      "validar",
+      "exportar",
+      "importar"
+    ],
+    "imperative_verbs_en": [
+      "save",
+      "update",
+      "delete",
+      "create",
+      "load",
+      "send",
+      "receive",
+      "process",
+      "cancel",
+      "start",
+      "register",
+      "publish",
+      "archive",
+      "open",
+      "close",
+      "assign",
+      "release",
+      "validate",
+      "export",
+      "import"
+    ]
+  },
+
+  "recommended_helpers": [
+    {
+      "id": "publicar_evento",
+      "purpose": "Wrapper canónico para publicar eventos del módulo. Centraliza: añadir timestamp, propagar correlation_id automáticamente desde el sourcePayload del handler entrante (o aceptarlo explícito), early-return si bus no disponible, log estructurado del publish, telemetría en errores.",
+      "applies_to": "Todo módulo que emita eventos (publishes en module.json). Validado en notas-poc (correlation_id explícito) y ai-gateway-poc (auto-extraído de sourcePayload).",
+      "snippet_canonico": "async _publicarEvento(eventName, payload, sourcePayload = null) {\n  if (!this.eventBus) {\n    this.logger.warn(`${this.name}.event.bus_unavailable`, { event: eventName });\n    return;\n  }\n  // Auto-extraer correlation_id: prioridad sourcePayload > payload.correlation_id > null\n  const correlation_id =\n    sourcePayload?.correlation_id ||\n    payload?.correlation_id ||\n    null;\n  const finalPayload = {\n    ...(correlation_id ? { correlation_id } : {}),\n    ...payload,\n    timestamp: payload.timestamp || new Date().toISOString()\n  };\n  try {\n    await this.eventBus.publish(eventName, finalPayload);\n    this.logger.info(`${this.name}.event.published`, {\n      event: eventName,\n      correlation_id\n    });\n  } catch (err) {\n    this.logger.error(`${this.name}.event.publish.failed`, {\n      event: eventName,\n      error_message: err.message,\n      stack: err.stack,\n      correlation_id\n    });\n    this.metrics?.increment(`${this.name}.event.errors`, 1, { event: eventName });\n  }\n}",
+      "uso_en_handler": "// Variante 1 (notas-poc): correlation_id explicito\nawait this._publicarEvento('notas.creado', { nota_id, titulo });\n\n// Variante 2 (ai-gateway-poc): auto-extraer del sourcePayload del handler\nasync onLlmCompleteRequest(payload) {\n  // ...lógica...\n  await this._publicarEvento('llm.complete.response', { request_id, status, data }, payload);\n}",
+      "validado_en_poc": "modules/notas-poc/index.js (variante 1) y modules/conversacion/ai-gateway-poc/index.js (variante 2)"
+    }
+  ],
+
+  "event_naming_subforms": {
+    "descripcion": "Dentro de la categoria 'events' (topic core/{core-id}/events/...), el nombre del evento puede seguir DOS sub-formas legitimas. Distinguirlas evita marcar drift en eventos request/response sobre el bus normal (POC2 ai-gateway, finding F1).",
+    "subforms": [
+      {
+        "id": "domain_event",
+        "name_pattern": "<module>.<entity>.<verb-pasado>",
+        "descripcion": "Evento de hecho consumado: algo paso, se cuenta. El verbo va en pasado para reflejar que el hecho ya ocurrio. Es la forma por defecto. El handler que lo emite NO espera respuesta — fire-and-forget.",
+        "ejemplos_canonicos": [
+          "notas.creado",
+          "pedido.confirmado",
+          "gateway.started",
+          "device.found",
+          "session.expired",
+          "build.completed"
+        ],
+        "verbos_o_estados_permitidos": [
+          "creado", "actualizado", "eliminado", "iniciado", "completado", "fallido",
+          "found", "lost", "started", "stopped", "saved", "deleted", "updated", "completed", "failed"
+        ]
+      },
+      {
+        "id": "protocol_event",
+        "name_pattern": "<module>.<intent>.<protocol-state>",
+        "descripcion": "Evento de protocolo en el bus normal (eventBus.publish, NO mqttRequest). Simula un patron request/response sobre el mismo bus que los eventos de dominio. <intent> es la accion solicitada (resolve, complete, fetch, save). <protocol-state> es la fase del protocolo (request, response, started, completed, failed, timeout). El emisor del .request espera escuchar el .response, correlacionado por request_id.",
+        "ejemplos_canonicos": [
+          "llm.complete.request",
+          "llm.complete.response",
+          "credential.resolve.request",
+          "credential.resolve.response",
+          "fs.read.request",
+          "fs.read.response"
+        ],
+        "verbos_o_estados_permitidos": [
+          "request", "response", "started", "completed", "failed", "timeout", "cancelled"
+        ]
+      }
+    ]
+  },
+
+  "subscribes_declaration_shape": {
+    "descripcion": "Shape canonico de cada entry en module.json events.subscribes[*]. Los campos basicos son obligatorios; request_schema_ref y response_event son opcionales pero recomendados para protocol_event.request handlers, paralelos a apis[*].request_schema_ref del contrato http. Si presente, el bus (o middleware) valida el payload entrante ANTES de invocar al handler — ValidationError genera response canonica VALIDATION_FAILED sin tocar el codigo del modulo.",
+    "campos": [
+      {
+        "name": "event",
+        "type": "string (event name)",
+        "obligatorio_si": "siempre",
+        "descripcion": "Nombre canonico del evento al que se suscribe. Sigue event_naming_subforms (domain_event o protocol_event)."
+      },
+      {
+        "name": "handler",
+        "type": "string (method name)",
+        "obligatorio_si": "siempre",
+        "descripcion": "Nombre del metodo del modulo que recibe el payload. Convencion: on<EventNameCamelCase> (onLlmCompleteRequest, onCredentialResponse)."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "obligatorio_si": "recomendado",
+        "descripcion": "Descripcion humana de cuando dispara este handler y que hace. Util para auditoria."
+      },
+      {
+        "name": "request_schema_ref",
+        "type": "string (path al JSON Schema)",
+        "obligatorio_si": "opcional, recomendado para protocol_event.request",
+        "descripcion": "Path al JSON Schema del payload entrante. Si presente, el bus o middleware valida ANTES de invocar el handler. ValidationError genera response canonica VALIDATION_FAILED automaticamente. Paralelo a apis[*].request_schema_ref del contrato http."
+      },
+      {
+        "name": "response_event",
+        "type": "string (event name)",
+        "obligatorio_si": "opcional, recomendado para protocol_event.request",
+        "descripcion": "Nombre del evento de response que el handler publica. Tipicamente <module>.<intent>.response. Documenta la pareja request/response y permite a la auditoria detectar protocolos incompletos (request declarado sin response correspondiente)."
+      },
+      {
+        "name": "response_schema_ref",
+        "type": "string (path al JSON Schema)",
+        "obligatorio_si": "opcional, junto con response_event",
+        "descripcion": "Path al JSON Schema de la response que el handler publica. Permite validacion automatica de salida y autodocumentacion del protocolo."
+      }
+    ]
+  },
+
+  "module_dependencies_shape": {
+    "descripcion": "Shape canonico del campo config.module_dependencies en module.json. Documenta de forma introspectable las dependencias del modulo hacia otros modulos del sistema. La auditoria/validator puede comparar el codigo real con esta declaracion: si el modulo invoca a un peer no declarado o usa interaction distinta a la declarada, drift.",
+    "interaction_types": [
+      {
+        "id":          "mqttRequest",
+        "descripcion": "El modulo llama a un peer via context.mqttRequest(domain, action, payload, options?) y espera respuesta canonica.",
+        "implica_publish_o_subscribe": "El framework (mqttRequest interno) publica al request topic y se suscribe a la response topic — el modulo no declara explicitamente."
+      },
+      {
+        "id":          "subscribe_only",
+        "descripcion": "El modulo escucha eventos publicados por el peer pero NO le habla. Relacion unidireccional receptor.",
+        "implica_publish_o_subscribe": "Los eventos escuchados aparecen en events.subscribes (con event de la forma <peer>.<entity>.<verb>)."
+      },
+      {
+        "id":          "publish_only",
+        "descripcion": "El modulo emite eventos que el peer escucha. Relacion unidireccional emisor. Raro como categoria explicita; usualmente es subscribe_only invertido (el peer lo declara, no este).",
+        "implica_publish_o_subscribe": "Los eventos emitidos aparecen en events.publishes."
+      },
+      {
+        "id":          "bidirectional",
+        "descripcion": "Combinacion: el modulo escucha eventos del peer Y le hace mqttRequest. Por ejemplo carta-scheduler escucha scheduler.job.triggered Y hace mqttRequest('scheduler', 'addJob', ...).",
+        "implica_publish_o_subscribe": "Ambos: aparece en subscribes (el evento) Y se llama via mqttRequest."
+      }
+    ],
+    "shape_per_dependency": {
+      "campos": [
+        {
+          "name":           "interaction",
+          "type":           "string (enum)",
+          "obligatorio_si": "siempre",
+          "descripcion":    "Tipo de interaccion: mqttRequest | subscribe_only | publish_only | bidirectional. Validador detecta drift si el codigo no coincide."
+        },
+        {
+          "name":           "actions",
+          "type":           "array de strings (action names)",
+          "obligatorio_si": "interaction in {mqttRequest, bidirectional}",
+          "descripcion":    "Lista de actions (segundo arg de mqttRequest) que el modulo invoca. Ej: ['addJob', 'deleteJob'] para scheduler. Validador detecta si el modulo llama una action no declarada."
+        },
+        {
+          "name":           "events",
+          "type":           "array de strings (event names)",
+          "obligatorio_si": "interaction in {subscribe_only, publish_only, bidirectional}",
+          "descripcion":    "Eventos del peer escuchados/publicados. Cruzable con events.subscribes/publishes."
+        },
+        {
+          "name":           "descripcion",
+          "type":           "string",
+          "obligatorio_si": "siempre",
+          "descripcion":    "Por que el modulo depende del peer. Que utilidad le da."
+        }
+      ],
+      "ejemplo_json": "{\"module_dependencies\":{\"scheduler\":{\"interaction\":\"mqttRequest\",\"actions\":[\"addJob\",\"deleteJob\"],\"descripcion\":\"Registra/elimina jobs cron en el scheduler central.\"},\"pedidos\":{\"interaction\":\"subscribe_only\",\"events\":[\"pedido.enviado_cocina\",\"pedido.cancelado\"],\"descripcion\":\"Recibimos pedidos para mostrar en cocina. NO llamamos a Pedidos.\"}}}"
+    }
+  }
+}

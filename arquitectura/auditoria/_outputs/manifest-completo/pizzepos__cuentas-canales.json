@@ -1,0 +1,307 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/cuentas-canales",
+    "ubicacion": "modules/pizzepos/cuentas-canales",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "cuentas-canales",
+    "version": "3.0.0",
+    "description_oficial": "Sistema unificado de canales de venta con patrón Strategy: mesa, teléfono, llevar, glovo, whatsapp",
+    "author": "Pizzepos Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_pizzepos",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "cuenta.creada",          "description": "Cuenta creada en cualquier canal (mesa/telefono/llevar/glovo/whatsapp)" },
+      { "event": "cuenta.cerrada",         "description": "Cuenta cerrada en cualquier canal" },
+      { "event": "mesa.abierta",           "description": "Mesa abierta para servicio" },
+      { "event": "mesa.cerrada",           "description": "Mesa cerrada y liberada" },
+      { "event": "telefono.pedido_creado", "description": "Pedido telefónico creado" },
+      { "event": "llevar.ticket_creado",   "description": "Ticket para llevar creado" },
+      { "event": "glovo.pedido_recibido",  "description": "Pedido Glovo recibido desde la plataforma" },
+      { "event": "glovo.pedido_aceptado",  "description": "Pedido Glovo aceptado por el restaurante" },
+      { "event": "glovo.pedido_listo",     "description": "Pedido Glovo listo para rider" },
+      { "event": "whatsapp.pedido_creado", "description": "Pedido creado desde conversación WhatsApp" },
+      { "event": "whatsapp.pedido_listo",  "description": "Pedido WhatsApp listo, cliente notificado" }
+    ],
+    "subscribes": [
+      {
+        "event": "cobro.procesado",
+        "handler": "onCobroProcesado",
+        "extras": { "description": "Cobro completado — cierra cuenta en el canal correspondiente por prefijo" }
+      },
+      {
+        "event": "pedido.creado",
+        "handler": "MesaStrategy.onPedidoCreado",
+        "extras": { "description": "Pedido creado para mesa — actualiza total" }
+      },
+      {
+        "event": "cocina.pedido_listo",
+        "handler": "TelefonoStrategy/LlevarStrategy/GlovoStrategy/WhatsAppStrategy.onCocinaPedidoListo",
+        "extras": { "description": "Pedido listo en cocina — notifica canal telefono/llevar/glovo/whatsapp" }
+      }
+    ],
+    "provides_eventos": [
+      "mesa.abierta",
+      "mesa.camarero_asignado",
+      "mesa.cerrada",
+      "mesa.renombrada",
+      "telefono.llamada_detectada",
+      "telefono.contacto_identificado",
+      "telefono.pedido_creado",
+      "telefono.listo_para_recoger",
+      "llevar.ticket_creado",
+      "llevar.ticket_listo",
+      "llevar.ticket_entregado",
+      "glovo.pedido_recibido",
+      "glovo.pedido_aceptado",
+      "glovo.pedido_rechazado",
+      "glovo.pedido_listo",
+      "glovo.pedido_recogido",
+      "whatsapp.mensaje_recibido",
+      "whatsapp.pedido_creado",
+      "whatsapp.pedido_confirmado",
+      "whatsapp.pedido_listo",
+      "llevadoo.pedido_recibido",
+      "llevadoo.pedido_aceptado",
+      "llevadoo.para_recoger",
+      "llevadoo.pedido_listo",
+      "llevadoo.pedido_entregado",
+      "cuenta.creada",
+      "cuenta.cerrada"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": ["cuentas-mesa", "cuentas-telefono", "cuentas-llevar"],
+    "config_declarada": [
+      {
+        "key": "mesas",
+        "tipo": "object",
+        "valor_default": {
+          "auto_nombre_prefijo": "Mesa",
+          "descripcion": "Mesas dinámicas — sin config fija, nombre libre en tiempo de ejecución"
+        }
+      },
+      {
+        "key": "whatsapp",
+        "tipo": "object",
+        "valor_default": {
+          "enabled": false,
+          "template_listo": "¡Hola {{nombre}}! Tu pedido #{{numero}} está listo para recoger. Te esperamos."
+        }
+      },
+      {
+        "key": "whatsapp_bot",
+        "tipo": "object",
+        "valor_default": {
+          "auto_reply": true,
+          "phone_number_id": "",
+          "access_token": "",
+          "saludo": "Hola! Bienvenido a nuestra pizzería. Puedes hacernos tu pedido por aquí.",
+          "template_confirmacion": "Hemos recibido tu pedido #{{numero}}. Total estimado: {{total}}EUR. Te confirmaremos en breve.",
+          "template_confirmado": "Tu pedido #{{numero}} ha sido confirmado! Total: {{total}}EUR. Te avisamos cuando esté listo.",
+          "template_listo": "Tu pedido #{{numero}} está listo! {{modo}} Total: {{total}}EUR",
+          "template_gracias": "Gracias por tu pedido! Esperamos que lo disfrutes."
+        }
+      },
+      {
+        "key": "glovo",
+        "tipo": "object",
+        "valor_default": {
+          "api_key": "",
+          "store_id": ""
+        }
+      },
+      {
+        "key": "display",
+        "tipo": "object",
+        "valor_default": {
+          "max_numeros_mostrar": 10
+        }
+      },
+      {
+        "key": "reseteo_diario",
+        "tipo": "boolean",
+        "valor_default": true
+      },
+      {
+        "key": "caller_id",
+        "tipo": "object",
+        "valor_default": {
+          "enabled": false
+        }
+      }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": { "level": null, "structured": null },
+    "metrics": { "enabled": null, "counters": [], "gauges": [], "timings": [] }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "glovo-events.json",
+      "glovo.json",
+      "llevadoo-events.json",
+      "llevadoo.json",
+      "llevar-events.json",
+      "llevar.json",
+      "mesa-events.json",
+      "mesa.json",
+      "telefono-events.json",
+      "telefono.json",
+      "whatsapp-events.json",
+      "whatsapp.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": ["strategies"],
+    "snapshots": {
+      "provides": {
+        "events": [
+          "mesa.abierta",
+          "mesa.camarero_asignado",
+          "mesa.cerrada",
+          "mesa.renombrada",
+          "telefono.llamada_detectada",
+          "telefono.contacto_identificado",
+          "telefono.pedido_creado",
+          "telefono.listo_para_recoger",
+          "llevar.ticket_creado",
+          "llevar.ticket_listo",
+          "llevar.ticket_entregado",
+          "glovo.pedido_recibido",
+          "glovo.pedido_aceptado",
+          "glovo.pedido_rechazado",
+          "glovo.pedido_listo",
+          "glovo.pedido_recogido",
+          "whatsapp.mensaje_recibido",
+          "whatsapp.pedido_creado",
+          "whatsapp.pedido_confirmado",
+          "whatsapp.pedido_listo",
+          "llevadoo.pedido_recibido",
+          "llevadoo.pedido_aceptado",
+          "llevadoo.para_recoger",
+          "llevadoo.pedido_listo",
+          "llevadoo.pedido_entregado",
+          "cuenta.creada",
+          "cuenta.cerrada"
+        ],
+        "queries": [
+          "mesas.activas",
+          "canales.list",
+          "canales.health",
+          "canales.metrics"
+        ]
+      },
+      "strategies": {
+        "mesa": {
+          "description": "Servicio en mesa — mesas dinámicas, nombre libre, métricas de tiempo",
+          "prefijo": "mesa_",
+          "ui_domain": "mesa",
+          "actions": ["abrir", "cerrar", "renombrar", "asignar_camarero", "get", "activas", "list", "health", "metrics"]
+        },
+        "telefono": {
+          "description": "Pedidos telefónicos — caller ID, CRM, WhatsApp notification",
+          "prefijo": "tel_",
+          "ui_domain": "telefono",
+          "actions": ["llamada", "crear_pedido", "pendientes", "get", "marcar_listo", "contactos", "guardar_contacto", "health", "metrics"]
+        },
+        "llevar": {
+          "description": "Pedidos para llevar — tickets con display SSE",
+          "prefijo": "llevar_",
+          "ui_domain": "llevar",
+          "actions": ["crear", "marcar_listo", "entregar", "activos", "listos", "get", "health", "metrics"]
+        },
+        "glovo": {
+          "description": "Delivery via Glovo — aceptar/rechazar, notificar rider",
+          "prefijo": "glovo_",
+          "ui_domain": "glovo",
+          "actions": ["recibir", "aceptar", "rechazar", "marcar_listo", "activos", "get", "historial", "health", "metrics"]
+        },
+        "whatsapp": {
+          "description": "Pedidos vía WhatsApp Business API — conversaciones, auto-reply, confirmación",
+          "prefijo": "wa_",
+          "ui_domain": "whatsapp",
+          "actions": ["mensaje", "crear_pedido", "confirmar", "marcar_listo", "activos", "get", "conversaciones", "enviar", "health", "metrics"]
+        }
+      }
+    }
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 6914,
+    "module_json_lineas": 188,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "No declara tools[] — acceso solo via UI o eventos directos",
+      "No declara ui_handlers — módulo sin wiring declarativo de UI",
+      "provides.events duplica parcialmente events.publishes con eventos adicionales no declarados en publishes (mesa.camarero_asignado, mesa.renombrada, telefono.llamada_detectada, telefono.contacto_identificado, telefono.listo_para_recoger, llevar.ticket_listo, llevar.ticket_entregado, glovo.pedido_rechazado, glovo.pedido_recogido, whatsapp.mensaje_recibido, whatsapp.pedido_confirmado, llevadoo.*)"
+    ]
+  }
+}

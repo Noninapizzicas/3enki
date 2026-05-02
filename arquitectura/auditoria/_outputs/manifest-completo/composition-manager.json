@@ -1,0 +1,173 @@
+{
+  "_meta": {
+    "modulo": "composition-manager",
+    "ubicacion": "modules/composition-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "composition-manager",
+    "version": "1.0.0",
+    "description_oficial": "Generic entity composition: systems, links, and dependencies. Reusable by any module via events.",
+    "author": "Aichat Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_3_core",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "composition.response", "description": "Response to composition.request (request/response pattern)" },
+      { "event": "system.created",        "description": "System (logical container) created" },
+      { "event": "system.updated",        "description": "System updated" },
+      { "event": "system.deleted",        "description": "System deleted" },
+      { "event": "entity.joined_system",  "description": "Entity assigned to a system" },
+      { "event": "entity.left_system",    "description": "Entity removed from a system" },
+      { "event": "entity.linked",         "description": "Two entities linked" },
+      { "event": "entity.unlinked",       "description": "Entity link removed" },
+      { "event": "entity.dependency.added",   "description": "Dependency added between entities" },
+      { "event": "entity.dependency.removed", "description": "Dependency removed" }
+    ],
+    "subscribes": [
+      {
+        "event": "composition.request",
+        "handler": "onCompositionRequest",
+        "extras": { "description": "Request/response entry point for other modules" }
+      },
+      {
+        "event": "db.query.response",
+        "handler": "onDbQueryResponse",
+        "extras": { "description": "Database query responses" }
+      }
+    ],
+    "provides_eventos": [
+      "composition.response",
+      "system.created",
+      "system.updated",
+      "system.deleted",
+      "entity.joined_system",
+      "entity.left_system",
+      "entity.linked",
+      "entity.unlinked",
+      "entity.dependency.added",
+      "entity.dependency.removed"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "system",  "action": "create",           "handler": "handleUISystemCreate" },
+      { "domain": "system",  "action": "list",             "handler": "handleUISystemList" },
+      { "domain": "system",  "action": "get",              "handler": "handleUISystemGet" },
+      { "domain": "system",  "action": "update",           "handler": "handleUISystemUpdate" },
+      { "domain": "system",  "action": "delete",           "handler": "handleUISystemDelete" },
+      { "domain": "system",  "action": "addProject",       "handler": "handleUISystemAddEntity" },
+      { "domain": "system",  "action": "removeProject",    "handler": "handleUISystemRemoveEntity" },
+      { "domain": "project", "action": "link",             "handler": "handleUILink" },
+      { "domain": "project", "action": "unlink",           "handler": "handleUIUnlink" },
+      { "domain": "project", "action": "getLinks",         "handler": "handleUIGetLinks" },
+      { "domain": "project", "action": "getRelated",       "handler": "handleUIGetRelated" },
+      { "domain": "project", "action": "addDependency",    "handler": "handleUIAddDependency" },
+      { "domain": "project", "action": "removeDependency", "handler": "handleUIRemoveDependency" },
+      { "domain": "project", "action": "getDependencies",  "handler": "handleUIGetDependencies" },
+      { "domain": "project", "action": "getDependents",    "handler": "handleUIGetDependents" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "dbTimeout", "tipo": "number", "valor_default": 10000 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "composition.system.created.total",
+        "composition.link.created.total",
+        "composition.dependency.created.total"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": ["prompt.json"],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 3400,
+    "module_json_lineas": 75,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "provides key at top-level duplicates events.publishes — outlier capturado",
+      "observability.logging.correlation_id=true no capturado (no forma parte del schema de observability_declarada)",
+      "subscribes items tienen campo description — capturado en extras"
+    ]
+  }
+}

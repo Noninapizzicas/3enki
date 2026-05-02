@@ -1,0 +1,253 @@
+{
+  "_meta": {
+    "modulo": "database-manager",
+    "ubicacion": "modules/database-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "database-manager",
+    "version": "2.0.0",
+    "description_oficial": "SQLite database manager using sql.js (JavaScript-only, no native compilation)",
+    "author": "Aichat Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_1_infra",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "db.created",              "description": "Database created for a project" },
+      { "event": "db.deleted",              "description": "Database deleted for a project" },
+      { "event": "db.query.executed",       "description": "SQL query executed successfully" },
+      { "event": "db.schema.initialized",   "description": "Database schema initialized" },
+      { "event": "db.query.response",       "description": "Response to a query request event" },
+      { "event": "db.schema.init.response", "description": "Response to a schema init request event" }
+    ],
+    "subscribes": [
+      { "event": "db.query.request",       "handler": "onQueryRequest",      "extras": {} },
+      { "event": "db.schema.init.request", "handler": "onSchemaInitRequest", "extras": {} },
+      { "event": "db.persist.request",     "handler": "onPersistRequest",    "extras": {} }
+    ],
+    "provides_eventos": [
+      "db.created",
+      "db.deleted",
+      "db.query.executed",
+      "db.schema.initialized"
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "db.query",
+      "description": "Ejecuta consulta SQL de solo lectura (SELECT). Retorna resultados de la query.",
+      "parameters_required": ["projectId", "query"],
+      "parameters_property_names": ["projectId", "query", "params"],
+      "parameters_size_chars": 321,
+      "parameters_full_path_hint": "modules/database-manager/module.json → tools[0].parameters"
+    },
+    {
+      "name": "db.tables",
+      "description": "Lista todas las tablas de la base de datos del proyecto.",
+      "parameters_required": ["projectId"],
+      "parameters_property_names": ["projectId"],
+      "parameters_size_chars": 119,
+      "parameters_full_path_hint": "modules/database-manager/module.json → tools[1].parameters"
+    },
+    {
+      "name": "db.schema",
+      "description": "Obtiene el esquema de una tabla específica (columnas, tipos, constraints).",
+      "parameters_required": ["projectId", "tableName"],
+      "parameters_property_names": ["projectId", "tableName"],
+      "parameters_size_chars": 196,
+      "parameters_full_path_hint": "modules/database-manager/module.json → tools[2].parameters"
+    },
+    {
+      "name": "db.execute",
+      "description": "Ejecuta consulta SQL modificadora (INSERT, UPDATE, DELETE). REQUIERE CONFIRMACIÓN del usuario.",
+      "parameters_required": ["projectId", "query"],
+      "parameters_property_names": ["projectId", "query", "params"],
+      "parameters_size_chars": 360,
+      "parameters_full_path_hint": "modules/database-manager/module.json → tools[3].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/databases",
+      "handler": "handleListDatabases",
+      "description": "List all available databases",
+      "request_schema_ref": null,
+      "response_schema_ref": "./schemas/database.json#/definitions/list_response"
+    },
+    {
+      "method": "POST",
+      "path": "/databases/:projectId/query",
+      "handler": "handleExecuteQuery",
+      "description": "Execute SQL query (publishes db.query.executed)",
+      "request_schema_ref": "./schemas/database.json#/definitions/query_request",
+      "response_schema_ref": "./schemas/database.json#/definitions/query_response"
+    },
+    {
+      "method": "GET",
+      "path": "/databases/:projectId/schema",
+      "handler": "handleGetSchema",
+      "description": "Get database schema",
+      "request_schema_ref": null,
+      "response_schema_ref": "./schemas/database.json#/definitions/schema_response"
+    },
+    {
+      "method": "POST",
+      "path": "/databases/:projectId/init",
+      "handler": "handleInitSchema",
+      "description": "Initialize database schema (publishes db.schema.initialized)",
+      "request_schema_ref": "./schemas/database.json#/definitions/init_request",
+      "response_schema_ref": "./schemas/database.json#/definitions/init_response"
+    },
+    {
+      "method": "DELETE",
+      "path": "/databases/:projectId",
+      "handler": "handleDeleteDatabase",
+      "description": "Delete project database (publishes db.deleted)",
+      "request_schema_ref": null,
+      "response_schema_ref": "./schemas/database.json#/definitions/delete_response"
+    },
+    {
+      "method": "GET",
+      "path": "/databases/:projectId/tables",
+      "handler": "handleListTables",
+      "description": "List tables in database",
+      "request_schema_ref": null,
+      "response_schema_ref": "./schemas/database.json#/definitions/tables_response"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check endpoint",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Module metrics",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "projectsPath", "tipo": "string",  "valor_default": "./data/projects" },
+      { "key": "autoSave",     "tipo": "boolean", "valor_default": true },
+      { "key": "maxDatabases", "tipo": "number",  "valor_default": 100 },
+      { "key": "queryTimeout", "tipo": "number",  "valor_default": 10000 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "db.created.total",
+        "db.deleted.total",
+        "db.query.total",
+        "db.query.errors",
+        "db.schema.init.total",
+        "db.schema.init.errors",
+        "db.saved.total",
+        "db.save.errors"
+      ],
+      "gauges": [
+        "db.loaded.count",
+        "db.projects.count"
+      ],
+      "timings": [
+        "db.query.duration",
+        "db.save.duration",
+        "db.load.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": ["schemas/database.json", "schemas/events.json"],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 7620,
+    "module_json_lineas": 255,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "tools[3] (db.execute) declara campos no-schema en tools[]: requires_confirmation=true, permissions=['write']",
+      "observability.logging declara correlation_id=true — campo extra no en schema de observability",
+      "provides declara queries[] además de events[] — queries no es key canónica del contrato"
+    ]
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "_meta": { "modulo": "gateway-manager", "ubicacion": "modules/gateway-manager", "auditado_en": "2026-04-30", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/gateway-manager.json" },
+  "identidad": { "name": "gateway-manager", "version": "1.0.0", "description_oficial": "Ciclo de vida de gateways software que traducen MQTT a protocolos nativos (TCP, BLE, USB, CMD)", "author": "Enki", "main_declarado": null, "main_real": "modules/gateway-manager/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": "tier_2_platform", "tier_declarado": "tier_2_platform", "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "literal", "valor": "gateway.stopped", "variables_referenciadas": [] }, "ubicacion": "modules/gateway-manager/index.js:103", "metodo_contenedor": "onUnload", "es_handler_de": null, "bloque_logico": "shutdown gateway", "payload": { "tipo": "object_literal", "campos_visibles": ["type", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('gateway.stopped', { type, timestamp: new Date().toISOString() });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "gateway.started", "variables_referenciadas": [] }, "ubicacion": "modules/gateway-manager/index.js:155", "metodo_contenedor": "_startEnabledGateways", "es_handler_de": null, "bloque_logico": "tras gateway.start()", "payload": { "tipo": "object_literal", "campos_visibles": ["type", "devices_count", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('gateway.started', { type, devices_count: gateway.devices.size, timestamp: ... });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "gateway.device_found", "variables_referenciadas": [] }, "ubicacion": "modules/gateway-manager/index.js:163", "metodo_contenedor": "_startEnabledGateways", "es_handler_de": null, "bloque_logico": "loop sobre gateway.devices", "payload": { "tipo": "object_literal", "campos_visibles": ["device_id", "gateway_type", "device_type", "capabilities", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "          await this.eventBus.publish('gateway.device_found', { device_id, gateway_type, device_type, capabilities, timestamp });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "gateway.error", "variables_referenciadas": [] }, "ubicacion": "modules/gateway-manager/index.js:178", "metodo_contenedor": "_startEnabledGateways", "es_handler_de": null, "bloque_logico": "catch en gateway.start", "payload": { "tipo": "object_literal", "campos_visibles": ["type", "error", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('gateway.error', { type, error: err.message, timestamp: ... });", "declarado_en_manifest": true }
+    ],
+    "subscribes": [],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["gateway.started", "gateway.stopped", "gateway.device_found", "gateway.device_lost", "gateway.error"],
+      "publica_literales_en_codigo": ["gateway.started", "gateway.stopped", "gateway.device_found", "gateway.error"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": ["gateway.device_lost"],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": [],
+      "subscribes_realmente_registrados": [],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [],
+  "ui_handlers": [
+    { "domain": "gateways", "action": "list", "handler_metodo": "handleList", "handler_ubicacion": "modules/gateway-manager/index.js:219", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["gateways", "active", "total_configured"], "status_error": null }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "gateways", "action": "status", "handler_metodo": "handleStatus", "handler_ubicacion": "modules/gateway-manager/index.js:242", "input_validado": ["type"], "codigos_error": ["400"], "output_shape": { "status_success": 200, "data_keys": ["type", "running", "enabled"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "gateways", "action": "restart", "handler_metodo": "handleRestart", "handler_ubicacion": "modules/gateway-manager/index.js:260", "input_validado": ["type"], "codigos_error": ["400", "500"], "output_shape": { "status_success": 200, "data_keys": ["type", "restarted", "devices"], "status_error": 500 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "gateways", "action": "discover", "handler_metodo": "handleDiscover", "handler_ubicacion": "modules/gateway-manager/index.js:280", "input_validado": ["type"], "codigos_error": ["400", "500"], "output_shape": { "status_success": 200, "data_keys": ["type", "discovered", "count"], "status_error": 500 }, "campo_origen_manifest": "ui_handlers" }
+  ],
+  "apis_http": [],
+  "estado": {
+    "memoria": [
+      { "campo": "this.gateways", "tipo": "Map", "ubicacion_init": "modules/gateway-manager/index.js:55", "se_invalida_con": "this.gateways.clear() en onUnload + delete en _restartGateway", "leak_potencial": false },
+      { "campo": "this.internalMetrics", "tipo": "Object", "ubicacion_init": "modules/gateway-manager/index.js:58", "se_invalida_con": "nunca", "leak_potencial": false }
+    ],
+    "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": "Sin persistencia — los gateways viven solo en memoria; al reload se reinician via config." }
+  },
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "gateways", "tipo": "object", "default_si_primitivo": null }
+    ],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": [
+      { "valor": "tcp,ble,usb,cmd", "ubicacion": "modules/gateway-manager/index.js:27", "naturaleza": "otro" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/gateway-manager/index.js:70", "acciones": ["this.logger = core.logger", "this.metrics = core.metrics", "this.eventBus = core.eventBus", "merge config['gateway-manager'].gateways", "merge core.config.gateways (compat)", "_startEnabledGateways()"], "guarda_referencias_externas": ["this.logger", "this.metrics", "this.eventBus"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/gateway-manager/index.js:97", "acciones": ["loop gateways: gateway.stop() + emit gateway.stopped", "this.gateways.clear()"], "estado_no_limpiado": ["this.internalMetrics"] },
+    "auto_wired_subscribes": false,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "mqtt-broker", "via_evento": "core.eventBus.mqtt (handle directo, gateways internos consumen mqtt)", "obligatorio_en": "onLoad", "ubicacion_uso": "modules/gateway-manager/index.js:121", "es_cross_vertical": false }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "mqtt-broker (eventBus.mqtt)", "que_pasa_si_cae": "Si mqtt no conectado en onLoad, log warn 'MQTT no disponible' y no se arranca ningún gateway — los devices físicos quedan sin gateway sin recovery automático.", "evidencia": "modules/gateway-manager/index.js:122" },
+    { "dependencia": "GatewayClass.start()", "que_pasa_si_cae": "Captura excepción, incrementa errors_total y emite gateway.error pero no reintenta — gateway queda sin arrancar hasta UI restart.", "evidencia": "modules/gateway-manager/index.js:171" }
+  ],
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('gateway-manager.<accion>', { ...campos })", "campos_estructurados_observados": ["module", "version", "active_gateways", "type", "devices", "error", "nota"], "ejemplos": [{ "snippet": "this.logger.info('gateway-manager.gateway.started', { type, devices: gateway.devices.size });", "ubicacion": "modules/gateway-manager/index.js:150" }, { "snippet": "this.logger.warn('gateway-manager.mqtt.not_available', { nota: 'MQTT no disponible — no se pueden arrancar gateways' });", "ubicacion": "modules/gateway-manager/index.js:123" }] },
+    "metricas_emitidas": [
+      { "nombre": "gateway.started.total", "tipo": "counter", "ubicacion": "modules/gateway-manager/index.js:147" },
+      { "nombre": "gateway.devices_found.total", "tipo": "counter", "ubicacion": "modules/gateway-manager/index.js:148" },
+      { "nombre": "gateway.errors.total", "tipo": "counter", "ubicacion": "modules/gateway-manager/index.js:172" }
+    ],
+    "metricas_drift_vs_manifest": ["gateway.commands_processed.total declarado en manifest pero no incrementado en index.js (probablemente vive en GatewayBase, no auditado en este pase)"],
+    "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" }
+  },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": [], "context_json_existe": false, "prompt_json_existe": false, "readme_existe": false, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/gateway-manager/index.js:7", "comentario_literal": "// Un gateway es un \"ESP32 virtual\" — desde el servidor es indistinguible de un ESP32 real. Mismo contrato MQTT: birth, status, command, ack.", "contexto": "doctrina del módulo: gateways como espejos de ESP32 reales" },
+      { "ubicacion": "modules/gateway-manager/index.js:81", "comentario_literal": "// Compatibilidad: config puede estar en core.config.gateways directamente", "contexto": "explica el doble-merge en onLoad (legacy vs canónico)" }
+    ],
+    "workarounds_detectados": [
+      { "ubicacion": "modules/gateway-manager/index.js:82", "descripcion": "Doble merge de config — primero gateway-manager.gateways, luego core.config.gateways top-level (compat con configuración legacy)" },
+      { "ubicacion": "modules/gateway-manager/index.js:295", "descripcion": "handleDiscover instancia un gateway temporal solo para llamar _discoverDevices() — no se persiste en this.gateways" }
+    ]
+  },
+  "metricas_fisicas": { "lineas_index_js": 311, "lineas_lib_total": 761, "lineas_services_total": 0, "archivos_codigo_count": 6, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "GATEWAY_TYPES como registro estático require()-eado de gateways/*.js (factory map)", "ejemplo": "modules/gateway-manager/index.js:27", "rareza": "inusual" },
+      { "patron": "Gateway temporal instanciado solo para discovery (sin start, no se persiste)", "ejemplo": "modules/gateway-manager/index.js:290", "rareza": "inusual" }
+    ]
+  },
+  "quirks": {
+    "warnings": [
+      "P3 — Gateway Manager IoT. Orquesta 4 tipos de gateway (tcp/ble/usb/cmd) declarados estáticamente en GATEWAY_TYPES.",
+      "gateway.device_lost declarado en manifest pero no se emite en index.js (posiblemente en gateways/*/disconnect — no auditado en este pase).",
+      "gateway.commands_processed.total declarado pero no incrementado en index.js (probablemente en GatewayBase).",
+      "Sin subscribes — solo emite eventos hacia adelante; el flujo de comandos llega via MQTT directo, no por eventBus."
+    ],
+    "secciones_vacias_intencionalmente": ["tools", "apis_http", "estado.persistencia.*", "configuracion.env_vars", "configuracion.paths_proyecto_referenciados", "codigo_intencion.todos", "version_archivada"]
+  }
+}

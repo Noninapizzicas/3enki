@@ -3,8 +3,8 @@
   "version": "2.0.0",
   "description": "SQLite database manager using sql.js (JavaScript-only, no native compilation)",
   "author": "Aichat Team",
+  "language": "en",
   "main": "index.js",
-
   "provides": {
     "events": [
       "db.created",
@@ -17,38 +17,49 @@
       "db.schema.init.request"
     ]
   },
-
   "events": {
     "publishes": [
       {
         "event": "db.created",
         "description": "Database created for a project",
-        "schema": { "$ref": "./schemas/events.json#/definitions/db_created" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/db_created"
+        }
       },
       {
         "event": "db.deleted",
         "description": "Database deleted for a project",
-        "schema": { "$ref": "./schemas/events.json#/definitions/db_deleted" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/db_deleted"
+        }
       },
       {
         "event": "db.query.executed",
         "description": "SQL query executed successfully",
-        "schema": { "$ref": "./schemas/events.json#/definitions/db_query_executed" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/db_query_executed"
+        }
       },
       {
         "event": "db.schema.initialized",
         "description": "Database schema initialized",
-        "schema": { "$ref": "./schemas/events.json#/definitions/db_schema_initialized" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/db_schema_initialized"
+        }
       },
       {
         "event": "db.query.response",
         "description": "Response to a query request event",
-        "schema": { "$ref": "./schemas/events.json#/definitions/db_query_response" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/db_query_response"
+        }
       },
       {
         "event": "db.schema.init.response",
         "description": "Response to a schema init request event",
-        "schema": { "$ref": "./schemas/events.json#/definitions/db_schema_init_response" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/db_schema_init_response"
+        }
       }
     ],
     "subscribes": [
@@ -69,51 +80,66 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
       "path": "/databases",
       "handler": "handleListDatabases",
       "description": "List all available databases",
-      "response_schema": { "$ref": "./schemas/database.json#/definitions/list_response" }
+      "response_schema": {
+        "$ref": "./schemas/database.json#/definitions/list_response"
+      }
     },
     {
       "method": "POST",
       "path": "/databases/:projectId/query",
       "handler": "handleExecuteQuery",
       "description": "Execute SQL query (publishes db.query.executed)",
-      "request_schema": { "$ref": "./schemas/database.json#/definitions/query_request" },
-      "response_schema": { "$ref": "./schemas/database.json#/definitions/query_response" }
+      "request_schema": {
+        "$ref": "./schemas/database.json#/definitions/query_request"
+      },
+      "response_schema": {
+        "$ref": "./schemas/database.json#/definitions/query_response"
+      }
     },
     {
       "method": "GET",
       "path": "/databases/:projectId/schema",
       "handler": "handleGetSchema",
       "description": "Get database schema",
-      "response_schema": { "$ref": "./schemas/database.json#/definitions/schema_response" }
+      "response_schema": {
+        "$ref": "./schemas/database.json#/definitions/schema_response"
+      }
     },
     {
       "method": "POST",
       "path": "/databases/:projectId/init",
       "handler": "handleInitSchema",
       "description": "Initialize database schema (publishes db.schema.initialized)",
-      "request_schema": { "$ref": "./schemas/database.json#/definitions/init_request" },
-      "response_schema": { "$ref": "./schemas/database.json#/definitions/init_response" }
+      "request_schema": {
+        "$ref": "./schemas/database.json#/definitions/init_request"
+      },
+      "response_schema": {
+        "$ref": "./schemas/database.json#/definitions/init_response"
+      }
     },
     {
       "method": "DELETE",
       "path": "/databases/:projectId",
       "handler": "handleDeleteDatabase",
       "description": "Delete project database (publishes db.deleted)",
-      "response_schema": { "$ref": "./schemas/database.json#/definitions/delete_response" }
+      "response_schema": {
+        "$ref": "./schemas/database.json#/definitions/delete_response"
+      }
     },
     {
       "method": "GET",
       "path": "/databases/:projectId/tables",
       "handler": "handleListTables",
       "description": "List tables in database",
-      "response_schema": { "$ref": "./schemas/database.json#/definitions/tables_response" }
+      "response_schema": {
+        "$ref": "./schemas/database.json#/definitions/tables_response"
+      }
     },
     {
       "method": "GET",
@@ -128,7 +154,6 @@
       "description": "Module metrics"
     }
   ],
-
   "tools": [
     {
       "name": "db.query",
@@ -148,10 +173,20 @@
           "params": {
             "type": "array",
             "description": "Parámetros para la query (opcional)",
-            "items": { "type": ["string", "number", "boolean", "null"] }
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
           }
         },
-        "required": ["projectId", "query"]
+        "required": [
+          "projectId",
+          "query"
+        ]
       }
     },
     {
@@ -166,7 +201,9 @@
             "description": "ID del proyecto"
           }
         },
-        "required": ["projectId"]
+        "required": [
+          "projectId"
+        ]
       }
     },
     {
@@ -185,7 +222,10 @@
             "description": "Nombre de la tabla"
           }
         },
-        "required": ["projectId", "tableName"]
+        "required": [
+          "projectId",
+          "tableName"
+        ]
       }
     },
     {
@@ -193,7 +233,9 @@
       "description": "Ejecuta consulta SQL modificadora (INSERT, UPDATE, DELETE). REQUIERE CONFIRMACIÓN del usuario.",
       "handler": "handleToolExecute",
       "requires_confirmation": true,
-      "permissions": ["write"],
+      "permissions": [
+        "write"
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -208,14 +250,23 @@
           "params": {
             "type": "array",
             "description": "Parámetros para la query (opcional)",
-            "items": { "type": ["string", "number", "boolean", "null"] }
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
           }
         },
-        "required": ["projectId", "query"]
+        "required": [
+          "projectId",
+          "query"
+        ]
       }
     }
   ],
-
   "observability": {
     "logging": {
       "level": "info",
@@ -245,7 +296,6 @@
       ]
     }
   },
-
   "config": {
     "projectsPath": "./data/projects",
     "autoSave": true,

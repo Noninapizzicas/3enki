@@ -1,0 +1,242 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/carta-manager",
+    "ubicacion": "modules/pizzepos/carta-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "carta-manager",
+    "version": "1.0.0",
+    "description_oficial": "Dueño de datos de cartas — CRUD, persistencia, versionado, búsqueda, estadísticas",
+    "author": "Pizzepos Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "carta.actualizada", "description": "Carta modificada (legacy — compatible con nuevos eventos .completada)" },
+      { "event": "carta.listada",     "description": "Respuesta a carta.listar.solicitada" },
+      { "event": "carta.editada",     "description": "Respuesta a carta.editar.solicitada" },
+      { "event": "carta.borrada",     "description": "Respuesta a carta.borrar.solicitada" },
+      { "event": "carta.listar.fallida", "description": null },
+      { "event": "carta.editar.fallida", "description": null },
+      { "event": "carta.borrar.fallida", "description": null }
+    ],
+    "subscribes": [
+      { "event": "project.activated",        "handler": "onProjectActivated",        "extras": {} },
+      { "event": "project.deactivated",      "handler": "onProjectDeactivated",      "extras": {} },
+      { "event": "carta.listar.solicitada",  "handler": "onCartaListarSolicitada",   "extras": {} },
+      { "event": "carta.editar.solicitada",  "handler": "onCartaEditarSolicitada",   "extras": {} },
+      { "event": "carta.borrar.solicitada",  "handler": "onCartaBorrarSolicitada",   "extras": {} }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [
+    {
+      "name": "carta.save",
+      "description": "Guarda carta a disco. Acepta carta_id (existente), carta (objeto completo), o nombre (nueva vacía).",
+      "parameters_required": ["project_id"],
+      "parameters_property_names": ["carta_id", "nombre", "carta", "project_id"],
+      "parameters_size_chars": 217,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[0].parameters"
+    },
+    {
+      "name": "carta.get",
+      "description": "Obtiene carta completa por ID",
+      "parameters_required": ["carta_id"],
+      "parameters_property_names": ["carta_id"],
+      "parameters_size_chars": 85,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[1].parameters"
+    },
+    {
+      "name": "carta.list",
+      "description": "Lista todas las cartas con resumen",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 33,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[2].parameters"
+    },
+    {
+      "name": "carta.delete",
+      "description": "Elimina carta (guarda versión antes)",
+      "parameters_required": ["carta_id"],
+      "parameters_property_names": ["carta_id"],
+      "parameters_size_chars": 85,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[3].parameters"
+    },
+    {
+      "name": "carta.add_product",
+      "description": "Añade producto a carta",
+      "parameters_required": ["carta_id", "nombre", "categoria", "precio"],
+      "parameters_property_names": ["carta_id", "nombre", "categoria", "precio", "ingredientes"],
+      "parameters_size_chars": 231,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[4].parameters"
+    },
+    {
+      "name": "carta.remove_product",
+      "description": "Elimina producto de carta",
+      "parameters_required": ["carta_id", "producto_id"],
+      "parameters_property_names": ["carta_id", "producto_id"],
+      "parameters_size_chars": 131,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[5].parameters"
+    },
+    {
+      "name": "carta.update_product",
+      "description": "Actualiza producto (nombre, precio, categoría, ingredientes)",
+      "parameters_required": ["carta_id", "producto_id"],
+      "parameters_property_names": ["carta_id", "producto_id", "nombre", "precio", "categoria", "ingredientes"],
+      "parameters_size_chars": 247,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[6].parameters"
+    },
+    {
+      "name": "carta.add_category",
+      "description": "Añade categoría a carta",
+      "parameters_required": ["carta_id", "nombre"],
+      "parameters_property_names": ["carta_id", "nombre"],
+      "parameters_size_chars": 121,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[7].parameters"
+    },
+    {
+      "name": "carta.update_prices",
+      "description": "Ajusta precios (porcentaje global, por categoría, o individuales)",
+      "parameters_required": ["carta_id"],
+      "parameters_property_names": ["carta_id", "porcentaje", "categoria", "precios"],
+      "parameters_size_chars": 174,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[8].parameters"
+    },
+    {
+      "name": "carta.search",
+      "description": "Busca productos por nombre o ingrediente",
+      "parameters_required": ["carta_id", "query"],
+      "parameters_property_names": ["carta_id", "query"],
+      "parameters_size_chars": 119,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[9].parameters"
+    },
+    {
+      "name": "carta.stats",
+      "description": "Estadísticas de carta",
+      "parameters_required": ["carta_id"],
+      "parameters_property_names": ["carta_id"],
+      "parameters_size_chars": 85,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[10].parameters"
+    },
+    {
+      "name": "carta.versions",
+      "description": "Historial de versiones (max 50)",
+      "parameters_required": ["carta_id"],
+      "parameters_property_names": ["carta_id"],
+      "parameters_size_chars": 85,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[11].parameters"
+    },
+    {
+      "name": "carta.restore",
+      "description": "Restaura carta a versión anterior",
+      "parameters_required": ["carta_id", "version_file"],
+      "parameters_property_names": ["carta_id", "version_file"],
+      "parameters_size_chars": 133,
+      "parameters_full_path_hint": "modules/pizzepos/carta-manager/module.json → tools[12].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "carta-manager", "action": "list",   "handler": "handleList" },
+      { "domain": "carta-manager", "action": "get",    "handler": "handleGet" },
+      { "domain": "carta-manager", "action": "health", "handler": "handleHealth" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": null,
+      "structured": null
+    },
+    "metrics": {
+      "enabled": null,
+      "counters": ["carta.saved", "carta.deleted", "carta.product.added", "carta.product.removed", "carta.prices.updated"],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": false,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 5814,
+    "module_json_lineas": 119,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "3 eventos publicados sin description (carta.listar.fallida, carta.editar.fallida, carta.borrar.fallida)",
+      "tier_carga_inferido=null: 'carta-manager' no aparece en ningún tier de system.json.module_load_order.tiers",
+      "Ningún directorio hermano encontrado (agents/, prompts/, schemas/, __tests__/): módulo mínimo",
+      "Cada tool declara campo 'handler' inline en module.json (no es campo canónico del schema tools[] pero sí del patrón tools-first del sistema)"
+    ]
+  }
+}

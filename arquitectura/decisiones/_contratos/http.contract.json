@@ -1,0 +1,416 @@
+{
+  "_doc": "Captura la disciplina de HTTP en el sistema event-core. La regla maestra es UNA y simple: HTTP es la frontera externa del core. Cruza el límite del proceso. Internamente, MQTT. Si es módulo del mismo core hablando con otro módulo del mismo core, MQTT obligatorio — HTTP nunca. HTTP existe para tres casos legítimos: (1) CLI / operador humano, (2) UIs web servidas a browsers, (3) integraciones con servicios externos (entrantes: webhooks; salientes: APIs de terceros). El contrato distingue dos sub-modos — HTTP-server (el core acepta requests externos) y HTTP-client (un módulo llama a un externo) — y aplica reglas distintas a cada uno, manteniendo coherencia con events/lifecycle/observability/errors/persistence.",
+  "id": "http",
+  "version": "1.0.0",
+  "creada": "2026-05-02",
+  "supersedes_nota": "Primera versión. Recoge el patrón ya implementado en core/gateway/http.js (HTTP server único) y los clientes HTTP de los módulos (cli/client.js, ai-gateway providers, etc.) y formaliza la regla 'HTTP solo en frontera, MQTT internamente'. Validado parcialmente por el CLI: cli/client.js es cliente HTTP puro, no embebe lógica del core.",
+
+  "objetivo": "Producir UN JSON output (_outputs/http.json) que enumera: (a) la regla maestra que HTTP solo cruza la frontera externa del core, (b) los TRES casos legítimos de exposición (cli, ui-web, integracion-externa), (c) las reglas para HTTP-server (forma de respuesta canónica coherente con errors.json, routing canonical /modules/<slug>/<path>, validation, auth opcional, telemetría obligatoria), (d) las reglas para HTTP-client (timeouts obligatorios, retry policy declarada, telemetría por call, redacción de secretos en URLs/headers, mapeo de errores HTTP externos a códigos canónicos), (e) lo prohibido (módulo X→módulo Y del mismo core via HTTP, secretos en URL, fetch sin timeout, response shape no canónica, etc.). Validable mecánicamente cruzando contra audits modulo-completo y código de modules/ y cli/.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/http.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/http.schema.json",
+      "arquitectura/decisiones/_outputs/errors.json (porque toda response HTTP usa el response_shape canónico y mapea a status_codes canónicos)",
+      "arquitectura/decisiones/_outputs/observability.json (porque todo request/response HTTP emite log + métrica)",
+      "arquitectura/decisiones/_outputs/events.json (porque las acciones que HTTP triggers en el core se traducen a eventBus.publish — HTTP NO sustituye al bus)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "core/gateway/http.js — el HTTP server único del core (autoridad sobre routing/cors/compression/cache)",
+      "cli/client.js + cli/index.js — el CLI como cliente HTTP puro (caso legítimo 1)",
+      "modules/conversacion/ai-gateway/providers/* — clientes HTTP a APIs externas (caso legítimo 3 saliente)",
+      "modules/dashboard, modules/ui-designer, modules/scratch-designer — UIs servidas por HTTP a browsers (caso legítimo 2)",
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json — campo apis_http (endpoints declarados por cada módulo)",
+      "modules/*/module.json — campo apis (endpoints HTTP del módulo)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "HTTP CRUZA EL LÍMITE DEL PROCESO. La regla que no se rompe: HTTP solo aparece cuando se cruza la frontera externa del core (proceso de Node). Si el remitente y el destinatario viven en el mismo proceso (módulos del mismo core), la comunicación va por MQTT. Si el remitente o el destinatario vive fuera (CLI en otra terminal, browser, servicio externo), entonces HTTP es legítimo.",
+
+    "INTERNAMENTE MQTT — SIN EXCEPCIONES. Un módulo NO llama a otro módulo del mismo core via HTTP, ni siquiera con localhost. Eso rompe el paradigma event-core: 'emite evento, quien sabe hace, tú no sabes cómo' presupone bus, no fetch. HTTP entre módulos del mismo core es drift estructural, no optimización ni atajo.",
+
+    "TRES CASOS LEGÍTIMOS, NI UNO MÁS. (1) CLI — operador humano que interactúa con el core desde su terminal; el binario CLI es cliente HTTP puro, no embebe lógica del core. (2) UI WEB — dashboard, configuradores, herramientas servidas a un browser que no habla MQTT nativo. (3) INTEGRACIÓN EXTERNA — webhooks entrantes de servicios que YA hablan HTTP, llamadas salientes a APIs de terceros que YA hablan HTTP. Cualquier cuarto caso requiere justificación explícita.",
+
+    "EL CORE TIENE UN ÚNICO HTTP-SERVER. Todo HTTP entrante pasa por core/gateway/http.js — un solo servidor, una sola política de cors/compression/cache/auth. Los módulos NO levantan sus propios listeners (no fastify, no express adicional, no http.createServer en módulos). Declaran apis en module.json y el gateway las enruta a /modules/<slug>/<path>.",
+
+    "ROUTING CANÓNICO POR MÓDULO. La URL refleja el dueño: /modules/<slug>/<path>. El verbo de la acción NO va en la URL — el método HTTP ya es el verbo (GET=consulta, POST=acción, PUT=reemplazo, DELETE=baja). Slug = nombre canónico del módulo (kebab-case). Path = recurso o acción específica del módulo. Sin prefijos extra (/api, /v1) salvo decisión explícita en el contrato.",
+
+    "RESPUESTA HTTP USA EL SHAPE CANÓNICO. Toda response del HTTP-server usa el response_shape de errors.json: { status, data | error } mutuamente excluyentes. El status del JSON coincide con el HTTP status code. NO hay { ok: true }, NO hay { result: ... }, NO hay { success: ... } — ese es drift que el validator de errors ya detecta y persistence/http heredan.",
+
+    "TIMEOUTS OBLIGATORIOS EN CLIENTE. Todo HTTP-client (módulo llamando a un externo, CLI llamando al core) declara timeout explícito. fetch sin timeout es un bug latente: el día que el externo cuelgue, el módulo se queda colgado y bloquea handlers. Sin timeout no se commitea — la regla es absoluta, igual que write atómico en persistence.",
+
+    "TELEMETRÍA OBLIGATORIA EN AMBAS DIRECCIONES. Cada request HTTP entrante (server) emite log + métrica de duración + status. Cada call saliente (client) emite log + métrica de duración + status del externo. Sin telemetría HTTP estás ciego ante latencias y caídas de upstream. Coherente con observability.contract: error en HTTP es auto-observable, igual que error en persistence.",
+
+    "REDACCIÓN DE SECRETOS EN URLS Y HEADERS. Tokens, claves, passwords NUNCA aparecen en URL query params (van en headers). En logs y métricas, los headers Authorization, X-API-Key, Cookie y similares se redactan ANTES de loguear. Coherente con no_secrets_in_logs y no_plain_secrets_on_disk: HTTP es otro canal donde el secreto puede fugarse y la disciplina es la misma.",
+
+    "ERRORES HTTP EXTERNOS SE MAPEAN A CÓDIGOS CANÓNICOS. Cuando un módulo llama a OpenAI y devuelve 429, el error que el módulo propaga al caller del bus NO es 'OpenAI dijo 429' — es { status: 503, code: 'UPSTREAM_RATE_LIMITED' } o equivalente del catálogo de errors.codes_infrastructure. La realidad del externo se traduce al vocabulario canónico del repo. El módulo es el adaptador, no un proxy transparente.",
+
+    "AUTH ES OPCIONAL Y EXPLÍCITA. El gateway HTTP soporta mTLS (via certificate-authority), tokens, basic auth — pero la decisión de exigir auth es explícita por endpoint en module.json (config.apis[*].auth_required). Sin declaración, se asume público. Sin sorpresas, sin endpoints accidentalmente expuestos.",
+
+    "EL CLI ES UN CLIENTE COMO CUALQUIER OTRO. cli/client.js no tiene privilegios especiales. Hace requests HTTP al gateway igual que un browser. La autoridad sobre el core es la misma que tiene cualquier consumidor. Si el CLI puede llamar GET /modules/X/Y, el browser también — la auth se decide por endpoint, no por cliente.",
+
+    "HTTP NO SUSTITUYE AL BUS. Un endpoint HTTP que el gateway sirve PUEDE traducirse internamente a un eventBus.publish o a un mqttRequest — esa es decisión del módulo, no del gateway. El módulo recibe el request HTTP (ya parseado por el gateway), hace su trabajo (que puede involucrar publicar eventos para que otros módulos hagan algo) y devuelve la response. HTTP no es atajo para saltarse el bus internamente."
+  ],
+
+  "principios": [
+    {
+      "id": "http_only_crosses_process_boundary",
+      "regla": "HTTP solo aparece cuando se cruza la frontera externa del core (proceso de Node). Si remitente y destinatario viven en el mismo proceso, MQTT obligatorio. Si uno de los dos vive fuera (CLI, browser, servicio externo), HTTP es legítimo.",
+      "razon": "El paradigma event-core ('emite evento, quien sabe hace, tú no sabes cómo') presupone bus, no fetch. HTTP intra-proceso introduce acoplamiento síncrono que el bus diseñado precisamente para evitar. Mantener HTTP solo en frontera preserva la propiedad clave del sistema: los módulos no se conocen entre sí, solo conocen el bus."
+    },
+    {
+      "id": "mqtt_for_intra_core_communication",
+      "regla": "Un módulo NUNCA llama a otro módulo del mismo core via HTTP, ni siquiera con localhost. La comunicación intra-core es 100% MQTT (eventBus.publish/subscribe o mqttRequest). HTTP entre módulos del mismo core es drift estructural, no optimización ni atajo.",
+      "razon": "Si un módulo A llama a B via HTTP, B se vuelve crítico para A en runtime — si B cae, A rompe. Con bus, B puede caer y A solo nota que su evento no se procesa (visibilidad operativa, no fallo en cascada). Además HTTP intra-proceso paga overhead de serialización + parsing innecesario cuando el bus ya pasa el objeto en memoria."
+    },
+    {
+      "id": "three_legitimate_cases_for_http",
+      "regla": "HTTP es legítimo en exactamente tres casos: (1) CLI — operador humano que interactúa con el core desde otra terminal/proceso, (2) UI WEB — dashboard, configuradores, herramientas servidas a un browser que no habla MQTT nativo, (3) INTEGRACIÓN EXTERNA — webhooks entrantes de servicios que ya hablan HTTP, o llamadas salientes a APIs de terceros que ya hablan HTTP.",
+      "razon": "Los tres casos comparten una propiedad: el otro extremo NO es parte del core ni del bus. CLI vive en otra terminal. Browser no habla MQTT. APIs externas (OpenAI, Telegram, WooCommerce) viven en otra empresa. En los tres, HTTP no es elección sino obligación del medio. Cualquier cuarto caso requiere justificación explícita en el contrato — la lista cerrada previene drift."
+    },
+    {
+      "id": "single_http_server_in_core",
+      "regla": "El core tiene UN único HTTP-server (core/gateway/http.js). Los módulos NO levantan listeners propios (ni express, ni fastify, ni http.createServer). Declaran apis en module.json y el gateway las enruta. Cors, compression, cache, auth se gestionan en el gateway, no por módulo.",
+      "razon": "Múltiples servers HTTP en el mismo proceso multiplican configuración (cors policy distinto por módulo, ports distintos, telemetría fragmentada). Un solo gateway canaliza toda la frontera HTTP, garantiza política coherente, y permite añadir middleware (auth, rate-limit, cache) sin tocar los módulos. Validado: core/gateway/http.js ya implementa este patrón."
+    },
+    {
+      "id": "canonical_routing_modules_slug_path",
+      "regla": "Toda URL servida por el gateway sigue el patrón /modules/<slug>/<path>. El slug es el nombre canónico del módulo (kebab-case, según naming.json). El path es el recurso o acción específica del módulo. El verbo NO va en la URL — el método HTTP ya es el verbo. Sin prefijos extra (/api, /v1) salvo decisión explícita del contrato.",
+      "razon": "El routing por dueño (modules/<slug>) hace explícita la responsabilidad: viendo la URL sabes a qué módulo va. Sin verbo en la URL, evitas el ruido /modules/notas/crear-nota cuando POST /modules/notas/notas ya lo dice. Coherente con events naming (verbo canónico ya está separado de la entidad)."
+    },
+    {
+      "id": "response_uses_canonical_error_shape",
+      "regla": "Toda response del HTTP-server usa el response_shape canónico de errors.json: { status, data | error } mutuamente excluyentes. El status del JSON coincide con el HTTP status code. NO hay { ok }, NO hay { result }, NO hay { success } — esos son drift que el validator de errors detecta.",
+      "razon": "Una sola forma de respuesta a través de todo el sistema (HTTP, mqttRequest, eventBus) significa que el cliente (CLI, browser, otro módulo) tiene UN único parser, UN único manejo de error. Sin esto, cada endpoint es una sorpresa. Coherente y reusa el contrato de errors sin duplicar reglas."
+    },
+    {
+      "id": "mandatory_timeout_in_http_client",
+      "regla": "Todo HTTP-client (módulo llamando a un externo, cli/client.js llamando al core) declara timeout explícito en cada request. fetch / http.request sin timeout NO se commitea. El timeout es por llamada (puede variar entre endpoints), no global.",
+      "razon": "Sin timeout, una llamada a un externo que cuelga deja el handler bloqueado indefinidamente — ocupa el event loop, agota retries del caller, propaga deadlock. Con timeout explícito, el módulo decide cuánto espera y emite un error canónico (UPSTREAM_TIMEOUT) cuando expira. Es la versión HTTP del 'no_silent_catch' del bus: hacer explícito el peor caso."
+    },
+    {
+      "id": "mandatory_telemetry_on_http",
+      "regla": "Cada request HTTP entrante (server) emite log + métrica (duración, status, ruta). Cada call saliente (client) emite log + métrica (duración, status del externo, host). Sin telemetría HTTP no se commitea ningún endpoint ni cliente. Coherente con observability.contract y errors auto_observable_errors.",
+      "razon": "HTTP es donde el sistema toca el mundo exterior — la información de qué tarda, qué falla y desde dónde es operativamente crítica. Sin métricas HTTP no detectas degradación de upstream (OpenAI responde más lento), pico de carga en el dashboard, o un cliente atacando un endpoint. Es ceguera evitable."
+    },
+    {
+      "id": "secret_redaction_in_urls_and_headers",
+      "regla": "Tokens, claves, passwords NUNCA aparecen en URL query params (van en headers Authorization / X-API-Key). Los headers de auth (Authorization, X-API-Key, Cookie, Set-Cookie) se redactan ANTES de loguear. La URL completa que aparece en logs/métricas no contiene credenciales.",
+      "razon": "URLs aparecen en muchos sitios: logs del proxy, logs del módulo, métricas con label 'path', browser history, server access logs de upstream. Un token en query param se filtra a TODOS esos canales. Headers son más fáciles de redactar consistentemente. Coherente con no_secrets_in_logs (observability), no_secrets_in_messages (errors), no_plain_secrets_on_disk (persistence) — la disciplina del secreto es transversal."
+    },
+    {
+      "id": "external_errors_mapped_to_canonical_codes",
+      "regla": "Cuando un módulo HTTP-client recibe un error de un externo (4xx, 5xx, timeout, network error), NO propaga 'OpenAI dijo X' al caller del bus. Lo traduce al vocabulario canónico de errors.codes_infrastructure: UPSTREAM_TIMEOUT, UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, UPSTREAM_AUTH_FAILED, etc. El módulo es adaptador, no proxy transparente.",
+      "razon": "Si cada módulo propaga el error tal cual lo recibe, el caller (otro módulo en el bus, el CLI, una UI) tiene que conocer la idiosincrasia de cada upstream. Con mapeo canónico, el caller maneja UPSTREAM_RATE_LIMITED igual venga de OpenAI, Anthropic o Twilio. La diversidad de externos se aplana en la frontera, no se propaga al sistema."
+    },
+    {
+      "id": "auth_explicitly_declared_per_endpoint",
+      "regla": "Cada endpoint HTTP del módulo declara su requisito de auth en module.json (config.apis[*].auth_required: 'none' | 'mtls' | 'bearer' | 'basic'). Sin declaración explícita, el endpoint se considera público. La auth se decide por endpoint, no por cliente.",
+      "razon": "Sin declaración explícita, los endpoints quedan accidentalmente expuestos o accidentalmente cerrados. La declaración por endpoint en el manifest hace que la auditoría/CI vea de un vistazo qué está expuesto. Decidir por cliente (CLI vs browser) en lugar de por endpoint mezcla policy con identidad — un browser puede ser tan legítimo como un CLI si tiene token."
+    },
+    {
+      "id": "http_does_not_replace_bus",
+      "regla": "Un endpoint HTTP que el gateway sirve PUEDE traducirse internamente a uno o más eventBus.publish o mqttRequest. Esa traducción es decisión del módulo. Pero el endpoint HTTP NO sustituye al bus para acciones cross-módulo: el módulo recibe el request HTTP, hace su trabajo (que probablemente publica eventos), y devuelve la response.",
+      "razon": "Si tienes /modules/recetas/crear que hace un INSERT directo, y otra acción del sistema necesita reaccionar a 'receta creada', acabas duplicando la lógica de notificación en HTTP y en bus. Si en cambio /modules/recetas/crear publica receta.creado, todos los reactivos siguen funcionando. HTTP es solo el mensajero del input externo; el bus es la espina dorsal del core."
+    }
+  ],
+
+  "modos": [
+    {
+      "id": "http-server",
+      "nombre": "HTTP server (el core acepta requests externos)",
+      "descripcion": "El gateway HTTP único del core (core/gateway/http.js) acepta requests externos de CLI, browsers o webhooks, los enruta a las apis declaradas en module.json de cada módulo, y devuelve la response usando el shape canónico. El módulo nunca abre su propio listener.",
+      "donde_aplica": "Todo módulo que declara apis en module.json. Endpoints visibles en audits modulo-completo.apis_http.",
+      "reglas": [
+        "Routing canónico: /modules/<slug>/<path>. El slug es el nombre del módulo (kebab-case). El path es el recurso o acción dentro del módulo. Sin /api ni /v1 salvo decisión explícita.",
+        "Método HTTP refleja el verbo: GET (consulta sin efectos), POST (acción/creación), PUT (reemplazo idempotente), DELETE (baja). El verbo NO va en la URL.",
+        "Response shape canónico: { status, data | error } mutuamente excluyentes. status del JSON coincide con HTTP status. Coherente con response_shape de errors.json.",
+        "Codes HTTP canónicos: usar SOLO los listados en errors.json.status_codes. Nunca inventar status (ej. 222, 280, 600).",
+        "Validation: si module.json declara request/response schemas, el gateway valida ANTES de pasar al handler y ANTES de responder. ValidationError → 400 con error canónico.",
+        "Auth: declarada por endpoint en module.json (config.apis[*].auth_required). El gateway aplica antes del handler. Sin declaración, público.",
+        "CORS: política única en el gateway (no por módulo). Configurable por entorno.",
+        "Telemetría obligatoria por request: log nivel info (200-399) o warn/error (4xx/5xx) + métrica de duración con labels {modulo, ruta, status}.",
+        "Body limit: configurable en el gateway (default 1MB). Requests excediendo → 413 con error canónico PAYLOAD_TOO_LARGE.",
+        "Timeout de request: configurable en el gateway (default 30s). Exceder → 504 con UPSTREAM_TIMEOUT (el gateway es upstream del cliente HTTP)."
+      ],
+      "ejemplo_request": "POST /modules/notas/crear\\nContent-Type: application/json\\n\\n{\"titulo\":\"x\",\"contenido\":\"y\"}",
+      "ejemplo_response_ok": "HTTP/1.1 201 Created\\nContent-Type: application/json\\n\\n{\"status\":201,\"data\":{\"id\":\"abc\",\"titulo\":\"x\"}}",
+      "ejemplo_response_error": "HTTP/1.1 400 Bad Request\\nContent-Type: application/json\\n\\n{\"status\":400,\"error\":{\"code\":\"VALIDATION_FAILED\",\"message\":\"titulo es requerido\",\"details\":{\"field\":\"titulo\"}}}",
+      "ejemplo_modulos_audit": [
+        "scratch-designer (20 endpoints)",
+        "ui-designer (18 endpoints)",
+        "staff-manager (15 endpoints)",
+        "certificate-authority (10 endpoints, mTLS)",
+        "database-manager (8 endpoints)",
+        "notas (8 endpoints)",
+        "metricas (7 endpoints)",
+        "security-p2p (6 endpoints)",
+        "dashboard (5 endpoints, sirve UI a browser)",
+        "conversation-export (4 endpoints)",
+        "esp32-flasher (4 endpoints)",
+        "system-inspector (4 endpoints)",
+        "firmware-manager (1 endpoint)"
+      ],
+      "infraestructura_existente": "core/gateway/http.js (1170 LOC) con compression.js, cache.js, ui.js. Soporta validation, hooks, cors, mTLS via certificate-authority."
+    },
+    {
+      "id": "http-client",
+      "nombre": "HTTP client (un módulo llama a un externo)",
+      "descripcion": "Un módulo realiza requests HTTP salientes a APIs de terceros (OpenAI, Telegram, WooCommerce, etc.) o, en el caso del CLI, al propio gateway HTTP del core. La lógica de retry, timeout, redacción de secretos y mapeo de errores está en el módulo cliente, no centralizada.",
+      "donde_aplica": "Módulos con dependencias HTTP externas (audits con campo dependencias_externas tipo http) y el binario CLI (cli/client.js).",
+      "reglas": [
+        "Timeout obligatorio en cada request. Sin timeout NO se commitea. Default sugerido: 10s para CLI→core, 30s para llamadas a externos (configurable por endpoint).",
+        "Retry policy declarada en config (config.http_clients[*].retry: { max_attempts, backoff_ms, retryable_status }). Por defecto 0 reintentos. Sólo idempotentes pueden tener retry > 0.",
+        "Telemetría obligatoria por call: log + métrica de duración con labels {host, status, modulo}. Errores upstream emiten métrica adicional con label 'kind=upstream'.",
+        "Redacción de secretos: tokens en headers Authorization / X-API-Key / Cookie. NUNCA en URL query params. Logs y métricas redactan estos headers ANTES de loguear.",
+        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_AUTH_FAILED, 429→UPSTREAM_RATE_LIMITED, 5xx→UPSTREAM_5XX, network/DNS→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT. Lista completa en errors.codes_infrastructure.",
+        "Body limit en respuesta: configurable. Respuestas excediendo se descartan con UPSTREAM_PAYLOAD_TOO_LARGE.",
+        "TLS: validación de certificado activa por defecto. Saltarla (rejectUnauthorized:false) requiere justificación documentada en module.json (config.http_clients[*].tls_verify=false con motivo).",
+        "Cache opcional: si el módulo cachea respuestas, debe declarar TTL y política de invalidación en config (similar a eviction_strategy de persistence)."
+      ],
+      "ejemplo_request": "const resp = await fetch(url, {\\n  method:'POST',\\n  headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },\\n  body: JSON.stringify(payload),\\n  signal: AbortSignal.timeout(this.config.http_clients.openai.timeout_ms)\\n});",
+      "ejemplo_response_ok": "Si externo devuelve 200: parsea, valida shape esperado, devuelve { status: 200, data: parsed } al caller del bus.",
+      "ejemplo_response_error": "Si externo devuelve 429: devuelve { status: 503, error: { code: 'UPSTREAM_RATE_LIMITED', message: 'Upstream rate limit', details: { kind: 'infrastructure', retryable: true, retry_after_ms: 60000 } } }",
+      "ejemplo_modulos_audit": [
+        "conversacion/ai-gateway (providers/* — OpenAI, Anthropic, etc.)",
+        "telegram-service (probable, llama a Telegram Bot API)",
+        "woocommerce service provider (services/providers/local/woocommerce)",
+        "url-data service (services/providers/local/url-data)",
+        "calling-generator (probable, llama a servicio de llamadas)",
+        "cli/client.js (caso especial: cliente HTTP del propio core)"
+      ],
+      "infraestructura_existente": "Cada módulo implementa su propio cliente. NO hay helper canónico aún — POC pendiente para un _httpRequest helper análogo a _publicarEvento (events) y _buildErrorResponse (errors)."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "intra_core_http_call",
+      "regla": "Un módulo del core llamando a otro módulo del MISMO core via HTTP (incluyendo localhost). Esto es drift estructural: rompe el paradigma event-core, paga overhead innecesario y crea fallos en cascada.",
+      "viola_principios": ["mqtt_for_intra_core_communication", "http_only_crosses_process_boundary"],
+      "como_detectar": "Análisis estático: en código de módulos buscar fetch / http.request / axios / got hacia URLs que contengan localhost / 127.0.0.1 / 0.0.0.0 / el host del propio gateway. Cruzar con audit dependencias_externas — si el target es el mismo core, drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Usar mqttRequest('otro-modulo', 'accion', payload) si esperas respuesta, o eventBus.publish('otro-modulo.entidad.verbo', payload) si es fire-and-forget."
+    },
+    {
+      "id": "module_owns_http_listener",
+      "regla": "Un módulo levantando su propio HTTP server (express / fastify / http.createServer). Toda exposición HTTP del core va por core/gateway/http.js — un único listener.",
+      "viola_principios": ["single_http_server_in_core"],
+      "como_detectar": "Regex en código de modules/: 'http\\.createServer|express\\(\\)|fastify\\(|new\\s+Server\\(' fuera de core/. Cruzar con audit estado.lifecycle si el módulo declara puerto propio.",
+      "ejemplo_drift_actual": "calling-generator y admin-panel mencionan createServer en el grep — verificar si son listeners propios (drift) o consumen libs que internamente usan http.createServer (no drift).",
+      "alternativa_correcta": "Declarar apis en module.json. El gateway las enruta automáticamente como /modules/<slug>/<path>."
+    },
+    {
+      "id": "non_canonical_response_shape",
+      "regla": "Endpoints HTTP que devuelven { ok: true } / { success: ... } / { result: ... } / cualquier shape distinta al canónico { status, data | error }. Drift que ya detecta el validator de errors.",
+      "viola_principios": ["response_uses_canonical_error_shape"],
+      "como_detectar": "Regex en handlers HTTP de módulos: 'res\\.json\\(\\s*\\{\\s*(ok|success|result)\\s*:' o 'return\\s+\\{\\s*(ok|success|result)\\s*:'. Cubierto también por errors.validate.js.",
+      "ejemplo_drift_actual": "Múltiples módulos del repo usan { ok } o { success }. Detectado por errors.validate.js (drift_respuesta_no_canonica).",
+      "alternativa_correcta": "return { status: 200, data: {...} } o return { status: 4xx, error: { code: 'XXX', message: '...' } }. Usar el helper _buildErrorResponse del POC notas para errores."
+    },
+    {
+      "id": "non_canonical_routing",
+      "regla": "Endpoints fuera del patrón /modules/<slug>/<path>. Ejemplos: /api/v1/notas, /notas, /handler/foo, rutas con verbo en URL (/modules/notas/crear-nota cuando POST /modules/notas/notas ya basta).",
+      "viola_principios": ["canonical_routing_modules_slug_path"],
+      "como_detectar": "Inspeccionar audits modulo-completo.apis_http[*].ruta. Si no empieza por /modules/<slug>/, drift. También: paths con verbos imperativos (crear, eliminar, actualizar) cuando el método HTTP ya los expresa.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Renombrar las rutas y mover el verbo al método HTTP. Ej: GET /modules/notas/notas (lista), POST /modules/notas/notas (crea), PUT /modules/notas/notas/:id (reemplaza), DELETE /modules/notas/notas/:id (borra)."
+    },
+    {
+      "id": "fetch_without_timeout",
+      "regla": "Llamadas HTTP salientes (fetch, http.request, axios.request, got, got.post, etc.) sin timeout explícito. Bug latente: el día que el upstream cuelgue, el handler se queda colgado bloqueando el event loop.",
+      "viola_principios": ["mandatory_timeout_in_http_client"],
+      "como_detectar": "Regex en código de módulos: 'fetch\\(' / 'http\\.request\\(' / 'axios\\.\\w+\\(' / 'got\\.\\w+\\(' donde el bloque de opciones NO contenga 'timeout|signal|AbortSignal'.",
+      "ejemplo_drift_actual": "ai-gateway providers (base-provider.js) y otros módulos clientes potencialmente carecen de timeout — verificar con cross-check.",
+      "alternativa_correcta": "fetch(url, { signal: AbortSignal.timeout(this.config.http_clients.<x>.timeout_ms) }). Para http.request, options.timeout = N + req.on('timeout', ...) + req.destroy()."
+    },
+    {
+      "id": "secret_in_url_query_param",
+      "regla": "Tokens, API keys, passwords incluidos en URL query params (e.g., ?token=ABC). Estos se filtran a logs del proxy, browser history, métricas con label 'path', server access logs.",
+      "viola_principios": ["secret_redaction_in_urls_and_headers", "no_plain_secrets_on_disk", "no_secrets_in_logs"],
+      "como_detectar": "Regex multi-campo: URLs construidas con template literals que contienen ${token} / ${apiKey} / ${password} / ${secret} en query string. Heurística: '?(\\w+)=' donde la key matchea sensitive_field_names.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Mover el secreto al header Authorization: Bearer <token> o X-API-Key: <key>. Si el upstream sólo soporta query param, es excepción documentada (señalar el upstream limitado)."
+    },
+    {
+      "id": "log_authorization_header_unredacted",
+      "regla": "Loguear request o response HTTP con headers Authorization / X-API-Key / Cookie / Set-Cookie sin redactar. El secreto se persiste a disco vía logs.",
+      "viola_principios": ["secret_redaction_in_urls_and_headers"],
+      "como_detectar": "Regex en código: 'logger\\.\\w+\\([^)]*headers' o 'JSON\\.stringify\\(headers' sin función de redacción aplicada antes. Cruzar con observability.detection_patterns.sensitive_field_names.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Helper _redactHeaders(headers) que reemplaza Authorization/X-API-Key/Cookie por '[REDACTED]' antes de loguear. Aplicar en todo logger.X que reciba headers."
+    },
+    {
+      "id": "no_telemetry_on_http_request",
+      "regla": "Endpoint HTTP server (handler) o llamada HTTP client sin log + métrica de duración + status. Ceguera operativa.",
+      "viola_principios": ["mandatory_telemetry_on_http"],
+      "como_detectar": "Inspeccionar handlers de apis: si el bloque NO contiene this.logger.X y this.metrics.X con sufijo .duration o .errors, drift. Para clientes: igual en torno al fetch/request.",
+      "ejemplo_drift_actual": "Validable cuando ejecutemos http.validate.js. Esperable: muchos handlers viejos sin telemetría explícita (el gateway puede aportar parte, pero log/metric específico del módulo se espera).",
+      "alternativa_correcta": "const t0 = Date.now(); try { /* lógica */ } finally { const dur = Date.now() - t0; this.logger.info('module.api.X', { dur, status }); this.metrics.histogram(`${this.name}.api.duration`, dur, { ruta, status }); }"
+    },
+    {
+      "id": "external_error_propagated_raw",
+      "regla": "Module HTTP-client que devuelve al caller del bus el error tal cual lo recibe del externo (ej: { error: 'OpenAI says: rate limit exceeded' }). El caller acaba conociendo la idiosincrasia de cada upstream.",
+      "viola_principios": ["external_errors_mapped_to_canonical_codes"],
+      "como_detectar": "Regex: en catch alrededor de fetch/http.request, presencia de 'error.message' o 'response.text()' propagado directamente al return sin mapeo a codes_infrastructure (UPSTREAM_*).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "switch (status) { case 401: case 403: return { status: 503, error: { code: 'UPSTREAM_AUTH_FAILED', ... } }; case 429: return { status: 503, error: { code: 'UPSTREAM_RATE_LIMITED', ... } }; case status >= 500: return { status: 503, error: { code: 'UPSTREAM_5XX', ... } }; }"
+    },
+    {
+      "id": "http_substitutes_bus_for_cross_module_action",
+      "regla": "Endpoint /modules/X/algo que en lugar de publicar un evento llama por HTTP a otro módulo del mismo core para hacer la acción. Variante de intra_core_http_call disfrazada de 'orquestación'.",
+      "viola_principios": ["http_does_not_replace_bus", "mqtt_for_intra_core_communication"],
+      "como_detectar": "Cruzar audits: handlers HTTP de módulo X que dentro hacen fetch a /modules/Y/... — drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "El handler HTTP de X publica el evento que Y escucha (eventBus.publish('y.entidad.verbo', payload)) o hace mqttRequest('y', 'accion', payload) si necesita respuesta sincrónica."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/http.schema.json. Top-level: _meta, regla (frase maestra), modos (array de 2: http-server y http-client con sus reglas, ejemplos request/response, módulos audit, infraestructura existente), reglas_universales (que aplican a ambos modos: response shape canónico, redacción de secretos, telemetría, no intra-core HTTP), routing_canonical (descripción del patrón /modules/<slug>/<path> + reglas de mapeo verbo→método), module_declaration_shape (cómo declarar config.apis y config.http_clients en module.json), status_code_mapping_to_canonical (cómo se mapean los HTTP status codes a errors.status_codes y los errores externos a errors.codes_infrastructure), detection_patterns (regex y listas usadas por el validator).",
+
+  "reglas_de_extraccion": [
+    "Definir _meta con convencion='http', version (semver), creado_en (date), contrato_referencia (path al contrato).",
+
+    "Definir regla como frase maestra. Ejemplo: 'HTTP es la frontera externa del core. Cruza el límite del proceso. Internamente, MQTT. Tres casos legítimos: CLI, UI web, integración externa. Routing canónico /modules/<slug>/<path>. Response usa shape canónico de errors.json. Timeouts y telemetría obligatorios en cliente. Errores externos mapeados a códigos canónicos. Un único HTTP server en el core.'.",
+
+    "Definir modos como array de exactamente 2 entradas: http-server y http-client. Cada una con: id (enum cerrado), nombre, descripcion, donde_aplica, reglas (array de strings, ≥5 cada uno), ejemplo_request, ejemplo_response_ok, ejemplo_response_error, ejemplo_modulos_audit (array de slugs reales), infraestructura_existente.",
+
+    "Definir reglas_universales como array de reglas que aplican a AMBOS modos (server y client). Ejemplos: response shape canónico, telemetría obligatoria, redacción de secretos, no intra-core HTTP. Cada regla con id, descripcion, viola_si_no_se_cumple (ids de principios o prohibiciones), aplica_a_modos (['*'] o lista de modos).",
+
+    "Definir routing_canonical como objeto: { patron (string ej. '/modules/<slug>/<path>'), reglas_de_mapeo_verbo_metodo (array describiendo GET/POST/PUT/DELETE), prefijos_prohibidos (array: ['/api', '/v1', '/handler']), slug_format ('kebab-case por naming.json'), path_format ('kebab-case, sin verbos imperativos') }.",
+
+    "Definir module_declaration_shape como objeto con dos sub-shapes: apis_shape (cómo declarar endpoints expuestos por el módulo en module.json — name, ruta, method, auth_required, request_schema_ref, response_schema_ref, descripcion) y http_clients_shape (cómo declarar dependencias HTTP salientes — host, base_url, timeout_ms, retry, tls_verify, auth_method, descripcion).",
+
+    "Definir status_code_mapping_to_canonical como objeto: { from_http_to_errors_json (mapeo de status HTTP recibido del externo a entrada en errors.codes_infrastructure: 401→UPSTREAM_AUTH_FAILED, 429→UPSTREAM_RATE_LIMITED, 5xx→UPSTREAM_5XX, etc.), local_status_codes_used (lista de status que el HTTP-server del core usa, todos ⊆ errors.status_codes) }.",
+
+    "Definir detection_patterns como objeto con las heurísticas del validator. Claves: localhost_target_regex (regex que detecta llamadas HTTP a localhost / 127.0.0.1 / 0.0.0.0 — drift potencial intra-core), module_owns_listener_regex (createServer / express() / fastify( fuera de core/), non_canonical_response_keys (['ok','success','result'] heredado de errors), fetch_without_timeout_regex (fetch( sin signal/timeout/AbortSignal cerca), secret_in_query_param_regex (URLs con keys sensibles en query string), authorization_header_log_regex (logger con headers sin redactar), unmapped_upstream_error_indicators (return error con .message del upstream), bus_replaced_by_http_indicators (handler HTTP que hace fetch a /modules/<otro>)."
+  ],
+
+  "derivaciones": {
+    "endpoint_es_canonical": "true si la ruta empieza por /modules/<slug>/ donde slug coincide con el directorio del módulo y el método HTTP es coherente con el verbo declarado.",
+    "tiene_timeout_declarado": "true si la llamada HTTP cliente incluye signal/timeout/AbortSignal en options o si module.json.config.http_clients[*].timeout_ms está definido para el host destino.",
+    "esta_declarada_auth": "true si module.json.config.apis[*].auth_required existe y ∈ {none, mtls, bearer, basic}.",
+    "respuesta_es_canonical": "true si el handler HTTP devuelve un objeto con exactamente { status, data } o { status, error } donde status es código numérico ∈ errors.status_codes.",
+    "cliente_mapea_errores_canonicos": "true si en el catch del HTTP-client el código del error devuelto al caller del bus ∈ errors.codes_infrastructure (UPSTREAM_*).",
+    "secretos_no_en_url": "true si las URLs construidas por el módulo NO incluyen tokens/keys/passwords en query params (sólo en headers).",
+    "telemetria_en_handler": "true si el handler HTTP del módulo tiene this.logger + this.metrics en proximidad de la respuesta (similar a auto_observable_errors).",
+    "telemetria_en_cliente": "true si la llamada HTTP saliente tiene this.logger + this.metrics en proximidad (con label host y status).",
+    "es_intra_core_http": "true si la URL destino apunta a localhost / 127.0.0.1 / 0.0.0.0 / al host del propio gateway. Drift estructural.",
+    "tiene_listener_propio": "true si el código del módulo contiene http.createServer / express() / fastify(/ new Server( fuera del gateway central."
+  },
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "http_json_estructura_valida",
+      "regla": "http.json valida estructuralmente contra http.schema.json (AJV strict, additionalProperties=false en todos los niveles).",
+      "como_detectar": "Cargar el schema, compilar con AJV strict, validar el output. Cualquier error de schema bloquea PASS.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/decisiones/_outputs/http.json", "arquitectura/decisiones/_schemas/http.schema.json"]
+    },
+    {
+      "id": "drift_intra_core_http_call",
+      "regla": "Ningún módulo realiza llamadas HTTP a localhost / 127.0.0.1 / 0.0.0.0 / al host del propio gateway. Si lo hace, debería usar el bus.",
+      "como_detectar": "Regex en código de módulos: 'fetch\\(|http\\.request\\(|axios\\.\\w+\\(|got\\.\\w+\\(' donde el primer arg contenga 'localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|:3000|/modules/'. Cruzar con audit dependencias_externas.",
+      "severidad": "error",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "intra_core_http_call (prohibido), mqtt_for_intra_core_communication (principio)",
+      "ejemplo_drift_actual": "cli/client.js es el caso legítimo único — está fuera de modules/."
+    },
+    {
+      "id": "drift_module_owns_http_listener",
+      "regla": "Ningún módulo levanta su propio HTTP server (express/fastify/http.createServer/new Server). El único listener válido vive en core/gateway/http.js.",
+      "como_detectar": "Regex en modules/: 'http\\.createServer|express\\(\\)|fastify\\(|new\\s+Server\\(' donde el path NO sea core/. Excepción: librerías externas que internamente lo usen (verificar que no es el módulo el que lo invoca).",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "module_owns_http_listener (prohibido), single_http_server_in_core (principio)"
+    },
+    {
+      "id": "drift_non_canonical_routing",
+      "regla": "Toda ruta declarada en module.json.config.apis[*].ruta empieza por /modules/<slug>/ donde slug coincide con el directorio del módulo. Sin /api ni /v1. Sin verbos imperativos en el path.",
+      "como_detectar": "Inspeccionar audit modulo-completo.apis_http[*].ruta. Si no empieza por /modules/<slug>/, drift. Si contiene 'crear|eliminar|actualizar|borrar' y existe método HTTP equivalente, drift de verbo en URL.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "modules/*/module.json"],
+      "viola": "non_canonical_routing (prohibido), canonical_routing_modules_slug_path (principio)"
+    },
+    {
+      "id": "drift_fetch_without_timeout",
+      "regla": "Ninguna llamada HTTP saliente (fetch, http.request, axios, got) carece de timeout explícito (signal/timeout/AbortSignal en options).",
+      "como_detectar": "Regex multi-línea: ubicar 'fetch\\(|http\\.request\\(|axios\\.\\w+\\(|got\\.\\w+\\(' y verificar que en el bloque de opciones (~10 líneas siguientes) aparece 'timeout|signal|AbortSignal|setTimeout'.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js", "modules/*/providers/**/*.js"],
+      "viola": "fetch_without_timeout (prohibido), mandatory_timeout_in_http_client (principio)",
+      "ejemplo_drift_actual": "Esperable en ai-gateway providers (base-provider.js) y otros módulos clientes — verificar tras ejecución."
+    },
+    {
+      "id": "drift_secret_in_url_query_param",
+      "regla": "Ninguna URL construida por un módulo incluye tokens/keys/passwords como query params. Severidad ERROR — riesgo de seguridad.",
+      "como_detectar": "Regex: URLs en template literals con patrones '?(token|api_key|password|secret|key)=${...}' o equivalentes. Cruzar con detection_patterns.secret_in_persistence_field_names heredado.",
+      "severidad": "error",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "secret_in_url_query_param (prohibido), secret_redaction_in_urls_and_headers (principio)"
+    },
+    {
+      "id": "drift_authorization_header_logged",
+      "regla": "Ninguna llamada a logger pasa headers HTTP completos sin redactar (Authorization, X-API-Key, Cookie, Set-Cookie).",
+      "como_detectar": "Regex: 'logger\\.\\w+\\([^)]*headers' o 'JSON\\.stringify\\(headers' donde NO haya función _redactHeaders / sanitize aplicada antes.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "log_authorization_header_unredacted (prohibido), secret_redaction_in_urls_and_headers (principio)"
+    },
+    {
+      "id": "drift_no_telemetry_on_http_handler",
+      "regla": "Cada handler HTTP de módulo emite log + métrica. Coherente con auto_observable_errors de errors.contract.",
+      "como_detectar": "Para cada api declarada en module.json, localizar el handler en código y verificar presencia de this.logger.X y this.metrics.X dentro del bloque del handler.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/module.json"],
+      "viola": "no_telemetry_on_http_request (prohibido), mandatory_telemetry_on_http (principio)"
+    },
+    {
+      "id": "drift_no_telemetry_on_http_client_call",
+      "regla": "Cada llamada HTTP saliente emite log + métrica de duración con label host y status.",
+      "como_detectar": "Localizar fetch/http.request en código, verificar que 5 líneas antes/después haya this.logger y this.metrics con label 'host' o equivalente.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js", "modules/*/providers/**/*.js"],
+      "viola": "no_telemetry_on_http_request (prohibido), mandatory_telemetry_on_http (principio)"
+    },
+    {
+      "id": "drift_external_error_propagated_raw",
+      "regla": "En catch alrededor de fetch/http.request, el error devuelto al caller del bus usa código canónico de errors.codes_infrastructure (UPSTREAM_*), no el mensaje raw del externo.",
+      "como_detectar": "Regex en catch alrededor de I/O HTTP: presencia de 'error.message' / 'response.text()' / 'response.statusText' propagados directamente al return SIN mapeo a UPSTREAM_*. Severidad warning porque hay falsos positivos.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js", "modules/*/providers/**/*.js"],
+      "viola": "external_error_propagated_raw (prohibido), external_errors_mapped_to_canonical_codes (principio)"
+    },
+    {
+      "id": "drift_auth_undeclared",
+      "regla": "Cada api declarada en module.json tiene config.apis[*].auth_required ∈ {none, mtls, bearer, basic}. Sin declaración explícita es info — el endpoint se asume público pero el manifest debería ser explícito.",
+      "como_detectar": "Inspeccionar manifest: si apis[*].auth_required ausente, info finding sugiriendo declaración explícita.",
+      "severidad": "info",
+      "fuentes": ["modules/*/module.json"],
+      "viola": "auth_explicitly_declared_per_endpoint (principio)"
+    },
+    {
+      "id": "module_http_audit_completeness",
+      "regla": "La auditoría modulo-completo de cada módulo tiene apis_http completo (con campos ruta, metodo, handler, codigos_error) cuando el módulo declara apis en module.json.",
+      "como_detectar": "Cruzar manifest config.apis con audit apis_http: si manifest declara N endpoints pero audit reporta menos, drift de auditoría.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "modules/*/module.json"],
+      "nota": "No es drift del código sino de la auditoría. Si aparece, hay que re-auditar el módulo con foco en HTTP."
+    }
+  ],
+
+  "salida_validador": "PASS si http.json es estructuralmente válido (AJV strict). Errores cross-system bloquean PASS — drift_intra_core_http_call y drift_secret_in_url_query_param son ERROR (riesgo arquitectónico y de seguridad). Warnings son drift visible que no bloquea (listener propio, fetch sin timeout, telemetría ausente, error externo raw, header sin redactar). Info son heurísticas (auth no declarada, auditoría incompleta). Formato coherente con los 6 validators previos: banner PASS/FAIL + lista de findings agrupados por severidad, con ubicación archivo:línea cuando aplique.",
+
+  "convenciones_complementarias": [
+    "events.validate.js cubre la disciplina del bus (qué se publica/escucha). http.validate.js cubre la disciplina de la frontera externa (qué entra/sale por HTTP). Son complementarios — juntos garantizan que la comunicación intra-core va por bus y la inter-proceso por HTTP.",
+    "lifecycle.validate.js valida onLoad/onUnload. http.validate.js NO valida que el HTTP-server se levante/cierre limpiamente (eso lo hace lifecycle a través del audit del gateway). http.validate.js asume que el gateway existe y está operativo.",
+    "observability.validate.js valida log/metric format. http.validate.js especifica la regla de telemetría OBLIGATORIA para HTTP específicamente (mandatory_telemetry_on_http) — server y client.",
+    "errors.validate.js valida response_shape canónico. http.validate.js asegura que toda response HTTP del core sigue ese mismo shape y que los errores HTTP externos se mapean a códigos canónicos del catálogo errors.codes_infrastructure (UPSTREAM_*).",
+    "persistence.validate.js cubre disco/DB. http.validate.js cubre red. Comparten la disciplina de secretos (no en plano nunca: ni en disco, ni en URL, ni en log).",
+    "modulo-completo.validate.js valida la AUDITORÍA. http.validate.js cruza apis declaradas en module.json con audit apis_http para detectar tanto drift de declaración como drift de auditoría.",
+    "Los 7 validators (naming, glossary, events, lifecycle, observability, errors, persistence) + http forman ahora 8 validators complementarios. Se ejecutan por separado o todos en CI con npm run validate:all (pendiente de añadir como meta-script)."
+  ]
+}

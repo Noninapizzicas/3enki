@@ -3,7 +3,7 @@
   "version": "2.3.0",
   "description": "Gestión de cuentas con ciclo de vida completo - 100% Event-Driven",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
     "events": [
       "cuenta.creada",
@@ -16,7 +16,6 @@
       "cuenta.listar"
     ]
   },
-
   "events": {
     "publishes": [
       {
@@ -91,7 +90,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "POST",
@@ -154,7 +152,6 @@
       "description": "Métricas del módulo"
     }
   ],
-
   "ui": {
     "enabled": true,
     "title": "Cuentas Activas",
@@ -167,24 +164,34 @@
       "cuenta-card",
       "cuenta-type-button"
     ],
-
     "views": {
       "main": {
         "type": "dashboard",
         "layout": "sidebar_content",
         "sidebar_position": "right",
-
         "header": {
           "title": "📋 Cuentas Activas",
           "show_clock": true,
           "show_connection_status": true,
           "info": [
-            { "id": "connection-status", "type": "mqtt-status", "label": "Conexión" },
-            { "id": "current-time", "type": "clock", "format": "HH:mm" },
-            { "id": "cuenta-count", "type": "counter", "source": "cuentas.length", "label": "cuentas" }
+            {
+              "id": "connection-status",
+              "type": "mqtt-status",
+              "label": "Conexión"
+            },
+            {
+              "id": "current-time",
+              "type": "clock",
+              "format": "HH:mm"
+            },
+            {
+              "id": "cuenta-count",
+              "type": "counter",
+              "source": "cuentas.length",
+              "label": "cuentas"
+            }
           ]
         },
-
         "sidebar": {
           "enabled": true,
           "position": "right",
@@ -193,60 +200,102 @@
             {
               "title": "Nueva Cuenta",
               "buttons": [
-                { "component": "cuenta-type-button", "props": { "tipo": "local" } },
-                { "component": "cuenta-type-button", "props": { "tipo": "delivery" } },
-                { "component": "cuenta-type-button", "props": { "tipo": "llevar" } }
+                {
+                  "component": "cuenta-type-button",
+                  "props": {
+                    "tipo": "local"
+                  }
+                },
+                {
+                  "component": "cuenta-type-button",
+                  "props": {
+                    "tipo": "delivery"
+                  }
+                },
+                {
+                  "component": "cuenta-type-button",
+                  "props": {
+                    "tipo": "llevar"
+                  }
+                }
               ]
             },
             {
               "title": "Acciones",
               "buttons": [
-                { "type": "button", "icon": "🔄", "label": "Refrescar", "action": "refresh" }
+                {
+                  "type": "button",
+                  "icon": "🔄",
+                  "label": "Refrescar",
+                  "action": "refresh"
+                }
               ]
             }
           ]
         },
-
         "content": {
           "id": "cuentas_grid",
           "type": "grid",
           "component": "cuenta-grid",
           "config": {
             "endpoint": "/modules/cuentas/cuentas",
-            "mqtt_topics": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"],
+            "mqtt_topics": [
+              "cuenta.creada",
+              "cuenta.actualizada",
+              "cuenta.eliminada",
+              "cuenta.estado_cambiado"
+            ],
             "refresh_on_event": true,
             "item_component": "cuenta-card",
-            "columns": { "mobile": 1, "tablet": 2, "desktop": 2, "wide": 3 }
+            "columns": {
+              "mobile": 1,
+              "tablet": 2,
+              "desktop": 2,
+              "wide": 3
+            }
           }
         }
       }
     },
-
     "mqtt": {
       "enabled": true,
-      "topics": ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"],
+      "topics": [
+        "cuenta.creada",
+        "cuenta.actualizada",
+        "cuenta.eliminada",
+        "cuenta.estado_cambiado"
+      ],
       "auto_refresh": true,
-      "sounds": { "cuenta.creada": "notification" }
+      "sounds": {
+        "cuenta.creada": "notification"
+      }
     },
-
     "permissions": {
-      "view": ["admin", "gerente", "camarero"],
-      "create": ["admin", "gerente", "camarero"],
-      "delete": ["admin", "gerente"]
+      "view": [
+        "admin",
+        "gerente",
+        "camarero"
+      ],
+      "create": [
+        "admin",
+        "gerente",
+        "camarero"
+      ],
+      "delete": [
+        "admin",
+        "gerente"
+      ]
     },
-
     "features": {
       "filters": true,
       "real_time": true,
       "quick_create": true
     },
-
     "navigation": {
       "on_cuenta_click": "/ui/comandero?cuenta_id={id}",
       "on_create_success": "/ui/comandero?cuenta_id={new_id}"
     }
   },
-
   "observability": {
     "logging": {
       "level": "info",
@@ -281,7 +330,6 @@
       ]
     }
   },
-
   "config": {
     "max_cuentas_activas": 100,
     "auto_numeracion": true,

@@ -1,0 +1,266 @@
+{
+  "_meta": {
+    "modulo": "conversacion/ai-gateway",
+    "ubicacion": "modules/conversacion/ai-gateway",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/conversacion__ai-gateway.json"
+  },
+
+  "identidad": {
+    "name": "ai-gateway",
+    "version": "1.0.0",
+    "description_oficial": "Ejecutor del LLM. Dos entry points: chat.prompt.ready (flujo de chat) y llm.complete.request (flujo genérico, usado por agentes). Internamente comparten _executeLLM (agentic loop con tools, providers con fallback, credentials event-driven).",
+    "author": "Event Core Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/conversacion/ai-gateway/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_3_core",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "credential.resolve.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/ai-gateway/index.js:124",
+        "metodo_contenedor": "_resolveCredential",
+        "es_handler_de": null,
+        "bloque_logico": "tras pendingCredentials.set; resolución de API key para un provider",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "provider", "project_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      this.pendingCredentials.set(request_id, { resolve, reject, timeout });\n      this.eventBus.publish('credential.resolve.request', { request_id, provider, project_id: projectId });\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "fs.read.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/ai-gateway/index.js:220",
+        "metodo_contenedor": "_readAttachment",
+        "es_handler_de": null,
+        "bloque_logico": "tras pendingFsReads.set; carga adjuntos para LLM",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "path", "project_id", "encoding"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      this.pendingFsReads.set(request_id, { resolve, reject, timeout });\n      this.eventBus.publish('fs.read.request', { request_id, path: attachmentPath, project_id, encoding });\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "variable", "valor": "toolName", "variables_referenciadas": ["toolName"] },
+        "ubicacion": "modules/conversacion/ai-gateway/index.js:348",
+        "metodo_contenedor": "_executeToolCall",
+        "es_handler_de": "agentic loop — invoca tools del LLM",
+        "bloque_logico": "fallback PATH 2 cuando tool no está en moduleLoader.toolsRegistry; publica el evento con nombre dinámico igual al toolName",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      this.eventBus.publish(toolName, { request_id, ...enrichedArgs });\n    });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "ai.chat.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/ai-gateway/index.js:479",
+        "metodo_contenedor": "onChatPromptReady",
+        "es_handler_de": "chat.prompt.ready",
+        "bloque_logico": "tras _executeLLM (success o error); respuesta consumida por chat-io",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "page_id", "conversation_id", "context", "settings", "prompt", "attachments", "intencion", "message", "message_id_user", "tool_calls_executed", "iterations", "tokens", "cost", "model", "provider"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('ai.chat.response', {\n      project_id, page_id, conversation_id, context: context || {}, settings,\n      prompt: systemPrompt, attachments: attachments || [], intencion: intencion ?? null,\n      message: llmResult.content, message_id_user: message_id,\n      tool_calls_executed, iterations, tokens, cost, model, provider\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "llm.complete.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/ai-gateway/index.js:521",
+        "metodo_contenedor": "onLlmCompleteRequest",
+        "es_handler_de": "llm.complete.request",
+        "bloque_logico": "tras _executeLLM; cierra el request_response genérico (usado por agentes)",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id", "success", "error", "...result"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('llm.complete.response', {\n      request_id,\n      success: !error,\n      ...(error ? { error } : { ...result })\n    });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "chat.prompt.ready",         "tipo_nombre": "literal", "handler": "onChatPromptReady",     "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:445", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:475", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "llm.complete.request",      "tipo_nombre": "literal", "handler": "onLlmCompleteRequest",  "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:503", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:518", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "credential.resolve.response","tipo_nombre": "literal", "handler": "onCredentialResponse",  "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:128", "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:128", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "credential.saved",          "tipo_nombre": "literal", "handler": "onCredentialSaved",     "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:139", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:139", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "credential.updated",        "tipo_nombre": "literal", "handler": "onCredentialSaved",     "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:139", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:139", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "credential.deleted",        "tipo_nombre": "literal", "handler": "onCredentialDeleted",   "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:143", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:143", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "fs.read.response",          "tipo_nombre": "literal", "handler": "onFsReadResponse",      "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:224", "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:224", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["ai.chat.response", "llm.complete.response", "credential.resolve.request", "fs.read.request"],
+      "publica_literales_en_codigo": ["ai.chat.response", "credential.resolve.request", "fs.read.request", "llm.complete.response"],
+      "publica_patrones_dinamicos": ["toolName (variable)"],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["chat.prompt.ready", "llm.complete.request", "credential.resolve.response", "credential.saved", "credential.updated", "credential.deleted", "fs.read.response"],
+      "subscribes_realmente_registrados": ["chat.prompt.ready", "llm.complete.request", "credential.resolve.response", "credential.saved", "credential.updated", "credential.deleted", "fs.read.response"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "providers",          "tipo": "Map", "ubicacion_init": "modules/conversacion/ai-gateway/index.js:37",  "se_invalida_con": "nunca tras carga inicial; recargado en _initializeProviders en onLoad",                              "leak_potencial": false },
+      { "campo": "credentialCache",    "tipo": "Map", "ubicacion_init": "modules/conversacion/ai-gateway/index.js:38",  "se_invalida_con": "credential.saved/updated/deleted (handlers onCredentialSaved/onCredentialDeleted invalidan entrada)", "leak_potencial": false },
+      { "campo": "pendingCredentials", "tipo": "Map", "ubicacion_init": "modules/conversacion/ai-gateway/index.js:39",  "se_invalida_con": "credential.resolve.response (delete) | timeout (delete + reject)",                                  "leak_potencial": false },
+      { "campo": "pendingFsReads",     "tipo": "Map", "ubicacion_init": "modules/conversacion/ai-gateway/index.js:40",  "se_invalida_con": "fs.read.response (delete) | timeout (delete + reject)",                                            "leak_potencial": false },
+      { "campo": "pagePrefixes",       "tipo": "Map", "ubicacion_init": "modules/conversacion/ai-gateway/index.js:185", "se_invalida_con": "se reconstruye en _buildPagePrefixes; no se invalida explícitamente entre invocaciones",          "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [],
+      "notas_concurrencia": null
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": [
+      { "valor": "setTimeout en _resolveCredential",       "ubicacion": "modules/conversacion/ai-gateway/index.js:119", "naturaleza": "timeout" },
+      { "valor": "setTimeout en _readAttachment",          "ubicacion": "modules/conversacion/ai-gateway/index.js:215", "naturaleza": "timeout" },
+      { "valor": "setTimeout en _executeToolCall (PATH 2)","ubicacion": "modules/conversacion/ai-gateway/index.js:336", "naturaleza": "timeout" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/conversacion/ai-gateway/index.js:43",
+      "acciones": [
+        "guarda this.logger / this.eventBus / this.config / this.moduleLoader desde context",
+        "_initializeProviders carga las clases de providers/ y las registra en this.providers Map",
+        "logger.info('ai-gateway.loaded', { providers: this.providers.size })"
+      ],
+      "guarda_referencias_externas": [
+        "this.logger=context.logger",
+        "this.eventBus=context.eventBus",
+        "this.config=context.moduleConfig",
+        "this.moduleLoader=context.moduleLoader (REF EXTERNA al loader del core para acceder a toolsRegistry)"
+      ],
+      "puede_fallar_silenciosamente": true
+    },
+    "onUnload": {
+      "ubicacion": "modules/conversacion/ai-gateway/index.js:53",
+      "acciones": [],
+      "estado_no_limpiado": ["providers", "credentialCache", "pendingCredentials", "pendingFsReads", "pagePrefixes (todos quedan en GC con la instancia — NO hay clearTimeout sobre los pending)"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "credential-manager",                 "via_evento": "credential.resolve.request → credential.resolve.response", "obligatorio_en": "runtime", "ubicacion_uso": "modules/conversacion/ai-gateway/index.js:124", "es_cross_vertical": false },
+    { "modulo_dependido": "filesystem",                         "via_evento": "fs.read.request → fs.read.response",                       "obligatorio_en": "runtime", "ubicacion_uso": "modules/conversacion/ai-gateway/index.js:220", "es_cross_vertical": false },
+    { "modulo_dependido": "core/moduleLoader (toolsRegistry)",  "via_evento": "context.moduleLoader — referencia directa para invocar tool handlers (PATH 1)", "obligatorio_en": "onLoad", "ubicacion_uso": "modules/conversacion/ai-gateway/index.js:47", "es_cross_vertical": false },
+    { "modulo_dependido": "providers externos (anthropic/openai/deepseek/groq/gemini/ollama/claude-cli)", "via_evento": "HTTP/CLI directo via clases providers/*.js", "obligatorio_en": "runtime", "ubicacion_uso": "modules/conversacion/ai-gateway/providers/", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "credential-manager",        "que_pasa_si_cae": "timeout en pendingCredentials (línea 119) y reject promise pending. _resolveCredential lanza error que _executeLLM captura y termina con ai-gateway.chat.failed.", "evidencia": "modules/conversacion/ai-gateway/index.js:119" },
+    { "dependencia": "filesystem (read attachments)","que_pasa_si_cae": "timeout en pendingFsReads (línea 215) y reject. Adjuntos no resueltos no llegan al LLM; mensaje sin attachments.",                                              "evidencia": "modules/conversacion/ai-gateway/index.js:215" },
+    { "dependencia": "tool destino (cuando PATH 2)", "que_pasa_si_cae": "timeout en setTimeout (línea 336) y reject de la promise de _executeToolCall. El agentic loop ve la tool fallida.",                                                "evidencia": "modules/conversacion/ai-gateway/index.js:336" },
+    { "dependencia": "provider LLM externo",         "que_pasa_si_cae": "Error capturado en try/catch de _executeLLM (línea 475). ai.chat.response se publica con message='Error: <msg>'. Cliente recibe respuesta de error.",            "evidencia": "modules/conversacion/ai-gateway/index.js:475" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('ai-gateway.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["providers", "provider", "error", "conversation_id", "request_id"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('ai-gateway.loaded', { providers: this.providers.size });",                       "ubicacion": "modules/conversacion/ai-gateway/index.js:50"  },
+        { "snippet": "this.logger.warn('ai-gateway.provider.init.failed', { provider: name, error: err.message });",    "ubicacion": "modules/conversacion/ai-gateway/index.js:86"  },
+        { "snippet": "this.logger.error('ai-gateway.chat.failed', { error: err.message, conversation_id });",            "ubicacion": "modules/conversacion/ai-gateway/index.js:475" },
+        { "snippet": "this.logger.error('ai-gateway.llm.failed', { error, request_id });",                                "ubicacion": "modules/conversacion/ai-gateway/index.js:518" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — ai-gateway genera request_id local con crypto.randomUUID() para credential/fs/tool calls. No extrae correlation_id de chat.prompt.ready ni lo añade a publishes salientes."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": false,
+    "tests_propios_existen": true
+  },
+
+  "version_archivada": {
+    "existe": true,
+    "ubicacion": "arquitectura/conversacion-ref/ai-gateway",
+    "diferencia_aproximada": "Predecesor del rediseño de la capa conversacional (tabula rasa abril 2026); contiene README, index.js, providers/ y schemas/"
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 529,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 9,
+    "ultimo_commit": {
+      "sha": "f2b3f9f",
+      "fecha": "2026-04-27 19:53:38 +0000",
+      "subject": "ai-gateway: invocar handler de tool directo si está en toolsRegistry"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+"publica con nombre VARIABLE (toolName) en línea 348 — caso único en los módulos auditados; el agentic loop publica el evento con el nombre de la tool del LLM como nombre de evento",
+      "onUnload está definido pero vacío — pendingCredentials y pendingFsReads NO se limpian con clearTimeout"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "tools (ai-gateway es ejecutor, no expone tools propias al LLM)",
+      "ui_handlers (sin endpoints UI)",
+      "apis_http (sin rutas HTTP)",
+      "estado.persistencia.sqlite_tablas (no usa SQLite)",
+      "estado.persistencia.archivos (lee adjuntos via fs.read.request, no gestiona archivos propios)",
+      "configuracion.env_vars (no usa process.env directo)",
+      "configuracion.module_json_config_keys (la config viene de manifest.config pero no se enumera aquí)",
+      "configuracion.paths_proyecto_referenciados",
+      "observabilidad.metricas_emitidas (no usa metrics.X)",
+      "codigo_intencion.todos (sin TODOs/FIXMEs marcados)"
+    ]
+  }
+}

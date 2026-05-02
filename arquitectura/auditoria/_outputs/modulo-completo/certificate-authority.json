@@ -1,0 +1,194 @@
+{
+  "_meta": {
+    "modulo": "certificate-authority",
+    "ubicacion": "modules/certificate-authority",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/certificate-authority.json"
+  },
+
+  "identidad": {
+    "name": "certificate-authority",
+    "version": "1.0.0",
+    "description_oficial": "Internal Certificate Authority with mTLS authentication for client portal and device management",
+    "author": "Event Core Team",
+    "main_declarado": null,
+    "main_real": "modules/certificate-authority/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": true,
+    "estado_modulo": "dormido_por_diseno",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [],
+    "subscribes": [],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["certificate.issued", "certificate.revoked", "certificate.renewed", "certificate.expired"],
+      "publica_literales_en_codigo": [],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": ["certificate.issued", "certificate.revoked", "certificate.renewed", "certificate.expired"],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": [],
+      "subscribes_realmente_registrados": [],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [
+    { "method": "GET",  "path": "/status",                  "handler_metodo": "handleStatus",            "handler_ubicacion": "modules/certificate-authority/index.js:114", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] },
+    { "method": "GET",  "path": "/ca/cert",                 "handler_metodo": "handleGetCACert",         "handler_ubicacion": "modules/certificate-authority/index.js:131", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] },
+    { "method": "POST", "path": "/certificates",            "handler_metodo": "handleIssueCertificate", "handler_ubicacion": "modules/certificate-authority/index.js:152", "auth_observada": "no_observable", "request_body_keys": ["type", "identifier", "commonName"], "response_keys": [] },
+    { "method": "POST", "path": "/certificates/revoke",     "handler_metodo": "handleRevokeCertificate","handler_ubicacion": "modules/certificate-authority/index.js:219", "auth_observada": "no_observable", "request_body_keys": ["serialNumber", "reason"], "response_keys": [] },
+    { "method": "POST", "path": "/certificates/renew",      "handler_metodo": "handleRenewCertificate", "handler_ubicacion": "modules/certificate-authority/index.js:252", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] },
+    { "method": "GET",  "path": "/certificates",            "handler_metodo": "handleListCertificates","handler_ubicacion": "modules/certificate-authority/index.js:298", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] },
+    { "method": "POST", "path": "/certificates/verify",     "handler_metodo": "handleVerifyCertificate","handler_ubicacion": "modules/certificate-authority/index.js:319", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] },
+    { "method": "GET",  "path": "/crl",                     "handler_metodo": "handleGetCRL",            "handler_ubicacion": "modules/certificate-authority/index.js:338", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] },
+    { "method": "GET",  "path": "/nginx-config",            "handler_metodo": "handleGetNginxConfig",   "handler_ubicacion": "modules/certificate-authority/index.js:378", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] },
+    { "method": "GET",  "path": "/health",                  "handler_metodo": "handleHealthCheck",      "handler_ubicacion": "modules/certificate-authority/index.js:390", "auth_observada": "no_observable", "request_body_keys": [], "response_keys": [] }
+  ],
+
+  "estado": {
+    "memoria": [
+      { "campo": "caManager",      "tipo": "Object", "ubicacion_init": "modules/certificate-authority/index.js:26", "se_invalida_con": "instanciado en onLoad — gestor interno de la CA (firma/revoca/genera certs)", "leak_potencial": false },
+      { "campo": "mtlsMiddleware", "tipo": "Object", "ubicacion_init": "modules/certificate-authority/index.js:27", "se_invalida_con": "instanciado en onLoad — middleware Express mTLS para verificar certs cliente",  "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/ca/* (CA root cert + private key + CRL — según contexto/certificate-authority.json)", "formato": "raw", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" },
+        { "path_pattern": "data/certificates/* (certs emitidos por cliente/dispositivo)", "formato": "raw", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "append-only" }
+      ],
+      "notas_concurrencia": "El caManager (interno) gestiona archivos PEM/DER. NO observado data/ca/ existente (según SYSTEM-ANALYSIS.md de marzo 2026 — fantasma de ruta documentada pero sin verificar existencia)."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": []
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/certificate-authority/index.js:46",
+      "acciones": [
+        "guarda this.core / this.logger / this.metrics",
+        "instancia caManager (CA interna)",
+        "instancia mtlsMiddleware (Express middleware)",
+        "logger.info('module.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.core", "this.logger", "this.metrics"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/certificate-authority/index.js:100",
+      "acciones": ["logger.info('module.unloaded')"],
+      "estado_no_limpiado": ["caManager", "mtlsMiddleware"]
+    },
+    "auto_wired_subscribes": false,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "node-forge (PKI library)", "via_evento": "require interno via caManager", "obligatorio_en": "ambos", "ubicacion_uso": "modules/certificate-authority/index.js (caManager interno)", "es_cross_vertical": false },
+    { "modulo_dependido": "Node.js fs (PEM files)",   "via_evento": "fs directo via caManager",      "obligatorio_en": "runtime", "ubicacion_uso": "modules/certificate-authority/index.js (caManager interno)", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "data/ca/ (CA root no existe)", "que_pasa_si_cae": "caManager onLoad probablemente lanza error si no encuentra root cert. Como módulo está disabled, no se carga.", "evidencia": "no observable directo en index.js (lógica en caManager)" },
+    { "dependencia": "node-forge",                   "que_pasa_si_cae": "caManager.issueCertificate falla → handler devuelve error 500.",                                                  "evidencia": "no observable directo (lógica en caManager interno)" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('certificate.<accion>' | 'module.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "serialNumber", "type", "identifier", "commonName", "reason"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('module.loaded', { ... });",                                                     "ubicacion": "modules/certificate-authority/index.js:89"  },
+        { "snippet": "this.logger.info('certificate.issued', { serialNumber: result.serialNumber, type, identifier, commonName });", "ubicacion": "modules/certificate-authority/index.js:189" },
+        { "snippet": "this.logger.info('certificate.revoked', { serialNumber, reason });",                                "ubicacion": "modules/certificate-authority/index.js:239" },
+        { "snippet": "this.logger.info('certificate.renewed', { ... });",                                                 "ubicacion": "modules/certificate-authority/index.js:275" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — módulo disabled, sin tráfico real."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 408,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": ["routeCode"],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Logger usa nombres idénticos a eventos declarados ('certificate.issued', 'certificate.revoked', 'certificate.renewed') pero NO se publican como eventos — solo se loggean. Drift de declaración vs implementación.", "ejemplo": "modules/certificate-authority/index.js:189", "rareza": "inusual" }
+    ]
+  },
+
+  "quirks": {
+    "warnings": [
+      "P2 DORMIDO POR DISEÑO: certificate-authority está disabled en config.json, según contexto/certificate-authority.json era documentado como 'sistema funcional completo' pero el directorio data/ca/ NO existe (fantasma documental).",
+      "DRIFT MASIVO: manifest declara 4 publica (certificate.issued/revoked/renewed/expired) pero código NO emite ninguno. Los logs (líneas 189, 239, 275) usan los MISMOS NOMBRES que los eventos pero son this.logger.info, NO this.eventBus.publish. Probable: el dev quería emitirlos pero solo los loggeó. Si el módulo se reactiva, hay que añadir eventBus.publish.",
+      "manifest declara outlier 'routeCode' (único en repo, junto con scheduler/icon/uiActions)",
+      "10 APIs HTTP completas implementadas (status/issue/revoke/renew/list/verify/CRL/nginx-config/health). Funcionalidad existe — solo está apagada.",
+      "Helpers internos: caManager (PKI) + mtlsMiddleware (Express) — encapsulación limpia",
+      "Si se reactiva, este módulo es la base del modelo de seguridad mTLS del repo (contexto/certificate-authority.json lo documenta extensivamente)"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "tools (no expone tools al LLM)",
+      "ui_handlers (no expone MQTT UI — solo HTTP)",
+      "estado.persistencia.sqlite_tablas (usa archivos PEM/DER)",
+      "configuracion.env_vars / module_json_config_keys / paths_proyecto / hardcoded",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / comentarios_porque / workarounds_detectados",
+      "version_archivada"
+    ]
+  }
+}

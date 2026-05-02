@@ -1,0 +1,237 @@
+{
+  "_meta": {
+    "modulo": "firmware-manager",
+    "ubicacion": "modules/firmware-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "firmware-manager",
+    "version": "2.0.0",
+    "description_oficial": "Registro de firmwares, versionado con checksums, y orquestación de OTA via device-shadow",
+    "author": "Enki",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": "tier_3_core",
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "firmware.registered",    "description": "Nuevo firmware registrado en catálogo" },
+      { "event": "firmware.ota_requested", "description": "OTA solicitada para un dispositivo via shadow" },
+      { "event": "firmware.ota_completed", "description": "Dispositivo actualizó firmware exitosamente" },
+      { "event": "firmware.ota_failed",    "description": "OTA falló para un dispositivo (timeout, version_mismatch, stale_cleanup)" }
+    ],
+    "subscribes": [
+      { "event": "shadow.updated",           "handler": "onShadowUpdated",   "extras": {} },
+      { "event": "device.registered",        "handler": "onDeviceRegistered","extras": {} },
+      { "event": "firmware.build_completed", "handler": "onBuildCompleted",  "extras": {} },
+      { "event": "esp32.build_completed",    "handler": "onBuildCompleted",  "extras": {} }
+    ],
+    "provides_eventos": [
+      "firmware.ota_requested",
+      "firmware.ota_completed",
+      "firmware.ota_failed",
+      "firmware.registered"
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "firmware.list",
+      "description": "Lista todos los tipos de firmware registrados con sus metadatos (utility, board, proyectos, versión latest)",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 36,
+      "parameters_full_path_hint": "modules/firmware-manager/module.json → tools[0].parameters"
+    },
+    {
+      "name": "firmware.info",
+      "description": "Info detallada de un tipo de firmware: todas las versiones, changelog, metadatos, checksums",
+      "parameters_required": ["type"],
+      "parameters_property_names": ["type"],
+      "parameters_size_chars": 137,
+      "parameters_full_path_hint": "modules/firmware-manager/module.json → tools[1].parameters"
+    },
+    {
+      "name": "firmware.list_by_project",
+      "description": "Lista firmwares asociados a un proyecto específico",
+      "parameters_required": ["project_id"],
+      "parameters_property_names": ["project_id"],
+      "parameters_size_chars": 130,
+      "parameters_full_path_hint": "modules/firmware-manager/module.json → tools[2].parameters"
+    },
+    {
+      "name": "firmware.register",
+      "description": "Registra un nuevo firmware en el catálogo. El binario debe existir en data/firmware/binaries/",
+      "parameters_required": ["type", "version", "file"],
+      "parameters_property_names": ["type", "version", "file", "changelog", "utility", "board", "capabilities", "projects"],
+      "parameters_size_chars": 749,
+      "parameters_full_path_hint": "modules/firmware-manager/module.json → tools[3].parameters"
+    },
+    {
+      "name": "firmware.trigger_ota",
+      "description": "Dispara actualización OTA para un dispositivo. Escribe desired.firmware en device-shadow.",
+      "parameters_required": ["device_id", "type"],
+      "parameters_property_names": ["device_id", "type", "version", "project_id"],
+      "parameters_size_chars": 378,
+      "parameters_full_path_hint": "modules/firmware-manager/module.json → tools[4].parameters"
+    },
+    {
+      "name": "firmware.ota_status",
+      "description": "Estado de OTAs pendientes y log reciente de actualizaciones",
+      "parameters_required": [],
+      "parameters_property_names": ["device_id", "limit"],
+      "parameters_size_chars": 214,
+      "parameters_full_path_hint": "modules/firmware-manager/module.json → tools[5].parameters"
+    },
+    {
+      "name": "firmware.update_meta",
+      "description": "Actualiza metadatos de un tipo de firmware: utility, description, board, capabilities, projects",
+      "parameters_required": ["type"],
+      "parameters_property_names": ["type", "utility", "description", "board", "capabilities", "projects"],
+      "parameters_size_chars": 452,
+      "parameters_full_path_hint": "modules/firmware-manager/module.json → tools[6].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "firmware", "action": "list",           "handler": "handleList" },
+      { "domain": "firmware", "action": "register",       "handler": "handleRegister" },
+      { "domain": "firmware", "action": "trigger-ota",    "handler": "handleTriggerOta" },
+      { "domain": "firmware", "action": "status",         "handler": "handleOtaStatus" },
+      { "domain": "firmware", "action": "rollback",       "handler": "handleRollback" },
+      { "domain": "firmware", "action": "device-versions","handler": "handleDeviceVersions" },
+      { "domain": "firmware", "action": "cleanup-otas",   "handler": "handleCleanupOtas" },
+      { "domain": "firmware", "action": "update-meta",    "handler": "handleUpdateMeta" },
+      { "domain": "firmware", "action": "info",           "handler": "handleGetInfo" },
+      { "domain": "firmware", "action": "list-by-project","handler": "handleListByProject" }
+    ]
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/firmware/:type/:version/:file",
+      "handler": "handleServeBinary",
+      "description": "Sirve binarios de firmware para descarga por ESP32",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "data_path",                  "tipo": "string",  "valor_default": "./data/firmware" },
+      { "key": "auto_check_on_register",     "tipo": "boolean", "valor_default": true },
+      { "key": "ota_timeout_ms",             "tipo": "number",  "valor_default": 300000 },
+      { "key": "ota_cleanup_interval_ms",    "tipo": "number",  "valor_default": 60000 },
+      { "key": "validate_binaries_on_load",  "tipo": "boolean", "valor_default": true }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "firmware.ota_requested.total",
+        "firmware.ota_completed.total",
+        "firmware.ota_failed.total",
+        "firmware.ota_timeout.total",
+        "firmware.ota_stale_cleanup.total",
+        "firmware.catalog_entries.total",
+        "firmware.rollback.total",
+        "firmware.device_outdated.total",
+        "firmware.binary_served.total",
+        "firmware.binary_served.bytes",
+        "firmware.binary_served.errors"
+      ],
+      "gauges": [
+        "firmware.pending_otas.count",
+        "firmware.catalog_types.count",
+        "firmware.catalog_entries.count",
+        "firmware.catalog_valid_binaries.count",
+        "firmware.catalog_missing_binaries.count"
+      ],
+      "timings": [
+        "firmware.ota.duration",
+        "firmware.register.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/firmware-manager/schemas/events.json",
+      "modules/firmware-manager/schemas/firmware.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 8721,
+    "module_json_lineas": 238,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "main no declarado (null): módulo sin entry-point explícito",
+      "provides.events duplica events.publishes: mismos 4 eventos declarados en ambos lugares",
+      "tier_declarado 'tier_3_core' no aparece en system.json.module_load_order.tiers con este módulo (tier_carga_inferido=null)"
+    ]
+  }
+}

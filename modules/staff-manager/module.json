@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Control de personal con tarjetas NFC (NTAG215) — jornada y distribución de llaves",
   "author": "Event Core Team",
-
+  "language": "en",
   "provides": {
     "apis": [
       {
@@ -98,7 +98,6 @@
       }
     ]
   },
-
   "events": {
     "publishes": [
       {
@@ -120,12 +119,10 @@
     ],
     "subscribes": []
   },
-
   "config": {
     "dataPath": "./data/staff",
     "maxShiftHours": 16
   },
-
   "observability": {
     "logging": {
       "level": "info",

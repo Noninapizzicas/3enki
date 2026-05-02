@@ -1,0 +1,298 @@
+{
+  "_meta": {
+    "modulo": "recetas",
+    "ubicacion": "modules/recetas",
+    "auditado_en": "2026-04-29",
+    "parcela": "eventos-emitidos",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/recetas.json"
+  },
+
+  "archivos_analizados": [
+    {
+      "path": "modules/recetas/index.js",
+      "lineas": 740,
+      "publishes_count": 11
+    }
+  ],
+
+  "eventos_emitidos": [
+    {
+      "indice": 1,
+      "nombre": { "tipo": "literal", "valor": "project.get.request", "variables_referenciadas": [] },
+      "ubicacion": "modules/recetas/index.js:109",
+      "contexto": {
+        "metodo_contenedor": "_slugForProject",
+        "es_handler_de": null,
+        "bloque_logico": "dentro de Promise resolver tras pendingProject.set"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["request_id", "project_id"],
+        "tiene_request_id": true,
+        "tiene_correlation_id": false,
+        "tiene_project_id": true,
+        "campos_con_template_literal": []
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": false,
+      "es_return": false,
+      "snippet": "      this.pendingProject.set(request_id, { resolve, reject, timer });\n      this.eventBus.publish('project.get.request', { request_id, project_id });\n    });"
+    },
+    {
+      "indice": 2,
+      "nombre": { "tipo": "literal", "valor": "fs.read.request", "variables_referenciadas": [] },
+      "ubicacion": "modules/recetas/index.js:140",
+      "contexto": {
+        "metodo_contenedor": "_readFile",
+        "es_handler_de": null,
+        "bloque_logico": "dentro de Promise resolver tras pendingFs.set"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["request_id", "path"],
+        "tiene_request_id": true,
+        "tiene_correlation_id": false,
+        "tiene_project_id": false,
+        "campos_con_template_literal": ["path"]
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": false,
+      "es_return": false,
+      "snippet": "      this.pendingFs.set(request_id, { resolve, reject, timer, op: 'read' });\n      this.eventBus.publish('fs.read.request', { request_id, path: this._pathFor(slug) });\n    });"
+    },
+    {
+      "indice": 3,
+      "nombre": { "tipo": "literal", "valor": "fs.write.request", "variables_referenciadas": [] },
+      "ubicacion": "modules/recetas/index.js:152",
+      "contexto": {
+        "metodo_contenedor": "_writeFile",
+        "es_handler_de": null,
+        "bloque_logico": "dentro de Promise resolver tras pendingFs.set; multilinea"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["request_id", "path", "content", "encoding"],
+        "tiene_request_id": true,
+        "tiene_correlation_id": false,
+        "tiene_project_id": false,
+        "campos_con_template_literal": ["path"]
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": false,
+      "es_return": false,
+      "snippet": "      this.pendingFs.set(request_id, { resolve, reject, timer, op: 'write' });\n      this.eventBus.publish('fs.write.request', {\n        request_id, path: this._pathFor(slug), content, encoding: 'utf-8'\n      });\n    });"
+    },
+    {
+      "indice": 4,
+      "nombre": { "tipo": "literal", "valor": "receta.creada", "variables_referenciadas": [] },
+      "ubicacion": "modules/recetas/index.js:354",
+      "contexto": {
+        "metodo_contenedor": "crear",
+        "es_handler_de": "tool recetas.crear (vía _toolDispatch)",
+        "bloque_logico": "tras store.recetas.push(receta) — receta ya añadida al store"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["proyecto_id", "id", "nombre", "timestamp"],
+        "tiene_request_id": false,
+        "tiene_correlation_id": false,
+        "tiene_project_id": true,
+        "campos_con_template_literal": []
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": false,
+      "es_return": false,
+      "snippet": "      store.recetas.push(receta);\n\n      this.eventBus.publish('receta.creada', { proyecto_id, id, nombre: receta.nombre, timestamp: now });\n"
+    },
+    {
+      "indice": 5,
+      "nombre": { "tipo": "literal", "valor": "receta.actualizada", "variables_referenciadas": [] },
+      "ubicacion": "modules/recetas/index.js:472",
+      "contexto": {
+        "metodo_contenedor": "actualizar",
+        "es_handler_de": "tool recetas.actualizar (vía _toolDispatch)",
+        "bloque_logico": "tras incrementar version y actualizar updated_at"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["proyecto_id", "id", "nombre", "version", "timestamp"],
+        "tiene_request_id": false,
+        "tiene_correlation_id": false,
+        "tiene_project_id": true,
+        "campos_con_template_literal": []
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": false,
+      "es_return": false,
+      "snippet": "      this._calcIncompleta(r);\n\n      this.eventBus.publish('receta.actualizada', { proyecto_id, id: r.id, nombre: r.nombre, version: r.version, timestamp: r.updated_at });\n"
+    },
+    {
+      "indice": 6,
+      "nombre": { "tipo": "literal", "valor": "receta.actualizada", "variables_referenciadas": [] },
+      "ubicacion": "modules/recetas/index.js:522",
+      "contexto": {
+        "metodo_contenedor": "revertir",
+        "es_handler_de": "tool recetas.revertir (vía _toolDispatch)",
+        "bloque_logico": "tras restaurar campos de target version, mismo evento que actualizar pero con campo motivo='revertir'"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["proyecto_id", "id", "nombre", "version", "timestamp", "motivo"],
+        "tiene_request_id": false,
+        "tiene_correlation_id": false,
+        "tiene_project_id": true,
+        "campos_con_template_literal": []
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": false,
+      "es_return": false,
+      "snippet": "      this._calcIncompleta(r);\n\n      this.eventBus.publish('receta.actualizada', { proyecto_id, id: r.id, nombre: r.nombre, version: r.version, timestamp: r.updated_at, motivo: 'revertir' });\n"
+    },
+    {
+      "indice": 7,
+      "nombre": { "tipo": "literal", "valor": "receta.eliminada", "variables_referenciadas": [] },
+      "ubicacion": "modules/recetas/index.js:537",
+      "contexto": {
+        "metodo_contenedor": "eliminar",
+        "es_handler_de": "tool recetas.eliminar (vía _toolDispatch)",
+        "bloque_logico": "tras setear estado='archivada' (no borra, archiva)"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["proyecto_id", "id", "nombre", "timestamp"],
+        "tiene_request_id": false,
+        "tiene_correlation_id": false,
+        "tiene_project_id": true,
+        "campos_con_template_literal": []
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": false,
+      "es_return": false,
+      "snippet": "      r.updated_at = Date.now();\n      this.eventBus.publish('receta.eliminada', { proyecto_id, id: r.id, nombre: r.nombre, timestamp: r.updated_at });\n      return { id: r.id, nombre: r.nombre, status: 'archivada' };"
+    },
+    {
+      "indice": 8,
+      "nombre": { "tipo": "literal", "valor": "ingrediente.precio.actualizado", "variables_referenciadas": [] },
+      "ubicacion": "modules/recetas/index.js:597",
+      "contexto": {
+        "metodo_contenedor": "actualizar_precio",
+        "es_handler_de": "tool recetas.actualizar_precio (vía _toolDispatch)",
+        "bloque_logico": "tras crear/actualizar el ingrediente en el catálogo del proyecto"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["proyecto_id", "nombre", "precio_mercado", "timestamp"],
+        "tiene_request_id": false,
+        "tiene_correlation_id": false,
+        "tiene_project_id": true,
+        "campos_con_template_literal": []
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": false,
+      "es_return": false,
+      "snippet": "      }\n      this.eventBus.publish('ingrediente.precio.actualizado', { proyecto_id, nombre: item.nombre, precio_mercado, timestamp: now });\n      return { nombre: item.nombre, precio_mercado, unidad: item.unidad, status: 'actualizado' };"
+    },
+    {
+      "indice": 9,
+      "nombre": { "tipo": "dynamic_template", "valor": "${toolName}.response", "variables_referenciadas": ["toolName"] },
+      "ubicacion": "modules/recetas/index.js:686",
+      "contexto": {
+        "metodo_contenedor": "_toolDispatch",
+        "es_handler_de": "fallback unknown tool",
+        "bloque_logico": "tool no encontrada en TOOL_HANDLERS — return temprano con error"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["request_id", "error"],
+        "tiene_request_id": true,
+        "tiene_correlation_id": false,
+        "tiene_project_id": false,
+        "campos_con_template_literal": ["error"]
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": false,
+      "es_return": true,
+      "snippet": "    if (!handlerName) {\n      return this.eventBus.publish(`${toolName}.response`, { request_id, error: `unknown tool ${toolName}` });\n    }"
+    },
+    {
+      "indice": 10,
+      "nombre": { "tipo": "dynamic_template", "valor": "${toolName}.response", "variables_referenciadas": ["toolName"] },
+      "ubicacion": "modules/recetas/index.js:690",
+      "contexto": {
+        "metodo_contenedor": "_toolDispatch",
+        "es_handler_de": "respuesta de tool exitosa",
+        "bloque_logico": "tras await del handler — devuelve result del handler"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["request_id", "result"],
+        "tiene_request_id": true,
+        "tiene_correlation_id": false,
+        "tiene_project_id": false,
+        "campos_con_template_literal": []
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": true,
+      "es_return": false,
+      "snippet": "      const result = await this[handlerName](params);\n      await this.eventBus.publish(`${toolName}.response`, { request_id, result });\n    } catch (err) {"
+    },
+    {
+      "indice": 11,
+      "nombre": { "tipo": "dynamic_template", "valor": "${toolName}.response", "variables_referenciadas": ["toolName"] },
+      "ubicacion": "modules/recetas/index.js:693",
+      "contexto": {
+        "metodo_contenedor": "_toolDispatch",
+        "es_handler_de": "respuesta de tool con error",
+        "bloque_logico": "dentro del catch tras logger.error"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["request_id", "error"],
+        "tiene_request_id": true,
+        "tiene_correlation_id": false,
+        "tiene_project_id": false,
+        "campos_con_template_literal": []
+      },
+      "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+      "es_await": true,
+      "es_return": false,
+      "snippet": "      this.logger.error(`${toolName}.failed`, { error: err.message });\n      await this.eventBus.publish(`${toolName}.response`, { request_id, error: err.message });\n    }"
+    }
+  ],
+
+  "consistencia_con_manifest": {
+    "publishes_declarados_en_manifest": [
+      "receta.creada", "receta.actualizada", "receta.eliminada",
+      "ingrediente.precio.actualizado",
+      "fs.read.request", "fs.write.request", "project.get.request"
+    ],
+    "literales_unicos_emitidos": [
+      "fs.read.request", "fs.write.request", "ingrediente.precio.actualizado",
+      "project.get.request", "receta.actualizada", "receta.creada", "receta.eliminada"
+    ],
+    "patrones_dinamicos_emitidos": ["${toolName}.response"],
+    "declarados_no_emitidos_en_codigo": [],
+    "emitidos_no_declarados_en_manifest": []
+  },
+
+  "patrones_observados": {
+    "canales_usados": ["eventBus"],
+    "publishes_por_canal": { "eventBus": 11, "mqtt_directo": 0, "otro": 0 },
+    "publishes_con_request_id": 6,
+    "publishes_con_correlation_id": 0,
+    "publishes_con_project_id": 6,
+    "publishes_await": 2,
+    "publishes_return": 1,
+    "publishes_dinamicos": 3,
+    "comentarios_explicativos": []
+  },
+
+  "quirks": {
+    "warnings": [],
+    "publishes_count_total": 11,
+    "publishes_unicos_literales_count": 7,
+    "archivos_lib_existe": false,
+    "archivos_services_existe": false
+  }
+}

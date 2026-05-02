@@ -1,0 +1,624 @@
+{
+  "_meta": {
+    "modulo": "conversacion/ai-agent-framework",
+    "ubicacion": "modules/conversacion/ai-agent-framework",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/conversacion__ai-agent-framework.json"
+  },
+
+  "identidad": {
+    "name": "ai-agent-framework",
+    "version": "1.1.0",
+    "description_oficial": "Carga agentes desde agents/*.json + prompts/*.json. Registra la tool invoke_agent (para el LLM) y escucha agent.execute.request (para módulos del dominio). Ambos paths usan el mismo helper interno _runAgent: arma el prompt del agente y llama al LLM via llm.complete.request. Cuando se incluye conversation_id, también publica el resultado como mensaje en la conversación con metadata.author del agente (preparado para chat multi-participante).",
+    "author": "Event Core Team",
+    "main_declarado": null,
+    "main_real": "modules/conversacion/ai-agent-framework/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_3_core",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "dynamic_template", "valor": "${responseEventName}", "variables_referenciadas": ["responseEventName"] },
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:201",
+        "metodo_contenedor": "_runAgent",
+        "es_handler_de": "agente no encontrado — error path",
+        "bloque_logico": "guard: agente no encontrado, return early con error",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["request_id", "session_id", "error"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": ["error"]
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": true,
+        "snippet": "    if (!agent) {\n      return this.eventBus.publish(responseEventName, {\n        request_id, session_id,\n        error: `Agente '${agent_name}' no encontrado`\n      });\n    }",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "dynamic_template", "valor": "${responseEventName} (timeout path)", "variables_referenciadas": ["responseEventName", "agent_name"] },
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:229",
+        "metodo_contenedor": "_runAgent",
+        "es_handler_de": "timeout del LLM — callback de setTimeout",
+        "bloque_logico": "timeout handler: pendingLlm timeout excedido",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["request_id", "session_id", "error"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": ["error"]
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": false,
+        "snippet": "      this.pendingLlm.delete(llm_request_id);\n      this.eventBus.publish(responseEventName, {\n        request_id, session_id,\n        error: `Timeout esperando agente ${agent_name} (${agent.timeout_ms}ms)`\n      });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "llm.complete.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:245",
+        "metodo_contenedor": "_runAgent",
+        "es_handler_de": null,
+        "bloque_logico": "tras construir system prompt y filtrar tools — pedido de completion al LLM",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["request_id", "system", "messages", "tools", "settings", "attachments", "project_id", "conversation_id", "page_id", "provider"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": true,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('llm.complete.request', {\n      request_id: llm_request_id,\n      system,\n      messages: [{ role: 'user', content: task }],\n      tools: toolsForAgent,\n      settings: { temperature: agent.temperature, max_tokens: agent.max_tokens },\n      attachments: [],\n      project_id: context.project_id || null,\n      conversation_id,\n      page_id: null,\n      provider: agent.provider\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "dynamic_template", "valor": "${pending.response_event} (error path)", "variables_referenciadas": ["pending.response_event"] },
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:284",
+        "metodo_contenedor": "onLlmCompleteResponse",
+        "es_handler_de": "llm.complete.response — LLM devolvio error",
+        "bloque_logico": "if (!success) — LLM fallo, propaga error al emisor original",
+        "payload": {
+          "tipo": "spread",
+          "campos_visibles": ["request_id", "session_id", "next_state", "should_continue", "error"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": true,
+        "snippet": "    if (!success) {\n      return this.eventBus.publish(pending.response_event, {\n        ...basePayload,\n        error: error || 'agent execution failed'\n      });\n    }",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "chat.assistant.saved", "variables_referenciadas": [] },
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:294",
+        "metodo_contenedor": "onLlmCompleteResponse",
+        "es_handler_de": "llm.complete.response — inyeccion en conversacion cuando hay conversation_id",
+        "bloque_logico": "bloque condicional if (pending.conversation_id) — cimentacion Fase 8",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": ["conversation_id", "role", "content", "metadata"],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "        await this.eventBus.publish('chat.assistant.saved', {\n          conversation_id: pending.conversation_id,\n          role: 'agent',\n          content,\n          metadata: {\n            author: { kind: 'agent', id: pending.agent_name, name: pending.agent_name },\n            block: { type: 'agent_intervention', title: pending.agent_name, status: 'closed' },\n            tool_calls: tool_calls_executed || []\n          }\n        });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "dynamic_template", "valor": "${pending.response_event} (success path)", "variables_referenciadas": ["pending.response_event"] },
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:309",
+        "metodo_contenedor": "onLlmCompleteResponse",
+        "es_handler_de": "llm.complete.response — respuesta exitosa del agente",
+        "bloque_logico": "path de exito — devuelve result con agent, content, tool_calls_executed",
+        "payload": {
+          "tipo": "spread",
+          "campos_visibles": ["request_id", "session_id", "next_state", "should_continue", "result"],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false,
+        "es_return": true,
+        "snippet": "    return this.eventBus.publish(pending.response_event, {\n      ...basePayload,\n      result: {\n        agent: pending.agent_name,\n        content,\n        tool_calls_executed: tool_calls_executed || []\n      }\n    });",
+        "declarado_en_manifest": false
+      }
+    ],
+    "subscribes": [
+      {
+        "nombre": "invoke_agent",
+        "tipo_nombre": "literal",
+        "handler": "onInvokeAgent",
+        "handler_ubicacion": "modules/conversacion/ai-agent-framework/index.js:159",
+        "comportamiento_si_falla": "log_y_sigue",
+        "evidencia_comportamiento": "modules/conversacion/ai-agent-framework/index.js:201",
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "agent.execute.request",
+        "tipo_nombre": "literal",
+        "handler": "onAgentExecuteRequest",
+        "handler_ubicacion": "modules/conversacion/ai-agent-framework/index.js:171",
+        "comportamiento_si_falla": "log_y_sigue",
+        "evidencia_comportamiento": "modules/conversacion/ai-agent-framework/index.js:201",
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "llm.complete.response",
+        "tipo_nombre": "literal",
+        "handler": "onLlmCompleteResponse",
+        "handler_ubicacion": "modules/conversacion/ai-agent-framework/index.js:266",
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": "modules/conversacion/ai-agent-framework/index.js:270 — si !pending return silencioso",
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": [
+        "invoke_agent.response",
+        "agent.execute.response",
+        "chat.assistant.saved",
+        "llm.complete.request"
+      ],
+      "publica_literales_en_codigo": [
+        "llm.complete.request",
+        "chat.assistant.saved"
+      ],
+      "publica_patrones_dinamicos": [
+        "${responseEventName} (invoke_agent.response | agent.execute.response)",
+        "${pending.response_event} (invoke_agent.response | agent.execute.response)"
+      ],
+      "publica_declarados_no_emitidos": ["invoke_agent.response", "agent.execute.response"],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": [
+        "invoke_agent",
+        "agent.execute.request",
+        "llm.complete.response"
+      ],
+      "subscribes_realmente_registrados": [
+        "invoke_agent",
+        "agent.execute.request",
+        "llm.complete.response"
+      ],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [
+    {
+      "name": "invoke_agent",
+      "description_para_llm": "Invoca un agente especialista para una tarea concreta. Cada agente sabe su dominio. Devuelve cuando el agente termina con el resultado.",
+      "parameters_required": ["agent_name", "task"],
+      "parameters_property_names": ["agent_name", "task", "context"],
+      "parameters_size_chars": 312,
+      "handler_metodo": "onInvokeAgent",
+      "handler_ubicacion": "modules/conversacion/ai-agent-framework/index.js:159",
+      "retorno": {
+        "tipo": "object",
+        "shape_inferido": {
+          "request_id": "string",
+          "session_id": "string|null",
+          "next_state": "null",
+          "should_continue": "boolean (false fijo hoy)",
+          "result": {
+            "agent": "string",
+            "content": "string",
+            "tool_calls_executed": "array"
+          }
+        },
+        "es_markdown_formateado": false,
+        "ejemplos_observados": [
+          "{ ...basePayload, result: { agent: pending.agent_name, content, tool_calls_executed: tool_calls_executed || [] } }"
+        ],
+        "publica_eventos_de_dominio": ["llm.complete.request", "chat.assistant.saved"]
+      },
+      "errores_conocidos": [
+        {
+          "condicion": "agente no encontrado en this.agents",
+          "respuesta_shape": { "request_id": "string", "session_id": "null", "error": "string" },
+          "ubicacion": "modules/conversacion/ai-agent-framework/index.js:201"
+        },
+        {
+          "condicion": "timeout esperando llm.complete.response",
+          "respuesta_shape": { "request_id": "string", "session_id": "null|string", "error": "string con ms del agente" },
+          "ubicacion": "modules/conversacion/ai-agent-framework/index.js:225"
+        },
+        {
+          "condicion": "LLM devolvio success=false",
+          "respuesta_shape": { "request_id": "string", "session_id": "null|string", "next_state": "null", "should_continue": false, "error": "string" },
+          "ubicacion": "modules/conversacion/ai-agent-framework/index.js:284"
+        }
+      ]
+    }
+  ],
+
+  "ui_handlers": [],
+
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      {
+        "campo": "agents",
+        "tipo": "Map",
+        "ubicacion_init": "modules/conversacion/ai-agent-framework/index.js:31",
+        "se_invalida_con": "nunca — catalogo cargado en onLoad, no se invalida durante vida del modulo",
+        "leak_potencial": false
+      },
+      {
+        "campo": "pendingLlm",
+        "tipo": "Map",
+        "ubicacion_init": "modules/conversacion/ai-agent-framework/index.js:33",
+        "se_invalida_con": "onLlmCompleteResponse (clearTimeout + delete) | timeout por agente (delete) | onUnload (clearTimeout + clear)",
+        "leak_potencial": false
+      }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        {
+          "path_pattern": "modules/conversacion/ai-agent-framework/agents/*.json",
+          "formato": "json",
+          "operaciones": ["read"],
+          "via_evento": null,
+          "atomicidad": "desconocido"
+        },
+        {
+          "path_pattern": "modules/conversacion/ai-agent-framework/prompts/*.json",
+          "formato": "json",
+          "operaciones": ["read"],
+          "via_evento": null,
+          "atomicidad": "desconocido"
+        },
+        {
+          "path_pattern": "modules/conversacion/ai-agent-framework/prompts/*.md",
+          "formato": "raw",
+          "operaciones": ["read"],
+          "via_evento": null,
+          "atomicidad": "desconocido"
+        },
+        {
+          "path_pattern": "modules/_shared/base.prompt.json",
+          "formato": "json",
+          "operaciones": ["read"],
+          "via_evento": null,
+          "atomicidad": "desconocido"
+        }
+      ],
+      "notas_concurrencia": "Lectura de archivos solo en onLoad (sincrona, fs.readFileSync). Sin escrituras. Sin concurrencia en archivos."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": [
+      {
+        "valor": "0.7",
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:114",
+        "naturaleza": "otro"
+      },
+      {
+        "valor": "2000",
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:115",
+        "naturaleza": "otro"
+      },
+      {
+        "valor": "120000",
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:116",
+        "naturaleza": "timeout"
+      }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/conversacion/ai-agent-framework/index.js:36",
+      "acciones": [
+        "guarda this.logger = context.logger",
+        "guarda this.eventBus = context.eventBus",
+        "guarda this.moduleLoader = context.moduleLoader || null",
+        "_loadBasePrompt() — fs.readFileSync base.prompt.json a this.basePromptText",
+        "_loadAgents() — fs.readdirSync agents/, carga y parsea cada JSON habilitado, carga prompt files",
+        "_registerInvokeAgentTool() — si this.moduleLoader.toolsRegistry existe, registra invoke_agent tool",
+        "logger.info('ai-agent-framework.loaded', { agents, base })"
+      ],
+      "guarda_referencias_externas": [
+        "this.logger=context.logger",
+        "this.eventBus=context.eventBus",
+        "this.moduleLoader=context.moduleLoader"
+      ],
+      "puede_fallar_silenciosamente": true
+    },
+    "onUnload": {
+      "ubicacion": "modules/conversacion/ai-agent-framework/index.js:54",
+      "acciones": [
+        "for ({ timeout } of this.pendingLlm.values()) clearTimeout(timeout)",
+        "this.pendingLlm.clear()"
+      ],
+      "estado_no_limpiado": [
+        "agents (catalogo de agentes cargados — queda en GC al morir instancia)",
+        "basePromptText (texto del prompt base)"
+      ]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    {
+      "modulo_dependido": "ai-gateway",
+      "via_evento": "llm.complete.request / llm.complete.response",
+      "obligatorio_en": "runtime",
+      "ubicacion_uso": "modules/conversacion/ai-agent-framework/index.js:245",
+      "es_cross_vertical": false
+    },
+    {
+      "modulo_dependido": "core/moduleLoader (toolsRegistry)",
+      "via_evento": "referencia directa context.moduleLoader — registro de invoke_agent tool en toolsRegistry",
+      "obligatorio_en": "onLoad",
+      "ubicacion_uso": "modules/conversacion/ai-agent-framework/index.js:44",
+      "es_cross_vertical": false
+    },
+    {
+      "modulo_dependido": "chat-io (u oyente de chat.assistant.saved)",
+      "via_evento": "chat.assistant.saved (condicional — solo cuando conversation_id presente)",
+      "obligatorio_en": "runtime",
+      "ubicacion_uso": "modules/conversacion/ai-agent-framework/index.js:294",
+      "es_cross_vertical": false
+    }
+  ],
+
+  "modos_de_fallo": [
+    {
+      "dependencia": "ai-gateway (llm.complete.response)",
+      "que_pasa_si_cae": "timeout por agente (default 120000ms) — cada pendingLlm entry expira y publica responseEventName con error de timeout",
+      "evidencia": "modules/conversacion/ai-agent-framework/index.js:225"
+    },
+    {
+      "dependencia": "core/moduleLoader.toolsRegistry",
+      "que_pasa_si_cae": "if (this.moduleLoader?.toolsRegistry) guard — si null, invoke_agent NO se registra y el LLM no puede llamarlo. Modulo sigue cargado pero tool es invisible al LLM.",
+      "evidencia": "modules/conversacion/ai-agent-framework/index.js:44"
+    },
+    {
+      "dependencia": "agents/*.json (archivos en disco)",
+      "que_pasa_si_cae": "try/catch individual por archivo en _loadAgents — warn log + skip. El modulo carga con los agentes que si pudieron parsearse.",
+      "evidencia": "modules/conversacion/ai-agent-framework/index.js:119"
+    },
+    {
+      "dependencia": "base.prompt.json (_shared)",
+      "que_pasa_si_cae": "try/catch en _loadBasePrompt con comentario opcional — fallo silencioso, basePromptText queda null. Agentes funcionan sin prompt base sin aviso en log.",
+      "evidencia": "modules/conversacion/ai-agent-framework/index.js:63"
+    }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('ai-agent-framework.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["agents", "base", "file", "error", "agent"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('ai-agent-framework.loaded', { agents: this.agents.size, base: !!this.basePromptText });", "ubicacion": "modules/conversacion/ai-agent-framework/index.js:48" },
+        { "snippet": "this.logger.warn('ai-agent-framework.agent.load.failed', { file, error: err.message });", "ubicacion": "modules/conversacion/ai-agent-framework/index.js:120" },
+        { "snippet": "this.logger.info('ai-agent-framework.invoke_agent.registered', { agents: enabledAgents.length });", "ubicacion": "modules/conversacion/ai-agent-framework/index.js:152" },
+        { "snippet": "this.logger?.warn?.('agent.message.publish.failed', { error: err.message, agent: pending.agent_name });", "ubicacion": "modules/conversacion/ai-agent-framework/index.js:305" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — genera llm_request_id interno con crypto.randomUUID() desconectado del request_id original. El original_request_id se preserva en pendingLlm para correlacion interna pero no hay correlation_id en los eventos."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [
+      "agents/architect.json",
+      "agents/cartadigital-composer.json",
+      "agents/cartadigital-ofertas.json",
+      "agents/cartadigital-pwa-builder.json",
+      "agents/cartadigital-reviewer.json",
+      "agents/device-ops.json",
+      "agents/escandallo-analyzer.json",
+      "agents/image-processor.json",
+      "agents/impresion-architect.json",
+      "agents/impresion-builder.json",
+      "agents/intent-router.json",
+      "agents/invoice-structurer.json",
+      "agents/invoice-validator.json",
+      "agents/marketing-brand-keeper.json",
+      "agents/marketing-copywriter.json",
+      "agents/marketing-onboarding.json",
+      "agents/marketing-strategist.json",
+      "agents/menu-enricher.json",
+      "agents/menu-structurer.json",
+      "agents/menu-validator.json",
+      "agents/recipe-analyzer.json",
+      "agents/recipe-chef-advisor.json",
+      "agents/recipe-completer.json",
+      "agents/recipe-curator.json",
+      "agents/recipe-structurer.json",
+      "agents/scheduler-dispatcher.json",
+      "agents/scheduler-planner.json",
+      "agents/tarifas-creator.json",
+      "agents/tarifas-sync.json",
+      "agents/viabilidad-receta-analyzer.json"
+    ],
+    "schemas": [],
+    "prompts": [
+      "prompts/architect-knowledge.md",
+      "prompts/architect-system.md",
+      "prompts/architect.json",
+      "prompts/cartadigital-composer-system.md",
+      "prompts/cartadigital-ofertas-system.md",
+      "prompts/cartadigital-pwa-builder-system.md",
+      "prompts/cartadigital-reviewer-system.md",
+      "prompts/escandallo-analyzer-system.md",
+      "prompts/escandallo-analyzer.json",
+      "prompts/image-processor-system.md",
+      "prompts/image-processor.json",
+      "prompts/impresion-architect-system.md",
+      "prompts/impresion-builder-system.md",
+      "prompts/intent-router-system.md",
+      "prompts/intent-router.json",
+      "prompts/invoice-structurer-system.md",
+      "prompts/invoice-validator-system.md",
+      "prompts/marketing-brand-keeper-system.md",
+      "prompts/marketing-copywriter-system.md",
+      "prompts/marketing-onboarding-system.md",
+      "prompts/marketing-onboarding.json",
+      "prompts/marketing-strategist-system.md",
+      "prompts/menu-enricher-system.md",
+      "prompts/menu-structurer-system.md",
+      "prompts/menu-validator-system.md",
+      "prompts/receptor-facturas-system.md",
+      "prompts/recipe-analyzer-system.md",
+      "prompts/recipe-analyzer.json",
+      "prompts/recipe-chef-advisor.json",
+      "prompts/recipe-completer.json",
+      "prompts/recipe-curator-system.md",
+      "prompts/recipe-curator.json",
+      "prompts/recipe-structurer-system.md",
+      "prompts/recipe-structurer.json",
+      "prompts/scheduler-dispatcher-system.md",
+      "prompts/scheduler-planner-system.md",
+      "prompts/tarifas-creator-system.md",
+      "prompts/tarifas-sync-system.md",
+      "prompts/viabilidad-receta-analyzer-system.md",
+      "prompts/viabilidad-receta-analyzer.json"
+    ],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": false,
+    "tests_propios_existen": true
+  },
+
+  "version_archivada": {
+    "existe": true,
+    "ubicacion": "arquitectura/conversacion-ref/ai-agent-framework",
+    "diferencia_aproximada": "version anterior con agent.js, context-manager.js, chef-advisor-tools.js separados — arquitectura multi-archivo vs actual single index.js"
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      {
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:14",
+        "comentario_literal": "Sin agentic loop propio, sin lifecycle complejo, sin SQLite. El propio ai-gateway dentro de llm.complete.request hace tools y todo lo demas.",
+        "contexto": "header del modulo: justifica por que el framework no implementa el loop de tools — delega en ai-gateway"
+      },
+      {
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:184",
+        "comentario_literal": "Cimentaciones para vision futura — hoy se preservan tal cual, se devuelven en la respuesta",
+        "contexto": "_runAgent: session_id y prev_state se preservan aunque hoy no se procesan — disenados para extension futura sin romper contrato"
+      },
+      {
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:242",
+        "comentario_literal": "Guardamos timeout aparte para no perder la referencia",
+        "contexto": "_runAgent: se hace pendingLlm.set() antes de crear el timeout, luego se anade la referencia al objeto ya en el Map para evitar race condition con la referencia al timeout"
+      },
+      {
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:278",
+        "comentario_literal": "Cimentaciones futuras — hoy fijas",
+        "contexto": "onLlmCompleteResponse: next_state=null y should_continue=false son campos reservados para agentic loop multi-turno futuro"
+      },
+      {
+        "ubicacion": "modules/conversacion/ai-agent-framework/index.js:291",
+        "comentario_literal": "Inyectar mensaje del agente en la conversacion si se nos dio conversation_id (Cimentacion para Fase 8 — chat multi-participante. Hoy conversation_id casi siempre es null.)",
+        "contexto": "onLlmCompleteResponse: el bloque chat.assistant.saved es infraestructura preparada para chat multi-participante; actualmente no se usa en el flujo normal"
+      }
+    ],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 320,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "a45816d",
+      "fecha": "2026-04-27 18:14:21 +0000",
+      "subject": "ai-agent-framework: handler agent.execute.request + cimentaciones Fase 8"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [
+      "events.publica es array de strings — description normalizada a null (manifest quirk: 'publishes es array de strings, no de objetos {event, description}')"
+    ],
+    "patrones_no_canonicos_en_codigo": [
+      {
+        "patron": "moduleLoader.toolsRegistry.set() — registro directo en toolsRegistry del core",
+        "ejemplo": "modules/conversacion/ai-agent-framework/index.js:151",
+        "rareza": "inusual"
+      },
+      {
+        "patron": "tool construida dinamicamente en runtime con enum de agentes cargados",
+        "ejemplo": "modules/conversacion/ai-agent-framework/index.js:133",
+        "rareza": "unico_en_repo"
+      },
+      {
+        "patron": "fs.readFileSync sincrono en onLoad — carga masiva de 30+ agentes + prompts en arranque",
+        "ejemplo": "modules/conversacion/ai-agent-framework/index.js:80",
+        "rareza": "inusual"
+      }
+    ]
+  },
+
+  "quirks": {
+    "warnings": [
+      "invoke_agent.response y agent.execute.response se publican via variable responseEventName/pending.response_event — son literalmente esos dos valores pero el codigo usa variable dinamica. Declarados en manifest, confirmados como los dos unicos valores posibles.",
+      "chat.assistant.saved se emite sin project_id ni message_id — contrato diferente al emitido por chat-io (que si incluye project_id, message_id). El oyente debe aceptar payload minimo.",
+      "base.prompt.json falla silencioso (catch vacio) — si el archivo no existe, basePromptText=null y los agentes funcionan sin prompt base sin aviso en log de nivel warn/error.",
+      "moduleLoader.getToolsForAI() puede retornar array vacio si no esta disponible — tools del agente quedan vacias sin error observable.",
+      "El manifest lista tools:[] pero invoke_agent se registra en toolsRegistry (no en module.json tools[]) — el manifest-completo no refleja esta tool."
+    ],
+    "secciones_vacias_intencionalmente": [
+      "ui_handlers (modulo sin UI — todo va por eventos y tool del LLM)",
+      "apis_http (sin endpoints HTTP)",
+      "estado.persistencia.sqlite_tablas (sin SQLite — documentado en header: 'sin SQLite')",
+      "configuracion.env_vars (no usa process.env)",
+      "configuracion.module_json_config_keys (sin config declarada en module.json)",
+      "configuracion.paths_proyecto_referenciados (no accede a datos de proyecto en runtime)",
+      "observabilidad.metricas_emitidas (no usa metrics.X())",
+      "codigo_intencion.todos (no hay TODOs/FIXMEs/XXX/HACK — la linea 16 contiene 'todo lo demas' en prosa, no es un marker)",
+      "codigo_intencion.workarounds_detectados (sin workarounds marcados)"
+    ]
+  }
+}

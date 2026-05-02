@@ -1,0 +1,100 @@
+{
+  "name": "cocina",
+  "version": "2.0.0",
+  "description": "Display de cocina en tiempo real (POC4). Agregador de eventos de pedidos con HTTP server canonico para el browser. POC del rewrite aplicando los 8 contratos arquitectonicos. Subset de cocina v3.1.0: sin multi-device ni pases multi-estacion ni cache de cuentaNombres (eso vendra en v2.1+). Foco: validar el patron http-server canonico que ningun POC anterior toco.",
+  "author": "Enki",
+  "language": "es",
+  "tier": "tier_4_dominio",
+
+  "events": {
+    "publishes": [
+      { "event": "cocina.item_preparando", "description": "Cocinero empieza a preparar un item." },
+      { "event": "cocina.item_preparado",  "description": "Item marcado como preparado por el cocinero." },
+      { "event": "cocina.pedido_listo",    "description": "Pedido completamente preparado y listo para servir." }
+    ],
+    "subscribes": [
+      {
+        "event":       "pedido.enviado_cocina",
+        "handler":     "onPedidoEnviadoCocina",
+        "description": "Pedido formal enviado a cocina desde el modulo Pedidos. Se añade a pedidosActivos."
+      },
+      {
+        "event":       "pedido.cancelado",
+        "handler":     "onPedidoCancelado",
+        "description": "Pedido cancelado: se elimina de pedidosActivos sin pasar por historial."
+      },
+      {
+        "event":       "caja.cerrada",
+        "handler":     "onCajaCerrada",
+        "description": "Cierre de caja: limpia pedidosActivos y persiste snapshot vacio."
+      },
+      {
+        "event":       "dia.iniciado",
+        "handler":     "onDiaIniciado",
+        "description": "Nuevo dia: limpia estado de cocina (idempotente)."
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method":         "GET",
+      "path":           "/modules/cocina/activos",
+      "handler":        "handleGetActivos",
+      "auth_required":  "none",
+      "description":    "Lista pedidos activos en cocina."
+    },
+    {
+      "method":         "GET",
+      "path":           "/modules/cocina/pedidos/:pedido_id",
+      "handler":        "handleGetPedido",
+      "auth_required":  "none",
+      "description":    "Devuelve el detalle de un pedido en cocina."
+    },
+    {
+      "method":         "GET",
+      "path":           "/modules/cocina/historial",
+      "handler":        "handleGetHistorial",
+      "auth_required":  "none",
+      "description":    "Lista los ultimos N pedidos completados (max_historial configurable)."
+    },
+    {
+      "method":         "POST",
+      "path":           "/modules/cocina/items/:item_id/preparar",
+      "handler":        "handlePrepararItem",
+      "auth_required":  "none",
+      "description":    "Marca un item como preparado. Publica cocina.item_preparando o cocina.item_preparado segun corresponda. Si todos los items del pedido estan preparados, publica cocina.pedido_listo."
+    },
+    {
+      "method":         "POST",
+      "path":           "/modules/cocina/pedidos/:pedido_id/listo",
+      "handler":        "handleMarcarListo",
+      "auth_required":  "none",
+      "description":    "Marca un pedido completo como listo (manualmente, sin esperar item-by-item). Publica cocina.pedido_listo."
+    }
+  ],
+
+  "ui_handlers": [],
+  "tools":       [],
+
+  "config": {
+    "persistence": {
+      "pattern":            "json-file",
+      "data_path":          "./data/cocina/snapshot.json",
+      "restart_resilient":  true,
+      "concurrency":        "single-writer"
+    },
+
+    "max_historial":             50,
+    "snapshot_debounce_ms":      1000,
+    "max_pedidos_activos":       500,
+
+    "module_dependencies": {
+      "pedidos": {
+        "interaction": "subscribe_only",
+        "events":      ["pedido.enviado_cocina", "pedido.cancelado"],
+        "descripcion": "Recibimos eventos del modulo Pedidos. NO llamamos a Pedidos directamente."
+      }
+    }
+  }
+}

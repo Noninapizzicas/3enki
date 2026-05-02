@@ -1,0 +1,102 @@
+{
+  "_meta": { "modulo": "device-shadow", "ubicacion": "modules/device-shadow", "auditado_en": "2026-04-30", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/device-shadow.json" },
+  "identidad": { "name": "device-shadow", "version": "1.0.0", "description_oficial": "Sincronización bidireccional de estado desired/reported/delta entre servidor y dispositivos IoT", "author": "Enki", "main_declarado": null, "main_real": "modules/device-shadow/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": "tier_2_platform", "tier_declarado": "tier_2_platform", "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "literal", "valor": "shadow.updated", "variables_referenciadas": [] }, "ubicacion": "modules/device-shadow/index.js:169", "metodo_contenedor": "_updateReported", "es_handler_de": null, "bloque_logico": "tras merge de reported", "payload": { "tipo": "object_literal", "campos_visibles": ["device_id", "project_id", "reported", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": false, "es_return": false, "snippet": "    this.eventBus.publish('shadow.updated', { device_id: deviceId, project_id: projectId, reported: shadow.reported, timestamp: shadow.last_reported_at });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "shadow.delta", "variables_referenciadas": [] }, "ubicacion": "modules/device-shadow/index.js:225", "metodo_contenedor": "_computeAndPublishDelta", "es_handler_de": null, "bloque_logico": "delta no vacío", "payload": { "tipo": "object_literal", "campos_visibles": ["device_id", "project_id", "delta", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": false, "es_return": false, "snippet": "      this.eventBus.publish('shadow.delta', { device_id: deviceId, project_id: projectId, delta, timestamp: ... });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "shadow.synced", "variables_referenciadas": [] }, "ubicacion": "modules/device-shadow/index.js:235", "metodo_contenedor": "_computeAndPublishDelta", "es_handler_de": null, "bloque_logico": "delta vaciado tras tener delta", "payload": { "tipo": "object_literal", "campos_visibles": ["device_id", "project_id", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": false, "es_return": false, "snippet": "      this.eventBus.publish('shadow.synced', { device_id: deviceId, project_id: projectId, timestamp: ... });", "declarado_en_manifest": true }
+    ],
+    "subscribes": [
+      { "nombre": "shadow.set_desired", "tipo_nombre": "literal", "handler": "onSetDesired", "handler_ubicacion": "modules/device-shadow/index.js:280", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/device-shadow/index.js:285", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["shadow.updated", "shadow.delta", "shadow.synced"],
+      "publica_literales_en_codigo": ["shadow.updated", "shadow.delta", "shadow.synced"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["shadow.set_desired"],
+      "subscribes_realmente_registrados": ["shadow.set_desired"],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [
+    { "name": "shadow.get_full", "description_para_llm": "Estado completo del shadow de un dispositivo: reported (lo que tiene), desired (lo que queremos), delta (diferencias)", "parameters_required": ["device_id"], "parameters_property_names": ["device_id"], "parameters_size_chars": 224, "handler_metodo": "handleGetFull", "handler_ubicacion": "modules/device-shadow/index.js:357", "retorno": { "tipo": "object", "shape_inferido": { "status": "number", "data": "{ device_id, reported, desired, delta, synced, last_reported_at, last_desired_at }" }, "es_markdown_formateado": false, "ejemplos_observados": ["return { status: 200, data: { device_id, reported, desired, delta, synced, last_reported_at, last_desired_at } };"], "publica_eventos_de_dominio": [] }, "errores_conocidos": [{ "condicion": "device_id missing", "respuesta_shape": { "status": 400, "error": "device_id requerido" }, "ubicacion": "modules/device-shadow/index.js:358" }, { "condicion": "shadow not found", "respuesta_shape": { "status": 404, "error": "Shadow no encontrado" }, "ubicacion": "modules/device-shadow/index.js:361" }] },
+    { "name": "shadow.set_desired", "description_para_llm": "Escribir estado deseado para un dispositivo. El delta se computa automáticamente y se envía por MQTT.", "parameters_required": ["device_id", "state"], "parameters_property_names": ["device_id", "project_id", "state"], "parameters_size_chars": 320, "handler_metodo": "handleSetDesired", "handler_ubicacion": "modules/device-shadow/index.js:340", "retorno": { "tipo": "object", "shape_inferido": { "status": "number", "data": "{ device_id, desired, delta }" }, "es_markdown_formateado": false, "ejemplos_observados": ["return { status: 200, data: { device_id, desired, delta } };"], "publica_eventos_de_dominio": ["shadow.delta", "shadow.synced"] }, "errores_conocidos": [{ "condicion": "device_id missing", "respuesta_shape": { "status": 400, "error": "device_id requerido" }, "ubicacion": "modules/device-shadow/index.js:341" }, { "condicion": "state missing", "respuesta_shape": { "status": 400, "error": "state requerido" }, "ubicacion": "modules/device-shadow/index.js:342" }] },
+    { "name": "shadow.get_delta", "description_para_llm": "Ver las diferencias entre lo deseado y lo reportado por el dispositivo", "parameters_required": ["device_id"], "parameters_property_names": ["device_id"], "parameters_size_chars": 200, "handler_metodo": "handleGetDelta", "handler_ubicacion": "modules/device-shadow/index.js:324", "retorno": { "tipo": "object", "shape_inferido": { "status": "number", "data": "{ device_id, delta, synced }" }, "es_markdown_formateado": false, "ejemplos_observados": ["return { status: 200, data: { device_id, delta, synced } };"], "publica_eventos_de_dominio": [] }, "errores_conocidos": [{ "condicion": "device_id missing", "respuesta_shape": { "status": 400, "error": "device_id requerido" }, "ubicacion": "modules/device-shadow/index.js:325" }, { "condicion": "shadow not found", "respuesta_shape": { "status": 404, "error": "Shadow no encontrado" }, "ubicacion": "modules/device-shadow/index.js:328" }] }
+  ],
+  "ui_handlers": [
+    { "domain": "shadow", "action": "get-reported", "handler_metodo": "handleGetReported", "handler_ubicacion": "modules/device-shadow/index.js:300", "input_validado": ["device_id"], "codigos_error": ["400", "404"], "output_shape": { "status_success": 200, "data_keys": ["device_id", "reported", "last_reported_at"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "shadow", "action": "get-desired", "handler_metodo": "handleGetDesired", "handler_ubicacion": "modules/device-shadow/index.js:312", "input_validado": ["device_id"], "codigos_error": ["400", "404"], "output_shape": { "status_success": 200, "data_keys": ["device_id", "desired", "last_desired_at"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "shadow", "action": "get-delta", "handler_metodo": "handleGetDelta", "handler_ubicacion": "modules/device-shadow/index.js:324", "input_validado": ["device_id"], "codigos_error": ["400", "404"], "output_shape": { "status_success": 200, "data_keys": ["device_id", "delta", "synced"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "shadow", "action": "set-desired", "handler_metodo": "handleSetDesired", "handler_ubicacion": "modules/device-shadow/index.js:340", "input_validado": ["device_id", "state"], "codigos_error": ["400"], "output_shape": { "status_success": 200, "data_keys": ["device_id", "desired", "delta"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "shadow", "action": "get-full", "handler_metodo": "handleGetFull", "handler_ubicacion": "modules/device-shadow/index.js:357", "input_validado": ["device_id"], "codigos_error": ["400", "404"], "output_shape": { "status_success": 200, "data_keys": ["device_id", "reported", "desired", "delta", "synced", "last_reported_at", "last_desired_at"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" }
+  ],
+  "apis_http": [],
+  "estado": {
+    "memoria": [
+      { "campo": "this.shadows", "tipo": "Map", "ubicacion_init": "modules/device-shadow/index.js:46", "se_invalida_con": "no se invalida — solo se persiste a disco; se rellena desde disco en _loadFromDisk", "leak_potencial": true },
+      { "campo": "this.internalMetrics", "tipo": "Object", "ubicacion_init": "modules/device-shadow/index.js:56", "se_invalida_con": "nunca", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/devices/shadows.json", "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "Persist on dirty cada persist_interval_ms (default 30s) + en onUnload."
+    }
+  },
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "persist_interval_ms", "tipo": "number", "default_si_primitivo": 30000 },
+      { "key": "data_path", "tipo": "string", "default_si_primitivo": "./data/devices" }
+    ],
+    "paths_proyecto_referenciados": ["data/devices/shadows.json"],
+    "valores_hardcoded_observables": [
+      { "valor": "devices/+/+/state/reported", "ubicacion": "modules/device-shadow/index.js:123", "naturaleza": "path" },
+      { "valor": "devices/${projectId}/${deviceId}/state/desired", "ubicacion": "modules/device-shadow/index.js:193", "naturaleza": "path" },
+      { "valor": "devices/${projectId}/${deviceId}/state/delta", "ubicacion": "modules/device-shadow/index.js:220", "naturaleza": "path" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/device-shadow/index.js:68", "acciones": ["this.logger = core.logger", "this.metrics = core.metrics", "this.eventBus = core.eventBus", "merge config['device-shadow']", "_loadFromDisk()", "_startMqttListeners()", "setInterval _persistIfDirty"], "guarda_referencias_externas": ["this.logger", "this.metrics", "this.eventBus"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/device-shadow/index.js:93", "acciones": ["_stopMqttListeners()", "clearInterval _persistTimer", "_persistToDisk()"], "estado_no_limpiado": ["this.shadows", "this.internalMetrics"] },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": ["mqtt 'message' listener registrado en modules/device-shadow/index.js:120, removido en modules/device-shadow/index.js:135 (onUnload)"]
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "mqtt-broker", "via_evento": "core.eventBus.mqtt (handle directo + subscribe topics MQTT)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/device-shadow/index.js:113", "es_cross_vertical": false }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "mqtt-broker (eventBus.mqtt)", "que_pasa_si_cae": "Si mqtt no conectado en onLoad, _startMqttListeners hace early return tras log warn — shadows reported nunca se actualizan, sin recovery automático.", "evidencia": "modules/device-shadow/index.js:114" },
+    { "dependencia": "payload MQTT bien formado", "que_pasa_si_cae": "JSON.parse fallido en _parsePayload retorna null y el mensaje se descarta sin log — silent drop de updates de reported state.", "evidencia": "modules/device-shadow/index.js:466" }
+  ],
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('device-shadow.<accion>', { ...campos })", "campos_estructurados_observados": ["device_id", "keys", "topic", "shadows", "error"], "ejemplos": [{ "snippet": "this.logger.info('device-shadow.reported.updated', { device_id: deviceId, keys: Object.keys(reported) });", "ubicacion": "modules/device-shadow/index.js:164" }, { "snippet": "this.logger.info('device-shadow.synced', { device_id: deviceId });", "ubicacion": "modules/device-shadow/index.js:234" }] },
+    "metricas_emitidas": [
+      { "nombre": "shadow.reported_updates.total", "tipo": "counter", "ubicacion": "modules/device-shadow/index.js:157" },
+      { "nombre": "shadow.desired_updates.total", "tipo": "counter", "ubicacion": "modules/device-shadow/index.js:181" },
+      { "nombre": "shadow.deltas_computed.total", "tipo": "counter", "ubicacion": "modules/device-shadow/index.js:215" },
+      { "nombre": "shadow.synced.total", "tipo": "counter", "ubicacion": "modules/device-shadow/index.js:233" }
+    ],
+    "metricas_drift_vs_manifest": [],
+    "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" }
+  },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": ["modules/device-shadow/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": false, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": { "todos": [], "comentarios_porque": [{ "ubicacion": "modules/device-shadow/index.js:190", "comentario_literal": "// Publicar desired a MQTT (retained para que el dispositivo lo lea al conectar)", "contexto": "explica por qué retain=true en publish desired" }, { "ubicacion": "modules/device-shadow/index.js:231", "comentario_literal": "// Delta se vació → dispositivo sincronizado", "contexto": "transición delta no-vacío → vacío detona shadow.synced" }, { "ubicacion": "modules/device-shadow/index.js:256", "comentario_literal": "// Recursive comparison para objetos anidados (1 nivel)", "contexto": "explicación de profundidad limitada del compare" }], "workarounds_detectados": [{ "ubicacion": "modules/device-shadow/index.js:281", "descripcion": "data = event?.data || event?.payload || event — multi-shape unwrapping del evento sin contrato fijo" }] },
+  "metricas_fisicas": { "lineas_index_js": 477, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": { "campos_no_canonicos_en_manifest": [], "patrones_no_canonicos_en_codigo": [{ "patron": "delta computado vía JSON.stringify para deep compare shallow (1 nivel)", "ejemplo": "modules/device-shadow/index.js:260", "rareza": "inusual" }, { "patron": "MQTT directo (eventBus.mqtt.publish/subscribe) en vez de eventBus.publish", "ejemplo": "modules/device-shadow/index.js:194", "rareza": "inusual" }] },
+  "quirks": {
+    "warnings": [
+      "P3 — Device Shadow IoT. Patrón AWS-style desired/reported/delta con persistencia en JSON local + sync por MQTT retained.",
+      "MQTT directo: usa eventBus.mqtt.publish/subscribe en vez de eventBus.publish — bypasea el bus para topics retained de IoT.",
+      "_parsePayload retorna null en errores sin log — silent drop de mensajes malformados.",
+      "Comparación de objetos anidados solo en 1 nivel (JSON.stringify shallow), suficiente para firmware.{version,url}."
+    ],
+    "secciones_vacias_intencionalmente": ["apis_http", "estado.persistencia.sqlite_tablas", "configuracion.env_vars", "codigo_intencion.todos", "version_archivada"]
+  }
+}

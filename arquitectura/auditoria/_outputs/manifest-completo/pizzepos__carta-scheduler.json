@@ -1,0 +1,188 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/carta-scheduler",
+    "ubicacion": "modules/pizzepos/carta-scheduler",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "carta-scheduler",
+    "version": "1.0.0",
+    "description_oficial": "Programación de cambios de carta por canal. Conversacional via agente planner, detección de conflictos, confirmación previa antes de aplicar.",
+    "author": "Pizzepos Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [],
+    "subscribes": [
+      { "event": "project.activated",   "handler": "onProjectActivated",   "extras": {} },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated", "extras": {} }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [
+    {
+      "name": "scheduler.crear_regla",
+      "description": "Crea una regla de programación de carta. La regla incluye cambios por canal (array de { canal, carta_id }) y un trigger (cron, datetime, interval). Después de crear, usar scheduler.detectar_conflictos si hay dudas.",
+      "parameters_required": ["project_id", "regla"],
+      "parameters_property_names": ["project_id", "regla"],
+      "parameters_size_chars": 215,
+      "parameters_full_path_hint": "modules/pizzepos/carta-scheduler/module.json → tools[0].parameters"
+    },
+    {
+      "name": "scheduler.listar_reglas",
+      "description": "Lista todas las reglas de programación del proyecto",
+      "parameters_required": ["project_id"],
+      "parameters_property_names": ["project_id"],
+      "parameters_size_chars": 89,
+      "parameters_full_path_hint": "modules/pizzepos/carta-scheduler/module.json → tools[1].parameters"
+    },
+    {
+      "name": "scheduler.eliminar_regla",
+      "description": "Elimina una regla y su job en el scheduler",
+      "parameters_required": ["project_id", "regla_id"],
+      "parameters_property_names": ["project_id", "regla_id"],
+      "parameters_size_chars": 129,
+      "parameters_full_path_hint": "modules/pizzepos/carta-scheduler/module.json → tools[2].parameters"
+    },
+    {
+      "name": "scheduler.detectar_conflictos",
+      "description": "Detecta si una nueva regla entra en conflicto con otras activas (mismo canal)",
+      "parameters_required": ["project_id", "nueva_regla"],
+      "parameters_property_names": ["project_id", "nueva_regla"],
+      "parameters_size_chars": 135,
+      "parameters_full_path_hint": "modules/pizzepos/carta-scheduler/module.json → tools[3].parameters"
+    },
+    {
+      "name": "scheduler.proximos_cambios",
+      "description": "Lista cambios pendientes de confirmación (triggered pero esperando al usuario)",
+      "parameters_required": ["project_id"],
+      "parameters_property_names": ["project_id"],
+      "parameters_size_chars": 89,
+      "parameters_full_path_hint": "modules/pizzepos/carta-scheduler/module.json → tools[4].parameters"
+    },
+    {
+      "name": "scheduler.confirmar",
+      "description": "Usuario confirma un cambio pendiente. Aplica los cambios via tarifas.assign.",
+      "parameters_required": ["project_id", "pendiente_id"],
+      "parameters_property_names": ["project_id", "pendiente_id"],
+      "parameters_size_chars": 137,
+      "parameters_full_path_hint": "modules/pizzepos/carta-scheduler/module.json → tools[5].parameters"
+    },
+    {
+      "name": "scheduler.rechazar",
+      "description": "Usuario rechaza un cambio pendiente. No se aplica.",
+      "parameters_required": ["project_id", "pendiente_id"],
+      "parameters_property_names": ["project_id", "pendiente_id", "razon"],
+      "parameters_size_chars": 163,
+      "parameters_full_path_hint": "modules/pizzepos/carta-scheduler/module.json → tools[6].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "carta-scheduler", "action": "reglas",   "handler": "handleListarReglas" },
+      { "domain": "carta-scheduler", "action": "proximos", "handler": "handleProximosCambios" },
+      { "domain": "carta-scheduler", "action": "health",   "handler": "handleHealth" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": null,
+      "structured": null
+    },
+    "metrics": {
+      "enabled": null,
+      "counters": [
+        "carta-scheduler.regla.triggered",
+        "carta-scheduler.pendiente.aplicado",
+        "carta-scheduler.pendiente.rechazado"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [
+      { "name": "scheduler-planner",    "description": "Conversa con el usuario para crear reglas de programación" },
+      { "name": "scheduler-dispatcher", "description": "Cuando un cambio se dispara, avisa al usuario y espera confirmación" }
+    ],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": false,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 4225,
+    "module_json_lineas": 127,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "events.publishes ausente: el módulo no declara eventos que emite",
+      "agents declarado como object (key→description) en lugar de array — normalizado a inline_en_module_json[]"
+    ]
+  }
+}

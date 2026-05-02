@@ -1,0 +1,133 @@
+{
+  "_meta": { "modulo": "scratch-designer", "ubicacion": "modules/scratch-designer", "auditado_en": "2026-04-30", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/scratch-designer.json" },
+  "identidad": { "name": "scratch-designer", "version": "2.0.0", "description_oficial": "Diseñador visual tipo Scratch - Bloques arrastrables que generan JSON", "author": "Event Core Team", "main_declarado": null, "main_real": "modules/scratch-designer/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": null, "tier_declarado": null, "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "dynamic_template", "valor": "${eventName}", "variables_referenciadas": ["eventName"] }, "ubicacion": "modules/scratch-designer/index.js:390", "metodo_contenedor": "_publishEvent (wrapper único de los 4 eventos)", "es_handler_de": null, "bloque_logico": "punto único de publish — eventName variable proviene del call site (handleCreate/Update/Delete/ExportJSON)", "payload": { "tipo": "object_literal", "campos_visibles": ["payload (variable según call site)"], "tiene_request_id": false, "tiene_correlation_id": true, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": false, "es_return": false, "snippet": "      this.eventBus.publish(eventName, payload, { correlationId: context?.correlationId });", "declarado_en_manifest": true }
+    ],
+    "subscribes": [],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["scratch.design.created", "scratch.design.updated", "scratch.design.deleted", "scratch.design.exported"],
+      "publica_literales_en_codigo": [],
+      "publica_patrones_dinamicos": ["${eventName} — los 4 nombres concretos (scratch.design.created/updated/deleted/exported) se pasan como argumento al wrapper _publishEvent desde call sites en index.js:133, 174, 198, 304"],
+      "publica_declarados_no_emitidos": ["scratch.design.created", "scratch.design.updated", "scratch.design.deleted", "scratch.design.exported"],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": [],
+      "subscribes_realmente_registrados": [],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [
+    { "method": "GET", "path": "/blocks/all", "handler_metodo": "handleGetAllBlocks", "handler_ubicacion": "modules/scratch-designer/index.js:73", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "blocks"] },
+    { "method": "GET", "path": "/blocks/modules", "handler_metodo": "handleGetModuleBlocks", "handler_ubicacion": "modules/scratch-designer/index.js:78", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "blocks"] },
+    { "method": "GET", "path": "/blocks/events", "handler_metodo": "handleGetEventBlocks", "handler_ubicacion": "modules/scratch-designer/index.js:83", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "blocks"] },
+    { "method": "GET", "path": "/blocks/actions", "handler_metodo": "handleGetActionBlocks", "handler_ubicacion": "modules/scratch-designer/index.js:88", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "blocks"] },
+    { "method": "GET", "path": "/blocks/components", "handler_metodo": "handleGetComponentBlocks", "handler_ubicacion": "modules/scratch-designer/index.js:93", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "blocks"] },
+    { "method": "GET", "path": "/blocks/containers", "handler_metodo": "handleGetContainerBlocks", "handler_ubicacion": "modules/scratch-designer/index.js:98", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "blocks"] },
+    { "method": "GET", "path": "/blocks/data", "handler_metodo": "handleGetDataBlocks", "handler_ubicacion": "modules/scratch-designer/index.js:103", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "blocks"] },
+    { "method": "GET", "path": "/blocks/conditions", "handler_metodo": "handleGetConditionBlocks", "handler_ubicacion": "modules/scratch-designer/index.js:108", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "blocks"] },
+    { "method": "GET", "path": "/designs", "handler_metodo": "handleListDesigns", "handler_ubicacion": "modules/scratch-designer/index.js:117", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "designs", "total"] },
+    { "method": "POST", "path": "/designs", "handler_metodo": "handleCreateDesign", "handler_ubicacion": "modules/scratch-designer/index.js:122", "auth_observada": "ninguna", "request_body_keys": ["name", "blocks", "metadata"], "response_keys": ["success", "design", "error"] },
+    { "method": "GET", "path": "/designs/:id", "handler_metodo": "handleGetDesign", "handler_ubicacion": "modules/scratch-designer/index.js:148", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "design", "error"] },
+    { "method": "PUT", "path": "/designs/:id", "handler_metodo": "handleUpdateDesign", "handler_ubicacion": "modules/scratch-designer/index.js:160", "auth_observada": "ninguna", "request_body_keys": ["name", "blocks", "metadata"], "response_keys": ["success", "design", "error"] },
+    { "method": "DELETE", "path": "/designs/:id", "handler_metodo": "handleDeleteDesign", "handler_ubicacion": "modules/scratch-designer/index.js:188", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "deleted", "error"] },
+    { "method": "POST", "path": "/designs/:id/duplicate", "handler_metodo": "handleDuplicateDesign", "handler_ubicacion": "modules/scratch-designer/index.js:208", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "design", "error"] },
+    { "method": "POST", "path": "/validate/connection", "handler_metodo": "handleValidateConnection", "handler_ubicacion": "modules/scratch-designer/index.js:230", "auth_observada": "ninguna", "request_body_keys": ["from_block", "to_block", "from_socket", "to_socket"], "response_keys": ["success", "valid", "reason", "error"] },
+    { "method": "POST", "path": "/validate/design", "handler_metodo": "handleValidateDesign", "handler_ubicacion": "modules/scratch-designer/index.js:255", "auth_observada": "ninguna", "request_body_keys": ["design"], "response_keys": ["success", "valid", "errors", "warnings"] },
+    { "method": "POST", "path": "/export/json", "handler_metodo": "handleExportJSON", "handler_ubicacion": "modules/scratch-designer/index.js:285", "auth_observada": "ninguna", "request_body_keys": ["design_id"], "response_keys": ["success", "json", "error"] },
+    { "method": "POST", "path": "/export/module-ui", "handler_metodo": "handleExportModuleUI", "handler_ubicacion": "modules/scratch-designer/index.js:320", "auth_observada": "ninguna", "request_body_keys": ["design_id", "module_name"], "response_keys": ["success", "ui", "error"] },
+    { "method": "GET", "path": "/health", "handler_metodo": "handleHealthCheck", "handler_ubicacion": "modules/scratch-designer/index.js:343", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "module", "version", "blocks_loaded", "designs"] },
+    { "method": "GET", "path": "/metrics", "handler_metodo": "handleGetMetrics", "handler_ubicacion": "modules/scratch-designer/index.js:354", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["success", "module", "stats", "gauges"] }
+  ],
+  "estado": {
+    "memoria": [
+      { "campo": "this.designManager", "tipo": "Object", "ubicacion_init": "modules/scratch-designer/index.js:26", "se_invalida_con": "instancia DesignManager interna — sin reset; la persistencia (si existe) la maneja el submódulo", "leak_potencial": false },
+      { "campo": "this.exporter", "tipo": "Object", "ubicacion_init": "modules/scratch-designer/index.js:27", "se_invalida_con": "stateless (puede mantener helpers internos)", "leak_potencial": false },
+      { "campo": "this.blocksCache", "tipo": "Object", "ubicacion_init": "modules/scratch-designer/index.js:30", "se_invalida_con": "se carga en onLoad y se nullea en onUnload (this.blocksCache = null)", "leak_potencial": false },
+      { "campo": "this._metrics", "tipo": "Object", "ubicacion_init": "modules/scratch-designer/index.js:33", "se_invalida_con": "nunca", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "INVENTARIO-SISTEMA.json (lectura del inventario para generar bloques)", "formato": "json", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" }
+      ],
+      "notas_concurrencia": "DesignManager interno gestiona los diseños (probable Map en memoria); persistencia detallada vive en lib/designs.js (no auditado en este pase)."
+    }
+  },
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "autosave", "tipo": "boolean", "default_si_primitivo": true },
+      { "key": "autosave_interval_ms", "tipo": "number", "default_si_primitivo": 30000 },
+      { "key": "max_designs", "tipo": "number", "default_si_primitivo": 100 },
+      { "key": "inventory_path", "tipo": "string", "default_si_primitivo": "../../INVENTARIO-SISTEMA.json" }
+    ],
+    "paths_proyecto_referenciados": ["INVENTARIO-SISTEMA.json"],
+    "valores_hardcoded_observables": [
+      { "valor": "INVENTARIO-SISTEMA.json (path absoluto resuelto desde __dirname)", "ubicacion": "modules/scratch-designer/index.js:53", "naturaleza": "path" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/scratch-designer/index.js:45", "acciones": ["this.logger = core.logger", "this.metrics = core.metrics", "this.eventBus = core.eventBus", "instanciar BlockGenerator(inventoryPath)", "blockGenerator.generateAll() → blocksCache"], "guarda_referencias_externas": ["this.logger", "this.metrics", "this.eventBus"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/scratch-designer/index.js:64", "acciones": ["this.blocksCache = null"], "estado_no_limpiado": ["this.designManager", "this.exporter", "this._metrics"] },
+    "auto_wired_subscribes": false,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "INVENTARIO-SISTEMA.json (artefacto del proyecto, no módulo)", "via_evento": "lectura directa para generar bloques en _BlockGenerator", "obligatorio_en": "onLoad", "ubicacion_uso": "modules/scratch-designer/index.js:53", "es_cross_vertical": true }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "INVENTARIO-SISTEMA.json", "que_pasa_si_cae": "BlockGenerator probablemente loguea y deja inventory en null; blocksCache queda incompleto pero no hay throw — endpoints /blocks/* devolverían cache parcial.", "evidencia": "modules/scratch-designer/index.js:60" },
+    { "dependencia": "eventBus.publish", "que_pasa_si_cae": "_publishEvent verifica this.eventBus?.publish y silencia si falta — eventos perdidos sin telemetría (degradado silencioso, mismo patrón que notas).", "evidencia": "modules/scratch-designer/index.js:389" }
+  ],
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('scratch.<accion>', { ...campos })", "campos_estructurados_observados": ["module", "blocks_categories", "inventory_loaded", "error", "correlation_id", "stack"], "ejemplos": [{ "snippet": "this.logger.info('modulo.loaded', { module: this.name, blocks_categories: Object.keys(this.blocksCache).length, inventory_loaded: !!this.blockGenerator.inventory });", "ubicacion": "modules/scratch-designer/index.js:57" }, { "snippet": "this.logger.error(`scratch.${operation}.error`, { error: error.message, stack, correlation_id: context?.correlationId });", "ubicacion": "modules/scratch-designer/index.js:402" }] },
+    "metricas_emitidas": [
+      { "nombre": "scratch.api.calls", "tipo": "counter", "ubicacion": "modules/scratch-designer/index.js:374" },
+      { "nombre": "scratch.${event}.duration (dynamic — design.created/updated/exported)", "tipo": "timing", "ubicacion": "modules/scratch-designer/index.js:381" },
+      { "nombre": "scratch.${event}.total (dynamic — design.created/updated/exported)", "tipo": "counter", "ubicacion": "modules/scratch-designer/index.js:384" },
+      { "nombre": "scratch.errors.total", "tipo": "counter", "ubicacion": "modules/scratch-designer/index.js:399" }
+    ],
+    "metricas_drift_vs_manifest": ["manifest declara 'design.created.total', 'design.exported.total', 'api.calls.total', 'errors.total' pero el código emite con prefijo 'scratch.' — drift de naming"],
+    "tracing": { "propaga_correlation_id": true, "evidencia": "modules/scratch-designer/index.js:391 — _publishEvent pasa { correlationId: context?.correlationId } al publish" }
+  },
+  "archivos_hermanos": { "agents": [], "schemas": ["modules/scratch-designer/schemas"], "prompts": ["modules/scratch-designer/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": true, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/scratch-designer/index.js:24", "comentario_literal": "// Submódulos", "contexto": "convención del módulo: lógica delegada a 3 subclases (BlockGenerator, DesignManager, DesignExporter) en lib/" }
+    ],
+    "workarounds_detectados": [
+      { "ubicacion": "modules/scratch-designer/index.js:388", "descripcion": "_publishEvent helper que centraliza .publish(...) — consecuencia: cross-check del schema apunta a este wrapper como ubicación, no al call site real" },
+      { "ubicacion": "modules/scratch-designer/index.js:373", "descripcion": "_trackApiCall + _recordMetrics + _publishEvent wrappers + _handleError central — pseudo-aspect pattern" },
+      { "ubicacion": "modules/scratch-designer/index.js:381", "descripcion": "Métricas con nombre dinámico via template literal scratch.${event}.duration / .total — sin enumeración explícita" }
+    ]
+  },
+  "metricas_fisicas": { "lineas_index_js": 412, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": ["apis con elementos 'group' (separadores descriptivos) intercalados con métodos HTTP — outlier en module.json"],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Punto único de eventBus.publish — wrapper _publishEvent con eventName variable", "ejemplo": "modules/scratch-designer/index.js:388", "rareza": "unico_en_repo" },
+      { "patron": "Submódulos en lib/ (BlockGenerator, DesignManager, DesignExporter) instanciados como propiedades del módulo", "ejemplo": "modules/scratch-designer/index.js:24", "rareza": "inusual" },
+      { "patron": "Lectura de INVENTARIO-SISTEMA.json (artefacto del proyecto, no módulo) para generar bloques", "ejemplo": "modules/scratch-designer/index.js:53", "rareza": "unico_en_repo" },
+      { "patron": "Métricas con names dinámicos via template literal — sin enumeración estática", "ejemplo": "modules/scratch-designer/index.js:381", "rareza": "inusual" },
+      { "patron": "Drift naming métricas: manifest declara sin prefijo 'scratch.', código las emite con prefijo", "ejemplo": "modules/scratch-designer/index.js:374", "rareza": "inusual" }
+    ]
+  },
+  "quirks": {
+    "warnings": [
+      "P4 — Scratch Designer (v2.0.0). Diseñador visual estilo Scratch que genera JSON consumible por ui-renderer.",
+      "Todos los publishes pasan por wrapper _publishEvent — el cross-check del schema apunta a la línea del wrapper (390), no al call site real (133/174/198/304).",
+      "Los 4 events declarados en manifest se reportan como 'declarados_no_emitidos' en el cross-check porque no aparecen como literales en .publish() (sí como argumentos a _publishEvent).",
+      "Drift métricas: declaradas sin prefijo 'scratch.' en manifest, emitidas con prefijo en código.",
+      "Lee INVENTARIO-SISTEMA.json del root del proyecto para generar bloques (cada vez en onLoad — single shot, sin watch).",
+      "Submódulos lib/blocks.js, lib/designs.js, lib/export.js — lógica externa al index.js, no auditada en este pase.",
+      "module.json mezcla 'group' descriptivos con entries reales en apis — outlier de schema."
+    ],
+    "secciones_vacias_intencionalmente": ["eventos.subscribes", "tools (LLM no expuesto, solo HTTP API)", "ui_handlers (usa apis_http directamente)", "estado.persistencia.sqlite_tablas", "configuracion.env_vars", "codigo_intencion.todos", "version_archivada"]
+  }
+}

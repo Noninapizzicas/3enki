@@ -1,0 +1,153 @@
+{
+  "_meta": {
+    "modulo": "bot-manager",
+    "ubicacion": "modules/bot-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "bot-manager",
+    "version": "1.0.0",
+    "description_oficial": "Gestión de bots y almacenamiento. Descarga archivos, guarda en carpetas, publica eventos. NO sabe de agentes.",
+    "author": "Event Core Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_4_features",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "bot.file.stored",    "description": null },
+      { "event": "bot.message.received","description": null },
+      { "event": "bot.command.received","description": null },
+      { "event": "bot.registered",     "description": null },
+      { "event": "bot.unregistered",   "description": null },
+      { "event": "bot.enabled",        "description": null },
+      { "event": "bot.disabled",       "description": null }
+    ],
+    "subscribes": [
+      { "event": "telegram.document.received", "handler": "onFileReceived",    "extras": {} },
+      { "event": "telegram.photo.received",    "handler": "onFileReceived",    "extras": {} },
+      { "event": "telegram.video.received",    "handler": "onFileReceived",    "extras": {} },
+      { "event": "telegram.audio.received",    "handler": "onFileReceived",    "extras": {} },
+      { "event": "telegram.voice.received",    "handler": "onFileReceived",    "extras": {} },
+      { "event": "telegram.text.received",     "handler": "onTextReceived",    "extras": {} },
+      { "event": "telegram.command.received",  "handler": "onCommandReceived", "extras": {} },
+      { "event": "credential.saved",           "handler": "onCredentialSaved", "extras": {} }
+    ],
+    "provides_eventos": [
+      "bot-management",
+      "file-storage",
+      "auto-responses"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [
+      "telegram-service",
+      "credential-manager"
+    ],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      {
+        "key": "storagePath",
+        "tipo": "string",
+        "valor_default": "./data/bots"
+      }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": null,
+      "structured": null
+    },
+    "metrics": {
+      "enabled": null,
+      "counters": [],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [
+    "bots",
+    "storage",
+    "telegram",
+    "files"
+  ],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 1349,
+    "module_json_lineas": 50,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "publishes es array de strings (sin description): description=null para todos",
+      "provides interpretado como provides_eventos (lista de capacidades declaradas)",
+      "main no declarado en module.json: null"
+    ]
+  }
+}

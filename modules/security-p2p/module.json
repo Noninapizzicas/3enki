@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "description": "P2P Zero Trust Security with E2E Encryption",
   "author": "Event Core Team",
-
+  "language": "en",
   "provides": {
-    "hooks": ["beforeEventPublish", "afterEventReceive"],
+    "hooks": [
+      "beforeEventPublish",
+      "afterEventReceive"
+    ],
     "apis": [
       {
         "name": "status",
@@ -39,7 +42,6 @@
       }
     ]
   },
-
   "events": {
     "publishes": [
       {
@@ -61,12 +63,10 @@
     ],
     "subscribes": []
   },
-
   "config": {
     "handshake_timeout_ms": 30000,
     "auto_trust_enabled": false
   },
-
   "observability": {
     "logging": {
       "level": "info",

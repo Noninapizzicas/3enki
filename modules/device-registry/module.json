@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Fuente única de verdad de todos los dispositivos IoT del sistema — ESP32, gateways, periféricos manuales",
   "author": "Enki",
+  "language": "en",
   "tier": "tier_2_platform",
-
   "provides": {
     "events": [
       "device.registered",
@@ -14,7 +14,6 @@
       "device.updated"
     ]
   },
-
   "events": {
     "subscribes": [
       {
@@ -29,22 +28,55 @@
       }
     ],
     "publishes": [
-      { "event": "device.registered", "description": "Nuevo dispositivo registrado en el sistema" },
-      { "event": "device.unregistered", "description": "Dispositivo eliminado del registro" },
-      { "event": "device.online", "description": "Dispositivo detectado online (birth/status)" },
-      { "event": "device.offline", "description": "Dispositivo detectado offline (LWT/timeout)" },
-      { "event": "device.updated", "description": "Metadata o estado de dispositivo actualizado" }
+      {
+        "event": "device.registered",
+        "description": "Nuevo dispositivo registrado en el sistema"
+      },
+      {
+        "event": "device.unregistered",
+        "description": "Dispositivo eliminado del registro"
+      },
+      {
+        "event": "device.online",
+        "description": "Dispositivo detectado online (birth/status)"
+      },
+      {
+        "event": "device.offline",
+        "description": "Dispositivo detectado offline (LWT/timeout)"
+      },
+      {
+        "event": "device.updated",
+        "description": "Metadata o estado de dispositivo actualizado"
+      }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "devices", "action": "list", "handler": "handleList" },
-    { "domain": "devices", "action": "get", "handler": "handleGet" },
-    { "domain": "devices", "action": "register", "handler": "handleRegister" },
-    { "domain": "devices", "action": "unregister", "handler": "handleUnregister" },
-    { "domain": "devices", "action": "stats", "handler": "handleStats" }
+    {
+      "domain": "devices",
+      "action": "list",
+      "handler": "handleList"
+    },
+    {
+      "domain": "devices",
+      "action": "get",
+      "handler": "handleGet"
+    },
+    {
+      "domain": "devices",
+      "action": "register",
+      "handler": "handleRegister"
+    },
+    {
+      "domain": "devices",
+      "action": "unregister",
+      "handler": "handleUnregister"
+    },
+    {
+      "domain": "devices",
+      "action": "stats",
+      "handler": "handleStats"
+    }
   ],
-
   "tools": [
     {
       "name": "devices.list",
@@ -53,9 +85,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Filtrar por proyecto (opcional)" },
-          "type": { "type": "string", "description": "Filtrar por tipo de driver (ej: print-proxy)" },
-          "online_only": { "type": "boolean", "description": "Solo dispositivos online" }
+          "project_id": {
+            "type": "string",
+            "description": "Filtrar por proyecto (opcional)"
+          },
+          "type": {
+            "type": "string",
+            "description": "Filtrar por tipo de driver (ej: print-proxy)"
+          },
+          "online_only": {
+            "type": "boolean",
+            "description": "Solo dispositivos online"
+          }
         }
       }
     },
@@ -66,9 +107,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "device_id": { "type": "string" }
+          "device_id": {
+            "type": "string"
+          }
         },
-        "required": ["device_id"]
+        "required": [
+          "device_id"
+        ]
       }
     },
     {
@@ -81,15 +126,16 @@
       }
     }
   ],
-
   "config": {
     "heartbeat_timeout_ms": 90000,
     "persist_interval_ms": 30000,
     "data_path": "./data/devices"
   },
-
   "observability": {
-    "logging": { "level": "info", "structured": true },
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [

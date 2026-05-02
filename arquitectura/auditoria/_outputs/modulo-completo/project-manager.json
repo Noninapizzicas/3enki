@@ -1,0 +1,360 @@
+{
+  "_meta": {
+    "modulo": "project-manager",
+    "ubicacion": "modules/project-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/project-manager.json"
+  },
+
+  "identidad": {
+    "name": "project-manager",
+    "version": "3.0.0",
+    "description_oficial": "Project lifecycle management: CRUD, session, features/blueprints, directories. Consumes composition-manager and context-manager via events.",
+    "author": "Aichat Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/project-manager/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_3_core",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "db.query.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:81",
+        "metodo_contenedor": "(query helper interno)",
+        "es_handler_de": null,
+        "bloque_logico": "tras pendingDbRequests.set; helper que pide a database-manager queries SQL sobre la DB 'system'",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "query", "params", "read_only", "project_id", "correlation_id"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false, "es_return": false,
+        "snippet": "      this.eventBus.publish('db.query.request', {\n        request_id: requestId, query, params, read_only: readOnly,\n        project_id: 'system', correlation_id: correlationId\n      }).catch(err => { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "composition.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:114",
+        "metodo_contenedor": "(composition helper interno)",
+        "es_handler_de": null,
+        "bloque_logico": "helper que invoca a composition-manager via request_response (action + data)",
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id", "action"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false, "es_return": false,
+        "snippet": "      this.eventBus.publish('composition.request', { request_id: requestId, action, ...data }).catch(err => { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "project.activated", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:202",
+        "metodo_contenedor": "(restore active projects loop en onLoad)",
+        "es_handler_de": null,
+        "bloque_logico": "tras restaurar proyectos activos al cargar el módulo: emite project.activated por cada uno",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "name", "base_path", "metadata", "activated_at"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish(EVENTS.PROJECT.ACTIVATED, {\n        project_id: projectId, name: project.name, base_path: project.base_path,\n        metadata: project.metadata || {}, activated_at: new Date().toISOString()\n      });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "db.schema.init.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:361",
+        "metodo_contenedor": "initializeProjectSchema",
+        "es_handler_de": null,
+        "bloque_logico": "tras crear proyecto: pide a database-manager inicializar schema con defaultSchema",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "schema", "correlation_id"], "tiene_request_id": false, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "      await this.eventBus.publish('db.schema.init.request', {\n        project_id: projectId, schema: this.config.defaultSchema, correlation_id: correlationId\n      });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "project.created", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:490",
+        "metodo_contenedor": "createProject",
+        "es_handler_de": null,
+        "bloque_logico": "tras INSERT en SQL + initializeProjectSchema",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "name", "description", "parent_project_id", "created_at"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish(EVENTS.PROJECT.CREATED, {\n      project_id: projectId, name, description, parent_project_id: parent_project_id || null, created_at: now\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "project.updated", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:520",
+        "metodo_contenedor": "updateProject",
+        "es_handler_de": null,
+        "bloque_logico": "tras UPDATE en SQL",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "name", "description", "..."], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish(EVENTS.PROJECT.UPDATED, {\n      project_id: projectId, name: project.name, description: ...\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "project.deleted", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:555",
+        "metodo_contenedor": "deleteProject",
+        "es_handler_de": null,
+        "bloque_logico": "tras borrar de SQL + borrar directorios + this.projects.delete",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "name", "deleted_at"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish(EVENTS.PROJECT.DELETED, {\n      project_id: projectId, name: project.name, deleted_at: new Date().toISOString()\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "project.activated", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:576",
+        "metodo_contenedor": "activateProject",
+        "es_handler_de": null,
+        "bloque_logico": "tras activeProjectIds.add(realId)",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "name", "base_path", "metadata", "activated_at"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish(EVENTS.PROJECT.ACTIVATED, {\n      project_id: realId, name: project.name, base_path: project.base_path,\n      metadata: project.metadata || {}, activated_at: new Date().toISOString()\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "project.updated", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:663",
+        "metodo_contenedor": "(updateAiConfig — método específico)",
+        "es_handler_de": null,
+        "bloque_logico": "tras UPDATE de provider/model/prompt_id en SQL",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "updated_fields", "updated_at"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish(EVENTS.PROJECT.UPDATED, {\n      project_id: projectId,\n      updated_fields: [...].filter(...), updated_at: now\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "project.get.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:817",
+        "metodo_contenedor": "onGetProjectRequest",
+        "es_handler_de": "project.get.request",
+        "bloque_logico": "respuesta a request_response: success false si no existe, error si falla",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "project", "error"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish(EVENTS.PROJECT.GET_RESPONSE, {\n      request_id, success: !!project, project: project || null,\n      error: project ? null : 'Project not found'\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "project.list.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:826",
+        "metodo_contenedor": "onListProjectsRequest",
+        "es_handler_de": "project.list.request",
+        "bloque_logico": "respuesta con todos los proyectos + IDs activos",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "projects", "count", "active_project_ids"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish(EVENTS.PROJECT.LIST_RESPONSE, {\n      request_id, success: true, projects, count: projects.length,\n      active_project_ids: [...this.activeProjectIds]\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "project.active.response", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:834",
+        "metodo_contenedor": "onGetActiveProjectRequest",
+        "es_handler_de": "project.active.request",
+        "bloque_logico": "respuesta con la lista de project_ids activos",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "success", "active_project_ids"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('project.active.response', {\n      request_id, success: true, active_project_ids: [...this.activeProjectIds]\n    });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "project.deactivated", "variables_referenciadas": [] },
+        "ubicacion": "modules/project-manager/index.js:1102",
+        "metodo_contenedor": "(deactivateProject method)",
+        "es_handler_de": null,
+        "bloque_logico": "tras setear is_active=false y eliminar de activeProjectIds",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "name", "deactivated_at"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('project.deactivated', {\n      project_id: id, name: project?.name, deactivated_at: new Date().toISOString()\n    });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.get.request",      "tipo_nombre": "literal", "handler": "onGetProjectRequest",       "handler_ubicacion": "modules/project-manager/index.js:814",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/project-manager/index.js:814",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.list.request",     "tipo_nombre": "literal", "handler": "onListProjectsRequest",     "handler_ubicacion": "modules/project-manager/index.js:823",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/project-manager/index.js:823",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.active.request",   "tipo_nombre": "literal", "handler": "onGetActiveProjectRequest", "handler_ubicacion": "modules/project-manager/index.js:832",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/project-manager/index.js:832",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "db.query.response",        "tipo_nombre": "literal", "handler": "onDbQueryResponse",         "handler_ubicacion": "modules/project-manager/index.js:92",   "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/project-manager/index.js:92",   "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "composition.response",     "tipo_nombre": "literal", "handler": "onCompositionResponse",     "handler_ubicacion": "modules/project-manager/index.js:124",  "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/project-manager/index.js:124",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project/state/request",    "tipo_nombre": "literal", "handler": "onProjectStateRequest",     "handler_ubicacion": "modules/project-manager/index.js:839",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/project-manager/index.js:839",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project/create",           "tipo_nombre": "literal", "handler": "onProjectCreate",           "handler_ubicacion": "modules/project-manager/index.js:841",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/project-manager/index.js:841",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project/update",           "tipo_nombre": "literal", "handler": "onProjectUpdate",           "handler_ubicacion": "modules/project-manager/index.js:855",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/project-manager/index.js:855",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project/delete",           "tipo_nombre": "literal", "handler": "onProjectDelete",           "handler_ubicacion": "modules/project-manager/index.js:877",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/project-manager/index.js:877",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project/activate",         "tipo_nombre": "literal", "handler": "onProjectActivate",         "handler_ubicacion": "modules/project-manager/index.js:888",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/project-manager/index.js:888",  "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["project.created", "project.updated", "project.deleted", "project.activated", "project.deactivated", "project.get.response", "project.list.response", "project.active.response", "project/state"],
+      "publica_literales_en_codigo": ["composition.request", "db.query.request", "db.schema.init.request", "project.activated", "project.active.response", "project.created", "project.deactivated", "project.deleted", "project.get.response", "project.list.response", "project.updated"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": ["project/state"],
+      "publica_emitidos_no_declarados": ["composition.request", "db.query.request", "db.schema.init.request"],
+      "subscribes_declarados_en_manifest": ["project.get.request", "project.list.request", "project.active.request", "db.query.response", "composition.response", "project/state/request", "project/create", "project/update", "project/delete", "project/activate"],
+      "subscribes_realmente_registrados": ["project.get.request", "project.list.request", "project.active.request", "db.query.response", "composition.response", "project/state/request", "project/create", "project/update", "project/delete", "project/activate"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "projects",                     "tipo": "Map", "ubicacion_init": "modules/project-manager/index.js:29", "se_invalida_con": "set en createProject/loadExistingProjects | delete en deleteProject", "leak_potencial": false },
+      { "campo": "activeProjectIds",             "tipo": "Set", "ubicacion_init": "modules/project-manager/index.js:30", "se_invalida_con": "add en activateProject | delete en deactivateProject",                "leak_potencial": false },
+      { "campo": "pendingDbRequests",            "tipo": "Map", "ubicacion_init": "modules/project-manager/index.js:31", "se_invalida_con": "delete en onDbQueryResponse | timeout (delete + reject) | onUnload (clearTimeout + reject + clear)", "leak_potencial": false },
+      { "campo": "pendingCompositionRequests",   "tipo": "Map", "ubicacion_init": "modules/project-manager/index.js:32", "se_invalida_con": "delete en onCompositionResponse | timeout | onUnload (clearTimeout + reject + clear)", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [],
+      "notas_concurrencia": "Datos persistidos en la DB 'system' via eventos db.query.request a database-manager. project-manager NO crea tablas directamente — usa initializeSystemSchema() que delega via composition-manager o database-manager."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [{ "key": "defaultSchema", "tipo": "object", "default_si_primitivo": null }],
+    "paths_proyecto_referenciados": ["data/projects/{slug}/"],
+    "valores_hardcoded_observables": [
+      { "valor": "system (project_id usado para queries internas)", "ubicacion": "modules/project-manager/index.js:83", "naturaleza": "otro" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/project-manager/index.js:36",
+      "acciones": [
+        "guarda this.logger / this.metrics / this.eventBus / this.uiHandler / this.config",
+        "logger.info('project-manager.loading')",
+        "initializeSystemSchema (crea tabla projects en DB system)",
+        "loadExistingProjects (SELECT proyectos desde DB system → this.projects Map)",
+        "ensureSystemProject (crea project 'system' raíz si no existe)",
+        "para cada proyecto activo: emite project.activated"
+      ],
+      "guarda_referencias_externas": ["this.logger=core.logger", "this.metrics=core.metrics", "this.eventBus=core.eventBus", "this.uiHandler=core.uiHandler"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/project-manager/index.js:54",
+      "acciones": [
+        "clearTimeout sobre pendingDbRequests + reject('Module unloading') + clear()",
+        "clearTimeout sobre pendingCompositionRequests + reject + clear()",
+        "logger.info('project-manager.unloaded')"
+      ],
+      "estado_no_limpiado": ["projects (Map de proyectos cacheados)", "activeProjectIds (Set)"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "database-manager",        "via_evento": "db.query.request → db.query.response",                    "obligatorio_en": "ambos",   "ubicacion_uso": "modules/project-manager/index.js:81",  "es_cross_vertical": false },
+    { "modulo_dependido": "database-manager",        "via_evento": "db.schema.init.request",                                  "obligatorio_en": "runtime", "ubicacion_uso": "modules/project-manager/index.js:361", "es_cross_vertical": false },
+    { "modulo_dependido": "composition-manager",     "via_evento": "composition.request → composition.response",              "obligatorio_en": "runtime", "ubicacion_uso": "modules/project-manager/index.js:114", "es_cross_vertical": false },
+    { "modulo_dependido": "core/constants (EVENTS)", "via_evento": "require('../../core/constants') o similar (no inspeccionado)", "obligatorio_en": "onLoad", "ubicacion_uso": "modules/project-manager/index.js (require al inicio)", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "database-manager",      "que_pasa_si_cae": "pendingDbRequests timeout → reject. initializeSystemSchema/loadExistingProjects fallan → onLoad lanza throw → módulo no carga.", "evidencia": "modules/project-manager/index.js:84 (catch en publish + clearTimeout)" },
+    { "dependencia": "composition-manager",   "que_pasa_si_cae": "pendingCompositionRequests timeout → reject. handleUIAddFeatures falla con error.",                                                "evidencia": "modules/project-manager/index.js:117 (catch)" },
+    { "dependencia": "core/constants",        "que_pasa_si_cae": "EVENTS undefined → ReferenceError en onLoad. Módulo no carga.",                                                                    "evidencia": "modules/project-manager/index.js (require al inicio del archivo)" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('project-manager.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "correlationId", "projectId", "count", "activeProjectIds", "error"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('project-manager.loading', { module: this.name });",                                    "ubicacion": "modules/project-manager/index.js:45"  },
+        { "snippet": "this.logger.info('project-manager.schema.initializing', { correlationId: cid });",                        "ubicacion": "modules/project-manager/index.js:138" },
+        { "snippet": "this.logger.info('project-manager.db.loaded', { count: projects.length, activeProjectIds: [...] });",     "ubicacion": "modules/project-manager/index.js:185" },
+        { "snippet": "this.logger.error('project-manager.db.load.failed', { error: error.message });",                          "ubicacion": "modules/project-manager/index.js:187" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": true,
+      "evidencia": "modules/project-manager/index.js:81-83 — propaga correlation_id en payload de db.query.request. línea 138 lo loguea como correlationId. Sin embargo, los publishes de project.X (líneas 490-1102) NO incluyen correlation_id en payload."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 1162,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": []
+  },
+
+  "quirks": {
+    "warnings": [
+      "publica_emitidos_no_declarados: 3 (db.query.request, composition.request, db.schema.init.request) — son requests a OTROS módulos, no eventos del dominio project — pero el manifest no los lista como publica.",
+      "publica_declarados_no_emitidos: 1 (project/state) — declarado en manifest pero el código usa publishUIState() helper que probablemente usa .emit() en lugar de .publish() (mismo patrón que credential-manager).",
+      "Tracing parcial: requests técnicas (db.query, composition) propagan correlation_id; eventos de dominio project.X NO lo propagan en payload.",
+      "ui_handlers no rellenados: handleUIListFeatures/handleUIAddFeatures + ui handlers de UI declarativa. Diferido por extensión.",
+      "apis_http no rellenadas: 13 según manifest (CRUD de proyectos via HTTP). Diferidas."
+    ],
+    "secciones_vacias_intencionalmente": [
+      "tools (project-manager no expone tools al LLM)",
+      "ui_handlers (diferido — ver warnings)",
+      "apis_http (diferido — ver warnings)",
+      "estado.persistencia.sqlite_tablas (NO crea tablas directamente; las crea database-manager via db.schema.init.request)",
+      "estado.persistencia.archivos",
+      "configuracion.env_vars (no usa process.env)",
+      "observabilidad.metricas_emitidas (no usa metrics.X)",
+      "codigo_intencion.todos / workarounds_detectados",
+      "outliers_capturados"
+    ]
+  }
+}

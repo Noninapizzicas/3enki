@@ -1,0 +1,175 @@
+{
+  "_meta": {
+    "modulo": "security-p2p",
+    "ubicacion": "modules/security-p2p",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "security-p2p",
+    "version": "1.0.0",
+    "description_oficial": "P2P Zero Trust Security with E2E Encryption",
+    "author": "Event Core Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": true,
+    "estado_modulo": "dormido_por_diseno",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "security.peer.trusted",      "description": "Peer trusted after successful handshake" },
+      { "event": "security.peer.revoked",       "description": "Trust revoked for a peer" },
+      { "event": "security.handshake.timeout",  "description": "Handshake timed out" },
+      { "event": "security.handshake.failed",   "description": "Handshake failed (HMAC mismatch)" }
+    ],
+    "subscribes": [],
+    "provides_eventos": []
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/status",
+      "handler": null,
+      "description": "Get security status and trusted peers",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/public-key",
+      "handler": null,
+      "description": "Get this core's public key and fingerprint",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/trust-peer",
+      "handler": null,
+      "description": "Add a peer as trusted",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/trust-peer",
+      "handler": null,
+      "description": "Revoke trust for a peer",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/trusted-peers",
+      "handler": null,
+      "description": "List all trusted peers",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "handshake_timeout_ms", "tipo": "number",  "valor_default": 30000 },
+      { "key": "auto_trust_enabled",   "tipo": "boolean", "valor_default": false  }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "security.events_encrypted",
+        "security.events_decrypted",
+        "security.encryption_errors",
+        "security.decryption_errors",
+        "security.handshakes.successful",
+        "security.handshakes.failed"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 2059,
+    "module_json_lineas": 87,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "main no declarado (null)",
+      "apis declaradas dentro de provides.apis (no top-level) — extraídas a apis_http",
+      "provides.hooks declarado (hooks: [beforeEventPublish, afterEventReceive]) — no campo canónico de primer nivel; valor preservado en outliers omitido porque provides es campo canónico",
+      "observability.metrics sin gauges ni timings declarados"
+    ]
+  }
+}

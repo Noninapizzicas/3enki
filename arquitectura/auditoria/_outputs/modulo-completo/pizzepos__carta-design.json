@@ -1,0 +1,205 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/carta-design",
+    "ubicacion": "modules/pizzepos/carta-design",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__carta-design.json"
+  },
+
+  "identidad": {
+    "name": "carta-design",
+    "version": "3.0.0",
+    "description_oficial": "Estudio de diseño profesional de cartas impresas. Sistema multi-rol con entrevista, equipo creativo, guión maestro y producción HTML.",
+    "author": "Pizzepos Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/pizzepos/carta-design/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "carta.html.generada", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-design/index.js:197",
+        "metodo_contenedor": "toolSave (probable)",
+        "es_handler_de": "tool design.save",
+        "bloque_logico": "tras escribir HTML + meta en disco",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["carta_id", "html", "title", "filename"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": ["title"] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    await this.eventBus.publish('carta.html.generada', {\n      carta_id, html, title: nombre || `Diseño ${carta_id}`, filename\n    });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.activated",   "tipo_nombre": "literal", "handler": "onProjectActivated",   "handler_ubicacion": "modules/pizzepos/carta-design/index.js:51", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-design/index.js:61", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.deactivated", "tipo_nombre": "literal", "handler": "onProjectDeactivated", "handler_ubicacion": "modules/pizzepos/carta-design/index.js:64", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-design/index.js:64", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "carta.actualizada",   "tipo_nombre": "literal", "handler": "onCartaGenerada",      "handler_ubicacion": "modules/pizzepos/carta-design/index.js:66", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-design/index.js:66", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["carta.html.generada"],
+      "publica_literales_en_codigo": ["carta.html.generada"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["project.activated", "project.deactivated", "carta.actualizada"],
+      "subscribes_realmente_registrados": ["project.activated", "project.deactivated", "carta.actualizada"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [
+    { "name": "design.load_carta",    "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolLoadCarta",    "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "design.save",          "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolSave",         "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": ["carta.html.generada"] }, "errores_conocidos": [] },
+    { "name": "design.profiles",      "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolProfiles",     "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "design.save_profile",  "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolSaveProfile",  "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "design.delete_profile","description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolDeleteProfile","handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "design.gallery",       "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolGallery",      "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "projectPaths",      "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-design/index.js:27", "se_invalida_con": "onProjectActivated set; cache permanente",                                  "leak_potencial": false },
+      { "campo": "builtinProfiles",   "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-design/index.js:28", "se_invalida_con": "carga única en onLoad (perfiles built-in del módulo) — no invalidación",      "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/carta-design/{filename}.html (probable)",      "formato": "html", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" },
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/carta-design/{filename}.html.meta.json",       "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "Persiste HTML diseñado por carta + metadatos. Sin locks."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/projects/{slug}/storage/pizzepos/carta-design/"],
+    "valores_hardcoded_observables": []
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/pizzepos/carta-design/index.js:35",
+      "acciones": [
+        "guarda this.logger / this.eventBus",
+        "carga builtinProfiles (perfiles built-in del módulo)",
+        "logger.info('module.loaded', { profiles: this.builtinProfiles.size })"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/pizzepos/carta-design/index.js:45",
+      "acciones": ["logger.info('module.unloaded')"],
+      "estado_no_limpiado": ["projectPaths", "builtinProfiles"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "pizzepos/carta-manager", "via_evento": "carta.actualizada (subscribe — log informativo, no dispatch)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-design/index.js:66", "es_cross_vertical": false },
+    { "modulo_dependido": "project-manager",        "via_evento": "project.activated (subscribe)",                                "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-design/index.js:51", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "fs (escritura HTML/meta)", "que_pasa_si_cae": "toolSave lanza error capturado por handler — no se publica carta.html.generada.", "evidencia": "modules/pizzepos/carta-design/index.js:195" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('carta-design.<accion>' | 'module.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "version", "profiles", "project_id", "carta_id", "filename", "size", "count"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('module.loaded', { module: this.name, version: this.version, profiles: this.builtinProfiles.size });", "ubicacion": "modules/pizzepos/carta-design/index.js:42"  },
+        { "snippet": "this.logger.info('carta-design.carta.updated', { ... });",                                                              "ubicacion": "modules/pizzepos/carta-design/index.js:68"  },
+        { "snippet": "this.logger.info('carta-design.profiles.loaded', { count: this.builtinProfiles.size });",                                "ubicacion": "modules/pizzepos/carta-design/index.js:93"  },
+        { "snippet": "this.logger.info('carta-design.save', { carta_id, filename, size: meta.size_bytes });",                                  "ubicacion": "modules/pizzepos/carta-design/index.js:209" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — carta-design no propaga correlation_id."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 337,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "08f170f",
+      "fecha": "2026-04-22 09:31:19 +0000",
+      "subject": "refactor(prompt-engine): separar context.json de prompt.json por módulo"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Naming mismatch handler/event: subscribe a 'carta.actualizada' con handler 'onCartaGenerada' (debería ser onCartaActualizada)", "ejemplo": "modules/pizzepos/carta-design/index.js:66 + module.json", "rareza": "inusual" }
+    ]
+  },
+
+  "quirks": {
+    "warnings": [
+      "ECOSISTEMA CARTAS — DESIGN. carta-design es un ESTUDIO DE DISEÑO PROFESIONAL (multi-rol con entrevista, equipo creativo, guión maestro). Más complejo que carta-impresion (HTML básico). 6 tools de diseño + perfiles built-in.",
+      "0 drift declarativo — manifest 100% honesto en publishes y subscribes",
+      "NAMING MISMATCH: subscribe declarado a 'carta.actualizada' pero handler se llama 'onCartaGenerada' (en lugar de onCartaActualizada). Funciona pero confunde.",
+      "Diferencia con carta-impresion: NO usa agent.execute.request — el módulo genera HTML directamente vía toolSave (probablemente con templating built-in)",
+      "onCartaGenerada solo logga (línea 68 'carta-design.carta.updated') — no auto-genera diseño nuevo, espera tool design.save explícita",
+      "6 tools sin handler_ubicacion identificada (diferido)"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "ui_handlers (no expone MQTT UI)",
+      "apis_http (no expone HTTP)",
+      "estado.persistencia.sqlite_tablas (usa HTML files)",
+      "configuracion.env_vars / module_json_config_keys / hardcoded",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / comentarios_porque / workarounds_detectados",
+      "version_archivada"
+    ]
+  }
+}

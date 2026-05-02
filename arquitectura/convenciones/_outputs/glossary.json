@@ -1,0 +1,288 @@
+{
+  "_meta": {
+    "convencion": "glossary",
+    "version": "1.0.0",
+    "creado_en": "2026-04-30",
+    "contrato_referencia": "arquitectura/convenciones/_contratos/glossary.contract.json",
+    "supersedes_nota": null
+  },
+
+  "scope": "Términos cross-módulo del sistema event-core. Solo entran conceptos compartidos entre dos o más módulos. Las entidades internas de un único módulo no entran. Sinónimos prohibidos.",
+
+  "criterio_inclusion": "Un término entra al glosario si: (1) más de un módulo lo usa o podría usarlo, Y (2) hay riesgo de sinónimo histórico o presente. Si el término es único de un módulo, NO entra.",
+
+  "concepts": [
+    {
+      "id": "client-order",
+      "domain": "horeca",
+      "es": "pedido",
+      "en": "order",
+      "notes": "Pedido del cliente final (mesa, take-away, delivery). NO confundir con `kitchen-ticket` (lo que llega a cocina).",
+      "industry_reference": "POS industry (Toast, Square, Olo): 'order'."
+    },
+    {
+      "id": "kitchen-ticket",
+      "domain": "horeca",
+      "es": "comanda",
+      "en": "ticket",
+      "notes": "Lo que llega a cocina/KDS. Puede tener tiempos, cursos, modificadores. En industria internacional: KOT (Kitchen Order Ticket).",
+      "industry_reference": "KDS industry: 'ticket' / 'KOT'."
+    },
+    {
+      "id": "payment",
+      "domain": "horeca",
+      "es": "cobro",
+      "en": "payment",
+      "notes": null,
+      "industry_reference": "POS industry: 'payment' / 'tender'."
+    },
+    {
+      "id": "invoice",
+      "domain": "horeca",
+      "es": "factura",
+      "en": "invoice",
+      "notes": "Documento fiscal. En España regula FacturaE/Verifactu.",
+      "industry_reference": "UBL, FacturaE, e-invoicing standards."
+    },
+    {
+      "id": "table-check",
+      "domain": "horeca",
+      "es": "cuenta",
+      "en": "check",
+      "notes": "Cuenta de mesa (US: 'check', UK: 'bill', industria global: 'tab'). Elegimos 'check' porque es el más usado en POS US.",
+      "industry_reference": "POS industry US: 'check'."
+    },
+    {
+      "id": "physical-table",
+      "domain": "horeca",
+      "es": "mesa",
+      "en": "table",
+      "notes": null,
+      "industry_reference": null
+    },
+    {
+      "id": "pos-terminal",
+      "domain": "horeca",
+      "es": "comandero",
+      "en": "pos-terminal",
+      "notes": "Terminal POS donde el camarero introduce comandas. ES 'comandero' es término operativo HORECA español.",
+      "industry_reference": "POS industry: 'POS terminal' / 'order entry terminal'."
+    },
+    {
+      "id": "menu",
+      "domain": "horeca",
+      "es": "carta",
+      "en": "menu",
+      "notes": "La carta del establecimiento. ES preserva 'carta' (término HORECA es).",
+      "industry_reference": "POS industry: 'menu'."
+    },
+    {
+      "id": "menu-item",
+      "domain": "horeca",
+      "es": "producto",
+      "en": "menu-item",
+      "notes": "Cada plato/bebida vendible. EN industria usa 'menu item' (kebab-case).",
+      "industry_reference": "POS industry (Toast, Square): 'menu item'."
+    },
+    {
+      "id": "menu-category",
+      "domain": "horeca",
+      "es": "categoria",
+      "en": "menu-category",
+      "notes": "Agrupación de items en la carta (entrantes, principales, postres). ES sin tilde.",
+      "industry_reference": "POS industry: 'menu category' / 'section'."
+    },
+    {
+      "id": "modifier",
+      "domain": "horeca",
+      "es": "variacion",
+      "en": "modifier",
+      "notes": "Variación de un item (sin cebolla, doble queso, salsa al lado). EN industria usa 'modifier'. ES sin tilde.",
+      "industry_reference": "POS industry: 'modifier' / 'modifier group'."
+    },
+    {
+      "id": "recipe",
+      "domain": "horeca",
+      "es": "receta",
+      "en": "recipe",
+      "notes": null,
+      "industry_reference": null
+    },
+    {
+      "id": "ingredient",
+      "domain": "horeca",
+      "es": "ingrediente",
+      "en": "ingredient",
+      "notes": null,
+      "industry_reference": null
+    },
+    {
+      "id": "recipe-costing",
+      "domain": "horeca",
+      "es": "escandallo",
+      "en": "recipe-costing",
+      "notes": "Cálculo del coste de una receta descomponiendo ingredientes con mermas/rendimientos y comparando coste con PVP. ES 'escandallo' es término profesional HORECA es. EN industria profesional (MarketMan, ChefTec, Apicbase) usa 'recipe costing'.",
+      "industry_reference": "Recipe management software: 'recipe costing'."
+    },
+    {
+      "id": "pricing",
+      "domain": "horeca",
+      "es": "tarifa",
+      "en": "pricing",
+      "notes": "Configuración de precios (por canal, por horario, etc.). ES 'tarifa' captura mejor el matiz de 'rate card' que 'precio' (que es el valor singular).",
+      "industry_reference": null
+    },
+    {
+      "id": "kitchen",
+      "domain": "horeca",
+      "es": "cocina",
+      "en": "kds",
+      "notes": "Sistema de cocina / Kitchen Display System. EN usa el acrónimo 'kds' que es estándar industrial. ES preserva 'cocina'.",
+      "industry_reference": "KDS — Kitchen Display System (industria HORECA)."
+    },
+    {
+      "id": "printing",
+      "domain": "horeca",
+      "es": "impresion",
+      "en": "print",
+      "notes": "Impresión de tickets/facturas/comandas. ES sin tilde.",
+      "industry_reference": null
+    },
+    {
+      "id": "iot-device",
+      "domain": "iot",
+      "es": null,
+      "en": "device",
+      "notes": "Dispositivo IoT del parque. En este sistema NO se traduce a ES — todos los módulos IoT son `language=en` por convención industria.",
+      "industry_reference": "AWS IoT Core, Azure IoT Hub: 'device'."
+    },
+    {
+      "id": "firmware-artifact",
+      "domain": "iot",
+      "es": null,
+      "en": "firmware",
+      "notes": "Binario de firmware compilado. Solo EN.",
+      "industry_reference": "Industria embedded."
+    },
+    {
+      "id": "device-shadow",
+      "domain": "iot",
+      "es": null,
+      "en": "shadow",
+      "notes": "Patrón AWS IoT shadow: estado desired/reported/delta. Solo EN.",
+      "industry_reference": "AWS IoT Device Shadow."
+    },
+    {
+      "id": "iot-gateway",
+      "domain": "iot",
+      "es": null,
+      "en": "gateway",
+      "notes": "Gateway que traduce MQTT a protocolos nativos (TCP/BLE/USB/CMD). Solo EN.",
+      "industry_reference": "Industria IoT."
+    },
+    {
+      "id": "flash-action",
+      "domain": "iot",
+      "es": null,
+      "en": "flash",
+      "notes": "Operación de flasheo de firmware via USB serial. Solo EN.",
+      "industry_reference": "esptool / PlatformIO."
+    },
+    {
+      "id": "metric",
+      "domain": "system",
+      "es": null,
+      "en": "metric",
+      "notes": "Métrica de observabilidad (counter/gauge/timing). Solo EN.",
+      "industry_reference": "Prometheus, OpenTelemetry."
+    },
+    {
+      "id": "log-entry",
+      "domain": "system",
+      "es": null,
+      "en": "log",
+      "notes": "Entrada de log estructurada. Solo EN.",
+      "industry_reference": "JSON logging standards."
+    },
+    {
+      "id": "credential",
+      "domain": "auth",
+      "es": null,
+      "en": "credential",
+      "notes": "Credencial de autenticación. Solo EN.",
+      "industry_reference": "OAuth, OIDC."
+    },
+    {
+      "id": "certificate",
+      "domain": "auth",
+      "es": null,
+      "en": "certificate",
+      "notes": "Certificado X.509 / PKI. Solo EN.",
+      "industry_reference": "X.509, PKI."
+    },
+    {
+      "id": "session",
+      "domain": "auth",
+      "es": "sesion",
+      "en": "session",
+      "notes": "Sesión de autenticación o de trabajo (jornada laboral en staff-manager). ES sin tilde.",
+      "industry_reference": null
+    },
+    {
+      "id": "staff-member",
+      "domain": "horeca",
+      "es": "empleado",
+      "en": "employee",
+      "notes": "Empleado del establecimiento.",
+      "industry_reference": null
+    },
+    {
+      "id": "agent",
+      "domain": "ai",
+      "es": null,
+      "en": "agent",
+      "notes": "Agente LLM. Solo EN.",
+      "industry_reference": "Industria LLM (OpenAI, Anthropic)."
+    },
+    {
+      "id": "prompt",
+      "domain": "ai",
+      "es": null,
+      "en": "prompt",
+      "notes": "Prompt de LLM. Solo EN.",
+      "industry_reference": "Industria LLM."
+    },
+    {
+      "id": "tool",
+      "domain": "ai",
+      "es": null,
+      "en": "tool",
+      "notes": "Tool de LLM (function calling). Solo EN.",
+      "industry_reference": "Industria LLM (OpenAI, Anthropic)."
+    },
+    {
+      "id": "channel",
+      "domain": "messaging",
+      "es": null,
+      "en": "channel",
+      "notes": "Canal de mensajería (telegram, slack, web). Solo EN.",
+      "industry_reference": "Messaging APIs."
+    },
+    {
+      "id": "message",
+      "domain": "messaging",
+      "es": null,
+      "en": "message",
+      "notes": "Mensaje individual. Solo EN.",
+      "industry_reference": "Messaging APIs."
+    },
+    {
+      "id": "project",
+      "domain": "system",
+      "es": null,
+      "en": "project",
+      "notes": "Proyecto multi-tenant del sistema. Solo EN.",
+      "industry_reference": null
+    }
+  ]
+}

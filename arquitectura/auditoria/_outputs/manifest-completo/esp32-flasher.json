@@ -1,0 +1,251 @@
+{
+  "_meta": {
+    "modulo": "esp32-flasher",
+    "ubicacion": "modules/esp32-flasher",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "esp32-flasher",
+    "version": "1.0.0",
+    "description_oficial": "Flash de firmware a ESP32 via serial (esptool/platformio) y monitor serial en tiempo real",
+    "author": "Enki",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": "tier_3_core",
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "flash.started",       "description": "Flash iniciado en un puerto serial" },
+      { "event": "flash.progress",      "description": "Progreso de flash (porcentaje, etapa)" },
+      { "event": "flash.completed",     "description": "Flash completado exitosamente" },
+      { "event": "flash.failed",        "description": "Flash falló" },
+      { "event": "flash.serial_output", "description": "Línea de salida del monitor serial" }
+    ],
+    "subscribes": [
+      {
+        "event": "firmware.build_completed",
+        "handler": "onBuildCompleted",
+        "extras": { "description": "Notifica que hay un binario listo para flashear" }
+      }
+    ],
+    "provides_eventos": [
+      "flash.started",
+      "flash.progress",
+      "flash.completed",
+      "flash.failed",
+      "flash.serial_output"
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "flash.list_ports",
+      "description": "Detecta puertos serial conectados (USB) donde puede haber un ESP32",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 33,
+      "parameters_full_path_hint": "modules/esp32-flasher/module.json → tools[0].parameters"
+    },
+    {
+      "name": "flash.start",
+      "description": "Flashea un firmware.bin a un ESP32 conectado por USB. Asíncrono con eventos de progreso.",
+      "parameters_required": ["port", "binary_path"],
+      "parameters_property_names": ["port", "binary_path", "baud"],
+      "parameters_size_chars": 277,
+      "parameters_full_path_hint": "modules/esp32-flasher/module.json → tools[1].parameters"
+    },
+    {
+      "name": "flash.status",
+      "description": "Estado de las operaciones de flash activas y puertos detectados",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 33,
+      "parameters_full_path_hint": "modules/esp32-flasher/module.json → tools[2].parameters"
+    },
+    {
+      "name": "flash.history",
+      "description": "Historial de operaciones de flash realizadas",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 33,
+      "parameters_full_path_hint": "modules/esp32-flasher/module.json → tools[3].parameters"
+    },
+    {
+      "name": "flash.monitor_start",
+      "description": "Inicia monitor serial en tiempo real en un puerto. Las líneas se publican como eventos flash.serial_output.",
+      "parameters_required": ["port"],
+      "parameters_property_names": ["port", "baud"],
+      "parameters_size_chars": 194,
+      "parameters_full_path_hint": "modules/esp32-flasher/module.json → tools[4].parameters"
+    },
+    {
+      "name": "flash.monitor_stop",
+      "description": "Detiene el monitor serial de un puerto",
+      "parameters_required": ["port"],
+      "parameters_property_names": ["port"],
+      "parameters_size_chars": 107,
+      "parameters_full_path_hint": "modules/esp32-flasher/module.json → tools[5].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "flash", "action": "list-ports",    "handler": "handleListPorts" },
+      { "domain": "flash", "action": "start",         "handler": "handleStart" },
+      { "domain": "flash", "action": "status",        "handler": "handleStatus" },
+      { "domain": "flash", "action": "cancel",        "handler": "handleCancel" },
+      { "domain": "flash", "action": "monitor-start", "handler": "handleMonitorStart" },
+      { "domain": "flash", "action": "monitor-stop",  "handler": "handleMonitorStop" },
+      { "domain": "flash", "action": "monitor-send",  "handler": "handleMonitorSend" },
+      { "domain": "flash", "action": "history",       "handler": "handleHistory" }
+    ]
+  },
+
+  "apis_http": [
+    {
+      "method": "POST",
+      "path": "/debug-control",
+      "handler": "handleDebugControl",
+      "description": "Activar/desactivar debug remoto de un ESP32 via MQTT",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/debug-stream",
+      "handler": "handleDebugStream",
+      "description": "Long-poll para recibir líneas de debug de un ESP32",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/serial-relay",
+      "handler": "handleSerialRelay",
+      "description": "Recibe output serial del CLI local y lo publica como evento",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/cli-download",
+      "handler": "handleCliDownload",
+      "description": "Descarga el script enki-esp32.js para usar localmente",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "esptool_path",       "tipo": "string",  "valor_default": "esptool" },
+      { "key": "platformio_path",    "tipo": "string",  "valor_default": "platformio" },
+      { "key": "default_baud",       "tipo": "number",  "valor_default": 115200 },
+      { "key": "flash_baud",         "tipo": "number",  "valor_default": 460800 },
+      { "key": "monitor_baud",       "tipo": "number",  "valor_default": 115200 },
+      { "key": "flash_timeout_ms",   "tipo": "number",  "valor_default": 120000 },
+      { "key": "serial_patterns",    "tipo": "array",   "valor_default": ["/dev/ttyUSB*", "/dev/ttyACM*"] },
+      { "key": "max_monitor_buffer", "tipo": "number",  "valor_default": 5000 },
+      { "key": "max_history",        "tipo": "number",  "valor_default": 200 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "flash.started.total",
+        "flash.completed.total",
+        "flash.failed.total",
+        "flash.cancelled.total",
+        "flash.monitor_started.total"
+      ],
+      "gauges": [
+        "flash.active.count",
+        "flash.monitors.count",
+        "flash.ports_detected.count"
+      ],
+      "timings": [
+        "flash.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": ["events.json", "flash.json"],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 6510,
+    "module_json_lineas": 220,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "main no declarado en module.json (se asume index.js por convención, pero no es explícito)",
+      "provides.events duplica events.publishes — mismos 5 eventos listados como strings en provides.events y como objetos en events.publishes",
+      "tier_declarado='tier_3_core' pero esp32-flasher NO aparece en system.json.module_load_order.tiers.tier_3_core — tier_carga_inferido=null",
+      "ui_handlers[].schema ($ref a flash.json) no capturado en output (campo extra no canónico en handlers)",
+      "events.subscribes[].description existe pero no capturado en extras como campo primitivo (se preserva en extras)"
+    ]
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "_meta": { "modulo": "esp32-dev", "ubicacion": "modules/esp32-dev", "auditado_en": "2026-04-30", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/esp32-dev.json" },
+  "identidad": { "name": "esp32-dev", "version": "1.0.0", "description_oficial": "Desarrollo ESP32: templates, scaffolding de proyectos y compilación de firmware", "author": "Enki", "main_declarado": null, "main_real": "modules/esp32-dev/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": "tier_3_core", "tier_declarado": "tier_3_core", "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "literal", "valor": "esp32.project_created", "variables_referenciadas": [] }, "ubicacion": "modules/esp32-dev/index.js:269", "metodo_contenedor": "handleCreateProject", "es_handler_de": null, "bloque_logico": "tras escribir el proyecto desde template + persistir índice", "payload": { "tipo": "object_literal", "campos_visibles": ["project_name", "template", "board", "framework"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish('esp32.project_created', { project_name, template, board: selectedBoard, framework: selectedFramework });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "esp32.build_started", "variables_referenciadas": [] }, "ubicacion": "modules/esp32-dev/index.js:381", "metodo_contenedor": "handleBuild", "es_handler_de": null, "bloque_logico": "antes de spawn platformio", "payload": { "tipo": "object_literal", "campos_visibles": ["project_name", "board", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('esp32.build_started', { project_name, board: project.board, timestamp: new Date().toISOString() });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "esp32.build_completed", "variables_referenciadas": [] }, "ubicacion": "modules/esp32-dev/index.js:564", "metodo_contenedor": "_runBuild (proc close code===0)", "es_handler_de": null, "bloque_logico": "spawn cerró con exit 0", "payload": { "tipo": "object_literal", "campos_visibles": ["project_name", "board", "binary_path", "binary_size", "duration_ms"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "          await this.eventBus.publish('esp32.build_completed', { project_name, board, binary_path, binary_size, duration_ms });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "esp32.build_failed", "variables_referenciadas": [] }, "ubicacion": "modules/esp32-dev/index.js:590", "metodo_contenedor": "_runBuild (proc close code!=0)", "es_handler_de": null, "bloque_logico": "spawn cerró con error o timeout", "payload": { "tipo": "object_literal", "campos_visibles": ["project_name", "board", "error", "exit_code", "duration_ms"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "          await this.eventBus.publish('esp32.build_failed', { project_name, board, error: errorOutput, exit_code, duration_ms });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "esp32.build_failed", "variables_referenciadas": [] }, "ubicacion": "modules/esp32-dev/index.js:618", "metodo_contenedor": "_runBuild (proc on error)", "es_handler_de": null, "bloque_logico": "spawn no se pudo ejecutar (ENOENT)", "payload": { "tipo": "object_literal", "campos_visibles": ["project_name", "board", "error", "exit_code: -1", "duration_ms"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('esp32.build_failed', { project_name, board, error: ..., exit_code: -1, duration_ms });", "declarado_en_manifest": true }
+    ],
+    "subscribes": [],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["esp32.project_created", "esp32.build_started", "esp32.build_completed", "esp32.build_failed"],
+      "publica_literales_en_codigo": ["esp32.project_created", "esp32.build_started", "esp32.build_completed", "esp32.build_failed"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": [],
+      "subscribes_realmente_registrados": [],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [],
+  "ui_handlers": [
+    { "domain": "esp32", "action": "list-templates", "handler_metodo": "handleListTemplates", "handler_ubicacion": "modules/esp32-dev/index.js:151", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["templates", "total"], "status_error": null }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "create-project", "handler_metodo": "handleCreateProject", "handler_ubicacion": "modules/esp32-dev/index.js:177", "input_validado": ["project_name", "template"], "codigos_error": ["400", "404", "409", "500"], "output_shape": { "status_success": 201, "data_keys": ["project_name", "template", "board", "framework", "path", "files"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "list-projects", "handler_metodo": "handleListProjects", "handler_ubicacion": "modules/esp32-dev/index.js:295", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["projects", "total"], "status_error": null }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "get-project", "handler_metodo": "handleGetProject", "handler_ubicacion": "modules/esp32-dev/index.js:315", "input_validado": ["project_name"], "codigos_error": ["400", "404"], "output_shape": { "status_success": 200, "data_keys": ["project_name", "template", "board", "framework", "path", "files", "last_build", "last_build_status"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "build", "handler_metodo": "handleBuild", "handler_ubicacion": "modules/esp32-dev/index.js:351", "input_validado": ["project_name"], "codigos_error": ["400", "404", "409", "429"], "output_shape": { "status_success": 202, "data_keys": ["project_name", "board", "status", "message"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "build-status", "handler_metodo": "handleBuildStatus", "handler_ubicacion": "modules/esp32-dev/index.js:407", "input_validado": [], "codigos_error": ["404"], "output_shape": { "status_success": 200, "data_keys": ["project_name", "status", "started_at", "elapsed_ms", "log_lines", "log_tail", "active_builds", "count"], "status_error": 404 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "list-boards", "handler_metodo": "handleListBoards", "handler_ubicacion": "modules/esp32-dev/index.js:459", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["boards", "total"], "status_error": null }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "esp32", "action": "delete-project", "handler_metodo": "handleDeleteProject", "handler_ubicacion": "modules/esp32-dev/index.js:474", "input_validado": ["project_name", "confirm"], "codigos_error": ["400", "404", "409"], "output_shape": { "status_success": 200, "data_keys": ["deleted"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" }
+  ],
+  "apis_http": [],
+  "estado": {
+    "memoria": [
+      { "campo": "this.templates", "tipo": "Map", "ubicacion_init": "modules/esp32-dev/index.js:82", "se_invalida_con": "carga estática en _loadTemplates onLoad — no se invalida en runtime", "leak_potencial": false },
+      { "campo": "this.activeBuilds", "tipo": "Map", "ubicacion_init": "modules/esp32-dev/index.js:85", "se_invalida_con": "delete por project_name en proc close/error + clear() onUnload (kill SIGTERM)", "leak_potencial": false },
+      { "campo": "this.projects", "tipo": "Object", "ubicacion_init": "modules/esp32-dev/index.js:88", "se_invalida_con": "delete en handleDeleteProject + _saveProjects tras cada cambio (onLoad lo carga)", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/esp32-dev/projects.json", "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" },
+        { "path_pattern": "data/esp32-dev/projects/<project_name>/...", "formato": "raw", "operaciones": ["read", "write", "delete"], "via_evento": null, "atomicidad": "desconocido" },
+        { "path_pattern": "data/esp32-dev/projects/<project>/.pio/build/<board>/firmware.bin", "formato": "binario", "operaciones": ["read"], "via_evento": null, "atomicidad": "desconocido" }
+      ],
+      "notas_concurrencia": "Índice de proyectos se reescribe completo tras cada handle (no diff). Builds escriben dentro de su propio projectDir."
+    }
+  },
+  "configuracion": {
+    "env_vars": ["PLATFORMIO_FORCE_COLOR=false (set en spawn)"],
+    "module_json_config_keys": [
+      { "key": "data_path", "tipo": "string", "default_si_primitivo": "./data/esp32-dev" },
+      { "key": "platformio_path", "tipo": "string", "default_si_primitivo": "platformio" },
+      { "key": "build_timeout_ms", "tipo": "number", "default_si_primitivo": 300000 },
+      { "key": "max_concurrent_builds", "tipo": "number", "default_si_primitivo": 2 }
+    ],
+    "paths_proyecto_referenciados": ["data/esp32-dev/", "data/esp32-dev/projects/", "data/esp32-dev/projects.json"],
+    "valores_hardcoded_observables": [
+      { "valor": "esp32dev,esp32-s2,esp32-s3,esp32-c3,esp32-c6,esp32-p4", "ubicacion": "modules/esp32-dev/index.js:18", "naturaleza": "otro" },
+      { "valor": "/^[a-z0-9][a-z0-9-]*$/", "ubicacion": "modules/esp32-dev/index.js:184", "naturaleza": "otro" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/esp32-dev/index.js:93", "acciones": ["this.logger = core.logger", "this.metrics = core.metrics", "this.eventBus = core.eventBus", "merge config['esp32-dev']", "path.resolve(data_path)", "_ensureDir data_path + projects/", "_loadTemplates() (built-in templates)", "_loadProjects() lee projects.json", "metrics.gauge esp32.projects.count", "metrics.gauge esp32.active_builds.count = 0"], "guarda_referencias_externas": ["this.logger", "this.metrics", "this.eventBus"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/esp32-dev/index.js:129", "acciones": ["loop activeBuilds: process.kill('SIGTERM')", "this.activeBuilds.clear()", "_saveProjects()"], "estado_no_limpiado": ["this.templates", "this.projects"] },
+    "auto_wired_subscribes": false,
+    "subscribes_dinamicos_en_lifecycle": ["child_process listeners (proc.on close/error/data) por build en _runBuild — terminan al cerrar el spawn"]
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "platformio (CLI externo)", "via_evento": "spawn binario configurable por config.platformio_path", "obligatorio_en": "runtime", "ubicacion_uso": "modules/esp32-dev/index.js:517", "es_cross_vertical": true },
+    { "modulo_dependido": "firmware-manager", "via_evento": "esp32.build_completed (firmware-manager se suscribe a este evento como compat legacy en onBuildCompleted)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/esp32-dev/index.js:564", "es_cross_vertical": false }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "platformio CLI", "que_pasa_si_cae": "proc.on('error') captura ENOENT y emite esp32.build_failed con exit_code=-1; build pasa a estado failed.", "evidencia": "modules/esp32-dev/index.js:602" },
+    { "dependencia": "build_timeout_ms (Node spawn timeout)", "que_pasa_si_cae": "Node mata el proceso; proc.on('close') con code distinto de 0 → esp32.build_failed con exit_code y errorOutput=tail del log.", "evidencia": "modules/esp32-dev/index.js:521" },
+    { "dependencia": "filesystem (data_path)", "que_pasa_si_cae": "_ensureDir/_saveProjects fallidos solo loguean warn — proyectos pueden perderse si se reinicia sin persistir; templates igualmente quedarían sin proyectos persistidos.", "evidencia": "modules/esp32-dev/index.js:107" },
+    { "dependencia": "binario .pio/build/<board>/firmware.bin", "que_pasa_si_cae": "fs.stat con catch silencioso → binarySize=0 pero igual emite esp32.build_completed (firmware-manager filtra bins inexistentes).", "evidencia": "modules/esp32-dev/index.js:546" }
+  ],
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('esp32.<accion>', { ...campos })", "campos_estructurados_observados": ["module", "version", "templates", "projects", "project_name", "template", "board", "framework", "duration_ms", "binary_size", "exit_code", "error"], "ejemplos": [{ "snippet": "this.logger.info('esp32.project.created', { project_name, template, board: selectedBoard, framework: selectedFramework });", "ubicacion": "modules/esp32-dev/index.js:265" }, { "snippet": "this.logger.info('esp32.build.completed', { project_name, duration_ms, binary_size });", "ubicacion": "modules/esp32-dev/index.js:560" }, { "snippet": "this.logger.error('esp32.build.failed', { project_name, exit_code: code, duration_ms });", "ubicacion": "modules/esp32-dev/index.js:586" }] },
+    "metricas_emitidas": [
+      { "nombre": "esp32.projects.count", "tipo": "gauge", "ubicacion": "modules/esp32-dev/index.js:117" },
+      { "nombre": "esp32.active_builds.count", "tipo": "gauge", "ubicacion": "modules/esp32-dev/index.js:118" },
+      { "nombre": "esp32.project_created.total", "tipo": "counter", "ubicacion": "modules/esp32-dev/index.js:262" },
+      { "nombre": "esp32.build_started.total", "tipo": "counter", "ubicacion": "modules/esp32-dev/index.js:378" },
+      { "nombre": "esp32.build_completed.total", "tipo": "counter", "ubicacion": "modules/esp32-dev/index.js:557" },
+      { "nombre": "esp32.build.duration", "tipo": "timing", "ubicacion": "modules/esp32-dev/index.js:558" },
+      { "nombre": "esp32.build_failed.total", "tipo": "counter", "ubicacion": "modules/esp32-dev/index.js:583" }
+    ],
+    "metricas_drift_vs_manifest": [],
+    "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" }
+  },
+  "archivos_hermanos": { "agents": [], "schemas": ["modules/esp32-dev/schemas"], "prompts": [], "context_json_existe": false, "prompt_json_existe": false, "readme_existe": false, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/esp32-dev/index.js:285", "comentario_literal": "// Limpiar si falló a medias", "contexto": "razón del rm recursive en catch de handleCreateProject (rollback parcial)" },
+      { "ubicacion": "modules/esp32-dev/index.js:386", "comentario_literal": "// Ejecutar build de forma asíncrona", "contexto": "explica el patrón fire-and-forget con .catch() para evitar UnhandledPromiseRejection" },
+      { "ubicacion": "modules/esp32-dev/index.js:388", "comentario_literal": "// No esperamos — build corre en background", "contexto": "razón por la que handleBuild devuelve 202 antes de que termine la compilación" }
+    ],
+    "workarounds_detectados": [
+      { "ubicacion": "modules/esp32-dev/index.js:184", "descripcion": "Regex /^[a-z0-9][a-z0-9-]*$/ para validar project_name como slug — anti path-injection en directorio creado" },
+      { "ubicacion": "modules/esp32-dev/index.js:286", "descripcion": "rm recursive en catch de create — rollback parcial si template scaffolding falla a medias" },
+      { "ubicacion": "modules/esp32-dev/index.js:519", "descripcion": "PLATFORMIO_FORCE_COLOR=false en env del spawn — evita ANSI codes en log" },
+      { "ubicacion": "modules/esp32-dev/index.js:543", "descripcion": "binPath con this.projects[projectName]?.board || 'esp32dev' — fallback si por algún motivo el board se perdió" }
+    ]
+  },
+  "metricas_fisicas": { "lineas_index_js": 734, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Templates built-in cargados desde firmware-templates en _loadTemplates en lugar de FS dinámico", "ejemplo": "modules/esp32-dev/index.js:111", "rareza": "inusual" },
+      { "patron": "Sin tools — solo ui_handlers (la UI/admin-panel orquesta, no se expone al LLM)", "ejemplo": "modules/esp32-dev/index.js:147", "rareza": "inusual" },
+      { "patron": "Manifest en module.json no declara 'tools' (a diferencia de firmware-builder que sí los expone al LLM)", "ejemplo": "modules/esp32-dev/module.json:1", "rareza": "inusual" }
+    ]
+  },
+  "quirks": {
+    "warnings": [
+      "P4 — esp32-dev (legacy). Reemplazado conceptualmente por firmware-builder (sin templates/scaffolding).",
+      "Coexiste con firmware-builder en runtime: ambos pueden estar habilitados — firmware-manager se suscribe a esp32.build_completed Y firmware.build_completed (compat de migración).",
+      "Sin tools expuestos al LLM (solo ui_handlers para el admin-panel) — diferencia clave con firmware-builder que sí expone tools.",
+      "Build asíncrono con 202 Accepted (mismo patrón que firmware-builder).",
+      "Persistencia: índice projects.json + directorios completos por proyecto (templates expandidos al FS) — pesado vs firmware-builder que solo lee FS sin scaffolding propio.",
+      "Validación project_name slug (lowercase + hyphens) — anti path-injection.",
+      "Templates se mantienen en memoria con Map (no recargan desde FS) — los de firmware-builder se re-escanean en cada list."
+    ],
+    "secciones_vacias_intencionalmente": ["eventos.subscribes", "tools (legacy: solo expone ui_handlers)", "apis_http", "estado.persistencia.sqlite_tablas", "codigo_intencion.todos", "version_archivada"]
+  }
+}

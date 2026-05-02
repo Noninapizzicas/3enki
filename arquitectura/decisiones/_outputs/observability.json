@@ -1,0 +1,182 @@
+{
+  "_meta": {
+    "convencion": "observability",
+    "version": "1.1.0",
+    "creado_en": "2026-05-02",
+    "contrato_referencia": "arquitectura/decisiones/_contratos/observability.contract.json",
+    "supersedes_nota": "v1.1.0 (POC2 ai-gateway, finding F4): cerrada la API canonica de metrics. metrics.api_canonical_methods declara que SOLO increment/gauge/timing son canonicos. histogram/observe/record/set/measure/sample son drift (deprecated, con reemplazo declarado). Añadidos detection_patterns para que el validator detecte uso de APIs no canonicas. Helpers defensivos que detectan multiples metodos son anti-patron explicito."
+  },
+
+  "regla": "Logs estructurados (identifier + fields), métricas por hecho de negocio con prefix de módulo, correlation_id se propaga en cadenas de eventos. Secrets nunca en payloads observables. Severidad significativa (debug/info/warn/error). El módulo usa el logger/metrics inyectados por el core, nunca instancia los suyos.",
+
+  "logger": {
+    "entry_shape": {
+      "identifier":     "string estable con patrón <module>.<entity>.<action_or_result>, ej. 'firmware.build_completed'",
+      "level":          "uno de debug | info | warn | error",
+      "timestamp":      "ISO 8601 (lo añade el logger inyectado, el módulo no se preocupa)",
+      "module":         "string con this.name del módulo emisor (lo añade el logger inyectado)",
+      "domain_fields":  "object con campos del dominio (correlation_id, project_id si aplica, ...datos del evento)"
+    },
+    "levels": ["debug", "info", "warn", "error"],
+    "signature": "this.logger.<level>(identifier, fields)",
+    "transport": {
+      "topic_pattern": "core/{core-id}/logs/{level}",
+      "qos": 0,
+      "retain": false
+    },
+    "fields_added_by_logger": [
+      "timestamp",
+      "module",
+      "level"
+    ],
+    "fields_provided_by_module": [
+      "identifier",
+      "domain_fields"
+    ]
+  },
+
+  "metrics": {
+    "types": [
+      {
+        "name": "counter",
+        "descripcion": "Contador sumable monotónicamente creciente. Sirve para contar ocurrencias de un evento (cuántas veces ha pasado algo).",
+        "when_to_use": "Eventos contables: builds completados, errores, requests procesados, bytes servidos. Sufijos típicos: .total, .errors, .bytes.",
+        "signature": "this.metrics.increment(name, [delta], [labels])"
+      },
+      {
+        "name": "gauge",
+        "descripcion": "Valor instantáneo que sube y baja. Sirve para medir cantidades actuales (no acumuladas).",
+        "when_to_use": "Cantidades actuales: módulos cargados, conexiones activas, tamaño de cola, items en cache. Sufijo típico: .count.",
+        "signature": "this.metrics.gauge(name, value, [labels])"
+      },
+      {
+        "name": "timing",
+        "descripcion": "Duración medida en milisegundos. Sirve para medir cuánto tarda una operación.",
+        "when_to_use": "Latencias y duraciones: tiempo de build, latencia de request, duración de procesamiento. Sufijo típico: .duration.",
+        "signature": "this.metrics.timing(name, ms, [labels])"
+      }
+    ],
+    "naming_pattern": "<module>.<entity>.<accion_pasado>.<sufijo>",
+    "canonical_suffixes": {
+      ".total":    "Counter sumable monotónico — total acumulado de eventos contables. Ej: firmware.build_completed.total",
+      ".count":    "Gauge — cantidad instantánea actual. Ej: firmware.pending_otas.count",
+      ".duration": "Timing — duración en milisegundos. Ej: firmware.build.duration",
+      ".bytes":    "Counter sumable — total de bytes (servidos, escritos, transmitidos). Ej: firmware.binary_served.bytes",
+      ".errors":   "Counter sumable — total de errores específicos. Ej: firmware.binary_served.errors"
+    },
+    "canonical_dimensions": [
+      {
+        "name": "project_id",
+        "descripcion": "Identificador del proyecto/tenant. Aplicar cuando la métrica es relevante por proyecto (sistemas multi-tenant)."
+      },
+      {
+        "name": "source",
+        "descripcion": "Origen del evento que generó la métrica. Valores comunes: cli, ui, auto, agent, system."
+      },
+      {
+        "name": "core_id",
+        "descripcion": "Identificador del core. Lo añade el core automáticamente en despliegues multi-core (Manzana). El módulo no lo emite."
+      },
+      {
+        "name": "type",
+        "descripcion": "Subset/categoría dentro de la métrica. Ej: en health.alerts.total con type='offline'."
+      }
+    ],
+    "prefix_per_module": true,
+    "example_metrics": [
+      "firmware.build_completed.total",
+      "firmware.pending_otas.count",
+      "firmware.build.duration",
+      "firmware.binary_served.bytes",
+      "firmware.binary_served.errors",
+      "recipe.created.total",
+      "recipe.cost.calculated.duration",
+      "device.online.count"
+    ],
+    "api_canonical_methods": {
+      "allowed": ["increment", "gauge", "timing"],
+      "deprecated": [
+        { "method": "histogram", "reemplazo": "timing", "razon": "Para distribuciones de duracion (ms) usar timing(name, ms, labels). Para distribuciones generales no se soporta v1." },
+        { "method": "observe",   "reemplazo": "gauge",  "razon": "Para valores instantaneos usar gauge(name, value, labels). 'observe' viene de Prometheus client y no encaja con la API minima del repo." },
+        { "method": "record",    "reemplazo": "increment", "razon": "Alias generico no canonico. Para counters usar increment(name, delta, labels)." }
+      ],
+      "rule": "La API canonica de this.metrics SOLO incluye increment, gauge y timing. Cualquier otro metodo (histogram, observe, record, etc.) es drift. Helpers defensivos que detectan multiples metodos son anti-patron — el modulo debe asumir la API canonica disponible."
+    }
+  },
+
+  "tracing": {
+    "v1_status": "optional",
+    "api_signature_when_present": "this.tracer.startSpan(name, { ...attrs })",
+    "propagation_pattern_v1": "En v1.0 el correlation_id en logs y eventos sustituye al span. El handler propaga correlation_id en sus publishes y logs; el operador puede reconstruir la cadena de causalidad por correlation_id sin necesidad de spans formales.",
+    "v2_plans": "v2 puede formalizar tracing como obligatorio si la necesidad operativa justifica el coste (backend de trazas como Jaeger/Tempo, sampling, propagación de trace_id binario). No bloquea v1."
+  },
+
+  "correlation_id": {
+    "field_name": "correlation_id",
+    "when_required": "Obligatorio en eventos del patrón request/response (mqttRequest del framework). Recomendado en cadenas de eventos donde un request del usuario desencadena múltiples handlers — sin él la trazabilidad cross-módulo se rompe.",
+    "propagation_pattern": "El handler que recibe payload.correlation_id lo incluye OBLIGATORIAMENTE en (a) los this.eventBus.publish posteriores: this.eventBus.publish('x.processed', { ...data, correlation_id }), y (b) los this.logger.X emitidos durante el procesamiento: this.logger.info('x.received', { ...fields, correlation_id }).",
+    "format": "string opaco generado por el caller (UUID, ULID, timestamp+random). Sin formato impuesto — el sistema solo lee el campo, no lo parsea."
+  },
+
+  "secrets": {
+    "canonical_sensitive_field_names": [
+      "password",
+      "token",
+      "api_key",
+      "apiKey",
+      "secret",
+      "authorization",
+      "cookie",
+      "session_token",
+      "sessionToken",
+      "private_key",
+      "privateKey",
+      "refresh_token",
+      "refreshToken",
+      "access_token",
+      "accessToken",
+      "client_secret",
+      "clientSecret"
+    ],
+    "policy": "Los campos cuya key coincida con la lista canónica NUNCA aparecen en payloads de logs, métricas o eventos observables. Esta regla es absoluta — no admite excepciones por conveniencia. El módulo es responsable de no incluirlos; el linter detecta drift y lo reporta como ERROR (no warning) — riesgo de compliance.",
+    "exception_handling": "Si un módulo necesita loguear algo derivado de un secreto (ej. validación de credencial, expiración), loguea metadata, NO el valor. Patrón: this.logger.info('credential.validated', { credential_id, type, valid_until, status }) en lugar de incluir el token. Si necesitas trazar uso de un token, usa el ID o un hash, no el valor."
+  },
+
+  "detection_patterns": {
+    "console_log_regex": "console\\.(log|error|warn|info|debug)\\s*\\(",
+    "prohibited_logger_imports": [
+      "pino",
+      "winston",
+      "bunyan",
+      "debug",
+      "log4js",
+      "loglevel",
+      "signale",
+      "consola",
+      "tslog"
+    ],
+    "sensitive_field_names": [
+      "password",
+      "token",
+      "api_key",
+      "apiKey",
+      "secret",
+      "authorization",
+      "cookie",
+      "session_token",
+      "sessionToken",
+      "private_key",
+      "privateKey",
+      "refresh_token",
+      "refreshToken",
+      "access_token",
+      "accessToken",
+      "client_secret",
+      "clientSecret"
+    ],
+    "template_literal_in_logger_regex": "this\\.logger\\.\\w+\\s*\\(\\s*`[^`]*\\$\\{",
+    "concat_in_logger_regex": "this\\.logger\\.\\w+\\s*\\(\\s*['\"][^'\"]*['\"]\\s*\\+",
+    "non_canonical_metrics_api_regex": "this\\.metrics\\.(histogram|observe|record|set|measure|sample)\\s*\\(",
+    "non_canonical_metrics_methods": ["histogram", "observe", "record", "set", "measure", "sample"]
+  }
+}

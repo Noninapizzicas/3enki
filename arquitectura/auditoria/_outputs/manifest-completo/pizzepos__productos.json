@@ -1,0 +1,167 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/productos",
+    "ubicacion": "modules/pizzepos/productos",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "productos",
+    "version": "2.3.0",
+    "description_oficial": "Catálogo de productos - Actualizado desde menús generados por IA",
+    "author": "Pizzepos Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_pizzepos",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "producto.creado",      "description": "Nuevo producto creado desde menú generado" },
+      { "event": "producto.actualizado", "description": "Producto actualizado" },
+      { "event": "producto.eliminado",   "description": "Producto eliminado del catálogo" },
+      { "event": "catalogo.actualizado", "description": "Catálogo completo actualizado desde menú" }
+    ],
+    "subscribes": [
+      { "event": "carta.actualizada",    "handler": "onCartaGenerada",      "extras": {} },
+      { "event": "project.activated",    "handler": "onProjectActivated",   "extras": {} },
+      { "event": "project.get.response", "handler": "onProjectGetResponse", "extras": {} }
+    ],
+    "provides_eventos": ["producto.creado", "producto.actualizado", "producto.eliminado"]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    { "method": "GET",   "path": "/productos",       "handler": "handleListProductos",   "description": "Listar productos (filtros: categoria, activo)",         "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",   "path": "/productos/:id",   "handler": "handleGetProducto",     "description": "Obtener producto por ID",                              "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",   "path": "/productos/search","handler": "handleSearchProductos",  "description": "Buscar productos por nombre",                          "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",   "path": "/categorias",      "handler": "handleListCategorias",  "description": "Listar categorías disponibles",                         "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",   "path": "/ingredientes",    "handler": "handleListIngredientes","description": "Listar ingredientes disponibles para pizzas al gusto",   "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",   "path": "/pizzas",          "handler": "handleListPizzas",      "description": "Listar pizzas disponibles para mitad y mitad",          "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "PATCH", "path": "/productos/:id",   "handler": "handleUpdateProducto",  "description": "Actualizar producto (publica producto.actualizado)",     "request_schema_ref": "./schemas/producto.json#/definitions/update_request", "response_schema_ref": null },
+    { "method": "DELETE","path": "/productos/:id",   "handler": "handleDeleteProducto",  "description": "Eliminar producto (publica producto.eliminado)",          "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",   "path": "/stats",           "handler": "handleGetStats",        "description": "Estadísticas del catálogo",                             "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",   "path": "/health",          "handler": "handleHealthCheck",     "description": "Health check",                                         "request_schema_ref": null, "response_schema_ref": null },
+    { "method": "GET",   "path": "/metrics",         "handler": "handleGetMetrics",      "description": "Métricas del módulo",                                  "request_schema_ref": null, "response_schema_ref": null }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "producto.creado.total",
+        "producto.actualizado.total",
+        "producto.eliminado.total",
+        "catalogo.actualizado.total",
+        "producto.errors.total"
+      ],
+      "gauges": [
+        "producto.activos.count",
+        "producto.por_categoria.count"
+      ],
+      "timings": [
+        "producto.list.duration",
+        "producto.search.duration",
+        "catalogo.sync.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Catálogo de Productos",
+    "icon": "📦",
+    "views_keys": ["main", "create", "edit", "detail"],
+    "section_widget_types": ["dashboard", "fullscreen", "grid", "modal"],
+    "permissions_declaradas": ["admin", "gerente", "camarero"],
+    "tamano_bytes": 2853,
+    "endpoints_referenciados": [
+      "/modules/productos/export",
+      "/modules/productos/productos",
+      "/modules/productos/productos/{id}"
+    ],
+    "mqtt_topics_declarados": [
+      "producto.creado",
+      "producto.actualizado",
+      "producto.eliminado",
+      "catalogo.actualizado"
+    ]
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/pizzepos/productos/schemas/events.json",
+      "modules/pizzepos/productos/schemas/producto.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 8622,
+    "module_json_lineas": 321,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "main field ausente (no declarado en module.json)",
+      "No tiene tools declaradas — auto-sync pasivo vía eventos",
+      "No tiene ui_handlers/handlers — operación HTTP-only + eventos",
+      "observability.logging tiene campo extra 'correlation_id' no capturado en schema (no hay campo en observability_declarada)",
+      "provides.queries declara 3 queries que no son eventos ni tools — patrón inusual",
+      "ui.access_level='gerente' — campo no estándar en ui declarativa"
+    ]
+  }
+}

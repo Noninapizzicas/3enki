@@ -1,0 +1,272 @@
+{
+  "_meta": {
+    "convencion": "lifecycle",
+    "version": "1.0.0",
+    "creado_en": "2026-04-30",
+    "contrato_referencia": "arquitectura/decisiones/_contratos/lifecycle.contract.json",
+    "supersedes_nota": null
+  },
+
+  "regla": "Cada módulo es un invitado: recibe del core lo que necesita en async onLoad(core), guarda referencias en this.*, libera todo en async onUnload(). Hot-reload safe por construcción. Estado del módulo lo lleva el core (5 estados predecibles: unloaded → loading → loaded → unloading → unloaded).",
+
+  "signatures": {
+    "onLoad": {
+      "signature": "async onLoad(core)",
+      "is_async": true,
+      "params": [
+        {
+          "name": "core",
+          "type": "object con logger, metrics, eventBus + opcionales",
+          "required": true
+        }
+      ],
+      "returns": "Promise<void> (resuelve cuando el módulo está listo para recibir eventos)",
+      "semantics": "El loader hace 'await module.onLoad(core)' y solo después ejecuta auto-wiring y marca el módulo como loaded. Si la promesa rechaza, el módulo se marca failed y no se auto-wire."
+    },
+    "onUnload": {
+      "signature": "async onUnload()",
+      "is_async": true,
+      "params": [],
+      "returns": "Promise<void> (resuelve cuando todos los recursos están liberados)",
+      "semantics": "El loader hace 'await module.onUnload()' antes de marcar unloaded. Si rechaza o no resuelve en timeout_ms, fuerza unload con leak controlado.",
+      "timeout_ms": 5000
+    }
+  },
+
+  "core_api": {
+    "required": [
+      {
+        "name": "logger",
+        "type": "Logger",
+        "descripcion": "Logger estructurado JSON. Métodos: info, warn, error, debug. Cada llamada espera (mensaje, campos).",
+        "ejemplo_uso": "this.logger = core.logger;"
+      },
+      {
+        "name": "metrics",
+        "type": "Metrics",
+        "descripcion": "Cliente de métricas. Métodos: increment(name, [labels]), gauge(name, value, [labels]), timing(name, ms, [labels]).",
+        "ejemplo_uso": "this.metrics = core.metrics;"
+      },
+      {
+        "name": "eventBus",
+        "type": "EventBus",
+        "descripcion": "Bus de eventos híbrido (EventEmitter + MQTT + Hooks). Métodos: publish(name, payload), subscribe(name, handler).",
+        "ejemplo_uso": "this.eventBus = core.eventBus;"
+      }
+    ],
+    "optional": [
+      {
+        "name": "uiHandler",
+        "type": "UiHandler",
+        "descripcion": "Para módulos que exponen ui_handlers. Métodos: register(module, action, handler), unregister(module, action).",
+        "ejemplo_uso": "if (core.uiHandler) { core.uiHandler.register(this.name, 'list', this.handleList.bind(this)); }"
+      },
+      {
+        "name": "config",
+        "type": "Object",
+        "descripcion": "Configuración global. El módulo SOLO accede a su slice: core.config?.[this.name].",
+        "ejemplo_uso": "const myConfig = { ...defaults, ...(core.config?.[this.name] || {}) };"
+      },
+      {
+        "name": "modules",
+        "type": "ModuleRegistry",
+        "descripcion": "Registry de otros módulos cargados. Solo para módulos inspector-like (system-inspector, dashboard). Métodos: list(), get(name).",
+        "ejemplo_uso": "if (core.modules) { const all = core.modules.list(); }"
+      }
+    ]
+  },
+
+  "state_machine": {
+    "estados": [
+      {
+        "id": "unloaded",
+        "descripcion": "El módulo no está cargado. Estado inicial y final tras unload limpio.",
+        "es_terminal": false,
+        "es_fallo": false
+      },
+      {
+        "id": "loading",
+        "descripcion": "El loader ha llamado onLoad y está esperando la promesa. Las suscripciones aún no están activas.",
+        "es_terminal": false,
+        "es_fallo": false
+      },
+      {
+        "id": "loaded",
+        "descripcion": "onLoad completó, auto-wiring hecho. El módulo está activo recibiendo eventos.",
+        "es_terminal": false,
+        "es_fallo": false
+      },
+      {
+        "id": "unloading",
+        "descripcion": "El loader ha llamado onUnload. Las suscripciones ya se han desconectado.",
+        "es_terminal": false,
+        "es_fallo": false
+      },
+      {
+        "id": "failed",
+        "descripcion": "onLoad rechazó. El módulo no está auto-wired. Estado terminal hasta retry manual.",
+        "es_terminal": true,
+        "es_fallo": true
+      },
+      {
+        "id": "unloaded_with_errors",
+        "descripcion": "onUnload rechazó o expiró. Recursos posiblemente leaked. Estado de fallo del unload.",
+        "es_terminal": true,
+        "es_fallo": true
+      }
+    ],
+    "transiciones": [
+      {
+        "desde": "unloaded",
+        "hasta": "loading",
+        "disparada_por": "loader",
+        "condicion": "El loader empieza a cargar el módulo (autodescubrimiento, hot-reload, retry manual)."
+      },
+      {
+        "desde": "loading",
+        "hasta": "loaded",
+        "disparada_por": "loader",
+        "condicion": "onLoad resolvió + auto-wiring completado sin errores."
+      },
+      {
+        "desde": "loading",
+        "hasta": "failed",
+        "disparada_por": "loader",
+        "condicion": "onLoad rechazó. El loader captura el error, lo loguea, marca failed."
+      },
+      {
+        "desde": "loaded",
+        "hasta": "unloading",
+        "disparada_por": "loader",
+        "condicion": "Operador descarga el módulo, o fs.watch detecta cambio (hot-reload), o el core se apaga."
+      },
+      {
+        "desde": "unloading",
+        "hasta": "unloaded",
+        "disparada_por": "loader",
+        "condicion": "onUnload resolvió dentro del timeout."
+      },
+      {
+        "desde": "unloading",
+        "hasta": "unloaded_with_errors",
+        "disparada_por": "timeout",
+        "condicion": "onUnload rechazó o expiró (>5000ms). El loader fuerza el unload con leak."
+      }
+    ]
+  },
+
+  "auto_wiring_sequence": [
+    { "orden": 1,  "accion": "Leer module.json del directorio del módulo (manifest)",                              "responsable": "loader", "nota": null },
+    { "orden": 2,  "accion": "Instanciar la clase del módulo (new ModuleClass())",                                 "responsable": "loader", "nota": null },
+    { "orden": 3,  "accion": "Marcar estado: loading",                                                              "responsable": "loader", "nota": null },
+    { "orden": 4,  "accion": "Llamar await module.onLoad(core) — el módulo inicializa su estado interno",         "responsable": "loader", "nota": "Si rechaza → estado: failed (transición a otro estado)" },
+    { "orden": 5,  "accion": "Auto-wire suscripciones declaradas en manifest.events.subscribes",                    "responsable": "loader", "nota": null },
+    { "orden": 6,  "accion": "Auto-wire tools del LLM declaradas en manifest.tools",                               "responsable": "loader", "nota": null },
+    { "orden": 7,  "accion": "Auto-wire ui_handlers declarados en manifest.ui_handlers",                            "responsable": "loader", "nota": null },
+    { "orden": 8,  "accion": "Auto-wire rutas HTTP declaradas en manifest.apis",                                    "responsable": "loader", "nota": null },
+    { "orden": 9,  "accion": "Marcar estado: loaded",                                                               "responsable": "loader", "nota": null },
+    { "orden": 10, "accion": "Publicar core/{core-id}/status retained con el módulo añadido a modules_loaded",     "responsable": "loader", "nota": null }
+  ],
+
+  "hot_reload_sequence": [
+    { "orden": 1,  "accion": "fs.watch detecta cambio en archivo del módulo",                                       "responsable": "loader", "nota": null },
+    { "orden": 2,  "accion": "Marcar estado: unloading",                                                            "responsable": "loader", "nota": null },
+    { "orden": 3,  "accion": "Auto-unwire suscripciones / tools / ui_handlers / rutas HTTP del módulo viejo",      "responsable": "loader", "nota": null },
+    { "orden": 4,  "accion": "Llamar await oldModule.onUnload() (con timeout 5s)",                                  "responsable": "loader", "nota": "Si rechaza/timeout → unloaded_with_errors pero el reload sigue" },
+    { "orden": 5,  "accion": "Descartar la instancia y la referencia a la clase vieja",                             "responsable": "loader", "nota": "Permite GC liberar la versión anterior" },
+    { "orden": 6,  "accion": "Limpiar require.cache para el archivo del módulo",                                    "responsable": "loader", "nota": null },
+    { "orden": 7,  "accion": "Re-require fresh del archivo del módulo (importa la nueva versión)",                  "responsable": "loader", "nota": null },
+    { "orden": 8,  "accion": "Instanciar la nueva clase (new NewModuleClass())",                                    "responsable": "loader", "nota": null },
+    { "orden": 9,  "accion": "Marcar estado: loading",                                                              "responsable": "loader", "nota": null },
+    { "orden": 10, "accion": "Llamar await newModule.onLoad(core)",                                                 "responsable": "loader", "nota": null },
+    { "orden": 11, "accion": "Auto-wire (subscribes/tools/ui_handlers/rutas HTTP)",                                 "responsable": "loader", "nota": null },
+    { "orden": 12, "accion": "Marcar estado: loaded + publicar status update",                                      "responsable": "loader", "nota": null }
+  ],
+
+  "error_handling": {
+    "arranque": {
+      "on_error_actions": [
+        "Capturar el error con try/catch alrededor del await onLoad",
+        "Loguear con this.logger.error('module.load_failed', { module, error: err.message, stack: err.stack })",
+        "Marcar el módulo como failed (estado terminal)",
+        "NO ejecutar auto-wiring (los handlers no existen)",
+        "Publicar evento observable_event con detalles del fallo",
+        "Continuar cargando otros módulos (un fallo NO bloquea el sistema)"
+      ],
+      "observable_event": "core/{core-id}/module/{name}/load_failed",
+      "recovery": "Operador puede llamar reload manual via UI/CLI; el loader reintenta el ciclo desde unloaded → loading.",
+      "timeout_ms": null
+    },
+    "apagado": {
+      "on_error_actions": [
+        "El loader hace await onUnload() con timeout 5000ms",
+        "Si rechaza: capturar, loguear el error con stack",
+        "Si expira: loguear timeout warning",
+        "En ambos casos: marcar unloaded_with_errors",
+        "Forzar liberación de referencias del módulo (descartar instancia)",
+        "Publicar observable_event con detalles",
+        "Los recursos no liberados (timers, listeners) quedan como leaks aceptados"
+      ],
+      "observable_event": "core/{core-id}/module/{name}/unload_error",
+      "recovery": "Si un módulo aparece repetidamente con unload_error, candidato prioritario a refactor. Reinicio del core libera los leaks.",
+      "timeout_ms": 5000
+    }
+  },
+
+  "config_namespacing": {
+    "access_pattern": "core.config?.[this.name]",
+    "scope": "Cada módulo accede SOLO a su slice de configuración, identificada por su this.name (que coincide con el slug del directorio).",
+    "prohibited_patterns": [
+      "core.config['otro-modulo']",
+      "core.config.otroModulo",
+      "core.config (acceso al objeto completo sin namespace)"
+    ],
+    "merge_pattern": "this.config = { ...defaults, ...(core.config?.[this.name] || {}) }"
+  },
+
+  "detection_patterns": {
+    "prohibited_signatures": [
+      "init",
+      "initialize",
+      "start",
+      "boot",
+      "setup",
+      "shutdown",
+      "stop",
+      "teardown",
+      "destroy",
+      "dispose"
+    ],
+    "forbidden_core_internals": [
+      "core._broker",
+      "core._loader",
+      "core._registry",
+      "core._internal",
+      "core.eventBus._",
+      "core.modules._"
+    ],
+    "module_scope_state_regex": "^\\s*(let|var)\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*=\\s*(new\\s+(Map|Set|WeakMap|WeakSet)|\\[|\\{)",
+    "silent_catch_in_load_regex": "catch\\s*\\([^)]*\\)\\s*\\{\\s*(\\}|//[^\\n]*\\s*\\})",
+    "state_machine_event_pattern": "^module\\.[a-z][a-z0-9-]*\\.(ready|initialized|started|loaded)$",
+    "reservation_keywords": [
+      "setInterval",
+      "setTimeout",
+      "fs.watch",
+      "spawn",
+      "exec",
+      "mqtt.subscribe",
+      "addListener",
+      "on('"
+    ],
+    "release_keywords": [
+      "clearInterval",
+      "clearTimeout",
+      "unwatch",
+      ".close()",
+      "kill",
+      "mqtt.unsubscribe",
+      "removeListener",
+      "off('"
+    ]
+  }
+}

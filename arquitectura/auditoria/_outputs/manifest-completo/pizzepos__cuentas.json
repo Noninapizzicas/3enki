@@ -1,0 +1,239 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/cuentas",
+    "ubicacion": "modules/pizzepos/cuentas",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "cuentas",
+    "version": "2.3.0",
+    "description_oficial": "Gestión de cuentas con ciclo de vida completo - 100% Event-Driven",
+    "author": "Pizzepos Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_pizzepos",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "cuenta.creada",        "description": "Nueva cuenta creada" },
+      { "event": "cuenta.actualizada",   "description": "Cuenta actualizada" },
+      { "event": "cuenta.eliminada",     "description": "Cuenta eliminada" },
+      { "event": "cuenta.estado_cambiado", "description": "Estado de cuenta cambió" }
+    ],
+    "subscribes": [
+      { "event": "comandero.item_agregado",    "handler": "onComanderoItemAgregado",    "extras": { "description": "Item agregado al buffer del comandero, actualizar totales" } },
+      { "event": "comandero.item_eliminado",   "handler": "onComanderoItemEliminado",   "extras": { "description": "Item eliminado del buffer del comandero, actualizar totales" } },
+      { "event": "comandero.item_actualizado", "handler": "onComanderoItemActualizado", "extras": { "description": "Item actualizado (cantidad +/-), ajustar items/total" } },
+      { "event": "comandero.enviar_cocina",    "handler": "onComanderoEnviarCocina",    "extras": { "description": "Envío a cocina, transicionar a en_preparacion" } },
+      { "event": "cocina.pedido_listo",        "handler": "onCocinaPedidoListo",        "extras": { "description": "Pedido listo en cocina, transicionar a listo" } },
+      { "event": "cobro.iniciado",             "handler": "onCobroIniciado",            "extras": { "description": "Cobro iniciado, transicionar a para_cobrar" } },
+      { "event": "cobro.procesado",            "handler": "onCobroProcesado",           "extras": { "description": "Cobro procesado, transicionar a cobrado y auto-eliminar" } },
+      { "event": "cuenta.cerrada",             "handler": "onCuentaExternaCerrada",     "extras": { "description": "Cuenta cerrada desde canal externo, limpiar del Map y timers" } }
+    ],
+    "provides_eventos": [
+      "cuenta.creada",
+      "cuenta.actualizada",
+      "cuenta.eliminada",
+      "cuenta.estado_cambiado"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "POST",
+      "path": "/cuentas",
+      "handler": "handleCreateCuenta",
+      "description": "Crear nueva cuenta (publica evento cuenta.creada)",
+      "request_schema_ref": "./schemas/cuenta.json#/definitions/create_request",
+      "response_schema_ref": "./schemas/cuenta.json#/definitions/create_response"
+    },
+    {
+      "method": "GET",
+      "path": "/cuentas",
+      "handler": "handleListCuentas",
+      "description": "Listar cuentas activas",
+      "request_schema_ref": null,
+      "response_schema_ref": "./schemas/cuenta.json#/definitions/list_response"
+    },
+    {
+      "method": "GET",
+      "path": "/cuentas/:id",
+      "handler": "handleGetCuenta",
+      "description": "Obtener cuenta por ID",
+      "request_schema_ref": null,
+      "response_schema_ref": "./schemas/cuenta.json#/definitions/get_response"
+    },
+    {
+      "method": "DELETE",
+      "path": "/cuentas/:id",
+      "handler": "handleDeleteCuenta",
+      "description": "Eliminar cuenta (publica evento cuenta.eliminada)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/cuentas/:id/marcar_entregado",
+      "handler": "handleMarcarEntregado",
+      "description": "Marcar cuenta como entregada (listo → entregado)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/stats",
+      "handler": "handleGetStats",
+      "description": "Estadísticas de cuentas",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "max_cuentas_activas", "tipo": "number",  "valor_default": 100 },
+      { "key": "auto_numeracion",     "tipo": "boolean", "valor_default": true },
+      { "key": "persistence",         "tipo": "object",  "valor_default": { "enabled": false, "type": "memory", "notes": "En producción cambiar a DB" } }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "cuenta.creada.total",
+        "cuenta.eliminada.total",
+        "cuenta.transicion.total",
+        "cuenta.errors.total"
+      ],
+      "gauges": [
+        "cuenta.activas.count",
+        "cuenta.por_tipo.local",
+        "cuenta.por_tipo.delivery",
+        "cuenta.por_tipo.llevar",
+        "cuenta.por_estado.pendiente",
+        "cuenta.por_estado.con_pedido",
+        "cuenta.por_estado.en_preparacion",
+        "cuenta.por_estado.listo",
+        "cuenta.por_estado.entregado",
+        "cuenta.por_estado.para_cobrar",
+        "cuenta.por_estado.cobrado",
+        "cuenta.alertas.count"
+      ],
+      "timings": [
+        "cuenta.create.duration",
+        "cuenta.list.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Cuentas Activas",
+    "icon": "📋",
+    "views_keys": ["main"],
+    "section_widget_types": ["cuenta-type-button", "button"],
+    "permissions_declaradas": ["admin", "gerente", "camarero"],
+    "tamano_bytes": 1847,
+    "endpoints_referenciados": [
+      "/modules/cuentas/cuentas",
+      "/ui/comandero?cuenta_id={id}",
+      "/ui/comandero?cuenta_id={new_id}"
+    ],
+    "mqtt_topics_declarados": [
+      "cuenta.creada",
+      "cuenta.actualizada",
+      "cuenta.eliminada",
+      "cuenta.estado_cambiado"
+    ]
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/pizzepos/cuentas/schemas/cuenta.json",
+      "modules/pizzepos/cuentas/schemas/events.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": true,
+    "ubicacion": "_archived/2026-02-13_otros-modulos/modules/cuentas"
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 8283,
+    "module_json_lineas": 294,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "main no declarado (null) — módulo sin entry point explícito",
+      "subscribes items incluyen campo 'description' extra (no en schema de subscribes del contrato, capturado en extras)",
+      "provides.queries declara 'cuenta.obtener' y 'cuenta.listar' — no son eventos pub/sub, son queries (outlier semántico dentro de campo canónico)"
+    ]
+  }
+}

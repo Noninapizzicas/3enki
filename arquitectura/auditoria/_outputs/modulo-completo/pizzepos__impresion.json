@@ -1,0 +1,57 @@
+{
+  "_meta": { "modulo": "pizzepos/impresion", "ubicacion": "modules/pizzepos/impresion", "auditado_en": "2026-04-29", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__impresion.json" },
+  "identidad": { "name": "impresion", "version": "3.0.0", "description_oficial": "Impresión de tickets pizzepos — comandas cocina + tickets venta + tickets pieza vía MQTT directo a impresoras ESP32", "author": "Pizzepos Team", "main_declarado": "index.js", "main_real": "modules/pizzepos/impresion/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": null, "tier_declarado": null, "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "literal", "valor": "impresion.error",                    "variables_referenciadas": [] }, "ubicacion": "modules/pizzepos/impresion/index.js:368", "metodo_contenedor": null, "es_handler_de": null, "bloque_logico": "tras error de impresión", "payload": { "tipo": "object_literal", "campos_visibles": ["error"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": false, "es_return": false, "snippet": "      this.eventBus.publish('impresion.error', { ... });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "impresion.ticket_pieza_generado",   "variables_referenciadas": [] }, "ubicacion": "modules/pizzepos/impresion/index.js:561", "metodo_contenedor": null, "es_handler_de": null, "bloque_logico": "tras generar ticket pieza", "payload": { "tipo": "variable", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish('impresion.ticket_pieza_generado', registro);", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "impresion.comanda_generada",        "variables_referenciadas": [] }, "ubicacion": "modules/pizzepos/impresion/index.js:618", "metodo_contenedor": null, "es_handler_de": null, "bloque_logico": "tras generar comanda cocina", "payload": { "tipo": "variable", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish('impresion.comanda_generada', registro);", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "impresion.ticket_venta_generado",  "variables_referenciadas": [] }, "ubicacion": "modules/pizzepos/impresion/index.js:749", "metodo_contenedor": null, "es_handler_de": null, "bloque_logico": "tras generar ticket venta", "payload": { "tipo": "variable", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish('impresion.ticket_venta_generado', registro);", "declarado_en_manifest": true }
+    ],
+    "subscribes": [
+      { "nombre": "cocina.item_ticket",    "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "cuenta.creada",         "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "mesa.abierta",          "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "mesa.renombrada",       "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "cuenta.eliminada",      "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "mesa.cerrada",          "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "llevar.ticket_creado",  "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "cuenta.actualizada",    "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "caja.cerrada",          "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "dia.iniciado",          "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["impresion.comanda_generada", "impresion.error", "impresion.ticket_venta_generado", "impresion.ticket_pieza_generado"],
+      "publica_literales_en_codigo": ["impresion.comanda_generada", "impresion.error", "impresion.ticket_pieza_generado", "impresion.ticket_venta_generado"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [], "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["cocina.item_ticket", "cuenta.creada", "mesa.abierta", "mesa.renombrada", "cuenta.eliminada", "mesa.cerrada", "llevar.ticket_creado", "cuenta.actualizada", "caja.cerrada", "dia.iniciado"],
+      "subscribes_realmente_registrados": ["cocina.item_ticket", "cuenta.creada", "mesa.abierta", "mesa.renombrada", "cuenta.eliminada", "mesa.cerrada", "llevar.ticket_creado", "cuenta.actualizada", "caja.cerrada", "dia.iniciado"],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [], "ui_handlers": [], "apis_http": [],
+  "estado": { "memoria": [], "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": "Genera tickets/comandas y los envía por MQTT directo a impresoras ESP32 (línea 1187 await mqtt.publish — uso de this.mqtt directo, no eventBus)." } },
+  "configuracion": { "env_vars": [], "module_json_config_keys": [], "paths_proyecto_referenciados": [], "valores_hardcoded_observables": [] },
+  "lifecycle": { "onLoad": { "ubicacion": null, "acciones": ["guarda this.logger / this.eventBus / this.mqtt (cliente MQTT directo)"], "guarda_referencias_externas": ["this.logger", "this.eventBus", "this.mqtt"], "puede_fallar_silenciosamente": false }, "onUnload": { "ubicacion": null, "acciones": [], "estado_no_limpiado": [] }, "auto_wired_subscribes": true, "subscribes_dinamicos_en_lifecycle": [] },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "core/gateway/UIRequestHandler (cliente MQTT)", "via_evento": "this.mqtt referencia directa para publish a topics ESP32", "obligatorio_en": "onLoad", "ubicacion_uso": "modules/pizzepos/impresion/index.js:1187", "es_cross_vertical": false },
+    { "modulo_dependido": "pizzepos/cocina",                              "via_evento": "cocina.item_ticket (subscribe)",                              "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/impresion/index.js", "es_cross_vertical": false }
+  ],
+  "modos_de_fallo": [],
+  "observabilidad": { "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('impresion.<accion>', { ...campos })", "campos_estructurados_observados": [], "ejemplos": [] }, "metricas_emitidas": [], "metricas_drift_vs_manifest": [], "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" } },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": [], "context_json_existe": false, "prompt_json_existe": false, "readme_existe": true, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": { "todos": [], "comentarios_porque": [], "workarounds_detectados": [] },
+  "metricas_fisicas": { "lineas_index_js": 1257, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": { "campos_no_canonicos_en_manifest": [], "patrones_no_canonicos_en_codigo": [{ "patron": "MQTT directo a ESP32 (línea 1187 await mqtt.publish topic, payload, qos:1) — bypass del eventBus para periféricos físicos. Mismo patrón que chat-io a frontend.", "ejemplo": "modules/pizzepos/impresion/index.js:1187", "rareza": "inusual" }] },
+  "quirks": {
+    "warnings": [
+      "P3 — Impresión pizzepos v3.0. 0 drift declarativo. 4 publica + 10 subscribes.",
+      "Tercer módulo del repo con MQTT directo (junto con chat-io y carta-impresion via agentes): MQTT a topics ESP32 para impresoras físicas (línea 1187).",
+      "Sistema multi-destino parcial (según contexto)"
+    ],
+    "secciones_vacias_intencionalmente": ["tools", "ui_handlers", "apis_http", "estado.memoria", "estado.persistencia.*", "configuracion.*", "observabilidad.metricas_emitidas", "codigo_intencion.*", "version_archivada"]
+  }
+}

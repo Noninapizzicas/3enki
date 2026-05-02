@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "description": "Registry de canales externos: mapea identificadores externos (chat_id, email, telefono) a proyectos y propositos internos",
   "author": "Event-Core Team",
+  "language": "en",
   "main": "index.js",
-
-  "dependencies": ["database-manager"],
-
+  "dependencies": [
+    "database-manager"
+  ],
   "provides": {
     "events": [
       "channel.registered",
@@ -18,33 +19,42 @@
       "channel.resolve.request"
     ]
   },
-
   "events": {
     "publishes": [
       {
         "event": "channel.registered",
         "description": "Nuevo canal vinculado a un proyecto",
-        "schema": { "$ref": "./schemas/events.json#/definitions/channel_registered" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/channel_registered"
+        }
       },
       {
         "event": "channel.updated",
         "description": "Canal actualizado",
-        "schema": { "$ref": "./schemas/events.json#/definitions/channel_updated" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/channel_updated"
+        }
       },
       {
         "event": "channel.removed",
         "description": "Canal desvinculado",
-        "schema": { "$ref": "./schemas/events.json#/definitions/channel_removed" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/channel_removed"
+        }
       },
       {
         "event": "channel.resolved",
         "description": "Canal resuelto exitosamente a proyecto+proposito",
-        "schema": { "$ref": "./schemas/events.json#/definitions/channel_resolved" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/channel_resolved"
+        }
       },
       {
         "event": "channel-manager.resolve.response",
         "description": "Respuesta a channel-manager.resolve.request (patron ServiceExecutor)",
-        "schema": { "$ref": "./schemas/events.json#/definitions/channel_resolve_response" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/channel_resolve_response"
+        }
       }
     ],
     "subscribes": [
@@ -55,16 +65,38 @@
       }
     ]
   },
-
   "handlers": [
-    { "domain": "channel", "action": "register", "handler": "handleRegister" },
-    { "domain": "channel", "action": "update", "handler": "handleUpdate" },
-    { "domain": "channel", "action": "remove", "handler": "handleRemove" },
-    { "domain": "channel", "action": "resolve", "handler": "handleResolve" },
-    { "domain": "channel", "action": "list", "handler": "handleList" },
-    { "domain": "channel", "action": "list-by-project", "handler": "handleListByProject" }
+    {
+      "domain": "channel",
+      "action": "register",
+      "handler": "handleRegister"
+    },
+    {
+      "domain": "channel",
+      "action": "update",
+      "handler": "handleUpdate"
+    },
+    {
+      "domain": "channel",
+      "action": "remove",
+      "handler": "handleRemove"
+    },
+    {
+      "domain": "channel",
+      "action": "resolve",
+      "handler": "handleResolve"
+    },
+    {
+      "domain": "channel",
+      "action": "list",
+      "handler": "handleList"
+    },
+    {
+      "domain": "channel",
+      "action": "list-by-project",
+      "handler": "handleListByProject"
+    }
   ],
-
   "tools": [
     {
       "name": "channel.resolve",
@@ -75,7 +107,13 @@
         "properties": {
           "channel_type": {
             "type": "string",
-            "enum": ["telegram", "gmail", "whatsapp", "glovo", "web"],
+            "enum": [
+              "telegram",
+              "gmail",
+              "whatsapp",
+              "glovo",
+              "web"
+            ],
             "description": "Tipo de canal externo"
           },
           "external_id": {
@@ -83,7 +121,10 @@
             "description": "Identificador externo (ej: 'mibot:12345', 'cuenta@gmail.com', '+34600123456')"
           }
         },
-        "required": ["channel_type", "external_id"]
+        "required": [
+          "channel_type",
+          "external_id"
+        ]
       }
     },
     {
@@ -106,7 +147,6 @@
       }
     }
   ],
-
   "observability": {
     "logging": {
       "level": "info",
@@ -130,7 +170,6 @@
       ]
     }
   },
-
   "config": {
     "db_project_id": "system",
     "table_name": "channels"

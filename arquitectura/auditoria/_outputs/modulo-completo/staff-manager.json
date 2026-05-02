@@ -1,0 +1,123 @@
+{
+  "_meta": { "modulo": "staff-manager", "ubicacion": "modules/staff-manager", "auditado_en": "2026-04-30", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/staff-manager.json" },
+  "identidad": { "name": "staff-manager", "version": "1.0.0", "description_oficial": "Control de personal con tarjetas NFC (NTAG215) — jornada y distribución de llaves", "author": "Event Core Team", "main_declarado": null, "main_real": "modules/staff-manager/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": null, "tier_declarado": null, "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [],
+    "subscribes": [],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["staff.session.tap_in", "staff.session.tap_out", "staff.session.auto_timeout", "staff.session.manager_close"],
+      "publica_literales_en_codigo": [],
+      "publica_patrones_dinamicos": ["staff.session.${type} via this.core.eventBus.emit() (NOT .publish) en modules/staff-manager/index.js:353 — patrón EventEmitter de Node, único en el repo. type ∈ {tap_in, tap_out, auto_timeout, manager_close} desde SessionManager via callback onSessionEvent"],
+      "publica_declarados_no_emitidos": ["staff.session.tap_in", "staff.session.tap_out", "staff.session.auto_timeout", "staff.session.manager_close"],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": [],
+      "subscribes_realmente_registrados": [],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [
+    { "method": "GET", "path": "/status", "handler_metodo": "handleStatus", "handler_ubicacion": "modules/staff-manager/index.js:97", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/employee", "handler_metodo": "handleEmployeeCreate", "handler_ubicacion": "modules/staff-manager/index.js:116", "auth_observada": "ninguna", "request_body_keys": ["name", "role", "pin"], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/employee", "handler_metodo": "handleEmployeeList", "handler_ubicacion": "modules/staff-manager/index.js:128", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/employee/:id", "handler_metodo": "handleEmployeeGet", "handler_ubicacion": "modules/staff-manager/index.js:140", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "PUT", "path": "/employee/:id", "handler_metodo": "handleEmployeeUpdate", "handler_ubicacion": "modules/staff-manager/index.js:155", "auth_observada": "ninguna", "request_body_keys": ["name", "role", "pin", "active"], "response_keys": ["status", "data"] },
+    { "method": "DELETE", "path": "/employee/:id", "handler_metodo": "handleEmployeeDelete", "handler_ubicacion": "modules/staff-manager/index.js:170", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/session/tap-in", "handler_metodo": "handleTapIn", "handler_ubicacion": "modules/staff-manager/index.js:185", "auth_observada": "ninguna", "request_body_keys": ["employee_id", "device_id"], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/session/tap-out", "handler_metodo": "handleTapOut", "handler_ubicacion": "modules/staff-manager/index.js:204", "auth_observada": "ninguna", "request_body_keys": ["employee_id"], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/session/active", "handler_metodo": "handleSessionActive", "handler_ubicacion": "modules/staff-manager/index.js:222", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/session/history", "handler_metodo": "handleSessionHistory", "handler_ubicacion": "modules/staff-manager/index.js:235", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/session/stale", "handler_metodo": "handleSessionStale", "handler_ubicacion": "modules/staff-manager/index.js:255", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/session/manager-close", "handler_metodo": "handleSessionManagerClose", "handler_ubicacion": "modules/staff-manager/index.js:265", "auth_observada": "ninguna", "request_body_keys": ["employee_id"], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/nfc/employee-card", "handler_metodo": "handleNfcEmployeeCard", "handler_ubicacion": "modules/staff-manager/index.js:285", "auth_observada": "ninguna", "request_body_keys": ["employee_id"], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/nfc/core-tag", "handler_metodo": "handleNfcCoreTag", "handler_ubicacion": "modules/staff-manager/index.js:307", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/nfc/parse", "handler_metodo": "handleNfcParse", "handler_ubicacion": "modules/staff-manager/index.js:330", "auth_observada": "ninguna", "request_body_keys": ["raw"], "response_keys": ["status", "data"] }
+  ],
+  "estado": {
+    "memoria": [
+      { "campo": "this.registry", "tipo": "Object", "ubicacion_init": "modules/staff-manager/index.js:58", "se_invalida_con": "instancia EmployeeRegistry (lib/employees) — close() en onUnload", "leak_potencial": false },
+      { "campo": "this.sessions", "tipo": "Object", "ubicacion_init": "modules/staff-manager/index.js:59", "se_invalida_con": "instancia SessionManager (lib/sessions) — close() en onUnload", "leak_potencial": false },
+      { "campo": "this.dataPath", "tipo": "primitivo", "ubicacion_init": "modules/staff-manager/index.js:38", "se_invalida_con": "nunca", "leak_potencial": false },
+      { "campo": "this.core", "tipo": "Object", "ubicacion_init": "modules/staff-manager/index.js:46", "se_invalida_con": "referencia al core completa — guarda referencia para acceder al uiHandler en unregister", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [],
+      "notas_concurrencia": "Persistencia delegada a EmployeeRegistry y SessionManager (modules/staff-manager/lib/, no auditados en este pase). Reciben SQL como parámetro en initialize() — probable SQLite via core. Las tablas reales no son visibles en index.js."
+    }
+  },
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "dataPath", "tipo": "string", "default_si_primitivo": "./data/staff" },
+      { "key": "maxShiftHours", "tipo": "number", "default_si_primitivo": 16 }
+    ],
+    "paths_proyecto_referenciados": ["data/staff/"],
+    "valores_hardcoded_observables": [
+      { "valor": "./data/staff (default dataPath)", "ubicacion": "modules/staff-manager/index.js:38", "naturaleza": "path" },
+      { "valor": "16 (maxShiftHours default)", "ubicacion": "modules/staff-manager/module.json:126", "naturaleza": "limit" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/staff-manager/index.js:45", "acciones": ["this.core = core", "this.logger = core.logger", "this.metrics = core.metrics", "merge core.config.staff.dataPath si existe", "instanciar EmployeeRegistry({ dataPath, logger })", "instanciar SessionManager({ dataPath, logger, maxShiftHours, onSessionEvent })", "registry.initialize(SQL)", "sessions.initialize(SQL)", "_registerUIHandlers(core.uiHandler) si existe"], "guarda_referencias_externas": ["this.core", "this.logger", "this.metrics"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/staff-manager/index.js:80", "acciones": ["registry.close()", "sessions.close()", "loop _uiActions(): core.uiHandler.unregister(this.name, action)"], "estado_no_limpiado": ["this.dataPath", "this.core (referencia)"] },
+    "auto_wired_subscribes": false,
+    "subscribes_dinamicos_en_lifecycle": ["onSessionEvent callback (modules/staff-manager/index.js:63) registrado como sink desde SessionManager — recibe (type, data) y los reemite vía eventBus.emit('staff.session.${type}', ...)"]
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "core.uiHandler", "via_evento": "uiHandler.register/unregister para 15 actions de UI", "obligatorio_en": "onLoad", "ubicacion_uso": "modules/staff-manager/index.js:70", "es_cross_vertical": false },
+    { "modulo_dependido": "SQL (parámetro pasado a initialize de registry y sessions)", "via_evento": "registry.initialize(SQL) y sessions.initialize(SQL) — el módulo recibe el handle SQL pero no se ve de dónde lo obtiene en este index.js", "obligatorio_en": "onLoad", "ubicacion_uso": "modules/staff-manager/index.js:66", "es_cross_vertical": true }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "core.eventBus", "que_pasa_si_cae": "_emitSessionEvent verifica !this.core?.eventBus y hace early return; emit() está en try/catch silencioso — los listeners externos nunca reciben eventos staff.session.* sin telemetría de fallo.", "evidencia": "modules/staff-manager/index.js:351" },
+    { "dependencia": "EmployeeRegistry / SessionManager (lib)", "que_pasa_si_cae": "Si initialize falla, el throw burbujea a onLoad — el módulo no puede arrancar (no hay catch).", "evidencia": "modules/staff-manager/index.js:66" },
+    { "dependencia": "core.uiHandler", "que_pasa_si_cae": "Si !core.uiHandler, _registerUIHandlers no se llama y los handlers HTTP no quedan registrados; las APIs declaradas en module.json fallarían a 404.", "evidencia": "modules/staff-manager/index.js:69" }
+  ],
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('module.<accion>', { ...campos })", "campos_estructurados_observados": ["module", "version", "dataPath"], "ejemplos": [{ "snippet": "this.logger?.info('module.loaded', { module: this.name, version: this.version, dataPath: this.dataPath });", "ubicacion": "modules/staff-manager/index.js:73" }, { "snippet": "this.logger?.info('module.unloaded', { module: this.name });", "ubicacion": "modules/staff-manager/index.js:90" }] },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": ["manifest declara counters staff.tap_in.count / staff.tap_out.count / staff.auto_close.count pero el código NO emite ninguna métrica (drift declarativo total — this.metrics se asigna pero no se usa)"],
+    "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" }
+  },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": ["modules/staff-manager/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": false, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/staff-manager/index.js:359", "comentario_literal": "// No bloquear si el bus no está disponible", "contexto": "razón del try/catch silencioso en _emitSessionEvent — degradación silenciosa frente a fallos del bus" }
+    ],
+    "workarounds_detectados": [
+      { "ubicacion": "modules/staff-manager/index.js:353", "descripcion": "Usa this.core.eventBus.emit() en vez de this.eventBus.publish() — mezcla EventEmitter de Node con el patrón pub/sub canónico del repo (único módulo con este uso)" },
+      { "ubicacion": "modules/staff-manager/index.js:63", "descripcion": "Callback onSessionEvent: this._emitSessionEvent.bind(this) — el SessionManager (lib) no conoce el bus, lo notifica via callback que reemite al bus" },
+      { "ubicacion": "modules/staff-manager/index.js:351", "descripcion": "Early return + try/catch silencioso al emitir — eventos perdidos sin telemetría si el bus falla" }
+    ]
+  },
+  "metricas_fisicas": { "lineas_index_js": 393, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": ["provides.apis (otros módulos usan top-level 'apis'; staff-manager los anida bajo provides) — outlier de schema"],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "eventBus.emit() (Node EventEmitter) en vez de eventBus.publish() — único módulo del repo con este uso", "ejemplo": "modules/staff-manager/index.js:353", "rareza": "unico_en_repo" },
+      { "patron": "Callback onSessionEvent inyectado a SessionManager para puente bus — la lib no conoce el bus directamente", "ejemplo": "modules/staff-manager/index.js:63", "rareza": "inusual" },
+      { "patron": "uiHandler.register/unregister explícitos por handler en vez de auto-wiring desde manifest", "ejemplo": "modules/staff-manager/index.js:374", "rareza": "inusual" },
+      { "patron": "registry.initialize(SQL) y sessions.initialize(SQL) — SQL inyectado como parámetro pero su origen no aparece en index.js", "ejemplo": "modules/staff-manager/index.js:66", "rareza": "inusual" },
+      { "patron": "Sin métricas pese a observability.metrics.enabled=true en manifest (drift total, mismo patrón que ui-designer)", "ejemplo": "modules/staff-manager/module.json:135", "rareza": "inusual" },
+      { "patron": "Optional chaining defensivo masivo: this.logger?.info, this.core?.eventBus, this.core?.uiHandler — todo puede no existir", "ejemplo": "modules/staff-manager/index.js:73", "rareza": "inusual" },
+      { "patron": "Manifest declara provides.apis con name/method/path/description (ricos) — otros módulos solo usan apis con method/path/handler", "ejemplo": "modules/staff-manager/module.json:8", "rareza": "inusual" }
+    ]
+  },
+  "quirks": {
+    "warnings": [
+      "P4 — Staff Manager (v1.0.0). Control de personal con NFC NTAG215, jornadas y distribución de llaves.",
+      "OUTLIER MAYOR: usa this.core.eventBus.emit() en vez de this.eventBus.publish() — único módulo del repo. Cross-check no detecta el .publish( en línea 353 (es .emit), por eso eventos.publica queda vacío y los 4 declarados aparecen como 'declarados_no_emitidos'.",
+      "Eventos staff.session.${type} con type ∈ {tap_in, tap_out, auto_timeout, manager_close} — coinciden con los 4 declarados en manifest (no hay drift semántico, solo de canal: emit vs publish).",
+      "SessionManager no conoce el bus — recibe callback onSessionEvent y delega; pseudo-pubsub vía función inyectada.",
+      "Sin métricas pese a manifest.observability.metrics.enabled=true (drift total, mismo patrón que ui-designer).",
+      "uiHandler.register/unregister explícitos por handler — no usa auto-wiring desde manifest.",
+      "Persistencia delegada a sublib (lib/employees, lib/sessions) que reciben SQL inyectado en initialize — origen del SQL no visible en index.js.",
+      "Optional chaining defensivo masivo (this.logger?.info, this.core?.eventBus) — sugiere uso en contextos sin core completo (tests/standalone)."
+    ],
+    "secciones_vacias_intencionalmente": ["eventos.publica (emit en vez de publish — no detectable por cross-check)", "eventos.subscribes", "tools (no expuesto al LLM)", "ui_handlers (registrados via uiHandler.register no via manifest)", "estado.persistencia.archivos", "configuracion.env_vars", "observabilidad.metricas_emitidas (drift)", "codigo_intencion.todos", "version_archivada"]
+  }
+}

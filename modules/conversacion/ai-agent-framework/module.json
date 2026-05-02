@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "description": "Carga agentes desde agents/*.json + prompts/*.json. Registra la tool invoke_agent (para el LLM) y escucha agent.execute.request (para módulos del dominio). Ambos paths usan el mismo helper interno _runAgent: arma el prompt del agente y llama al LLM via llm.complete.request. Cuando se incluye conversation_id, también publica el resultado como mensaje en la conversación con metadata.author del agente (preparado para chat multi-participante).",
   "author": "Event Core Team",
-
+  "language": "en",
   "publishes": [
     "invoke_agent.response",
     "agent.execute.response",
@@ -11,8 +11,17 @@
     "llm.complete.request"
   ],
   "subscribes": [
-    { "event": "invoke_agent",         "handler": "onInvokeAgent" },
-    { "event": "agent.execute.request","handler": "onAgentExecuteRequest" },
-    { "event": "llm.complete.response","handler": "onLlmCompleteResponse" }
+    {
+      "event": "invoke_agent",
+      "handler": "onInvokeAgent"
+    },
+    {
+      "event": "agent.execute.request",
+      "handler": "onAgentExecuteRequest"
+    },
+    {
+      "event": "llm.complete.response",
+      "handler": "onLlmCompleteResponse"
+    }
   ]
 }

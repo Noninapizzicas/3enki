@@ -1,0 +1,200 @@
+{
+  "_meta": {
+    "modulo": "notas",
+    "ubicacion": "modules/notas",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "notas",
+    "version": "1.0.0",
+    "description_oficial": "Módulo de notas rápidas con eventos en tiempo real",
+    "author": "Event-Core Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": false,
+    "en_disabled_de_config": true,
+    "estado_modulo": "dormido_por_diseno",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "nota.creada",      "description": "Cuando se crea una nueva nota" },
+      { "event": "nota.actualizada", "description": "Cuando se actualiza una nota existente" },
+      { "event": "nota.eliminada",   "description": "Cuando se elimina una nota" }
+    ],
+    "subscribes": [],
+    "provides_eventos": ["nota.creada", "nota.actualizada", "nota.eliminada"]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/notas",
+      "handler": "handleListNotas",
+      "description": "Listar todas las notas",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/notas/:id",
+      "handler": "handleGetNota",
+      "description": "Obtener una nota por ID",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/notas",
+      "handler": "handleCreateNota",
+      "description": "Crear nueva nota (publica evento nota.creada)",
+      "request_schema_ref": "./schemas/nota.json#/definitions/create_request",
+      "response_schema_ref": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/notas/:id",
+      "handler": "handleUpdateNota",
+      "description": "Actualizar nota (publica evento nota.actualizada)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "DELETE",
+      "path": "/notas/:id",
+      "handler": "handleDeleteNota",
+      "description": "Eliminar nota (publica evento nota.eliminada)",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/notas/:id/pin",
+      "handler": "handleTogglePin",
+      "description": "Fijar/desfijar nota",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del módulo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": ["nota.creada.total", "nota.actualizada.total", "nota.eliminada.total"],
+      "gauges": ["nota.activas.count", "nota.pinned.count"],
+      "timings": ["nota.create.duration", "nota.update.duration"]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Notas",
+    "icon": "📝",
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": ["modules/notas/schemas/events.json", "modules/notas/schemas/nota.json"],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {
+      "provides_nota": {
+        "_note": "provides.queries=['nota.obtener','nota.listar'] — subestructura con queries no canónica dentro del campo provides",
+        "queries": ["nota.obtener", "nota.listar"]
+      },
+      "apis_shape_extras": {
+        "_note": "apis[] usa query_params y request_schema inline — campos extra dentro de entradas de apis no contemplados en apis_http shape del schema de extracción"
+      }
+    }
+  },
+
+  "version_archivada": {
+    "existe": true,
+    "ubicacion": "_archived/2025-12-12_ui/frontend/src/routes/notas"
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 2996,
+    "module_json_lineas": 109,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "events usa forma envuelta (events.publishes / events.subscribes) — no top-level",
+      "provides.queries declara ['nota.obtener','nota.listar'] — no hay campo queries canónico en el schema de extracción",
+      "apis en lugar de routes — campo no canónico; mapeado a apis_http",
+      "apis[].query_params presente en 1 ruta (GET /notas) — campo extra dentro de apis, no capturado en apis_http shape",
+      "apis[].request_schema inline con $ref (POST /notas) — no hay campo request_schema_ref canónico en contrato; se copia el $ref string en request_schema_ref",
+      "observability.logging.correlation_id=true — campo extra no canónico, descartado (no está en schema de observability_declarada)",
+      "ui declarativa sin views ni secciones: objeto ui tiene solo enabled/title/icon/description — tamano_bytes=0 (no hay blob serializado aparte)",
+      "version_archivada apunta a ruta de frontend (routes/notas), no a un módulo backend archivado"
+    ]
+  }
+}

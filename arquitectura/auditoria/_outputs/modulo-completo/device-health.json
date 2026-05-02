@@ -1,0 +1,126 @@
+{
+  "_meta": { "modulo": "device-health", "ubicacion": "modules/device-health", "auditado_en": "2026-04-30", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/device-health.json" },
+  "identidad": { "name": "device-health", "version": "1.0.0", "description_oficial": "Monitorización de liveness, uptime, alertas y métricas de la flota de dispositivos IoT", "author": "Enki", "main_declarado": null, "main_real": "modules/device-health/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": "tier_3_core", "tier_declarado": "tier_3_core", "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "dynamic_template", "valor": "health.alert.${type}", "variables_referenciadas": ["type"] }, "ubicacion": "modules/device-health/index.js:363", "metodo_contenedor": "_createAlert", "es_handler_de": null, "bloque_logico": "tras crear alerta (offline/reconnect_loop/ota_failed)", "payload": { "tipo": "object_literal", "campos_visibles": ["device_id", "project_id", "message", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish(`health.alert.${type}`, { device_id, project_id, message, timestamp });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "health.report", "variables_referenciadas": [] }, "ubicacion": "modules/device-health/index.js:389", "metodo_contenedor": "_publishReport", "es_handler_de": null, "bloque_logico": "tick periódico cada report_interval_min", "payload": { "tipo": "object_literal", "campos_visibles": ["total_devices", "online", "offline", "active_alerts", "timestamp"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('health.report', { total_devices, online, offline, active_alerts, timestamp });", "declarado_en_manifest": true }
+    ],
+    "subscribes": [
+      { "nombre": "device.online", "tipo_nombre": "literal", "handler": "onDeviceOnline", "handler_ubicacion": "modules/device-health/index.js:114", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/device-health/index.js:117", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "device.offline", "tipo_nombre": "literal", "handler": "onDeviceOffline", "handler_ubicacion": "modules/device-health/index.js:159", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/device-health/index.js:162", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "firmware.ota_failed", "tipo_nombre": "literal", "handler": "onOtaFailed", "handler_ubicacion": "modules/device-health/index.js:186", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/device-health/index.js:189", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "firmware.ota_completed", "tipo_nombre": "literal", "handler": "onOtaCompleted", "handler_ubicacion": "modules/device-health/index.js:203", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/device-health/index.js:206", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["health.alert.offline", "health.alert.reconnect_loop", "health.alert.ota_failed", "health.report"],
+      "publica_literales_en_codigo": ["health.report"],
+      "publica_patrones_dinamicos": ["health.alert.${type}"],
+      "publica_declarados_no_emitidos": ["health.alert.offline", "health.alert.reconnect_loop", "health.alert.ota_failed"],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["device.online", "device.offline", "firmware.ota_failed", "firmware.ota_completed"],
+      "subscribes_realmente_registrados": ["device.online", "device.offline", "firmware.ota_failed", "firmware.ota_completed"],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [
+    { "name": "health.dashboard", "description_para_llm": "Dashboard de salud del parque: dispositivos online/offline, uptime%, alertas activas, reconexiones", "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 38, "handler_metodo": "handleDashboard", "handler_ubicacion": "modules/device-health/index.js:225", "retorno": { "tipo": "object", "shape_inferido": { "status": "number", "data": "{ summary: { total, online, offline, active_alerts, avg_uptime_pct }, devices: [...], recent_alerts: [...] }" }, "es_markdown_formateado": false, "ejemplos_observados": ["return { status: 200, data: { summary, devices, recent_alerts: this.alerts.slice(0,10) } };"], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "health.device_history", "description_para_llm": "Historial de salud de un dispositivo: periodos offline, historial OTA, alertas específicas", "parameters_required": ["device_id"], "parameters_property_names": ["device_id"], "parameters_size_chars": 200, "handler_metodo": "handleDeviceHistory", "handler_ubicacion": "modules/device-health/index.js:290", "retorno": { "tipo": "object", "shape_inferido": { "status": "number", "data": "{ device_id, is_offline, last_online, last_offline, reconnections_24h, offline_periods, ota_history, alerts }" }, "es_markdown_formateado": false, "ejemplos_observados": ["return { status: 200, data: { device_id, is_offline, ..., alerts: this.alerts.filter(a => a.device_id === data.device_id).slice(0,20) } };"], "publica_eventos_de_dominio": [] }, "errores_conocidos": [{ "condicion": "device_id missing", "respuesta_shape": { "status": 400, "error": "device_id requerido" }, "ubicacion": "modules/device-health/index.js:291" }, { "condicion": "no history", "respuesta_shape": { "status": 404, "error": "No hay historial" }, "ubicacion": "modules/device-health/index.js:294" }] },
+    { "name": "health.alerts", "description_para_llm": "Lista de alertas de salud: offline prolongado, reconnect loops, OTA fallidos", "parameters_required": [], "parameters_property_names": ["type", "device_id", "active_only"], "parameters_size_chars": 380, "handler_metodo": "handleAlerts", "handler_ubicacion": "modules/device-health/index.js:311", "retorno": { "tipo": "object", "shape_inferido": { "status": "number", "data": "{ alerts: [...], total, active }" }, "es_markdown_formateado": false, "ejemplos_observados": ["return { status: 200, data: { alerts: alerts.slice(0, limit), total, active } };"], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [
+    { "domain": "health", "action": "dashboard", "handler_metodo": "handleDashboard", "handler_ubicacion": "modules/device-health/index.js:225", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["summary", "devices", "recent_alerts"], "status_error": null }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "health", "action": "device-history", "handler_metodo": "handleDeviceHistory", "handler_ubicacion": "modules/device-health/index.js:290", "input_validado": ["device_id"], "codigos_error": ["400", "404"], "output_shape": { "status_success": 200, "data_keys": ["device_id", "is_offline", "last_online", "last_offline", "reconnections_24h", "offline_periods", "ota_history", "alerts"], "status_error": 400 }, "campo_origen_manifest": "ui_handlers" },
+    { "domain": "health", "action": "alerts", "handler_metodo": "handleAlerts", "handler_ubicacion": "modules/device-health/index.js:311", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": 200, "data_keys": ["alerts", "total", "active"], "status_error": null }, "campo_origen_manifest": "ui_handlers" }
+  ],
+  "apis_http": [],
+  "estado": {
+    "memoria": [
+      { "campo": "this.deviceStates", "tipo": "Map", "ubicacion_init": "modules/device-health/index.js:42", "se_invalida_con": "no se invalida — solo persiste a disco; rellena desde disco en _loadHistory", "leak_potencial": true },
+      { "campo": "this.alerts", "tipo": "Array", "ubicacion_init": "modules/device-health/index.js:45", "se_invalida_con": "FIFO con maxAlerts=200 (this.alerts.pop() cuando length > 200)", "leak_potencial": false },
+      { "campo": "this._offlineTimers", "tipo": "Map", "ubicacion_init": "modules/device-health/index.js:49", "se_invalida_con": "clearTimeout en onUnload + en _clearOfflineTimer al volver online", "leak_potencial": false },
+      { "campo": "this.internalMetrics", "tipo": "Object", "ubicacion_init": "modules/device-health/index.js:53", "se_invalida_con": "nunca", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/devices/health-history.json", "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "Save solo en onUnload (no hay timer de persistencia periódica)."
+    }
+  },
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "offline_threshold_min", "tipo": "number", "default_si_primitivo": 5 },
+      { "key": "reconnect_loop_threshold", "tipo": "number", "default_si_primitivo": 5 },
+      { "key": "reconnect_loop_window_min", "tipo": "number", "default_si_primitivo": 30 },
+      { "key": "report_interval_min", "tipo": "number", "default_si_primitivo": 60 },
+      { "key": "data_path", "tipo": "string", "default_si_primitivo": "./data/devices" }
+    ],
+    "paths_proyecto_referenciados": ["data/devices/health-history.json"],
+    "valores_hardcoded_observables": [
+      { "valor": "200", "ubicacion": "modules/device-health/index.js:46", "naturaleza": "limit" },
+      { "valor": "50", "ubicacion": "modules/device-health/index.js:131", "naturaleza": "limit" },
+      { "valor": "20", "ubicacion": "modules/device-health/index.js:216", "naturaleza": "limit" },
+      { "valor": "24*60*60*1000", "ubicacion": "modules/device-health/index.js:141", "naturaleza": "timeout" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/device-health/index.js:65", "acciones": ["this.logger = core.logger", "this.metrics = core.metrics", "this.eventBus = core.eventBus", "merge config['device-health']", "_loadHistory()", "setInterval _publishReport report_interval_min"], "guarda_referencias_externas": ["this.logger", "this.metrics", "this.eventBus"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/device-health/index.js:92", "acciones": ["clearInterval _reportTimer", "clearTimeout todos los _offlineTimers", "_saveHistory()"], "estado_no_limpiado": ["this.deviceStates", "this.alerts", "this.internalMetrics"] },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "device-registry", "via_evento": "device.online (subscribe), device.offline (subscribe)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/device-health/index.js:114", "es_cross_vertical": false },
+    { "modulo_dependido": "firmware-manager", "via_evento": "firmware.ota_failed (subscribe), firmware.ota_completed (subscribe)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/device-health/index.js:186", "es_cross_vertical": false }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "device-registry", "que_pasa_si_cae": "Si device-registry no emite device.online/offline, deviceStates queda obsoleto y nunca se generan alertas — sistema se vuelve ciego sin telemetría.", "evidencia": "modules/device-health/index.js:114" },
+    { "dependencia": "filesystem (data_path)", "que_pasa_si_cae": "_saveHistory captura err y solo loguea; pérdida silenciosa de historial al apagar.", "evidencia": "modules/device-health/index.js:471" }
+  ],
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('device-health.<accion>', { ...campos })", "campos_estructurados_observados": ["device_id", "message", "devices", "alerts", "error"], "ejemplos": [{ "snippet": "this.logger.warn(`device-health.alert.${type}`, { device_id: deviceId, message });", "ubicacion": "modules/device-health/index.js:358" }, { "snippet": "this.logger.info('device-health.loaded_from_disk', { devices: this.deviceStates.size, alerts: this.alerts.length });", "ubicacion": "modules/device-health/index.js:445" }] },
+    "metricas_emitidas": [
+      { "nombre": "health.alerts.total", "tipo": "counter", "ubicacion": "modules/device-health/index.js:355" },
+      { "nombre": "health.alerts.offline", "tipo": "counter", "ubicacion": "modules/device-health/index.js:356" },
+      { "nombre": "health.alerts.reconnect_loop", "tipo": "counter", "ubicacion": "modules/device-health/index.js:356" },
+      { "nombre": "health.alerts.ota_failed", "tipo": "counter", "ubicacion": "modules/device-health/index.js:356" }
+    ],
+    "metricas_drift_vs_manifest": [],
+    "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" }
+  },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": ["modules/device-health/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": false, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/device-health/index.js:14", "comentario_literal": "// NO toma acciones correctivas — solo informa via eventos y alertas.", "contexto": "doctrina del módulo: observador puro, no actuator" },
+      { "ubicacion": "modules/device-health/index.js:130", "comentario_literal": "// Mantener solo últimos 50 periodos", "contexto": "explica truncado de offline_periods para evitar growth ilimitado" },
+      { "ubicacion": "modules/device-health/index.js:215", "comentario_literal": "// Mantener solo últimos 20 OTAs", "contexto": "trim de ota_history" }
+    ],
+    "workarounds_detectados": [
+      { "ubicacion": "modules/device-health/index.js:115", "descripcion": "data = event?.data || event?.payload || event — multi-shape unwrap del evento sin contrato fijo (mismo patrón que device-shadow)" },
+      { "ubicacion": "modules/device-health/index.js:356", "descripcion": "this.internalMetrics[`alerts_${type}`] dinámico via template literal — clave puede no existir en init si type es nuevo" }
+    ]
+  },
+  "metricas_fisicas": { "lineas_index_js": 476, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "evento dinámico via template literal `health.alert.${type}` para 3 tipos enumerables (offline/reconnect_loop/ota_failed)", "ejemplo": "modules/device-health/index.js:363", "rareza": "inusual" },
+      { "patron": "setTimeout por dispositivo para detección offline prolongado (Map de timers)", "ejemplo": "modules/device-health/index.js:173", "rareza": "inusual" }
+    ]
+  },
+  "quirks": {
+    "warnings": [
+      "P3 — Device Health IoT. Observador puro de la flota, sin acciones correctivas (solo emite alertas).",
+      "Evento dinámico `health.alert.${type}` con 3 valores conocidos (offline, reconnect_loop, ota_failed) — manifest declara los 3 explícitamente; aparecen como declarados_no_emitidos porque el código no los emite como literales sino vía template literal.",
+      "Persistencia solo en onUnload — si el proceso muere abrupto se pierden todas las alertas y states acumulados.",
+      "Reconnect loop detection vía sliding window de timestamps (24h almacenados, ventana configurable filtrada en cada online)."
+    ],
+    "secciones_vacias_intencionalmente": ["apis_http", "estado.persistencia.sqlite_tablas", "configuracion.env_vars", "codigo_intencion.todos", "version_archivada"]
+  }
+}

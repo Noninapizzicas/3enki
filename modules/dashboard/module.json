@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "Observability Dashboard - Web UI para monitorear todos los cores",
   "author": "Event Core Team",
+  "language": "en",
   "provides": {
     "apis": [
       {
@@ -55,8 +56,10 @@
     "views": {
       "main": {
         "type": "dashboard",
-        "permissions": ["admin", "user"],
-
+        "permissions": [
+          "admin",
+          "user"
+        ],
         "layout": {
           "type": "two-column",
           "config": {
@@ -65,12 +68,10 @@
             "gap": "var(--space-lg)"
           }
         },
-
         "header": {
           "title": "⚡ Event Core Dashboard",
           "subtitle": "Real-time monitoring of all cores"
         },
-
         "sections": [
           {
             "id": "stats",
@@ -85,7 +86,9 @@
                   "icon": "🖥️",
                   "color": "primary",
                   "endpoint": "/modules/dashboard/api/cores",
-                  "mqtt_topics": ["core/+/heartbeat"]
+                  "mqtt_topics": [
+                    "core/+/heartbeat"
+                  ]
                 },
                 {
                   "type": "stat-card",
@@ -114,7 +117,9 @@
                 "type": "grid",
                 "endpoint": "/modules/dashboard/api/cores",
                 "data_path": "cores",
-                "mqtt_topics": ["core/+/heartbeat"],
+                "mqtt_topics": [
+                  "core/+/heartbeat"
+                ],
                 "refresh_on_event": true,
                 "item_template": {
                   "type": "card",

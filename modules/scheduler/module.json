@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "Advanced job scheduling module with multiple trigger types (cron, interval, datetime, event-based, condition, composite)",
   "author": "Event-Core",
+  "language": "en",
   "icon": "⏰",
   "enabled": true,
-
   "config": {
     "jobsPath": "./data/scheduler/jobs.json",
     "autoSave": true,
@@ -16,7 +16,6 @@
     "defaultRetries": 3,
     "defaultRetryDelay": 5000
   },
-
   "provides": {
     "events": [
       "scheduler.job.created",
@@ -34,7 +33,6 @@
       "scheduler.triggers.types"
     ]
   },
-
   "events": {
     "publishes": [
       {
@@ -78,7 +76,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
@@ -153,7 +150,6 @@
       "description": "Get scheduler statistics"
     }
   ],
-
   "uiActions": [
     {
       "domain": "scheduler",
@@ -211,7 +207,6 @@
       "handler": "handleUIListExecutions"
     }
   ],
-
   "observability": {
     "logging": {
       "level": "info",
@@ -237,7 +232,6 @@
       ]
     }
   },
-
   "tools": [
     {
       "name": "scheduler.list_jobs",
@@ -278,10 +272,19 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["cron", "interval", "datetime", "event", "condition", "composite"]
+                "enum": [
+                  "cron",
+                  "interval",
+                  "datetime",
+                  "event",
+                  "condition",
+                  "composite"
+                ]
               }
             },
-            "required": ["type"]
+            "required": [
+              "type"
+            ]
           },
           "action": {
             "type": "object",
@@ -289,13 +292,23 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["mqtt", "http", "module"]
+                "enum": [
+                  "mqtt",
+                  "http",
+                  "module"
+                ]
               }
             },
-            "required": ["type"]
+            "required": [
+              "type"
+            ]
           }
         },
-        "required": ["name", "trigger", "action"]
+        "required": [
+          "name",
+          "trigger",
+          "action"
+        ]
       }
     },
     {
@@ -310,7 +323,9 @@
             "description": "ID of the job to trigger"
           }
         },
-        "required": ["jobId"]
+        "required": [
+          "jobId"
+        ]
       }
     }
   ]

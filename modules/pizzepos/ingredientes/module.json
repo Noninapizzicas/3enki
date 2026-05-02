@@ -3,12 +3,18 @@
   "version": "4.0.0",
   "description": "Catálogo de ingredientes - Actualizado desde menús generados por IA",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
-    "events": ["ingrediente.creado", "ingrediente.actualizado"],
-    "queries": ["ingrediente.obtener", "ingrediente.listar", "ingrediente.buscar"]
+    "events": [
+      "ingrediente.creado",
+      "ingrediente.actualizado"
+    ],
+    "queries": [
+      "ingrediente.obtener",
+      "ingrediente.listar",
+      "ingrediente.buscar"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -49,7 +55,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
@@ -94,14 +99,16 @@
       "description": "Métricas del módulo"
     }
   ],
-
   "ui": {
     "enabled": true,
     "title": "Ingredientes",
     "icon": "🥬",
     "description": "Catálogo de ingredientes y alérgenos",
     "access_level": "gerente",
-    "components": ["ingrediente-list", "ingrediente-form"],
+    "components": [
+      "ingrediente-list",
+      "ingrediente-form"
+    ],
     "views": {
       "main": {
         "type": "dashboard",
@@ -109,23 +116,37 @@
         "component": "ingrediente-list",
         "config": {
           "endpoint": "/modules/ingredientes/ingredientes",
-          "mqtt_topics": ["ingrediente.creado", "ingrediente.actualizado"],
+          "mqtt_topics": [
+            "ingrediente.creado",
+            "ingrediente.actualizado"
+          ],
           "searchable": true
         }
       }
     },
     "mqtt": {
       "enabled": true,
-      "topics": ["ingrediente.creado", "ingrediente.actualizado"],
+      "topics": [
+        "ingrediente.creado",
+        "ingrediente.actualizado"
+      ],
       "auto_refresh": true
     },
     "permissions": {
-      "view": ["admin", "gerente"],
-      "edit": ["admin", "gerente"]
+      "view": [
+        "admin",
+        "gerente"
+      ],
+      "edit": [
+        "admin",
+        "gerente"
+      ]
     },
-    "features": { "search": true, "filters": true }
+    "features": {
+      "search": true,
+      "filters": true
+    }
   },
-
   "observability": {
     "logging": {
       "level": "info",

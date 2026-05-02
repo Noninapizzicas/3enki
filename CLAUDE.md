@@ -6,13 +6,9 @@
 
 Cada módulo conoce exactamente una cosa: su dominio. Nada más.
 
----
-
-## Lo que esto significa en la práctica
-
 ### Un módulo NO:
 - Llama directamente a otro módulo
-- Instancia servicios de persistencia propios porque "los necesita"
+- Instancia servicios de persistencia propios
 - Espera respuesta de lo que emitió
 - Mezcla dominio con infraestructura (SQLite, HTTP, filesystem)
 - Controla el flujo después de emitir
@@ -23,81 +19,80 @@ Cada módulo conoce exactamente una cosa: su dominio. Nada más.
 - Actúa dentro de su responsabilidad
 - Devuelve resultados a quien le llamó
 
+El emisor sabe **qué**. El receptor sabe **cómo**.
+
+## Granularidad
+
+**Un módulo = una responsabilidad acotada. El nombre del directorio describe exactamente qué hace.**
+
+- `carta-design` diseña la apariencia visual
+- `carta-impresion` genera la carta para imprimir
+- `carta-scheduler` decide qué carta está activa por franja
+- `device-registry` / `device-shadow` / `device-health` son 3 responsabilidades, no un mega `device-manager`
+
+No fusionar en mega-módulos "manager". La claridad inmediata del nombre vale más que el ahorro de archivos. Si dos módulos comparten 80% de su lógica, se valora fusionar como excepción razonada, no como regla.
+
 ---
 
-## Ejemplos concretos
+# Cómo trabajo en este repo
 
-**MAL — recetas instancia su propio SQLiteManager:**
-```js
-// recetas/index.js
-const manager = new SQLiteManager(project_id, ...);
-await manager.guardar(receta);
+Este `CLAUDE.md` es un **índice**. La información estructurada vive en JSONs validados contra schemas. Antes de cualquier tarea, leo los archivos que apliquen.
+
+## Convenciones (cómo se nombra y se estructura todo)
+
+- **`arquitectura/convenciones/_outputs/naming.json`**
+  Convención de naming: idioma por módulo (`module.json.language` ∈ {es, en}), forma de los eventos (`<module-prefix>.<entity>.<verb>`), verbos canónicos por idioma, restricciones léxicas (ASCII puro, kebab-case, sin tildes ni ñ).
+
+- **`arquitectura/convenciones/_outputs/glossary.json`**
+  Glosario cross-módulo: una sola forma canónica por concepto por idioma. Sinónimos prohibidos. Si un concepto aparece aquí, su nombre canónico es el único permitido. Solo entran términos que cruzan dos o más módulos.
+
+- **`arquitectura/convenciones/_contratos/{naming,glossary}.contract.json`**
+  El "por qué": principios, scope, criterios de inclusión, validaciones cruzadas. Lectura recomendada cuando hay dudas sobre la regla.
+
+## Auditoría del sistema (estado real de cada módulo)
+
+- **`arquitectura/auditoria/_outputs/manifest-completo/<modulo>.json`**
+  Lo declarado por el módulo (extraído de su `module.json`).
+
+- **`arquitectura/auditoria/_outputs/modulo-completo/<modulo>.json`**
+  Lo real (extraído del código + cruzado con el manifest). Incluye eventos publicados con archivo:línea, subscribes, tools, ui_handlers, apis_http, estado, lifecycle, dependencias, modos de fallo, observabilidad, outliers y quirks. **Es el documento autoritativo del módulo: si tienes que reescribirlo, lees ESTO antes que el código viejo.**
+
+- **`arquitectura/auditoria/_contratos/modulo-completo.contract.json`**
+  Define qué campos tiene cada auditoría y por qué.
+
+## Validators
+
+Todos los outputs (convenciones y auditorías) son validables mecánicamente. Antes de proponer cambios estructurales:
+
+```bash
+node arquitectura/convenciones/_validators/naming.validate.js
+node arquitectura/convenciones/_validators/naming.validate.js --check-system
+node arquitectura/convenciones/_validators/glossary.validate.js
+node arquitectura/convenciones/_validators/glossary.validate.js --check-system
+node arquitectura/auditoria/_validators/modulo-completo.validate.js <slug>
 ```
-Recetas no sabe de SQLite. No debería saber.
-
-**BIEN — recetas emite con su schema, quien sabe persiste:**
-```js
-// recetas/index.js
-this.eventBus.publish('receta.crear', {
-  proyecto_id,
-  schema: 'receta',
-  datos: { nombre, ingredientes, ... }
-});
-// Fin. Recetas no sabe qué pasa después.
-```
-Recetas conoce su schema — es su dominio. El receptor recibe el objeto y lo persiste sin saber qué es una receta. El emisor sabe **qué**. El receptor sabe **cómo**.
 
 ---
 
-## El LLM sigue el mismo paradigma
+# Protocolo de trabajo
 
-El LLM llama una tool → emite el evento → continúa la conversación.  
-No espera confirmación de persistencia. No controla el flujo.  
-Fire and forget.
+1. **Antes de tocar un módulo:** leo su auditoría completa (`_outputs/modulo-completo/<modulo>.json`). Si tengo que escribir código nuevo, leo también `naming.json` y `glossary.json`.
 
----
+2. **Antes de añadir/renombrar un evento:** consulto `naming.json` (forma + verbo canónico del idioma del módulo) y `glossary.json` (si la entidad está, uso la forma canónica del idioma).
 
-## Por qué esto importa
+3. **Si una decisión rompe la convención:** paro y pido confirmación antes de proceder. Las convenciones son la regla, el legacy es drift que se migra.
 
-Cuando un módulo hace más de lo que le toca:
-- El sistema se vuelve frágil (cambia una cosa, rompe tres)
-- Aparecen dependencias ocultas
-- No puedes reemplazar piezas sin reescribir todo
-- El código crece hacia adentro en lugar de hacia afuera
+4. **Antes de escribir código, me pregunto:**
+   - ¿Este módulo está haciendo algo que no es su dominio?
+   - ¿Podría resolver esto emitiendo un evento en lugar de llamar directamente?
+   - ¿Quién debería escuchar esto? ¿Ese módulo ya existe?
+   - ¿Estoy mezclando dominio con infraestructura?
 
-Con este paradigma:
-- Cada módulo es reemplazable
-- El sistema escala añadiendo escuchadores, no modificando emisores
-- Un fallo en persistencia no rompe el dominio
-- Se puede testear cada capa por separado
+   Si la respuesta a la 1 o la 4 es sí, paro. Refactorizo el diseño antes de escribir.
 
----
+5. **Mapa de eventos antes del código.** Para cualquier módulo nuevo o a reescribir, primero respondo:
+   - ¿Qué eventos emite?
+   - ¿Qué eventos escucha?
+   - ¿A qué reacciona cada subscribe?
 
-## Antes de escribir código, pregúntate
-
-1. ¿Este módulo está haciendo algo que no es su dominio?
-2. ¿Podría resolver esto emitiendo un evento en lugar de llamar directamente?
-3. ¿Quién debería escuchar esto? ¿Ese módulo ya existe?
-4. ¿Estoy mezclando dominio con infraestructura?
-
-Si la respuesta a (1) o (4) es sí — para. Refactoriza el diseño antes de escribir código.
-
----
-
-## Antes de tocar un módulo, mapea sus eventos
-
-Para cualquier módulo nuevo o a refactorizar, responde primero estas dos preguntas:
-
-**¿Qué eventos emite?** — cada acción del dominio es un evento con nombre claro: `receta.creada`, `pedido.recibido`, `cobro.procesado`
-
-**¿Qué eventos escucha?** — y qué hace cuando los recibe
-
-Ese mapa revela:
-- Lo que falta implementar
-- Lo que está duplicado
-- Lo que está mal conectado
-- Qué otros módulos se benefician añadiendo un listener (sin tocar el emisor)
-
-El mapa va en `arquitectura/<modulo>.json` antes de escribir código.
-Sin mapa, no se toca el módulo.
-
+   El mapa va en la auditoría del módulo. Sin mapa, no se toca el módulo.

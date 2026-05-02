@@ -1,0 +1,175 @@
+{
+  "_doc": "Captura cada llamada a publish() en el código del módulo (index.js + lib/ + services/). Descriptivo, NO prescriptivo: registra elecciones (canal, payload, await) sin marcarlas como violación. La diversidad capturada es información para el cruce posterior.",
+  "id": "eventos-emitidos",
+  "version": "1.0.0",
+  "creada": "2026-04-29",
+
+  "objetivo": "Para cada módulo, foto fiel y verificable de cada publish: nombre (literal o dinámico), ubicación archivo:línea, payload visible, canal usado, si lleva request_id/correlation_id/project_id, contexto del código. Cruzado con el manifest declarativo: qué se declara y no se emite, qué se emite y no se declara.",
+
+  "duracion_esperada_seg": 120,
+  "modelo_recomendado": "claude-sonnet-4-6 — lectura de código con grep + parseo de literales, requiere razonamiento ligero sobre estructura JS",
+
+  "inputs": {
+    "obligatorios": [
+      "{ubicacion}/index.js",
+      "/home/user/2enki/arquitectura/auditoria/_outputs/manifest-completo/{slug}.json"
+    ],
+    "obligatorios_si_existen": [
+      "{ubicacion}/lib/**/*.js",
+      "{ubicacion}/services/**/*.js"
+    ],
+    "prohibido_leer": [
+      "{ubicacion}/__tests__/**",
+      "{ubicacion}/agents/*.json",
+      "{ubicacion}/schemas/*.json",
+      "{ubicacion}/prompts/**",
+      "Cualquier archivo de OTRO módulo",
+      "node_modules/"
+    ],
+    "tecnica": [
+      "grep -nE \"(eventBus|this\\.eventBus|mqtt|this\\.mqtt)\\.publish\\(\" en cada archivo permitido",
+      "Para cada match, leer ±5 líneas alrededor para extraer payload y canal",
+      "Si el publish ocupa varias líneas (multilinea), extraer el bloque completo hasta cerrar paréntesis"
+    ]
+  },
+
+  "filosofia": [
+    "DESCRIBIR, no juzgar. Si el módulo usa this.mqtt.publish directo, capturar el hecho. NO marcar como violación.",
+    "Si el nombre del evento es dinámico (template literal o variable), capturar el patrón LITERAL del código (incluyendo backticks y `${var}`).",
+    "Si el payload es spread o variable, anotar 'tipo' como tal y dejar campos_visibles=[].",
+    "Si hay un comentario inmediatamente antes del publish que explique el porqué, copiarlo LITERAL en patrones_observados.comentarios_explicativos."
+  ],
+
+  "output_shape": {
+    "_meta": {
+      "modulo": "string — slug del módulo (con / si submódulo)",
+      "ubicacion": "string — modules/{...}",
+      "auditado_en": "string ISO date",
+      "parcela": "eventos-emitidos",
+      "parcela_version": "1.0.0",
+      "manifest_referencia": "string — path al manifest-completo output usado para el cruce"
+    },
+
+    "archivos_analizados": [
+      {
+        "path": "string — relativo al repo",
+        "lineas": "integer — wc -l",
+        "publishes_count": "integer — número de publish() encontrados en este archivo"
+      }
+    ],
+
+    "eventos_emitidos": [
+      {
+        "indice": "integer — 1-based, orden de aparición global",
+        "nombre": {
+          "tipo": "literal | dynamic_template | variable | otro",
+          "valor": "string — el contenido textual entre comillas/backticks. Para literal: 'receta.creada'. Para template: '${toolName}.response'. Para variable: el nombre de la variable.",
+          "variables_referenciadas": ["array — nombres de variables interpoladas si dynamic_template; vacío si literal"]
+        },
+        "ubicacion": "string — '{path}:{linea}' del publish (línea exacta del paréntesis abierto)",
+        "contexto": {
+          "metodo_contenedor": "string|null — nombre del método/función del módulo que contiene el publish (mejor esfuerzo extrayendo el `methodName()` o `function name()` o `name = (` más cercano arriba)",
+          "es_handler_de": "string|null — nombre del evento que está manejando si el método empieza por 'on*' o se invoca tras un subscribe (mejor esfuerzo)",
+          "bloque_logico": "string|null — descripción corta del control flow alrededor (ej. 'tras INSERT exitoso', 'en catch', 'en lifecycle onLoad'). Solo si es claro del código sin interpretar."
+        },
+        "payload": {
+          "tipo": "object_literal | spread | variable | sin_payload | mixto",
+          "campos_visibles": ["array — keys del objeto literal si tipo=object_literal. Vacío para spread/variable/sin_payload"],
+          "tiene_request_id": "boolean — true si el payload incluye request_id como campo (literal o spread evidente)",
+          "tiene_correlation_id": "boolean",
+          "tiene_project_id": "boolean — true si lleva project_id O proyecto_id (cualquiera de los dos)",
+          "campos_con_template_literal": ["array — campos cuyo valor usa template literals o expresión compleja"]
+        },
+        "canal": {
+          "tipo": "eventBus | mqtt_directo | otro",
+          "expresion_usada": "string — 'this.eventBus.publish' | 'this.mqtt.publish' | 'eventBus.publish' | otra"
+        },
+        "es_await": "boolean — true si el publish está precedido por await",
+        "es_return": "boolean — true si está en un return statement",
+        "snippet": "string — 3-5 líneas del código incluyendo el publish (con indentación original)"
+      }
+    ],
+
+    "consistencia_con_manifest": {
+      "_doc": "Cruce literal con manifest-completo del mismo módulo.",
+      "publishes_declarados_en_manifest": ["array — copia de manifest.eventos.publica[].event"],
+      "literales_unicos_emitidos": ["array — set de eventos_emitidos[].nombre.valor donde tipo=literal"],
+      "patrones_dinamicos_emitidos": ["array — set de eventos_emitidos[].nombre.valor donde tipo=dynamic_template"],
+      "declarados_no_emitidos_en_codigo": ["array — declarados en manifest pero ningún publish literal coincide. NOTA: un patrón dinámico podría cubrir uno declarado, pero esa heurística NO se aplica aquí — solo cruce literal."],
+      "emitidos_no_declarados_en_manifest": ["array — literales emitidos pero no listados en manifest"]
+    },
+
+    "patrones_observados": {
+      "_doc": "Métricas y elecciones del módulo, descriptivas.",
+      "canales_usados": ["array — set de eventos_emitidos[].canal.tipo"],
+      "publishes_por_canal": {
+        "eventBus": "integer",
+        "mqtt_directo": "integer",
+        "otro": "integer"
+      },
+      "publishes_con_request_id": "integer",
+      "publishes_con_correlation_id": "integer",
+      "publishes_con_project_id": "integer",
+      "publishes_await": "integer",
+      "publishes_return": "integer",
+      "publishes_dinamicos": "integer — count donde tipo!=literal",
+      "comentarios_explicativos": [
+        {
+          "ubicacion": "string — archivo:linea del comentario",
+          "comentario_literal": "string — copia del comentario tal cual",
+          "publish_relacionado_indice": "integer — indice del publish al que precede"
+        }
+      ]
+    },
+
+    "quirks": {
+      "warnings": ["array — anomalías detectadas durante extracción"],
+      "publishes_count_total": "integer — len(eventos_emitidos)",
+      "publishes_unicos_literales_count": "integer",
+      "archivos_lib_existe": "boolean",
+      "archivos_services_existe": "boolean"
+    }
+  },
+
+  "reglas_de_extraccion": [
+    "Buscar SOLO en index.js + lib/**/*.js + services/**/*.js. NO __tests__, NO node_modules.",
+    "Patrón regex para detectar publish: `(eventBus|this\\.eventBus|mqtt|this\\.mqtt)\\.publish\\(`. Si aparece otra forma (e.g. `myBus.publish`), capturarla con canal.tipo='otro' y la expresion usada.",
+    "Para extraer nombre: leer el primer argumento (entre la primera coma y el paréntesis abierto). Si está entre comillas simples/dobles → literal. Si está entre backticks con `${...}` → dynamic_template. Si es identificador → variable.",
+    "Para extraer payload: leer el segundo argumento. Si es `{ ... }` literal → tipo=object_literal y enumerar keys directos (no nested). Si es `{ ...obj, campo }` → tipo=mixto (campos_visibles incluye sólo los literales). Si es identificador o expresión → tipo=variable. Si solo hay un argumento → tipo=sin_payload.",
+    "Multiline: si el publish abre paréntesis pero no cierra en la línea, leer hasta el cierre. NO truncar.",
+    "snippet: 3 líneas de contexto (la del publish + 1 antes + 1 después como mínimo). Si el publish es multiline, incluirlo entero.",
+    "Para metodo_contenedor: hacer scan hacia arriba buscando el patrón más cercano de `methodName(...) {` o `methodName = (...)` o `function methodName(...)`. Mejor esfuerzo, null si ambiguo.",
+    "comentarios_explicativos: capturar comentarios de UNA línea (`//`) que estén DIRECTAMENTE antes del publish (línea anterior, sin línea en blanco entre medias). Solo si su contenido aporta razón ('emit X because Y', 'fire-and-forget', etc.). Comentarios meramente descriptivos del nombre se ignoran.",
+    "Si hay PUBLISHES dentro de eval(), Function constructor, o código generado, MARCARLO en quirks.warnings y NO intentar extraerlo."
+  ],
+
+  "prohibido": [
+    "Marcar nada como 'violación', 'incumple', 'incorrecto'. El contrato es descriptivo.",
+    "Inferir el shape del payload más allá de lo visible literalmente.",
+    "Inventar metodo_contenedor o bloque_logico — si no es claro, null.",
+    "Agrupar o de-duplicar literales con dinámicos. Cada publish es una entrada.",
+    "Modificar código del módulo — read-only.",
+    "Leer archivos de OTROS módulos."
+  ],
+
+  "salida": {
+    "ruta": "arquitectura/auditoria/_outputs/eventos-emitidos/{slug}.json",
+    "slug_rule": "modulo.replace('/', '__')"
+  },
+
+  "validacion_automatica": {
+    "ajv_schema": "arquitectura/auditoria/_schemas/eventos-emitidos.schema.json",
+    "validator_script": "arquitectura/auditoria/_validators/eventos-emitidos.validate.js",
+    "checks_cruzados": [
+      "publishes_count_total === len(eventos_emitidos)",
+      "Para cada eventos_emitidos[i].ubicacion = 'path:linea': el path existe y la línea contiene literalmente '.publish('",
+      "literales_unicos_emitidos = set único de los nombre.valor donde tipo=literal — coherente con eventos_emitidos",
+      "publishes_por_canal[eventBus] + [mqtt_directo] + [otro] === publishes_count_total",
+      "manifest_referencia apunta a un archivo existente y su modulo coincide con _meta.modulo",
+      "publishes_declarados_en_manifest === manifest.eventos.publica[].event (lectura independiente)",
+      "Cada eventos_emitidos[i].snippet contiene literalmente el texto '.publish(' (sanity check anti-invención)"
+    ]
+  },
+
+  "prompt_template_para_subagente": "Tarea: extraer todos los eventos emitidos del módulo {MODULO} en {UBICACION}.\n\nLEE OBLIGATORIO:\n1. /home/user/2enki/arquitectura/auditoria/_contratos/eventos-emitidos.contract.json\n2. /home/user/2enki/arquitectura/auditoria/_schemas/eventos-emitidos.schema.json\n3. /home/user/2enki/arquitectura/auditoria/_outputs/eventos-emitidos/recetas.json (fixture)\n4. /home/user/2enki/arquitectura/auditoria/_outputs/manifest-completo/{SLUG}.json (para el cruce)\n\nLEE EL CÓDIGO:\n- /home/user/2enki/{UBICACION}/index.js\n- Si existe: /home/user/2enki/{UBICACION}/lib/**/*.js\n- Si existe: /home/user/2enki/{UBICACION}/services/**/*.js\n\nPROHIBIDO leer __tests__/, agents/*.json, schemas/*.json, prompts/, OTROS módulos.\n\nUSA grep -nE \"(eventBus|this\\.eventBus|mqtt|this\\.mqtt)\\.publish\\(\" sobre cada archivo permitido para enumerar todos los publishes.\n\nPara cada publish, extrae literalmente:\n- nombre (literal entre comillas, dynamic_template entre backticks con ${}, o variable identificador)\n- ubicación archivo:línea exacta\n- método contenedor (mejor esfuerzo)\n- payload tipo + campos visibles si es objeto literal\n- canal (eventBus / mqtt_directo / otro)\n- es_await, es_return\n- snippet 3-5 líneas\n\nAplica las reglas_de_extraccion del contrato. Cumple el shape del schema EXACTAMENTE (additionalProperties:false).\n\nFILOSOFÍA: descriptivo, no prescriptivo. NO marcar nada como 'violación'. Solo describir.\n\nGUARDA: /home/user/2enki/arquitectura/auditoria/_outputs/eventos-emitidos/{SLUG}.json\nVALIDA: cd /home/user/2enki && node arquitectura/auditoria/_validators/eventos-emitidos.validate.js {SLUG}\n\nSi FAIL, arregla hasta PASS.\n\nResponde en <120 palabras: ruta, exit code, número de publishes detectados, distribución por canal, declarados_no_emitidos count, emitidos_no_declarados count, correcciones aplicadas si las hubo."
+}

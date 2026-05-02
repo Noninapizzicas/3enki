@@ -1,0 +1,266 @@
+{
+  "_meta": {
+    "modulo": "escandallo",
+    "ubicacion": "modules/escandallo",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "escandallo",
+    "version": "1.0.0",
+    "description_oficial": "Análisis de costes y escandallo de recetas. Calcula costes, márgenes, food cost, comparativas de precios y alertas.",
+    "author": "Event Core Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_negocio_alimentario",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "escandallo.calculado",  "description": "Escandallo calculado para una receta" },
+      { "event": "escandallo.alerta",     "description": "Alerta: coste supera umbral o margen bajo" },
+      { "event": "escandallo.comparativa","description": "Comparativa de precios generada" }
+    ],
+    "subscribes": [
+      { "event": "project.activated",              "handler": "onProjectActivated",           "extras": {} },
+      { "event": "project.deactivated",            "handler": "onProjectDeactivated",         "extras": {} },
+      { "event": "receta.creada",                  "handler": "onRecetaCreada",               "extras": {} },
+      { "event": "receta.actualizada",             "handler": "onRecetaActualizada",          "extras": {} },
+      { "event": "ingrediente.precio.actualizado", "handler": "onIngredientePrecioActualizado","extras": {} }
+    ],
+    "provides_eventos": ["escandallo.calculado", "escandallo.alerta", "escandallo.comparativa"]
+  },
+
+  "tools": [
+    {
+      "name": "escandallo.receta",
+      "description": "Calcula el escandallo completo de una receta: desglose de costes por ingrediente, coste total, coste por porción, porcentaje de cada ingrediente, food cost si se indica precio de venta. Puede usar precios de mercado o de compra.",
+      "parameters_required": ["receta_id"],
+      "parameters_property_names": ["receta_id", "precio_venta", "usar_precio_compra"],
+      "parameters_size_chars": 378,
+      "parameters_full_path_hint": "modules/escandallo/module.json → tools[0].parameters"
+    },
+    {
+      "name": "escandallo.global",
+      "description": "Escandallo global de todas las recetas del proyecto: coste medio, ranking por coste, ingredientes más caros, resumen por categoría. Visión completa de costes.",
+      "parameters_required": [],
+      "parameters_property_names": ["precios_venta"],
+      "parameters_size_chars": 160,
+      "parameters_full_path_hint": "modules/escandallo/module.json → tools[1].parameters"
+    },
+    {
+      "name": "escandallo.comparar_precios",
+      "description": "Compara precios de mercado vs precios de compra reales para todos los ingredientes. Muestra diferencias, ahorro potencial, y ingredientes sin precio de compra.",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 33,
+      "parameters_full_path_hint": "modules/escandallo/module.json → tools[2].parameters"
+    },
+    {
+      "name": "escandallo.simular_precio",
+      "description": "Simula diferentes precios de venta para una receta y muestra el impacto en margen, food cost y beneficio por porción. Útil para decidir precio de carta.",
+      "parameters_required": ["receta_id"],
+      "parameters_property_names": ["receta_id", "precios", "food_cost_objetivo"],
+      "parameters_size_chars": 384,
+      "parameters_full_path_hint": "modules/escandallo/module.json → tools[3].parameters"
+    },
+    {
+      "name": "escandallo.ingrediente_impacto",
+      "description": "Analiza el impacto de un ingrediente: en cuántas recetas aparece, coste total que representa, qué pasaría si sube de precio X%.",
+      "parameters_required": ["ingrediente_nombre"],
+      "parameters_property_names": ["ingrediente_nombre", "subida_porcentaje"],
+      "parameters_size_chars": 255,
+      "parameters_full_path_hint": "modules/escandallo/module.json → tools[4].parameters"
+    },
+    {
+      "name": "escandallo.optimizar",
+      "description": "Sugiere optimizaciones de coste: ingredientes más caros que podrían sustituirse, recetas con food cost alto, ingredientes con poco uso que encarecen stock.",
+      "parameters_required": [],
+      "parameters_property_names": ["food_cost_maximo"],
+      "parameters_size_chars": 130,
+      "parameters_full_path_hint": "modules/escandallo/module.json → tools[5].parameters"
+    },
+    {
+      "name": "escandallo.ficha_tecnica",
+      "description": "Genera la ficha técnica completa de una receta: escandallo detallado, elaboración, alérgenos, food cost, formato profesional listo para imprimir o archivar.",
+      "parameters_required": ["receta_id"],
+      "parameters_property_names": ["receta_id", "precio_venta"],
+      "parameters_size_chars": 200,
+      "parameters_full_path_hint": "modules/escandallo/module.json → tools[6].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "escandallo", "action": "receta",     "handler": "handleEscandalloReceta" },
+      { "domain": "escandallo", "action": "global",     "handler": "handleEscandalloGlobal" },
+      { "domain": "escandallo", "action": "comparativa","handler": "handleComparativa" },
+      { "domain": "escandallo", "action": "stats",      "handler": "handleStats" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": { "level": null, "structured": null },
+    "metrics": {
+      "enabled": null,
+      "counters": [
+        "escandallo.receta.calculated",
+        "escandallo.global.calculated",
+        "escandallo.comparativa.generated",
+        "escandallo.simulacion.run",
+        "escandallo.ficha.generated"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": ["escandallo-optimizer"]
+  },
+
+  "intents_declarados": [
+    {
+      "keywords": ["cuánto cuesta", "coste de", "coste receta", "escandallo de", "escandallo receta"],
+      "action": "tool_call",
+      "tool": "escandallo.receta",
+      "agent": null,
+      "description": "Calcular el escandallo completo de una receta",
+      "multi_turn": null
+    },
+    {
+      "keywords": ["food cost", "margen", "rentabilidad", "a qué precio vender", "precio de venta"],
+      "action": "tool_call",
+      "tool": "escandallo.receta",
+      "agent": null,
+      "description": "Calcular food cost y margen de una receta dado un precio de venta",
+      "multi_turn": null
+    },
+    {
+      "keywords": ["simular precio", "simula precios", "si lo vendo a", "qué pasa si precio"],
+      "action": "tool_call",
+      "tool": "escandallo.simular_precio",
+      "agent": null,
+      "description": "Simular diferentes precios de venta y su impacto en margen",
+      "multi_turn": null
+    },
+    {
+      "keywords": ["comparar precios", "mercado vs compra", "diferencia precios", "precios reales vs estimados"],
+      "action": "tool_call",
+      "tool": "escandallo.comparar_precios",
+      "agent": null,
+      "description": "Comparar precios de mercado estimados con precios de compra reales de facturas",
+      "multi_turn": null
+    },
+    {
+      "keywords": ["impacto ingrediente", "qué pasa si sube", "si sube el precio de", "impacto subida"],
+      "action": "tool_call",
+      "tool": "escandallo.ingrediente_impacto",
+      "agent": null,
+      "description": "Analizar el impacto de una subida de precio de un ingrediente",
+      "multi_turn": null
+    },
+    {
+      "keywords": ["optimizar costes", "reducir costes", "cómo abaratar", "sugerencias coste"],
+      "action": "tool_call",
+      "tool": "escandallo.optimizar",
+      "agent": null,
+      "description": "Sugerencias de optimización de costes del menú",
+      "multi_turn": null
+    },
+    {
+      "keywords": ["ficha técnica", "generar ficha", "ficha receta"],
+      "action": "tool_call",
+      "tool": "escandallo.ficha_tecnica",
+      "agent": null,
+      "description": "Generar ficha técnica profesional de una receta",
+      "multi_turn": null
+    },
+    {
+      "keywords": ["escandallo global", "resumen costes", "costes del menú", "todas las recetas costes"],
+      "action": "tool_call",
+      "tool": "escandallo.global",
+      "agent": null,
+      "description": "Escandallo global de todas las recetas del proyecto",
+      "multi_turn": null
+    },
+    {
+      "keywords": ["optimiza el menú completo", "analiza todos los costes", "revisión completa de costes"],
+      "action": "agent",
+      "tool": null,
+      "agent": "escandallo-optimizer",
+      "description": "Análisis completo de costes del menú con recomendaciones de optimización",
+      "multi_turn": false
+    }
+  ],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": true,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": true
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 8843,
+    "module_json_lineas": 237,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "provides.events duplica events.publishes — provides es campo inusual (no canónico puro) con subestructura {events:[...]}, capturado en provides_eventos",
+      "tools[].handler presente en module.json pero no forma parte del shape de tools en el schema de extracción — no se captura en tools[]",
+      "observability.metrics no declara enabled ni gauges ni timings — normalizados a null/[]"
+    ]
+  }
+}

@@ -1,0 +1,190 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/variaciones",
+    "ubicacion": "modules/pizzepos/variaciones",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "variaciones",
+    "version": "3.0.0",
+    "description_oficial": "Gestión de variaciones de productos (quitar/añadir ingredientes)",
+    "author": "Pizzepos Team",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_5_domain_pizzepos",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "event": "variacion.validada",
+        "description": "Variación validada correctamente"
+      },
+      {
+        "event": "variacion.rechazada",
+        "description": "Variación rechazada (no permitida)"
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "producto.creado",
+        "handler": "onProductoCreado",
+        "extras": { "description": "Producto creado - registrar variaciones permitidas" }
+      },
+      {
+        "event": "comandero.item_agregado",
+        "handler": "onComanderoItemAgregado",
+        "extras": { "description": "Item agregado al buffer del comandero - validar variaciones" }
+      }
+    ],
+    "provides_eventos": [
+      "variacion.validada",
+      "variacion.rechazada"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/productos/:producto_id/variaciones",
+      "handler": "handleGetVariacionesProducto",
+      "description": "Obtener variaciones permitidas para un producto",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/validar",
+      "handler": "handleValidarVariacion",
+      "description": "Validar si una variación es permitida",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/calcular-precio",
+      "handler": "handleCalcularPrecio",
+      "description": "Calcular precio final con variaciones",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Métricas del módulo",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": []
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "variacion.validada.total",
+        "variacion.rechazada.total"
+      ],
+      "gauges": [
+        "variacion.productos_configurados.count"
+      ],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/pizzepos/variaciones/schemas/events.json",
+      "modules/pizzepos/variaciones/schemas/variacion.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 2386,
+    "module_json_lineas": 93,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "provides.queries declara ['variacion.validar', 'variacion.calcular_precio'] — no son eventos sino queries RPC, campo no canónico del schema de provides",
+      "observability.logging.correlation_id=true — campo extra no recogido en observability_declarada (solo logging.level + logging.structured son canónicos en el schema de salida)",
+      "main ausente en module.json — puede que el loader use index.js por convención"
+    ]
+  }
+}

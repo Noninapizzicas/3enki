@@ -3,15 +3,30 @@
   "version": "1.0.0",
   "description": "Generación de paquetes (CSV + originales) para asesoría contable",
   "author": "Event-Core Team",
+  "language": "es",
   "main": "index.js",
-
   "handlers": [
-    { "domain": "asesoria", "action": "generar-paquete", "method": "handleGenerarPaquete" },
-    { "domain": "asesoria", "action": "historial", "method": "handleHistorial" },
-    { "domain": "asesoria", "action": "descargar", "method": "handleDescargar" },
-    { "domain": "asesoria", "action": "preview", "method": "handlePreview" }
+    {
+      "domain": "asesoria",
+      "action": "generar-paquete",
+      "method": "handleGenerarPaquete"
+    },
+    {
+      "domain": "asesoria",
+      "action": "historial",
+      "method": "handleHistorial"
+    },
+    {
+      "domain": "asesoria",
+      "action": "descargar",
+      "method": "handleDescargar"
+    },
+    {
+      "domain": "asesoria",
+      "action": "preview",
+      "method": "handlePreview"
+    }
   ],
-
   "tools": [
     {
       "name": "asesoria.generar-paquete",
@@ -20,11 +35,23 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "projectId": { "type": "string", "description": "ID del proyecto" },
-          "periodo": { "type": "string", "description": "Periodo YYYY-MM para filtrar" },
-          "incluirOriginales": { "type": "boolean", "default": true, "description": "Incluir archivos originales (PDF/IMG) en el ZIP" }
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          },
+          "periodo": {
+            "type": "string",
+            "description": "Periodo YYYY-MM para filtrar"
+          },
+          "incluirOriginales": {
+            "type": "boolean",
+            "default": true,
+            "description": "Incluir archivos originales (PDF/IMG) en el ZIP"
+          }
         },
-        "required": ["projectId"]
+        "required": [
+          "projectId"
+        ]
       }
     },
     {
@@ -34,13 +61,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "projectId": { "type": "string", "description": "ID del proyecto" }
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          }
         },
-        "required": ["projectId"]
+        "required": [
+          "projectId"
+        ]
       }
     }
   ],
-
   "events": {
     "publishes": [
       "asesoria.paquete.generado",
@@ -48,7 +79,6 @@
     ],
     "subscribes": []
   },
-
   "config": {
     "csv": {
       "separator": ";",
@@ -60,7 +90,6 @@
       "zip": 60000
     }
   },
-
   "observability": {
     "logging": {
       "level": "info",

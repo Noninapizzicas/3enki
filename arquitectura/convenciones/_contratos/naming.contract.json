@@ -1,0 +1,128 @@
+{
+  "_doc": "Captura LA convención de naming del sistema event-core: idioma por módulo, forma de los eventos, verbos canónicos por idioma, restricciones léxicas. Es la regla determinista que rige cómo se nombran módulos, eventos, entidades y verbos. Descriptiva del estado canónico, NO del legacy: si un módulo viejo no la cumple, eso se reporta como drift, no como excepción al contrato.",
+  "id": "naming",
+  "version": "1.1.0",
+  "creada": "2026-04-30",
+  "supersedes_nota": "v1.1.0 (POC iteration): añadidas clarificaciones en razon de 'masculino_singular_for_es' (nota didáctica sobre identificadores ≠ lenguaje natural) y 'form_canonical' (cuándo usar 2-partes vs 3-partes — single-entity vs multi-entity modules). Sin cambios estructurales en output ni schema. Validado en POC modules/notas-poc/.",
+
+  "objetivo": "Eliminar ambigüedad y drift en los nombres del sistema. Producir UN JSON output único (_outputs/naming.json) que contiene las reglas, los whitelist de verbos por idioma, y los flags de restricciones léxicas. Validable mecánicamente contra cada module.json y cada evento publicado por cada módulo.",
+
+  "duracion_esperada_seg": 5,
+  "modelo_recomendado": "ninguno — el output es estático, mantenido por humanos via PR. El validador es determinista.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/convenciones/_contratos/naming.contract.json (este archivo)",
+      "arquitectura/convenciones/_schemas/naming.schema.json"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/auditoria/_outputs/manifest-completo/*.json — fuente de eventos declarados por módulo",
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json — fuente de eventos reales emitidos por módulo",
+      "modules/*/module.json — debe declarar el campo `language`"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "DECLARATIVO. El output es la regla; no contiene legacy ni excepciones. Si un módulo viejo no cumple, la migración del módulo lo arreglará — el contrato no cede.",
+    "MONOLINGÜE POR MÓDULO. Cada módulo elige UN idioma (es | en) y todos sus eventos, entidades y verbos siguen ese idioma. No hay spanglish dentro de un módulo.",
+    "AUTODECLARADO. El idioma se declara explícitamente en module.json.language. La convención: que case con el nombre del directorio.",
+    "ASCII PURO. Nombres de eventos sin tildes, sin ñ, sin caracteres especiales. Las tildes viven en strings UI, no en el bus.",
+    "VERBOS CERRADOS. Cada idioma tiene una whitelist cerrada de verbos del ciclo de vida. No se inventan variantes.",
+    "FORMA EXPLÍCITA. <module-prefix>.<entity>.<verb> (3 partes) o <module-prefix>.<verb> (2 partes cuando entity == module). Nada más.",
+    "KEBAB-CASE EN COMPUESTOS. recipe-costing, food-cost, cuentas-canales. Nunca camelCase ni snake_case en nombres de evento (excepción: verbos compuestos del whitelist EN como build_started, build_completed — herencia industria embedded).",
+    "DRIFT ES INFORMACIÓN. El validador reporta cada incumplimiento con archivo:línea. La decisión de migrar es del equipo, pero el contrato no se reescribe para ocultar drift."
+  ],
+
+  "principios": [
+    {
+      "id": "monolingual_module",
+      "regla": "Cada módulo es monolingüe.",
+      "razon": "Evita spanglish accidental dentro del módulo. Forza coherencia local entre nombre del directorio, eventos, entidades y verbos."
+    },
+    {
+      "id": "language_declared",
+      "regla": "module.json declara `language` ∈ {es, en}.",
+      "razon": "Habilita lint mecánico. Sin declaración, no hay forma de validar."
+    },
+    {
+      "id": "directory_name_matches_language",
+      "regla": "Convención: el nombre del directorio del módulo es del mismo idioma que `language`. Ejemplos: modules/recetas/ → es; modules/firmware-manager/ → en.",
+      "razon": "El idioma emerge naturalmente del nombre. Renombrar el directorio fuerza migrar los eventos. Sin esta convención hay riesgo de mismatch silencioso."
+    },
+    {
+      "id": "ascii_only",
+      "regla": "Nombres de eventos en ASCII puro. Sin tildes, sin ñ, sin acentos.",
+      "razon": "Compatibilidad con MQTT topics, JSON keys, regex y logs de stdout. `confirmacion`, no `confirmación`."
+    },
+    {
+      "id": "closed_verb_list",
+      "regla": "Solo se usan verbos del whitelist del idioma del módulo. Lista cerrada.",
+      "razon": "Evita inventar variantes (creando, was-created, creates). Hay UNA forma canónica por idioma por concepto del ciclo de vida."
+    },
+    {
+      "id": "form_canonical",
+      "regla": "Eventos siguen `<module-prefix>.<entity>.<verb>` (3 partes) o `<module-prefix>.<verb>` (2 partes, solo cuando entity coincide con module).",
+      "razon": "Estructura explícita. Parsear/buscar/categorizar es trivial. Ejemplos: `pos.pedido.creado` (3 partes), `device.online` (2 partes — el dispositivo es la entidad implícita). REGLA DE APLICACIÓN: usar 2-partes cuando el módulo maneja UNA SOLA entidad (single-entity, ej. notas → `notas.creado`); usar 3-partes cuando el módulo maneja varias entidades (multi-entity, ej. cocina → `cocina.comanda.recibida` + `cocina.ticket.impreso`). El POC del módulo notas validó la pertinencia de esta clarificación: `notas.creado` resulta limpio porque la nota ES la entidad del módulo."
+    },
+    {
+      "id": "kebab_case_compounds",
+      "regla": "Compuestos en kebab-case: `recipe-costing`, `food-cost`, `cuentas-canales`, `pos-terminal`. Nunca camelCase ni snake_case excepto en los verbos compuestos del whitelist EN.",
+      "razon": "Consistencia con MQTT y JSON. snake_case se permite SOLO en verbos compuestos heredados de industria embedded (build_started, build_completed, ota_failed) listados explícitamente en el whitelist."
+    },
+    {
+      "id": "masculino_singular_for_es",
+      "regla": "Los verbos en español se declaran en masculino singular como forma canónica. `pedido.creado`, no `pedido.creada` ni `pedidos.creados`.",
+      "razon": "Una sola forma. Si la entidad es femenina (factura, mesa, comanda, nota), el verbo sigue siendo masculino singular. Es convención puramente sintáctica del bus, NO concordancia gramatical natural — los identificadores del bus no son lenguaje natural sino strings estables que las máquinas indexan/filtran/agregan. NOTA DIDÁCTICA: cuando leas 'nota.creado' o 'factura.creado' suena forzado en español hablado, pero estos no son frases — son identificadores. La gramática natural se aplica en strings UI (mensajes al usuario), nunca en topics, eventos ni nombres de métricas. Validado en POC notas: respetar la regla mantiene una sola forma léxica para todo el sistema."
+    },
+    {
+      "id": "no_synonyms_in_glossary",
+      "regla": "Si un concepto está en glossary.json, su nombre canónico es el único permitido. No se aceptan sinónimos ni traducciones libres.",
+      "razon": "Coherencia cross-módulo. Si dos módulos hablan del mismo concepto, deben usar el mismo término."
+    }
+  ],
+
+  "lista_canonica_idiomas": ["es", "en"],
+
+  "output_shape_resumen": "Ver _schemas/naming.schema.json. Top-level: _meta, regla (string maestra), rules (form, ascii_only, no_accents, no_tilde_n, case_compounds), languages (object con keys 'es' y 'en'; cada uno tiene module_json_language_value y verbs_lifecycle).",
+
+  "reglas_de_extraccion": [
+    "Definir la `regla` maestra en una frase corta que resuma todo.",
+    "Definir `rules` con flags booleanos/enums explícitos: form (string del patrón), ascii_only=true, no_accents=true, no_tilde_n=true, case_compounds='kebab-case'.",
+    "Definir `languages.es` y `languages.en`. Cada uno tiene module_json_language_value (string que aparece en module.json) y verbs_lifecycle (array de verbos en el idioma).",
+    "Verbos del whitelist EN: incluir verbos atómicos en past participle (created, updated, deleted...) Y verbos compuestos heredados de industria embedded (build_started, build_completed, build_failed, ota_requested, ota_completed, ota_failed). Estos compuestos snake_case son la EXCEPCIÓN explícita al kebab-case en verbos.",
+    "Verbos del whitelist ES: solo verbos atómicos en participio masculino singular (creado, actualizado, eliminado...). No hay equivalentes compuestos en ES porque el dominio embedded vive en EN.",
+    "Cada whitelist debe ser exhaustivo de los verbos que el sistema NECESITA. Si aparece un verb necesario que falta, se añade vía PR al output (no al contrato).",
+    "El contrato (este archivo) describe QUÉ campos debe tener el output. El output (_outputs/naming.json) contiene los valores concretos."
+  ],
+
+  "derivaciones": {
+    "module_default_language_from_directory": "heurística — el validador puede inferir un default mirando si el nombre del directorio contiene palabras claramente ES (receta, pedido, cobro, factura, nota, mesa, carta, cocina, comanda, comandero, viabilidad, escandallo, perifericos, facturacion, pizzepos) o claramente EN. Si ambiguo o vacío, se exige declaración explícita.",
+    "verb_must_be_whitelisted": "true si event_name.split('.').pop() ∈ languages[module.language].verbs_lifecycle"
+  },
+
+  "prohibido": [
+    "Marcar el contrato como inmutable. Es versionado: cambios = bump de version + razón en _meta.",
+    "Mezclar idiomas dentro del mismo módulo. Si un módulo necesita cambiar de idioma, se renombra entero (incluyendo eventos).",
+    "Aceptar tildes o ñ en nombres de eventos bajo ningún pretexto.",
+    "Inventar verbos fuera del whitelist. Si falta uno, se propone PR al output con justificación.",
+    "Usar el contrato para excepcionar legacy. El contrato describe el estado canónico; el legacy es drift, no excepción."
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    "naming.json valida estructuralmente contra naming.schema.json (AJV strict, additionalProperties=false).",
+    "Cada module.json en modules/ tiene el campo `language` declarado y su valor está en lista_canonica_idiomas.",
+    "Para cada módulo con auditoría modulo-completo, cada evento de eventos.publica[].nombre.valor: si nombre.tipo='literal', el valor cumple la forma `<prefix>.<entity>.<verb>` o `<prefix>.<verb>`, todos los segmentos son ASCII puros, y el verbo (último segmento o sufijo conocido) está en verbs_lifecycle del idioma del módulo.",
+    "Ningún nombre de evento contiene tildes, ñ, espacios ni caracteres no-ASCII.",
+    "Si module.json.language='es', ningún evento publicado contiene un verbo del whitelist EN (heurística de cross-mix detection); viceversa para 'en'.",
+    "El idioma declarado en module.json es coherente con el nombre del directorio (warning, no error — porque puede haber casos legítimos como recipe-costing/ con language=en aunque sea dominio HORECA).",
+    "La forma <prefix>.<entity>.<verb> es preferida; <prefix>.<verb> se permite solo cuando el evento describe un cambio del módulo entero (ej. device.online — el módulo device como entidad implícita)."
+  ],
+
+  "salida_validador": "PASS si naming.json es estructuralmente válido. FAIL si hay errores de schema. Cross-checks contra módulos del repo se reportan como warnings detallados (drift) pero NO bloquean PASS — el contrato se valida a sí mismo, el drift del sistema es información para la migración.",
+
+  "convenciones_complementarias": [
+    "Esta convención asume coexistencia con `glossary` (arquitectura/convenciones/_outputs/glossary.json) que define términos cross-módulo. Si una entidad de un evento está en el glosario, debe ser la forma canónica del idioma del módulo (validado por glossary.validate.js, no por este validator)."
+  ]
+}

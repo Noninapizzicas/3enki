@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Diseñador visual de interfaces para módulos Event-Core",
   "author": "Event Core Team",
-
+  "language": "en",
   "provides": {
     "events": [
       "ui-designer.template.created",
@@ -15,7 +15,6 @@
     ],
     "queries": []
   },
-
   "events": {
     "publishes": [
       {
@@ -24,9 +23,15 @@
         "schema": {
           "type": "object",
           "properties": {
-            "template_id": { "type": "string" },
-            "name": { "type": "string" },
-            "type": { "type": "string" }
+            "template_id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            }
           }
         }
       },
@@ -36,8 +41,12 @@
         "schema": {
           "type": "object",
           "properties": {
-            "template_id": { "type": "string" },
-            "changes": { "type": "object" }
+            "template_id": {
+              "type": "string"
+            },
+            "changes": {
+              "type": "object"
+            }
           }
         }
       },
@@ -47,8 +56,12 @@
         "schema": {
           "type": "object",
           "properties": {
-            "template_id": { "type": "string" },
-            "name": { "type": "string" }
+            "template_id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
           }
         }
       },
@@ -67,7 +80,6 @@
     ],
     "subscribes": []
   },
-
   "apis": [
     {
       "method": "GET",
@@ -178,7 +190,6 @@
       "description": "Health check del módulo"
     }
   ],
-
   "ui": {
     "enabled": true,
     "version": "2.0",
@@ -192,43 +203,90 @@
       "order": 5
     }
   },
-
   "schema": {
     "template": {
       "type": "object",
-      "required": ["name", "type"],
+      "required": [
+        "name",
+        "type"
+      ],
       "properties": {
-        "id": { "type": "string" },
+        "id": {
+          "type": "string"
+        },
         "name": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]*$",
           "minLength": 3,
           "maxLength": 50
         },
-        "display_name": { "type": "string", "maxLength": 100 },
-        "description": { "type": "string", "maxLength": 500 },
-        "icon": { "type": "string", "maxLength": 4 },
+        "display_name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "icon": {
+          "type": "string",
+          "maxLength": 4
+        },
         "type": {
           "type": "string",
-          "enum": ["view", "modal", "form", "dashboard", "component", "page"]
+          "enum": [
+            "view",
+            "modal",
+            "form",
+            "dashboard",
+            "component",
+            "page"
+          ]
         },
         "category": {
           "type": "string",
-          "enum": ["general", "admin", "data", "analytics", "settings", "ai", "custom"]
+          "enum": [
+            "general",
+            "admin",
+            "data",
+            "analytics",
+            "settings",
+            "ai",
+            "custom"
+          ]
         },
         "status": {
           "type": "string",
-          "enum": ["draft", "published", "archived"]
+          "enum": [
+            "draft",
+            "published",
+            "archived"
+          ]
         },
-        "layout": { "type": "object" },
-        "components": { "type": "array" },
-        "theme": { "type": "object" },
-        "permissions": { "type": "array", "items": { "type": "string" } },
-        "tags": { "type": "array", "items": { "type": "string" } }
+        "layout": {
+          "type": "object"
+        },
+        "components": {
+          "type": "array"
+        },
+        "theme": {
+          "type": "object"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     }
   },
-
   "observability": {
     "logging": {
       "level": "info",
@@ -238,7 +296,6 @@
       "enabled": true
     }
   },
-
   "config": {
     "enabled": true,
     "autosave": true,

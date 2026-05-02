@@ -1,0 +1,182 @@
+{
+  "_meta": {
+    "modulo": "text-editor",
+    "ubicacion": "modules/text-editor",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "text-editor",
+    "version": "1.0.0",
+    "description_oficial": "Text editor for MD and JSON files with syntax highlighting and validation",
+    "author": "Aichat Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_6_ui",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "editor.open.response",     "description": null },
+      { "event": "editor.saved",             "description": null },
+      { "event": "editor.validate.response", "description": null },
+      { "event": "editor.format.response",   "description": null },
+      { "event": "editor.error",             "description": null }
+    ],
+    "subscribes": [
+      { "event": "editor.open.request",     "handler": "handleOpenRequest",     "extras": {} },
+      { "event": "editor.save.request",     "handler": "handleSaveRequest",     "extras": {} },
+      { "event": "editor.validate.request", "handler": "handleValidateRequest", "extras": {} },
+      { "event": "editor.format.request",   "handler": "handleFormatRequest",   "extras": {} }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "editor", "action": "open",     "handler": "handleUIOpen" },
+      { "domain": "editor", "action": "save",     "handler": "handleUISave" },
+      { "domain": "editor", "action": "validate", "handler": "handleUIValidate" },
+      { "domain": "editor", "action": "format",   "handler": "handleUIFormat" }
+    ]
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/editor/open",
+      "handler": "openFile",
+      "description": "Open file for editing",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/editor/save",
+      "handler": "saveFile",
+      "description": "Save file content",
+      "request_schema_ref": "schemas/save-file.json",
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/editor/validate",
+      "handler": "validateContent",
+      "description": "Validate JSON content",
+      "request_schema_ref": "schemas/validate-content.json",
+      "response_schema_ref": null
+    },
+    {
+      "method": "POST",
+      "path": "/editor/format",
+      "handler": "formatContent",
+      "description": "Format JSON content",
+      "request_schema_ref": "schemas/format-content.json",
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": ["file-browser", "project-manager"],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "supported_formats",  "tipo": "array",   "valor_default": ["md", "json", "txt", "html", "css", "js", "yaml", "yml", "xml"] },
+      { "key": "max_file_size",       "tipo": "number",  "valor_default": 5242880 },
+      { "key": "auto_save_interval",  "tipo": "number",  "valor_default": 30000 },
+      { "key": "tab_size",            "tipo": "number",  "valor_default": 2 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "files_opened_total",
+        "files_saved_total",
+        "validation_errors_total"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Editor de Texto",
+    "icon": "📝",
+    "views_keys": ["editor"],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/text-editor/schemas/format-content.json",
+      "modules/text-editor/schemas/save-file.json",
+      "modules/text-editor/schemas/validate-content.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 2852,
+    "module_json_lineas": 110,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "events.publishes es array de strings (no objetos con description) — normalizado a description=null",
+      "dependencies declarado como objeto {modules:[...]} en lugar de array — outlier capturado",
+      "api GET /editor/open usa query_params en lugar de request_schema — request_schema_ref mapeado a null",
+      "observability.metrics.custom en lugar de counters/gauges/timings — normalizado a counters[], gauges=[], timings=[]",
+      "ui declarada inline en module.json — tamano_bytes reportado como 0 (no es archivo separado)"
+    ]
+  }
+}

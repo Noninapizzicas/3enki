@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "PDF viewer and text extraction module",
   "author": "Aichat Team",
+  "language": "en",
   "main": "index.js",
-
   "ui": {
     "enabled": true,
     "title": "Visor PDF",
@@ -18,7 +18,6 @@
       }
     }
   },
-
   "apis": [
     {
       "method": "GET",
@@ -86,13 +85,24 @@
       }
     }
   ],
-
   "events": {
     "subscribes": [
-      { "event": "pdf.view.request", "handler": "handleViewRequest" },
-      { "event": "pdf.extract.request", "handler": "handleExtractRequest" },
-      { "event": "pdf.metadata.request", "handler": "handleMetadataRequest" },
-      { "event": "pdf.list.request", "handler": "handleListRequest" }
+      {
+        "event": "pdf.view.request",
+        "handler": "handleViewRequest"
+      },
+      {
+        "event": "pdf.extract.request",
+        "handler": "handleExtractRequest"
+      },
+      {
+        "event": "pdf.metadata.request",
+        "handler": "handleMetadataRequest"
+      },
+      {
+        "event": "pdf.list.request",
+        "handler": "handleListRequest"
+      }
     ],
     "publishes": [
       "pdf.view.response",
@@ -102,17 +112,29 @@
       "pdf.error"
     ]
   },
-
   "ui_handlers": [
-    { "domain": "pdf", "action": "view", "handler": "handleUIView" },
-    { "domain": "pdf", "action": "metadata", "handler": "handleUIMetadata" },
-    { "domain": "pdf", "action": "list", "handler": "handleUIListPdfs" }
+    {
+      "domain": "pdf",
+      "action": "view",
+      "handler": "handleUIView"
+    },
+    {
+      "domain": "pdf",
+      "action": "metadata",
+      "handler": "handleUIMetadata"
+    },
+    {
+      "domain": "pdf",
+      "action": "list",
+      "handler": "handleUIListPdfs"
+    }
   ],
-
   "dependencies": {
-    "modules": ["filesystem", "project-manager"]
+    "modules": [
+      "filesystem",
+      "project-manager"
+    ]
   },
-
   "tools": [
     {
       "name": "pdf.create",
@@ -135,17 +157,26 @@
           },
           "type": {
             "type": "string",
-            "enum": ["from_text"],
+            "enum": [
+              "from_text"
+            ],
             "description": "Siempre 'from_text'. No usar from_html."
           },
           "orientation": {
             "type": "string",
-            "enum": ["portrait", "landscape"],
+            "enum": [
+              "portrait",
+              "landscape"
+            ],
             "description": "Orientación: portrait (por defecto) o landscape"
           },
           "format": {
             "type": "string",
-            "enum": ["A4", "letter", "legal"],
+            "enum": [
+              "A4",
+              "letter",
+              "legal"
+            ],
             "description": "Formato de página: A4 (por defecto), letter o legal"
           },
           "project_id": {
@@ -153,7 +184,10 @@
             "description": "ID del proyecto (opcional)"
           }
         },
-        "required": ["filename", "content"]
+        "required": [
+          "filename",
+          "content"
+        ]
       }
     },
     {
@@ -168,7 +202,9 @@
             "description": "ID del proyecto"
           }
         },
-        "required": ["projectId"]
+        "required": [
+          "projectId"
+        ]
       }
     },
     {
@@ -187,7 +223,10 @@
             "description": "Ruta al archivo PDF"
           }
         },
-        "required": ["projectId", "filePath"]
+        "required": [
+          "projectId",
+          "filePath"
+        ]
       }
     },
     {
@@ -210,17 +249,18 @@
             "description": "Número de página (1-indexed). Si no se especifica, extrae todo."
           }
         },
-        "required": ["projectId", "filePath"]
+        "required": [
+          "projectId",
+          "filePath"
+        ]
       }
     }
   ],
-
   "config": {
     "max_pdf_size": 52428800,
     "cache_enabled": true,
     "cache_ttl": 3600000
   },
-
   "observability": {
     "logging": {
       "level": "info",

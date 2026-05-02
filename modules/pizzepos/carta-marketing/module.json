@@ -3,23 +3,46 @@
   "version": "1.0.0",
   "description": "Equipo de marketing silencioso. Escucha cambios en cartas y automáticamente enriquece, pule y mejora según el perfil de marca del proyecto. Aprende con el tiempo.",
   "author": "Pizzepos Team",
+  "language": "es",
   "main": "index.js",
-
   "events": {
     "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "carta.actualizada", "handler": "onCartaActualizada" }
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated"
+      },
+      {
+        "event": "project.deactivated",
+        "handler": "onProjectDeactivated"
+      },
+      {
+        "event": "carta.actualizada",
+        "handler": "onCartaActualizada"
+      }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "carta-marketing", "action": "perfil", "handler": "handleGetPerfil" },
-    { "domain": "carta-marketing", "action": "update-perfil", "handler": "handleUpdatePerfil" },
-    { "domain": "carta-marketing", "action": "actividad", "handler": "handleGetActividad" },
-    { "domain": "carta-marketing", "action": "health", "handler": "handleHealth" }
+    {
+      "domain": "carta-marketing",
+      "action": "perfil",
+      "handler": "handleGetPerfil"
+    },
+    {
+      "domain": "carta-marketing",
+      "action": "update-perfil",
+      "handler": "handleUpdatePerfil"
+    },
+    {
+      "domain": "carta-marketing",
+      "action": "actividad",
+      "handler": "handleGetActividad"
+    },
+    {
+      "domain": "carta-marketing",
+      "action": "health",
+      "handler": "handleHealth"
+    }
   ],
-
   "tools": [
     {
       "name": "marketing.get_perfil",
@@ -28,9 +51,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" }
+          "project_id": {
+            "type": "string"
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -40,17 +67,45 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "nombre": { "type": "string", "description": "Nombre del negocio" },
-          "tono": { "type": "string", "description": "Tono de comunicación (ej: cercano, formal, divertido)" },
-          "idioma": { "type": "string", "description": "Idioma principal (es, en, it, etc.)" },
-          "publico": { "type": "string", "description": "Público objetivo (ej: familias, jóvenes, turistas)" },
-          "valores": { "type": "string", "description": "Valores de marca (ej: producto fresco, tradición, innovación)" },
-          "colores": { "type": "object", "description": "Paleta de colores { primario, secundario, acento }" },
-          "prohibido": { "type": "string", "description": "Qué evitar (ej: anglicismos, tono pretencioso)" },
-          "referencia_visual": { "type": "string", "description": "Estilo visual de referencia (ej: trattoria moderna, minimalista)" }
+          "project_id": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre del negocio"
+          },
+          "tono": {
+            "type": "string",
+            "description": "Tono de comunicación (ej: cercano, formal, divertido)"
+          },
+          "idioma": {
+            "type": "string",
+            "description": "Idioma principal (es, en, it, etc.)"
+          },
+          "publico": {
+            "type": "string",
+            "description": "Público objetivo (ej: familias, jóvenes, turistas)"
+          },
+          "valores": {
+            "type": "string",
+            "description": "Valores de marca (ej: producto fresco, tradición, innovación)"
+          },
+          "colores": {
+            "type": "object",
+            "description": "Paleta de colores { primario, secundario, acento }"
+          },
+          "prohibido": {
+            "type": "string",
+            "description": "Qué evitar (ej: anglicismos, tono pretencioso)"
+          },
+          "referencia_visual": {
+            "type": "string",
+            "description": "Estilo visual de referencia (ej: trattoria moderna, minimalista)"
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -60,9 +115,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" }
+          "project_id": {
+            "type": "string"
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -72,13 +131,16 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" }
+          "project_id": {
+            "type": "string"
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     }
   ],
-
   "agents": {
     "description": "Equipo de agentes especializados que trabajan automáticamente",
     "marketing-onboarding": "Entrevista conversacional para construir perfil de marca",

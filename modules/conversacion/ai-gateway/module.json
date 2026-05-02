@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Ejecutor del LLM. Dos entry points: chat.prompt.ready (flujo de chat) y llm.complete.request (flujo genérico, usado por agentes). Internamente comparten _executeLLM (agentic loop con tools, providers con fallback, credentials event-driven).",
   "author": "Event Core Team",
-
+  "language": "en",
   "publishes": [
     "ai.chat.response",
     "llm.complete.response",
@@ -11,26 +11,121 @@
     "fs.read.request"
   ],
   "subscribes": [
-    { "event": "chat.prompt.ready",          "handler": "onChatPromptReady" },
-    { "event": "llm.complete.request",       "handler": "onLlmCompleteRequest" },
-    { "event": "credential.resolve.response","handler": "onCredentialResponse" },
-    { "event": "credential.saved",           "handler": "onCredentialSaved" },
-    { "event": "credential.updated",         "handler": "onCredentialSaved" },
-    { "event": "credential.deleted",         "handler": "onCredentialDeleted" },
-    { "event": "fs.read.response",           "handler": "onFsReadResponse" }
+    {
+      "event": "chat.prompt.ready",
+      "handler": "onChatPromptReady"
+    },
+    {
+      "event": "llm.complete.request",
+      "handler": "onLlmCompleteRequest"
+    },
+    {
+      "event": "credential.resolve.response",
+      "handler": "onCredentialResponse"
+    },
+    {
+      "event": "credential.saved",
+      "handler": "onCredentialSaved"
+    },
+    {
+      "event": "credential.updated",
+      "handler": "onCredentialSaved"
+    },
+    {
+      "event": "credential.deleted",
+      "handler": "onCredentialDeleted"
+    },
+    {
+      "event": "fs.read.response",
+      "handler": "onFsReadResponse"
+    }
   ],
-
   "config": {
     "providers": {
-      "deepseek":   { "enabled": true, "priority": 1, "api_base": "https://api.deepseek.com/v1", "default_model": "deepseek-chat", "models": ["deepseek-chat","deepseek-coder","deepseek-reasoner"] },
-      "anthropic":  { "enabled": true, "priority": 2, "api_base": "https://api.anthropic.com/v1", "default_model": "claude-3-5-sonnet-20241022", "models": ["claude-3-5-sonnet-20241022","claude-3-opus-20240229","claude-3-haiku-20240307"] },
-      "openai":     { "enabled": true, "priority": 3, "api_base": "https://api.openai.com/v1", "default_model": "gpt-4o-mini", "models": ["gpt-4o","gpt-4o-mini","gpt-3.5-turbo"] },
-      "groq":       { "enabled": true, "priority": 4, "api_base": "https://api.groq.com/openai/v1", "default_model": "llama-3.3-70b-versatile", "models": ["llama-3.3-70b-versatile","mixtral-8x7b-32768","gemma2-9b-it"] },
-      "gemini":     { "enabled": true, "priority": 5, "api_base": "https://generativelanguage.googleapis.com/v1beta", "default_model": "gemini-2.5-flash", "models": ["gemini-2.5-flash","gemini-2.5-pro"] },
-      "ollama":     { "enabled": true, "priority": 6, "api_base": "http://localhost:11434/api", "default_model": "llama2", "models": ["llama2","codellama","mistral","mixtral"] },
-      "claude-cli": { "enabled": true, "priority": 7, "cli_path": "claude", "default_model": "sonnet", "models": ["sonnet","opus","haiku"] }
+      "deepseek": {
+        "enabled": true,
+        "priority": 1,
+        "api_base": "https://api.deepseek.com/v1",
+        "default_model": "deepseek-chat",
+        "models": [
+          "deepseek-chat",
+          "deepseek-coder",
+          "deepseek-reasoner"
+        ]
+      },
+      "anthropic": {
+        "enabled": true,
+        "priority": 2,
+        "api_base": "https://api.anthropic.com/v1",
+        "default_model": "claude-3-5-sonnet-20241022",
+        "models": [
+          "claude-3-5-sonnet-20241022",
+          "claude-3-opus-20240229",
+          "claude-3-haiku-20240307"
+        ]
+      },
+      "openai": {
+        "enabled": true,
+        "priority": 3,
+        "api_base": "https://api.openai.com/v1",
+        "default_model": "gpt-4o-mini",
+        "models": [
+          "gpt-4o",
+          "gpt-4o-mini",
+          "gpt-3.5-turbo"
+        ]
+      },
+      "groq": {
+        "enabled": true,
+        "priority": 4,
+        "api_base": "https://api.groq.com/openai/v1",
+        "default_model": "llama-3.3-70b-versatile",
+        "models": [
+          "llama-3.3-70b-versatile",
+          "mixtral-8x7b-32768",
+          "gemma2-9b-it"
+        ]
+      },
+      "gemini": {
+        "enabled": true,
+        "priority": 5,
+        "api_base": "https://generativelanguage.googleapis.com/v1beta",
+        "default_model": "gemini-2.5-flash",
+        "models": [
+          "gemini-2.5-flash",
+          "gemini-2.5-pro"
+        ]
+      },
+      "ollama": {
+        "enabled": true,
+        "priority": 6,
+        "api_base": "http://localhost:11434/api",
+        "default_model": "llama2",
+        "models": [
+          "llama2",
+          "codellama",
+          "mistral",
+          "mixtral"
+        ]
+      },
+      "claude-cli": {
+        "enabled": true,
+        "priority": 7,
+        "cli_path": "claude",
+        "default_model": "sonnet",
+        "models": [
+          "sonnet",
+          "opus",
+          "haiku"
+        ]
+      }
     },
-    "retry": { "max_attempts": 3, "initial_delay_ms": 1000, "max_delay_ms": 10000, "backoff_multiplier": 2 },
+    "retry": {
+      "max_attempts": 3,
+      "initial_delay_ms": 1000,
+      "max_delay_ms": 10000,
+      "backoff_multiplier": 2
+    },
     "max_tool_iterations": 10,
     "tool_timeout_ms": 150000
   }

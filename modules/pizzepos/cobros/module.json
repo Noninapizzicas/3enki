@@ -3,7 +3,7 @@
   "version": "2.1.0",
   "description": "Gestión unificada de cobros - 7 métodos de pago: efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr. Abre cajón via periferico.abrir-cajon.",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
     "events": [
       "cobro.iniciado",
@@ -11,9 +11,12 @@
       "cobro.reembolsado",
       "periferico.abrir-cajon"
     ],
-    "queries": ["cobro.obtener", "cobro.listar", "cobro.por_cuenta"]
+    "queries": [
+      "cobro.obtener",
+      "cobro.listar",
+      "cobro.por_cuenta"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -70,7 +73,6 @@
       }
     ]
   },
-
   "ui": {
     "enabled": true,
     "title": "Sistema de Cobros",
@@ -83,12 +85,10 @@
       "form-payment",
       "payment-detail"
     ],
-
     "views": {
       "main": {
         "type": "dashboard",
         "layout": "fullwidth",
-
         "header": {
           "title": "💰 Historial de Cobros",
           "subtitle": "Gestión de pagos y transacciones",
@@ -99,11 +99,13 @@
               "icon": "📊",
               "action": "export",
               "variant": "secondary",
-              "permissions": ["admin", "gerente"]
+              "permissions": [
+                "admin",
+                "gerente"
+              ]
             }
           ]
         },
-
         "content": {
           "id": "payments_grid",
           "type": "table",
@@ -119,7 +121,6 @@
           }
         }
       },
-
       "create": {
         "type": "modal",
         "width": "500px",
@@ -138,7 +139,6 @@
           }
         }
       },
-
       "detail": {
         "type": "fullscreen",
         "component": "payment-detail",
@@ -147,13 +147,18 @@
           "show_header": true,
           "show_breadcrumbs": true,
           "breadcrumbs": [
-            { "label": "Cobros", "path": "/cobros" },
-            { "label": "Recibo #{id}", "path": "/cobros/{id}" }
+            {
+              "label": "Cobros",
+              "path": "/cobros"
+            },
+            {
+              "label": "Recibo #{id}",
+              "path": "/cobros/{id}"
+            }
           ]
         }
       }
     },
-
     "mqtt": {
       "enabled": true,
       "topics": [
@@ -166,15 +171,31 @@
         "cobro.procesado": "success"
       }
     },
-
     "permissions": {
-      "view": ["admin", "gerente", "camarero"],
-      "create": ["admin", "gerente", "camarero"],
-      "confirm": ["admin", "gerente", "camarero"],
-      "refund": ["admin", "gerente"],
-      "export": ["admin", "gerente"]
+      "view": [
+        "admin",
+        "gerente",
+        "camarero"
+      ],
+      "create": [
+        "admin",
+        "gerente",
+        "camarero"
+      ],
+      "confirm": [
+        "admin",
+        "gerente",
+        "camarero"
+      ],
+      "refund": [
+        "admin",
+        "gerente"
+      ],
+      "export": [
+        "admin",
+        "gerente"
+      ]
     },
-
     "features": {
       "search": false,
       "filters": true,
@@ -185,7 +206,6 @@
       "print_receipt": true
     }
   },
-
   "apis": [
     {
       "method": "POST",
@@ -248,7 +268,6 @@
       "description": "Lista dispositivos con cajón de dinero disponibles para selección"
     }
   ],
-
   "metodos_pago": {
     "efectivo": {
       "enabled": true,
@@ -263,7 +282,10 @@
       "icono": "💳",
       "requiere_confirmacion": false,
       "soporta_contactless": true,
-      "proveedores": ["redsys", "stripe"]
+      "proveedores": [
+        "redsys",
+        "stripe"
+      ]
     },
     "bizum": {
       "enabled": true,
@@ -303,7 +325,6 @@
       "descripcion": "QR de pago rápido para Bizum/wallets"
     }
   },
-
   "observability": {
     "logging": {
       "level": "info",

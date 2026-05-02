@@ -1,0 +1,82 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/cuentas-canales",
+    "ubicacion": "modules/pizzepos/cuentas-canales",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__cuentas-canales.json"
+  },
+  "identidad": {
+    "name": "cuentas-canales",
+    "version": "1.0.0",
+    "description_oficial": "Hub de canales de venta (mesa/teléfono/llevar/Glovo/WhatsApp) — Strategy pattern por canal",
+    "author": "Pizzepos Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/pizzepos/cuentas-canales/index.js",
+    "tags": []
+  },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": null, "tier_declarado": null, "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "literal", "valor": "cuenta.cerrada", "variables_referenciadas": [] }, "ubicacion": "modules/pizzepos/cuentas-canales/index.js:286", "metodo_contenedor": "onCobroProcesado", "es_handler_de": "cobro.procesado", "bloque_logico": "tras procesar cobro — cierra cuenta en el canal correspondiente por prefijo", "payload": { "tipo": "object_literal", "campos_visibles": ["cuenta_id", "canal"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('cuenta.cerrada', { ... });", "declarado_en_manifest": true }
+    ],
+    "subscribes": [
+      { "nombre": "cobro.procesado",     "tipo_nombre": "literal", "handler": "onCobroProcesado",                "handler_ubicacion": "modules/pizzepos/cuentas-canales/index.js:146", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/cuentas-canales/index.js:146", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "pedido.creado",       "tipo_nombre": "literal", "handler": "MesaStrategy.onPedidoCreado",     "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "cocina.pedido_listo", "tipo_nombre": "literal", "handler": "TelefonoStrategy/LlevarStrategy/GlovoStrategy/WhatsAppStrategy.onCocinaPedidoListo", "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["cuenta.creada", "cuenta.cerrada", "mesa.abierta", "mesa.cerrada", "telefono.pedido_creado", "llevar.ticket_creado", "glovo.pedido_recibido", "glovo.pedido_aceptado", "glovo.pedido_listo", "whatsapp.pedido_creado", "whatsapp.pedido_listo"],
+      "publica_literales_en_codigo": ["cuenta.cerrada"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": ["cuenta.creada", "mesa.abierta", "mesa.cerrada", "telefono.pedido_creado", "llevar.ticket_creado", "glovo.pedido_recibido", "glovo.pedido_aceptado", "glovo.pedido_listo", "whatsapp.pedido_creado", "whatsapp.pedido_listo"],
+      "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["cobro.procesado", "pedido.creado", "cocina.pedido_listo"],
+      "subscribes_realmente_registrados": ["cobro.procesado", "pedido.creado", "cocina.pedido_listo"],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [],
+  "estado": {
+    "memoria": [],
+    "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": "Strategy pattern: cada canal (mesa/telefono/llevar/glovo/whatsapp) es una clase separada en strategies/ que orquesta su flujo. cuentas-canales/index.js es shell + dispatcher. 2 TODOs documentados en SYSTEM-ANALYSIS: WhatsApp Business API + Twilio integraciones." }
+  },
+  "configuracion": { "env_vars": [], "module_json_config_keys": [], "paths_proyecto_referenciados": [], "valores_hardcoded_observables": [] },
+  "lifecycle": {
+    "onLoad":   { "ubicacion": "modules/pizzepos/cuentas-canales/index.js:71", "acciones": ["instancia 5 strategies (Mesa/Telefono/Llevar/Glovo/WhatsApp)", "guarda this.logger / this.eventBus"], "guarda_referencias_externas": ["this.logger", "this.eventBus"], "puede_fallar_silenciosamente": false },
+    "onUnload": { "ubicacion": "modules/pizzepos/cuentas-canales/index.js:116", "acciones": ["logger.info('module.unloaded')"], "estado_no_limpiado": [] },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "pizzepos/cobros",  "via_evento": "cobro.procesado (subscribe)",        "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/cuentas-canales/index.js:146", "es_cross_vertical": false },
+    { "modulo_dependido": "pizzepos/cocina",  "via_evento": "cocina.pedido_listo (vía strategies)","obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/cuentas-canales/strategies/", "es_cross_vertical": false },
+    { "modulo_dependido": "pizzepos/pedidos", "via_evento": "pedido.creado (subscribe — MesaStrategy)","obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/cuentas-canales/strategies/mesa.js", "es_cross_vertical": false }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "WhatsApp Business API",  "que_pasa_si_cae": "WhatsAppStrategy con TODO 'Integrar con WhatsApp Business API' — no implementado.", "evidencia": "modules/pizzepos/cuentas-canales/strategies/whatsapp.js (TODO según SYSTEM-ANALYSIS)" },
+    { "dependencia": "Twilio (telefono)",       "que_pasa_si_cae": "TelefonoStrategy con TODO 'Integrar con Twilio/WhatsApp Business API' — no implementado.", "evidencia": "modules/pizzepos/cuentas-canales/strategies/telefono.js (TODO según SYSTEM-ANALYSIS)" }
+  ],
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('cuentas-canales.<accion>', { ...campos })", "campos_estructurados_observados": [], "ejemplos": [] },
+    "metricas_emitidas": [], "metricas_drift_vs_manifest": [],
+    "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" }
+  },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": [], "context_json_existe": false, "prompt_json_existe": false, "readme_existe": true, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": { "todos": [], "comentarios_porque": [], "workarounds_detectados": [] },
+  "metricas_fisicas": { "lineas_index_js": 367, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": { "campos_no_canonicos_en_manifest": [], "patrones_no_canonicos_en_codigo": [] },
+  "quirks": {
+    "warnings": [
+      "P3 — Strategy pattern por canal de venta (5 estrategias: Mesa, Telefono, Llevar, Glovo, WhatsApp).",
+      "DRIFT MASIVO: manifest declara 11 publica pero código (index.js) solo emite 1 literal (cuenta.cerrada). Las otras 10 (mesa.X, telefono.X, llevar.X, glovo.X, whatsapp.X) viven en strategies/*.js — diferidas por extensión.",
+      "Subscribes pedido.creado y cocina.pedido_listo registran handlers de strategies (MesaStrategy, TelefonoStrategy, etc.) — patrón de delegación a clases helper",
+      "TODOs documentados en SYSTEM-ANALYSIS: WhatsApp Business API + Twilio (telefono) — integraciones no implementadas"
+    ],
+    "secciones_vacias_intencionalmente": ["tools", "ui_handlers", "apis_http", "estado.memoria (estado vive en strategies)", "estado.persistencia.sqlite_tablas", "configuracion.env_vars / module_json_config_keys / paths_proyecto / hardcoded", "observabilidad.metricas_emitidas", "codigo_intencion.todos / comentarios_porque / workarounds_detectados", "version_archivada"]
+  }
+}

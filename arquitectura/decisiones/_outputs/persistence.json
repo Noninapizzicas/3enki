@@ -1,0 +1,370 @@
+{
+  "_meta": {
+    "convencion": "persistence",
+    "version": "1.0.0",
+    "creado_en": "2026-04-30",
+    "contrato_referencia": "arquitectura/decisiones/_contratos/persistence.contract.json",
+    "supersedes_nota": "Primera versión. Recoge los 6 patrones detectados en los 66 audits y los formaliza con sus reglas mínimas. Validado parcialmente por POC notas (json-file con write atómico)."
+  },
+
+  "regla": "Cada módulo elige su patrón de persistencia (in-memory, json-file, json-file-per-project, sqlite, append-only-log, external-delegation) y lo declara en module.json. Reglas universales aplican a todos: aislamiento absoluto entre módulos, write atómico cuando aplica, ENOENT graceful, telemetría obligatoria en I/O, no secretos en plano. El catálogo es de 6 patrones canónicos.",
+
+  "patrones": [
+    {
+      "id": "in-memory",
+      "nombre": "In-memory only (sin persistencia)",
+      "descripcion": "El módulo guarda su estado en propiedades de la instancia (Map, Set, Object) y NO persiste a disco. Al restart del core, todo el estado se pierde y el módulo arranca desde cero (o desde un seed inicial via eventos).",
+      "when_to_use": "Estado claramente ephemeral: caches que se reconstruyen, agregaciones temporales, registros de sesiones activas, contadores de runtime. Cuando perder el estado al reiniciar es aceptable o incluso deseable.",
+      "reglas_minimas": [
+        "Declarar config.persistence.pattern='in-memory' en module.json.",
+        "Declarar config.persistence.restart_resilient=false explícitamente (NO asumir).",
+        "Documentar QUÉ se pierde en restart en module.json.config.persistence.lost_on_restart (lista de campos/datos).",
+        "Si el estado puede crecer sin bound, declarar TTL/eviction (eviction_strategy)."
+      ],
+      "ejemplo_uso": "this.cache = new Map(); // se descarta al unload, se rehidrata via eventos al cargar",
+      "ejemplo_modulos_audit": [
+        "gateway-manager (this.gateways y this.internalMetrics in-memory)",
+        "notas v1.0.0 original (in-memory antes del POC)"
+      ],
+      "riesgos": [
+        "Pérdida silenciosa: si un usuario crea data y reiniciamos, la pierde sin aviso. Mitigación: declaración explícita en module.json.",
+        "Memory leak si el estado crece sin bound. Mitigación: TTL/eviction declarados."
+      ],
+      "restart_resilient": false,
+      "supports_concurrency": "single-process (Node EventLoop ya serializa)"
+    },
+    {
+      "id": "json-file",
+      "nombre": "JSON file único (global)",
+      "descripcion": "El módulo persiste su estado completo en UN archivo JSON en disco. Carga al arrancar, guarda tras cada mutación o periódicamente. Patrón típico para módulos con estado moderado (≤MB) que cabe en memoria.",
+      "when_to_use": "Estado pequeño-medio (configuración, catálogos, listas), lectura frecuente, escritura ocasional, sin necesidad de queries complejas. Cuando la simplicidad y la portabilidad (un solo archivo de backup) priman.",
+      "reglas_minimas": [
+        "Declarar config.persistence.pattern='json-file' y data_path en module.json.",
+        "OBLIGATORIO: write atómico (tempFile + fs.rename). NUNCA fs.writeFile directo sobre el archivo final.",
+        "ENOENT en read es graceful: log info, arrancar con estado vacío. NO error.",
+        "Encoding: UTF-8. Indent 2 spaces (legibilidad humana de backups).",
+        "Versionado: incluir _version y _updated en el JSON para diagnosticar formatos viejos.",
+        "Si el archivo está corrupto (JSON.parse falla), log warn y arrancar limpio (NO crashear el módulo)."
+      ],
+      "ejemplo_uso": "const tmp = `${this._dataFile}.tmp`; await fs.promises.writeFile(tmp, JSON.stringify(data, null, 2)); await fs.promises.rename(tmp, this._dataFile);",
+      "ejemplo_modulos_audit": [
+        "notas-poc (POC validado del patrón canónico)",
+        "ui-designer (modules/ui-designer/data/templates.json — único módulo con write atómico antes del POC)",
+        "firmware-manager (data/firmware/manifest.json)"
+      ],
+      "riesgos": [
+        "Sin write atómico: corrupción ante caída durante write. Mitigado por la regla obligatoria.",
+        "Lectura completa en memoria: no escala más allá de MB. Si el módulo crece, migrar a sqlite.",
+        "Concurrencia: single-writer asumido. Si dos handlers escriben simultáneamente, último gana."
+      ],
+      "restart_resilient": true,
+      "supports_concurrency": "single-writer (Node EventLoop serializa handlers async; race entre write atómico y read teóricamente posible — aceptado por simplicidad)"
+    },
+    {
+      "id": "json-file-per-project",
+      "nombre": "JSON file por proyecto (multi-tenant)",
+      "descripcion": "Variación de json-file donde el path incluye project_id. Un archivo por proyecto, mismo módulo gestiona N proyectos sin que se mezclen. Las mismas reglas que json-file aplican por archivo.",
+      "when_to_use": "Sistema multi-tenant donde cada proyecto tiene su propio estado del módulo. Catálogos por proyecto, configuraciones por proyecto, datos de dominio que NO cruzan proyectos.",
+      "reglas_minimas": [
+        "Declarar config.persistence.pattern='json-file-per-project' en module.json.",
+        "Path canonical: <data_path>/<project_id>/<entidad>.json (o equivalente con project_id en el path).",
+        "Aplican TODAS las reglas de json-file por archivo (write atómico, ENOENT graceful, etc.).",
+        "Cache de paths por project_id permitido para no hacer path.resolve() en cada operación.",
+        "El módulo NUNCA accede a archivos de proyectos que no son los del request actual.",
+        "Cuando un proyecto se elimina, el módulo limpia sus archivos (no leak en disco)."
+      ],
+      "ejemplo_uso": "const filePath = path.join(this.config.data_path, project_id, 'recetas.json');",
+      "ejemplo_modulos_audit": [
+        "recetas (data/projects/{slug}/recetas.json)",
+        "escandallo (cache + projectPaths)",
+        "viabilidad (configs por proyecto)",
+        "pizzepos__cocina (cuentas + pedidos por proyecto)",
+        "pizzepos__carta-design / carta-impresion / carta-scheduler (todas las cartas por proyecto)"
+      ],
+      "riesgos": [
+        "Mismo que json-file, multiplicado por N proyectos.",
+        "projectPaths cache puede crecer sin bound — declarar TTL o invalidación.",
+        "Si un proyecto se elimina, el módulo debe limpiar sus archivos (no leak en disco)."
+      ],
+      "restart_resilient": true,
+      "supports_concurrency": "single-writer por archivo (proyectos son independientes; concurrencia entre proyectos OK)"
+    },
+    {
+      "id": "sqlite",
+      "nombre": "SQLite (transactional)",
+      "descripcion": "Base de datos SQLite embebida (sql.js o sqlite3). Tablas estructuradas, queries SQL, transacciones, índices. Para módulos con estado relacional, queries complejas o volúmenes grandes que no caben razonablemente en JSON.",
+      "when_to_use": "Estado relacional con relaciones, queries complejas (filtros, joins, agregaciones), volúmenes grandes (decenas de miles de registros), necesidad de transacciones atómicas multi-tabla, append-only con queries (event sourcing).",
+      "reglas_minimas": [
+        "Declarar config.persistence.pattern='sqlite' y db_path en module.json.",
+        "Declarar las tablas y sus columnas en config.persistence.tables (introspectable sin abrir código).",
+        "Operaciones de escritura múltiple van en TRANSACCIÓN (BEGIN/COMMIT). Las atómicas individuales no necesitan.",
+        "Migraciones: declarar config.persistence.migrations como lista ordenada (suaves: ALTER TABLE ADD COLUMN con default; duras: refactor mayor con backup explícito).",
+        "Si soporta concurrencia: usar WAL mode (PRAGMA journal_mode=WAL).",
+        "Cerrar conexión en onUnload (db.close())."
+      ],
+      "ejemplo_uso": "this.db.exec('BEGIN'); try { this.db.run(...); this.db.run(...); this.db.exec('COMMIT'); } catch (e) { this.db.exec('ROLLBACK'); throw e; }",
+      "ejemplo_modulos_audit": [
+        "staff-manager (delega a EmployeeRegistry+SessionManager con SQL)",
+        "prompt-manager (no auditado en detalle — probable SQLite)",
+        "database-manager (proveedor genérico)"
+      ],
+      "riesgos": [
+        "Migración mal hecha = corrupción difícil de revertir. Mitigación: backup automático antes de migración.",
+        "Lock contention si muchos handlers concurrentes en single-writer mode. Mitigación: WAL.",
+        "Schema drift entre lo declarado y lo real. Mitigación: validator que cruza tabla declarada vs CREATE TABLE en código."
+      ],
+      "restart_resilient": true,
+      "supports_concurrency": "WAL mode soporta múltiples readers + 1 writer concurrentes; sin WAL es single-writer global"
+    },
+    {
+      "id": "append-only-log",
+      "nombre": "Append-only log file",
+      "descripcion": "Archivo de log donde se añade al final, NUNCA se modifica el contenido existente. Modelo natural para logs estructurados, audit trails, event sourcing. Las reglas son distintas a json-file: NO hay write atómico in-place.",
+      "when_to_use": "Logs operativos, audit trails (quién hizo qué cuándo), event sourcing (cada cambio se añade al log, el estado se reconstruye replicando), métricas históricas que no se editan.",
+      "reglas_minimas": [
+        "Declarar config.persistence.pattern='append-only-log' en module.json.",
+        "Append-only de verdad: usar fs.appendFile o write con flag 'a'. NUNCA fs.writeFile sobre el archivo final.",
+        "Cada entrada es una línea JSON (JSONL/NDJSON) — facilita parsear stream sin cargar todo en memoria.",
+        "Rotación documentada: cuándo se cierra el archivo actual y se abre uno nuevo (por tamaño, por fecha).",
+        "Lectura: stream-based (no cargar el archivo entero). Si el módulo necesita queries, considerar otro patrón.",
+        "Sin in-place updates: si necesitas modificar una entrada vieja, añades una nueva entrada que la 'sobrescribe' lógicamente."
+      ],
+      "ejemplo_uso": "await fs.promises.appendFile(this._logFile, JSON.stringify(entry) + '\\n', 'utf8');",
+      "ejemplo_modulos_audit": [
+        "log-manager (logs por naturaleza son append-only)",
+        "potencialmente conversation-export"
+      ],
+      "riesgos": [
+        "Crecimiento sin bound si no hay rotación. Mitigación: rotación obligatoria en config.persistence.rotation_strategy.",
+        "Lectura completa = O(N) costoso si N grande. Mitigación: stream + filtros tempranos.",
+        "Race condition en append concurrente: el SO garantiza atomicidad de write < BUFSIZE; entradas pequeñas (<4KB) seguras."
+      ],
+      "restart_resilient": true,
+      "supports_concurrency": "multi-writer al mismo archivo OK si entries son pequeñas (atomicidad de write SO); para entries grandes, single-writer"
+    },
+    {
+      "id": "external-delegation",
+      "nombre": "External delegation (otro módulo persiste)",
+      "descripcion": "El módulo NO persiste localmente. Cuando necesita guardar/recuperar estado, lo delega via bus a otro módulo (credential-manager para secretos, database-manager para data genérica, etc.). El módulo es stateless o casi.",
+      "when_to_use": "Secretos (delegar SIEMPRE a credential-manager). Data que ya tiene un módulo dueño (no duplicar). Módulos puros de transformación que no tienen estado propio. Cuando la dependencia hacia el módulo persistidor es estable.",
+      "reglas_minimas": [
+        "Declarar config.persistence.pattern='external-delegation' en module.json.",
+        "Declarar config.persistence.delegated_to (lista de módulos: credential-manager, database-manager, ...) para que la auditoría vea la dependencia.",
+        "Comunicación con el módulo persistidor SIEMPRE via bus (mqttRequest/eventBus.publish), NUNCA acceso directo a su persistencia.",
+        "Tolerar que el persistidor esté caído (retry, fallback, error claro al caller). NO asumir always-available."
+      ],
+      "ejemplo_uso": "const resp = await mqttRequest('credential-manager', 'resolve', { id: credId }); if (resp.error) { /* propagate */ }",
+      "ejemplo_modulos_audit": [
+        "telegram-service (probablemente usa credential-manager para tokens)",
+        "ai-gateway (delega credenciales a credential-manager)",
+        "módulos sin estado de dominio"
+      ],
+      "riesgos": [
+        "Coupling fuerte al módulo persistidor: si su API cambia, este módulo rompe. Mitigación: usar el patrón request_response_formal con códigos canónicos.",
+        "Latencia: cada acceso a 'estado' es un round-trip de bus, no una lectura local. Mitigación: cache local con TTL si el patrón de acceso lo justifica.",
+        "Cascada de fallos: si el persistidor cae, este módulo no funciona. Mitigación: degradación documentada."
+      ],
+      "restart_resilient": "depende-del-persistidor",
+      "supports_concurrency": "según el persistidor delegado"
+    }
+  ],
+
+  "reglas_universales": [
+    {
+      "id": "declarar_patron_en_manifest",
+      "descripcion": "Todo módulo que persiste estado (archivos, DB, in-memory acotado) DEBE declarar config.persistence.pattern en su module.json. Sin declaración, la persistencia es opaca a la auditoría.",
+      "viola_si_no_se_cumple": ["explicit_declaration_in_manifest", "undeclared_persistence_pattern"],
+      "aplica_a_patrones": ["*"]
+    },
+    {
+      "id": "aislamiento_absoluto_entre_modulos",
+      "descripcion": "Ningún módulo accede directamente a la persistencia de otro: ni leyendo sus archivos, ni consultando su SQLite, ni inspeccionando su estado en memoria. La comunicación cross-módulo va por bus.",
+      "viola_si_no_se_cumple": ["absolute_isolation_between_modules", "cross_module_persistence_access"],
+      "aplica_a_patrones": ["*"]
+    },
+    {
+      "id": "no_secretos_en_plano",
+      "descripcion": "Tokens, passwords, API keys, claves privadas NUNCA aparecen en archivos JSON/YAML/SQLite en plano legibles por cualquiera con acceso al disco. Delegar a credential-manager.",
+      "viola_si_no_se_cumple": ["no_plain_secrets_on_disk", "secrets_in_plain_storage"],
+      "aplica_a_patrones": ["*"]
+    },
+    {
+      "id": "telemetria_obligatoria_en_io",
+      "descripcion": "Todo catch alrededor de read/write/query/transaction emite log + métrica via los patrones canónicos. Cero fallos silenciosos en disco/DB.",
+      "viola_si_no_se_cumple": ["mandatory_telemetry_on_io", "silent_io_failure"],
+      "aplica_a_patrones": ["*"]
+    },
+    {
+      "id": "write_atomico_obligatorio",
+      "descripcion": "Toda escritura de archivo de persistencia (JSON, YAML, ini, etc.) usa tempFile + fs.rename. Excepción: append-only-log. No aplica a in-memory ni a sqlite (que tiene su propio modelo transaccional).",
+      "viola_si_no_se_cumple": ["atomic_writes_mandatory", "non_atomic_write"],
+      "aplica_a_patrones": ["json-file", "json-file-per-project"]
+    },
+    {
+      "id": "enoent_es_info_no_error",
+      "descripcion": "En onLoad, si el archivo de persistencia no existe (ENOENT), el módulo arranca con estado vacío y emite log info — NO log error ni excepción. Primer arranque es caso normal.",
+      "viola_si_no_se_cumple": ["enoent_is_info_not_error", "enoent_treated_as_error"],
+      "aplica_a_patrones": ["json-file", "json-file-per-project", "append-only-log"]
+    },
+    {
+      "id": "concurrencia_documentada_o_single_writer",
+      "descripcion": "El módulo declara explícitamente su modelo de concurrencia (single-writer | multi-writer-locked | multi-writer-optimistic). La asunción tácita 'no hay concurrencia' es la fuente de race conditions.",
+      "viola_si_no_se_cumple": ["concurrency_documented_or_single_writer", "assumed_concurrency_no_locking"],
+      "aplica_a_patrones": ["*"]
+    },
+    {
+      "id": "restart_resilient_declarado",
+      "descripcion": "El módulo declara explícitamente si recupera estado tras restart (true) o si el estado se pierde (false). Sorpresas operativas en restart son bugs.",
+      "viola_si_no_se_cumple": ["restart_resilient_default"],
+      "aplica_a_patrones": ["*"]
+    }
+  ],
+
+  "module_declaration_shape": {
+    "descripcion": "Shape canónico del campo config.persistence dentro de module.json. La auditoría introspecta este shape para saber qué persiste cada módulo sin abrir código. Igual que events.publishes/subscribes son auto-wired, config.persistence es auto-introspectable.",
+    "campos": [
+      {
+        "name": "pattern",
+        "type": "string (enum)",
+        "obligatorio_si": "el módulo persiste cualquier cosa",
+        "descripcion": "Identificador del patrón canónico elegido por el módulo. Uno de los 6 ids del catálogo.",
+        "valores_permitidos": [
+          "in-memory",
+          "json-file",
+          "json-file-per-project",
+          "sqlite",
+          "append-only-log",
+          "external-delegation"
+        ]
+      },
+      {
+        "name": "data_path",
+        "type": "string (path relativo o absoluto)",
+        "obligatorio_si": "pattern in {json-file, json-file-per-project, append-only-log}",
+        "descripcion": "Ruta del archivo (o directorio raíz para json-file-per-project) donde el módulo persiste. Convención: 'data/<modulo>/<entidad>.json'."
+      },
+      {
+        "name": "db_path",
+        "type": "string (path)",
+        "obligatorio_si": "pattern='sqlite'",
+        "descripcion": "Ruta del archivo SQLite. Convención: 'data/<modulo>/<modulo>.sqlite'."
+      },
+      {
+        "name": "tables",
+        "type": "array de objetos {name, columns, indices?}",
+        "obligatorio_si": "pattern='sqlite'",
+        "descripcion": "Lista de tablas que crea el módulo. Cada una con name, columns (array de {name, type, constraints}), indices opcionales. Permite cruzar con CREATE TABLE en código."
+      },
+      {
+        "name": "migrations",
+        "type": "array de objetos {version, description, sql}",
+        "obligatorio_si": "pattern='sqlite' y han habido cambios de esquema",
+        "descripcion": "Lista ordenada de migraciones aplicadas al esquema. Cada migration tiene version semver, descripción, SQL ejecutado."
+      },
+      {
+        "name": "restart_resilient",
+        "type": "boolean",
+        "obligatorio_si": "siempre",
+        "descripcion": "true si el módulo recupera su estado tras restart; false si el estado se pierde (típico in-memory)."
+      },
+      {
+        "name": "lost_on_restart",
+        "type": "array de strings",
+        "obligatorio_si": "pattern='in-memory' y restart_resilient=false",
+        "descripcion": "Lista de campos/datos que se pierden al reiniciar. Documenta lo que el operador necesita saber."
+      },
+      {
+        "name": "concurrency",
+        "type": "string (enum)",
+        "obligatorio_si": "siempre",
+        "descripcion": "Modelo de concurrencia declarado por el módulo.",
+        "valores_permitidos": [
+          "single-writer",
+          "multi-writer-locked",
+          "multi-writer-optimistic"
+        ]
+      },
+      {
+        "name": "delegated_to",
+        "type": "array de strings (slugs de módulos)",
+        "obligatorio_si": "pattern='external-delegation'",
+        "descripcion": "Lista de módulos a los que se delega la persistencia (credential-manager, database-manager, ...). Hace explícita la dependencia."
+      },
+      {
+        "name": "rotation_strategy",
+        "type": "object {trigger, max_size_mb?, max_age_days?, retention_count?}",
+        "obligatorio_si": "pattern='append-only-log'",
+        "descripcion": "Estrategia de rotación del log: por tamaño, por fecha o por cuenta de archivos retenidos."
+      },
+      {
+        "name": "eviction_strategy",
+        "type": "object {ttl_ms?, max_entries?, policy?}",
+        "obligatorio_si": "pattern='in-memory' y el estado puede crecer sin bound",
+        "descripcion": "Estrategia de eviction para evitar memory leak. ttl_ms (caducidad), max_entries (LRU/FIFO), policy ('lru'|'fifo'|'ttl')."
+      }
+    ],
+    "ejemplos_por_patron": [
+      {
+        "patron": "in-memory",
+        "ejemplo_json": "{\"persistence\":{\"pattern\":\"in-memory\",\"restart_resilient\":false,\"concurrency\":\"single-writer\",\"lost_on_restart\":[\"this.cache\",\"this.activeSessions\"],\"eviction_strategy\":{\"ttl_ms\":300000,\"max_entries\":1000,\"policy\":\"lru\"}}}"
+      },
+      {
+        "patron": "json-file",
+        "ejemplo_json": "{\"persistence\":{\"pattern\":\"json-file\",\"data_path\":\"./data/notas.json\",\"restart_resilient\":true,\"concurrency\":\"single-writer\"}}"
+      },
+      {
+        "patron": "json-file-per-project",
+        "ejemplo_json": "{\"persistence\":{\"pattern\":\"json-file-per-project\",\"data_path\":\"./data/projects\",\"restart_resilient\":true,\"concurrency\":\"single-writer\"}}"
+      },
+      {
+        "patron": "sqlite",
+        "ejemplo_json": "{\"persistence\":{\"pattern\":\"sqlite\",\"db_path\":\"./data/staff.sqlite\",\"restart_resilient\":true,\"concurrency\":\"multi-writer-locked\",\"tables\":[{\"name\":\"empleados\",\"columns\":[{\"name\":\"id\",\"type\":\"TEXT PRIMARY KEY\"},{\"name\":\"nombre\",\"type\":\"TEXT NOT NULL\"}]}],\"migrations\":[{\"version\":\"1.0.0\",\"description\":\"initial schema\",\"sql\":\"CREATE TABLE empleados ...\"}]}}"
+      },
+      {
+        "patron": "append-only-log",
+        "ejemplo_json": "{\"persistence\":{\"pattern\":\"append-only-log\",\"data_path\":\"./data/audit.log\",\"restart_resilient\":true,\"concurrency\":\"multi-writer-locked\",\"rotation_strategy\":{\"trigger\":\"size\",\"max_size_mb\":50,\"retention_count\":10}}}"
+      },
+      {
+        "patron": "external-delegation",
+        "ejemplo_json": "{\"persistence\":{\"pattern\":\"external-delegation\",\"restart_resilient\":\"depende-del-persistidor\",\"concurrency\":\"single-writer\",\"delegated_to\":[\"credential-manager\"]}}"
+      }
+    ]
+  },
+
+  "detection_patterns": {
+    "non_atomic_write_regex": "fs\\.(promises\\.)?writeFile\\s*\\(\\s*([\\w\\.\\[\\]'\"`$\\{\\}]+)\\s*,",
+    "secret_in_persistence_field_names": [
+      "password",
+      "passwd",
+      "secret",
+      "token",
+      "api_key",
+      "apikey",
+      "access_token",
+      "refresh_token",
+      "private_key",
+      "client_secret",
+      "authorization",
+      "session_token",
+      "credential",
+      "credentials"
+    ],
+    "silent_io_catch_regex": "catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}",
+    "cross_module_path_indicators": [
+      "modules/",
+      "data/recetas/",
+      "data/firmware/",
+      "data/projects/",
+      "data/credentials/",
+      "data/staff/",
+      "data/templates/"
+    ],
+    "schema_drift_keywords": [
+      "CREATE TABLE",
+      "CREATE INDEX",
+      "ALTER TABLE",
+      "DROP TABLE",
+      "CREATE UNIQUE INDEX"
+    ]
+  }
+}

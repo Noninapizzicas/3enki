@@ -3,12 +3,17 @@
   "version": "2.1.0",
   "description": "Catálogo de categorías de productos - Actualizado desde menús generados",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
-    "events": ["categoria.creada", "categoria.actualizada"],
-    "queries": ["categoria.obtener", "categoria.listar"]
+    "events": [
+      "categoria.creada",
+      "categoria.actualizada"
+    ],
+    "queries": [
+      "categoria.obtener",
+      "categoria.listar"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -41,7 +46,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
@@ -86,14 +90,16 @@
       "description": "Métricas del módulo"
     }
   ],
-
   "ui": {
     "enabled": true,
     "title": "Categorías",
     "icon": "📁",
     "description": "Gestión de categorías del menú",
     "access_level": "gerente",
-    "components": ["categoria-list", "categoria-form"],
+    "components": [
+      "categoria-list",
+      "categoria-form"
+    ],
     "views": {
       "main": {
         "type": "dashboard",
@@ -101,26 +107,50 @@
         "component": "categoria-list",
         "config": {
           "endpoint": "/modules/categorias/categorias",
-          "mqtt_topics": ["categoria.creada", "categoria.actualizada", "categoria.orden_actualizado"],
+          "mqtt_topics": [
+            "categoria.creada",
+            "categoria.actualizada",
+            "categoria.orden_actualizado"
+          ],
           "sortable": true
         }
       }
     },
     "mqtt": {
       "enabled": true,
-      "topics": ["categoria.creada", "categoria.actualizada", "categoria.orden_actualizado"],
+      "topics": [
+        "categoria.creada",
+        "categoria.actualizada",
+        "categoria.orden_actualizado"
+      ],
       "auto_refresh": true
     },
     "permissions": {
-      "view": ["admin", "gerente"],
-      "create": ["admin", "gerente"],
-      "edit": ["admin", "gerente"],
-      "delete": ["admin"],
-      "reorder": ["admin", "gerente"]
+      "view": [
+        "admin",
+        "gerente"
+      ],
+      "create": [
+        "admin",
+        "gerente"
+      ],
+      "edit": [
+        "admin",
+        "gerente"
+      ],
+      "delete": [
+        "admin"
+      ],
+      "reorder": [
+        "admin",
+        "gerente"
+      ]
     },
-    "features": { "drag_drop": true, "reorder": true }
+    "features": {
+      "drag_drop": true,
+      "reorder": true
+    }
   },
-
   "observability": {
     "logging": {
       "level": "info",

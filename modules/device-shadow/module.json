@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Sincronización bidireccional de estado desired/reported/delta entre servidor y dispositivos IoT",
   "author": "Enki",
+  "language": "en",
   "tier": "tier_2_platform",
-
   "provides": {
     "events": [
       "shadow.updated",
@@ -12,7 +12,6 @@
       "shadow.synced"
     ]
   },
-
   "events": {
     "subscribes": [
       {
@@ -22,20 +21,47 @@
       }
     ],
     "publishes": [
-      { "event": "shadow.updated", "description": "Estado reported de un dispositivo fue actualizado" },
-      { "event": "shadow.delta", "description": "Nuevo delta computado — desired difiere de reported" },
-      { "event": "shadow.synced", "description": "Delta vacío — dispositivo sincronizado con estado deseado" }
+      {
+        "event": "shadow.updated",
+        "description": "Estado reported de un dispositivo fue actualizado"
+      },
+      {
+        "event": "shadow.delta",
+        "description": "Nuevo delta computado — desired difiere de reported"
+      },
+      {
+        "event": "shadow.synced",
+        "description": "Delta vacío — dispositivo sincronizado con estado deseado"
+      }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "shadow", "action": "get-reported", "handler": "handleGetReported" },
-    { "domain": "shadow", "action": "get-desired", "handler": "handleGetDesired" },
-    { "domain": "shadow", "action": "get-delta", "handler": "handleGetDelta" },
-    { "domain": "shadow", "action": "set-desired", "handler": "handleSetDesired" },
-    { "domain": "shadow", "action": "get-full", "handler": "handleGetFull" }
+    {
+      "domain": "shadow",
+      "action": "get-reported",
+      "handler": "handleGetReported"
+    },
+    {
+      "domain": "shadow",
+      "action": "get-desired",
+      "handler": "handleGetDesired"
+    },
+    {
+      "domain": "shadow",
+      "action": "get-delta",
+      "handler": "handleGetDelta"
+    },
+    {
+      "domain": "shadow",
+      "action": "set-desired",
+      "handler": "handleSetDesired"
+    },
+    {
+      "domain": "shadow",
+      "action": "get-full",
+      "handler": "handleGetFull"
+    }
   ],
-
   "tools": [
     {
       "name": "shadow.get_full",
@@ -44,9 +70,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "device_id": { "type": "string" }
+          "device_id": {
+            "type": "string"
+          }
         },
-        "required": ["device_id"]
+        "required": [
+          "device_id"
+        ]
       }
     },
     {
@@ -56,11 +86,21 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "device_id": { "type": "string" },
-          "project_id": { "type": "string" },
-          "state": { "type": "object", "description": "Estado deseado (ej: {firmware: {version: '3.5.0', url: '...'}})" }
+          "device_id": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "object",
+            "description": "Estado deseado (ej: {firmware: {version: '3.5.0', url: '...'}})"
+          }
         },
-        "required": ["device_id", "state"]
+        "required": [
+          "device_id",
+          "state"
+        ]
       }
     },
     {
@@ -70,20 +110,25 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "device_id": { "type": "string" }
+          "device_id": {
+            "type": "string"
+          }
         },
-        "required": ["device_id"]
+        "required": [
+          "device_id"
+        ]
       }
     }
   ],
-
   "config": {
     "persist_interval_ms": 30000,
     "data_path": "./data/devices"
   },
-
   "observability": {
-    "logging": { "level": "info", "structured": true },
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [

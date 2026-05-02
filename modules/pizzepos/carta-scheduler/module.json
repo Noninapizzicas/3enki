@@ -3,21 +3,37 @@
   "version": "1.0.0",
   "description": "Programación de cambios de carta por canal. Conversacional via agente planner, detección de conflictos, confirmación previa antes de aplicar.",
   "author": "Pizzepos Team",
+  "language": "es",
   "main": "index.js",
-
   "events": {
     "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" }
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated"
+      },
+      {
+        "event": "project.deactivated",
+        "handler": "onProjectDeactivated"
+      }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "carta-scheduler", "action": "reglas", "handler": "handleListarReglas" },
-    { "domain": "carta-scheduler", "action": "proximos", "handler": "handleProximosCambios" },
-    { "domain": "carta-scheduler", "action": "health", "handler": "handleHealth" }
+    {
+      "domain": "carta-scheduler",
+      "action": "reglas",
+      "handler": "handleListarReglas"
+    },
+    {
+      "domain": "carta-scheduler",
+      "action": "proximos",
+      "handler": "handleProximosCambios"
+    },
+    {
+      "domain": "carta-scheduler",
+      "action": "health",
+      "handler": "handleHealth"
+    }
   ],
-
   "tools": [
     {
       "name": "scheduler.crear_regla",
@@ -26,13 +42,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
+          "project_id": {
+            "type": "string"
+          },
           "regla": {
             "type": "object",
             "description": "{ descripcion, cambios: [{canal, carta_id}], trigger: {type, ...}, activa }"
           }
         },
-        "required": ["project_id", "regla"]
+        "required": [
+          "project_id",
+          "regla"
+        ]
       }
     },
     {
@@ -41,8 +62,14 @@
       "handler": "toolListarReglas",
       "parameters": {
         "type": "object",
-        "properties": { "project_id": { "type": "string" } },
-        "required": ["project_id"]
+        "properties": {
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -52,10 +79,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "regla_id": { "type": "string" }
+          "project_id": {
+            "type": "string"
+          },
+          "regla_id": {
+            "type": "string"
+          }
         },
-        "required": ["project_id", "regla_id"]
+        "required": [
+          "project_id",
+          "regla_id"
+        ]
       }
     },
     {
@@ -65,10 +99,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "nueva_regla": { "type": "object" }
+          "project_id": {
+            "type": "string"
+          },
+          "nueva_regla": {
+            "type": "object"
+          }
         },
-        "required": ["project_id", "nueva_regla"]
+        "required": [
+          "project_id",
+          "nueva_regla"
+        ]
       }
     },
     {
@@ -77,8 +118,14 @@
       "handler": "toolProximosCambios",
       "parameters": {
         "type": "object",
-        "properties": { "project_id": { "type": "string" } },
-        "required": ["project_id"]
+        "properties": {
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -88,10 +135,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "pendiente_id": { "type": "string" }
+          "project_id": {
+            "type": "string"
+          },
+          "pendiente_id": {
+            "type": "string"
+          }
         },
-        "required": ["project_id", "pendiente_id"]
+        "required": [
+          "project_id",
+          "pendiente_id"
+        ]
       }
     },
     {
@@ -101,20 +155,27 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "pendiente_id": { "type": "string" },
-          "razon": { "type": "string" }
+          "project_id": {
+            "type": "string"
+          },
+          "pendiente_id": {
+            "type": "string"
+          },
+          "razon": {
+            "type": "string"
+          }
         },
-        "required": ["project_id", "pendiente_id"]
+        "required": [
+          "project_id",
+          "pendiente_id"
+        ]
       }
     }
   ],
-
   "agents": {
     "scheduler-planner": "Conversa con el usuario para crear reglas de programación",
     "scheduler-dispatcher": "Cuando un cambio se dispara, avisa al usuario y espera confirmación"
   },
-
   "observability": {
     "metrics": {
       "counters": [

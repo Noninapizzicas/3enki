@@ -3,25 +3,47 @@
   "version": "2.0.0",
   "description": "Genera versiones imprimibles de cartas en HTML print-ready. Los agentes deciden layout y generan con criterio adaptado a cada carta y marca.",
   "author": "Pizzepos Team",
+  "language": "es",
   "main": "index.js",
-
   "events": {
     "publishes": [
-      { "event": "carta.impresion.lista", "description": "HTML imprimible generado y guardado" }
+      {
+        "event": "carta.impresion.lista",
+        "description": "HTML imprimible generado y guardado"
+      }
     ],
     "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "carta.actualizada", "handler": "onCartaActualizada" }
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated"
+      },
+      {
+        "event": "project.deactivated",
+        "handler": "onProjectDeactivated"
+      },
+      {
+        "event": "carta.actualizada",
+        "handler": "onCartaActualizada"
+      }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "carta-impresion", "action": "get", "handler": "handleGet" },
-    { "domain": "carta-impresion", "action": "generar", "handler": "handleGenerar" },
-    { "domain": "carta-impresion", "action": "health", "handler": "handleHealth" }
+    {
+      "domain": "carta-impresion",
+      "action": "get",
+      "handler": "handleGet"
+    },
+    {
+      "domain": "carta-impresion",
+      "action": "generar",
+      "handler": "handleGenerar"
+    },
+    {
+      "domain": "carta-impresion",
+      "action": "health",
+      "handler": "handleHealth"
+    }
   ],
-
   "tools": [
     {
       "name": "impresion.get",
@@ -30,10 +52,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "carta_id": { "type": "string" }
+          "project_id": {
+            "type": "string"
+          },
+          "carta_id": {
+            "type": "string"
+          }
         },
-        "required": ["project_id", "carta_id"]
+        "required": [
+          "project_id",
+          "carta_id"
+        ]
       }
     },
     {
@@ -43,10 +72,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "carta_id": { "type": "string" }
+          "project_id": {
+            "type": "string"
+          },
+          "carta_id": {
+            "type": "string"
+          }
         },
-        "required": ["project_id", "carta_id"]
+        "required": [
+          "project_id",
+          "carta_id"
+        ]
       }
     },
     {
@@ -56,22 +92,37 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "carta_id": { "type": "string" },
-          "html": { "type": "string", "description": "HTML completo print-ready" },
-          "layout": { "type": "object", "description": "Guión de maquetación del architect" },
-          "brand_applied": { "type": "object", "description": "Elementos de marca aplicados" }
+          "project_id": {
+            "type": "string"
+          },
+          "carta_id": {
+            "type": "string"
+          },
+          "html": {
+            "type": "string",
+            "description": "HTML completo print-ready"
+          },
+          "layout": {
+            "type": "object",
+            "description": "Guión de maquetación del architect"
+          },
+          "brand_applied": {
+            "type": "object",
+            "description": "Elementos de marca aplicados"
+          }
         },
-        "required": ["project_id", "carta_id", "html"]
+        "required": [
+          "project_id",
+          "carta_id",
+          "html"
+        ]
       }
     }
   ],
-
   "agents": {
     "impresion-architect": "Analiza la carta y decide layout óptimo (caras, columnas, formato, densidad)",
     "impresion-builder": "Genera el HTML+CSS print-ready según el guión del architect y el perfil de marca"
   },
-
   "observability": {
     "metrics": {
       "counters": [

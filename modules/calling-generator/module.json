@@ -3,8 +3,8 @@
   "version": "2.0.0",
   "description": "Generates executable JavaScript functions from plugin definitions with HTTP and event-based execution",
   "author": "Aichat Team",
+  "language": "en",
   "main": "index.js",
-
   "provides": {
     "events": [
       "function.generated",
@@ -18,43 +18,56 @@
       "function.execute.request"
     ]
   },
-
   "events": {
     "publishes": [
       {
         "event": "function.generated",
         "description": "Function generated from plugin",
-        "schema": { "$ref": "./schemas/events.json#/definitions/function_generated" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/function_generated"
+        }
       },
       {
         "event": "function.executed",
         "description": "Function executed successfully",
-        "schema": { "$ref": "./schemas/events.json#/definitions/function_executed" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/function_executed"
+        }
       },
       {
         "event": "function.failed",
         "description": "Function execution failed",
-        "schema": { "$ref": "./schemas/events.json#/definitions/function_failed" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/function_failed"
+        }
       },
       {
         "event": "function.generation.error",
         "description": "Error generating function",
-        "schema": { "$ref": "./schemas/events.json#/definitions/function_generation_error" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/function_generation_error"
+        }
       },
       {
         "event": "function.get.response",
         "description": "Response with function metadata",
-        "schema": { "$ref": "./schemas/events.json#/definitions/function_get_response" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/function_get_response"
+        }
       },
       {
         "event": "function.list.response",
         "description": "Response with function list",
-        "schema": { "$ref": "./schemas/events.json#/definitions/function_list_response" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/function_list_response"
+        }
       },
       {
         "event": "function.execute.response",
         "description": "Response with execution result",
-        "schema": { "$ref": "./schemas/events.json#/definitions/function_execute_response" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/function_execute_response"
+        }
       }
     ],
     "subscribes": [
@@ -80,29 +93,36 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
       "path": "/functions",
       "handler": "handleListFunctions",
       "description": "List all generated functions",
-      "response_schema": { "$ref": "./schemas/function.json#/definitions/list_response" }
+      "response_schema": {
+        "$ref": "./schemas/function.json#/definitions/list_response"
+      }
     },
     {
       "method": "GET",
       "path": "/functions/:name",
       "handler": "handleGetFunction",
       "description": "Get function metadata",
-      "response_schema": { "$ref": "./schemas/function.json#/definitions/get_response" }
+      "response_schema": {
+        "$ref": "./schemas/function.json#/definitions/get_response"
+      }
     },
     {
       "method": "POST",
       "path": "/functions/:name/execute",
       "handler": "handleExecuteFunction",
       "description": "Execute function (publishes function.executed/failed)",
-      "request_schema": { "$ref": "./schemas/function.json#/definitions/execute_request" },
-      "response_schema": { "$ref": "./schemas/function.json#/definitions/execute_response" }
+      "request_schema": {
+        "$ref": "./schemas/function.json#/definitions/execute_request"
+      },
+      "response_schema": {
+        "$ref": "./schemas/function.json#/definitions/execute_response"
+      }
     },
     {
       "method": "GET",
@@ -117,7 +137,6 @@
       "description": "Module metrics"
     }
   ],
-
   "observability": {
     "logging": {
       "level": "info",
@@ -148,7 +167,6 @@
       ]
     }
   },
-
   "config": {
     "localFunctionTimeout": 5000,
     "httpTimeout": 30000,

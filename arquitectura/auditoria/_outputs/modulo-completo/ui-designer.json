@@ -1,0 +1,133 @@
+{
+  "_meta": { "modulo": "ui-designer", "ubicacion": "modules/ui-designer", "auditado_en": "2026-04-30", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/ui-designer.json" },
+  "identidad": { "name": "ui-designer", "version": "1.0.0", "description_oficial": "Diseñador visual de interfaces para módulos Event-Core", "author": "Event Core Team", "main_declarado": null, "main_real": "modules/ui-designer/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": null, "tier_declarado": null, "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.template.created", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:474", "metodo_contenedor": "handleCreateTemplate", "es_handler_de": null, "bloque_logico": "tras templates.set y persistencia", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id", "name", "type"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.template.created', { template_id, name, type });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.template.updated", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:537", "metodo_contenedor": "handleUpdateTemplate", "es_handler_de": null, "bloque_logico": "tras update + persistir", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id", "changes"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.template.updated', { template_id, changes });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.template.deleted", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:564", "metodo_contenedor": "handleDeleteTemplate", "es_handler_de": null, "bloque_logico": "tras templates.delete", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id", "name"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.template.deleted', { template_id, name });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.template.published", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:693", "metodo_contenedor": "handlePublishTemplate", "es_handler_de": null, "bloque_logico": "tras cambio de status draft → published", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.template.published', { template_id });", "declarado_en_manifest": false },
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.export.yaml", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:921", "metodo_contenedor": "handleExportYaml", "es_handler_de": null, "bloque_logico": "tras generar YAML blueprint", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.export.yaml', { template_id });", "declarado_en_manifest": true },
+      { "nombre": { "tipo": "literal", "valor": "ui-designer.export.svelte", "variables_referenciadas": [] }, "ubicacion": "modules/ui-designer/index.js:958", "metodo_contenedor": "handleExportSvelte", "es_handler_de": null, "bloque_logico": "tras generar componente Svelte", "payload": { "tipo": "object_literal", "campos_visibles": ["template_id"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "        await this.eventBus.publish('ui-designer.export.svelte', { template_id });", "declarado_en_manifest": true }
+    ],
+    "subscribes": [],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["ui-designer.template.created", "ui-designer.template.updated", "ui-designer.template.deleted", "ui-designer.export.yaml", "ui-designer.export.svelte", "ui-designer.export.json"],
+      "publica_literales_en_codigo": ["ui-designer.template.created", "ui-designer.template.updated", "ui-designer.template.deleted", "ui-designer.template.published", "ui-designer.export.yaml", "ui-designer.export.svelte"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": ["ui-designer.export.json"],
+      "publica_emitidos_no_declarados": ["ui-designer.template.published"],
+      "subscribes_declarados_en_manifest": [],
+      "subscribes_realmente_registrados": [],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [
+    { "method": "GET", "path": "/templates", "handler_metodo": "handleListTemplates", "handler_ubicacion": "modules/ui-designer/index.js:383", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/templates", "handler_metodo": "handleCreateTemplate", "handler_ubicacion": "modules/ui-designer/index.js:434", "auth_observada": "ninguna", "request_body_keys": ["name", "type", "display_name", "description", "icon", "category", "layout", "components", "theme", "permissions", "tags"], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/templates/:id", "handler_metodo": "handleGetTemplate", "handler_ubicacion": "modules/ui-designer/index.js:493", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "PUT", "path": "/templates/:id", "handler_metodo": "handleUpdateTemplate", "handler_ubicacion": "modules/ui-designer/index.js:509", "auth_observada": "ninguna", "request_body_keys": ["name", "display_name", "description", "icon", "type", "category", "layout", "components", "theme", "permissions", "tags"], "response_keys": ["status", "data"] },
+    { "method": "DELETE", "path": "/templates/:id", "handler_metodo": "handleDeleteTemplate", "handler_ubicacion": "modules/ui-designer/index.js:550", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/templates/:id/duplicate", "handler_metodo": "handleDuplicateTemplate", "handler_ubicacion": "modules/ui-designer/index.js:577", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/templates/:id/publish", "handler_metodo": "handlePublishTemplate", "handler_ubicacion": "modules/ui-designer/index.js:673", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/templates/:id/archive", "handler_metodo": "handleArchiveTemplate", "handler_ubicacion": "modules/ui-designer/index.js:708", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/layouts", "handler_metodo": "handleListLayouts", "handler_ubicacion": "modules/ui-designer/index.js:739", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/layouts/:type", "handler_metodo": "handleGetLayout", "handler_ubicacion": "modules/ui-designer/index.js:759", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/predefined", "handler_metodo": "handleGetPredefinedTemplates", "handler_ubicacion": "modules/ui-designer/index.js:780", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/predefined/create", "handler_metodo": "handleCreateFromPredefined", "handler_ubicacion": "modules/ui-designer/index.js:851", "auth_observada": "ninguna", "request_body_keys": ["predefined_id", "name"], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/components", "handler_metodo": "handleListComponents", "handler_ubicacion": "modules/ui-designer/index.js:611", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/components/:name", "handler_metodo": "handleGetComponentSchema", "handler_ubicacion": "modules/ui-designer/index.js:647", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/export/yaml", "handler_metodo": "handleExportYaml", "handler_ubicacion": "modules/ui-designer/index.js:903", "auth_observada": "ninguna", "request_body_keys": ["template_id"], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/export/svelte", "handler_metodo": "handleExportSvelte", "handler_ubicacion": "modules/ui-designer/index.js:940", "auth_observada": "ninguna", "request_body_keys": ["template_id"], "response_keys": ["status", "data"] },
+    { "method": "POST", "path": "/export/json", "handler_metodo": "handleExportJson", "handler_ubicacion": "modules/ui-designer/index.js:978", "auth_observada": "ninguna", "request_body_keys": ["template_id"], "response_keys": ["status", "data"] },
+    { "method": "GET", "path": "/health", "handler_metodo": "handleHealthCheck", "handler_ubicacion": "modules/ui-designer/index.js:1193", "auth_observada": "ninguna", "request_body_keys": [], "response_keys": ["status", "data"] }
+  ],
+  "estado": {
+    "memoria": [
+      { "campo": "this.templates", "tipo": "Map", "ubicacion_init": "modules/ui-designer/index.js:21", "se_invalida_con": "rehidratado desde disco en loadFromJSON; delete por id en handleDeleteTemplate; persistToJSON tras cada mutación", "leak_potencial": false },
+      { "campo": "this.componentRegistry", "tipo": "Object", "ubicacion_init": "modules/ui-designer/index.js:33", "se_invalida_con": "registry estático construido en initComponentRegistry — nunca se invalida", "leak_potencial": false },
+      { "campo": "this.startTime", "tipo": "primitivo", "ubicacion_init": "modules/ui-designer/index.js:26", "se_invalida_con": "nunca", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "modules/ui-designer/data/templates.json", "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "transaccional" }
+      ],
+      "notas_concurrencia": "persistToJSON usa write a tempFile + fs.rename atómico (modules/ui-designer/index.js:1264-1265). Se invoca tras cada mutación sin debounce."
+    }
+  },
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [
+      { "key": "enabled", "tipo": "boolean", "default_si_primitivo": true },
+      { "key": "autosave", "tipo": "boolean", "default_si_primitivo": true },
+      { "key": "autosave_interval_ms", "tipo": "number", "default_si_primitivo": 30000 }
+    ],
+    "paths_proyecto_referenciados": ["modules/ui-designer/data/", "modules/ui-designer/data/templates.json"],
+    "valores_hardcoded_observables": [
+      { "valor": "modules/ui-designer/data (path absoluto vía process.cwd())", "ubicacion": "modules/ui-designer/index.js:22", "naturaleza": "path" },
+      { "valor": "/^[a-z][a-z0-9-]*$/ (slug pattern del template name)", "ubicacion": "modules/ui-designer/module.json:204", "naturaleza": "otro" }
+    ]
+  },
+  "lifecycle": {
+    "onLoad": { "ubicacion": "modules/ui-designer/index.js:347", "acciones": ["this.logger = core.logger", "this.eventBus = core.eventBus", "loadFromJSON() lee templates.json (mkdir si no existe)"], "guarda_referencias_externas": ["this.logger", "this.eventBus"], "puede_fallar_silenciosamente": true },
+    "onUnload": { "ubicacion": "modules/ui-designer/index.js:365", "acciones": ["persistToJSON()"], "estado_no_limpiado": ["this.templates", "this.componentRegistry"] },
+    "auto_wired_subscribes": false,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "filesystem (modules/ui-designer/data)", "via_evento": "fs.promises read/write/rename", "obligatorio_en": "onLoad", "ubicacion_uso": "modules/ui-designer/index.js:1214", "es_cross_vertical": true }
+  ],
+  "modos_de_fallo": [
+    { "dependencia": "filesystem (data/templates.json)", "que_pasa_si_cae": "loadFromJSON crea el directorio si no existe; si templates.json no existe, sigue con Map vacía. Errores de read/write se loguean (no throw).", "evidencia": "modules/ui-designer/index.js:1217" },
+    { "dependencia": "eventBus.publish", "que_pasa_si_cae": "publishes son `await` directos — si el bus rechaza la promesa, el handler captura en try/catch y devuelve 500 (toda la operación falla aunque la mutación ya se persistió).", "evidencia": "modules/ui-designer/index.js:474" }
+  ],
+  "observabilidad": {
+    "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('ui-designer.<accion>', { ...campos })", "campos_estructurados_observados": ["module", "version", "templates_count", "template_id", "name", "type", "error"], "ejemplos": [{ "snippet": "this.logger.info('ui-designer.loaded', { module: this.name, templates_count: this.templates.size });", "ubicacion": "modules/ui-designer/index.js:359" }, { "snippet": "this.logger.error('ui-designer.export-json.error', { error: error.message });", "ubicacion": "modules/ui-designer/index.js:1003" }] },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": ["manifest declara observability.metrics.enabled: true pero el módulo NO tiene this.metrics ni emite ninguna métrica (drift declarativo total)"],
+    "tracing": { "propaga_correlation_id": false, "evidencia": "no observable — handlers reciben req+context pero no propagan correlationId al publish (a diferencia de scratch-designer)" }
+  },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": ["modules/ui-designer/prompt.json"], "context_json_existe": false, "prompt_json_existe": true, "readme_existe": false, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/ui-designer/index.js:20", "comentario_literal": "// Estado interno", "contexto": "delimita estado del módulo (templates Map + dataDir/dataFile)" },
+      { "ubicacion": "modules/ui-designer/index.js:32", "comentario_literal": "// Componentes disponibles (registry)", "contexto": "registry estático de componentes UI disponibles, construido en initComponentRegistry" }
+    ],
+    "workarounds_detectados": [
+      { "ubicacion": "modules/ui-designer/index.js:1264", "descripcion": "Persistencia atómica via tempFile + fs.rename — único módulo que aplica este patrón en el repo (otros usan write directo)" },
+      { "ubicacion": "modules/ui-designer/index.js:22", "descripcion": "this.dataDir resuelto desde process.cwd() — frágil si se cambia el directorio de trabajo en runtime" },
+      { "ubicacion": "modules/ui-designer/index.js:474", "descripcion": "publish dentro del try/catch del handler — si falla, retorna 500 aunque la mutación ya esté persistida en disco (estado inconsistente entre disco y bus)" }
+    ]
+  },
+  "metricas_fisicas": { "lineas_index_js": 1280, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": ["schema.template.<...> (esquema JSON inline en module.json — único módulo con esta forma de schema embebido)"],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Persistencia atómica con tempFile + fs.rename (único módulo del repo con este patrón)", "ejemplo": "modules/ui-designer/index.js:1264", "rareza": "unico_en_repo" },
+      { "patron": "Sin métricas pese a observability.metrics.enabled=true en manifest (drift total)", "ejemplo": "modules/ui-designer/module.json:238", "rareza": "inusual" },
+      { "patron": "Schema JSON inline completo dentro de module.json (no en archivo schemas/) ", "ejemplo": "modules/ui-designer/module.json:196", "rareza": "inusual" },
+      { "patron": "this.dataDir vía process.cwd() en constructor (en vez de path relativo a __dirname)", "ejemplo": "modules/ui-designer/index.js:22", "rareza": "inusual" },
+      { "patron": "Evento 'ui-designer.template.published' emitido pero no declarado en manifest (drift declarativo)", "ejemplo": "modules/ui-designer/index.js:693", "rareza": "inusual" },
+      { "patron": "Evento 'ui-designer.export.json' declarado en manifest pero NO emitido (handleExportJson no publica)", "ejemplo": "modules/ui-designer/module.json:64", "rareza": "inusual" }
+    ]
+  },
+  "quirks": {
+    "warnings": [
+      "P4 — UI Designer (v1.0.0). Diseñador visual de templates de UI con persistencia atómica en JSON.",
+      "Drift declarativo: declara 'ui-designer.export.json' en publishes pero handleExportJson NO emite (solo retorna data); emite 'ui-designer.template.published' que NO está declarado.",
+      "Persistencia atómica única en el repo: tempFile + fs.rename — patrón POSIX seguro contra writes parciales.",
+      "Sin métricas: manifest declara observability.metrics.enabled=true pero el módulo NO recibe core.metrics ni emite ninguna métrica.",
+      "Schema JSON inline en module.json (template schema completo) — outlier, otros módulos usan archivos schemas/.",
+      "this.dataDir resuelto via process.cwd() — frágil si cambia el cwd; otros módulos usan path.resolve relativo a __dirname.",
+      "publishes dentro del try/catch del handler — si el bus falla, devuelve 500 aunque la mutación ya esté persistida (estado inconsistente bus↔disco).",
+      "Sin tools (no expone al LLM), solo apis_http (admin-panel orquesta)."
+    ],
+    "secciones_vacias_intencionalmente": ["eventos.subscribes", "tools (no expuesto al LLM)", "ui_handlers (usa apis_http directamente)", "estado.persistencia.sqlite_tablas", "configuracion.env_vars", "observabilidad.metricas_emitidas (drift)", "codigo_intencion.todos", "version_archivada"]
+  }
+}

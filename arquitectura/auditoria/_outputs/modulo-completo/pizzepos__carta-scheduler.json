@@ -1,0 +1,215 @@
+{
+  "_meta": {
+    "modulo": "pizzepos/carta-scheduler",
+    "ubicacion": "modules/pizzepos/carta-scheduler",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/pizzepos__carta-scheduler.json"
+  },
+
+  "identidad": {
+    "name": "carta-scheduler",
+    "version": "1.0.0",
+    "description_oficial": "Programación de cambios de carta por canal. Conversacional via agente planner, detección de conflictos, confirmación previa antes de aplicar.",
+    "author": "Pizzepos Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/pizzepos/carta-scheduler/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "agent.execute.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/pizzepos/carta-scheduler/index.js:273",
+        "metodo_contenedor": "onSchedulerJobTriggered (probable)",
+        "es_handler_de": "scheduler.job.triggered",
+        "bloque_logico": "tras crear pendiente y guardarlo; dispatch al agente scheduler-dispatcher para avisar al usuario antes de aplicar el cambio",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["agentName", "context"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": true, "es_return": false,
+        "snippet": "    // Dispatch al agente dispatcher para avisar al usuario\n    await this.eventBus.publish('agent.execute.request', {\n      agentName: 'scheduler-dispatcher',\n      context: { project_id: projectId, pendiente_id: pendiente.id, regla, cambios: regla.cambios }\n    });",
+        "declarado_en_manifest": false
+      }
+    ],
+    "subscribes": [
+      { "nombre": "project.activated",       "tipo_nombre": "literal", "handler": "onProjectActivated",       "handler_ubicacion": "modules/pizzepos/carta-scheduler/index.js:79",  "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-scheduler/index.js:95",  "auto_wired": true,  "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "project.deactivated",     "tipo_nombre": "literal", "handler": "onProjectDeactivated",     "handler_ubicacion": "modules/pizzepos/carta-scheduler/index.js:102", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-scheduler/index.js:102", "auto_wired": true,  "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "scheduler.job.triggered", "tipo_nombre": "literal", "handler": "onSchedulerJobTriggered",  "handler_ubicacion": "modules/pizzepos/carta-scheduler/index.js:242", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/pizzepos/carta-scheduler/index.js:242", "auto_wired": false, "subscripcion_dinamica": true,  "declarado_en_manifest": false }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": [],
+      "publica_literales_en_codigo": ["agent.execute.request"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [],
+      "publica_emitidos_no_declarados": ["agent.execute.request"],
+      "subscribes_declarados_en_manifest": ["project.activated", "project.deactivated"],
+      "subscribes_realmente_registrados": ["project.activated", "project.deactivated", "scheduler.job.triggered"],
+      "subscribes_dinamicos": ["scheduler.job.triggered (no auto-wired vía manifest — registrado en runtime)"]
+    }
+  },
+
+  "tools": [
+    { "name": "scheduler.crear_regla",        "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolCrearRegla",        "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "scheduler.listar_reglas",      "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolListarReglas",      "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "scheduler.eliminar_regla",     "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolEliminarRegla",     "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "scheduler.detectar_conflictos","description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolDetectarConflictos","handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "scheduler.proximos_cambios",   "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolProximosCambios",   "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "scheduler.confirmar",          "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolConfirmar",          "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] },
+    { "name": "scheduler.rechazar",           "description_para_llm": null, "parameters_required": [], "parameters_property_names": [], "parameters_size_chars": 0, "handler_metodo": "toolRechazar",           "handler_ubicacion": null, "retorno": { "tipo": "object", "shape_inferido": {}, "es_markdown_formateado": false, "ejemplos_observados": [], "publica_eventos_de_dominio": [] }, "errores_conocidos": [] }
+  ],
+  "ui_handlers": [],
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "reglasPerProject",     "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-scheduler/index.js:39", "se_invalida_con": "set en onProjectActivated (carga reglas) | toolCrearRegla / toolEliminarRegla mutan", "leak_potencial": false },
+      { "campo": "pendientesPerProject", "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-scheduler/index.js:40", "se_invalida_con": "set en onSchedulerJobTriggered (crea pendiente) | toolConfirmar / toolRechazar limpian", "leak_potencial": false },
+      { "campo": "projectPaths",         "tipo": "Map", "ubicacion_init": "modules/pizzepos/carta-scheduler/index.js:41", "se_invalida_con": "onProjectActivated set; cache permanente",                                            "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/carta-scheduler/reglas.json (probable)",     "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" },
+        { "path_pattern": "data/projects/{slug}/storage/pizzepos/carta-scheduler/pendientes.json (probable)", "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" }
+      ],
+      "notas_concurrencia": "Persiste reglas (programaciones) y pendientes (cambios programados sin confirmar) por proyecto. Sin locks."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/projects/{slug}/storage/pizzepos/carta-scheduler/"],
+    "valores_hardcoded_observables": [
+      { "valor": "scheduler-dispatcher (nombre del agente)", "ubicacion": "modules/pizzepos/carta-scheduler/index.js:274", "naturaleza": "otro" }
+    ]
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/pizzepos/carta-scheduler/index.js:47",
+      "acciones": [
+        "guarda this.logger / this.eventBus / this.scheduler (referencia al módulo scheduler)",
+        "logger.info('module.loaded')"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus", "this.scheduler (REF EXTERNA al módulo scheduler para registrar jobs)"],
+      "puede_fallar_silenciosamente": true
+    },
+    "onUnload": {
+      "ubicacion": "modules/pizzepos/carta-scheduler/index.js:65",
+      "acciones": ["logger.info('module.unloaded')"],
+      "estado_no_limpiado": ["reglasPerProject", "pendientesPerProject", "projectPaths"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": ["scheduler.job.triggered (no en manifest — suscrito en runtime)"]
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "scheduler",            "via_evento": "registra jobs vía referencia directa this.scheduler + escucha scheduler.job.triggered (subscribe dinámico)", "obligatorio_en": "ambos",   "ubicacion_uso": "modules/pizzepos/carta-scheduler/index.js:205 (warn scheduler_not_available)", "es_cross_vertical": false },
+    { "modulo_dependido": "ai-agent-framework",   "via_evento": "agent.execute.request (dispatch a scheduler-dispatcher)",                                                     "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-scheduler/index.js:273", "es_cross_vertical": false },
+    { "modulo_dependido": "project-manager",      "via_evento": "project.activated (subscribe)",                                                                                "obligatorio_en": "runtime", "ubicacion_uso": "modules/pizzepos/carta-scheduler/index.js:79",  "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "scheduler (no disponible)",      "que_pasa_si_cae": "logger.warn 'carta-scheduler.scheduler_not_available'; las reglas se persisten pero no se ejecutan en su momento.", "evidencia": "modules/pizzepos/carta-scheduler/index.js:205" },
+    { "dependencia": "scheduler (registro de job falla)","que_pasa_si_cae": "logger.warn 'carta-scheduler.job.register_error'; la regla queda guardada pero sin trigger asociado.",            "evidencia": "modules/pizzepos/carta-scheduler/index.js:231" },
+    { "dependencia": "fs (reglas)",                     "que_pasa_si_cae": "logger.warn/error 'carta-scheduler.reglas.load_error/save_error'.",                                              "evidencia": "modules/pizzepos/carta-scheduler/index.js:136" },
+    { "dependencia": "ai-agent-framework (dispatcher)", "que_pasa_si_cae": "agent.execute.request fire-and-forget; pendiente queda guardado pero sin notificación al usuario.",              "evidencia": "modules/pizzepos/carta-scheduler/index.js:273" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('carta-scheduler.<accion>' | 'module.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["module", "version", "project_id", "error", "regla_id"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('module.loaded', { module: this.name, version: this.version });",                                        "ubicacion": "modules/pizzepos/carta-scheduler/index.js:62"  },
+        { "snippet": "this.logger.warn('carta-scheduler.reglas.load_error', { project_id: projectId, error: err.message });",                    "ubicacion": "modules/pizzepos/carta-scheduler/index.js:136" },
+        { "snippet": "this.logger.warn('carta-scheduler.scheduler_not_available');",                                                              "ubicacion": "modules/pizzepos/carta-scheduler/index.js:205" },
+        { "snippet": "this.logger.warn('carta-scheduler.job.register_error', { ... });",                                                           "ubicacion": "modules/pizzepos/carta-scheduler/index.js:231" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — carta-scheduler no propaga correlation_id."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [
+      { "ubicacion": "modules/pizzepos/carta-scheduler/index.js:272", "comentario_literal": "Dispatch al agente dispatcher para avisar al usuario", "contexto": "explica el flujo: cuando un job se dispara, no se aplica directo — se crea pendiente y se notifica al usuario via agente para que confirme antes de aplicar (workflow human-in-the-loop)" }
+    ],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 544,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "Subscribe DINÁMICO no declarado en manifest: scheduler.job.triggered", "ejemplo": "modules/pizzepos/carta-scheduler/index.js:242", "rareza": "inusual" },
+      { "patron": "Referencia directa al módulo scheduler vía this.scheduler (registro de jobs imperativo, no via evento)", "ejemplo": "modules/pizzepos/carta-scheduler/index.js:205", "rareza": "inusual" }
+    ]
+  },
+
+  "quirks": {
+    "warnings": [
+      "ECOSISTEMA CARTAS — SCHEDULER. carta-scheduler programa cambios de carta. Workflow: tool crear_regla → registra job en scheduler módulo → al disparar (scheduler.job.triggered) crea pendiente → dispatch agente scheduler-dispatcher para confirmar con usuario → tool confirmar/rechazar aplica o descarta.",
+      "subscribes_realmente_registrados (3) ≠ subscribes_declarados_en_manifest (2): scheduler.job.triggered se suscribe en runtime, no via auto-wire. Drift estructural.",
+      "publica_emitidos_no_declarados: agent.execute.request (cross-módulo)",
+      "Patrón HUMAN-IN-THE-LOOP: jobs no aplican cambios directamente — primero crean pendiente y notifican vía agente. Único módulo con este patrón visible.",
+      "Acopla DIRECTO con módulo scheduler: this.scheduler es referencia directa al módulo (no via evento) — patrón inusual en el repo (la mayoría usa eventos)",
+      "7 tools, sin handler_ubicacion identificada (toolX viven entre líneas 280-520 sin prefijo claro — diferido)"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "ui_handlers (no expone MQTT UI)",
+      "apis_http (no expone HTTP)",
+      "estado.persistencia.sqlite_tablas (usa JSON files)",
+      "configuracion.env_vars / module_json_config_keys",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.todos / workarounds_detectados",
+      "version_archivada"
+    ]
+  }
+}

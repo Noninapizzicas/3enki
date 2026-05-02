@@ -3,8 +3,8 @@
   "version": "1.1.0",
   "description": "Servicio core de periféricos — descubrimiento, registro y routing de dispositivos hardware. Capacidades: imprimir, display, abrir-cajon.",
   "author": "Event Core Team",
+  "language": "es",
   "tier": "tier_2_platform",
-
   "provides": {
     "events": [
       "periferico.impreso",
@@ -19,7 +19,6 @@
       "periferico.listado"
     ]
   },
-
   "events": {
     "publishes": [
       {
@@ -101,25 +100,58 @@
       }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "perifericos", "action": "list", "handler": "handleListar" },
-    { "domain": "perifericos", "action": "get", "handler": "handleGet" },
-    { "domain": "perifericos", "action": "create", "handler": "handleRegistrar" },
-    { "domain": "perifericos", "action": "update", "handler": "handleActualizar" },
-    { "domain": "perifericos", "action": "delete", "handler": "handleDesregistrar" },
-    { "domain": "perifericos", "action": "test", "handler": "handleTestDispositivo" },
-    { "domain": "perifericos", "action": "status", "handler": "handleEstado" },
-    { "domain": "perifericos", "action": "discover", "handler": "handleDescubrir" },
-    { "domain": "perifericos", "action": "listar-por-capacidad", "handler": "handleListarPorCapacidad" }
+    {
+      "domain": "perifericos",
+      "action": "list",
+      "handler": "handleListar"
+    },
+    {
+      "domain": "perifericos",
+      "action": "get",
+      "handler": "handleGet"
+    },
+    {
+      "domain": "perifericos",
+      "action": "create",
+      "handler": "handleRegistrar"
+    },
+    {
+      "domain": "perifericos",
+      "action": "update",
+      "handler": "handleActualizar"
+    },
+    {
+      "domain": "perifericos",
+      "action": "delete",
+      "handler": "handleDesregistrar"
+    },
+    {
+      "domain": "perifericos",
+      "action": "test",
+      "handler": "handleTestDispositivo"
+    },
+    {
+      "domain": "perifericos",
+      "action": "status",
+      "handler": "handleEstado"
+    },
+    {
+      "domain": "perifericos",
+      "action": "discover",
+      "handler": "handleDescubrir"
+    },
+    {
+      "domain": "perifericos",
+      "action": "listar-por-capacidad",
+      "handler": "handleListarPorCapacidad"
+    }
   ],
-
   "config": {
     "dataPath": "./data/perifericos",
     "dispositivos": [],
     "health_check_interval_ms": 30000
   },
-
   "observability": {
     "logging": {
       "level": "info",

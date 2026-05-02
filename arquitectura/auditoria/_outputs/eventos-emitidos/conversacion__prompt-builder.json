@@ -1,0 +1,155 @@
+{
+  "_meta": {
+    "modulo": "conversacion/prompt-builder",
+    "ubicacion": "modules/conversacion/prompt-builder",
+    "auditado_en": "2026-04-29",
+    "parcela": "eventos-emitidos",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/conversacion__prompt-builder.json"
+  },
+
+  "archivos_analizados": [
+    {
+      "path": "modules/conversacion/prompt-builder/index.js",
+      "lineas": 268,
+      "publishes_count": 3
+    }
+  ],
+
+  "eventos_emitidos": [
+    {
+      "indice": 1,
+      "nombre": {
+        "tipo": "literal",
+        "valor": "prompt.list.request",
+        "variables_referenciadas": []
+      },
+      "ubicacion": "modules/conversacion/prompt-builder/index.js:117",
+      "contexto": {
+        "metodo_contenedor": "_requestUserPrompts",
+        "es_handler_de": null,
+        "bloque_logico": "al arrancar, tras asignar this._listRequestId"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["request_id"],
+        "tiene_request_id": true,
+        "tiene_correlation_id": false,
+        "tiene_project_id": false,
+        "campos_con_template_literal": []
+      },
+      "canal": {
+        "tipo": "eventBus",
+        "expresion_usada": "this.eventBus.publish"
+      },
+      "es_await": false,
+      "es_return": false,
+      "snippet": "    this._listRequestId = request_id;\n    this.eventBus.publish('prompt.list.request', { request_id }).catch(err =>\n      this.logger.warn('prompt-builder.list.failed', { error: err.message })\n    );"
+    },
+    {
+      "indice": 2,
+      "nombre": {
+        "tipo": "literal",
+        "valor": "db.query.request",
+        "variables_referenciadas": []
+      },
+      "ubicacion": "modules/conversacion/prompt-builder/index.js:156",
+      "contexto": {
+        "metodo_contenedor": "_db",
+        "es_handler_de": null,
+        "bloque_logico": "dentro de Promise resolver, tras pendingDb.set"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["project_id", "query", "params", "read_only", "request_id"],
+        "tiene_request_id": true,
+        "tiene_correlation_id": false,
+        "tiene_project_id": true,
+        "campos_con_template_literal": []
+      },
+      "canal": {
+        "tipo": "eventBus",
+        "expresion_usada": "this.eventBus.publish"
+      },
+      "es_await": false,
+      "es_return": false,
+      "snippet": "      this.pendingDb.set(request_id, { resolve, reject, timeout });\n      this.eventBus.publish('db.query.request', { project_id, query, params, read_only: true, request_id });\n    });"
+    },
+    {
+      "indice": 3,
+      "nombre": {
+        "tipo": "literal",
+        "valor": "chat.prompt.ready",
+        "variables_referenciadas": []
+      },
+      "ubicacion": "modules/conversacion/prompt-builder/index.js:252",
+      "contexto": {
+        "metodo_contenedor": "onMessageSaved",
+        "es_handler_de": "chat.message.saved",
+        "bloque_logico": "tras construir systemPrompt e historial de mensajes"
+      },
+      "payload": {
+        "tipo": "object_literal",
+        "campos_visibles": ["project_id", "page_id", "conversation_id", "context", "settings", "prompt", "attachments", "intencion", "message", "messages", "message_id"],
+        "tiene_request_id": false,
+        "tiene_correlation_id": false,
+        "tiene_project_id": true,
+        "campos_con_template_literal": []
+      },
+      "canal": {
+        "tipo": "eventBus",
+        "expresion_usada": "this.eventBus.publish"
+      },
+      "es_await": true,
+      "es_return": false,
+      "snippet": "    // Propagamos los 9 campos. prompt pasa de id → string final.\n    await this.eventBus.publish('chat.prompt.ready', {\n      project_id,\n      page_id,\n      conversation_id,\n      context: context || {},\n      settings,\n      prompt: systemPrompt,\n      attachments: attachments || [],\n      intencion: intencion ?? null,\n      message,\n      messages,\n      message_id\n    });"
+    }
+  ],
+
+  "consistencia_con_manifest": {
+    "publishes_declarados_en_manifest": [
+      "chat.prompt.ready",
+      "prompt.list.request"
+    ],
+    "literales_unicos_emitidos": [
+      "chat.prompt.ready",
+      "db.query.request",
+      "prompt.list.request"
+    ],
+    "patrones_dinamicos_emitidos": [],
+    "declarados_no_emitidos_en_codigo": [],
+    "emitidos_no_declarados_en_manifest": [
+      "db.query.request"
+    ]
+  },
+
+  "patrones_observados": {
+    "canales_usados": ["eventBus"],
+    "publishes_por_canal": {
+      "eventBus": 3,
+      "mqtt_directo": 0,
+      "otro": 0
+    },
+    "publishes_con_request_id": 2,
+    "publishes_con_correlation_id": 0,
+    "publishes_con_project_id": 2,
+    "publishes_await": 1,
+    "publishes_return": 0,
+    "publishes_dinamicos": 0,
+    "comentarios_explicativos": [
+      {
+        "ubicacion": "modules/conversacion/prompt-builder/index.js:251",
+        "comentario_literal": "// Propagamos los 9 campos. prompt pasa de id → string final.",
+        "publish_relacionado_indice": 3
+      }
+    ]
+  },
+
+  "quirks": {
+    "warnings": [],
+    "publishes_count_total": 3,
+    "publishes_unicos_literales_count": 3,
+    "archivos_lib_existe": false,
+    "archivos_services_existe": false
+  }
+}

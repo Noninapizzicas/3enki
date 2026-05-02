@@ -3,8 +3,8 @@
   "version": "3.0.0",
   "description": "Multi-bot Telegram service - centralized management, credential-manager integration",
   "author": "Event Core Team",
+  "language": "en",
   "main": "index.js",
-
   "provides": {
     "events": [
       "telegram.text.received",
@@ -25,7 +25,6 @@
       "telegram.queue.overflow"
     ]
   },
-
   "events": {
     "publishes": [
       {
@@ -110,23 +109,64 @@
       }
     ],
     "subscribes": [
-      { "event": "credential.saved", "handler": "onCredentialSaved" },
-      { "event": "credential.deleted", "handler": "onCredentialDeleted" },
-      { "event": "telegram.send_message.request", "handler": "onSendMessageRequest" },
-      { "event": "telegram.get_file.request", "handler": "onGetFileRequest" },
-      { "event": "telegram.send_photo.request", "handler": "onSendPhotoRequest" },
-      { "event": "telegram.send_document.request", "handler": "onSendDocumentRequest" },
-      { "event": "telegram.send_video.request", "handler": "onSendVideoRequest" },
-      { "event": "telegram.send_location.request", "handler": "onSendLocationRequest" },
-      { "event": "telegram.edit_message.request", "handler": "onEditMessageRequest" },
-      { "event": "telegram.delete_message.request", "handler": "onDeleteMessageRequest" },
-      { "event": "telegram.answer_callback.request", "handler": "onAnswerCallbackRequest" },
-      { "event": "telegram.get_chat.request", "handler": "onGetChatRequest" },
-      { "event": "telegram.set_commands.request", "handler": "onSetCommandsRequest" },
-      { "event": "telegram.list_bots.request", "handler": "onListBotsRequest" }
+      {
+        "event": "credential.saved",
+        "handler": "onCredentialSaved"
+      },
+      {
+        "event": "credential.deleted",
+        "handler": "onCredentialDeleted"
+      },
+      {
+        "event": "telegram.send_message.request",
+        "handler": "onSendMessageRequest"
+      },
+      {
+        "event": "telegram.get_file.request",
+        "handler": "onGetFileRequest"
+      },
+      {
+        "event": "telegram.send_photo.request",
+        "handler": "onSendPhotoRequest"
+      },
+      {
+        "event": "telegram.send_document.request",
+        "handler": "onSendDocumentRequest"
+      },
+      {
+        "event": "telegram.send_video.request",
+        "handler": "onSendVideoRequest"
+      },
+      {
+        "event": "telegram.send_location.request",
+        "handler": "onSendLocationRequest"
+      },
+      {
+        "event": "telegram.edit_message.request",
+        "handler": "onEditMessageRequest"
+      },
+      {
+        "event": "telegram.delete_message.request",
+        "handler": "onDeleteMessageRequest"
+      },
+      {
+        "event": "telegram.answer_callback.request",
+        "handler": "onAnswerCallbackRequest"
+      },
+      {
+        "event": "telegram.get_chat.request",
+        "handler": "onGetChatRequest"
+      },
+      {
+        "event": "telegram.set_commands.request",
+        "handler": "onSetCommandsRequest"
+      },
+      {
+        "event": "telegram.list_bots.request",
+        "handler": "onListBotsRequest"
+      }
     ]
   },
-
   "tools": [
     {
       "name": "telegram.send_message",
@@ -135,13 +175,36 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot (ej: facturas)" },
-          "chatId": { "type": "number", "description": "ID del chat" },
-          "text": { "type": "string", "description": "Texto del mensaje" },
-          "parseMode": { "type": "string", "enum": ["HTML", "Markdown"], "description": "Formato del texto" },
-          "replyMarkup": { "type": "object", "description": "Keyboard markup (inline_keyboard o keyboard)" }
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot (ej: facturas)"
+          },
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat"
+          },
+          "text": {
+            "type": "string",
+            "description": "Texto del mensaje"
+          },
+          "parseMode": {
+            "type": "string",
+            "enum": [
+              "HTML",
+              "Markdown"
+            ],
+            "description": "Formato del texto"
+          },
+          "replyMarkup": {
+            "type": "object",
+            "description": "Keyboard markup (inline_keyboard o keyboard)"
+          }
         },
-        "required": ["botName", "chatId", "text"]
+        "required": [
+          "botName",
+          "chatId",
+          "text"
+        ]
       }
     },
     {
@@ -151,12 +214,28 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot" },
-          "chatId": { "type": "number", "description": "ID del chat" },
-          "photo": { "type": "string", "description": "URL o file_id de la foto" },
-          "caption": { "type": "string", "description": "Caption de la foto" }
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot"
+          },
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat"
+          },
+          "photo": {
+            "type": "string",
+            "description": "URL o file_id de la foto"
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption de la foto"
+          }
         },
-        "required": ["botName", "chatId", "photo"]
+        "required": [
+          "botName",
+          "chatId",
+          "photo"
+        ]
       }
     },
     {
@@ -166,12 +245,28 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot" },
-          "chatId": { "type": "number", "description": "ID del chat" },
-          "document": { "type": "string", "description": "URL o file_id del documento" },
-          "caption": { "type": "string", "description": "Caption del documento" }
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot"
+          },
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat"
+          },
+          "document": {
+            "type": "string",
+            "description": "URL o file_id del documento"
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption del documento"
+          }
         },
-        "required": ["botName", "chatId", "document"]
+        "required": [
+          "botName",
+          "chatId",
+          "document"
+        ]
       }
     },
     {
@@ -181,12 +276,28 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot" },
-          "chatId": { "type": "number", "description": "ID del chat" },
-          "video": { "type": "string", "description": "URL o file_id del video" },
-          "caption": { "type": "string", "description": "Caption del video" }
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot"
+          },
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat"
+          },
+          "video": {
+            "type": "string",
+            "description": "URL o file_id del video"
+          },
+          "caption": {
+            "type": "string",
+            "description": "Caption del video"
+          }
         },
-        "required": ["botName", "chatId", "video"]
+        "required": [
+          "botName",
+          "chatId",
+          "video"
+        ]
       }
     },
     {
@@ -196,12 +307,29 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot" },
-          "chatId": { "type": "number", "description": "ID del chat" },
-          "latitude": { "type": "number", "description": "Latitud" },
-          "longitude": { "type": "number", "description": "Longitud" }
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot"
+          },
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat"
+          },
+          "latitude": {
+            "type": "number",
+            "description": "Latitud"
+          },
+          "longitude": {
+            "type": "number",
+            "description": "Longitud"
+          }
         },
-        "required": ["botName", "chatId", "latitude", "longitude"]
+        "required": [
+          "botName",
+          "chatId",
+          "latitude",
+          "longitude"
+        ]
       }
     },
     {
@@ -211,12 +339,29 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot" },
-          "chatId": { "type": "number", "description": "ID del chat" },
-          "messageId": { "type": "number", "description": "ID del mensaje" },
-          "text": { "type": "string", "description": "Nuevo texto" }
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot"
+          },
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat"
+          },
+          "messageId": {
+            "type": "number",
+            "description": "ID del mensaje"
+          },
+          "text": {
+            "type": "string",
+            "description": "Nuevo texto"
+          }
         },
-        "required": ["botName", "chatId", "messageId", "text"]
+        "required": [
+          "botName",
+          "chatId",
+          "messageId",
+          "text"
+        ]
       }
     },
     {
@@ -226,11 +371,24 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot" },
-          "chatId": { "type": "number", "description": "ID del chat" },
-          "messageId": { "type": "number", "description": "ID del mensaje" }
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot"
+          },
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat"
+          },
+          "messageId": {
+            "type": "number",
+            "description": "ID del mensaje"
+          }
         },
-        "required": ["botName", "chatId", "messageId"]
+        "required": [
+          "botName",
+          "chatId",
+          "messageId"
+        ]
       }
     },
     {
@@ -240,12 +398,27 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot" },
-          "callbackId": { "type": "string", "description": "ID del callback" },
-          "text": { "type": "string", "description": "Texto de respuesta (opcional)" },
-          "showAlert": { "type": "boolean", "description": "Mostrar como alerta" }
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot"
+          },
+          "callbackId": {
+            "type": "string",
+            "description": "ID del callback"
+          },
+          "text": {
+            "type": "string",
+            "description": "Texto de respuesta (opcional)"
+          },
+          "showAlert": {
+            "type": "boolean",
+            "description": "Mostrar como alerta"
+          }
         },
-        "required": ["botName", "callbackId"]
+        "required": [
+          "botName",
+          "callbackId"
+        ]
       }
     },
     {
@@ -255,11 +428,23 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot" },
-          "fileId": { "type": "string", "description": "ID del archivo" },
-          "download": { "type": "boolean", "description": "Descargar archivo a storage" }
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot"
+          },
+          "fileId": {
+            "type": "string",
+            "description": "ID del archivo"
+          },
+          "download": {
+            "type": "boolean",
+            "description": "Descargar archivo a storage"
+          }
         },
-        "required": ["botName", "fileId"]
+        "required": [
+          "botName",
+          "fileId"
+        ]
       }
     },
     {
@@ -269,10 +454,19 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot" },
-          "chatId": { "type": "number", "description": "ID del chat" }
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot"
+          },
+          "chatId": {
+            "type": "number",
+            "description": "ID del chat"
+          }
         },
-        "required": ["botName", "chatId"]
+        "required": [
+          "botName",
+          "chatId"
+        ]
       }
     },
     {
@@ -282,20 +476,30 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "botName": { "type": "string", "description": "Nombre del bot" },
+          "botName": {
+            "type": "string",
+            "description": "Nombre del bot"
+          },
           "commands": {
             "type": "array",
             "description": "Lista de comandos",
             "items": {
               "type": "object",
               "properties": {
-                "command": { "type": "string" },
-                "description": { "type": "string" }
+                "command": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
               }
             }
           }
         },
-        "required": ["botName", "commands"]
+        "required": [
+          "botName",
+          "commands"
+        ]
       }
     },
     {
@@ -308,18 +512,18 @@
       }
     }
   ],
-
   "config": {
     "pollingInterval": 1000,
     "rateLimitPerSecond": 25,
     "maxQueueSize": 100,
     "storagePath": "./data/bots"
   },
-
   "dependencies": {
-    "modules": ["credential-manager", "filesystem"]
+    "modules": [
+      "credential-manager",
+      "filesystem"
+    ]
   },
-
   "observability": {
     "logging": {
       "level": "info",

@@ -3,24 +3,50 @@
   "version": "2.0.0",
   "description": "Backoffice de la carta pública. Configura branding, compone carta final (datos + marketing + ofertas), genera PWA. Los agentes hacen el trabajo.",
   "author": "Pizzepos Team",
+  "language": "es",
   "main": "index.js",
-
   "events": {
     "subscribes": [
-      { "event": "project.activated", "handler": "onProjectActivated" },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated" },
-      { "event": "carta.actualizada", "handler": "onCartaActualizada" },
-      { "event": "tarifas.config.actualizada", "handler": "onTarifasActualizada" }
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated"
+      },
+      {
+        "event": "project.deactivated",
+        "handler": "onProjectDeactivated"
+      },
+      {
+        "event": "carta.actualizada",
+        "handler": "onCartaActualizada"
+      },
+      {
+        "event": "tarifas.config.actualizada",
+        "handler": "onTarifasActualizada"
+      }
     ]
   },
-
   "ui_handlers": [
-    { "domain": "carta-digital", "action": "config", "handler": "handleGetConfig" },
-    { "domain": "carta-digital", "action": "update-config", "handler": "handleUpdateConfig" },
-    { "domain": "carta-digital", "action": "carta-publica", "handler": "handleGetCartaPublica" },
-    { "domain": "carta-digital", "action": "health", "handler": "handleHealth" }
+    {
+      "domain": "carta-digital",
+      "action": "config",
+      "handler": "handleGetConfig"
+    },
+    {
+      "domain": "carta-digital",
+      "action": "update-config",
+      "handler": "handleUpdateConfig"
+    },
+    {
+      "domain": "carta-digital",
+      "action": "carta-publica",
+      "handler": "handleGetCartaPublica"
+    },
+    {
+      "domain": "carta-digital",
+      "action": "health",
+      "handler": "handleHealth"
+    }
   ],
-
   "tools": [
     {
       "name": "cartadigital.get_config",
@@ -28,8 +54,14 @@
       "handler": "toolGetConfig",
       "parameters": {
         "type": "object",
-        "properties": { "project_id": { "type": "string" } },
-        "required": ["project_id"]
+        "properties": {
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -39,14 +71,28 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "whatsapp_telefono": { "type": "string" },
-          "nombre_negocio": { "type": "string" },
-          "moneda": { "type": "string" },
-          "tema": { "type": "object" },
-          "funcionalidades": { "type": "object" }
+          "project_id": {
+            "type": "string"
+          },
+          "whatsapp_telefono": {
+            "type": "string"
+          },
+          "nombre_negocio": {
+            "type": "string"
+          },
+          "moneda": {
+            "type": "string"
+          },
+          "tema": {
+            "type": "object"
+          },
+          "funcionalidades": {
+            "type": "object"
+          }
         },
-        "required": ["project_id"]
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -55,8 +101,14 @@
       "handler": "toolGetCartaPublica",
       "parameters": {
         "type": "object",
-        "properties": { "project_id": { "type": "string" } },
-        "required": ["project_id"]
+        "properties": {
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ]
       }
     },
     {
@@ -66,24 +118,31 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" },
-          "carta_compuesta": { "type": "object" }
+          "project_id": {
+            "type": "string"
+          },
+          "carta_compuesta": {
+            "type": "object"
+          }
         },
-        "required": ["project_id", "carta_compuesta"]
+        "required": [
+          "project_id",
+          "carta_compuesta"
+        ]
       }
     }
   ],
-
   "agents": {
     "cartadigital-composer": "Compone carta final: carta-manager + marketing + ofertas + config",
     "cartadigital-pwa-builder": "Genera export PWA (HTML + service worker + manifest)",
     "cartadigital-ofertas": "Gestiona ofertas y combos",
     "cartadigital-reviewer": "Revisa completitud: imágenes, descripciones, alérgenos, precios"
   },
-
   "observability": {
     "metrics": {
-      "counters": ["carta-digital.recompose.triggered"]
+      "counters": [
+        "carta-digital.recompose.triggered"
+      ]
     }
   }
 }

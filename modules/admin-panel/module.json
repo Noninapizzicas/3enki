@@ -2,6 +2,7 @@
   "name": "admin-panel",
   "version": "1.0.0",
   "description": "Web-based admin panel for managing Event Core system",
+  "language": "en",
   "dependencies": [
     "ui-renderer"
   ],
@@ -78,14 +79,12 @@
       }
     ]
   },
-
   "ui": {
     "enabled": true,
     "title": "Admin Panel",
     "icon": "⚙️",
     "description": "System administration and monitoring"
   },
-
   "schema": {
     "id": {
       "type": "string",
@@ -99,7 +98,11 @@
     "status": {
       "type": "enum",
       "label": "Status",
-      "enum": ["active", "inactive", "error"],
+      "enum": [
+        "active",
+        "inactive",
+        "error"
+      ],
       "required": true
     },
     "version": {
@@ -109,7 +112,12 @@
     "type": {
       "type": "enum",
       "label": "Type",
-      "enum": ["module", "plugin", "agent", "prompt"]
+      "enum": [
+        "module",
+        "plugin",
+        "agent",
+        "prompt"
+      ]
     },
     "description": {
       "type": "text",

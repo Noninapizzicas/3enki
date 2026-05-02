@@ -1,0 +1,396 @@
+{
+  "_doc": "Captura LA forma canónica en la que el sistema event-core responde cuando algo sale mal: shape de la respuesta de error, códigos estandarizados, distinción entre dominio e infraestructura, telemetría automática, política de propagación. Sin un contrato de errores, cada módulo inventa su forma — los callers no pueden tratar errores uniformemente, los logs son ilegibles, las métricas se confunden, y los secretos se filtran en mensajes. Este contrato es la pareja del de observability: un error que ocurre, un error que se observa, un error que el caller puede tratar.",
+  "id": "errors",
+  "version": "1.2.0",
+  "creada": "2026-05-02",
+  "supersedes_nota": "v1.2.0 (POC2 ai-gateway, finding F3): añadidos al output codes_infrastructure: CREDENTIAL_NOT_FOUND y los 8 UPSTREAM_* (AUTH_FAILED, NOT_FOUND, RATE_LIMITED, 5XX, TIMEOUT, UNREACHABLE, INVALID_RESPONSE, PAYLOAD_TOO_LARGE) — referenciados por http.contract.status_code_mapping_to_canonical pero ausentes hasta ahora. Schema fix: pattern de code admite digitos (^[A-Z][A-Z0-9_]*[A-Z0-9]$) para soportar UPSTREAM_5XX. Cierra incoherencia entre errors.json y http.json.\n\nv1.1.0 (POC1 notas): deprecadas PROJECT_NOT_FOUND/RECIPE_NOT_FOUND (usar RESOURCE_NOT_FOUND + entity_type). Añadidos field y all_errors a details_canonical_fields. Añadida sección recommended_helpers con _buildErrorResponse.",
+
+  "objetivo": "Producir UN JSON output (_outputs/errors.json) que define: shape canónica de respuesta (éxito y fallo), códigos de status estandarizados con su significado, estructura del campo error (code, message, details opcionales), política de stack traces, política de propagación (cuándo absorber, cuándo throw), telemetría obligatoria al emitir un error (log + métrica), política de exposición externa (qué se ve en respuestas vs qué solo en logs internos), distinción entre errores de dominio vs infraestructura. Validable mecánicamente cruzando contra las auditorías modulo-completo.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/errors.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/errors.schema.json",
+      "arquitectura/decisiones/_outputs/events.json (porque hereda los status_codes_canonical del request_response)",
+      "arquitectura/decisiones/_outputs/observability.json (porque cada error emite log y métrica obligatorios)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json — campos `tools[].errores_conocidos`, `tools[].retorno`, `ui_handlers[].codigos_error`, `ui_handlers[].output_shape`, `apis_http[].response_keys`, `modos_de_fallo`",
+      "arquitectura/auditoria/_outputs/manifest-completo/*.json — declaraciones de schemas de respuesta en module.json"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL ERROR ES INFORMACIÓN, NO EXCEPCIÓN A ESCONDER. Cuando algo falla, eso es un hecho del sistema tan importante como un éxito. Los errores se modelan como datos, se observan, se propagan a quien deba enterarse. Esconderlos es peor que provocarlos.",
+
+    "FORMA CANÓNICA ÚNICA. Toda respuesta de un tool, ui_handler, api HTTP o mqttRequest tiene la misma forma — cambia el contenido según éxito o fallo. El caller siempre sabe dónde buscar el status, dónde el data, dónde el error. Sin sorpresas.",
+
+    "DOS PÚBLICOS, UNA INFORMACIÓN. Cada error tiene un mensaje legible para humanos (que mira un log o un dashboard) y un código procesable por máquinas (para ramas de control en el caller). Los dos coexisten: ni solo string ('algo falló'), ni solo número (404 sin contexto).",
+
+    "DOMINIO vs INFRAESTRUCTURA. Un error de dominio (la receta no existe, el pedido ya está pagado, la tarifa no aplica) es información de negocio — el caller puede actuar sobre ella. Un error de infraestructura (DB caída, broker desconectado, filesystem lleno) es información operativa — el caller poco puede hacer. Distinguir los dos en el código y en la respuesta es clave para que el sistema sea robusto.",
+
+    "AUTO-OBSERVABLE. Cada error que el módulo genera produce automáticamente (a) un log con severidad apropiada, (b) una métrica counter incrementada. No depende de que el módulo se acuerde. La telemetría no es opcional para errores — es lo que distingue un sistema productivo de uno opaco.",
+
+    "STACK TRACES NO SE FILTRAN. El stack trace es información sensible: revela rutas de archivos, nombres de variables, estructura interna del sistema. SOLO aparece en logs (level=error o debug) — JAMÁS en la respuesta que llega a un caller externo. Lo que el caller recibe es { code, message, details? } — limpio, controlado.",
+
+    "PROPAGAR O ABSORBER ES DECISIÓN DEL DOMINIO. Un módulo que recibe un error de otro módulo (ej. via mqttRequest) decide qué hacer: a) propagarlo al caller superior con su propio status; b) traducirlo a un error de dominio propio; c) absorberlo y degradarse (con métrica de degraded). Pero NUNCA traga el error sin telemetría.",
+
+    "RECUPERABLE vs FATAL. El caller necesita saber si reintentar tiene sentido. Algunos errores (timeout transitorio, broker brevemente caído) son recuperables. Otros (input inválido, recurso no encontrado, permiso denegado) no lo son por reintento — el caller debe corregir antes de reintentar. El código de error transmite esto.",
+
+    "SIN SECRETOS EN EL MENSAJE. El mensaje de error nunca contiene tokens, passwords, paths privados ni datos personales. Si necesita referenciar algo sensible, usa metadata (ej. 'credential expired' con credential_id, no con el token). Coherente con no_secrets_in_logs del contrato observability.",
+
+    "EL EMISOR DESCRIBE, EL CALLER DECIDE. El módulo que emite un error describe lo que pasó y por qué. NO instruye al caller qué hacer. El caller, con código y mensaje, decide: reintenta, escala, degrada, log y sigue. Esto coincide con el principio what_vs_how_separation de events.",
+
+    "ERRORES NO INVENTAN CÓDIGOS. Hay una lista cerrada de códigos canónicos (HTTP-like + dominio + infraestructura). El módulo elige el más apropiado de la lista — NO inventa códigos nuevos por capricho. Si la lista no cubre un caso real, se propone PR para extenderla."
+  ],
+
+  "principios": [
+    {
+      "id": "canonical_response_shape",
+      "regla": "Toda respuesta de tool/ui_handler/api_http/handler de mqttRequest sigue UN ÚNICO shape: { status: integer, data?: object, error?: { code: string, message: string, details?: object } }. Cuando el resultado es éxito, hay 'data' y NO hay 'error'. Cuando es fallo, hay 'error' y NO hay 'data'. status (HTTP-like) está siempre.",
+      "razon": "Una sola forma elimina el bikeshed por módulo (algunos devolvían { ok: true }, otros { success: true }, otros raw data). Con shape único, los callers (UI, otras módulos, LLM) tratan respuestas de cualquier módulo igual. La auditoría puede validarlo mecánicamente."
+    },
+    {
+      "id": "human_message_machine_code",
+      "regla": "Cuando hay error, el campo error tiene SIEMPRE dos sub-campos: code (string corto, identificador estable, procesable por máquinas) y message (string libre, legible por humanos). Opcionalmente details (object con metadata estructurada).",
+      "razon": "code es para que el caller ramifique (if (error.code === 'PROJECT_NOT_FOUND') redirect_to_creation()). message es para que el operador o el usuario final entienda qué pasó. Sin code, el caller tiene que parsear el message — frágil. Sin message, el log es críptico. Coexisten."
+    },
+    {
+      "id": "domain_vs_infrastructure",
+      "regla": "Cada error se clasifica explícitamente como 'domain' o 'infrastructure'. Domain: la lógica de negocio rechazó la operación (input inválido, no encontrado, conflicto, permiso denegado). Infrastructure: el sistema falló por debajo (DB caída, broker desconectado, filesystem lleno, timeout). La clasificación viaja en error.details.kind o se infiere por el código.",
+      "razon": "El caller actúa distinto en cada caso. Frente a un error de dominio, puede mostrar mensaje al usuario y pedir corrección. Frente a uno de infraestructura, puede reintentar, fallar con dignidad, alertar. Sin distinción, el caller mezcla 'tu input está mal' con 'el sistema está caído' — UX y operativa rotas."
+    },
+    {
+      "id": "auto_observable_errors",
+      "regla": "Cada vez que un módulo emite un error (devuelve respuesta con error), automáticamente: (a) emite this.logger.X con severity apropiada (warn si recuperable/dominio, error si fatal/infraestructura), (b) incrementa una métrica counter '<module>.<entidad>.errors' o '<module>.<accion>.errors'. NO depende de que el módulo se acuerde — es parte de la API.",
+      "razon": "Sin telemetría automática, los errores son invisibles hasta que un usuario se queja. Con telemetría automática, el operador VE el aumento de errores en tiempo real (alerts, dashboards). La auto-observabilidad es la diferencia entre un sistema productivo y uno opaco."
+    },
+    {
+      "id": "no_stack_in_response",
+      "regla": "El stack trace JAMÁS aparece en la respuesta que devuelve el módulo al caller. El stack solo va al log (this.logger.error('module.action.failed', { error: err.message, stack: err.stack })). Lo que el caller recibe es { code, message, details? } — limpio.",
+      "razon": "Stack traces revelan rutas internas del sistema, nombres de variables, estructura de directorios — info útil para atacantes, ruido para callers legítimos. Mantener la respuesta limpia + el log con stack completo es estándar de seguridad y de UX."
+    },
+    {
+      "id": "propagate_or_absorb_with_telemetry",
+      "regla": "Cuando un módulo recibe un error de otro módulo (vía mqttRequest u otra forma de comunicación), tiene tres opciones legítimas: (a) propagarlo al caller superior con su propio status; (b) traducirlo a un error de dominio propio (con código nuevo); (c) absorberlo y degradarse (devolver éxito parcial). En las TRES opciones, el módulo emite log + métrica obligatoriamente. NO hay cuarta opción 'tragar sin telemetría'.",
+      "razon": "Propagar, traducir, absorber son decisiones legítimas del dominio. Tragar silenciosamente NO lo es — pierde la información del fallo. La telemetría obligatoria garantiza que el sistema sigue siendo observable independientemente de la decisión del módulo."
+    },
+    {
+      "id": "recoverable_signal",
+      "regla": "El código de error transmite si reintentar la misma operación tiene sentido. Errores recuperables (timeout, broker brevemente desconectado, lock contention) llevan códigos del rango 5xx + retry hint. Errores no-recuperables (input inválido, permission denied, not found) llevan 4xx — el caller debe corregir antes de reintentar.",
+      "razon": "Sin esta señal, los callers reintentan ciegos: o no reintentan nunca (pierden recuperaciones triviales), o reintentan siempre (saturan el sistema con requests inválidas que nunca van a pasar). El código de error es la señal."
+    },
+    {
+      "id": "no_secrets_in_messages",
+      "regla": "El campo error.message y error.details NUNCA contienen secretos: tokens, passwords, API keys, datos personales (PII), paths privados del filesystem, contenidos privados de clientes. Si el error está relacionado con una credencial, se usa metadata (credential_id, type, expired_at), NO el valor.",
+      "razon": "Coherente con no_secrets_in_logs del contrato observability. Los errores viajan por el mismo bus que los logs — un secreto en error.message es un secreto filtrado. Riesgo de compliance (GDPR, PCI), de seguridad. Sin excepciones."
+    },
+    {
+      "id": "describe_dont_instruct",
+      "regla": "El error describe LO QUE PASÓ, no le dice al caller QUÉ HACER. message='Recipe not found' (descripción), no 'Please create the recipe first' (instrucción). El caller tiene contexto que el módulo emisor no — decide qué hacer con la descripción.",
+      "razon": "Coincide con el principio what_vs_how_separation de events. El módulo emisor de un error sabe el qué; el caller sabe el cómo. Una instrucción pegada al error acopla el comportamiento del caller al dominio del emisor — anti-paradigma. Si el caller necesita recomendaciones, las pone su capa de UI/UX, no el módulo backend."
+    },
+    {
+      "id": "closed_code_list",
+      "regla": "Los códigos de error pertenecen a una lista cerrada y canónica definida en errors.json (HTTP-like estándar + lista de códigos de dominio + lista de códigos de infraestructura). El módulo elige el más apropiado de la lista — NO inventa códigos. Si la lista no cubre un caso real, se propone PR para extenderla.",
+      "razon": "Códigos inventados ad-hoc generan drift léxico (un módulo dice 'NOT_FOUND', otro 'NOTFOUND', otro '404'). El caller no puede ramificar. Lista cerrada + extensión por PR = vocabulario controlado del sistema. Mismo razonamiento que glossary y verbs_lifecycle de naming."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "response_shape_exact",
+      "decision": "Toda respuesta de tool/ui_handler/api_http/handler de mqttRequest tiene la forma exacta: { status: integer (HTTP-like), data?: object (presente en éxito, ausente en fallo), error?: { code: string UPPER_SNAKE_CASE, message: string libre, details?: object opcional } (presente en fallo, ausente en éxito) }. Mutuamente excluyentes: si hay error, NO hay data. Si hay data, NO hay error. status SIEMPRE presente.",
+      "derivado_de": ["canonical_response_shape", "human_message_machine_code"],
+      "razon": "Forma estricta y predecible permite a callers procesar respuestas uniformemente sin try/catch defensivos por cada call. La auditoría puede validar el shape mecánicamente.",
+      "notas": "Esto es lo que recibe el caller. El status es HTTP-like (200/400/500), el code es la subdivisión léxica del error específico ('RECIPE_NOT_FOUND', 'DATABASE_DOWN')."
+    },
+    {
+      "id": "status_codes_canonical",
+      "decision": "Status integer de la respuesta sigue convención HTTP-like. Lista cerrada heredada de events.json.request_response.status_codes_canonical y extendida si necesario: 200 (OK), 201 (Created), 202 (Accepted, async), 204 (No Content), 400 (Bad Request — input inválido), 401 (Unauthorized), 403 (Forbidden), 404 (Not Found), 409 (Conflict), 422 (Unprocessable Entity), 429 (Too Many Requests), 500 (Internal Server Error — infraestructura), 502 (Bad Gateway — dependencia externa), 503 (Service Unavailable — temporal), 504 (Gateway Timeout). Códigos 4xx = error de dominio (caller debe corregir). Códigos 5xx = error de infraestructura (puede ser recuperable).",
+      "derivado_de": ["recoverable_signal", "domain_vs_infrastructure", "closed_code_list"],
+      "razon": "HTTP-like es lingua franca entendida por todos los callers (UIs, otros módulos, herramientas externas). La división 4xx/5xx codifica la distinción dominio/infraestructura sin inventar nada. El caller sabe inmediatamente: 4xx = corregí input antes de reintentar, 5xx = reintenta con backoff."
+    },
+    {
+      "id": "error_code_naming",
+      "decision": "El campo error.code es un string en UPPER_SNAKE_CASE: 'PROJECT_NOT_FOUND', 'INVALID_INPUT', 'DATABASE_DOWN', 'CREDENTIAL_EXPIRED'. Tres a cinco palabras como mucho. Identifica la causa específica dentro de la categoría del status. Lista cerrada en errors.json — no se inventan.",
+      "derivado_de": ["closed_code_list", "human_message_machine_code"],
+      "razon": "UPPER_SNAKE_CASE es convención industria para constantes/códigos (HTTP, gRPC, proto). Distingue visualmente del status numérico y del message en prosa. Estable en el tiempo (cambiar un code es breaking change). El caller hace 'switch (error.code)' sin parsear strings.",
+      "notas": "Códigos canónicos viven en errors.json bajo dos categorías: codes_domain (4xx-related) y codes_infrastructure (5xx-related)."
+    },
+    {
+      "id": "details_structure",
+      "decision": "El campo error.details es un object opcional con metadata adicional. Campos canónicos cuando aplican: kind ('domain' | 'infrastructure' — si no se infiere por status), retryable (boolean — sugerencia explícita), retry_after_ms (number, en infraestructura recuperable), entity_type (string — qué tipo de entidad falló: 'recipe', 'project'), entity_id (string — identificador específico). Otros campos son módulo-específicos pero documentables.",
+      "derivado_de": ["domain_vs_infrastructure", "recoverable_signal"],
+      "razon": "details permite enriquecer el error con contexto útil para el caller sin contaminar message (que es prosa). Estructurado, NO concatenación de strings. retry_after_ms es ejemplo de campo que el caller usa directamente en su lógica de backoff."
+    },
+    {
+      "id": "auto_log_on_error",
+      "decision": "Cada vez que un módulo construye una respuesta con error, antes de devolverla emite automáticamente: this.logger.<level>(`${this.name}.${action}.failed`, { error_code, error_message, error_details, stack: errOriginal?.stack, ...contextoRelevante }). Level: warn si status 4xx (recuperable/dominio), error si status 5xx (infraestructura). Esta llamada es PARTE de la respuesta — no se omite.",
+      "derivado_de": ["auto_observable_errors", "severity_meaningful (observability)"],
+      "razon": "Sin telemetría automática, los errores son invisibles. Forzando que esté en la API de respuesta (un helper buildErrorResponse() que loguea + devuelve), nadie puede emitirlo sin telemetría. El level apropiado al status mantiene severidad significativa (observability principio)."
+    },
+    {
+      "id": "auto_metric_on_error",
+      "decision": "Junto al log, automáticamente: this.metrics.increment(`${this.name}.<action>.errors`, 1, { code: error.code, kind: 'domain'|'infrastructure' }). El nombre de la métrica usa el sufijo canónico .errors (de observability.metrics.canonical_suffixes). El label 'code' permite agrupar errores por causa.",
+      "derivado_de": ["auto_observable_errors", "metrics_naming_pattern (observability)"],
+      "razon": "Una métrica por error permite ver tendencias (¿este código está aumentando? ¿errores de infra suben este mes?). El label 'code' en el counter da granularidad sin multiplicar nombres de métrica. Coherente con el patrón <module>.<entity>.<accion>.errors."
+    },
+    {
+      "id": "stack_in_logs_only",
+      "decision": "El campo .stack del Error original (si existe) se incluye SOLO en this.logger. JAMÁS en error.message, error.details, ni en ningún otro campo de la respuesta que devuelve el módulo al caller. La respuesta lleva exclusivamente { code, message, details? }.",
+      "derivado_de": ["no_stack_in_response", "no_secrets_in_messages"],
+      "razon": "Stack revela paths de filesystem, nombres internos, estructura del proyecto — útil para atacantes, ruido para callers legítimos. Mantener el stack EN logs (donde el operador puede consultarlo) y FUERA de respuestas (que llegan a callers potencialmente externos) es estándar de seguridad y de UX limpia."
+    },
+    {
+      "id": "mqttRequest_error_propagation",
+      "decision": "Cuando un módulo llama mqttRequest('domain', 'action', payload) y la respuesta es un error (status >= 400), el caller decide entre 3 opciones: (a) PROPAGAR — devolver el mismo error con el mismo code/message del peer (mismo status, mismo error.code, mismo message); (b) TRADUCIR — devolver un error propio con código del dominio del caller (ej. el peer dice 'CREDENTIAL_NOT_FOUND', el caller traduce a 'AUTHENTICATION_FAILED'); (c) ABSORBER — devolver éxito con datos parciales o defaults, registrando degradado en log+métrica. En las 3 opciones: log + métrica obligatorios.",
+      "derivado_de": ["propagate_or_absorb_with_telemetry"],
+      "razon": "Cuando un error cruza fronteras de módulos, el caller decide cómo presentárselo a sus propios callers. Propagación literal expone códigos del peer (acoplamiento). Traducción aísla. Absorción mantiene UX. Las 3 son válidas; lo que NO es válido es no decidir o tragar sin telemetría."
+    },
+    {
+      "id": "http_endpoint_error_format",
+      "decision": "Para endpoints HTTP (apis_http), el módulo devuelve { status, body }. El status es el HTTP status code. El body es JSON con la misma estructura canónica: { status (int — debe coincidir con el status HTTP), error: { code, message, details? } } cuando hay error. Headers Content-Type: application/json.",
+      "derivado_de": ["canonical_response_shape"],
+      "razon": "HTTP nativo soporta status code. El body en JSON con la misma estructura del response interno mantiene coherencia: el caller HTTP procesa errores igual que el caller interno. Duplicar status (en HTTP header y en body) es redundante pero práctico — algunos middlewares solo miran el body, otros solo el header."
+    },
+    {
+      "id": "tool_response_format",
+      "decision": "Para tools del LLM (manifest.tools), el handler devuelve la misma forma canónica { status, data?, error? }. El LLM consume esto como JSON estándar. NO se devuelve string suelto, NO se devuelve { ok: true }, NO se devuelve raw data. El LLM ramifica por status (>= 400 = problema, 2xx = ok).",
+      "derivado_de": ["canonical_response_shape"],
+      "razon": "Una sola forma para handlers internos, HTTP, mqttRequest y tools del LLM. El LLM se beneficia especialmente: con shape canónico aprende UNA convención, no una por módulo. Tools que devolvían string libre o { success } generan drift léxico que el LLM tiene que parsear caso por caso."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "respuesta_no_canonica",
+      "regla": "Devolver una respuesta con shape distinto del canónico: { ok: true, ... }, { success: false, ... }, { result: ... }, raw data sin status, etc. La forma canónica obliga: { status: integer, data?: object, error?: { code, message, details? } }.",
+      "viola_principios": ["canonical_response_shape"],
+      "como_detectar": "Regex en código de módulos sobre returns dentro de handlers (handle*, on*): patterns que detecten 'return { ok:', 'return { success:', 'return { result:', 'return [datos primitivos]'.",
+      "ejemplo_drift_actual": "Algunos módulos auditados usan { ok: true } o { success: true } en lugar de { status: 200, data: ... }.",
+      "alternativa_correcta": "return { status: 200, data: { ... } } en éxito; return { status: 400, error: { code: 'INVALID_INPUT', message: '...' } } en fallo. Forma única y predecible."
+    },
+    {
+      "id": "inventar_status_no_canonico",
+      "regla": "Usar status numéricos fuera de la lista canónica HTTP-like (200/201/202/204/400/401/403/404/409/422/429/500/502/503/504). Status como 0, 250, 999, -1 son drift.",
+      "viola_principios": ["status_codes_canonical (decisión)", "closed_code_list"],
+      "como_detectar": "Regex en código: 'return { status:' seguido de número. Cruzar el número con la lista canónica de errors.json. Si no está, drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Si el caso no encaja en ningún status canónico, usar el más cercano semánticamente o proponer extensión de la lista en errors.json (PR con justificación)."
+    },
+    {
+      "id": "inventar_error_code",
+      "regla": "Usar códigos de error fuera de la lista cerrada de errors.json.codes_domain ∪ codes_infrastructure. Inventar códigos como 'NOTFOUND' (sin underscore), 'project_not_found' (lowercase), 'PROJ_NF' (siglas), 'ERROR_42' (genérico).",
+      "viola_principios": ["closed_code_list", "error_code_naming (decisión)"],
+      "como_detectar": "Regex en código: 'code:' o 'code =' en respuestas error. Cruzar el valor con la lista canónica. Si no está, drift. Heurística adicional: códigos que NO son UPPER_SNAKE_CASE.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Elegir el más apropiado de errors.json.codes_domain o codes_infrastructure. Si falta uno, PR a errors.json con justificación."
+    },
+    {
+      "id": "respuesta_con_stack_trace",
+      "regla": "Incluir el stack trace (string multilínea con file paths y line numbers) en error.message, error.details o cualquier otro campo de la respuesta que devuelve el módulo al caller.",
+      "viola_principios": ["no_stack_in_response", "no_secrets_in_messages"],
+      "como_detectar": "Regex en código: 'message: err.stack', 'details: { stack:', 'error: error.stack', y similares. Stack siempre se reconoce por contener '\\n at ' o paths con '/' o 'file://'.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "El stack va al log: this.logger.error('module.action.failed', { error: err.message, code, stack: err.stack }). La respuesta lleva solo { code, message: err.message, details? }."
+    },
+    {
+      "id": "error_sin_log",
+      "regla": "Devolver una respuesta con error (status >= 400) sin emitir antes this.logger.X correspondiente. La telemetría es parte de la API de error, no opcional.",
+      "viola_principios": ["auto_observable_errors", "auto_log_on_error (decisión)"],
+      "como_detectar": "Análisis estático: 'return { status: <4xx|5xx>, error: ...' que NO tiene this.logger.X dentro de las ~10 líneas previas en el mismo bloque.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Usar un helper buildErrorResponse() que loguea + devuelve, o garantizar manualmente: this.logger.warn/error(...) ANTES del return error. La auditoría detecta el patrón."
+    },
+    {
+      "id": "error_sin_metric",
+      "regla": "Devolver una respuesta con error sin incrementar la métrica counter <module>.<action>.errors. La métrica es la que da observabilidad agregada — sin ella el sistema es opaco respecto a qué errores ocurren con qué frecuencia.",
+      "viola_principios": ["auto_observable_errors", "auto_metric_on_error (decisión)"],
+      "como_detectar": "Análisis estático similar al de error_sin_log: 'return { status: <4xx|5xx>, error:' que no tiene this.metrics.increment(...errors...) en proximidad.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Helper buildErrorResponse() debe llamar this.metrics.increment(`${this.name}.<action>.errors`, 1, { code }) automáticamente."
+    },
+    {
+      "id": "mensaje_de_error_con_secreto",
+      "regla": "Incluir en error.message o error.details campos sensibles (password, token, api_key, authorization, secret, private_key, refresh_token, access_token, cookie, session_token y variantes camelCase). También: paths absolutos del filesystem, URLs internas con tokens en query, IPs internas.",
+      "viola_principios": ["no_secrets_in_messages"],
+      "como_detectar": "Análisis estático del segundo argumento de error: chequear keys del objeto details O substrings del message contra la lista detection_patterns.sensitive_field_names. Severidad ERROR — riesgo de seguridad/compliance.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Loguear metadata, NO valores. error.message='Credential expired' + error.details={ credential_id, expired_at }. Coherente con secret_scrubbing del contrato observability."
+    },
+    {
+      "id": "error_como_string_suelto",
+      "regla": "Devolver el campo error como string en lugar de object: { status: 400, error: 'Project not found' }. La forma canónica exige error como objeto: { code, message, details? }.",
+      "viola_principios": ["canonical_response_shape", "human_message_machine_code"],
+      "como_detectar": "Regex en código: 'error: [\\\"\\']' (error con valor string literal) o 'error: variable_string'. Cruzar con shape canónico.",
+      "ejemplo_drift_actual": "Algunos módulos auditados devuelven { status: 400, error: 'mensaje plano' }. Drift conocido en ui_handlers.codigos_error de varios audits.",
+      "alternativa_correcta": "{ status: 400, error: { code: 'PROJECT_NOT_FOUND', message: 'Project with id X does not exist' } }. El caller puede ramificar por code, mostrar message al usuario."
+    },
+    {
+      "id": "swallow_error_silently",
+      "regla": "try { ... } catch (e) { } sin log + sin propagación + sin métrica. El error se traga y nadie se entera. Variante: catch (e) { return null } o { return [] } — devolver default sin telemetría.",
+      "viola_principios": ["propagate_or_absorb_with_telemetry", "auto_observable_errors"],
+      "como_detectar": "Regex multi-línea: 'catch \\([^)]*\\)\\s*\\{\\s*\\}' (vacío) o 'catch \\([^)]*\\)\\s*\\{\\s*return (null|undefined|\\[\\]|\\{\\});\\s*\\}' (default sin log).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Si decides absorber: catch (err) { this.logger.warn('module.action.absorbed', { error: err.message }); this.metrics.increment(`${this.name}.<action>.errors`, 1, { kind: 'absorbed' }); return defaultValue; }. Absorber con telemetría es legítimo."
+    },
+    {
+      "id": "instruccion_en_message",
+      "regla": "El campo error.message contiene una instrucción al caller en lugar de una descripción del hecho. 'Please create the recipe first', 'Try again later', 'Contact administrator', 'Use trigger-ota instead'.",
+      "viola_principios": ["describe_dont_instruct", "what_vs_how_separation (events)"],
+      "como_detectar": "Heurística sobre mensajes: regex sobre 'message:' valores que contengan verbos imperativos en inglés ('please', 'try', 'contact', 'use', 'check') o español ('intenta', 'contacta', 'usa', 'verifica', 'por favor').",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Describir el hecho, no instruir. 'Recipe not found' (descripción) en lugar de 'Please create the recipe first' (instrucción). Las instrucciones al usuario las añade la capa de UI según el código del error, no el módulo backend."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/errors.schema.json. Top-level: _meta, regla (frase maestra), response_shape (success_shape + error_shape canónicos con campos detallados), status_codes (array cerrado HTTP-like con kind y retryable por código), codes_domain (lista UPPER_SNAKE_CASE de códigos de errores de dominio), codes_infrastructure (idem para infra), details_canonical_fields (objeto describiendo campos canónicos opcionales de details), auto_telemetry (patrones de log y metric obligatorios), propagation_options (las 3 opciones cuando el módulo recibe un error de otro módulo), detection_patterns (heurísticas para el validator).",
+
+  "reglas_de_extraccion": [
+    "Definir _meta con convencion='errors', version (semver), creado_en (date), contrato_referencia (path al contrato).",
+
+    "Definir regla como frase maestra que resuma toda la decisión arquitectónica de errores en una línea legible. Ejemplo: 'Toda respuesta sigue { status, data?, error? }. Códigos cerrados HTTP-like (4xx dominio, 5xx infraestructura). Cada error genera log + métrica automáticos. Stack solo en logs. Sin secretos en mensajes.'.",
+
+    "Definir response_shape como objeto con dos sub-objetos: success_shape (campos esperados cuando hay éxito: status, data) y error_shape (campos esperados cuando hay fallo: status, error.code, error.message, error.details opcional). Cada campo tiene tipo y descripción. Indicar mutual exclusion: 'data y error nunca coexisten'.",
+
+    "Definir status_codes como array de objetos. Cada objeto tiene: code (integer), name (string corto), kind (enum 'success'|'domain'|'infrastructure'), retryable (boolean — sugerencia explícita de si reintentar tiene sentido), descripcion (humana). Códigos: 200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504. Ej: {code: 404, name: 'Not Found', kind: 'domain', retryable: false, descripcion: 'El recurso solicitado no existe.'}.",
+
+    "Definir codes_domain como array de objetos canónicos UPPER_SNAKE_CASE para errores de dominio (que el caller puede actuar). Cada objeto: code (string), status_typical (integer 4xx — el status HTTP que típicamente acompaña), descripcion (humana), ejemplo_uso (cuándo usar este código). Lista inicial: PROJECT_NOT_FOUND, RECIPE_NOT_FOUND, INVALID_INPUT, MISSING_FIELD, FIELD_TOO_LONG, ALREADY_EXISTS, CONFLICT_STATE, PERMISSION_DENIED, RATE_LIMITED, INVALID_VERSION, etc. Lista extensible vía PR.",
+
+    "Definir codes_infrastructure como array de objetos canónicos UPPER_SNAKE_CASE para errores de infraestructura (sistema falla por debajo). Cada objeto: code, status_typical (5xx), descripcion, ejemplo_uso. Lista inicial: DATABASE_DOWN, BROKER_DISCONNECTED, FILESYSTEM_ERROR, EXTERNAL_API_FAILED, TIMEOUT, MQTT_NOT_AVAILABLE, OUT_OF_MEMORY, etc.",
+
+    "Definir details_canonical_fields como objeto describiendo cada campo canónico opcional de error.details. Claves: kind (enum 'domain'|'infrastructure', cuando no es claro por status), retryable (boolean), retry_after_ms (number), entity_type (string), entity_id (string). Para cada uno: politica (obligatorio_cuando | opcional | recomendado), formato, valores_comunes.",
+
+    "Definir auto_telemetry como objeto con dos sub-objetos: log_pattern (qué emite el módulo automáticamente al construir un error: signature, level mapping por status, fields incluidos) y metric_pattern (signature de this.metrics.increment, naming, labels canónicos).",
+
+    "Definir propagation_options como array con las 3 opciones cuando un módulo recibe un error de otro módulo: propagate (mantener mismo status/code/message), translate (nuevo código del dominio del caller), absorb (devolver default + log warning). Cada uno: id, descripcion, ejemplo_codigo (snippet), telemetria_obligatoria.",
+
+    "Definir detection_patterns como objeto con las heurísticas que el validator aplicará. Claves: non_canonical_response_keys (array: ['ok', 'success', 'result' como top-level keys de respuesta), prohibited_imperative_message_words (lista en EN+ES: 'please', 'try', 'contact', 'use', 'check', 'intenta', 'contacta', 'usa', 'verifica', 'por favor'), stack_in_response_indicators (array de patrones que sugieren stack en respuesta: 'message: err.stack', 'details: { stack:'), sensitive_field_names (heredado de observability — misma lista), error_string_in_field_regex (detecta 'error: \\\"...\\\"' en lugar de objeto).",
+
+    "El contrato (este archivo) describe QUÉ campos debe tener el output. El output (_outputs/errors.json) contiene los valores concretos. Si necesitas cambiar la regla → cambias el contrato + bumpeas version. Si necesitas añadir un código nuevo (ej. RATE_LIMITED en codes_domain) → cambias el output con justificación."
+  ],
+
+  "derivaciones": {
+    "response_es_canonica": "true si la respuesta tiene exactamente las claves del shape canónico: 'status' (siempre), Y 'data' XOR 'error' (mutuamente excluyentes). Cualquier otra clave top-level (ok, success, result, raw...) → false.",
+    "error_kind_inferido_por_status": "Si error.details.kind no está presente: 'domain' si status ∈ [400, 499]; 'infrastructure' si status ∈ [500, 599]; undefined en otros casos.",
+    "error_es_recuperable": "true si: (a) status ∈ [500, 599] AND (status_codes[status].retryable=true), O (b) error.details.retryable=true explícito.",
+    "contiene_campo_sensible_en_error": "true si keys del error.details intersecan con detection_patterns.sensitive_field_names, OR si error.message contiene substring que coincida con esos campos.",
+    "tiene_telemetria_completa": "true si: en proximidad al return de error, hay this.logger.<level>(...) AND this.metrics.increment(...errors...). Heurística de proximidad: ~10 líneas previas en el mismo bloque.",
+    "topic_de_error_log": "core/{core-id}/logs/{level} — heredado de events.json categoria 'logs'. Level=warn si status 4xx, level=error si status 5xx.",
+    "instruccion_en_message_detectada": "true si error.message contiene cualquier substring de detection_patterns.prohibited_imperative_message_words."
+  },
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "errors_json_estructura_valida",
+      "regla": "errors.json valida estructuralmente contra errors.schema.json (AJV strict, additionalProperties=false en todos los niveles).",
+      "como_detectar": "Cargar el schema, compilar con AJV strict, validar el output. Cualquier error de schema bloquea PASS.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/decisiones/_outputs/errors.json", "arquitectura/decisiones/_schemas/errors.schema.json"]
+    },
+    {
+      "id": "drift_respuesta_no_canonica",
+      "regla": "Ningún handler devuelve respuestas con shape distinto del canónico { status, data?, error? }. Patrones drift: { ok: ... }, { success: ... }, { result: ... }, { ...raw_data sin status }.",
+      "como_detectar": "Regex en código de módulos sobre returns dentro de handlers (handle*, on*): patrones que detecten 'return\\s*\\{\\s*ok\\s*:', 'return\\s*\\{\\s*success\\s*:', 'return\\s*\\{\\s*result\\s*:', 'return\\s*\\{[^}]*\\}' sin la clave 'status'.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "respuesta_no_canonica (prohibido), canonical_response_shape (principio)",
+      "ejemplo_drift_actual": "Algunos módulos auditados devuelven { ok: true } o { success: true }."
+    },
+    {
+      "id": "drift_inventar_status_no_canonico",
+      "regla": "Todos los integers usados en 'status:' de respuestas pertenecen a la lista canónica de status_codes.",
+      "como_detectar": "Regex: 'status\\s*:\\s*([0-9]+)'. Capturar el número y cruzar con la lista de status_codes en errors.json. Si no está, drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "inventar_status_no_canonico (prohibido), status_codes_canonical (decisión), closed_code_list (principio)"
+    },
+    {
+      "id": "drift_inventar_error_code",
+      "regla": "Todos los códigos en error.code son UPPER_SNAKE_CASE Y pertenecen a codes_domain ∪ codes_infrastructure.",
+      "como_detectar": "Regex: 'code\\s*:\\s*[\\\"\\\\']([A-Z_]+)[\\\"\\\\']'. Capturar el código, verificar UPPER_SNAKE_CASE (regex ^[A-Z][A-Z_]*[A-Z]$), y cruzar con la lista canónica.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "inventar_error_code (prohibido), error_code_naming (decisión), closed_code_list (principio)"
+    },
+    {
+      "id": "drift_respuesta_con_stack_trace",
+      "regla": "Ningún campo de la respuesta (error.message, error.details) contiene stack trace. Solo el log puede llevar stack.",
+      "como_detectar": "Regex en código: en proximidad a 'return ... error:', detectar 'message: ([^,}]*\\.stack)', 'details: \\{[^}]*stack:', 'message: err\\.stack'. Severidad ERROR — riesgo de seguridad.",
+      "severidad": "error",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "respuesta_con_stack_trace (prohibido), no_stack_in_response (principio)"
+    },
+    {
+      "id": "drift_error_sin_log",
+      "regla": "Cada return de respuesta con error (status >= 400) tiene this.logger.<level> en proximidad (~10 líneas previas en el mismo bloque).",
+      "como_detectar": "Análisis estático: localizar 'return\\s*\\{[^}]*status\\s*:\\s*([4-5][0-9][0-9])' (status 400-599). Para cada match, buscar this.logger.X en las 10 líneas previas. Si no aparece, drift.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "error_sin_log (prohibido), auto_observable_errors (principio)"
+    },
+    {
+      "id": "drift_error_sin_metric",
+      "regla": "Cada return de respuesta con error tiene this.metrics.increment con sufijo .errors en proximidad.",
+      "como_detectar": "Análisis estático similar a drift_error_sin_log: buscar this.metrics.increment con name que termine en '.errors' en las 10 líneas previas al return de error.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "error_sin_metric (prohibido), auto_observable_errors (principio)"
+    },
+    {
+      "id": "drift_mensaje_de_error_con_secreto",
+      "regla": "Ningún error.message ni error.details contiene campos sensibles (password, token, api_key, etc.) — coherente con drift_secrets_en_payload_log de observability.",
+      "como_detectar": "Análisis estático: para cada respuesta con error: { message, details? }, inspeccionar keys de details y substrings relevantes de message contra detection_patterns.sensitive_field_names. Severidad ERROR — riesgo de compliance/seguridad.",
+      "severidad": "error",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "mensaje_de_error_con_secreto (prohibido), no_secrets_in_messages (principio)"
+    },
+    {
+      "id": "drift_error_como_string_suelto",
+      "regla": "El campo error de la respuesta es siempre un objeto con { code, message, details? }, NUNCA un string suelto.",
+      "como_detectar": "Regex en código: 'error\\s*:\\s*[\\\"\\\\']' (error con valor string literal directamente) o 'error\\s*:\\s*[a-z_]+\\s*[,}]' donde la variable es claramente string. Cruzar con shape canónico.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "error_como_string_suelto (prohibido), canonical_response_shape (principio)",
+      "ejemplo_drift_actual": "Algunos módulos auditados devuelven { status: 400, error: 'mensaje plano' }."
+    },
+    {
+      "id": "drift_swallow_error_silently",
+      "regla": "Ningún try/catch traga errores silenciosamente. Cada catch tiene log + propagación o log + métrica + recuperación documentada.",
+      "como_detectar": "Regex multi-línea: 'catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}' (vacío) o 'catch\\s*\\([^)]*\\)\\s*\\{\\s*return\\s+(null|undefined|\\[\\]|\\{\\})\\s*;?\\s*\\}' (default sin log).",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "swallow_error_silently (prohibido), propagate_or_absorb_with_telemetry (principio)"
+    },
+    {
+      "id": "drift_instruccion_en_message",
+      "regla": "Heurística: el campo error.message no contiene verbos imperativos ('please', 'try', 'contact', 'use', 'check', 'intenta', 'contacta', 'usa', 'verifica', 'por favor').",
+      "como_detectar": "Para cada error.message detectado en respuestas: case-insensitive substring match contra detection_patterns.prohibited_imperative_message_words. Severidad info — heurística aproximada.",
+      "severidad": "info",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "instruccion_en_message (prohibido), describe_dont_instruct (principio)"
+    },
+    {
+      "id": "module_errors_audit_completeness",
+      "regla": "La auditoría modulo-completo de cada módulo tiene los campos tools[].errores_conocidos, ui_handlers[].codigos_error y modos_de_fallo completos.",
+      "como_detectar": "Inspeccionar audit: módulos con tools que carecen de errores_conocidos array, ui_handlers que carecen de codigos_error array, o que tienen modos_de_fallo vacío cuando claramente puede haber errores. Severidad info — apunta a re-auditar.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json"],
+      "nota": "No es drift del código sino de la auditoría. Si aparece, hay que re-auditar el módulo con foco en errores."
+    }
+  ],
+
+  "salida_validador": "PASS si errors.json es estructuralmente válido (AJV strict). Errores cross-system bloquean PASS — stack en response y secretos en mensajes son ERROR (riesgo de seguridad). Warnings son drift visible que no bloquea. Info son heurísticas para revisión manual. Formato coherente con naming/glossary/events/lifecycle/observability.validate.js: banner PASS/FAIL + lista de findings agrupados por severidad, con ubicación archivo:línea cuando aplique.",
+
+  "convenciones_complementarias": [
+    "events.validate.js cubre la disciplina del bus (qué se publica). errors.validate.js cubre cómo se construyen las respuestas que devuelven los handlers — incluyendo los handlers de mqttRequest del framework.",
+    "observability.validate.js cubre logger/metrics/correlation_id en todo contexto. errors.validate.js especifica la regla de telemetría OBLIGATORIA para errores específicamente (auto_log_on_error, auto_metric_on_error).",
+    "naming.validate.js valida la forma léxica de eventos. errors.validate.js valida la forma léxica de error.code (UPPER_SNAKE_CASE, lista cerrada).",
+    "lifecycle.validate.js valida cómo nace/muere un módulo. errors.validate.js valida cómo el módulo responde cuando algo sale mal durante su vida.",
+    "modulo-completo.validate.js valida la AUDITORÍA. errors.validate.js cruza patrones de respuestas-con-error contra la auditoría para detectar tools/ui_handlers/apis sin documentar errores.",
+    "Los 6 validators son complementarios. Cada uno tiene su scope. Se ejecutan por separado o todos en CI."
+  ]
+}

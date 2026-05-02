@@ -1,0 +1,36 @@
+name: validate
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate-architecture:
+    name: Architecture validation + POC tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate architecture (8 contracts vs baseline)
+        run: npm run validate:ci
+
+      - name: Run POC tests (ai-gateway-poc)
+        run: npm run test:ai-gateway-poc
+
+      - name: Run POC tests (carta-scheduler-poc)
+        run: npm run test:carta-scheduler-poc
+
+      - name: Run POC tests (cocina-poc)
+        run: npm run test:cocina-poc

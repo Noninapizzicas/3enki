@@ -3,12 +3,18 @@
   "version": "1.0.0",
   "description": "Módulo de métricas centralizado - Escucha eventos del sistema y genera métricas en tiempo real",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
-    "events": ["metricas.snapshot", "metricas.alerta"],
-    "queries": ["metricas.obtener", "metricas.counters", "metricas.gauges"]
+    "events": [
+      "metricas.snapshot",
+      "metricas.alerta"
+    ],
+    "queries": [
+      "metricas.obtener",
+      "metricas.counters",
+      "metricas.gauges"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -26,7 +32,6 @@
         }
       }
     ],
-
     "subscribes": [
       {
         "event": "*.creado",
@@ -55,7 +60,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
@@ -126,27 +130,29 @@
       "description": "Health check del módulo de métricas"
     }
   ],
-
   "ui": {
     "enabled": true,
     "title": "Métricas del Sistema",
     "icon": "📊",
-    "components": ["dashboard-metricas", "metric-card"],
-
+    "components": [
+      "dashboard-metricas",
+      "metric-card"
+    ],
     "views": {
       "main": {
         "type": "dashboard",
         "component": "dashboard-metricas",
         "config": {
           "endpoint": "/modules/metricas/metrics",
-          "mqtt_topics": ["metricas.snapshot"],
+          "mqtt_topics": [
+            "metricas.snapshot"
+          ],
           "refresh_interval": 5000,
           "refresh_on_event": true
         }
       }
     }
   },
-
   "observability": {
     "logging": {
       "level": "info",
@@ -158,7 +164,6 @@
       "comment": "Este módulo ES el sistema de métricas, no genera métricas sobre sí mismo para evitar recursión"
     }
   },
-
   "config": {
     "snapshot_interval_ms": 10000,
     "max_timings_stored": 1000,

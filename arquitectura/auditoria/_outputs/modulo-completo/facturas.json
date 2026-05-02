@@ -1,0 +1,222 @@
+{
+  "_meta": {
+    "modulo": "facturas",
+    "ubicacion": "modules/facturas",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/facturas.json"
+  },
+
+  "identidad": {
+    "name": "facturas",
+    "version": "2.0.0",
+    "description_oficial": "Procesamiento comercial de facturas: pipeline step-based con agentes IA, validación y observabilidad",
+    "author": "Event-Core Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/facturas/index.js",
+    "tags": []
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      {
+        "nombre": { "tipo": "literal", "valor": "telegram.send_message.request", "variables_referenciadas": [] },
+        "ubicacion": "modules/facturas/index.js:177",
+        "metodo_contenedor": "(notificar telegram tras procesamiento)",
+        "es_handler_de": null,
+        "bloque_logico": "envía notificación al chat configurado tras procesar una factura",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["request_id", "botName", "chatId", "text", "parseMode"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": ["request_id"] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false, "es_return": false,
+        "snippet": "      this.eventBus.publish('telegram.send_message.request', {\n        request_id: `factura_notify_${Date.now()}`,\n        botName, chatId, text, parseMode: 'HTML'\n      });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": { "tipo": "literal", "valor": "factura.exportada", "variables_referenciadas": [] },
+        "ubicacion": "modules/facturas/index.js:442",
+        "metodo_contenedor": "handleExportar",
+        "es_handler_de": null,
+        "bloque_logico": "tras generar CSV fiscal y leer archivo en base64; notifica UI",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["projectId", "total", "archivo"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "es_await": false, "es_return": false,
+        "snippet": "      // Notificar UI\n      this.eventBus.publish('factura.exportada', {\n        projectId: proyecto, total: exportData.total || 0, archivo: csvPath\n      });",
+        "declarado_en_manifest": true
+      }
+    ],
+    "subscribes": [
+      { "nombre": "factura.entrada", "tipo_nombre": "literal", "handler": "onFacturaEntrada", "handler_ubicacion": "modules/facturas/index.js:116", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/facturas/index.js:140", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["factura.recibida", "factura.procesada", "factura.error", "factura.exportada"],
+      "publica_literales_en_codigo": ["factura.exportada", "telegram.send_message.request"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": ["factura.recibida", "factura.procesada", "factura.error"],
+      "publica_emitidos_no_declarados": ["telegram.send_message.request"],
+      "subscribes_declarados_en_manifest": ["factura.entrada"],
+      "subscribes_realmente_registrados": ["factura.entrada"],
+      "subscribes_dinamicos": []
+    }
+  },
+
+  "tools": [],
+
+  "ui_handlers": [
+    { "domain": "facturas", "action": "procesar",         "handler_metodo": "handleProcesar",         "handler_ubicacion": "modules/facturas/index.js:227", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": null, "data_keys": [], "status_error": null }, "campo_origen_manifest": "handlers" },
+    { "domain": "facturas", "action": "subir",            "handler_metodo": "handleSubir",            "handler_ubicacion": "modules/facturas/index.js:246", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": null, "data_keys": [], "status_error": null }, "campo_origen_manifest": "handlers" },
+    { "domain": "facturas", "action": "reprocesar",       "handler_metodo": "handleReprocesar",       "handler_ubicacion": "modules/facturas/index.js:280", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": null, "data_keys": [], "status_error": null }, "campo_origen_manifest": "handlers" },
+    { "domain": "facturas", "action": "listar",           "handler_metodo": "handleListar",           "handler_ubicacion": "modules/facturas/index.js:313", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": null, "data_keys": [], "status_error": null }, "campo_origen_manifest": "handlers" },
+    { "domain": "facturas", "action": "obtener",          "handler_metodo": "handleObtener",          "handler_ubicacion": "modules/facturas/index.js:334", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": null, "data_keys": [], "status_error": null }, "campo_origen_manifest": "handlers" },
+    { "domain": "facturas", "action": "actualizar",       "handler_metodo": "handleActualizar",       "handler_ubicacion": "modules/facturas/index.js:358", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": null, "data_keys": [], "status_error": null }, "campo_origen_manifest": "handlers" },
+    { "domain": "facturas", "action": "estadisticas",     "handler_metodo": "handleEstadisticas",     "handler_ubicacion": "modules/facturas/index.js:379", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": null, "data_keys": [], "status_error": null }, "campo_origen_manifest": "handlers" },
+    { "domain": "facturas", "action": "exportar",         "handler_metodo": "handleExportar",         "handler_ubicacion": "modules/facturas/index.js:413", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": null, "data_keys": [], "status_error": null }, "campo_origen_manifest": "handlers" },
+    { "domain": "facturas", "action": "pipeline-metrics", "handler_metodo": "handlePipelineMetrics",  "handler_ubicacion": "modules/facturas/index.js:495", "input_validado": [], "codigos_error": [], "output_shape": { "status_success": null, "data_keys": [], "status_error": null }, "campo_origen_manifest": "handlers" }
+  ],
+
+  "apis_http": [],
+
+  "estado": {
+    "memoria": [
+      { "campo": "services", "tipo": "Object", "ubicacion_init": "modules/facturas/index.js:40", "se_invalida_con": "instanciado en onLoad — vive con la instancia (interno: pipeline + agentes)", "leak_potencial": false }
+    ],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [
+        { "path_pattern": "data/projects/{projectId}/storage/facturas/{recibidas,procesadas,enviadas,errores}/", "formato": "json", "operaciones": ["read", "write"], "via_evento": null, "atomicidad": "read-then-write" },
+        { "path_pattern": "data/projects/{projectId}/storage/facturas/csv/*.csv (export)", "formato": "csv", "operaciones": ["write"], "via_evento": null, "atomicidad": "append-only" }
+      ],
+      "notas_concurrencia": "Pipeline step-based: factura entra por onFacturaEntrada, pasa por subdirectorios (recibidas → procesadas → enviadas | errores). Sin locks — single-writer por factura."
+    }
+  },
+
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": ["data/projects/{projectId}/storage/facturas/"],
+    "valores_hardcoded_observables": []
+  },
+
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": "modules/facturas/index.js:77",
+      "acciones": [
+        "guarda this.logger / this.eventBus / this.uiHandler / this.metrics",
+        "instancia this.services (pipeline + agentes IA)",
+        "logger.info('facturas.loaded', { pipeline: 'v2' })"
+      ],
+      "guarda_referencias_externas": ["this.logger", "this.eventBus", "this.uiHandler", "this.metrics"],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": "modules/facturas/index.js:104",
+      "acciones": ["logger.info('facturas.unloaded')"],
+      "estado_no_limpiado": ["services (pipeline + agentes en GC)"]
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
+
+  "dependencias_implicitas": [
+    { "modulo_dependido": "telegram-service",       "via_evento": "telegram.send_message.request",   "obligatorio_en": "runtime", "ubicacion_uso": "modules/facturas/index.js:177", "es_cross_vertical": true },
+    { "modulo_dependido": "ai-gateway / agents IA", "via_evento": "via this.services pipeline (agentes IA)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/facturas/index.js:101 (services con agentes)", "es_cross_vertical": false },
+    { "modulo_dependido": "filesystem (storage por proyecto)", "via_evento": "Node.js fs directo (no via fs.X.request)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/facturas/index.js:438 (fs.readFileSync)", "es_cross_vertical": false }
+  ],
+
+  "modos_de_fallo": [
+    { "dependencia": "archivo de entrada inválido / inexistente", "que_pasa_si_cae": "logger.error('facturas.entrada.archivo-no-existe') y return temprano sin procesar.",                                          "evidencia": "modules/facturas/index.js:126" },
+    { "dependencia": "pipeline (services interno)",               "que_pasa_si_cae": "logger.error('facturas.entrada.error') con stack — la factura queda en errores/. NO se publica factura.error explícitamente.", "evidencia": "modules/facturas/index.js:140" },
+    { "dependencia": "telegram-service",                          "que_pasa_si_cae": "publish fire-and-forget (no await), si falla no afecta procesamiento.",                                                       "evidencia": "modules/facturas/index.js:177 (sin await)" }
+  ],
+
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('facturas.<accion>', { ...campos })",
+      "campos_estructurados_observados": ["pipeline", "metrics", "source", "projectId", "filePath", "data", "error"],
+      "ejemplos": [
+        { "snippet": "this.logger.info('facturas.loaded', { pipeline: 'v2', metrics: !!context.metrics });", "ubicacion": "modules/facturas/index.js:101" },
+        { "snippet": "this.logger.warn('facturas.entrada.invalida', { data });",                              "ubicacion": "modules/facturas/index.js:121" },
+        { "snippet": "this.logger.error('facturas.entrada.archivo-no-existe', { filePath, projectId });",     "ubicacion": "modules/facturas/index.js:126" },
+        { "snippet": "this.logger.info('facturas.entrada.recibida', { source, projectId, filePath });",       "ubicacion": "modules/facturas/index.js:130" }
+      ]
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": ["manifest declara observability con 'histograms' (campo no canónico para schema). Métricas reales se emiten via this.metrics (interno) pero no las observamos en grep."],
+    "tracing": {
+      "propaga_correlation_id": false,
+      "evidencia": "no observable — facturas no propaga correlation_id. request_id en telegram.send_message.request es generado local con Date.now() (no UUID v4)."
+    }
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+
+  "metricas_fisicas": {
+    "lineas_index_js": 572,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "08f170f",
+      "fecha": "2026-04-22 09:31:19 +0000",
+      "subject": "refactor(prompt-engine): separar context.json de prompt.json por módulo"
+    }
+  },
+
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      { "patron": "request_id generado con Date.now() en lugar de UUID v4", "ejemplo": "modules/facturas/index.js:178", "rareza": "inusual" }
+    ]
+  },
+
+  "quirks": {
+    "warnings": [
+      "DRIFT GRANDE: manifest declara 4 publica (factura.recibida/procesada/error/exportada), código solo emite 1 literal (factura.exportada). Las otras 3 (factura.recibida/procesada/error) NO se ven en publish — probable que estén en el pipeline interno (this.services) que no inspeccionamos.",
+      "publica_emitidos_no_declarados: telegram.send_message.request (cross-vertical, request a telegram-service)",
+      "Cross-vertical: facturas envía notificaciones via telegram-service (otra vertical)",
+      "request_id no es UUID v4 — usa Date.now() (modules/facturas/index.js:178). Único caso visto hasta ahora.",
+      "campo no canónico declarado en manifest.observability: 'histograms'",
+      "9 ui_handlers usan 'handlers' field en lugar de 'ui_handlers' (quirk repo, ya conocido)"
+    ],
+    "secciones_vacias_intencionalmente": [
+      "tools (no expone tools al LLM directamente)",
+      "apis_http (no expone HTTP)",
+      "estado.persistencia.sqlite_tablas (usa archivos JSON/CSV)",
+      "configuracion.env_vars / module_json_config_keys / hardcoded",
+      "observabilidad.metricas_emitidas (this.metrics existe pero no se ve grep directo — pipeline interno)",
+      "codigo_intencion.todos / workarounds_detectados",
+      "version_archivada"
+    ]
+  }
+}

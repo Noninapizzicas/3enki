@@ -3,12 +3,17 @@
   "version": "3.0.0",
   "description": "Gestión de variaciones de productos (quitar/añadir ingredientes)",
   "author": "Pizzepos Team",
-
+  "language": "es",
   "provides": {
-    "events": ["variacion.validada", "variacion.rechazada"],
-    "queries": ["variacion.validar", "variacion.calcular_precio"]
+    "events": [
+      "variacion.validada",
+      "variacion.rechazada"
+    ],
+    "queries": [
+      "variacion.validar",
+      "variacion.calcular_precio"
+    ]
   },
-
   "events": {
     "publishes": [
       {
@@ -39,7 +44,6 @@
       }
     ]
   },
-
   "apis": [
     {
       "method": "GET",
@@ -72,7 +76,6 @@
       "description": "Métricas del módulo"
     }
   ],
-
   "observability": {
     "logging": {
       "level": "info",

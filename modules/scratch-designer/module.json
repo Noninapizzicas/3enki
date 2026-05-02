@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "description": "Diseñador visual tipo Scratch - Bloques arrastrables que generan JSON",
   "author": "Event Core Team",
-
+  "language": "en",
   "provides": {
     "events": [
       "scratch.design.created",
@@ -13,33 +13,39 @@
     ],
     "queries": []
   },
-
   "events": {
     "publishes": [
       {
         "event": "scratch.design.created",
         "description": "Nuevo diseño creado",
-        "schema": { "$ref": "./schemas/events.json#/definitions/design_created" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/design_created"
+        }
       },
       {
         "event": "scratch.design.updated",
         "description": "Diseño actualizado",
-        "schema": { "$ref": "./schemas/events.json#/definitions/design_updated" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/design_updated"
+        }
       },
       {
         "event": "scratch.design.deleted",
         "description": "Diseño eliminado",
-        "schema": { "$ref": "./schemas/events.json#/definitions/design_deleted" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/design_deleted"
+        }
       },
       {
         "event": "scratch.design.exported",
         "description": "Diseño exportado a JSON",
-        "schema": { "$ref": "./schemas/events.json#/definitions/design_exported" }
+        "schema": {
+          "$ref": "./schemas/events.json#/definitions/design_exported"
+        }
       }
     ],
     "subscribes": []
   },
-
   "apis": [
     {
       "group": "Paleta de Bloques",
@@ -93,7 +99,6 @@
       "handler": "handleGetConditionBlocks",
       "description": "Bloques de logica (if, loops, comparaciones)"
     },
-
     {
       "group": "Diseños",
       "description": "CRUD de diseños"
@@ -109,7 +114,9 @@
       "path": "/designs",
       "handler": "handleCreateDesign",
       "description": "Crear nuevo diseño (publica scratch.design.created)",
-      "request_schema": { "$ref": "./schemas/design.json#/definitions/create_request" }
+      "request_schema": {
+        "$ref": "./schemas/design.json#/definitions/create_request"
+      }
     },
     {
       "method": "GET",
@@ -122,7 +129,9 @@
       "path": "/designs/:id",
       "handler": "handleUpdateDesign",
       "description": "Actualizar diseño (publica scratch.design.updated)",
-      "request_schema": { "$ref": "./schemas/design.json#/definitions/update_request" }
+      "request_schema": {
+        "$ref": "./schemas/design.json#/definitions/update_request"
+      }
     },
     {
       "method": "DELETE",
@@ -136,7 +145,6 @@
       "handler": "handleDuplicateDesign",
       "description": "Duplicar diseño existente"
     },
-
     {
       "group": "Validacion",
       "description": "Validar conexiones y estructura"
@@ -153,7 +161,6 @@
       "handler": "handleValidateDesign",
       "description": "Validar diseño completo"
     },
-
     {
       "group": "Export",
       "description": "Exportar diseños"
@@ -163,16 +170,19 @@
       "path": "/export/json",
       "handler": "handleExportJSON",
       "description": "Exportar diseño como JSON para ui-renderer (publica scratch.design.exported)",
-      "request_schema": { "$ref": "./schemas/design.json#/definitions/export_request" }
+      "request_schema": {
+        "$ref": "./schemas/design.json#/definitions/export_request"
+      }
     },
     {
       "method": "POST",
       "path": "/export/module-ui",
       "handler": "handleExportModuleUI",
       "description": "Exportar como seccion UI de module.json",
-      "request_schema": { "$ref": "./schemas/design.json#/definitions/export_request" }
+      "request_schema": {
+        "$ref": "./schemas/design.json#/definitions/export_request"
+      }
     },
-
     {
       "group": "Observability",
       "description": "Health y metricas"
@@ -190,7 +200,6 @@
       "description": "Metricas del modulo"
     }
   ],
-
   "ui": {
     "enabled": true,
     "version": "2.0",
@@ -204,14 +213,12 @@
       "order": 4
     }
   },
-
   "config": {
     "autosave": true,
     "autosave_interval_ms": 30000,
     "max_designs": 100,
     "inventory_path": "../../INVENTARIO-SISTEMA.json"
   },
-
   "observability": {
     "logging": {
       "level": "info",

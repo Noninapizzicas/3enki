@@ -1,0 +1,181 @@
+{
+  "_meta": {
+    "modulo": "device-registry",
+    "ubicacion": "modules/device-registry",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "device-registry",
+    "version": "1.0.0",
+    "description_oficial": "Fuente única de verdad de todos los dispositivos IoT del sistema — ESP32, gateways, periféricos manuales",
+    "author": "Enki",
+    "main": null
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": "tier_2_platform",
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "device.registered",   "description": "Nuevo dispositivo registrado en el sistema" },
+      { "event": "device.unregistered", "description": "Dispositivo eliminado del registro" },
+      { "event": "device.online",       "description": "Dispositivo detectado online (birth/status)" },
+      { "event": "device.offline",      "description": "Dispositivo detectado offline (LWT/timeout)" },
+      { "event": "device.updated",      "description": "Metadata o estado de dispositivo actualizado" }
+    ],
+    "subscribes": [
+      {
+        "event": "device.register",
+        "handler": "onDeviceRegister",
+        "extras": { "description": "Petición de registro manual de dispositivo" }
+      },
+      {
+        "event": "device.unregister",
+        "handler": "onDeviceUnregister",
+        "extras": { "description": "Petición de eliminación de dispositivo" }
+      }
+    ],
+    "provides_eventos": [
+      "device.registered",
+      "device.unregistered",
+      "device.online",
+      "device.offline",
+      "device.updated"
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "devices.list",
+      "description": "Lista todos los dispositivos registrados con su estado (online/offline), tipo, firmware, última conexión",
+      "parameters_required": [],
+      "parameters_property_names": ["project_id", "type", "online_only"],
+      "parameters_size_chars": 271,
+      "parameters_full_path_hint": "modules/device-registry/module.json → tools[0].parameters"
+    },
+    {
+      "name": "devices.get",
+      "description": "Info detallada de un dispositivo: estado, firmware, IP, RSSI, uptime, capabilities",
+      "parameters_required": ["device_id"],
+      "parameters_property_names": ["device_id"],
+      "parameters_size_chars": 87,
+      "parameters_full_path_hint": "modules/device-registry/module.json → tools[1].parameters"
+    },
+    {
+      "name": "devices.stats",
+      "description": "Estadísticas del parque: total registrados, online, offline, por tipo",
+      "parameters_required": [],
+      "parameters_property_names": [],
+      "parameters_size_chars": 33,
+      "parameters_full_path_hint": "modules/device-registry/module.json → tools[2].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "devices", "action": "list",        "handler": "handleList" },
+      { "domain": "devices", "action": "get",         "handler": "handleGet" },
+      { "domain": "devices", "action": "register",    "handler": "handleRegister" },
+      { "domain": "devices", "action": "unregister",  "handler": "handleUnregister" },
+      { "domain": "devices", "action": "stats",       "handler": "handleStats" }
+    ]
+  },
+
+  "apis_http": [],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "heartbeat_timeout_ms", "tipo": "number", "valor_default": 90000 },
+      { "key": "persist_interval_ms",  "tipo": "number", "valor_default": 30000 },
+      { "key": "data_path",            "tipo": "string", "valor_default": "./data/devices" }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "devices.registered.total",
+        "devices.online.current",
+        "devices.offline.current",
+        "devices.births.total",
+        "devices.lwts.total"
+      ],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": false,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 3340,
+    "module_json_lineas": 104,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "provides.events es array de strings (sin description) — provides_eventos extraído literalmente",
+      "events.subscribes[].description movido a extras{} (no es campo canónico del schema subscribes)"
+    ]
+  }
+}

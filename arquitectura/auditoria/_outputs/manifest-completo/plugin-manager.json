@@ -1,0 +1,200 @@
+{
+  "_meta": {
+    "modulo": "plugin-manager",
+    "ubicacion": "modules/plugin-manager",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "plugin-manager",
+    "version": "2.0.0",
+    "description_oficial": "Discovers and manages JSON-based function plugins",
+    "author": "Aichat Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_2_platform",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "plugin.loaded",        "description": "Plugin loaded successfully" },
+      { "event": "plugin.unloaded",      "description": "Plugin unloaded" },
+      { "event": "plugin.error",         "description": "Plugin loading error" },
+      { "event": "plugin.reloaded",      "description": "All plugins reloaded" },
+      { "event": "plugin.get.response",  "description": "Response to plugin get request" },
+      { "event": "plugin.list.response", "description": "Response to plugin list request" }
+    ],
+    "subscribes": [
+      {
+        "event": "plugin.get.request",
+        "handler": "onGetPluginRequest",
+        "extras": {}
+      },
+      {
+        "event": "plugin.list.request",
+        "handler": "onListPluginsRequest",
+        "extras": {}
+      }
+    ],
+    "provides_eventos": [
+      "plugin.loaded",
+      "plugin.unloaded",
+      "plugin.error",
+      "plugin.reloaded"
+    ]
+  },
+
+  "tools": [],
+
+  "ui_handlers": {
+    "campo_origen": null,
+    "items": []
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/plugins/:name",
+      "handler": "handleGetPlugin",
+      "description": "Get specific plugin definition",
+      "request_schema_ref": null,
+      "response_schema_ref": "modules/plugin-manager/schemas/plugin.json#/definitions/get_response"
+    },
+    {
+      "method": "GET",
+      "path": "/plugins",
+      "handler": "handleListPlugins",
+      "description": "List all loaded plugins",
+      "request_schema_ref": null,
+      "response_schema_ref": "modules/plugin-manager/schemas/plugin.json#/definitions/list_response"
+    },
+    {
+      "method": "POST",
+      "path": "/plugins/reload",
+      "handler": "handleReloadPlugins",
+      "description": "Reload all plugins from disk (publishes plugin.reloaded)",
+      "request_schema_ref": null,
+      "response_schema_ref": "modules/plugin-manager/schemas/plugin.json#/definitions/reload_response"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check endpoint",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/metrics",
+      "handler": "handleGetMetrics",
+      "description": "Module metrics",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": [],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "pluginsPath",     "tipo": "string",  "valor_default": "../../plugins" },
+      { "key": "autoReload",      "tipo": "boolean", "valor_default": false },
+      { "key": "watchInterval",   "tipo": "number",  "valor_default": 5000 },
+      { "key": "validateSchema",  "tipo": "boolean", "valor_default": true }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "plugin.loaded.total",
+        "plugin.error.total",
+        "plugin.reload.total"
+      ],
+      "gauges": [
+        "plugin.count",
+        "plugin.functions.count"
+      ],
+      "timings": [
+        "plugin.discovery.duration",
+        "plugin.load.duration"
+      ]
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": false,
+    "enabled": null,
+    "title": null,
+    "icon": null,
+    "views_keys": [],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [
+      "modules/plugin-manager/schemas/events.json",
+      "modules/plugin-manager/schemas/plugin.json"
+    ],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {}
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": null,
+    "module_json_bytes": 3559,
+    "module_json_lineas": 134,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "observability.logging.correlation_id=true es campo extra no mapeado en schema (no inlineable en observability_declarada)",
+      "apis usan campo 'response_schema' (con $ref inline) — se captura como response_schema_ref el path del $ref",
+      "provides es outlier con eventos duplicados en events.publishes (queries no aparecen en subscribes como publicados)"
+    ]
+  }
+}

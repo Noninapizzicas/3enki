@@ -1,0 +1,46 @@
+{
+  "_meta": { "modulo": "facturacion/fuentes", "ubicacion": "modules/facturacion/fuentes", "auditado_en": "2026-04-29", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/facturacion__fuentes.json" },
+  "identidad": { "name": "fuentes", "version": "1.0.0", "description_oficial": "Fuentes de entrada de facturas (Telegram, Gmail, manual) — Strategy pattern", "author": "Pizzepos Team", "main_declarado": "index.js", "main_real": "modules/facturacion/fuentes/index.js", "tags": [] },
+  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": null, "tier_declarado": null, "dev_only_declarado": false, "enabled_declarado": null },
+  "eventos": {
+    "publica": [
+      { "nombre": { "tipo": "literal", "valor": "factura.entrada", "variables_referenciadas": [] }, "ubicacion": "modules/facturacion/fuentes/index.js:100", "metodo_contenedor": null, "es_handler_de": "telegram.photo.received / telegram.document.received", "bloque_logico": "tras recibir factura por canal externo", "payload": { "tipo": "object_literal", "campos_visibles": ["filePath", "projectId", "source"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": false, "es_return": false, "snippet": "    this.eventBus.publish('factura.entrada', { ... });", "declarado_en_manifest": true }
+    ],
+    "subscribes": [
+      { "nombre": "telegram.photo.received",    "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "telegram.document.received", "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+    ],
+    "consistencia_con_manifest": {
+      "publica_declarados_en_manifest": ["factura.entrada"],
+      "publica_literales_en_codigo": ["factura.entrada"],
+      "publica_patrones_dinamicos": [],
+      "publica_declarados_no_emitidos": [], "publica_emitidos_no_declarados": [],
+      "subscribes_declarados_en_manifest": ["telegram.photo.received", "telegram.document.received"],
+      "subscribes_realmente_registrados": ["telegram.photo.received", "telegram.document.received"],
+      "subscribes_dinamicos": []
+    }
+  },
+  "tools": [], "ui_handlers": [], "apis_http": [],
+  "estado": { "memoria": [], "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": "Strategy pattern: Telegram, Gmail, manual. Cada strategy emite factura.entrada cuando recibe input." } },
+  "configuracion": { "env_vars": [], "module_json_config_keys": [], "paths_proyecto_referenciados": [], "valores_hardcoded_observables": [] },
+  "lifecycle": { "onLoad": { "ubicacion": null, "acciones": [], "guarda_referencias_externas": ["this.logger", "this.eventBus"], "puede_fallar_silenciosamente": false }, "onUnload": { "ubicacion": null, "acciones": [], "estado_no_limpiado": [] }, "auto_wired_subscribes": true, "subscribes_dinamicos_en_lifecycle": [] },
+  "dependencias_implicitas": [
+    { "modulo_dependido": "telegram-service", "via_evento": "telegram.photo/document.received (subscribes)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/facturacion/fuentes/index.js", "es_cross_vertical": true },
+    { "modulo_dependido": "facturas",         "via_evento": "factura.entrada (publica → consumido por facturas pipeline)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/facturacion/fuentes/index.js:100", "es_cross_vertical": false }
+  ],
+  "modos_de_fallo": [],
+  "observabilidad": { "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('fuentes.<accion>', { ...campos })", "campos_estructurados_observados": [], "ejemplos": [] }, "metricas_emitidas": [], "metricas_drift_vs_manifest": [], "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" } },
+  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": [], "context_json_existe": false, "prompt_json_existe": false, "readme_existe": true, "tests_propios_existen": false },
+  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
+  "codigo_intencion": { "todos": [], "comentarios_porque": [], "workarounds_detectados": [] },
+  "metricas_fisicas": { "lineas_index_js": 263, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
+  "outliers_capturados": { "campos_no_canonicos_en_manifest": ["strategies"], "patrones_no_canonicos_en_codigo": [] },
+  "quirks": {
+    "warnings": [
+      "P3 — Fuentes facturación. 0 drift declarativo. Strategy pattern (Telegram, Gmail, manual).",
+      "Manifest declara outlier 'strategies' (único en repo)",
+      "Cross-vertical: telegram-service (otra vertical) — entrada de facturas via Telegram"
+    ],
+    "secciones_vacias_intencionalmente": ["tools", "ui_handlers", "apis_http", "estado.memoria", "estado.persistencia.*", "configuracion.*", "observabilidad.metricas_emitidas", "codigo_intencion.*", "version_archivada"]
+  }
+}

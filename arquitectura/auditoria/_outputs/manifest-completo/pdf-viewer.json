@@ -1,0 +1,209 @@
+{
+  "_meta": {
+    "modulo": "pdf-viewer",
+    "ubicacion": "modules/pdf-viewer",
+    "auditado_en": "2026-04-29",
+    "parcela": "manifest-completo",
+    "parcela_version": "2.0.0"
+  },
+
+  "identidad": {
+    "name": "pdf-viewer",
+    "version": "1.0.0",
+    "description_oficial": "PDF viewer and text extraction module",
+    "author": "Aichat Team",
+    "main": "index.js"
+  },
+
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": "tier_6_ui",
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
+
+  "eventos": {
+    "publica": [
+      { "event": "pdf.view.response",     "description": null },
+      { "event": "pdf.extract.response",  "description": null },
+      { "event": "pdf.metadata.response", "description": null },
+      { "event": "pdf.list.response",     "description": null },
+      { "event": "pdf.error",             "description": null }
+    ],
+    "subscribes": [
+      { "event": "pdf.view.request",      "handler": "handleViewRequest",     "extras": {} },
+      { "event": "pdf.extract.request",   "handler": "handleExtractRequest",  "extras": {} },
+      { "event": "pdf.metadata.request",  "handler": "handleMetadataRequest", "extras": {} },
+      { "event": "pdf.list.request",      "handler": "handleListRequest",     "extras": {} }
+    ],
+    "provides_eventos": []
+  },
+
+  "tools": [
+    {
+      "name": "pdf.create",
+      "description": "Crea un archivo PDF desde texto plano. IMPORTANTE: usa texto plano corto (máx 3000 caracteres). NO envíes HTML largo ni contenido extenso — el JSON se truncará y fallará. Si el contenido es largo, resúmelo antes de llamar a esta tool. Usa el campo 'title' para el encabezado.",
+      "parameters_required": ["filename", "content"],
+      "parameters_property_names": ["filename", "content", "title", "type", "orientation", "format", "project_id"],
+      "parameters_size_chars": 798,
+      "parameters_full_path_hint": "modules/pdf-viewer/module.json → tools[0].parameters"
+    },
+    {
+      "name": "pdf.list",
+      "description": "Lista todos los archivos PDF en un proyecto.",
+      "parameters_required": ["projectId"],
+      "parameters_property_names": ["projectId"],
+      "parameters_size_chars": 119,
+      "parameters_full_path_hint": "modules/pdf-viewer/module.json → tools[1].parameters"
+    },
+    {
+      "name": "pdf.metadata",
+      "description": "Obtiene metadata de un archivo PDF (tamaño, fecha, etc.).",
+      "parameters_required": ["projectId", "filePath"],
+      "parameters_property_names": ["projectId", "filePath"],
+      "parameters_size_chars": 195,
+      "parameters_full_path_hint": "modules/pdf-viewer/module.json → tools[2].parameters"
+    },
+    {
+      "name": "pdf.extract",
+      "description": "Extrae texto de un archivo PDF. Puede extraer una página específica o todo el documento.",
+      "parameters_required": ["projectId", "filePath"],
+      "parameters_property_names": ["projectId", "filePath", "page"],
+      "parameters_size_chars": 300,
+      "parameters_full_path_hint": "modules/pdf-viewer/module.json → tools[3].parameters"
+    }
+  ],
+
+  "ui_handlers": {
+    "campo_origen": "ui_handlers",
+    "items": [
+      { "domain": "pdf", "action": "view",     "handler": "handleUIView" },
+      { "domain": "pdf", "action": "metadata", "handler": "handleUIMetadata" },
+      { "domain": "pdf", "action": "list",     "handler": "handleUIListPdfs" }
+    ]
+  },
+
+  "apis_http": [
+    {
+      "method": "GET",
+      "path": "/pdf/view",
+      "handler": "viewPdf",
+      "description": "Get PDF file for viewing",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/pdf/extract-text",
+      "handler": "extractText",
+      "description": "Extract text from PDF",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/pdf/metadata",
+      "handler": "getMetadata",
+      "description": "Get PDF metadata",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    },
+    {
+      "method": "GET",
+      "path": "/pdf/list",
+      "handler": "listPdfs",
+      "description": "List all PDF files in project",
+      "request_schema_ref": null,
+      "response_schema_ref": null
+    }
+  ],
+
+  "config_y_deps": {
+    "dependencies_declaradas": ["filesystem", "project-manager"],
+    "requires_declarado": [],
+    "replaces_declarado": [],
+    "config_declarada": [
+      { "key": "max_pdf_size",   "tipo": "number",  "valor_default": 52428800 },
+      { "key": "cache_enabled",  "tipo": "boolean", "valor_default": true },
+      { "key": "cache_ttl",      "tipo": "number",  "valor_default": 3600000 }
+    ]
+  },
+
+  "observability_declarada": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [],
+      "gauges": [],
+      "timings": []
+    }
+  },
+
+  "agentes": {
+    "inline_en_module_json": [],
+    "archivos_propios": [],
+    "agents_referenciados_en_intents": []
+  },
+
+  "intents_declarados": [],
+
+  "ui_declarativa": {
+    "presente": true,
+    "enabled": true,
+    "title": "Visor PDF",
+    "icon": "📄",
+    "views_keys": ["viewer"],
+    "section_widget_types": [],
+    "permissions_declaradas": [],
+    "tamano_bytes": 0,
+    "endpoints_referenciados": [],
+    "mqtt_topics_declarados": []
+  },
+
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context": false,
+    "prompt_module": true,
+    "readme": true,
+    "tests_propios": false
+  },
+
+  "tags_declaradas": [],
+
+  "outliers_capturados": {
+    "campos_no_canonicos": [],
+    "snapshots": {
+      "dependencies_es_objeto": "dependencies = {modules: [\"filesystem\", \"project-manager\"]} — estructura objeto, no array plano; normalizado a dependencies_declaradas[]",
+      "observability_metrics_custom": "observability.metrics declara campo 'custom' (no canónico: [\"pdfs_viewed_total\", \"text_extractions_total\", \"pdf_errors_total\"]) en vez de counters/gauges/timings — mapeado a vacíos; 'custom' se pierde",
+      "events_publishes_strings": "events.publishes es array de strings, no array de objetos {event, description} — normalizado con description: null",
+      "ui_description_field": "ui.description = \"Visualizador y extractor de texto de PDFs\" — campo adicional dentro de ui, no reflejado en ui_declarativa"
+    }
+  },
+
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null
+  },
+
+  "quirks": {
+    "eventos_top_level": false,
+    "ui_handlers_field_name": "ui_handlers",
+    "module_json_bytes": 6484,
+    "module_json_lineas": 238,
+    "tiene_main_no_estandar": false,
+    "warnings": [
+      "events.publishes es array de strings — se normalizan con description: null",
+      "observability.metrics.custom no mapea a counters/gauges/timings — información perdida en normalización",
+      "dependencies es objeto {modules:[...]} no array plano — se extrae .modules[]",
+      "context.json ausente — archivos_hermanos.context = false"
+    ]
+  }
+}

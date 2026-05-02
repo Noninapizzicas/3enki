@@ -1,0 +1,57 @@
+{
+  "_doc": "Captura la disciplina de HTTP en el sistema event-core. La regla maestra es UNA y simple: HTTP es la frontera externa del core. Cruza el límite del proceso. Internamente, MQTT. Si es módulo del mismo core hablando con otro módulo del mismo core, MQTT obligatorio — HTTP nunca. HTTP existe para tres casos legítimos: (1) CLI / operador humano, (2) UIs web servidas a browsers, (3) integraciones con servicios externos (entrantes: webhooks; salientes: APIs de terceros). El contrato distingue dos sub-modos — HTTP-server (el core acepta requests externos) y HTTP-client (un módulo llama a un externo) — y aplica reglas distintas a cada uno, manteniendo coherencia con events/lifecycle/observability/errors/persistence.",
+  "id": "http",
+  "version": "1.0.0",
+  "creada": "2026-05-02",
+  "supersedes_nota": "Primera versión. Recoge el patrón ya implementado en core/gateway/http.js (HTTP server único) y los clientes HTTP de los módulos (cli/client.js, ai-gateway providers, etc.) y formaliza la regla 'HTTP solo en frontera, MQTT internamente'. Validado parcialmente por el CLI: cli/client.js es cliente HTTP puro, no embebe lógica del core.",
+
+  "objetivo": "Producir UN JSON output (_outputs/http.json) que enumera: (a) la regla maestra que HTTP solo cruza la frontera externa del core, (b) los TRES casos legítimos de exposición (cli, ui-web, integracion-externa), (c) las reglas para HTTP-server (forma de respuesta canónica coherente con errors.json, routing canonical /modules/<slug>/<path>, validation, auth opcional, telemetría obligatoria), (d) las reglas para HTTP-client (timeouts obligatorios, retry policy declarada, telemetría por call, redacción de secretos en URLs/headers, mapeo de errores HTTP externos a códigos canónicos), (e) lo prohibido (módulo X→módulo Y del mismo core via HTTP, secretos en URL, fetch sin timeout, response shape no canónica, etc.). Validable mecánicamente cruzando contra audits modulo-completo y código de modules/ y cli/.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/http.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/http.schema.json",
+      "arquitectura/decisiones/_outputs/errors.json (porque toda response HTTP usa el response_shape canónico y mapea a status_codes canónicos)",
+      "arquitectura/decisiones/_outputs/observability.json (porque todo request/response HTTP emite log + métrica)",
+      "arquitectura/decisiones/_outputs/events.json (porque las acciones que HTTP triggers en el core se traducen a eventBus.publish — HTTP NO sustituye al bus)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "core/gateway/http.js — el HTTP server único del core (autoridad sobre routing/cors/compression/cache)",
+      "cli/client.js + cli/index.js — el CLI como cliente HTTP puro (caso legítimo 1)",
+      "modules/conversacion/ai-gateway/providers/* — clientes HTTP a APIs externas (caso legítimo 3 saliente)",
+      "modules/dashboard, modules/ui-designer, modules/scratch-designer — UIs servidas por HTTP a browsers (caso legítimo 2)",
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json — campo apis_http (endpoints declarados por cada módulo)",
+      "modules/*/module.json — campo apis (endpoints HTTP del módulo)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "HTTP CRUZA EL LÍMITE DEL PROCESO. La regla que no se rompe: HTTP solo aparece cuando se cruza la frontera externa del core (proceso de Node). Si el remitente y el destinatario viven en el mismo proceso (módulos del mismo core), la comunicación va por MQTT. Si el remitente o el destinatario vive fuera (CLI en otra terminal, browser, servicio externo), entonces HTTP es legítimo.",
+
+    "INTERNAMENTE MQTT — SIN EXCEPCIONES. Un módulo NO llama a otro módulo del mismo core via HTTP, ni siquiera con localhost. Eso rompe el paradigma event-core: 'emite evento, quien sabe hace, tú no sabes cómo' presupone bus, no fetch. HTTP entre módulos del mismo core es drift estructural, no optimización ni atajo.",
+
+    "TRES CASOS LEGÍTIMOS, NI UNO MÁS. (1) CLI — operador humano que interactúa con el core desde su terminal; el binario CLI es cliente HTTP puro, no embebe lógica del core. (2) UI WEB — dashboard, configuradores, herramientas servidas a un browser que no habla MQTT nativo. (3) INTEGRACIÓN EXTERNA — webhooks entrantes de servicios que YA hablan HTTP, llamadas salientes a APIs de terceros que YA hablan HTTP. Cualquier cuarto caso requiere justificación explícita.",
+
+    "EL CORE TIENE UN ÚNICO HTTP-SERVER. Todo HTTP entrante pasa por core/gateway/http.js — un solo servidor, una sola política de cors/compression/cache/auth. Los módulos NO levantan sus propios listeners (no fastify, no express adicional, no http.createServer en módulos). Declaran apis en module.json y el gateway las enruta a /modules/<slug>/<path>.",
+
+    "ROUTING CANÓNICO POR MÓDULO. La URL refleja el dueño: /modules/<slug>/<path>. El verbo de la acción NO va en la URL — el método HTTP ya es el verbo (GET=consulta, POST=acción, PUT=reemplazo, DELETE=baja). Slug = nombre canónico del módulo (kebab-case). Path = recurso o acción específica del módulo. Sin prefijos extra (/api, /v1) salvo decisión explícita en el contrato.",
+
+    "RESPUESTA HTTP USA EL SHAPE CANÓNICO. Toda response del HTTP-server usa el response_shape de errors.json: { status, data | error } mutuamente excluyentes. El status del JSON coincide con el HTTP status code. NO hay { ok: true }, NO hay { result: ... }, NO hay { success: ... } — ese es drift que el validator de errors ya detecta y persistence/http heredan.",
+
+    "TIMEOUTS OBLIGATORIOS EN CLIENTE. Todo HTTP-client (módulo llamando a un externo, CLI llamando al core) declara timeout explícito. fetch sin timeout es un bug latente: el día que el externo cuelgue, el módulo se queda colgado y bloquea handlers. Sin timeout no se commitea — la regla es absoluta, igual que write atómico en persistence.",
+
+    "TELEMETRÍA OBLIGATORIA EN AMBAS DIRECCIONES. Cada request HTTP entrante (server) emite log + métrica de duración + status. Cada call saliente (client) emite log + métrica de duración + status del externo. Sin telemetría HTTP estás ciego ante latencias y caídas de upstream. Coherente con observability.contract: error en HTTP es auto-observable, igual que error en persistence.",
+
+    "REDACCIÓN DE SECRETOS EN URLS Y HEADERS. Tokens, claves, passwords NUNCA aparecen en URL query params (van en headers). En logs y métricas, los headers Authorization, X-API-Key, Cookie y similares se redactan ANTES de loguear. Coherente con no_secrets_in_logs y no_plain_secrets_on_disk: HTTP es otro canal donde el secreto puede fugarse y la disciplina es la misma.",
+
+    "ERRORES HTTP EXTERNOS SE MAPEAN A CÓDIGOS CANÓNICOS. Cuando un módulo llama a OpenAI y devuelve 429, el error que el módulo propaga al caller del bus NO es 'OpenAI dijo 429' — es { status: 503, code: 'UPSTREAM_RATE_LIMITED' } o equivalente del catálogo de errors.codes_infrastructure. La realidad del externo se traduce al vocabulario canónico del repo. El módulo es el adaptador, no un proxy transparente.",
+
+    "AUTH ES OPCIONAL Y EXPLÍCITA. El gateway HTTP soporta mTLS (via certificate-authority), tokens, basic auth — pero la decisión de exigir auth es explícita por endpoint en module.json (config.apis[*].auth_required). Sin declaración, se asume público. Sin sorpresas, sin endpoints accidentalmente expuestos.",
+
+    "EL CLI ES UN CLIENTE COMO CUALQUIER OTRO. cli/client.js no tiene privilegios especiales. Hace requests HTTP al gateway igual que un browser. La autoridad sobre el core es la misma que tiene cualquier consumidor. Si el CLI puede llamar GET /modules/X/Y, el browser también — la auth se decide por endpoint, no por cliente.",
+
+    "HTTP NO SUSTITUYE AL BUS. Un endpoint HTTP que el gateway sirve PUEDE traducirse internamente a un eventBus.publish o a un mqttRequest — esa es decisión del módulo, no del gateway. El módulo recibe el request HTTP (ya parseado por el gateway), hace su trabajo (que puede involucrar publicar eventos para que otros módulos hagan algo) y devuelve la response. HTTP no es atajo para saltarse el bus internamente."
+  ]
+}

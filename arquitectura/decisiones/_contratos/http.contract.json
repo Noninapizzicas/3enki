@@ -184,5 +184,88 @@
       ],
       "infraestructura_existente": "Cada módulo implementa su propio cliente. NO hay helper canónico aún — POC pendiente para un _httpRequest helper análogo a _publicarEvento (events) y _buildErrorResponse (errors)."
     }
+  ],
+
+  "prohibido": [
+    {
+      "id": "intra_core_http_call",
+      "regla": "Un módulo del core llamando a otro módulo del MISMO core via HTTP (incluyendo localhost). Esto es drift estructural: rompe el paradigma event-core, paga overhead innecesario y crea fallos en cascada.",
+      "viola_principios": ["mqtt_for_intra_core_communication", "http_only_crosses_process_boundary"],
+      "como_detectar": "Análisis estático: en código de módulos buscar fetch / http.request / axios / got hacia URLs que contengan localhost / 127.0.0.1 / 0.0.0.0 / el host del propio gateway. Cruzar con audit dependencias_externas — si el target es el mismo core, drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Usar mqttRequest('otro-modulo', 'accion', payload) si esperas respuesta, o eventBus.publish('otro-modulo.entidad.verbo', payload) si es fire-and-forget."
+    },
+    {
+      "id": "module_owns_http_listener",
+      "regla": "Un módulo levantando su propio HTTP server (express / fastify / http.createServer). Toda exposición HTTP del core va por core/gateway/http.js — un único listener.",
+      "viola_principios": ["single_http_server_in_core"],
+      "como_detectar": "Regex en código de modules/: 'http\\.createServer|express\\(\\)|fastify\\(|new\\s+Server\\(' fuera de core/. Cruzar con audit estado.lifecycle si el módulo declara puerto propio.",
+      "ejemplo_drift_actual": "calling-generator y admin-panel mencionan createServer en el grep — verificar si son listeners propios (drift) o consumen libs que internamente usan http.createServer (no drift).",
+      "alternativa_correcta": "Declarar apis en module.json. El gateway las enruta automáticamente como /modules/<slug>/<path>."
+    },
+    {
+      "id": "non_canonical_response_shape",
+      "regla": "Endpoints HTTP que devuelven { ok: true } / { success: ... } / { result: ... } / cualquier shape distinta al canónico { status, data | error }. Drift que ya detecta el validator de errors.",
+      "viola_principios": ["response_uses_canonical_error_shape"],
+      "como_detectar": "Regex en handlers HTTP de módulos: 'res\\.json\\(\\s*\\{\\s*(ok|success|result)\\s*:' o 'return\\s+\\{\\s*(ok|success|result)\\s*:'. Cubierto también por errors.validate.js.",
+      "ejemplo_drift_actual": "Múltiples módulos del repo usan { ok } o { success }. Detectado por errors.validate.js (drift_respuesta_no_canonica).",
+      "alternativa_correcta": "return { status: 200, data: {...} } o return { status: 4xx, error: { code: 'XXX', message: '...' } }. Usar el helper _buildErrorResponse del POC notas para errores."
+    },
+    {
+      "id": "non_canonical_routing",
+      "regla": "Endpoints fuera del patrón /modules/<slug>/<path>. Ejemplos: /api/v1/notas, /notas, /handler/foo, rutas con verbo en URL (/modules/notas/crear-nota cuando POST /modules/notas/notas ya basta).",
+      "viola_principios": ["canonical_routing_modules_slug_path"],
+      "como_detectar": "Inspeccionar audits modulo-completo.apis_http[*].ruta. Si no empieza por /modules/<slug>/, drift. También: paths con verbos imperativos (crear, eliminar, actualizar) cuando el método HTTP ya los expresa.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Renombrar las rutas y mover el verbo al método HTTP. Ej: GET /modules/notas/notas (lista), POST /modules/notas/notas (crea), PUT /modules/notas/notas/:id (reemplaza), DELETE /modules/notas/notas/:id (borra)."
+    },
+    {
+      "id": "fetch_without_timeout",
+      "regla": "Llamadas HTTP salientes (fetch, http.request, axios.request, got, got.post, etc.) sin timeout explícito. Bug latente: el día que el upstream cuelgue, el handler se queda colgado bloqueando el event loop.",
+      "viola_principios": ["mandatory_timeout_in_http_client"],
+      "como_detectar": "Regex en código de módulos: 'fetch\\(' / 'http\\.request\\(' / 'axios\\.\\w+\\(' / 'got\\.\\w+\\(' donde el bloque de opciones NO contenga 'timeout|signal|AbortSignal'.",
+      "ejemplo_drift_actual": "ai-gateway providers (base-provider.js) y otros módulos clientes potencialmente carecen de timeout — verificar con cross-check.",
+      "alternativa_correcta": "fetch(url, { signal: AbortSignal.timeout(this.config.http_clients.<x>.timeout_ms) }). Para http.request, options.timeout = N + req.on('timeout', ...) + req.destroy()."
+    },
+    {
+      "id": "secret_in_url_query_param",
+      "regla": "Tokens, API keys, passwords incluidos en URL query params (e.g., ?token=ABC). Estos se filtran a logs del proxy, browser history, métricas con label 'path', server access logs.",
+      "viola_principios": ["secret_redaction_in_urls_and_headers", "no_plain_secrets_on_disk", "no_secrets_in_logs"],
+      "como_detectar": "Regex multi-campo: URLs construidas con template literals que contienen ${token} / ${apiKey} / ${password} / ${secret} en query string. Heurística: '?(\\w+)=' donde la key matchea sensitive_field_names.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Mover el secreto al header Authorization: Bearer <token> o X-API-Key: <key>. Si el upstream sólo soporta query param, es excepción documentada (señalar el upstream limitado)."
+    },
+    {
+      "id": "log_authorization_header_unredacted",
+      "regla": "Loguear request o response HTTP con headers Authorization / X-API-Key / Cookie / Set-Cookie sin redactar. El secreto se persiste a disco vía logs.",
+      "viola_principios": ["secret_redaction_in_urls_and_headers"],
+      "como_detectar": "Regex en código: 'logger\\.\\w+\\([^)]*headers' o 'JSON\\.stringify\\(headers' sin función de redacción aplicada antes. Cruzar con observability.detection_patterns.sensitive_field_names.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "Helper _redactHeaders(headers) que reemplaza Authorization/X-API-Key/Cookie por '[REDACTED]' antes de loguear. Aplicar en todo logger.X que reciba headers."
+    },
+    {
+      "id": "no_telemetry_on_http_request",
+      "regla": "Endpoint HTTP server (handler) o llamada HTTP client sin log + métrica de duración + status. Ceguera operativa.",
+      "viola_principios": ["mandatory_telemetry_on_http"],
+      "como_detectar": "Inspeccionar handlers de apis: si el bloque NO contiene this.logger.X y this.metrics.X con sufijo .duration o .errors, drift. Para clientes: igual en torno al fetch/request.",
+      "ejemplo_drift_actual": "Validable cuando ejecutemos http.validate.js. Esperable: muchos handlers viejos sin telemetría explícita (el gateway puede aportar parte, pero log/metric específico del módulo se espera).",
+      "alternativa_correcta": "const t0 = Date.now(); try { /* lógica */ } finally { const dur = Date.now() - t0; this.logger.info('module.api.X', { dur, status }); this.metrics.histogram(`${this.name}.api.duration`, dur, { ruta, status }); }"
+    },
+    {
+      "id": "external_error_propagated_raw",
+      "regla": "Module HTTP-client que devuelve al caller del bus el error tal cual lo recibe del externo (ej: { error: 'OpenAI says: rate limit exceeded' }). El caller acaba conociendo la idiosincrasia de cada upstream.",
+      "viola_principios": ["external_errors_mapped_to_canonical_codes"],
+      "como_detectar": "Regex: en catch alrededor de fetch/http.request, presencia de 'error.message' o 'response.text()' propagado directamente al return sin mapeo a codes_infrastructure (UPSTREAM_*).",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "switch (status) { case 401: case 403: return { status: 503, error: { code: 'UPSTREAM_AUTH_FAILED', ... } }; case 429: return { status: 503, error: { code: 'UPSTREAM_RATE_LIMITED', ... } }; case status >= 500: return { status: 503, error: { code: 'UPSTREAM_5XX', ... } }; }"
+    },
+    {
+      "id": "http_substitutes_bus_for_cross_module_action",
+      "regla": "Endpoint /modules/X/algo que en lugar de publicar un evento llama por HTTP a otro módulo del mismo core para hacer la acción. Variante de intra_core_http_call disfrazada de 'orquestación'.",
+      "viola_principios": ["http_does_not_replace_bus", "mqtt_for_intra_core_communication"],
+      "como_detectar": "Cruzar audits: handlers HTTP de módulo X que dentro hacen fetch a /modules/Y/... — drift.",
+      "ejemplo_drift_actual": null,
+      "alternativa_correcta": "El handler HTTP de X publica el evento que Y escucha (eventBus.publish('y.entidad.verbo', payload)) o hace mqttRequest('y', 'accion', payload) si necesita respuesta sincrónica."
+    }
   ]
 }

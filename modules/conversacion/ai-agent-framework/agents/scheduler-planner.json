@@ -8,10 +8,10 @@
   "tools": [
     "carta.list",
     "tarifas.get",
-    "scheduler.crear_regla",
-    "scheduler.listar_reglas",
-    "scheduler.eliminar_regla",
-    "scheduler.detectar_conflictos"
+    "carta-scheduler.crear_regla",
+    "carta-scheduler.listar_reglas",
+    "carta-scheduler.eliminar_regla",
+    "carta-scheduler.detectar_conflictos"
   ],
   "provider": "auto",
   "temperature": 0.3,

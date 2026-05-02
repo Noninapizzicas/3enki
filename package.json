@@ -17,7 +17,7 @@
     "test:security": "node tests/unit/security-p2p.test.js",
     "test:integration": "node tests/integration/full-stack.test.js",
     "test:ai-gateway-poc": "node tests/unit/ai-gateway-poc.test.js",
-    "test:carta-scheduler-poc": "node tests/unit/carta-scheduler-poc.test.js",
+    "test:carta-scheduler": "node tests/unit/carta-scheduler.test.js",
     "test:cocina-poc": "node tests/unit/cocina-poc.test.js",
     "test:mqtt-request": "node tests/unit/mqtt-request.test.js",
     "test:integration:carta-scheduler": "node tests/integration/carta-scheduler-mqtt-request.test.js",

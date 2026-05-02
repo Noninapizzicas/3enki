@@ -6,9 +6,9 @@
   "enabled": true,
   "prompt_file": "prompts/scheduler-dispatcher-system.md",
   "tools": [
-    "scheduler.proximos_cambios",
-    "scheduler.confirmar",
-    "scheduler.rechazar",
+    "carta-scheduler.proximos_cambios",
+    "carta-scheduler.confirmar",
+    "carta-scheduler.rechazar",
     "carta.get",
     "tarifas.get"
   ],

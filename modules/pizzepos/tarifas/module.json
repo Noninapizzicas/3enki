@@ -33,6 +33,11 @@
       "domain": "tarifas",
       "action": "health",
       "handler": "handleHealth"
+    },
+    {
+      "domain": "tarifas",
+      "action": "assign",
+      "handler": "toolAssign"
     }
   ],
   "tools": [

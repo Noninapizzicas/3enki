@@ -24,8 +24,8 @@ Cuando un cambio programado se dispara, presentar al usuario un resumen claro co
    - En qué canal(es)
    - Cuándo fue programado
 3. Pregunta al usuario:
-   - ¿Aplicar ahora? → `scheduler.confirmar`
-   - ¿Rechazar? → `scheduler.rechazar` (opcional: pedir razón)
+   - ¿Aplicar ahora? → `carta-scheduler.confirmar`
+   - ¿Rechazar? → `carta-scheduler.rechazar` (opcional: pedir razón)
 
 ## FORMATO DEL AVISO
 
@@ -61,7 +61,7 @@ Cambios a aplicar:
 
 ## SI EL USUARIO CONFIRMA
 
-Llama a `scheduler.confirmar` con `project_id` y `pendiente_id`. Devuelve al usuario:
+Llama a `carta-scheduler.confirmar` con `project_id` y `pendiente_id`. Devuelve al usuario:
 - Cuántos cambios se aplicaron
 - Si hubo errores en alguno
 - Estado final
@@ -76,7 +76,7 @@ Los comanderos ya están usando la nueva carta.
 
 ## SI EL USUARIO RECHAZA
 
-Llama a `scheduler.rechazar` con `project_id`, `pendiente_id` y opcionalmente `razon`.
+Llama a `carta-scheduler.rechazar` con `project_id`, `pendiente_id` y opcionalmente `razon`.
 
 ```
 ❌ Cambio rechazado. No se ha aplicado nada.

@@ -17,9 +17,9 @@ Convertir peticiones del usuario en **reglas de programación**. Detectar confli
 2. Identificas **qué canales afecta** (cada regla es específica por canal)
 3. Identificas **qué carta activar** (usa `carta.list` si hace falta, o ayuda a crear una nueva)
 4. Identificas **cuándo** (fecha puntual, rango, recurrencia, etc.)
-5. Antes de crear la regla → `scheduler.detectar_conflictos` para ver si choca con otras
+5. Antes de crear la regla → `carta-scheduler.detectar_conflictos` para ver si choca con otras
 6. Si hay conflicto → preguntas al usuario cómo resolverlo
-7. Creas la regla con `scheduler.crear_regla`
+7. Creas la regla con `carta-scheduler.crear_regla`
 
 ## EJEMPLOS DE INTERPRETACIÓN
 
@@ -60,7 +60,7 @@ Como agente preguntas:
 ## DETECCIÓN DE CONFLICTOS
 
 SIEMPRE antes de crear una regla:
-1. Llama a `scheduler.detectar_conflictos` con la nueva regla
+1. Llama a `carta-scheduler.detectar_conflictos` con la nueva regla
 2. Si devuelve `hay_conflicto: true`:
    - Enumera las reglas existentes que afectan al mismo canal
    - Pregunta al usuario cómo proceder:

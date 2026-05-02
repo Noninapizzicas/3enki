@@ -29,8 +29,8 @@ jobs:
       - name: Run POC tests (ai-gateway-poc)
         run: npm run test:ai-gateway-poc
 
-      - name: Run POC tests (carta-scheduler-poc)
-        run: npm run test:carta-scheduler-poc
+      - name: Run unit tests (carta-scheduler)
+        run: npm run test:carta-scheduler
 
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc

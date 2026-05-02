@@ -1,12 +1,12 @@
 /**
- * Tests unitarios para carta-scheduler-poc (parcela 5/6 del POC3).
+ * Tests unitarios para carta-scheduler (parcela 5/6 del POC3).
  *
  * Cubre los 8 contratos a traves de casos E2E con mocks:
  *  - Bus mockeado (publish + mqttRequest a scheduler/tarifas)
  *  - fs real con tmpdir (json-file-per-project con write atomico)
  *
- * Ejecutar: node tests/unit/carta-scheduler-poc.test.js
- *           npm run test:carta-scheduler-poc
+ * Ejecutar: node tests/unit/carta-scheduler.test.js
+ *           npm run test:carta-scheduler
  */
 
 'use strict';
@@ -16,8 +16,8 @@ const fs     = require('fs');
 const path   = require('path');
 const os     = require('os');
 
-const CartaSchedulerModule = require('../../modules/pizzepos/carta-scheduler-poc/index.js');
-const moduleConfigBase     = require('../../modules/pizzepos/carta-scheduler-poc/module.json').config;
+const CartaSchedulerModule = require('../../modules/pizzepos/carta-scheduler/index.js');
+const moduleConfigBase     = require('../../modules/pizzepos/carta-scheduler/module.json').config;
 
 // ----------------------------------------------------------------- helpers
 
@@ -61,7 +61,7 @@ function makeMocks() {
 }
 
 function makeTmpProject() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'carta-scheduler-poc-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'carta-scheduler-'));
 }
 
 function findEvent(published, name) {
@@ -100,7 +100,7 @@ async function loadModule(mocks, configOverrides = {}) {
 // ----------------------------------------------------------------- tests
 
 (async () => {
-  console.log('carta-scheduler-poc — smoke tests\n');
+  console.log('carta-scheduler — smoke tests\n');
 
   // ============================================================ Group 1: lifecycle
 
@@ -181,9 +181,9 @@ async function loadModule(mocks, configOverrides = {}) {
     assert.ok(ev, 'debe publicar carta-scheduler.regla.creada');
     assert.strictEqual(ev[1].project_id, 'p1');
 
-    // mqttRequest a scheduler.addJob
-    const sched = mocks.requests.find(r => r.domain === 'scheduler' && r.action === 'addJob');
-    assert.ok(sched, 'debe llamar mqttRequest a scheduler.addJob');
+    // mqttRequest a scheduler.create
+    const sched = mocks.requests.find(r => r.domain === 'scheduler' && r.action === 'create');
+    assert.ok(sched, 'debe llamar mqttRequest a scheduler.create');
     assert.ok(sched.payload.name.startsWith('carta-scheduler:'));
 
     await m.onUnload();
@@ -211,7 +211,7 @@ async function loadModule(mocks, configOverrides = {}) {
       const r = reglas.values().next().value;
       assert.strictEqual(r.descripcion, 'persistente');
       // tambien debe re-registrar el job en scheduler
-      const sched = mocks.requests.find(r => r.domain === 'scheduler' && r.action === 'addJob');
+      const sched = mocks.requests.find(r => r.domain === 'scheduler' && r.action === 'create');
       assert.ok(sched, 'al activar proyecto, jobs activos se re-registran');
       await m.onUnload();
     }
@@ -504,5 +504,5 @@ async function loadModule(mocks, configOverrides = {}) {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  console.log('\ncarta-scheduler-poc: todos los tests pasaron ✓');
+  console.log('\ncarta-scheduler: todos los tests pasaron ✓');
 })().catch(err => { console.error(err); process.exit(1); });

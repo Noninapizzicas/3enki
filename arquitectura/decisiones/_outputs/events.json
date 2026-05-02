@@ -171,7 +171,7 @@
         "core\\.modules\\.\\w+\\.instance\\."
       ],
       "alternativa_canonica": "// EN VEZ DE:\nconst sched = this.moduleLoader.getModule('scheduler');\nawait sched.instance.addJob(payload);\n\n// HACER:\nconst resp = await this.mqttRequest('scheduler', 'addJob', payload, { timeout_ms: 5000 });\nif (resp.error) { /* manejar error canonico */ }",
-      "validado_en_poc": "modules/pizzepos/carta-scheduler-poc/index.js (POC3) usa context.mqttRequest exclusivamente para scheduler.addJob/deleteJob y tarifas.assign — cero accesos directos a moduleLoader."
+      "validado_en_poc": "modules/pizzepos/carta-scheduler/index.js (POC3 promocionado a real) usa context.mqttRequest exclusivamente para scheduler.create/delete y tarifas.assign — cero accesos directos a moduleLoader."
     }
   },
 

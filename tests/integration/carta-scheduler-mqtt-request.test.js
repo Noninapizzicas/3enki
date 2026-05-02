@@ -1,18 +1,18 @@
 /**
- * Test de integracion: carta-scheduler-poc usando el mqttRequest REAL
+ * Test de integracion: carta-scheduler usando el mqttRequest REAL
  * inyectado por core/modules/loader.js (no mock).
  *
  * Cierra el circulo del POC3: el modulo no es mas un caso aislado con bus
  * mockeado — funciona con la cadena real:
  *
- *   loader.load(carta-scheduler-poc)
+ *   loader.load(carta-scheduler)
  *     → moduleContext.mqttRequest = (d, a, p) => uiHandler.handle(d, a, p)
- *     → carta-scheduler-poc llama mqttRequest('scheduler', 'addJob', ...)
+ *     → carta-scheduler llama mqttRequest('scheduler', 'create', ...)
  *     → uiHandler.handle invoca el handler de scheduler-mock (auto-wired
  *       desde scheduler-mock/module.json.ui_handlers[])
  *     → respuesta canonica { status, data | error } llega de vuelta
  *
- * Si esto pasa, carta-scheduler-poc se puede promocionar a producción
+ * Si esto pasa, carta-scheduler se puede promocionar a producción
  * cambiando solo el directorio.
  *
  * Ejecutar: node tests/integration/carta-scheduler-mqtt-request.test.js
@@ -26,7 +26,7 @@ const fs     = require('fs');
 const os     = require('os');
 
 const ModuleLoader  = require('../../core/modules/loader');
-const REAL_POC_PATH = path.resolve(__dirname, '../../modules/pizzepos/carta-scheduler-poc');
+const REAL_MODULE_PATH = path.resolve(__dirname, '../../modules/pizzepos/carta-scheduler');
 
 // ----------------------------------------------------------------- helpers
 
@@ -108,25 +108,25 @@ async function testAsync(description, fn) {
 // ----------------------------------------------------------------- tests
 
 (async () => {
-  console.log('carta-scheduler-poc — integracion con mqttRequest real\n');
+  console.log('carta-scheduler — integracion con mqttRequest real\n');
 
-  await testAsync('carta-scheduler-poc + scheduler + tarifas mock via loader real', async () => {
+  await testAsync('carta-scheduler + scheduler + tarifas mock via loader real', async () => {
     const tmpdir       = fs.mkdtempSync(path.join(os.tmpdir(), 'integ-'));
     const modulesPath  = path.join(tmpdir, 'modules');
     const projectBase  = path.join(tmpdir, 'project');
     fs.mkdirSync(projectBase, { recursive: true });
 
-    // Mock peers: scheduler (responde a addJob/deleteJob), tarifas (assign)
+    // Mock peers: scheduler (responde a scheduler.create/delete), tarifas (assign)
     writeMockPeer(path.join(modulesPath, 'scheduler'), 'scheduler', {
-      handleAddJob:    `return { status: 201, data: { job_id: 'job-' + (data.name || 'x') } };`,
-      handleDeleteJob: `return { status: 200, data: { deleted: true } };`
+      handleCreate: `return { status: 201, data: { id: 'job-' + (data.name || 'x') } };`,
+      handleDelete: `return { status: 200, data: { deleted: true } };`
     });
     writeMockPeer(path.join(modulesPath, 'tarifas'), 'tarifas', {
       handleAssign: `return { status: 200, data: { canal: data.canal, carta_id: data.carta_id, applied: true } };`
     });
 
-    // Symlink carta-scheduler-poc real (no copia, lo cargamos del directorio real)
-    fs.symlinkSync(REAL_POC_PATH, path.join(modulesPath, 'carta-scheduler-poc'));
+    // Symlink carta-scheduler real (no copia, lo cargamos del directorio real)
+    fs.symlinkSync(REAL_MODULE_PATH, path.join(modulesPath, 'carta-scheduler'));
 
     // Setup core mock + loader real
     const uiHandler = makeMockUIHandler();
@@ -144,19 +144,19 @@ async function testAsync(description, fn) {
       JSON.parse(fs.readFileSync(path.join(modulesPath, 'tarifas', 'module.json'), 'utf-8')));
 
     // Verifica que los handlers se registraron en uiHandler
-    assert.ok(uiHandler._handlers.has('scheduler.addJob'),   'scheduler.addJob handler registrado');
-    assert.ok(uiHandler._handlers.has('scheduler.deleteJob'),'scheduler.deleteJob handler registrado');
-    assert.ok(uiHandler._handlers.has('tarifas.assign'),     'tarifas.assign handler registrado');
+    assert.ok(uiHandler._handlers.has('scheduler.create'), 'scheduler.create handler registrado');
+    assert.ok(uiHandler._handlers.has('scheduler.delete'), 'scheduler.delete handler registrado');
+    assert.ok(uiHandler._handlers.has('tarifas.assign'),   'tarifas.assign handler registrado');
 
-    // Carga carta-scheduler-poc REAL (con manifest del repo)
+    // Carga carta-scheduler REAL (con manifest del repo)
     const cartaManifest = JSON.parse(fs.readFileSync(
-      path.join(REAL_POC_PATH, 'module.json'), 'utf-8'
+      path.join(REAL_MODULE_PATH, 'module.json'), 'utf-8'
     ));
     // Override path de persistencia al tmp para no contaminar repo
     const originalPersistencePath = cartaManifest.config.persistence.data_path_template;
     cartaManifest.config.persistence.data_path_template = `${projectBase}/storage/pizzepos/config`;
 
-    const carta = await loader.load('carta-scheduler-poc', REAL_POC_PATH, cartaManifest);
+    const carta = await loader.load('carta-scheduler', REAL_MODULE_PATH, cartaManifest);
 
     // Activa el proyecto (carga estado vacio del disco — ENOENT graceful)
     await carta.onProjectActivated({
@@ -164,7 +164,7 @@ async function testAsync(description, fn) {
       base_path:  projectBase
     });
 
-    // Crea una regla — esto dispara mqttRequest('scheduler', 'addJob', ...) REAL
+    // Crea una regla — esto dispara mqttRequest('scheduler', 'create', ...) REAL
     const r1 = await carta.toolCrearRegla({
       project_id: 'p-test',
       regla: {
@@ -177,15 +177,15 @@ async function testAsync(description, fn) {
     assert.strictEqual(r1.status, 201, 'crear_regla devuelve 201');
     assert.ok(r1.data.regla.id);
 
-    // Verifica que el peer scheduler recibio el addJob
+    // Verifica que el peer scheduler recibio el create
     const schedInst = loader.loadedModules.get('scheduler').instance;
-    const addJobCalls = schedInst.calls.filter(c => c.handler === 'handleAddJob');
-    assert.strictEqual(addJobCalls.length, 1, 'scheduler.addJob fue llamado 1 vez');
+    const createCalls = schedInst.calls.filter(c => c.handler === 'handleCreate');
+    assert.strictEqual(createCalls.length, 1, 'scheduler.create fue llamado 1 vez');
     // El modulo se identifica internamente como 'carta-scheduler' (sin -poc),
     // por eso el prefix del job en el scheduler usa ese name.
-    assert.ok(addJobCalls[0].data.name.startsWith('carta-scheduler:'),
-      `name del job empieza por modulo prefix (got: ${addJobCalls[0].data.name})`);
-    assert.strictEqual(addJobCalls[0].data.project_id, 'p-test');
+    assert.ok(createCalls[0].data.name.startsWith('carta-scheduler:'),
+      `name del job empieza por modulo prefix (got: ${createCalls[0].data.name})`);
+    assert.strictEqual(createCalls[0].data.project_id, 'p-test');
 
     // Simula que el job dispara → carta-scheduler crea pendiente
     const reglaId = r1.data.regla.id;
@@ -216,14 +216,14 @@ async function testAsync(description, fn) {
     assert.strictEqual(assignCalls[0].data.canal, 'mesa');
     assert.strictEqual(assignCalls[0].data.carta_id, 'dia');
 
-    // Elimina la regla — dispara scheduler.deleteJob via mqttRequest
+    // Elimina la regla — dispara scheduler.delete via mqttRequest
     const r3 = await carta.toolEliminarRegla({ project_id: 'p-test', regla_id: reglaId });
     assert.strictEqual(r3.status, 200);
-    const deleteCalls = schedInst.calls.filter(c => c.handler === 'handleDeleteJob');
-    assert.strictEqual(deleteCalls.length, 1, 'scheduler.deleteJob fue llamado 1 vez');
+    const deleteCalls = schedInst.calls.filter(c => c.handler === 'handleDelete');
+    assert.strictEqual(deleteCalls.length, 1, 'scheduler.delete fue llamado 1 vez');
 
     // Cleanup
-    await loader.unload('carta-scheduler-poc');
+    await loader.unload('carta-scheduler');
     await loader.unload('tarifas');
     await loader.unload('scheduler');
 
@@ -232,5 +232,5 @@ async function testAsync(description, fn) {
     fs.rmSync(tmpdir, { recursive: true, force: true });
   });
 
-  console.log('\ncarta-scheduler-poc integration: todos los tests pasaron ✓');
+  console.log('\ncarta-scheduler integration: todos los tests pasaron ✓');
 })().catch(err => { console.error(err); process.exit(1); });

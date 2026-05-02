@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "events",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/events.contract.json",
-    "supersedes_nota": "v1.3.0 (POC2 ai-gateway, finding F2): _publicarEvento canonico unificado — soporta variante 1 (correlation_id explicito, notas-poc) y variante 2 (auto-extract de sourcePayload, ai-gateway-poc). Sin elegir entre ambas, el helper acepta las dos formas.\n\nv1.2.0 (POC2 finding F1): añadida event_naming_subforms (domain_event vs protocol_event).\n\nv1.1.0 (POC1 notas): recommended_helpers con _publicarEvento."
+    "supersedes_nota": "v1.4.0 (POC2 ai-gateway, finding F5): añadida subscribes_declaration_shape que documenta los 6 campos canonicos de subscribes[*] en module.json. Los campos request_schema_ref / response_event / response_schema_ref son opcionales pero recomendados para protocol_event handlers — paralelos a apis[*].request_schema_ref del contrato http. Habilitan validacion declarativa del bus.\n\nv1.3.0 (POC2 F2): _publicarEvento canonico unificado.\n\nv1.2.0 (POC2 F1): event_naming_subforms (domain_event vs protocol_event).\n\nv1.1.0 (POC1): recommended_helpers."
   },
 
   "regla": "Eventos viajan por MQTT (Aedes embedded por defecto). Bus híbrido transparente al módulo. Topics jerárquicos por categoría: core/{core-id}/<categoria>/.... Cardinalidad libre (cero, uno o muchos suscriptores). Fire-and-forget. Idempotencia obligatoria en handlers. Mismo código del módulo de Casa a Manzana — la escala se decide por configuración del transporte, no por código.",
@@ -315,6 +315,48 @@
         "verbos_o_estados_permitidos": [
           "request", "response", "started", "completed", "failed", "timeout", "cancelled"
         ]
+      }
+    ]
+  },
+
+  "subscribes_declaration_shape": {
+    "descripcion": "Shape canonico de cada entry en module.json events.subscribes[*]. Los campos basicos son obligatorios; request_schema_ref y response_event son opcionales pero recomendados para protocol_event.request handlers, paralelos a apis[*].request_schema_ref del contrato http. Si presente, el bus (o middleware) valida el payload entrante ANTES de invocar al handler — ValidationError genera response canonica VALIDATION_FAILED sin tocar el codigo del modulo.",
+    "campos": [
+      {
+        "name": "event",
+        "type": "string (event name)",
+        "obligatorio_si": "siempre",
+        "descripcion": "Nombre canonico del evento al que se suscribe. Sigue event_naming_subforms (domain_event o protocol_event)."
+      },
+      {
+        "name": "handler",
+        "type": "string (method name)",
+        "obligatorio_si": "siempre",
+        "descripcion": "Nombre del metodo del modulo que recibe el payload. Convencion: on<EventNameCamelCase> (onLlmCompleteRequest, onCredentialResponse)."
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "obligatorio_si": "recomendado",
+        "descripcion": "Descripcion humana de cuando dispara este handler y que hace. Util para auditoria."
+      },
+      {
+        "name": "request_schema_ref",
+        "type": "string (path al JSON Schema)",
+        "obligatorio_si": "opcional, recomendado para protocol_event.request",
+        "descripcion": "Path al JSON Schema del payload entrante. Si presente, el bus o middleware valida ANTES de invocar el handler. ValidationError genera response canonica VALIDATION_FAILED automaticamente. Paralelo a apis[*].request_schema_ref del contrato http."
+      },
+      {
+        "name": "response_event",
+        "type": "string (event name)",
+        "obligatorio_si": "opcional, recomendado para protocol_event.request",
+        "descripcion": "Nombre del evento de response que el handler publica. Tipicamente <module>.<intent>.response. Documenta la pareja request/response y permite a la auditoria detectar protocolos incompletos (request declarado sin response correspondiente)."
+      },
+      {
+        "name": "response_schema_ref",
+        "type": "string (path al JSON Schema)",
+        "obligatorio_si": "opcional, junto con response_event",
+        "descripcion": "Path al JSON Schema de la response que el handler publica. Permite validacion automatica de salida y autodocumentacion del protocolo."
       }
     ]
   }

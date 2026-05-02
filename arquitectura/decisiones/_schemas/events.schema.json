@@ -273,6 +273,31 @@
           "items": { "$ref": "#/$defs/event_subform" }
         }
       }
+    },
+
+    "subscribes_declaration_shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["descripcion", "campos"],
+      "properties": {
+        "descripcion": { "type": "string", "minLength": 30 },
+        "campos": {
+          "type": "array",
+          "minItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "type", "obligatorio_si", "descripcion"],
+            "properties": {
+              "name":           { "type": "string", "pattern": "^[a-z][a-z_]*$" },
+              "type":           { "type": "string", "minLength": 3 },
+              "obligatorio_si": { "type": "string", "minLength": 5 },
+              "descripcion":    { "type": "string", "minLength": 10 }
+            }
+          }
+        }
+      }
     }
   },
 

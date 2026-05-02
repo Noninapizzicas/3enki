@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "http",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/http.contract.json",
-    "supersedes_nota": "v1.2.0 (POC4 cocina, findings F1+F7): añadida handler_signature que formaliza la firma canonica del handler HTTP (async handleX(req): {status, data | error}) + el shape canonico de req (params, body, query, headers, method, path, correlation_id?, project_id?, auth?). Sin esto, dos modulos no son interoperables con el mismo gateway. Validado en POC4 cocina-poc.\n\nv1.1.0 (POC2 F7): fetch inyectable en HTTP-client.\n\nv1.0.0: primera version."
+    "supersedes_nota": "v1.3.0 (POC4 finding F2): añadida validation_enforcement que documenta como el gateway HTTP enforce request_schema_ref / response_schema_ref declarados en module.json. Request validation falla → 400 VALIDATION_FAILED automatico SIN invocar handler. Response validation con modos strict/warn/off (default warn). Cierra disciplina paralela a subscribes_declaration_shape del contrato events.\n\nv1.2.0 (POC4 F1+F7): handler_signature canonica.\n\nv1.1.0 (POC2 F7): fetch inyectable.\n\nv1.0.0: primera version."
   },
 
   "regla": "HTTP es la frontera externa del core. Cruza el límite del proceso. Internamente, MQTT. Tres casos legítimos: CLI, UI web, integración externa. Routing canónico /modules/<slug>/<path>. Response usa shape canónico de errors.json. Timeouts y telemetría obligatorios en cliente. Errores externos mapeados a códigos canónicos. Un único HTTP server en el core.",
@@ -359,6 +359,30 @@
       "localhost:3000",
       "fetch.*modules"
     ]
+  },
+
+  "validation_enforcement": {
+    "regla": "Cuando un endpoint declara request_schema_ref / response_schema_ref en module.json, el gateway HTTP central VALIDA el payload contra ese schema automaticamente. El handler no escribe codigo de validacion manual. Si el payload entrante no valida, el gateway responde 400 VALIDATION_FAILED canonico SIN invocar al handler. Esto cierra la disciplina: validacion declarativa, paralela a subscribes_declaration_shape.request_schema_ref del contrato events.",
+    "request_validation": {
+      "mecanismo": "El gateway carga el JSON Schema referenciado por apis[*].request_schema_ref en onLoad del modulo. Por cada request entrante a ese endpoint: (1) parsea body, (2) compila + valida con AJV strict, (3) si falla → 400 sin tocar handler.",
+      "cuando":    "Solo si apis[*].request_schema_ref esta declarado. Sin declaracion, el handler valida manualmente (no recomendado, drift detectable).",
+      "fallo_devuelve": {
+        "status":           400,
+        "code":             "VALIDATION_FAILED",
+        "message_template": "Request body does not match schema for <path>: <error de AJV>",
+        "details":          "{ kind: 'domain', field: <ruta JSON-pointer del campo invalido>, schema_ref: <path>, errors: [<lista AJV>] }"
+      },
+      "ejemplo": "module.json: { \"method\": \"POST\", \"path\": \"/modules/cocina/items/:item_id/preparar\", \"request_schema_ref\": \"./schemas/preparar-item-request.json\" }\n→ Si body = { /* sin pedido_id */ }, gateway responde 400 con error.code=VALIDATION_FAILED automaticamente. handlePrepararItem NUNCA se invoca."
+    },
+    "response_validation": {
+      "mecanismo": "Igual que request, pero sobre el shape devuelto por el handler. Comprueba que el handler devuelve { status, data } o { status, error } y opcionalmente que data matchea response_schema_ref.",
+      "modo_default": "warn",
+      "modos": [
+        { "id": "strict", "comportamiento": "Si la response no valida, el gateway devuelve 500 INTERNAL_ERROR al cliente (proteccion: el modulo NO puede mandar shape rota al exterior). Recomendado en produccion." },
+        { "id": "warn",   "comportamiento": "El gateway loggea warn + metric pero deja pasar la response al cliente. Util en desarrollo y migracion gradual." },
+        { "id": "off",    "comportamiento": "Sin validacion de response. El handler es responsable. Solo para casos legacy donde el shape no esta estabilizado." }
+      ]
+    }
   },
 
   "handler_signature": {

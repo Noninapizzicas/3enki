@@ -182,6 +182,59 @@
       }
     },
 
+    "validation_enforcement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regla", "request_validation", "response_validation"],
+      "properties": {
+        "regla": { "type": "string", "minLength": 30 },
+        "request_validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mecanismo", "cuando", "fallo_devuelve", "ejemplo"],
+          "properties": {
+            "mecanismo":     { "type": "string", "minLength": 30 },
+            "cuando":        { "type": "string", "minLength": 20 },
+            "fallo_devuelve": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "code", "message_template", "details"],
+              "properties": {
+                "status":           { "type": "integer", "minimum": 400, "maximum": 499 },
+                "code":             { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*[A-Z0-9]$" },
+                "message_template": { "type": "string", "minLength": 5 },
+                "details":          { "type": "string", "minLength": 5 }
+              }
+            },
+            "ejemplo":       { "type": "string", "minLength": 30 }
+          }
+        },
+        "response_validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mecanismo", "modo_default", "modos"],
+          "properties": {
+            "mecanismo":    { "type": "string", "minLength": 30 },
+            "modo_default": { "enum": ["strict", "warn", "off"] },
+            "modos": {
+              "type": "array",
+              "minItems": 2,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "comportamiento"],
+                "properties": {
+                  "id":            { "enum": ["strict", "warn", "off"] },
+                  "comportamiento": { "type": "string", "minLength": 20 }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
     "handler_signature": {
       "type": "object",
       "additionalProperties": false,

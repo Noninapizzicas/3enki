@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "events",
-    "version": "1.1.0",
-    "creado_en": "2026-04-30",
+    "version": "1.2.0",
+    "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/events.contract.json",
-    "supersedes_nota": "v1.1.0 (POC iteration): añadida sección recommended_helpers con patrón canónico _publicarEvento(). Clarificación 2v3 partes en topic_structure del contrato. Validado en modules/notas-poc/."
+    "supersedes_nota": "v1.2.0 (POC2 ai-gateway, finding F1): añadida sección event_naming_subforms que distingue 'domain_event' (verbo pasado, hecho consumado) de 'protocol_event' (request/response sobre bus normal). Sin esta distincion el validator marcaria drift en módulos legitimos como ai-gateway (llm.complete.request) y credential-manager (credential.resolve.request).\n\nv1.1.0 (POC1 notas): añadida sección recommended_helpers con _publicarEvento. Clarificación 2v3 partes en topic_structure."
   },
 
   "regla": "Eventos viajan por MQTT (Aedes embedded por defecto). Bus híbrido transparente al módulo. Topics jerárquicos por categoría: core/{core-id}/<categoria>/.... Cardinalidad libre (cero, uno o muchos suscriptores). Fire-and-forget. Idempotencia obligatoria en handlers. Mismo código del módulo de Casa a Manzana — la escala se decide por configuración del transporte, no por código.",
@@ -278,5 +278,44 @@
       "uso_en_handler": "await this._publicarEvento('notas.creado', { nota_id, titulo }, context?.correlationId);",
       "validado_en_poc": "modules/notas-poc/index.js _publicarEvento (línea ~390)"
     }
-  ]
+  ],
+
+  "event_naming_subforms": {
+    "descripcion": "Dentro de la categoria 'events' (topic core/{core-id}/events/...), el nombre del evento puede seguir DOS sub-formas legitimas. Distinguirlas evita marcar drift en eventos request/response sobre el bus normal (POC2 ai-gateway, finding F1).",
+    "subforms": [
+      {
+        "id": "domain_event",
+        "name_pattern": "<module>.<entity>.<verb-pasado>",
+        "descripcion": "Evento de hecho consumado: algo paso, se cuenta. El verbo va en pasado para reflejar que el hecho ya ocurrio. Es la forma por defecto. El handler que lo emite NO espera respuesta — fire-and-forget.",
+        "ejemplos_canonicos": [
+          "notas.creado",
+          "pedido.confirmado",
+          "gateway.started",
+          "device.found",
+          "session.expired",
+          "build.completed"
+        ],
+        "verbos_o_estados_permitidos": [
+          "creado", "actualizado", "eliminado", "iniciado", "completado", "fallido",
+          "found", "lost", "started", "stopped", "saved", "deleted", "updated", "completed", "failed"
+        ]
+      },
+      {
+        "id": "protocol_event",
+        "name_pattern": "<module>.<intent>.<protocol-state>",
+        "descripcion": "Evento de protocolo en el bus normal (eventBus.publish, NO mqttRequest). Simula un patron request/response sobre el mismo bus que los eventos de dominio. <intent> es la accion solicitada (resolve, complete, fetch, save). <protocol-state> es la fase del protocolo (request, response, started, completed, failed, timeout). El emisor del .request espera escuchar el .response, correlacionado por request_id.",
+        "ejemplos_canonicos": [
+          "llm.complete.request",
+          "llm.complete.response",
+          "credential.resolve.request",
+          "credential.resolve.response",
+          "fs.read.request",
+          "fs.read.response"
+        ],
+        "verbos_o_estados_permitidos": [
+          "request", "response", "started", "completed", "failed", "timeout", "cancelled"
+        ]
+      }
+    ]
+  }
 }

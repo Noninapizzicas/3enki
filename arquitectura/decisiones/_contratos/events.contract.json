@@ -1,9 +1,9 @@
 {
   "_doc": "Captura LA forma canónica de comunicarse entre módulos del sistema event-core: emite y desentiende. Un evento se lanza al espacio. Lo escuchan quienes están suscritos — pueden ser doscientos, uno o ninguno. El emisor sabe qué pasó. El receptor sabe cómo reaccionar. Nadie hilvana a nadie. Caos ordenado. Este contrato es la primera pieza de la base que sirve igual para Casa (un proceso) que Manzana (N cores distribuidos).",
   "id": "events",
-  "version": "1.1.0",
-  "creada": "2026-04-30",
-  "supersedes_nota": "v1.1.0 (POC iteration): clarificación 2-partes vs 3-partes en topic_structure (single-entity vs multi-entity modules). Añadida sección recommended_helpers en output con patrón canónico _publicarEvento (auto-timestamp + correlation_id). Validado en modules/notas-poc/.",
+  "version": "1.2.0",
+  "creada": "2026-05-02",
+  "supersedes_nota": "v1.2.0 (POC2 ai-gateway, finding F1): añadida sección event_naming_subforms al output que distingue 'domain_event' (<module>.<entity>.<verb-pasado>) de 'protocol_event' (<module>.<intent>.<protocol-state>). Los protocol_events son legitimos sobre el bus normal (eventBus.publish): patrón request/response que credential-manager, filesystem y ai-gateway ya usan en producción. Sin esta distincion el validator marcaria como drift los nombres tipo 'llm.complete.request' que son canónicos.\n\nv1.1.0 (POC1 notas): clarificación 2-partes vs 3-partes en topic_structure. Añadida recommended_helpers con _publicarEvento.",
 
   "objetivo": "Establecer el patrón único, mecánicamente validable, de comunicación entre módulos. Producir UN JSON output (_outputs/events.json) que contiene las reglas concretas: canales permitidos, forma de los topics, QoS por categoría, política de retain, Last-Will, descubrimiento. Servir de espina dorsal para cualquier reescritura: si una decisión técnica contradice este contrato, gana el contrato.",
 

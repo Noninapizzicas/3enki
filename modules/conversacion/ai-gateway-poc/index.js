@@ -56,7 +56,8 @@ class AiGateway {
       logger:            this.logger,
       metrics:           this.metrics,
       resolveCredential: (ref, projectId) => this._resolveCredential(ref, projectId),
-      moduleName:        this.name
+      moduleName:        this.name,
+      fetch:             context.fetch  // F7: opcional, undefined → DeepSeekClient usa global.fetch
     }));
 
     this.logger.info(`${this.name}.loaded`, {

@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "http",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/http.contract.json",
-    "supersedes_nota": "Primera versión. Recoge el patrón ya implementado en core/gateway/http.js (HTTP server único) y los clientes HTTP de los módulos (cli/client.js, ai-gateway providers, etc.) y formaliza la regla 'HTTP solo en frontera, MQTT internamente'."
+    "supersedes_nota": "v1.1.0 (POC2 ai-gateway, finding F7): añadida regla 'fetch inyectable en constructor del cliente' al modo http-client. Permite tests reproducibles sin contaminar global.fetch (o equivalente). Patron: new HttpClient({ ...config, fetch: customFetchOrUndefined }).\n\nv1.0.0: primera version, patron HTTP server unico + clients ya implementados."
   },
 
   "regla": "HTTP es la frontera externa del core. Cruza el límite del proceso. Internamente, MQTT. Tres casos legítimos: CLI, UI web, integración externa. Routing canónico /modules/<slug>/<path>. Response usa shape canónico de errors.json. Timeouts y telemetría obligatorios en cliente. Errores externos mapeados a códigos canónicos. Un único HTTP server en el core.",
@@ -60,7 +60,8 @@
         "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_AUTH_FAILED, 429→UPSTREAM_RATE_LIMITED, 5xx→UPSTREAM_5XX, network→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT.",
         "Body limit en respuesta: configurable. Excediendo → UPSTREAM_PAYLOAD_TOO_LARGE.",
         "TLS validation activa por defecto. rejectUnauthorized:false requiere justificación documentada en module.json.",
-        "Cache opcional con TTL e invalidación declarada (similar a eviction_strategy de persistence)."
+        "Cache opcional con TTL e invalidación declarada (similar a eviction_strategy de persistence).",
+        "fetch (o equivalente HTTP) ACEPTADO como inyeccion opcional en el constructor del cliente para tests reproducibles. Por defecto el cliente usa global.fetch; en tests se inyecta un mock. Sin contaminar global.fetch. Patron canonico: new HttpClient({ ...config, fetch: customFetchOrUndefined })."
       ],
       "ejemplo_request": "const resp = await fetch(url, {\n  method:'POST',\n  headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },\n  body: JSON.stringify(payload),\n  signal: AbortSignal.timeout(this.config.http_clients.openai.timeout_ms)\n});",
       "ejemplo_response_ok": "Si externo devuelve 200: parsea, valida shape esperado, devuelve { status: 200, data: parsed } al caller del bus.",

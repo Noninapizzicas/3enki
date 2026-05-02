@@ -22,11 +22,14 @@ class DeepSeekClient {
    * @param {Object} args
    * @param {Object} args.config              — entry de module.json.config.http_clients[deepseek]
    * @param {Object} args.logger              — logger structured json
-   * @param {Object} args.metrics             — metrics (histogram/increment/observe)
+   * @param {Object} args.metrics             — metrics (API canonica: increment/gauge/timing)
    * @param {Function} args.resolveCredential — async (credentialRef, projectId) => apiKey | throws
    * @param {string} args.moduleName          — nombre del modulo emisor para signatures
+   * @param {Function} [args.fetch]           — fetch inyectable para tests (default: global.fetch).
+   *                                            Patron canonico del contrato http v1.1.0 (F7):
+   *                                            permite mocks sin contaminar global.fetch.
    */
-  constructor({ config, logger, metrics, resolveCredential, moduleName = 'ai-gateway' }) {
+  constructor({ config, logger, metrics, resolveCredential, moduleName = 'ai-gateway', fetch: fetchImpl }) {
     if (!config)            throw new Error('DeepSeekClient: config (http_clients entry) is required');
     if (!config.timeout_ms) throw new Error('DeepSeekClient: config.timeout_ms is required (mandatory_timeout_in_http_client)');
     this.config            = config;
@@ -34,6 +37,10 @@ class DeepSeekClient {
     this.metrics           = metrics;
     this.resolveCredential = resolveCredential;
     this.moduleName        = moduleName;
+    this._fetch            = fetchImpl || (typeof fetch === 'function' ? fetch : null);
+    if (!this._fetch) {
+      throw new Error('DeepSeekClient: fetch is not available (Node 18+ required, or inject fetch in constructor)');
+    }
   }
 
   /**
@@ -127,7 +134,7 @@ class DeepSeekClient {
 
     let response, statusCode = 0;
     try {
-      response = await fetch(url, {
+      response = await this._fetch(url, {
         method,
         headers,
         body: JSON.stringify(body),

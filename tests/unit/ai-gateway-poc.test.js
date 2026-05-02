@@ -75,9 +75,14 @@ function findResponse(published, request_id) {
   return r ? r[1] : null;
 }
 
-function setFetch(handler) {
-  global.fetch = handler;
-}
+// F7: fetch inyectable. Cada test asigna su handler via setFetch() y el proxy
+// lo pasa al onLoad como context.fetch. Sin contaminar global.fetch.
+// Default: si un test no llama setFetch, fetch lanza (sirve para tests donde
+// la llamada nunca llega a fetch — validation, credential timeout, etc.).
+let currentFetch = async () => { throw new Error('fetch called but no setFetch in test'); };
+function setFetch(handler) { currentFetch = handler; }
+function resetFetch()       { currentFetch = async () => { throw new Error('fetch called but no setFetch in test'); }; }
+const fetchProxy = (...args) => currentFetch(...args);
 
 function ok200Body(content = 'pong', model = 'deepseek-chat') {
   return {
@@ -119,7 +124,7 @@ async function testAsync(description, fn) {
   await testAsync('VALIDATION_FAILED: payload sin request_id', async () => {
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ messages: [{ role: 'user', content: 'x' }] });
     const r = mocks.published.find(p => p[0] === 'llm.complete.response');
@@ -133,7 +138,7 @@ async function testAsync(description, fn) {
   await testAsync('VALIDATION_FAILED: payload sin messages', async () => {
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r1' });
     const r = findResponse(mocks.published, 'r1');
@@ -146,7 +151,7 @@ async function testAsync(description, fn) {
   await testAsync('VALIDATION_FAILED: messages array vacio', async () => {
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r1', messages: [] });
     const r = findResponse(mocks.published, 'r1');
@@ -161,7 +166,7 @@ async function testAsync(description, fn) {
     setFetch(async () => ok200Body('pong'));
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r2', messages: [{ role: 'user', content: 'ping' }] });
     const r = findResponse(mocks.published, 'r2');
@@ -177,7 +182,7 @@ async function testAsync(description, fn) {
     setFetch(async () => ok200Body());
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({
       request_id: 'r2b',
@@ -195,7 +200,7 @@ async function testAsync(description, fn) {
     setFetch(async () => ok200Body());
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r3a', messages: [{ role: 'user', content: 'a' }], project_id: 'p1' });
     const credReqsBefore = mocks.published.filter(p => p[0] === 'credential.resolve.request').length;
@@ -210,7 +215,7 @@ async function testAsync(description, fn) {
     setFetch(async () => ok200Body());
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r4', messages: [{ role: 'user', content: 'a' }], project_id: 'p2' });
     assert.strictEqual(m.credentialCache.size, 1);
@@ -223,7 +228,7 @@ async function testAsync(description, fn) {
     setFetch(async () => ok200Body());
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r5a', messages: [{ role: 'user', content: 'a' }], project_id: 'p1' });
     await m.onLlmCompleteRequest({ request_id: 'r5b', messages: [{ role: 'user', content: 'b' }], project_id: 'p2' });
@@ -239,7 +244,7 @@ async function testAsync(description, fn) {
     setFetch(async () => errResponse(401, { error: { message: 'Invalid API key' } }));
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r6', messages: [{ role: 'user', content: 'x' }] });
     const r = findResponse(mocks.published, 'r6');
@@ -254,7 +259,7 @@ async function testAsync(description, fn) {
     setFetch(async () => errResponse(429, { error: { message: 'Rate limit' } }));
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     // Sobrescribe retry para test rapido (sin backoff real)
     moduleConfig.http_clients[0].retry = { max_attempts: 1, backoff_ms: 0, retryable_status: [429] };
@@ -269,7 +274,7 @@ async function testAsync(description, fn) {
     setFetch(async () => errResponse(500, { error: { message: 'oops' } }));
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     moduleConfig.http_clients[0].retry = { max_attempts: 1, backoff_ms: 0, retryable_status: [] };
     await m.onLlmCompleteRequest({ request_id: 'r8', messages: [{ role: 'user', content: 'x' }] });
@@ -283,7 +288,7 @@ async function testAsync(description, fn) {
     setFetch(async () => ({ status: 200, text: async () => '<<<not_json>>>' }));
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     moduleConfig.http_clients[0].retry = { max_attempts: 1, backoff_ms: 0, retryable_status: [] };
     await m.onLlmCompleteRequest({ request_id: 'r9', messages: [{ role: 'user', content: 'x' }] });
@@ -299,7 +304,7 @@ async function testAsync(description, fn) {
     setFetch(async () => { const e = new Error('ECONNREFUSED'); e.name = 'TypeError'; throw e; });
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     moduleConfig.http_clients[0].retry = { max_attempts: 1, backoff_ms: 0, retryable_status: [] };
     await m.onLlmCompleteRequest({ request_id: 'r10', messages: [{ role: 'user', content: 'x' }] });
@@ -313,7 +318,7 @@ async function testAsync(description, fn) {
     setFetch(async () => { const e = new Error('aborted'); e.name = 'TimeoutError'; throw e; });
     const mocks = makeMocks();
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     moduleConfig.http_clients[0].retry = { max_attempts: 1, backoff_ms: 0, retryable_status: [] };
     await m.onLlmCompleteRequest({ request_id: 'r11', messages: [{ role: 'user', content: 'x' }] });
@@ -332,7 +337,7 @@ async function testAsync(description, fn) {
     // Acelera el timeout para no esperar 5s
     const cfg = JSON.parse(JSON.stringify(moduleConfig));
     cfg.credential_resolve_timeout_ms = 50;
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig: cfg });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig: cfg, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r12', messages: [{ role: 'user', content: 'x' }] });
     const r = findResponse(mocks.published, 'r12');
@@ -345,7 +350,7 @@ async function testAsync(description, fn) {
     const mocks = makeMocks();
     mocks.setCredentialResponse({ error: 'no credentials configured' });
     const m = new AiGateway();
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r13', messages: [{ role: 'user', content: 'x' }] });
     const r = findResponse(mocks.published, 'r13');
@@ -361,7 +366,7 @@ async function testAsync(description, fn) {
     const m = new AiGateway();
     const cfg = JSON.parse(JSON.stringify(moduleConfig));
     cfg.credential_resolve_timeout_ms = 60000; // largo, no expira en el test
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig: cfg });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig: cfg, fetch: fetchProxy });
     bindBusToModule(mocks, m);
 
     // Disparar un request sin esperar la response. La promise se va a rechazar
@@ -385,7 +390,7 @@ async function testAsync(description, fn) {
     const m = new AiGateway();
     const cfg = JSON.parse(JSON.stringify(moduleConfig));
     cfg.http_clients[0].retry = { max_attempts: 1, backoff_ms: 0, retryable_status: [] };
-    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig: cfg });
+    await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig: cfg, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r15', messages: [{ role: 'user', content: 'x' }] });
     // Buscar log que loguea headers

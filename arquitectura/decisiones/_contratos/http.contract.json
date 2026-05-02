@@ -267,5 +267,38 @@
       "ejemplo_drift_actual": null,
       "alternativa_correcta": "El handler HTTP de X publica el evento que Y escucha (eventBus.publish('y.entidad.verbo', payload)) o hace mqttRequest('y', 'accion', payload) si necesita respuesta sincrónica."
     }
-  ]
+  ],
+
+  "output_shape_resumen": "Ver _schemas/http.schema.json. Top-level: _meta, regla (frase maestra), modos (array de 2: http-server y http-client con sus reglas, ejemplos request/response, módulos audit, infraestructura existente), reglas_universales (que aplican a ambos modos: response shape canónico, redacción de secretos, telemetría, no intra-core HTTP), routing_canonical (descripción del patrón /modules/<slug>/<path> + reglas de mapeo verbo→método), module_declaration_shape (cómo declarar config.apis y config.http_clients en module.json), status_code_mapping_to_canonical (cómo se mapean los HTTP status codes a errors.status_codes y los errores externos a errors.codes_infrastructure), detection_patterns (regex y listas usadas por el validator).",
+
+  "reglas_de_extraccion": [
+    "Definir _meta con convencion='http', version (semver), creado_en (date), contrato_referencia (path al contrato).",
+
+    "Definir regla como frase maestra. Ejemplo: 'HTTP es la frontera externa del core. Cruza el límite del proceso. Internamente, MQTT. Tres casos legítimos: CLI, UI web, integración externa. Routing canónico /modules/<slug>/<path>. Response usa shape canónico de errors.json. Timeouts y telemetría obligatorios en cliente. Errores externos mapeados a códigos canónicos. Un único HTTP server en el core.'.",
+
+    "Definir modos como array de exactamente 2 entradas: http-server y http-client. Cada una con: id (enum cerrado), nombre, descripcion, donde_aplica, reglas (array de strings, ≥5 cada uno), ejemplo_request, ejemplo_response_ok, ejemplo_response_error, ejemplo_modulos_audit (array de slugs reales), infraestructura_existente.",
+
+    "Definir reglas_universales como array de reglas que aplican a AMBOS modos (server y client). Ejemplos: response shape canónico, telemetría obligatoria, redacción de secretos, no intra-core HTTP. Cada regla con id, descripcion, viola_si_no_se_cumple (ids de principios o prohibiciones), aplica_a_modos (['*'] o lista de modos).",
+
+    "Definir routing_canonical como objeto: { patron (string ej. '/modules/<slug>/<path>'), reglas_de_mapeo_verbo_metodo (array describiendo GET/POST/PUT/DELETE), prefijos_prohibidos (array: ['/api', '/v1', '/handler']), slug_format ('kebab-case por naming.json'), path_format ('kebab-case, sin verbos imperativos') }.",
+
+    "Definir module_declaration_shape como objeto con dos sub-shapes: apis_shape (cómo declarar endpoints expuestos por el módulo en module.json — name, ruta, method, auth_required, request_schema_ref, response_schema_ref, descripcion) y http_clients_shape (cómo declarar dependencias HTTP salientes — host, base_url, timeout_ms, retry, tls_verify, auth_method, descripcion).",
+
+    "Definir status_code_mapping_to_canonical como objeto: { from_http_to_errors_json (mapeo de status HTTP recibido del externo a entrada en errors.codes_infrastructure: 401→UPSTREAM_AUTH_FAILED, 429→UPSTREAM_RATE_LIMITED, 5xx→UPSTREAM_5XX, etc.), local_status_codes_used (lista de status que el HTTP-server del core usa, todos ⊆ errors.status_codes) }.",
+
+    "Definir detection_patterns como objeto con las heurísticas del validator. Claves: localhost_target_regex (regex que detecta llamadas HTTP a localhost / 127.0.0.1 / 0.0.0.0 — drift potencial intra-core), module_owns_listener_regex (createServer / express() / fastify( fuera de core/), non_canonical_response_keys (['ok','success','result'] heredado de errors), fetch_without_timeout_regex (fetch( sin signal/timeout/AbortSignal cerca), secret_in_query_param_regex (URLs con keys sensibles en query string), authorization_header_log_regex (logger con headers sin redactar), unmapped_upstream_error_indicators (return error con .message del upstream), bus_replaced_by_http_indicators (handler HTTP que hace fetch a /modules/<otro>)."
+  ],
+
+  "derivaciones": {
+    "endpoint_es_canonical": "true si la ruta empieza por /modules/<slug>/ donde slug coincide con el directorio del módulo y el método HTTP es coherente con el verbo declarado.",
+    "tiene_timeout_declarado": "true si la llamada HTTP cliente incluye signal/timeout/AbortSignal en options o si module.json.config.http_clients[*].timeout_ms está definido para el host destino.",
+    "esta_declarada_auth": "true si module.json.config.apis[*].auth_required existe y ∈ {none, mtls, bearer, basic}.",
+    "respuesta_es_canonical": "true si el handler HTTP devuelve un objeto con exactamente { status, data } o { status, error } donde status es código numérico ∈ errors.status_codes.",
+    "cliente_mapea_errores_canonicos": "true si en el catch del HTTP-client el código del error devuelto al caller del bus ∈ errors.codes_infrastructure (UPSTREAM_*).",
+    "secretos_no_en_url": "true si las URLs construidas por el módulo NO incluyen tokens/keys/passwords en query params (sólo en headers).",
+    "telemetria_en_handler": "true si el handler HTTP del módulo tiene this.logger + this.metrics en proximidad de la respuesta (similar a auto_observable_errors).",
+    "telemetria_en_cliente": "true si la llamada HTTP saliente tiene this.logger + this.metrics en proximidad (con label host y status).",
+    "es_intra_core_http": "true si la URL destino apunta a localhost / 127.0.0.1 / 0.0.0.0 / al host del propio gateway. Drift estructural.",
+    "tiene_listener_propio": "true si el código del módulo contiene http.createServer / express() / fastify(/ new Server( fuera del gateway central."
+  }
 }

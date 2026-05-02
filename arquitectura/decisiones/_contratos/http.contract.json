@@ -300,5 +300,117 @@
     "telemetria_en_cliente": "true si la llamada HTTP saliente tiene this.logger + this.metrics en proximidad (con label host y status).",
     "es_intra_core_http": "true si la URL destino apunta a localhost / 127.0.0.1 / 0.0.0.0 / al host del propio gateway. Drift estructural.",
     "tiene_listener_propio": "true si el código del módulo contiene http.createServer / express() / fastify(/ new Server( fuera del gateway central."
-  }
+  },
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "http_json_estructura_valida",
+      "regla": "http.json valida estructuralmente contra http.schema.json (AJV strict, additionalProperties=false en todos los niveles).",
+      "como_detectar": "Cargar el schema, compilar con AJV strict, validar el output. Cualquier error de schema bloquea PASS.",
+      "severidad": "error",
+      "fuentes": ["arquitectura/decisiones/_outputs/http.json", "arquitectura/decisiones/_schemas/http.schema.json"]
+    },
+    {
+      "id": "drift_intra_core_http_call",
+      "regla": "Ningún módulo realiza llamadas HTTP a localhost / 127.0.0.1 / 0.0.0.0 / al host del propio gateway. Si lo hace, debería usar el bus.",
+      "como_detectar": "Regex en código de módulos: 'fetch\\(|http\\.request\\(|axios\\.\\w+\\(|got\\.\\w+\\(' donde el primer arg contenga 'localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|:3000|/modules/'. Cruzar con audit dependencias_externas.",
+      "severidad": "error",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "intra_core_http_call (prohibido), mqtt_for_intra_core_communication (principio)",
+      "ejemplo_drift_actual": "cli/client.js es el caso legítimo único — está fuera de modules/."
+    },
+    {
+      "id": "drift_module_owns_http_listener",
+      "regla": "Ningún módulo levanta su propio HTTP server (express/fastify/http.createServer/new Server). El único listener válido vive en core/gateway/http.js.",
+      "como_detectar": "Regex en modules/: 'http\\.createServer|express\\(\\)|fastify\\(|new\\s+Server\\(' donde el path NO sea core/. Excepción: librerías externas que internamente lo usen (verificar que no es el módulo el que lo invoca).",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "module_owns_http_listener (prohibido), single_http_server_in_core (principio)"
+    },
+    {
+      "id": "drift_non_canonical_routing",
+      "regla": "Toda ruta declarada en module.json.config.apis[*].ruta empieza por /modules/<slug>/ donde slug coincide con el directorio del módulo. Sin /api ni /v1. Sin verbos imperativos en el path.",
+      "como_detectar": "Inspeccionar audit modulo-completo.apis_http[*].ruta. Si no empieza por /modules/<slug>/, drift. Si contiene 'crear|eliminar|actualizar|borrar' y existe método HTTP equivalente, drift de verbo en URL.",
+      "severidad": "warning",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "modules/*/module.json"],
+      "viola": "non_canonical_routing (prohibido), canonical_routing_modules_slug_path (principio)"
+    },
+    {
+      "id": "drift_fetch_without_timeout",
+      "regla": "Ninguna llamada HTTP saliente (fetch, http.request, axios, got) carece de timeout explícito (signal/timeout/AbortSignal en options).",
+      "como_detectar": "Regex multi-línea: ubicar 'fetch\\(|http\\.request\\(|axios\\.\\w+\\(|got\\.\\w+\\(' y verificar que en el bloque de opciones (~10 líneas siguientes) aparece 'timeout|signal|AbortSignal|setTimeout'.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js", "modules/*/providers/**/*.js"],
+      "viola": "fetch_without_timeout (prohibido), mandatory_timeout_in_http_client (principio)",
+      "ejemplo_drift_actual": "Esperable en ai-gateway providers (base-provider.js) y otros módulos clientes — verificar tras ejecución."
+    },
+    {
+      "id": "drift_secret_in_url_query_param",
+      "regla": "Ninguna URL construida por un módulo incluye tokens/keys/passwords como query params. Severidad ERROR — riesgo de seguridad.",
+      "como_detectar": "Regex: URLs en template literals con patrones '?(token|api_key|password|secret|key)=${...}' o equivalentes. Cruzar con detection_patterns.secret_in_persistence_field_names heredado.",
+      "severidad": "error",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "secret_in_url_query_param (prohibido), secret_redaction_in_urls_and_headers (principio)"
+    },
+    {
+      "id": "drift_authorization_header_logged",
+      "regla": "Ninguna llamada a logger pasa headers HTTP completos sin redactar (Authorization, X-API-Key, Cookie, Set-Cookie).",
+      "como_detectar": "Regex: 'logger\\.\\w+\\([^)]*headers' o 'JSON\\.stringify\\(headers' donde NO haya función _redactHeaders / sanitize aplicada antes.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js"],
+      "viola": "log_authorization_header_unredacted (prohibido), secret_redaction_in_urls_and_headers (principio)"
+    },
+    {
+      "id": "drift_no_telemetry_on_http_handler",
+      "regla": "Cada handler HTTP de módulo emite log + métrica. Coherente con auto_observable_errors de errors.contract.",
+      "como_detectar": "Para cada api declarada en module.json, localizar el handler en código y verificar presencia de this.logger.X y this.metrics.X dentro del bloque del handler.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/module.json"],
+      "viola": "no_telemetry_on_http_request (prohibido), mandatory_telemetry_on_http (principio)"
+    },
+    {
+      "id": "drift_no_telemetry_on_http_client_call",
+      "regla": "Cada llamada HTTP saliente emite log + métrica de duración con label host y status.",
+      "como_detectar": "Localizar fetch/http.request en código, verificar que 5 líneas antes/después haya this.logger y this.metrics con label 'host' o equivalente.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js", "modules/*/providers/**/*.js"],
+      "viola": "no_telemetry_on_http_request (prohibido), mandatory_telemetry_on_http (principio)"
+    },
+    {
+      "id": "drift_external_error_propagated_raw",
+      "regla": "En catch alrededor de fetch/http.request, el error devuelto al caller del bus usa código canónico de errors.codes_infrastructure (UPSTREAM_*), no el mensaje raw del externo.",
+      "como_detectar": "Regex en catch alrededor de I/O HTTP: presencia de 'error.message' / 'response.text()' / 'response.statusText' propagados directamente al return SIN mapeo a UPSTREAM_*. Severidad warning porque hay falsos positivos.",
+      "severidad": "warning",
+      "fuentes": ["modules/*/index.js", "modules/*/lib/**/*.js", "modules/*/providers/**/*.js"],
+      "viola": "external_error_propagated_raw (prohibido), external_errors_mapped_to_canonical_codes (principio)"
+    },
+    {
+      "id": "drift_auth_undeclared",
+      "regla": "Cada api declarada en module.json tiene config.apis[*].auth_required ∈ {none, mtls, bearer, basic}. Sin declaración explícita es info — el endpoint se asume público pero el manifest debería ser explícito.",
+      "como_detectar": "Inspeccionar manifest: si apis[*].auth_required ausente, info finding sugiriendo declaración explícita.",
+      "severidad": "info",
+      "fuentes": ["modules/*/module.json"],
+      "viola": "auth_explicitly_declared_per_endpoint (principio)"
+    },
+    {
+      "id": "module_http_audit_completeness",
+      "regla": "La auditoría modulo-completo de cada módulo tiene apis_http completo (con campos ruta, metodo, handler, codigos_error) cuando el módulo declara apis en module.json.",
+      "como_detectar": "Cruzar manifest config.apis con audit apis_http: si manifest declara N endpoints pero audit reporta menos, drift de auditoría.",
+      "severidad": "info",
+      "fuentes": ["arquitectura/auditoria/_outputs/modulo-completo/*.json", "modules/*/module.json"],
+      "nota": "No es drift del código sino de la auditoría. Si aparece, hay que re-auditar el módulo con foco en HTTP."
+    }
+  ],
+
+  "salida_validador": "PASS si http.json es estructuralmente válido (AJV strict). Errores cross-system bloquean PASS — drift_intra_core_http_call y drift_secret_in_url_query_param son ERROR (riesgo arquitectónico y de seguridad). Warnings son drift visible que no bloquea (listener propio, fetch sin timeout, telemetría ausente, error externo raw, header sin redactar). Info son heurísticas (auth no declarada, auditoría incompleta). Formato coherente con los 6 validators previos: banner PASS/FAIL + lista de findings agrupados por severidad, con ubicación archivo:línea cuando aplique.",
+
+  "convenciones_complementarias": [
+    "events.validate.js cubre la disciplina del bus (qué se publica/escucha). http.validate.js cubre la disciplina de la frontera externa (qué entra/sale por HTTP). Son complementarios — juntos garantizan que la comunicación intra-core va por bus y la inter-proceso por HTTP.",
+    "lifecycle.validate.js valida onLoad/onUnload. http.validate.js NO valida que el HTTP-server se levante/cierre limpiamente (eso lo hace lifecycle a través del audit del gateway). http.validate.js asume que el gateway existe y está operativo.",
+    "observability.validate.js valida log/metric format. http.validate.js especifica la regla de telemetría OBLIGATORIA para HTTP específicamente (mandatory_telemetry_on_http) — server y client.",
+    "errors.validate.js valida response_shape canónico. http.validate.js asegura que toda response HTTP del core sigue ese mismo shape y que los errores HTTP externos se mapean a códigos canónicos del catálogo errors.codes_infrastructure (UPSTREAM_*).",
+    "persistence.validate.js cubre disco/DB. http.validate.js cubre red. Comparten la disciplina de secretos (no en plano nunca: ni en disco, ni en URL, ni en log).",
+    "modulo-completo.validate.js valida la AUDITORÍA. http.validate.js cruza apis declaradas en module.json con audit apis_http para detectar tanto drift de declaración como drift de auditoría.",
+    "Los 7 validators (naming, glossary, events, lifecycle, observability, errors, persistence) + http forman ahora 8 validators complementarios. Se ejecutan por separado o todos en CI con npm run validate:all (pendiente de añadir como meta-script)."
+  ]
 }

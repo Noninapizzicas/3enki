@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "errors",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/errors.contract.json",
-    "supersedes_nota": "v1.3.0 (POC2 ai-gateway, finding F2): añadido recommended_helpers.build_success_response (helper canonico { status, data }, mutuamente excluyente con error). Validado en ai-gateway-poc.\n\nv1.2.0 (POC2 finding F3): añadidos CREDENTIAL_NOT_FOUND y 8 UPSTREAM_* al catalogo codes_infrastructure.\n\nv1.1.0 (POC1 notas): deprecadas PROJECT_NOT_FOUND/RECIPE_NOT_FOUND. Añadidos field y all_errors. recommended_helpers con _buildErrorResponse."
+    "supersedes_nota": "v1.4.0 (POC2 ai-gateway, finding F6): añadida internal_vs_canonical_shapes que documenta el patron 'shape interno {ok,...} en API privada del modulo, shape canonico {status, data|error} en frontera externa'. Sin esta clarificacion, el patron parecia drift cuando es disciplina sana de encapsulacion. Validado en ai-gateway-poc (DeepSeekClient interno vs onLlmCompleteRequest publicando al bus).\n\nv1.3.0 (POC2 F2): build_success_response.\n\nv1.2.0 (POC2 F3): CREDENTIAL_NOT_FOUND + 8 UPSTREAM_*.\n\nv1.1.0 (POC1): _buildErrorResponse + field/all_errors."
   },
 
   "regla": "Toda respuesta sigue { status, data?, error? } — mutuamente excluyentes data y error. Status HTTP-like (4xx dominio, 5xx infraestructura). error.code en UPPER_SNAKE_CASE de lista cerrada. Cada error genera log + métrica automáticos. Stack jamás en respuesta. Sin secretos en mensajes. Describir, no instruir.",
@@ -255,5 +255,21 @@
       "uso_en_handler": "return this._buildSuccessResponse({ status: 200, data: { id, titulo } });\n// Para creación:\nreturn this._buildSuccessResponse({ status: 201, data: nuevoRecurso });\n// Para tareas en background (acceptado pero no completado):\nreturn this._buildSuccessResponse({ status: 202, data: { request_id } });",
       "validado_en_poc": "modules/conversacion/ai-gateway-poc/index.js _buildSuccessResponse"
     }
-  ]
+  ],
+
+  "internal_vs_canonical_shapes": {
+    "regla": "Los modulos pueden usar shapes ricos { ok: true | false, ... } en su API privada (helpers, clientes HTTP, sub-libs internas). Pero TODA salida que cruza la frontera del modulo (publish al bus, response del handler HTTP, return de tool/ui_handler/mqttRequest) usa el shape canonico { status, data | error } mutuamente excluyentes. La traduccion ocurre en el handler que cruza la frontera, no en cada helper interno.",
+    "internal_shape": {
+      "forma": "{ ok: true, data } | { ok: false, error: { code, status, message, details } }",
+      "scope": "API privada del modulo: helpers (_request, _resolveCredential), clientes HTTP-client privados, sub-libs no exportadas. NUNCA llega al bus ni al gateway HTTP.",
+      "ejemplo": "DeepSeekClient.chatCompletion() devuelve { ok, data } o { ok, error: { code, status, message, details } } al handler interno onLlmCompleteRequest del modulo. El cliente puede evolucionar internamente (añadir campos, cambiar nombres) sin romper el contrato externo."
+    },
+    "canonical_shape": {
+      "forma": "{ status, data } | { status, error: { code, message, details? } } — mutuamente excluyentes",
+      "scope": "Toda salida observable: response de mqttRequest, payload publicado al bus, response del HTTP-server, return de ui_handler/tool. Visible a otros modulos, al CLI, al browser, a las metricas/logs.",
+      "ejemplo": "onLlmCompleteRequest publica al bus { request_id, status, data | error } — el cliente externo del bus solo conoce esta forma. La forma interna { ok, ... } del DeepSeekClient queda invisible al consumer."
+    },
+    "boundary": "El handler cruza la frontera: recibe shape interno del helper/cliente, decide HTTP status apropiado y publica/devuelve shape canonico. La traduccion es un if/else explicito en una sola linea. Sin esa traduccion, el modulo expondria detalles internos al sistema entero — drift de encapsulacion.",
+    "ejemplo": "// shape interno del helper (privado)\nconst result = await this.deepseek.chatCompletion({ ... });\nif (result.ok) {\n  // traduccion a shape canonico antes de publicar al bus\n  await this._publicarEvento('llm.complete.response', this._buildSuccessResponse({ status: 200, data: result.data }), payload);\n} else {\n  await this._publicarEvento('llm.complete.response', this._buildErrorResponse({\n    status: result.error.status,\n    code:   result.error.code,\n    message: result.error.message,\n    details: result.error.details\n  }), payload);\n}"
+  }
 }

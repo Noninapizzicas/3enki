@@ -237,6 +237,37 @@
       "minItems": 0,
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/helper_pattern" }
+    },
+
+    "internal_vs_canonical_shapes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regla", "internal_shape", "canonical_shape", "boundary", "ejemplo"],
+      "properties": {
+        "regla":           { "type": "string", "minLength": 30 },
+        "internal_shape":  {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["forma", "scope", "ejemplo"],
+          "properties": {
+            "forma":   { "type": "string", "minLength": 15 },
+            "scope":   { "type": "string", "minLength": 15 },
+            "ejemplo": { "type": "string", "minLength": 15 }
+          }
+        },
+        "canonical_shape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["forma", "scope", "ejemplo"],
+          "properties": {
+            "forma":   { "type": "string", "minLength": 15 },
+            "scope":   { "type": "string", "minLength": 15 },
+            "ejemplo": { "type": "string", "minLength": 15 }
+          }
+        },
+        "boundary":        { "type": "string", "minLength": 30 },
+        "ejemplo":         { "type": "string", "minLength": 30 }
+      }
     }
   },
 

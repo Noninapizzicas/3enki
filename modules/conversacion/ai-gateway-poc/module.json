@@ -1,0 +1,73 @@
+{
+  "name": "ai-gateway",
+  "version": "2.0.0",
+  "description": "Ejecutor LLM (POC, deepseek-only). Entry point: llm.complete.request → llama deepseek con credencial event-driven → llm.complete.response. POC del rewrite aplicando los 8 contratos arquitectonicos (events, lifecycle, observability, errors, persistence, http, naming, glossary).",
+  "author": "Enki",
+  "language": "en",
+  "tier": "tier_3_core",
+
+  "events": {
+    "publishes": [
+      { "event": "llm.complete.response",      "description": "Response of an llm.complete.request. Shape canonical { request_id, status, data | error }." },
+      { "event": "credential.resolve.request", "description": "Request to credential-manager to resolve an api key for a provider." }
+    ],
+    "subscribes": [
+      { "event": "llm.complete.request",       "handler": "onLlmCompleteRequest",  "description": "Entry point. Performs a chat completion against deepseek." },
+      { "event": "credential.resolve.response","handler": "onCredentialResponse",  "description": "Resolves the pending promise for a credential request_id." },
+      { "event": "credential.saved",           "handler": "onCredentialSaved",     "description": "Invalidates cache entry of the affected provider." },
+      { "event": "credential.updated",         "handler": "onCredentialSaved",     "description": "Invalidates cache entry of the affected provider." },
+      { "event": "credential.deleted",         "handler": "onCredentialDeleted",   "description": "Invalidates cache entry of the deleted provider." }
+    ]
+  },
+
+  "apis": [],
+
+  "config": {
+    "providers": {
+      "deepseek": {
+        "enabled":       true,
+        "api_base":      "https://api.deepseek.com/v1",
+        "default_model": "deepseek-chat",
+        "models":        ["deepseek-chat", "deepseek-reasoner"]
+      }
+    },
+
+    "http_clients": [
+      {
+        "name":           "deepseek",
+        "host":           "api.deepseek.com",
+        "base_url":       "https://api.deepseek.com/v1",
+        "timeout_ms":     90000,
+        "retry": {
+          "max_attempts":     3,
+          "backoff_ms":       1000,
+          "retryable_status": [429, 502, 503, 504]
+        },
+        "tls_verify":     true,
+        "auth_method":    "bearer",
+        "credential_ref": "deepseek",
+        "descripcion":    "DeepSeek Chat Completions API. Bearer token resuelto via credential-manager."
+      }
+    ],
+
+    "persistence": {
+      "pattern":            "in-memory",
+      "restart_resilient":  false,
+      "concurrency":        "single-writer",
+      "lost_on_restart":    [
+        "credentialCache (cache TTL de api keys resueltas)",
+        "pendingCredentials (promesas pendientes de resolver credenciales)"
+      ],
+      "eviction_strategy": {
+        "ttl_ms":      300000,
+        "max_entries": 100,
+        "policy":      "lru"
+      }
+    },
+
+    "credential_resolve_timeout_ms": 5000,
+
+    "max_messages_per_request": 100,
+    "max_message_length":       100000
+  }
+}

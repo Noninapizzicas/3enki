@@ -1,9 +1,9 @@
 {
   "_doc": "Captura LA forma canónica de hacer observable un módulo: cómo loguea, qué métricas emite, cómo nombra esas métricas, cómo propaga correlation_id, qué severidades usa. Sin observabilidad disciplinada, el sistema funciona pero es opaco — no se sabe qué pasa, dónde se traba, qué se ralentiza. Este contrato establece la mínima ergonomía operativa: los 4 validators previos detectan drift estructural; los logs y métricas detectan drift de comportamiento en runtime.",
   "id": "observability",
-  "version": "1.0.0",
-  "creada": "2026-04-30",
-  "supersedes_nota": "Primera versión. Recoge el espíritu de la Observability incluida en event-core v0.5.0 (Logger + Tracer + Metrics, 19 tests) y formaliza patrones que en las evoluciones se aplicaron de forma desigual módulo a módulo.",
+  "version": "1.1.0",
+  "creada": "2026-05-02",
+  "supersedes_nota": "v1.1.0 (POC2 ai-gateway, finding F4): cerrada la API canonica de metrics — SOLO increment/gauge/timing. histogram/observe/record/set/measure/sample son drift con reemplazo declarado. Helpers defensivos que detectan varios metodos (como _emitMetric del POC) son anti-patron explicito: el modulo asume API canonica disponible. Añadidos detection_patterns non_canonical_metrics_api_regex y non_canonical_metrics_methods.\n\nv1.0.0: primera version. Recoge el espiritu de Observability v0.5.0 (Logger + Tracer + Metrics, 19 tests).",
 
   "objetivo": "Producir UN JSON output (_outputs/observability.json) que define: forma canónica del logger (estructura de cada log entry, campos obligatorios/recomendados), naming de métricas (prefijos por módulo, sufijos por tipo, dimensiones canónicas), propagación de correlation_id, política de severidad, secretos prohibidos en logs, política de tracing (spans, atributos, sampling). Validable mecánicamente cruzando contra las auditorías modulo-completo.",
 

@@ -415,17 +415,25 @@ class AiGateway {
   }
 
   /**
-   * Emite metrica de forma defensiva (compatibilidad histogram/increment/observe).
-   * Centraliza para que el resto del codigo no chequee this.metrics constantemente.
+   * Emite metrica usando SOLO la API canonica del contrato observability v1.1.0
+   * (allowed: increment | gauge | timing). Sin helpers defensivos.
+   *
+   * Convencion por sufijo:
+   *   .duration → timing(name, ms, labels)
+   *   .count    → gauge(name, value, labels)
+   *   resto     → increment(name, delta, labels)   (.total, .errors, .bytes, etc.)
+   *
+   * El core garantiza que this.metrics expone los 3 metodos. Si no estan,
+   * el modulo falla en onLoad — fail fast en vez de silencio.
    */
   _emitMetric(name, value, labels) {
     if (!this.metrics) return;
-    if (/duration$/.test(name) && typeof this.metrics.histogram === 'function') {
-      this.metrics.histogram(name, value, labels);
-    } else if (typeof this.metrics.increment === 'function') {
+    if (/\.duration$/.test(name)) {
+      this.metrics.timing(name, value, labels);
+    } else if (/\.count$/.test(name)) {
+      this.metrics.gauge(name, value, labels);
+    } else {
       this.metrics.increment(name, value || 1, labels);
-    } else if (typeof this.metrics.observe === 'function') {
-      this.metrics.observe(name, value, labels);
     }
   }
 }

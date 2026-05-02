@@ -29,9 +29,11 @@ function makeMocks() {
     error: (e, p) => logs.push(['error', e, p])
   };
 
+  // API canonica observability v1.1.0: increment, gauge, timing
   const metrics = {
-    histogram: (n, v, l) => metrics_calls.push(['histogram', n, v, l]),
-    increment: (n, v, l) => metrics_calls.push(['increment', n, v, l])
+    increment: (n, v, l) => metrics_calls.push(['increment', n, v, l]),
+    gauge:     (n, v, l) => metrics_calls.push(['gauge',     n, v, l]),
+    timing:    (n, v, l) => metrics_calls.push(['timing',    n, v, l])
   };
 
   // El bus simula tambien al credential-manager: cuando se publica

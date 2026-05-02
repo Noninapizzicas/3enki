@@ -259,14 +259,16 @@ class DeepSeekClient {
     return { ok: false, error: { code, status, message, details: details || {} } };
   }
 
+  // API canonica observability v1.1.0: SOLO increment/gauge/timing.
+  // .duration → timing | .count → gauge | resto → increment
   _metric(name, value, labels) {
     if (!this.metrics) return;
-    if (/duration$/.test(name) && typeof this.metrics.histogram === 'function') {
-      this.metrics.histogram(name, value, labels);
-    } else if (typeof this.metrics.increment === 'function') {
+    if (/\.duration$/.test(name)) {
+      this.metrics.timing(name, value, labels);
+    } else if (/\.count$/.test(name)) {
+      this.metrics.gauge(name, value, labels);
+    } else {
       this.metrics.increment(name, value || 1, labels);
-    } else if (typeof this.metrics.observe === 'function') {
-      this.metrics.observe(name, value, labels);
     }
   }
 

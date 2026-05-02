@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "observability",
-    "version": "1.0.0",
-    "creado_en": "2026-04-30",
+    "version": "1.1.0",
+    "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/observability.contract.json",
-    "supersedes_nota": null
+    "supersedes_nota": "v1.1.0 (POC2 ai-gateway, finding F4): cerrada la API canonica de metrics. metrics.api_canonical_methods declara que SOLO increment/gauge/timing son canonicos. histogram/observe/record/set/measure/sample son drift (deprecated, con reemplazo declarado). Añadidos detection_patterns para que el validator detecte uso de APIs no canonicas. Helpers defensivos que detectan multiples metodos son anti-patron explicito."
   },
 
   "regla": "Logs estructurados (identifier + fields), métricas por hecho de negocio con prefix de módulo, correlation_id se propaga en cadenas de eventos. Secrets nunca en payloads observables. Severidad significativa (debug/info/warn/error). El módulo usa el logger/metrics inyectados por el core, nunca instancia los suyos.",
@@ -92,7 +92,16 @@
       "recipe.created.total",
       "recipe.cost.calculated.duration",
       "device.online.count"
-    ]
+    ],
+    "api_canonical_methods": {
+      "allowed": ["increment", "gauge", "timing"],
+      "deprecated": [
+        { "method": "histogram", "reemplazo": "timing", "razon": "Para distribuciones de duracion (ms) usar timing(name, ms, labels). Para distribuciones generales no se soporta v1." },
+        { "method": "observe",   "reemplazo": "gauge",  "razon": "Para valores instantaneos usar gauge(name, value, labels). 'observe' viene de Prometheus client y no encaja con la API minima del repo." },
+        { "method": "record",    "reemplazo": "increment", "razon": "Alias generico no canonico. Para counters usar increment(name, delta, labels)." }
+      ],
+      "rule": "La API canonica de this.metrics SOLO incluye increment, gauge y timing. Cualquier otro metodo (histogram, observe, record, etc.) es drift. Helpers defensivos que detectan multiples metodos son anti-patron — el modulo debe asumir la API canonica disponible."
+    }
   },
 
   "tracing": {
@@ -166,6 +175,8 @@
       "clientSecret"
     ],
     "template_literal_in_logger_regex": "this\\.logger\\.\\w+\\s*\\(\\s*`[^`]*\\$\\{",
-    "concat_in_logger_regex": "this\\.logger\\.\\w+\\s*\\(\\s*['\"][^'\"]*['\"]\\s*\\+"
+    "concat_in_logger_regex": "this\\.logger\\.\\w+\\s*\\(\\s*['\"][^'\"]*['\"]\\s*\\+",
+    "non_canonical_metrics_api_regex": "this\\.metrics\\.(histogram|observe|record|set|measure|sample)\\s*\\(",
+    "non_canonical_metrics_methods": ["histogram", "observe", "record", "set", "measure", "sample"]
   }
 }

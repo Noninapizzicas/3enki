@@ -8,6 +8,7 @@
   "required": [
     "correlation_id",
     "conversation_id",
+    "project_id",
     "user_id",
     "channel",
     "channel_context",

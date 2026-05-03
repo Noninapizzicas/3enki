@@ -163,7 +163,7 @@ async function testAsync(description, fn) {
     const m = instantiate(mocks);
     await m.onAgentExecuteRequest({
       correlation_id: 'corr-v', request_id: 'req-v', user_id: 'default',
-      agent_name: 'recipe-analyzer', timestamp: '2026-05-03T10:00:00.000Z',
+      agent_name: 'recipe-analyzer', project_id: 'proj-v', timestamp: '2026-05-03T10:00:00.000Z',
       task: 'analiza'
     });
     await nextTick(); await nextTick();
@@ -223,7 +223,7 @@ async function testAsync(description, fn) {
     const m = instantiate(mocks);
     await m.onAgentExecuteRequest({
       correlation_id: 'c-v', request_id: 'r-v', user_id: 'default',
-      agent_name: 'agente-fantasma',
+      agent_name: 'agente-fantasma', project_id: 'proj-v',
       timestamp: '2026-05-03T10:00:00.000Z',
       task: 'algo'
     });

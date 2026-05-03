@@ -27,9 +27,9 @@
       "description": "Solo si el agente nace de una conversacion del chat. Permite que el resultado pueda inyectarse de vuelta como mensaje en la conversacion (chat multi-participante futuro)."
     },
     "project_id": {
-      "type": ["string", "null"],
+      "type": "string",
       "minLength": 1,
-      "description": "Proyecto activo. null si single-tenant aun. String no vacio si multi-tenant."
+      "description": "Proyecto activo. Obligatorio siempre (multi-tenancy.contract v1.1.0). null retirado tras directriz UX. Si el agente nace de chat humano, viene del payload chat. Si nace de modulo del dominio, el publisher lo propaga desde su input."
     },
     "user_id": {
       "type": "string",

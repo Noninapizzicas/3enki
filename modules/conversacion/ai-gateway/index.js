@@ -534,13 +534,13 @@ class AiGatewayModule {
       await this.eventBus.publish('ai.chat.failed', {
         correlation_id: correlation_id || crypto.randomUUID(),
         conversation_id,
+        project_id,
         user_id,
         channel,
         channel_context,
         message_id,
         error,
         timestamp: new Date().toISOString(),
-        ...(project_id !== null ? { project_id } : {}),
         duration_ms: Date.now() - startedAt,
         provider_attempted: providerAttempted
       });

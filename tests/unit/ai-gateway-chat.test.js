@@ -191,6 +191,7 @@ async function testAsync(description, fn) {
     await m.onChatPromptReady({
       correlation_id: 'corr-v',
       conversation_id: 'conv-v',
+      project_id: 'proj-v',
       user_id: 'default',
       channel: 'web',
       channel_context: {},

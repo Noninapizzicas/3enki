@@ -16,14 +16,14 @@
       "description": "Identifica el viaje (la conversacion sostenida). Sin esto no hay viaje, hay request suelto."
     },
     "project_id": {
-      "type": ["string", "null"],
-      "description": "Proyecto activo. null si single-tenant aun. String no vacio si multi-tenant.",
-      "minLength": 1
+      "type": "string",
+      "minLength": 1,
+      "description": "Proyecto activo. Obligatorio siempre (multi-tenancy.contract v1.1.0). null retirado tras directriz UX: el frontend abre panel emergente cuando falta, antes de publicar evento. Single-user single-tenant arranca con proyecto 'default' creado automaticamente."
     },
     "project_id_strict": {
       "type": "string",
       "minLength": 1,
-      "description": "project_id obligatorio (no null). Usado en eventos donde el proyecto es semantica esencial."
+      "description": "Alias de project_id (mismo shape). Mantenido por compat con $refs existentes."
     },
     "user_id": {
       "type": "string",

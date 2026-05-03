@@ -1,0 +1,283 @@
+{
+  "_doc": "Captura LA disciplina de resiliencia del sistema event-core: cómo cada módulo se recupera de errores transitorios (red caída, upstream rate-limited, broker desconectado momentáneamente), qué política de retry usa, cómo aplica backoff exponencial con jitter, cuándo abre un circuit breaker, cómo degrada graciosamente cuando una dependencia no está disponible. La regla maestra: errores transitorios se reintentan con backoff exponencial; errores permanentes (4xx auth, validación) NO se reintentan; el sistema degrada antes de caer (timeouts cortos, fallback a defaults, evento .failed canónico). Sin un contrato de resilience, cada módulo inventa su política de retry (algunos sin retry, otros con loops infinitos, otros con backoff lineal), las dependencias caídas tiran el sistema entero, y los rate-limits del upstream causan storms de retries.",
+  "id": "resilience",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Recoge las prácticas que ya existen implementadas en ai-gateway/providers/base-provider.js (withRetry con backoff exponencial), facturas/pipeline (retry policy), escandallo/core/precio-finder (retry sobre upstream APIs). Eleva a contrato transversal autónomo con criterios canónicos (max_attempts, initial_delay_ms, max_delay_ms, backoff_multiplier, jitter), distinción entre errores retryables y no retryables (heredada de errors.contract codes_infrastructure), y patterns de degradación gradual.",
+
+  "objetivo": "Producir UN JSON output (_outputs/resilience.json) que define: política canónica de retry (max_attempts default 3, initial_delay_ms 1000, max_delay_ms 10000, backoff_multiplier 2, jitter ±10%), clasificación de errores (retryable vs no retryable cruzando con errors.json codes_infrastructure: UPSTREAM_TIMEOUT/UPSTREAM_5XX/UPSTREAM_RATE_LIMITED/UPSTREAM_UNREACHABLE retryables; UPSTREAM_AUTH_FAILED/UPSTREAM_INVALID_RESPONSE/CREDENTIAL_NOT_FOUND no retryables), patterns aceptados (withRetry helper que cada módulo use, no loops infinitos), patterns prohibidos (retry sin límite, retry sobre 4xx, retry sin jitter), graceful degradation (timeout cortos, fallback a defaults, publish de .failed cuando se agota el retry). Validable mecánicamente cruzando contra implementaciones de retry en módulos.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/resilience.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/errors.contract.json (clasificación de códigos infrastructure → retryable o no)",
+      "arquitectura/decisiones/_outputs/errors.json (lista canónica de codes_infrastructure)"
+    ],
+    "obligatorios_si_existen": [
+      "modules/conversacion/ai-gateway/providers/base-provider.js (withRetry helper canónico)"
+    ],
+    "opcionales_para_contexto": [
+      "modules/facturas/pipeline/invoice-pipeline.js (otra implementación de retry)",
+      "modules/escandallo/core/precio-finder.js"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "ERROR TRANSITORIO SE REINTENTA. Errores como timeout, 5xx, 429 (rate limit), connection refused son transitorios — el upstream puede recuperarse. Reintentar con backoff es la respuesta correcta.",
+
+    "ERROR PERMANENTE NO SE REINTENTA. Errores como 401 (auth failed), 400 (validación), 404 (not found) son permanentes — reintentar no cambia el resultado, solo desperdicia recursos. Se publica .failed inmediatamente.",
+
+    "BACKOFF EXPONENCIAL CON JITTER. Tras cada intento fallido, esperar el doble del delay anterior (1s → 2s → 4s → 8s) más un jitter aleatorio (±10%) para evitar storms cuando muchos consumidores reintentan a la vez tras un upstream caído.",
+
+    "MÁXIMO 3 INTENTOS POR DEFECTO. La política canónica es 3 intentos. Configurable por módulo. Más allá de 3 raramente cambia el resultado y empieza a parecerse a polling.",
+
+    "MAX DELAY 10 SEGUNDOS. El delay entre intentos no excede 10s en el patrón canónico. Más tiempo entre intentos sugiere que la operación no debería ser síncrona (debería ser asíncrona via bus).",
+
+    "TIMEOUT CORTO POR INTENTO. Cada intento individual tiene timeout (5-30s típicos). Sin timeout, un upstream lento bloquea el handler indefinidamente.",
+
+    "GRACEFUL DEGRADATION ANTES QUE CAÍDA. Cuando una dependencia no está disponible, el módulo degrada (devuelve cached, devuelve default, publica .failed con código canónico) antes que tirar el proceso entero.",
+
+    "CIRCUIT BREAKER PARA UPSTREAMS POCO FIABLES. Si un upstream falla N veces seguidas, el módulo abre el circuit breaker: durante M minutos rechaza nuevas operaciones contra ese upstream sin intentar (publica .failed inmediatamente). Tras M, half-open para probar si recuperó.",
+
+    "WITHRETRY ES UN HELPER CANÓNICO. Los módulos que reintentan usan un helper común (withRetry) que aplica la política. Cada módulo NO implementa su propio loop de retry desde cero.",
+
+    "EL EVENTO .FAILED NO ES UN INTENTO DE RETRY. Cuando el módulo publica .failed, se considera el ciclo terminado. El consumer puede reintentar (con un nuevo request_id), pero el publisher original ha cumplido publicando el cierre.",
+
+    "JITTER EVITA THUNDERING HERD. Sin jitter, todos los retries sincronizados convergen al mismo instante (hora puntual + N segundos exactos). El upstream caído recibe un pico al recuperar. Jitter dispersa la carga.",
+
+    "TIMEOUTS GLOBAL Y POR-INTENTO SON DISTINTOS. Timeout por intento (5-30s) limita un intento individual. Timeout global (max sum de todos los intentos + delays) limita el ciclo entero. Ambos se documentan."
+  ],
+
+  "principios": [
+    {
+      "id": "retry_solo_errores_retryables",
+      "regla": "Solo errores en lista retryable (UPSTREAM_TIMEOUT, UPSTREAM_5XX, UPSTREAM_RATE_LIMITED, UPSTREAM_UNREACHABLE, BROKER_DISCONNECTED) se reintentan. Errores no retryables (UPSTREAM_AUTH_FAILED, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, RESOURCE_NOT_FOUND, AUTHORIZATION_REQUIRED) van directo a .failed.",
+      "razon": "Reintentar errores permanentes desperdicia recursos y puede empeorar (rate limits, lockouts)."
+    },
+    {
+      "id": "backoff_exponencial_con_jitter",
+      "regla": "Delay entre intentos: initial_delay_ms × backoff_multiplier^(attempt-1) ± jitter. Default: 1000ms × 2^n ± 10%.",
+      "razon": "Exponencial da espacio al upstream para recuperar; jitter evita thundering herd cuando hay muchos consumidores."
+    },
+    {
+      "id": "max_3_intentos_default",
+      "regla": "Política canónica: max_attempts = 3. Configurable por módulo en module.json.config.retry.max_attempts.",
+      "razon": "3 intentos cubren la mayoría de fallos transitorios. Más allá raramente cambia el resultado."
+    },
+    {
+      "id": "max_delay_10s_default",
+      "regla": "max_delay_ms = 10000 por defecto. Cuando el backoff exponencial calcula delay > 10s, se cap a 10s.",
+      "razon": "Delays muy largos sugieren que la operación debería ser asíncrona via bus, no retries síncronos."
+    },
+    {
+      "id": "timeout_por_intento_obligatorio",
+      "regla": "Cada intento individual tiene timeout. Sin timeout, un upstream lento bloquea el handler indefinidamente. Default: 30000ms.",
+      "razon": "Sin timeout, los retries no llegan a ejecutarse — el primer intento queda colgado."
+    },
+    {
+      "id": "withretry_helper_canonico",
+      "regla": "Los módulos que reintentan usan un helper común (withRetry) que aplica la política configurada. NO implementan loop manual.",
+      "razon": "Helper único elimina drift entre módulos (uno con jitter, otro sin; uno con timeout, otro sin)."
+    },
+    {
+      "id": "publish_failed_al_agotar_retries",
+      "regla": "Cuando se agotan los intentos, el módulo publica el evento .failed canónico de su flujo (ai.chat.failed, agent.execute.failed, etc.) con error.code apropiado.",
+      "razon": "no_silent_failures: el caller necesita saber que falló y por qué. El publish .failed cierra el ciclo."
+    },
+    {
+      "id": "graceful_degradation",
+      "regla": "Cuando una dependencia no está disponible, el módulo degrada gracefully: devuelve cached value, devuelve default, publica .failed con código apropiado. NO derriba el proceso ni el bus.",
+      "razon": "Un módulo caído no debe propagar la caída al sistema entero. La filosofía 'fail open' permite que el resto siga funcionando."
+    },
+    {
+      "id": "circuit_breaker_opcional_para_upstreams_inestables",
+      "regla": "Cuando un upstream falla N veces seguidas, el módulo PUEDE abrir circuit breaker: durante M minutos rechaza llamadas sin intentar. Half-open tras M para probar recovery.",
+      "razon": "Storming de retries contra un upstream caído lo empeora (más carga). Circuit breaker corta esa retroalimentación."
+    },
+    {
+      "id": "configuracion_en_module_json",
+      "regla": "La política de retry vive en module.json.config.retry: { max_attempts, initial_delay_ms, max_delay_ms, backoff_multiplier }.",
+      "razon": "Centralizada en el manifest, configurable por entorno, auditable."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "lista_canonica_retryable_vs_permanente",
+      "decision": "Errores retryables: UPSTREAM_TIMEOUT, UPSTREAM_5XX, UPSTREAM_RATE_LIMITED, UPSTREAM_UNREACHABLE, BROKER_DISCONNECTED. Permanentes: UPSTREAM_AUTH_FAILED, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, RESOURCE_NOT_FOUND, AUTHORIZATION_REQUIRED, TIMEOUT (de operación interna).",
+      "alternativa_descartada": "Decisión por módulo (cada uno decide qué reintenta).",
+      "razon": "Lista canónica elimina drift. Cada módulo respeta la misma clasificación heredada de errors.contract.codes_infrastructure."
+    },
+    {
+      "id": "backoff_exponencial_con_jitter_aleatorio",
+      "decision": "Backoff exponencial (multiplier 2 default) con jitter ±10%.",
+      "alternativa_descartada": "Backoff lineal (cada intento espera 5s) o sin jitter.",
+      "razon": "Exponencial es más eficiente: si el upstream se recupera tras 8s, no hace falta esperar 30s (5s × 6 intentos). Jitter evita thundering herd."
+    },
+    {
+      "id": "max_3_intentos_no_5_ni_10",
+      "decision": "Default max_attempts = 3.",
+      "alternativa_descartada": "5 o 10 intentos por defecto.",
+      "razon": "3 cubren la mayoría de fallos transitorios. Más allá raramente cambia el resultado y empieza a desperdiciar recursos contra upstreams realmente caídos."
+    },
+    {
+      "id": "withretry_helper_central",
+      "decision": "Existe un helper canónico withRetry (en core/utils/ o en cada módulo siguiendo el patrón). Los módulos NO implementan retry manual.",
+      "alternativa_descartada": "Cada módulo implementa su propio loop de retry.",
+      "razon": "Helper único garantiza comportamiento idéntico (jitter aplicado, timeout respetado, errores clasificados). Manual produce drift inevitable."
+    },
+    {
+      "id": "graceful_degradation_no_fail_loud",
+      "decision": "Cuando una dependencia no está disponible, el módulo degrada (cached, default, .failed). NO lanza errores que tiren el proceso.",
+      "alternativa_descartada": "Fail-loud: cualquier dependencia caída → process.exit.",
+      "razon": "Fail-loud mata todo el sistema cuando una pieza no esencial falla. Fail-open mantiene el resto funcionando y reporta el módulo problemático."
+    },
+    {
+      "id": "circuit_breaker_opcional_no_obligatorio",
+      "decision": "Circuit breaker es PATRÓN OPCIONAL para módulos que llaman upstreams especialmente inestables. NO obligatorio para todos.",
+      "alternativa_descartada": "Circuit breaker obligatorio en todos los módulos con upstreams.",
+      "razon": "Circuit breaker añade complejidad (state machine, configuración de N y M). Para upstreams normalmente fiables, withRetry simple es suficiente. Cuando se observa drift de retries reiterados, se añade circuit breaker."
+    },
+    {
+      "id": "configuracion_en_module_json_no_codigo",
+      "decision": "Política de retry se configura en module.json.config.retry. NO en código del módulo.",
+      "alternativa_descartada": "Configuración hardcoded en el código.",
+      "razon": "Configuración en manifest permite ajustar por entorno (development con max_attempts=1 para fail-fast en tests; production con max_attempts=3) sin tocar código."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "retry_sin_limite",
+      "regla": "Ningún módulo reintenta sin límite (while (true) try { ... }).",
+      "enforce": "Validador escanea código buscando loops infinitos con retry. Severidad error."
+    },
+    {
+      "id": "retry_sobre_4xx_auth",
+      "regla": "Ningún módulo reintenta cuando el error es UPSTREAM_AUTH_FAILED o validación 4xx.",
+      "enforce": "Validador escanea código del withRetry de cada módulo verificando que la lista de retryable codes no incluye AUTH_FAILED."
+    },
+    {
+      "id": "retry_sin_backoff",
+      "regla": "Ningún módulo reintenta inmediatamente sin esperar (retry-now).",
+      "enforce": "Validador busca patrones `for (let i = 0; i < N; i++) { try { ... } catch }` sin setTimeout. Severidad warning."
+    },
+    {
+      "id": "retry_sin_jitter",
+      "regla": "Cuando el módulo reintenta, el delay incluye jitter (±10% típico).",
+      "enforce": "Validador inspecciona implementación de withRetry buscando uso de Math.random en el cálculo del delay."
+    },
+    {
+      "id": "intento_sin_timeout",
+      "regla": "Cada intento individual de retry tiene timeout. Sin timeout, el primer intento puede bloquear indefinidamente.",
+      "enforce": "Validador busca calls HTTP / DB sin AbortSignal o timeout configurado dentro de withRetry."
+    },
+    {
+      "id": "fail_loud_que_derribe_proceso",
+      "regla": "Ningún módulo lanza errores no capturados que tiren el proceso. Errores no retryables → publish .failed; retryables → retry; agotados → publish .failed.",
+      "enforce": "Auditoría manual + revisión de PR."
+    },
+    {
+      "id": "retry_loop_dentro_del_publish_handler",
+      "regla": "El handler de un evento NO contiene su propio loop de retry contra el bus (NO publica el mismo evento N veces). Si necesita reintentar, usa withRetry sobre la operación que falló (HTTP/DB), no sobre el publish.",
+      "enforce": "Auditoría manual."
+    },
+    {
+      "id": "circuit_breaker_state_global",
+      "regla": "Si un módulo implementa circuit breaker, el state vive en this.<x> de la instancia. NO en variables globales del archivo.",
+      "enforce": "Auditoría manual."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/resilience.schema.json (a crear). Top-level: _meta, regla_maestra (string), politica_canonica_retry (object: { max_attempts: 3, initial_delay_ms: 1000, max_delay_ms: 10000, backoff_multiplier: 2, jitter_factor: 0.1, timeout_per_attempt_ms: 30000 }), errores_retryables (array de códigos), errores_no_retryables (array de códigos), patterns_aceptados (array: withRetry helper, circuit breaker opcional, graceful degradation), patterns_prohibidos (array), patrones_de_drift (regexes que el validador usa).",
+
+  "reglas_de_extraccion": [
+    "1. Validar contrato.",
+    "2. Verificar que la lista de errores retryables/no retryables es coherente con errors.json codes_infrastructure.",
+    "3. Inspeccionar implementaciones de withRetry en módulos: verificar que aplican backoff exponencial + jitter, max_attempts respetado, timeout por intento.",
+    "4. Escanear código buscando loops infinitos sin condición de salida (`while (true) { ... }` con calls upstream).",
+    "5. Escanear código buscando retry inmediato sin setTimeout (drift retry_sin_backoff).",
+    "6. Escanear código buscando retries que NO publican .failed al agotar intentos.",
+    "7. Reportar PASS/FAIL."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/resilience.schema.json (a crear)"
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/resilience.validate.js (a crear)"
+    },
+    {
+      "tipo": "implementacion_canonica",
+      "items": ["modules/conversacion/ai-gateway/providers/base-provider.js (withRetry canónico)"]
+    },
+    {
+      "tipo": "modulos_consumidores",
+      "items": ["ai-gateway providers", "facturas pipeline", "escandallo precio-finder", "futuros módulos con upstreams externos"]
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección resilience cuando exista)"
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "resilience_contract_estructura_valida",
+      "regla": "Amplitud canónica.",
+      "como_detectar": "17 secciones canónicas presentes.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_retry_sin_limite",
+      "regla": "Ningún módulo tiene `while (true)` con call upstream.",
+      "como_detectar": "Regex sobre código.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_retry_inmediato_sin_backoff",
+      "regla": "Retry incluye setTimeout entre intentos.",
+      "como_detectar": "Heurística sobre código.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_intento_sin_timeout",
+      "regla": "Calls HTTP dentro de withRetry tienen AbortSignal o timeout.",
+      "como_detectar": "Inspeccionar implementaciones.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_retry_no_publica_failed",
+      "regla": "Cuando se agotan los intentos, el módulo publica .failed canónico.",
+      "como_detectar": "Heurística sobre código.",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS si el contrato es válido Y no hay retries sin límite Y los retries respetan backoff. Errors solo para retry sin límite (severo). Warnings para retry sin backoff/jitter, retry sin publicar .failed.",
+
+  "convenciones_complementarias": {
+    "naming": "Helper común se llama withRetry (camelCase). Variables de configuración: max_attempts, initial_delay_ms, etc. (snake_case en JSON config).",
+    "glossary": "Términos: retry, backoff, jitter, circuit breaker, graceful degradation, retryable. Forma canónica en glossary.json.",
+    "events": "Events del bus son fire-and-forget. La resiliencia se aplica al EVENTO HANDLER (procesa el evento con retry sobre operaciones internas), no al publish (que es síncrono al bus).",
+    "errors": "Lista canónica de retryable/no retryable se deriva de errors.json codes_infrastructure. Coherente con errors.contract.",
+    "observability": "Cada retry emite log con metadata: attempt_n, delay_ms, error_code. Métricas: retries por código, tiempo total esperado vs gastado.",
+    "lifecycle": "Si un módulo tiene circuit breaker state, lo limpia en onUnload (clearTimeout de half-open).",
+    "persistence": "Estado de circuit breaker es in-memory, se pierde con restart. Coherente con persistence.contract.in-memory.",
+    "http": "Coherente con http.contract.client_resiliente: clientes HTTP con timeout + retry policy + backoff.",
+    "security": "Retries no exponen credenciales en logs/payloads. Coherente con security.contract.no_secrets_in_logs.",
+    "frontend": "El frontend NO implementa retry contra el bus (push nativo). Si una operación timeout, el frontend muestra error y deja al usuario reintentar manualmente.",
+    "testing": "Tests pueden mockear el clock para validar backoff sin esperar reales (10s+).",
+    "multi-tenancy": "Retries no escapan del scope: si un retry falla, el .failed publicado mantiene project_id + user_id.",
+    "documentation": "Política canónica documentada aquí. Cada módulo override en module.json si necesita custom.",
+    "versionado": "Cambiar la política default canónica (max_attempts, etc.) es BREAKING para módulos que dependen de los defaults.",
+    "deployment": "La política se aplica igual en Termux y Linux server. No hay diferencias de timeouts por entorno.",
+    "module-loading": "Helper withRetry se inyecta o se importa desde core/utils — los módulos NO implementan su propio retry.",
+    "bus-transport": "Conexión perdida al broker se maneja con reconexión automática de mqtt.js (backoff propio del cliente). Eventos perdidos durante desconexión NO se reintentan automáticamente — quedan perdidos (semántica de QoS 1 con broker no persistente).",
+    "scheduling": "Retries diferidos usan setTimeout (scheduling.contract). Coherente."
+  }
+}

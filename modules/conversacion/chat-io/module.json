@@ -5,13 +5,25 @@
   "author": "Event Core Team",
   "language": "en",
   "publishes": [
-    "chat.message.saved",
+    {
+      "event": "chat.message.saved",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
+      "description": "Usuario manda mensaje al compañero, persistido en la conversacion. Trigger del razonamiento."
+    },
     "chat.assistant.saved"
   ],
   "subscribes": [
     {
       "event": "ai.chat.response",
-      "handler": "onAiResponse"
+      "handler": "onAiResponse",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.response.schema.json",
+      "description": "Compañero produjo respuesta exitosa. Reenviar al canal de origen segun channel_context."
+    },
+    {
+      "event": "ai.chat.failed",
+      "handler": "onAiFailed",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.failed.schema.json",
+      "description": "Flujo del chat fallo (timeout LLM, credencial, etc.). Informar al usuario por su canal."
     },
     {
       "event": "db.query.response",

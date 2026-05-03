@@ -5,7 +5,16 @@
   "author": "Event Core Team",
   "language": "en",
   "publishes": [
-    "ai.chat.response",
+    {
+      "event": "ai.chat.response",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.response.schema.json",
+      "description": "Compañero produjo respuesta exitosa (incluye agentic loop completo con tools)."
+    },
+    {
+      "event": "ai.chat.failed",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.failed.schema.json",
+      "description": "Cierre canonico en error (timeout LLM, credencial no resuelta, todos los providers caidos). Sin esto los flujos quedan colgados — viola garantia no_silent_failures."
+    },
     "llm.complete.response",
     "credential.resolve.request",
     "fs.read.request"
@@ -13,7 +22,9 @@
   "subscribes": [
     {
       "event": "chat.prompt.ready",
-      "handler": "onChatPromptReady"
+      "handler": "onChatPromptReady",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.prompt.ready.schema.json",
+      "description": "Entry point chat: prompt construido por prompt-builder, ejecutar LLM con agentic loop."
     },
     {
       "event": "llm.complete.request",

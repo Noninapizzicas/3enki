@@ -5,13 +5,25 @@
   "author": "Event Core Team",
   "language": "en",
   "publishes": [
-    "chat.prompt.ready",
+    {
+      "event": "chat.prompt.ready",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.prompt.ready.schema.json",
+      "description": "System prompt completo construido (incluye contexto base + memorias agregadas via chat.context.enriched). Listo para invocar al LLM."
+    },
     "prompt.list.request"
   ],
   "subscribes": [
     {
       "event": "chat.message.saved",
-      "handler": "onMessageSaved"
+      "handler": "onMessageSaved",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
+      "description": "Trigger del razonamiento. Recoge el mensaje del usuario y construye el system prompt completo."
+    },
+    {
+      "event": "chat.context.enriched",
+      "handler": "onContextEnriched",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
+      "description": "NUEVO: una memoria modular aporta contexto adicional al system prompt. prompt-builder agrega por priority. Hoy ningun modulo lo emite — habilita memorias futuras."
     },
     {
       "event": "prompt.list.response",

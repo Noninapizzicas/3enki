@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/chat-flow/chat.prompt.ready.schema.json",
+  "title": "chat.prompt.ready — payload schema",
+  "description": "El system prompt completo esta construido (incluye contexto base + todas las memorias agregadas via chat.context.enriched). Ya se puede invocar al LLM. Publicado por prompt-builder. Consumido por ai-gateway.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "conversation_id",
+    "project_id",
+    "user_id",
+    "channel",
+    "channel_context",
+    "message_id",
+    "system_prompt",
+    "messages",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "conversation_id": { "$ref": "_common.schema.json#/$defs/conversation_id" },
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":         { "$ref": "_common.schema.json#/$defs/user_id" },
+    "channel":         { "$ref": "_common.schema.json#/$defs/channel" },
+    "channel_context": { "$ref": "_common.schema.json#/$defs/channel_context" },
+    "message_id":      { "$ref": "_common.schema.json#/$defs/message_id" },
+    "system_prompt": {
+      "type": "string",
+      "minLength": 1,
+      "description": "System prompt completo construido. Sin polisemia con prompt_id. Es lo que se manda al LLM como system message."
+    },
+    "messages": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Historial completo a enviar al LLM. Ultimo elemento es el mensaje del usuario actual. Los anteriores son el FIFO de la conversacion (limitado por politica del compañero).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content"],
+        "properties": {
+          "role":    { "enum": ["user", "assistant", "system", "tool"] },
+          "content": { "type": ["string", "array", "null"] },
+          "tool_calls":   { "type": "array" },
+          "tool_call_id": { "type": "string" },
+          "name":         { "type": "string" }
+        }
+      }
+    },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" },
+
+    "tools_disponibles": {
+      "type": "array",
+      "description": "Subset de tools que el LLM puede invocar (filtradas por proyecto/agente). Cada item es la definicion de tool en formato OpenAI function calling.",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "settings":        { "$ref": "_common.schema.json#/$defs/settings" },
+    "intencion": {
+      "type": ["string", "null"],
+      "description": "Hint de intencion preservado de chat.message.saved."
+    },
+    "attachments": {
+      "type": "array",
+      "items": { "$ref": "_common.schema.json#/$defs/attachment" }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/chat-flow/ai.chat.failed.schema.json",
+  "title": "ai.chat.failed — payload schema",
+  "description": "El flujo del chat fallo (timeout LLM, todos los providers caidos, credencial no resuelta, error inesperado). Cierra el ciclo iniciado en chat.message.saved con resultado de error. Sin este evento, los flujos que fallan quedan colgados sin respuesta al usuario — viola garantia no_silent_failures. Publicado por ai-gateway. Consumido por chat-io / canales (para informar al usuario) / observabilidad / alerting.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "conversation_id",
+    "user_id",
+    "channel",
+    "channel_context",
+    "message_id",
+    "error",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "conversation_id": { "$ref": "_common.schema.json#/$defs/conversation_id" },
+    "user_id":         { "$ref": "_common.schema.json#/$defs/user_id" },
+    "channel":         { "$ref": "_common.schema.json#/$defs/channel" },
+    "channel_context": { "$ref": "_common.schema.json#/$defs/channel_context" },
+    "message_id":      { "$ref": "_common.schema.json#/$defs/message_id" },
+    "error":           { "$ref": "_common.schema.json#/$defs/error_canonical" },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" },
+
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Tiempo desde que ai-gateway recibio chat.prompt.ready hasta el fallo. Util para diagnosticar timeouts vs errores rapidos."
+    },
+    "provider_attempted": {
+      "type": ["string", "null"],
+      "description": "Provider que se intento al fallar. Null si el fallo fue antes de elegir provider (ej. credencial no resuelta)."
+    }
+  }
+}

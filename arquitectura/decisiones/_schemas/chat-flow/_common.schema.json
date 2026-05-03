@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/chat-flow/_common.schema.json",
+  "title": "chat-flow common definitions",
+  "description": "Definiciones canonicas compartidas por los 5 schemas chat_flow. Cualquier schema chat_flow las referencia con $ref. Heredadas del documento maestro companero-viaje.contract.json (campos_canonicos_de_payload).",
+
+  "$defs": {
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Hilo causal de la cadena de eventos. Generado por el originador (canal o cron), propagado SIN modificar."
+    },
+    "conversation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifica el viaje (la conversacion sostenida). Sin esto no hay viaje, hay request suelto."
+    },
+    "project_id": {
+      "type": ["string", "null"],
+      "description": "Proyecto activo. null si single-tenant aun. String no vacio si multi-tenant.",
+      "minLength": 1
+    },
+    "project_id_strict": {
+      "type": "string",
+      "minLength": 1,
+      "description": "project_id obligatorio (no null). Usado en eventos donde el proyecto es semantica esencial."
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifica al humano. 'default' en single-user. Imprescindible para aislamiento."
+    },
+    "channel": {
+      "enum": ["web", "telegram", "voice", "whatsapp", "discord", "email", "sms", "cron", "webhook", "test"],
+      "description": "Canal de origen / destino. Lista cerrada para evitar drift."
+    },
+    "channel_context": {
+      "type": "object",
+      "description": "Datos opacos del canal para devolver respuesta al humano correcto. additionalProperties:true (cada canal define su shape).",
+      "minProperties": 0
+    },
+    "message_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Id del mensaje del usuario que inicia el ciclo. Se preserva en toda la cadena."
+    },
+    "message_id_assistant": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Id NUEVO del mensaje generado por el compañero. Distinto a message_id (que es del usuario)."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601. Util para debugging temporal y ordenacion."
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Config del LLM para esta interaccion.",
+      "properties": {
+        "model":       { "type": "string", "minLength": 1 },
+        "provider":    { "type": "string", "minLength": 1 },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+        "max_tokens":  { "type": "integer", "minimum": 1 },
+        "top_p":       { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "attachment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "ref"],
+      "description": "Adjunto que el usuario envia con el mensaje.",
+      "properties": {
+        "type":     { "enum": ["pdf", "image", "audio", "video", "document", "url", "other"] },
+        "ref":      { "type": "string", "minLength": 1, "description": "Path o URL del attachment." },
+        "filename": { "type": "string" },
+        "size":     { "type": "integer", "minimum": 0 },
+        "mime":     { "type": "string" }
+      }
+    },
+    "tool_call_executed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "result_status"],
+      "description": "Auditoria: una tool ejecutada por el LLM dentro del agentic loop.",
+      "properties": {
+        "name":          { "type": "string", "minLength": 1, "description": "Nombre de la tool (ej. 'tarifas.assign')." },
+        "args":          { "type": "object", "description": "Args con los que se invoco. Sin secretos." },
+        "result_status": { "enum": ["ok", "error", "timeout"] },
+        "duration_ms":   { "type": "integer", "minimum": 0 },
+        "error_code":    { "type": "string", "description": "Si result_status=error: codigo canonico." }
+      }
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output", "total"],
+      "description": "Consumo de tokens del LLM.",
+      "properties": {
+        "input":  { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 },
+        "total":  { "type": "integer", "minimum": 0 }
+      }
+    },
+    "error_canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "description": "Error canonico segun errors.contract. code en codes_infrastructure (UPSTREAM_*, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR, etc.).",
+      "properties": {
+        "code":    { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*[A-Z0-9]$" },
+        "message": { "type": "string", "minLength": 1 },
+        "details": { "type": "object" }
+      }
+    }
+  }
+}

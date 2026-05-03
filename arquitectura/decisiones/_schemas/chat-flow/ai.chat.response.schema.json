@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/chat-flow/ai.chat.response.schema.json",
+  "title": "ai.chat.response — payload schema",
+  "description": "El compañero produjo una respuesta exitosa (incluye todo el agentic loop con tools). Cierra el flujo iniciado en chat.message.saved. Publicado por ai-gateway. Consumido por chat-io / canales activos / conversation-export / observabilidad.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "conversation_id",
+    "project_id",
+    "user_id",
+    "channel",
+    "channel_context",
+    "message_id",
+    "message_id_assistant",
+    "assistant_message",
+    "model",
+    "provider",
+    "tokens",
+    "duration_ms",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":       { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "conversation_id":      { "$ref": "_common.schema.json#/$defs/conversation_id" },
+    "project_id":           { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":              { "$ref": "_common.schema.json#/$defs/user_id" },
+    "channel":              { "$ref": "_common.schema.json#/$defs/channel" },
+    "channel_context":      { "$ref": "_common.schema.json#/$defs/channel_context" },
+    "message_id":           { "$ref": "_common.schema.json#/$defs/message_id" },
+    "message_id_assistant": { "$ref": "_common.schema.json#/$defs/message_id_assistant" },
+    "assistant_message": {
+      "type": "string",
+      "description": "Texto producido por el LLM. Sin polisemia: SIEMPRE es texto del compañero."
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Modelo del LLM que produjo la respuesta. Ej. 'gpt-4o-mini', 'claude-3-5-sonnet-20241022', 'deepseek-chat'."
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Proveedor del LLM. Ej. 'openai', 'anthropic', 'deepseek', 'groq', 'gemini', 'ollama', 'claude-cli'."
+    },
+    "tokens":      { "$ref": "_common.schema.json#/$defs/tokens" },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Tiempo total desde que ai-gateway recibio chat.prompt.ready hasta este publish. Incluye agentic loop completo."
+    },
+    "timestamp":   { "$ref": "_common.schema.json#/$defs/timestamp" },
+
+    "tool_calls_executed": {
+      "type": "array",
+      "description": "Auditoria de tools ejecutadas durante el agentic loop. Para conversation-export y debugging — ningun consumer lo usa para logica.",
+      "items": { "$ref": "_common.schema.json#/$defs/tool_call_executed" }
+    },
+    "iterations": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Numero de iteraciones del agentic loop (1 = LLM respondio sin invocar tools)."
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount", "currency"],
+      "description": "Coste calculado de la llamada (segun pricing del provider).",
+      "properties": {
+        "amount":   { "type": "number", "minimum": 0 },
+        "currency": { "enum": ["USD", "EUR"] }
+      }
+    },
+    "finish_reason": {
+      "enum": ["stop", "length", "tool_calls", "content_filter", "error"],
+      "description": "Razon por la que el LLM termino de generar."
+    }
+  }
+}

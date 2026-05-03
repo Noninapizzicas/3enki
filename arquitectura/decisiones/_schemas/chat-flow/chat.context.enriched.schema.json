@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/chat-flow/chat.context.enriched.schema.json",
+  "title": "chat.context.enriched — payload schema",
+  "description": "Evento NUEVO. Una memoria aporta contexto adicional al system prompt para una conversacion concreta. Publicado por modulos de memoria modular (memory-rag, memory-user-profile, memory-long-term, memory-project-knowledge — cuando existan). Consumido por prompt-builder, que agrega multiples por priority. Hoy ningun modulo lo emite — el schema esta para que añadir memorias futuras NO requiera inventar nada.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "conversation_id",
+    "message_id",
+    "source",
+    "context_addition",
+    "priority",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "conversation_id": { "$ref": "_common.schema.json#/$defs/conversation_id" },
+    "message_id":      { "$ref": "_common.schema.json#/$defs/message_id" },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Id de la memoria que aporta el contexto. Ej. 'memory-rag', 'memory-user-profile', 'memory-long-term'."
+    },
+    "context_addition": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Texto a incluir en el system prompt construido por prompt-builder. La memoria es responsable de formatearlo."
+    },
+    "priority": {
+      "type": "integer",
+      "description": "Orden de inclusion en el system prompt. Numeros mas bajos = mayor prioridad (incluido antes). Convenciones: 0-99 contexto base, 100-499 perfil de usuario, 500-999 RAG, 1000+ memoria especulativa."
+    },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" },
+
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Opcional. Si presente, prompt-builder ignora el contexto si timestamp actual > expires_at. Util para info temporal (ultima actividad reciente)."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Datos opacos de la memoria para auditoria (origen, score de relevancia RAG, etc.). prompt-builder NO los usa para construir el prompt."
+    }
+  }
+}

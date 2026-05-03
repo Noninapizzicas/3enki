@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/chat-flow/chat.message.saved.schema.json",
+  "title": "chat.message.saved — payload schema",
+  "description": "Evento emitido cuando el usuario manda un mensaje al compañero, persistido en la conversacion. Es el TRIGGER del razonamiento del compañero. Publicado por chat-io o por canales (telegram-service, voice-input, etc.). Consumido por prompt-builder y por modulos de memoria modular (que pueden a su vez emitir chat.context.enriched).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "conversation_id",
+    "project_id",
+    "user_id",
+    "channel",
+    "channel_context",
+    "message_id",
+    "user_message",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "conversation_id": { "$ref": "_common.schema.json#/$defs/conversation_id" },
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":         { "$ref": "_common.schema.json#/$defs/user_id" },
+    "channel":         { "$ref": "_common.schema.json#/$defs/channel" },
+    "channel_context": { "$ref": "_common.schema.json#/$defs/channel_context" },
+    "message_id":      { "$ref": "_common.schema.json#/$defs/message_id" },
+    "user_message": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Texto del usuario. Sin polisemia: SIEMPRE es texto del humano."
+    },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" },
+
+    "attachments": {
+      "type": "array",
+      "items": { "$ref": "_common.schema.json#/$defs/attachment" },
+      "description": "Adjuntos opcionales (PDF, imagen, audio, etc.)."
+    },
+    "intencion": {
+      "type": ["string", "null"],
+      "description": "Hint opcional sobre la intencion del usuario (clasificacion, keyword, etc.)."
+    },
+    "settings":        { "$ref": "_common.schema.json#/$defs/settings" },
+    "page_id": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Contexto de pagina opcional (que pantalla esta viendo el usuario)."
+    },
+    "prompt_id": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Id de plantilla de prompt seleccionada por el usuario opcional. Sin polisemia con system_prompt."
+    }
+  }
+}

@@ -179,6 +179,138 @@ function checkEndpointUiIntermedio(findings) {
   }
 }
 
+function checkUiHandlerSinAction(findings) {
+  for (const { slug, manifest } of listModuleManifests()) {
+    const handlers = manifest.ui_handlers;
+    if (!Array.isArray(handlers) || handlers.length === 0) continue;
+    for (const h of handlers) {
+      if (typeof h === 'string') continue; // ya reportado en otro check
+      if (typeof h.action !== 'string' || h.action.length === 0) {
+        findings.warnings.push(`drift_ui_handler_sin_action: ${slug} ui_handler sin campo action (key obligatoria para discovery del frontend)`);
+      }
+    }
+  }
+}
+
+const PALETA_PROYECTO_HEX = new Set(['#22c55e', '#3b82f6', '#a855f7', '#f97316', '#ef4444', '#eab308', '#06b6d4', '#ec4899']);
+
+function checkColorHexCustomEnFrontend(findings) {
+  const FRONTEND_SRC = path.join(REPO_ROOT, 'frontend/src');
+  if (!fs.existsSync(FRONTEND_SRC)) return;
+  const exts = new Set(['.svelte', '.css', '.ts', '.js']);
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full);
+        else if (exts.has(path.extname(name))) {
+          const content = fs.readFileSync(full, 'utf-8');
+          // Detect hex colors NOT in palette
+          const rx = /#[0-9a-fA-F]{6}\b/g;
+          const matches = content.match(rx) || [];
+          for (const m of matches) {
+            const norm = m.toLowerCase();
+            if (PALETA_PROYECTO_HEX.has(norm)) continue;
+            // Tailwind neutral / common values frequently appear: ignore #fff, #000, #ffffff, #000000
+            if (/^#0{6}$|^#f{6}$|^#1{6}$|^#e{6}$/i.test(m)) continue;
+            // Solo reportar primer match por archivo para no inundar
+            const ln = lineOfOffset(content, content.indexOf(m));
+            findings.warnings.push(`drift_color_hex_custom_en_frontend_src: ${path.relative(REPO_ROOT, full)}:${ln} — ${m} fuera de paleta canonica`);
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  walk(FRONTEND_SRC);
+}
+
+function checkModalBloqueante(findings) {
+  const FRONTEND_SRC = path.join(REPO_ROOT, 'frontend/src');
+  if (!fs.existsSync(FRONTEND_SRC)) return;
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full);
+        else if (name.endsWith('.svelte')) {
+          const content = fs.readFileSync(full, 'utf-8');
+          if (/<dialog\s+open/i.test(content) || /document\.body\.style\.overflow\s*=\s*['"`]hidden['"`]/.test(content) || /class\s*=\s*['"`][^'"`]*modal-backdrop/.test(content)) {
+            findings.warnings.push(`drift_modal_bloqueante_con_backdrop: ${path.relative(REPO_ROOT, full)} — patron modal bloqueante detectado (frontend.contract prohibe modales que tomen control completo de pantalla)`);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  walk(FRONTEND_SRC);
+}
+
+const LOCALSTORAGE_DOMAIN_KEYS = /['"`]\w*(recipe|conversation|message|project|escandallo|order|invoice|cuenta)\w*['"`]/i;
+
+function checkLocalStorageDeDominio(findings) {
+  const FRONTEND_SRC = path.join(REPO_ROOT, 'frontend/src');
+  if (!fs.existsSync(FRONTEND_SRC)) return;
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full);
+        else if (/\.(svelte|js|ts)$/.test(name)) {
+          const content = fs.readFileSync(full, 'utf-8');
+          const rx = /localStorage\.setItem\s*\(\s*([^,)]+)/g;
+          let m;
+          while ((m = rx.exec(content)) !== null) {
+            if (LOCALSTORAGE_DOMAIN_KEYS.test(m[1])) {
+              const ln = lineOfOffset(content, m.index);
+              findings.warnings.push(`drift_localstorage_de_estado_de_dominio: ${path.relative(REPO_ROOT, full)}:${ln} — localStorage.setItem con key ${m[1].trim()} (datos de dominio van al backend)`);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  walk(FRONTEND_SRC);
+}
+
+function checkIconfontOSvgInline(findings) {
+  const FRONTEND_PKG = path.join(REPO_ROOT, 'frontend/package.json');
+  if (fs.existsSync(FRONTEND_PKG)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(FRONTEND_PKG, 'utf-8'));
+      const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+      for (const dep of Object.keys(allDeps)) {
+        if (/^(@fortawesome\/|material-icons|@mdi\/font|lucide-)/.test(dep)) {
+          findings.warnings.push(`drift_iconfont_o_svg_inline_obligatorio_para_iconos: frontend/package.json incluye "${dep}" — iconos canonicos son emojis Unicode`);
+        }
+      }
+    } catch (_) {}
+  }
+}
+
+const FRAMEWORKS_UI_HEAVY = ['@mui/material', 'bootstrap', 'bulma', '@chakra-ui/react', 'daisyui', '@skeletonlabs/skeleton'];
+const STATE_LIBS_PROHIBIDAS = ['redux', '@reduxjs/toolkit', 'mobx', 'zustand', 'pinia', 'jotai', 'recoil'];
+
+function checkFrameworkUiYStateContainer(findings) {
+  const FRONTEND_PKG = path.join(REPO_ROOT, 'frontend/package.json');
+  if (!fs.existsSync(FRONTEND_PKG)) return;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(FRONTEND_PKG, 'utf-8'));
+    const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+    for (const lib of FRAMEWORKS_UI_HEAVY) {
+      if (allDeps[lib]) findings.errors.push(`drift_framework_ui_heavy_en_dependencies: frontend/package.json incluye "${lib}" — solo Tailwind permitido`);
+    }
+    for (const lib of STATE_LIBS_PROHIBIDAS) {
+      if (allDeps[lib]) findings.errors.push(`drift_redux_mobx_zustand_pinia: frontend/package.json incluye "${lib}" — solo Svelte stores nativos`);
+    }
+  } catch (_) {}
+}
+
 // ---- Reporting ----
 
 function reportFindings(findings) {
@@ -232,6 +364,12 @@ function main() {
     checkNavigationSpa(findings);
     checkPanelExceeds33vh(findings);
     checkEndpointUiIntermedio(findings);
+    checkUiHandlerSinAction(findings);
+    checkColorHexCustomEnFrontend(findings);
+    checkModalBloqueante(findings);
+    checkLocalStorageDeDominio(findings);
+    checkIconfontOSvgInline(findings);
+    checkFrameworkUiYStateContainer(findings);
     reportFindings(findings);
   }
 

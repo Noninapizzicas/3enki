@@ -150,6 +150,48 @@
       "decision": "Stack frontend canónico: SvelteKit (framework), Svelte stores (estado), MQTT.js (sobre WebSocket puerto 9001, comunicación), Monaco Editor (text-editor), PDF.js (pdf-viewer), Tailwind CSS (estilo).",
       "alternativa_descartada": "Stack libre por contributor (React + Redux, Vue + Pinia, etc.).",
       "razon": "Un solo stack reduce el coste cognitivo de mantenimiento, el bundle size, y permite que features cross-módulo (paneles, drawers, modales) compartan implementación. Cambios de stack requieren replantear el contrato."
+    },
+    {
+      "id": "client_side_render_no_ssr",
+      "decision": "El frame se renderiza client-side. NO hay Server-Side Rendering ni Static Site Generation para las pantallas operativas (sí puede haberlo para landing públicas, fuera del scope del frame).",
+      "alternativa_descartada": "SSR completo (SvelteKit lo soporta) para mejorar TTI y SEO.",
+      "razon": "El frame depende del bus MQTT en tiempo real (suscripciones, push). SSR generaría un snapshot estático que se desfasa al hidratar — añadiendo complejidad sin valor. Y SEO no aplica: el frame es una app de trabajo, no contenido público indexable. Client-side rendering casa con la naturaleza event-driven del sistema."
+    },
+    {
+      "id": "websocket_unico_canal_a_backend",
+      "decision": "El frontend habla con el backend EXCLUSIVAMENTE por MQTT sobre WebSocket (puerto 9001). HTTP solo para descargar assets (HTML inicial, JS bundle, archivos estáticos servidos por core).",
+      "alternativa_descartada": "Mezclar SSE (Server-Sent Events), WebSocket nativo y HTTP REST según el caso.",
+      "razon": "Un único canal para la comunicación operativa elimina el problema de sincronizar estado entre canales (event llega por SSE pero la actualización vino por REST = race condition). MQTT/WS unifica push y request/response (este último con request_id correlacionado). Coherente con events.contract y bus-transport.contract."
+    },
+    {
+      "id": "estado_local_en_svelte_stores_no_redux",
+      "decision": "Estado del frontend vive en Svelte stores (writable, derived, readable). No se introduce Redux, MobX, Zustand, Pinia, ni patterns de state container externo.",
+      "alternativa_descartada": "Redux toolkit para state global predecible con middleware (logger, devtools).",
+      "razon": "Svelte stores son la primitiva nativa del framework — sin abstracción adicional, con reactividad granular. El bus MQTT ya provee el log de eventos (devtools-friendly) que Redux ofrece como ventaja. Otra librería duplica concepto. Coherencia con decisión `tecnologias_fijadas`."
+    },
+    {
+      "id": "iconos_emojis_unicode_no_svg_iconfont",
+      "decision": "Los iconos del frame son emojis Unicode (🟢, 🤖, 📂, 📄, ⚙️, 🔔). NO SVG inline, NO icon fonts (FontAwesome, Material Icons), NO componente IconLibrary custom.",
+      "alternativa_descartada": "Icon library con SVG (Lucide, Heroicons) o iconfont (FontAwesome).",
+      "razon": "Emojis: zero bundle adicional, renderiza nativamente en cada plataforma con su look-and-feel (Termux-Android se ve nativo Android; Linux Firefox usa Twemoji o equivalente del sistema), accesibles por defecto, semánticamente claros. Icon libraries añaden bundle (~50-200KB) y requieren mantenimiento del catálogo. Excepción documentada: cuando un emoji no existe para un caso (ej. logo del producto), se usa SVG inline mínimo."
+    },
+    {
+      "id": "auth_de_sesion_separada_de_credentials_de_sistema",
+      "decision": "La sesión del usuario en el frontend (login web) se gestiona por un módulo de auth dedicado (cuando exista) que emite session_token al frontend. Ese session_token NO da acceso a credentials del sistema (API keys, tokens OAuth de providers, certificados de cluster).",
+      "alternativa_descartada": "Reutilizar el mecanismo de credential-manager para autenticar al usuario web (un user_id + password como otra credencial).",
+      "razon": "Auth de sesión web tiene flujos distintos (login, logout, refresh, MFA, recovery) con UX específica que no encaja en credential-manager (diseñado para secretos del sistema, no humanos). Separar evita que un session_token mal validado dé acceso a API keys del sistema. Coherente con security.contract.frontend_sin_acceso_a_secretos."
+    },
+    {
+      "id": "no_pwa_con_service_worker_que_intercepte_bus",
+      "decision": "El frontend puede ser instalable como PWA (manifest, icono homescreen). Pero NO se introduce service worker que intercepte requests del bus o cachee respuestas operativas.",
+      "alternativa_descartada": "Service worker offline-first que cachee últimos eventos del bus para mostrar UI cuando no hay conexión.",
+      "razon": "Offline-first contradice el modelo (chat con compañero vivo, agentes que ejecutan, datos de proyecto). Mostrar cache desfasado confunde al usuario (vería respuestas viejas como si fueran nuevas). Si no hay bus, el frame muestra estado de desconexión claro y no opera, en vez de simular operatividad."
+    },
+    {
+      "id": "tailwind_no_framework_ui_heavy",
+      "decision": "Tailwind CSS para utilidad de estilos. NO Material UI / Bootstrap / Bulma / Chakra UI / DaisyUI / Skeleton.",
+      "alternativa_descartada": "Framework UI completo (Material UI) con componentes pre-hechos.",
+      "razon": "Frameworks UI completos imponen su look-and-feel y su modelo de componentes — chocan con el frame canónico definido aquí (5 zonas + lateral, sandwich del chat). Tailwind es utilidad pura: el equipo controla cada componente. Bundle size también significativamente menor."
     }
   ],
 
@@ -288,6 +330,60 @@
       "regla": "Ningún módulo backend expone endpoints HTTP con prefijo /ui/.",
       "como_detectar": "Iterar manifest-completo. Inspeccionar apis_http de cada módulo.",
       "severidad": "error"
+    },
+    {
+      "id": "drift_ui_handler_sin_action",
+      "regla": "Cualquier ui_handler declarado en module.json incluye campo action (string no vacío) que el frontend usa como key de discovery.",
+      "como_detectar": "Iterar manifest-completo. Si ui_handler.action ausente o vacío, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_color_hex_custom_en_frontend_src",
+      "regla": "Código frontend/src/ no contiene colores hex (#RRGGBB / #RGB) fuera de la paleta canónica de proyecto y de la paleta neutra de Tailwind.",
+      "como_detectar": "Regex sobre frontend/src/**.{svelte,css,ts,js} buscando #[0-9a-f]{3,6} y filtrando contra whitelist de paleta canónica.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modal_bloqueante_con_backdrop",
+      "regla": "Componentes en frontend/src no usan <dialog open> con backdrop bloqueante ni patrones equivalentes (overlay con z-index alto + body scroll lock).",
+      "como_detectar": "Regex sobre componentes svelte buscando <dialog>, .modal-backdrop, document.body.style.overflow='hidden'.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_localstorage_de_estado_de_dominio",
+      "regla": "El frontend persiste en localStorage SOLO preferencias UI (panel abierto, último workspace, tema). NO persiste datos de dominio (recetas, conversaciones, mensajes, projects).",
+      "como_detectar": "Regex sobre frontend/src buscando localStorage.setItem con keys que contengan 'recipe|conversation|message|project|escandallo' (no whitelisted).",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_iconfont_o_svg_inline_obligatorio_para_iconos",
+      "regla": "Iconos de las 5 zonas + lateral usan emojis Unicode. SVG inline solo para casos justificados (logo del producto). Iconfonts (FontAwesome, Material Icons) prohibidos.",
+      "como_detectar": "Regex sobre frontend/src buscando import de @fortawesome|material-icons; <i class='fa-' / 'material-icons'.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_framework_ui_heavy_en_dependencies",
+      "regla": "frontend/package.json no incluye Material UI / Bootstrap / Bulma / Chakra UI / DaisyUI / Skeleton.",
+      "como_detectar": "Inspeccionar frontend/package.json.dependencies.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_redux_mobx_zustand_pinia",
+      "regla": "frontend/package.json no incluye Redux / MobX / Zustand / Pinia. Solo Svelte stores.",
+      "como_detectar": "Inspeccionar frontend/package.json.dependencies.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_service_worker_intercepta_bus",
+      "regla": "Si existe service worker en frontend, NO intercepta requests/responses del bus (rutas WebSocket /mqtt). Solo cachea assets estáticos.",
+      "como_detectar": "Buscar archivos service-worker.{js,ts} y verificar que su fetch handler no toca rutas de WS.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_app_html_con_ssr_directives",
+      "regla": "frontend/src/app.html no incluye directivas de SSR. SvelteKit config.kit.adapter es estático o adapter-node sin SSR para las rutas operativas.",
+      "como_detectar": "Inspeccionar svelte.config.js y verificar que prerender/ssr esté en false para las rutas del frame.",
+      "severidad": "info"
     }
   ],
 

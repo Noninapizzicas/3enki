@@ -1,0 +1,306 @@
+{
+  "_doc": "Captura LA disciplina de carga de módulos del sistema event-core: cómo el core descubre módulos al arrancar, en qué orden los carga, cómo resuelve dependencies entre ellos, cómo maneja errores de carga, cómo soporta hot-reload en desarrollo, qué se inyecta a cada módulo en onLoad. La regla maestra: descubrimiento por convención (escanea ./modules/, cada subdirectorio con module.json + index.js es un módulo), carga in-process via require(), respeto de module.json.dependencies para orden, fallo de carga aislado (un módulo roto no derriba el core). Sin un contrato de module-loading, el orden de carga es ad-hoc, las dependencies se rompen silenciosamente, y un módulo con error en onLoad puede tirar el sistema entero.",
+  "id": "module-loading",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Recoge la implementación que ya existe en core/modules/loader.js: descubrimiento por escaneo de ./modules/, validación de module.json + index.js, instanciación de la clase exportada, auto-wire de subscribes antes de onLoad, paso de contexto (core + moduleConfig + moduleLoader) en onLoad, watchers para hot-reload, unloadAll en shutdown. Eleva a contrato transversal autónomo con criterios explícitos de orden, dependencies, y manejo de fallos.",
+
+  "objetivo": "Producir UN JSON output (_outputs/module-loading.json) que define: cómo se descubren los módulos (escaneo de ./modules/), qué archivos son obligatorios (module.json + index.js), qué shape exporta el index.js (clase con onLoad/onUnload), qué contexto recibe el módulo en onLoad (core, moduleConfig, moduleLoader, logger, metrics, eventBus), cómo se resuelven dependencies (module.json.dependencies como orden topológico), cómo se aísla el fallo de carga (try/catch por módulo, no propaga al core), cómo funciona hot-reload (watchers de fs.watch que recargan onUnload + onLoad). Validable mecánicamente cruzando contra cada module.json del repo y contra core/modules/loader.js.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/module-loading.contract.json (este archivo)",
+      "core/modules/loader.js (implementación canónica del loader)",
+      "modules/*/module.json (manifests de cada módulo)"
+    ],
+    "obligatorios_si_existen": [
+      "modules/*/index.js (clase exportada con onLoad/onUnload)"
+    ],
+    "opcionales_para_contexto": [
+      "arquitectura/decisiones/_contratos/lifecycle.contract.json (gobierna el shape de onLoad/onUnload — este contrato concreta CÓMO se invocan)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "DESCUBRIMIENTO POR CONVENCIÓN. El loader escanea ./modules/ al arrancar. Cada subdirectorio con module.json + index.js es un módulo. No hay registro central donde dar de alta los módulos — añadir un módulo es añadir el directorio.",
+
+    "MANIFEST OBLIGATORIO. Sin module.json, el directorio no es un módulo (puede ser carpeta auxiliar). El manifest declara name, version, description, language, publishes, subscribes, dependencies, config. Sin manifest, no se carga.",
+
+    "INDEX.JS EXPORTA UNA CLASE. La clase implementa onLoad(context) y onUnload(). El loader instancia la clase y le pasa contexto en onLoad. Sin clase exportada o sin onLoad, el módulo no carga.",
+
+    "CONTEXTO INYECTADO EN ONLOAD. El loader pasa al módulo en onLoad: core (referencia al core), moduleConfig (su sección config del manifest), moduleLoader (referencia al loader para registrar tools / consultar otros módulos), logger (instancia logger), metrics (instancia métricas), eventBus (publish/subscribe). El módulo no instancia nada de eso por su cuenta.",
+
+    "DEPENDENCIES DEFINEN ORDEN. module.json.dependencies es array de nombres de otros módulos. El loader resuelve orden topológico: si A depende de B, B se carga antes que A. Ciclos = error de carga.",
+
+    "FALLO DE CARGA AISLADO. Si un módulo lanza error en onLoad, el loader: limpia subscribes auto-wired, registra error, marca el módulo como NO cargado, sigue cargando los demás. Un módulo roto NO derriba el core.",
+
+    "AUTO-WIRE DE SUBSCRIBES ANTES DE ONLOAD. Antes de invocar onLoad, el loader registra cada subscribe declarado en module.json contra el bus, ligado al handler que el módulo expone. Así cuando onLoad termina y empieza la actividad, los subscribes ya están activos.",
+
+    "HOT-RELOAD EN DESARROLLO. Cuando NODE_ENV=development, el loader pone fs.watch sobre el directorio de cada módulo. Cambio detectado → unloadAll del módulo → recargar módulo (clear require cache + load again). Producción: hot-reload deshabilitado, cambios requieren restart del proceso.",
+
+    "UNLOADALL EN SHUTDOWN. Al recibir SIGTERM/SIGINT, el loader llama onUnload de cada módulo en orden inverso al de carga. onUnload limpia timers, cierra conexiones, persiste estado pendiente. Shutdown gracioso garantizado.",
+
+    "MÓDULOS DEL REPO + EXTERNOS. El loader carga módulos desde ./modules/ (committed al repo) y opcionalmente desde paths externos configurables. Externos se declaran en config.json.modules.external_paths como array.",
+
+    "NO REQUIRE CIRCULAR ENTRE MÓDULOS. Los módulos no se importan entre sí con require(). Comunicación es 100% via bus. Si A necesita resultado de B, A publica un evento y B lo procesa, no hace `require('../B')`.",
+
+    "INTENT REGISTRY OPCIONAL. core/modules/intent-registry.js permite a módulos registrar 'intents' (acciones nombradas que otros módulos pueden invocar). Es una capa fina sobre el bus para descubrimiento — no cambia el principio event-driven."
+  ],
+
+  "principios": [
+    {
+      "id": "discovery_por_convencion",
+      "regla": "Loader escanea ./modules/ al arrancar. Cada subdirectorio con module.json + index.js es candidato a módulo.",
+      "razon": "Convención > configuración. Añadir módulo = añadir directorio; no hay registro central que mantener."
+    },
+    {
+      "id": "manifest_obligatorio",
+      "regla": "Sin module.json, el directorio no se considera módulo. El manifest declara metadata, publishes, subscribes, dependencies, config.",
+      "razon": "Manifest es el contrato externo del módulo. Sin manifest, el loader no puede auto-wire ni validar dependencies ni saber qué es."
+    },
+    {
+      "id": "exporta_clase_con_onload_onunload",
+      "regla": "index.js exporta una clase que implementa onLoad(context) y onUnload(). Sin esos métodos, el módulo no carga.",
+      "razon": "Contrato uniforme permite al loader tratar todos los módulos igual. lifecycle.contract gobierna el shape de los métodos; este contrato gobierna cómo se invocan."
+    },
+    {
+      "id": "contexto_inyectado_en_onload",
+      "regla": "Loader pasa { core, moduleConfig, moduleLoader, logger, metrics, eventBus } a onLoad. El módulo NO instancia logger/metrics/bus por su cuenta.",
+      "razon": "Inyección elimina dependencias hardcoded y permite que el loader controle qué instancia recibe cada módulo (metrics labeled por módulo, logger con prefijo del nombre del módulo, etc.)."
+    },
+    {
+      "id": "dependencies_definen_orden",
+      "regla": "module.json.dependencies es array de nombres de módulos. Loader resuelve orden topológico. Ciclos = error.",
+      "razon": "Sin orden explícito, módulo A puede arrancar antes que su dependencia B y fallar en onLoad. Ordering topológico garantiza que B siempre está listo cuando A arranca."
+    },
+    {
+      "id": "fallo_aislado_no_derriba_core",
+      "regla": "Si onLoad de un módulo lanza, loader registra error, limpia subscribes auto-wired, marca el módulo como no cargado, sigue con los demás.",
+      "razon": "Un módulo roto no debe tirar el core entero. El sistema arranca con N-1 módulos y reporta el módulo problemático sin colapsar."
+    },
+    {
+      "id": "auto_wire_subscribes_antes_de_onload",
+      "regla": "El loader registra los subscribes declarados en module.json contra el bus ANTES de invocar onLoad. Así cuando onLoad termina, los handlers ya están activos.",
+      "razon": "Si el orden fuera al revés, durante onLoad el módulo podría publicar eventos que aún no tienen handlers escuchando."
+    },
+    {
+      "id": "hot_reload_en_development_unicamente",
+      "regla": "fs.watch sobre cada módulo activo SOLO cuando NODE_ENV=development. Producción: cambios requieren restart manual del proceso.",
+      "razon": "Hot-reload tiene riesgo (estado en memoria perdido, watchers que se acumulan). En development es valioso para iteración rápida; en producción es preferible determinismo."
+    },
+    {
+      "id": "unloadall_en_shutdown_orden_inverso",
+      "regla": "Al recibir SIGTERM/SIGINT, loader invoca onUnload de cada módulo cargado en ORDEN INVERSO al de carga. Permite que A (cargado tras B) se desuscriba antes de que B se descargue.",
+      "razon": "Si B se descarga antes que A, A puede seguir publicando eventos a B inexistente. Orden inverso preserva la consistencia durante shutdown."
+    },
+    {
+      "id": "no_require_directo_entre_modulos",
+      "regla": "Ningún módulo hace require() de otro módulo del repo. Comunicación 100% via bus.",
+      "razon": "require directo crea acoplamiento de código (cambios en B rompen A). Bus desacopla — A solo conoce los eventos canónicos, no la implementación de B."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "discovery_por_filesystem_no_registro_central",
+      "decision": "Loader descubre módulos escaneando ./modules/. No hay archivo de registro (modules.json) ni base de datos de módulos.",
+      "alternativa_descartada": "Archivo modules.json en raíz que enumera los módulos cargables, mantenido a mano.",
+      "razon": "Registro central requiere mantenimiento manual cada vez que se añade/quita módulo — fácil olvidar. Filesystem como registro: añadir directorio = añadir módulo; quitar directorio = quitar módulo. Cero mantenimiento."
+    },
+    {
+      "id": "in_process_con_require_dinamico",
+      "decision": "Módulos se cargan in-process con require() del index.js. Comparten el mismo Node runtime.",
+      "alternativa_descartada": "Cada módulo en su propio worker thread (worker_threads) o proceso (child_process).",
+      "razon": "Workers/processes añaden overhead de IPC y complican el bus (eventos cruzando límites). Y la performance in-process bus >> IPC. Aislamiento por proceso solo se justifica si hay módulos no-trusted, que no es el caso aquí (todos los módulos son del mismo repo)."
+    },
+    {
+      "id": "context_inyectado_no_singleton_global",
+      "decision": "El loader inyecta { core, logger, eventBus, ... } a cada módulo en onLoad. Los módulos NO importan singletons globales.",
+      "alternativa_descartada": "Singletons globales (require('./logger') en cada módulo).",
+      "razon": "Inyección permite al loader controlar qué instancia recibe cada módulo (logger con prefijo del nombre, metrics labeled por módulo). Singletons hacen imposible diferenciar."
+    },
+    {
+      "id": "dependencies_resuelve_orden_topologico",
+      "decision": "module.json.dependencies se interpreta como grafo dirigido. Loader hace topological sort. Ciclos = error.",
+      "alternativa_descartada": "Cargar en orden alfabético / orden de descubrimiento del filesystem.",
+      "razon": "Sin orden topológico, dependencias pueden no estar listas cuando otro módulo las usa. Orden alfabético es accidental — coincide a veces, falla otras."
+    },
+    {
+      "id": "fallo_de_carga_aislado_no_propaga",
+      "decision": "Error en onLoad de un módulo NO derriba el core. Se registra, se limpia, y se continúa con los demás.",
+      "alternativa_descartada": "Fail-fast: cualquier error de carga abort del proceso.",
+      "razon": "Fail-fast es atractivo pero en sistema event-driven con N módulos, un error en módulo no-crítico (ej. un módulo de telemetría) no debe impedir que el resto funcione. La detección del módulo roto se hace en runtime via logs/health checks."
+    },
+    {
+      "id": "hot_reload_solo_development",
+      "decision": "fs.watch para hot-reload se activa SOLO si NODE_ENV=development.",
+      "alternativa_descartada": "Hot-reload siempre activo (incluso en production).",
+      "razon": "En production, los cambios deben pasar por proceso controlado (commit, test, deploy). Hot-reload bypassa ese flujo y deja el proceso en estado inconsistente."
+    },
+    {
+      "id": "shutdown_grafico_orden_inverso",
+      "decision": "onUnload se invoca en orden inverso al de carga. Permite que dependientes se descarguen antes que dependencias.",
+      "alternativa_descartada": "onUnload en cualquier orden (paralelo o aleatorio).",
+      "razon": "Orden inverso preserva consistencia: si A depende de B, A puede usar B durante su onUnload (limpiar suscripciones, persistir estado vía B). Si B se descarga primero, A queda colgado."
+    },
+    {
+      "id": "no_require_directo_entre_modulos",
+      "decision": "Ningún módulo hace require() de otro módulo del repo.",
+      "alternativa_descartada": "Require directo cuando 'es más simple' (typed access vs eventos).",
+      "razon": "Require directo rompe el desacoplamiento. Si A require B, cualquier cambio en B's API rompe A inmediatamente. Bus permite que B evolucione internamente mientras mantiene los events canónicos."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "modulo_sin_module_json",
+      "regla": "Ningún directorio en modules/ pretende ser módulo sin module.json. Carpetas auxiliares (ej. modules/_shared/) deben tener prefijo `_` para que el loader las ignore.",
+      "enforce": "Validador escanea modules/ buscando subdirectorios sin module.json (excluyendo prefijo _). Severidad warning."
+    },
+    {
+      "id": "modulo_sin_index_js_o_sin_clase",
+      "regla": "Ningún module.json válido vive sin index.js que exporta clase con onLoad/onUnload.",
+      "enforce": "Validador instancia y verifica typeof exports[default].prototype.onLoad === 'function'. Severidad error."
+    },
+    {
+      "id": "require_directo_entre_modulos",
+      "regla": "Ningún módulo del repo hace require() del index.js u otros archivos de otro módulo del repo.",
+      "enforce": "Validador escanea código de cada módulo buscando `require('../<otroModulo>/...')` o `require('../../modules/<otroModulo>/...')`. Severidad error."
+    },
+    {
+      "id": "instanciar_logger_metrics_eventbus_propio",
+      "regla": "Ningún módulo crea su propio logger/metrics/eventBus — los recibe en context inyectado por el loader.",
+      "enforce": "Validador escanea código buscando `new Logger()`, `new MetricsClient()`, `new EventBus()`. Severidad warning."
+    },
+    {
+      "id": "module_json_dependencies_referencias_falsas",
+      "regla": "module.json.dependencies referencia nombres de módulos que existen en el repo.",
+      "enforce": "Validador cruza dependencies declaradas con módulos descubribles. Severidad error si referencia inexistente."
+    },
+    {
+      "id": "module_json_dependencies_ciclo",
+      "regla": "El grafo de dependencies no contiene ciclos.",
+      "enforce": "Validador hace topological sort y detecta ciclos. Severidad error."
+    },
+    {
+      "id": "fail_fast_que_derribe_core",
+      "regla": "Ningún módulo lanza errores en onLoad que pretendan derribar el proceso. Si un módulo no puede arrancar, lanza error y deja que el loader lo aísle.",
+      "enforce": "Auditoría manual. Patrones tipo `process.exit(1)` en onLoad son drift severo."
+    },
+    {
+      "id": "hot_reload_en_production",
+      "regla": "Ningún módulo asume hot-reload activo en production. Cambios en producción requieren restart del proceso.",
+      "enforce": "Auditoría manual."
+    },
+    {
+      "id": "shutdown_no_graceful",
+      "regla": "Ningún módulo se descarga sin invocar onUnload. Y onUnload limpia timers, cierra conexiones, persiste pendientes.",
+      "enforce": "Validador inspecciona implementaciones de onUnload buscando clearTimeout / clearInterval / close() / persist(). Severidad warning si onUnload está vacío."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/module-loading.schema.json (a crear). Top-level: _meta, regla_maestra (string), discovery (object: scanea ./modules/ al arrancar, archivos obligatorios), shape_de_modulo (object: index.js exporta clase, methods onLoad/onUnload), context_inyectado (object: lista de campos que el loader pasa en onLoad), resolucion_de_dependencies (object: topological sort, manejo de ciclos), manejo_de_fallos (object: aislamiento, no propagación al core), hot_reload (object: watchers, NODE_ENV=development), shutdown (object: orden inverso, SIGTERM/SIGINT), patrones_de_drift (regexes que el validador usa).",
+
+  "reglas_de_extraccion": [
+    "1. Validar contrato.",
+    "2. Iterar modules/. Para cada subdirectorio sin prefijo `_`, verificar que tiene module.json + index.js.",
+    "3. Para cada module.json, verificar shape mínimo (name, version, description) y que dependencies referencian módulos existentes.",
+    "4. Construir grafo de dependencies y verificar que no hay ciclos.",
+    "5. Escanear código de cada módulo buscando require('../<otroModulo>/...') — drift error si encuentra.",
+    "6. Escanear código de cada módulo buscando new Logger() / new MetricsClient() / new EventBus() — drift warning.",
+    "7. Inspeccionar implementaciones de onUnload buscando ausencia de cleanup — drift warning si vacío.",
+    "8. Reportar PASS/FAIL."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/module-loading.schema.json (a crear)"
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/module-loading.validate.js (a crear)"
+    },
+    {
+      "tipo": "implementacion_canonica",
+      "ubicacion": "core/modules/loader.js",
+      "regla": "Implementador del contrato. Cualquier cambio en el loader requiere actualizar este contrato."
+    },
+    {
+      "tipo": "modulos_consumidores",
+      "items": ["TODOS los módulos en modules/"],
+      "regla": "Cumplen el contrato exportando clase con onLoad/onUnload, declarando dependencies en module.json, recibiendo contexto inyectado."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección module-loading cuando exista)",
+      "regla": "Warnings de módulos con onUnload vacío quedan en baseline."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "module_loading_contract_estructura_valida",
+      "regla": "Amplitud canónica completa.",
+      "como_detectar": "17 secciones canónicas presentes.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_sin_module_json",
+      "regla": "Subdirectorios en modules/ (sin prefijo _) tienen module.json.",
+      "como_detectar": "fs.readdir + fs.existsSync.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_sin_index_js",
+      "regla": "Cada module.json tiene su index.js correspondiente.",
+      "como_detectar": "fs.existsSync.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_require_directo_entre_modulos",
+      "regla": "Ningún módulo hace require de otro módulo del repo.",
+      "como_detectar": "Regex sobre código.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_dependency_referencia_inexistente",
+      "regla": "module.json.dependencies referencia módulos que existen.",
+      "como_detectar": "Cruzar dependencies declaradas vs módulos descubribles.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_dependency_ciclo",
+      "regla": "El grafo de dependencies no contiene ciclos.",
+      "como_detectar": "Topological sort.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_onunload_vacio",
+      "regla": "Implementaciones de onUnload no están vacías cuando el módulo tiene timers/connections/state.",
+      "como_detectar": "Heurística sobre código.",
+      "severidad": "info"
+    }
+  ],
+
+  "salida_validador": "PASS si el contrato es válido, todos los módulos tienen module.json + index.js + clase con onLoad/onUnload, no hay require directo entre módulos, dependencies referencian módulos existentes, no hay ciclos. Errors para violaciones críticas (require directo, ciclos, módulo sin index.js). Warnings para módulos sin module.json en directorios candidatos. Info para onUnload vacío.",
+
+  "convenciones_complementarias": {
+    "naming": "Nombres de módulos cumplen naming.contract: kebab-case, ASCII puro. El nombre del directorio == name en module.json.",
+    "glossary": "Términos: módulo, manifest, loader, hot-reload, dependencies, onLoad, onUnload. Forma canónica en glossary.json.",
+    "events": "Auto-wire de subscribes ocurre antes de onLoad. Los publishes se permiten desde onLoad en adelante.",
+    "errors": "Errores de carga van con códigos canónicos: MODULE_LOAD_FAILED, MODULE_DEPENDENCY_NOT_FOUND, MODULE_DEPENDENCY_CYCLE.",
+    "observability": "El loader emite logs por cada módulo cargado: 'core.module.loaded', 'core.module.load.failed'. Métricas: módulos cargados / fallidos / total.",
+    "lifecycle": "Coherente con lifecycle.contract: el loader implementa el ciclo onLoad/onUnload que el contrato define. Este contrato concreta CÓMO el loader invoca esos métodos.",
+    "persistence": "El loader no persiste estado propio entre arranques. Cada arranque escanea ./modules/ desde cero.",
+    "http": "El loader expone via core un endpoint /modules (lista módulos cargados) — útil para debugging y dashboard.",
+    "security": "Coherente con security: módulos no leen secretos directamente; los reciben via credential.resolve.request. El contexto inyectado en onLoad NO contiene credentials.",
+    "frontend": "El frontend consulta modules cargados via MQTT (system.modules.list) o HTTP (/modules) para construir la barra de módulos del workspace.",
+    "testing": "Tests del loader verifican: discovery correcto, orden topológico, aislamiento de fallos, hot-reload en development.",
+    "multi-tenancy": "El loader carga módulos UNA vez (no por proyecto). Los módulos son project-scoped en sus operaciones, no en su carga.",
+    "documentation": "Este contrato es la fuente autoritativa de cómo se cargan módulos. README individual por módulo solo si añade valor.",
+    "versionado": "module.version sube según versionado.contract (mayor en breaking de events, minor en features, patch en fixes).",
+    "deployment": "Coherente con deployment.contract: el loader corre en el proceso único Node. La carga de módulos es parte del proceso de arranque que deployment.contract canoniza."
+  }
+}

@@ -119,6 +119,64 @@ function checkDependencyReferenciaInexistente(findings) {
   }
 }
 
+function checkModuleJsonCamposMinimos(findings) {
+  for (const { dir, manifest } of listModuleManifests()) {
+    for (const field of ['name', 'version', 'description']) {
+      const v = manifest[field];
+      if (typeof v !== 'string' || v.length === 0) {
+        findings.errors.push(`drift_module_json_sin_campos_minimos: ${path.relative(REPO_ROOT, dir)}/module.json — campo "${field}" ausente o vacio`);
+      }
+    }
+  }
+}
+
+function checkModuloInstanciaLoggerPropio(findings) {
+  for (const { dir, manifest } of listModuleManifests()) {
+    const idxFile = path.join(dir, 'index.js');
+    if (!fs.existsSync(idxFile)) continue;
+    const content = fs.readFileSync(idxFile, 'utf-8');
+    if (/require\s*\(\s*['"`]winston['"`]\s*\)/.test(content) || /new\s+Logger\s*\(/.test(content)) {
+      findings.warnings.push(`drift_modulo_instancia_logger_propio: ${path.relative(REPO_ROOT, idxFile)} — instancia logger propio (debe usar this.logger inyectado)`);
+    }
+  }
+}
+
+function checkModuloInstanciaEventBusPropio(findings) {
+  for (const { dir, manifest } of listModuleManifests()) {
+    const idxFile = path.join(dir, 'index.js');
+    if (!fs.existsSync(idxFile)) continue;
+    const content = fs.readFileSync(idxFile, 'utf-8');
+    if (/new\s+EventBus\s*\(/.test(content) || /new\s+EventEmitter\s*\(/.test(content)) {
+      // EventEmitter en módulos puede ser legítimo (eventos internos del módulo) — solo flagear como warning
+      findings.warnings.push(`drift_modulo_instancia_eventbus_propio: ${path.relative(REPO_ROOT, idxFile)} — new EventEmitter/EventBus (verificar que no es para comunicacion cross-modulo)`);
+    }
+  }
+}
+
+function checkOnLoadLanzaProcessExit(findings) {
+  for (const { dir, manifest } of listModuleManifests()) {
+    const idxFile = path.join(dir, 'index.js');
+    if (!fs.existsSync(idxFile)) continue;
+    const content = fs.readFileSync(idxFile, 'utf-8');
+    // Heurística: process.exit dentro del cuerpo de onLoad
+    const onLoadMatch = content.match(/async\s+onLoad\s*\([^)]*\)\s*\{([\s\S]*?)\n\s\s\}/);
+    if (onLoadMatch && /process\.exit\s*\(/.test(onLoadMatch[1])) {
+      findings.errors.push(`drift_onload_lanza_process_exit: ${path.relative(REPO_ROOT, idxFile)} — onLoad invoca process.exit (debe lanzar error que el loader aisla)`);
+    }
+  }
+}
+
+function checkModuloSinOnUnload(findings) {
+  for (const { dir, manifest } of listModuleManifests()) {
+    const idxFile = path.join(dir, 'index.js');
+    if (!fs.existsSync(idxFile)) continue;
+    const content = fs.readFileSync(idxFile, 'utf-8');
+    if (!/(?:async\s+)?onUnload\s*\(/.test(content)) {
+      findings.warnings.push(`drift_modulo_sin_onunload: ${path.relative(REPO_ROOT, idxFile)} — clase sin metodo onUnload (loader lo necesita en shutdown)`);
+    }
+  }
+}
+
 function reportFindings(f) {
   if (f.errors.length) { console.log(`${RED}cross-system errors (${f.errors.length})${RST}`); for (const e of f.errors) console.log(`  ${RED}✗${RST} ${e}`); }
   if (f.warnings.length) { console.log(`${YEL}cross-system warnings (${f.warnings.length})${RST}`); for (const w of f.warnings) console.log(`  ${YEL}!${RST} ${w}`); }
@@ -141,6 +199,11 @@ function main() {
     checkSinIndexJs(f);
     checkRequireDirectoEntreModulos(f);
     checkDependencyReferenciaInexistente(f);
+    checkModuleJsonCamposMinimos(f);
+    checkModuloInstanciaLoggerPropio(f);
+    checkModuloInstanciaEventBusPropio(f);
+    checkOnLoadLanzaProcessExit(f);
+    checkModuloSinOnUnload(f);
     reportFindings(f);
   }
   process.exit(0);

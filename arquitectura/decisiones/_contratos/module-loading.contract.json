@@ -149,6 +149,36 @@
       "decision": "Ningún módulo hace require() de otro módulo del repo.",
       "alternativa_descartada": "Require directo cuando 'es más simple' (typed access vs eventos).",
       "razon": "Require directo rompe el desacoplamiento. Si A require B, cualquier cambio en B's API rompe A inmediatamente. Bus permite que B evolucione internamente mientras mantiene los events canónicos."
+    },
+    {
+      "id": "manifest_minimo_obligatorio_no_opcional",
+      "decision": "El loader exige module.json con: name (string), version (string), description (string). Sin esos 3 campos, el módulo no carga.",
+      "alternativa_descartada": "Manifest con todos los campos opcionales — el loader rellena defaults.",
+      "razon": "Los 3 campos mínimos son la identidad del módulo. Sin name no se puede referenciar; sin version no se puede gestionar evolución; sin description no se entiende qué hace. Defaults silenciosos enmascaran módulos mal definidos."
+    },
+    {
+      "id": "directorios_con_prefijo_underscore_son_auxiliares",
+      "decision": "Subdirectorios de modules/ con prefijo `_` (ej. modules/_shared/, modules/_archived/) NO son módulos. El loader los ignora.",
+      "alternativa_descartada": "Detección heurística: 'si tiene module.json es módulo, si no, ignorar'.",
+      "razon": "Convención explícita es más barata que heurística (no hay que abrir archivos para decidir). Permite tener directorios auxiliares (componentes compartidos, archivos de referencia) sin ambigüedad."
+    },
+    {
+      "id": "module_loader_unico_no_loaders_anidados",
+      "decision": "Hay UN loader (core/modules/loader.js) que carga TODOS los módulos. No hay 'sub-loaders' por categoría.",
+      "alternativa_descartada": "Loader principal + loaders especializados por dominio (un loader para módulos pizzepos, otro para conversación, etc.).",
+      "razon": "Múltiples loaders multiplican puntos de fallo y obligan a coordinar config (qué loader ve qué directorio). Loader único trata todos los módulos igual."
+    },
+    {
+      "id": "modulo_no_lanza_error_critico_en_onload_que_derribe_otros",
+      "decision": "Si onLoad lanza error, el loader registra y continúa con los demás módulos. NO se aborta el proceso ni se detienen los onLoad subsiguientes.",
+      "alternativa_descartada": "Fail-fast: error en cualquier onLoad → abort del proceso.",
+      "razon": "Fail-fast tira el sistema entero por un módulo no crítico (ej. módulo de telemetría con bug). Aislar errores permite que el resto del sistema siga sirviendo. La detección del módulo problemático se hace via logs."
+    },
+    {
+      "id": "tools_registry_global_compartido",
+      "decision": "Existe un toolsRegistry compartido (en moduleLoader) donde los módulos registran tools que el LLM puede usar. Es la única excepción al aislamiento module-to-module.",
+      "alternativa_descartada": "Cada módulo registra sus tools en su propio store y el LLM consulta vía bus.",
+      "razon": "Las tools del LLM se filtran por scope/page en cada agentic loop — necesitan estar listadas en un solo lugar para que ai-gateway las pueda enumerar rápidamente. Vía bus añadiría latency en cada llamada al LLM."
     }
   ],
 
@@ -281,6 +311,42 @@
       "regla": "Implementaciones de onUnload no están vacías cuando el módulo tiene timers/connections/state.",
       "como_detectar": "Heurística sobre código.",
       "severidad": "info"
+    },
+    {
+      "id": "drift_module_json_sin_campos_minimos",
+      "regla": "Cada module.json incluye name, version, description (los 3 mínimos obligatorios).",
+      "como_detectar": "Inspeccionar module.json y verificar presencia y tipo string no vacío de los 3 campos.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_instancia_logger_propio",
+      "regla": "Ningún módulo hace `new Logger()` o `require('winston')` y crea logger propio. Lo recibe del context inyectado por el loader.",
+      "como_detectar": "Regex sobre código de cada módulo.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_instancia_eventbus_propio",
+      "regla": "Ningún módulo crea su propia EventEmitter / EventBus. Usa el this.eventBus inyectado.",
+      "como_detectar": "Regex: new EventEmitter() / new EventBus() en módulos. Excluyendo core/.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_module_loader_anidado",
+      "regla": "Solo existe core/modules/loader.js. No hay otros 'loader.js' en módulos que carguen sub-módulos.",
+      "como_detectar": "find modules/ -name 'loader.js' que NO sea archivo del propio core.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_onload_lanza_process_exit",
+      "regla": "Ningún onLoad invoca process.exit(). Si el módulo no puede arrancar, lanza error y deja que el loader lo aísle.",
+      "como_detectar": "Regex en onLoad de cada módulo: process.exit dentro del cuerpo de la función.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_sin_onunload",
+      "regla": "Cada módulo declara método onUnload (aunque sea vacío). El loader lo invoca durante shutdown.",
+      "como_detectar": "Inspeccionar prototype de la clase exportada por index.js.",
+      "severidad": "warning"
     }
   ],
 

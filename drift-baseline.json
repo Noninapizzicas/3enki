@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-05-03T16:14:38.374Z",
-  "total": 3043,
+  "generated_at": "2026-05-03T16:16:40.966Z",
+  "total": 3037,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
     "events": 205,
     "lifecycle": 59,
     "observability": 273,
-    "errors": 1165,
+    "errors": 1159,
     "persistence": 193,
     "http": 191,
     "chat-flow": 3,
@@ -23,7 +23,7 @@
     "scheduling": 2
   },
   "by_severity": {
-    "warning": 2979,
+    "warning": 2973,
     "info": 90,
     "error": 1
   },
@@ -1052,12 +1052,6 @@
     "errors|drift_error_sin_metric|pizzepos/productos modules/pizzepos/productos/index.js:660 — return { status: 400, ... } sin this.metrics.<X>(...errors...) en proximidad",
     "errors|drift_error_sin_metric|pizzepos/productos modules/pizzepos/productos/index.js:666 — return { status: 404, ... } sin this.metrics.<X>(...errors...) en proximidad",
     "errors|drift_error_sin_metric|pizzepos/productos modules/pizzepos/productos/index.js:804 — return { status: 400, ... } sin this.metrics.<X>(...errors...) en proximidad",
-    "errors|drift_error_sin_metric|pizzepos/productos modules/pizzepos/productos/index.js:823 — return { status: 500, ... } sin this.metrics.<X>(...errors...) en proximidad",
-    "errors|drift_error_sin_metric|pizzepos/productos modules/pizzepos/productos/index.js:847 — return { status: 404, ... } sin this.metrics.<X>(...errors...) en proximidad",
-    "errors|drift_error_sin_metric|pizzepos/tarifas modules/pizzepos/tarifas/index.js:157 — return { status: 400, ... } sin this.metrics.<X>(...errors...) en proximidad",
-    "errors|drift_error_sin_metric|pizzepos/tarifas modules/pizzepos/tarifas/index.js:159 — return { status: 400, ... } sin this.metrics.<X>(...errors...) en proximidad",
-    "errors|drift_error_sin_metric|pizzepos/tarifas modules/pizzepos/tarifas/index.js:177 — return { status: 400, ... } sin this.metrics.<X>(...errors...) en proximidad",
-    "errors|drift_error_sin_metric|pizzepos/tarifas modules/pizzepos/tarifas/index.js:179 — return { status: 400, ... } sin this.metrics.<X>(...errors...) en proximidad",
     "errors|drift_inventar_error_code|composition-manager modules/composition-manager/index.js:580 — código \"VALIDATION_ERROR\" no en lista canónica",
     "errors|drift_inventar_error_code|composition-manager modules/composition-manager/index.js:591 — código \"VALIDATION_ERROR\" no en lista canónica",
     "errors|drift_inventar_error_code|composition-manager modules/composition-manager/index.js:593 — código \"NOT_FOUND\" no en lista canónica",

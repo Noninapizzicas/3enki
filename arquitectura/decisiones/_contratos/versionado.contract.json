@@ -127,6 +127,30 @@
       "decision": "package.json.version del repo es 0.x.y mientras hay contratos no completados o features no estables. Salto a 1.0.0 cuando todos los contratos transversales y subsistemas estén cerrados.",
       "alternativa_descartada": "1.0.0 desde el primer commit aunque el sistema sea preview.",
       "razon": "0.x.y es la convención semver para preview — los consumers externos saben que minor breaks pueden ocurrir. Saltar a 1.0.0 prematuramente compromete con stability que no se cumple."
+    },
+    {
+      "id": "schema_versions_implicitas_via_contrato",
+      "decision": "Los JSON Schemas de eventos NO tienen `version` propia. Heredan version del contrato/sub-contrato que los define (chat-flow v1.0.0 → todos sus schemas son v1.0.0).",
+      "alternativa_descartada": "Versionar cada schema independientemente con su propio campo version.",
+      "razon": "Versionar schema por schema multiplica los puntos de cambio. Un cambio que toca 3 schemas del mismo subsistema obligaría a 3 subidas que se desincronizarían fácilmente. Heredar del contrato concentra el cambio en UN punto."
+    },
+    {
+      "id": "module_version_separa_implementacion_de_contrato_externo",
+      "decision": "module.version refleja cambios INTERNOS del módulo (refactor, bug fix). El SHAPE de los events que el módulo publica viene gobernado por sub-contratos canónicos (chat-flow, agent-flow). Cambiar shape de event canónico = subir version del sub-contrato, no del módulo.",
+      "alternativa_descartada": "module.version captura todo (interno + shape).",
+      "razon": "Los consumers se preocupan por el shape de los events, no por refactors internos. Si module.version sube por refactor, los consumers no necesitan migrar. Si el sub-contrato sube mayor, todos los módulos del subsistema migran coordinadamente."
+    },
+    {
+      "id": "downgrade_de_version_es_drift_severo",
+      "decision": "Las versiones SOLO suben. Un commit que reduce la version de un artefacto (ej. 1.2.0 → 1.1.0) es drift severo (probablemente revert mal hecho).",
+      "alternativa_descartada": "Permitir downgrade cuando se hace revert con git revert.",
+      "razon": "Downgrade rompe la garantía de monotonía: un consumer que vio v1.2.0 espera que las próximas sean ≥1.2.0. Revert correcto preserva history y bumpa para registrar el revert (1.2.0 → 1.2.1 que efectivamente rebobina el cambio)."
+    },
+    {
+      "id": "version_initial_es_1_0_0_no_0_x",
+      "decision": "Cuando se crea un contrato/schema/módulo nuevo, su version inicial es 1.0.0. NO 0.1.0 ni 0.0.1.",
+      "alternativa_descartada": "Convención npm de empezar en 0.1.0 o 0.0.1.",
+      "razon": "0.x.y es semver para 'preview / breaking changes pueden ocurrir en minor'. Pero un contrato del repo es estable desde su creación (su contenido está pensado para durar). Empezar en 1.0.0 marca esa estabilidad. La excepción es package.json del repo (sí 0.x.y mientras el sistema agregado no esté maduro)."
     }
   ],
 
@@ -257,6 +281,42 @@
       "id": "drift_breaking_change_sin_subir_mayor",
       "regla": "Cambios breaking detectables (campo required removido, enum restringido) van con subida de mayor.",
       "como_detectar": "Diff de schema entre versions.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_version_inicial_distinta_a_1_0_0",
+      "regla": "Contratos nuevos tienen version inicial 1.0.0. NO 0.1.0 ni 0.0.1.",
+      "como_detectar": "Inspeccionar contratos con creada == HEAD-recent y verificar version=='1.0.0'.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_schema_con_version_propia",
+      "regla": "Los JSON Schemas en _schemas/ NO tienen campo version propio. Heredan version del contrato.",
+      "como_detectar": "Inspeccionar archivos _schemas/**/*.json buscando propiedad version a nivel raíz.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_con_version_no_semver",
+      "regla": "module.json.version cumple semver puro MAJOR.MINOR.PATCH.",
+      "como_detectar": "Iterar modules/*/module.json y validar version contra regex.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_dependency_version_con_caret_o_tilde_en_module_json",
+      "regla": "module.json.dependencies son strings (nombres de módulos), NO objetos con version constraints — los módulos son del repo, no externos.",
+      "como_detectar": "Inspeccionar module.json.dependencies que sean objetos en vez de strings.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_supersedes_nota_referencia_version_inexistente",
+      "regla": "supersedes_nota referencia versions previas que existieron (no inventa 'v0.5.0 deprecated').",
+      "como_detectar": "Auditoria manual.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_creada_field_ausente_o_no_iso_date",
+      "regla": "Cada contrato tiene campo creada con formato YYYY-MM-DD.",
+      "como_detectar": "Inspeccionar contratos buscando creada que no sea string ISO date.",
       "severidad": "warning"
     }
   ],

@@ -91,6 +91,55 @@ function checkSupersedesNota(findings) {
   }
 }
 
+function checkSchemaConVersionPropia(findings) {
+  const SCHEMAS_DIR = path.join(REPO_ROOT, 'arquitectura/decisiones/_schemas');
+  if (!fs.existsSync(SCHEMAS_DIR)) return;
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full);
+        else if (name.endsWith('.json')) {
+          let j; try { j = loadJson(full); } catch (_) { continue; }
+          if (typeof j.version === 'string') {
+            findings.warnings.push(`drift_schema_con_version_propia: ${path.relative(REPO_ROOT, full)} tiene campo version="${j.version}" — schemas heredan version del contrato`);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  walk(SCHEMAS_DIR);
+}
+
+function checkCreadaIsoDate(findings) {
+  for (const { kind, file } of listVersioned()) {
+    if (kind !== 'contract') continue;
+    let j; try { j = loadJson(file); } catch (_) { continue; }
+    const c = j.creada;
+    if (typeof c !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(c)) {
+      findings.warnings.push(`drift_creada_field_ausente_o_no_iso_date: ${path.relative(REPO_ROOT, file)} — creada="${c}" no es ISO date YYYY-MM-DD`);
+    }
+  }
+}
+
+function checkDependencyVersionConstraintEnModuleJson(findings) {
+  for (const { kind, file } of listVersioned()) {
+    if (kind !== 'module') continue;
+    let j; try { j = loadJson(file); } catch (_) { continue; }
+    const deps = j.dependencies;
+    if (!Array.isArray(deps)) continue;
+    for (const dep of deps) {
+      if (typeof dep === 'object' && dep !== null) {
+        findings.warnings.push(`drift_dependency_version_con_caret_o_tilde_en_module_json: ${path.relative(REPO_ROOT, file)} dependency es objeto ${JSON.stringify(dep).slice(0,40)} — debe ser string (nombre del modulo)`);
+      } else if (typeof dep === 'string' && /[\^~@]/.test(dep)) {
+        findings.warnings.push(`drift_dependency_version_con_caret_o_tilde_en_module_json: ${path.relative(REPO_ROOT, file)} dependency "${dep}" tiene constraint version — modulos del repo no se versionan asi`);
+      }
+    }
+  }
+}
+
 function reportFindings(f) {
   if (f.errors.length) { console.log(`${RED}cross-system errors (${f.errors.length})${RST}`); for (const e of f.errors) console.log(`  ${RED}✗${RST} ${e}`); }
   if (f.warnings.length) { console.log(`${YEL}cross-system warnings (${f.warnings.length})${RST}`); for (const w of f.warnings) console.log(`  ${YEL}!${RST} ${w}`); }
@@ -112,6 +161,9 @@ function main() {
     const f = { errors: [], warnings: [], info: [] };
     checkSemverFormat(f);
     checkSupersedesNota(f);
+    checkSchemaConVersionPropia(f);
+    checkCreadaIsoDate(f);
+    checkDependencyVersionConstraintEnModuleJson(f);
     reportFindings(f);
   }
   process.exit(0);

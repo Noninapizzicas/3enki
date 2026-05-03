@@ -1,9 +1,9 @@
 {
   "_doc": "Sub-contrato derivado del documento maestro companero-viaje.contract.json. Define el SHAPE EXACTO (validable con JSON Schema) de los 5 eventos canonicos de la categoria chat_flow: chat.message.saved, chat.context.enriched, chat.prompt.ready, ai.chat.response, ai.chat.failed. Cualquier modulo del subsistema que publique o consuma estos eventos cumple este contrato. El validator chat-flow.validate.js cruza module.json publishes/subscribes con los schemas declarados aqui y detecta drift estructural ANTES de produccion.",
   "id": "chat-flow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-05-03",
-  "supersedes_nota": "Primera version. Deriva del documento maestro del compañero de viaje (companero-viaje.contract v1.0.0). Captura el shape canonico que reemplaza el hilvanado manual actual entre chat-io, prompt-builder, ai-gateway. Cierra los drifts semanticos detectados durante la creacion del documento maestro: 'message' polisemico, 'message_id_user' fantasma, ausencia de correlation_id, ausencia de user_id, ausencia de chat.context.enriched para memorias modulares.",
+  "supersedes_nota": "v1.1.0 (directriz multi-tenancy v1.1.0): project_id pasa de nullable a string obligatorio en todos los eventos chat_flow. Migracion de schemas + tests anotada como trabajo_pendiente. La directriz nace de la decision arquitectonica que el frontend abre panel emergente (system_panel) cuando el usuario no tiene proyecto/conversacion activos, antes de publicar evento alguno — null implicito ya no tiene cabida.\n\nv1.0.0: Primera version. Deriva del documento maestro del compañero de viaje (companero-viaje.contract v1.0.0). Captura el shape canonico que reemplaza el hilvanado manual actual entre chat-io, prompt-builder, ai-gateway. Cierra los drifts semanticos detectados durante la creacion del documento maestro: 'message' polisemico, 'message_id_user' fantasma, ausencia de correlation_id, ausencia de user_id, ausencia de chat.context.enriched para memorias modulares.",
 
   "deriva_de": "arquitectura/decisiones/_contratos/companero-viaje.contract.json — protocolos_canonicos.eventos_canonicos.categorias[chat_flow]",
 
@@ -407,5 +407,30 @@
     "lifecycle": "Modulos del subsistema declaran sus subscribes en module.json para auto-wire en onLoad. Cumplen el patron onLoad/onUnload con limpieza de pendings (timeouts de DB, timeouts de credencial, etc.) sin instanciar servicios propios.",
     "persistence": "chat-io persiste mensajes via db.query.request a database-manager (event-driven). NO instancia DB propia. prompt-builder no persiste estado de conversacion — solo arma el system prompt en memoria. Memorias modulares pueden tener su propio storage local (in-memory para indices, json-file-per-project para datasets) declarado en config.persistence.pattern.",
     "http": "El subsistema chat NO expone HTTP. La fachada externa es chat-io (MQTT push al frontend web) y los modulos de canal (telegram-service via webhook, voice-output via WebSocket, etc.). Esos canales SI cumplen http.contract para su frontera externa, pero los eventos chat_flow son siempre internos via bus."
-  }
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "endurecer_project_id_a_obligatorio_en_schemas",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Tras directriz multi-tenancy v1.1.0 (project_id y conversation_id siempre obligatorios), migrar los schemas chat-flow para que project_id sea string obligatorio (no nullable). Hoy _common.schema.json tiene type:['string','null']; pasa a 'string' minLength 1.",
+      "schemas_afectados": [
+        "arquitectura/decisiones/_schemas/chat-flow/_common.schema.json — $defs.project_id retirar 'null'.",
+        "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json — project_id ya esta en required, ahora debe rechazar null en runtime.",
+        "arquitectura/decisiones/_schemas/chat-flow/chat.prompt.ready.schema.json — igual.",
+        "arquitectura/decisiones/_schemas/chat-flow/ai.chat.response.schema.json — igual.",
+        "arquitectura/decisiones/_schemas/chat-flow/ai.chat.failed.schema.json — project_id ya estaba opcional; pasa a obligatorio."
+      ],
+      "tests_afectados": [
+        "tests/unit/chat-io.test.js — ajustar fixtures que usen project_id null.",
+        "tests/unit/prompt-builder.test.js — igual.",
+        "tests/unit/ai-gateway-chat.test.js — igual."
+      ],
+      "criterio_de_cierre": "AJV strict rechaza payload con project_id null. Tests del subsistema chat verdes con project_id obligatorio. Bootstrap del repo crea proyecto 'default' al primer arranque; chat-io exige project_id en handleSend y rechaza con AUTHORIZATION_REQUIRED si falta.",
+      "bloqueado_por": "Implementacion del bootstrap del proyecto 'default' (probablemente en project-manager) + UI del setup_required en frontend para que el usuario nunca llegue al estado sin proyecto.",
+      "fecha_anotacion": "2026-05-03",
+      "deriva_de": "multi-tenancy.contract v1.1.0 (decision project_id_y_conversation_id_siempre_obligatorios)"
+    }
+  ]
 }

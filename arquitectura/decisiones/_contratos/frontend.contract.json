@@ -1,9 +1,9 @@
 {
   "_doc": "Captura LA forma canónica del frontend del sistema event-core: pantalla única donde el chat (compañero) es el eje y todos los módulos del backend renderizan su superficie alrededor sin sacar al usuario del espacio. Define el frame común (layout, principios, modelo de extensión, protocolo backend↔frontend, prohibidos) que toda UI del repo respeta. NO entra dentro del contenido visual concreto de cada módulo (UIs específicas como /compañero, /cocina y los renderizados internos de menu-generator, recetas, etc.) — eso es horizontal, propiedad de cada módulo. La regla maestra: el usuario nunca abandona el frame; cada vez que sales del espacio, hay distracciones.",
   "id": "frontend",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "creada": "2026-05-03",
-  "supersedes_nota": "v1.1.0 (patron agente-vive-en-chat): añadida sección bloques_canonicos_inline_render con el tipo agent_intervention (tarjeta colapsable que representa la ejecución de un agente especialista en el chat). Coherente con agent-flow.contract v1.1.0 (chat_inline_rendering) y companero-viaje. Documenta el shape de metadata.block para cada tipo de bloque inline. Lista cerrada extensible — añadir tipo nuevo requiere actualizar el contrato.\n\nv1.0.0: Primera versión. Absorbe la información que vivía en frontend/DISEÑO-UI.md como fuente JSON autoritativa (validable, cross-referenciable con el resto del sistema). El markdown se archiva — la fuente de verdad pasa a ser este contrato. Recoge los 5 principios fundamentales, el layout canónico de 5 zonas + lateral, el sandwich del chat, el sistema visual (colores de proyecto, iconos de provider), el protocolo MQTT frontend↔backend, y las 8 decisiones arquitectónicas previas. Documento autoritativo del frame; cada módulo backend declara su superficie via module.json.ui_handlers respetando este frame.",
+  "supersedes_nota": "v1.2.0 (directriz multi-tenancy v1.1.0): añadidas decisiones chat_requiere_project_y_conversation_activos y setup_required_es_inline_no_modal_bloqueante. Nuevo tipo de bloque canonico inline 'setup_required' (panel ≤33vh que guía al usuario a crear/seleccionar proyecto+conversación cuando faltan). Trabajo_pendiente para implementar UI del panel. Coherente con multi-tenancy.contract.project_id_y_conversation_id_siempre_obligatorios.\n\nv1.1.0 (patron agente-vive-en-chat): añadida sección bloques_canonicos_inline_render con el tipo agent_intervention (tarjeta colapsable que representa la ejecución de un agente especialista en el chat). Coherente con agent-flow.contract v1.1.0 (chat_inline_rendering) y companero-viaje. Documenta el shape de metadata.block para cada tipo de bloque inline. Lista cerrada extensible — añadir tipo nuevo requiere actualizar el contrato.\n\nv1.0.0: Primera versión. Absorbe la información que vivía en frontend/DISEÑO-UI.md como fuente JSON autoritativa (validable, cross-referenciable con el resto del sistema). El markdown se archiva — la fuente de verdad pasa a ser este contrato. Recoge los 5 principios fundamentales, el layout canónico de 5 zonas + lateral, el sandwich del chat, el sistema visual (colores de proyecto, iconos de provider), el protocolo MQTT frontend↔backend, y las 8 decisiones arquitectónicas previas. Documento autoritativo del frame; cada módulo backend declara su superficie via module.json.ui_handlers respetando este frame.",
 
   "objetivo": "Producir UN JSON output (_outputs/frontend.json) que define: el layout canónico (5 zonas + lateral), los principios maestros (pantalla única, chat como eje, sandwich, no salir nunca), los tipos canónicos de superficie que un módulo backend puede aportar (workspace_module, chat_tool, inline_render, system_panel), el protocolo MQTT canónico entre frontend y backend (publishes/subscribes con su shape mínimo), el sistema visual estándar (paleta de colores de proyecto, mapping provider→icono, badges/estados), los anti-patrones absolutos (modales bloqueantes, navegación SPA, redirects fuera del frame). Validable mecánicamente cruzando contra los module.json del repo (si declaran ui_handlers, su shape cumple el contrato) y contra el código del frontend (que el frame implementado respeta el layout canónico).",
 
@@ -192,6 +192,18 @@
       "decision": "Tailwind CSS para utilidad de estilos. NO Material UI / Bootstrap / Bulma / Chakra UI / DaisyUI / Skeleton.",
       "alternativa_descartada": "Framework UI completo (Material UI) con componentes pre-hechos.",
       "razon": "Frameworks UI completos imponen su look-and-feel y su modelo de componentes — chocan con el frame canónico definido aquí (5 zonas + lateral, sandwich del chat). Tailwind es utilidad pura: el equipo controla cada componente. Bundle size también significativamente menor."
+    },
+    {
+      "id": "chat_requiere_project_y_conversation_activos",
+      "decision": "El input del chat se habilita SOLO cuando hay project_id activo Y conversation_id activa. Si falta cualquiera, el frame muestra un panel emergente (system_panel canónico, ≤33vh, no bloqueante) que guía al usuario a crear/seleccionar antes de habilitar el input. La regla aplica en el primer arranque (proyecto 'default' creado automáticamente, conversación inicial abierta) y cuando el usuario explícitamente cierra el proyecto activo.",
+      "alternativa_descartada": "Permitir mensajes 'sin proyecto' o 'sin conversación' como contexto global — los publica chat-io con project_id null o conversation_id null y se procesa.",
+      "razon": "Coherente con multi-tenancy.contract.project_id_y_conversation_id_siempre_obligatorios (v1.1.0). null en project_id se propaga como ruido a logs, métricas, storage scope, y agent-observer. Bloquear el input es la barrera arquitectónica que evita el caso. UX: el usuario ve UN solo paso para resolver (panel guía) en lugar de mensajes ambiguos sin contexto."
+    },
+    {
+      "id": "setup_required_es_inline_no_modal_bloqueante",
+      "decision": "El panel emergente que resuelve 'falta proyecto/conversación' es un system_panel del frame (max 33vh, sin backdrop bloqueante, cierre con clic fuera o tras crear). NO es un modal que tome control de toda la pantalla.",
+      "alternativa_descartada": "Modal centrado bloqueante con overlay oscuro (estilo confirmation dialog clásico).",
+      "razon": "Modal bloqueante rompe la regla maestra del frontend (frontend.contract.principios.paneles_no_modales_bloqueantes). El system_panel canónico es coherente con el resto del frame — el chat sigue visible detrás, el usuario ve el contexto que está creando."
     }
   ],
 
@@ -411,6 +423,22 @@
         },
         "renderizado_canonico": "Tarjeta dentro del scroll del chat. Header: avatar agente + nombre + indicador de actividad (spinner si open, check verde si closed, warning si failed). Cuerpo: assistant_message del chat.assistant.saved correspondiente. Si detail_url presente, botón 'ver detalle' que abre system_panel max 33vh.",
         "transiciones": "open → closed (success) | open → failed (error). Una vez closed/failed la tarjeta NO vuelve a open — un retry crea NUEVA tarjeta con nuevo request_id pero mismo correlation_id."
+      },
+      {
+        "type": "setup_required",
+        "descripcion": "Bloque que aparece cuando el usuario intenta usar el frame sin project_id activo o sin conversation_id activa. Guía a crear/seleccionar el contexto faltante antes de habilitar el input. Coherente con multi-tenancy.contract.project_id_y_conversation_id_siempre_obligatorios y frontend.contract.chat_requiere_project_y_conversation_activos.",
+        "publicado_por": "El propio frontend (no es evento del bus — es estado UI local). Se renderiza cuando el frontend detecta state.project_id == null || state.conversation_id == null al cargar el frame.",
+        "shape_de_metadata_block": {
+          "type": "setup_required",
+          "missing": "project | conversation | both",
+          "actions": [
+            { "label": "Crear nuevo proyecto", "kind": "create_project" },
+            { "label": "Seleccionar proyecto existente", "kind": "select_project" },
+            { "label": "Iniciar conversación", "kind": "start_conversation" }
+          ]
+        },
+        "renderizado_canonico": "system_panel (max 33vh) que aparece superpuesto al frame. NO es modal — el chat se ve detrás semi-transparente pero deshabilitado. Cuerpo: pregunta breve ('Necesitas un proyecto activo para empezar') + 1-3 botones de acción. Al resolver, el panel se cierra y el input del chat se habilita.",
+        "transiciones": "Aparece automáticamente al cargar frame sin contexto. Desaparece al resolverlo (project + conversation establecidos). Si el usuario cierra el panel sin resolver, vuelve a aparecer al primer intento de input."
       }
     ],
     "tipos_futuros_documentados": [
@@ -430,5 +458,25 @@
     "http": "Frontend habla MQTT, no HTTP, con los módulos backend (decisión arquitectónica mqtt_directo). El único HTTP que el frontend hace es para descargas de archivos (atachments, PDFs) y assets estáticos. http.contract aplica para esos casos; este transversal lo refuerza prohibiendo /ui/* específicos.",
     "chat-flow": "El frontend ES el canal 'web' del chat-flow. Cuando el usuario manda mensaje, viaja como chat.message.saved con channel: 'web', channel_context: { ws_session_id, ... }. Cuando llega ai.chat.response con channel: 'web', el frontend lo renderiza en el área chat. El shape de los 5 eventos chat_flow es responsabilidad de chat-flow.contract; este transversal solo gobierna cómo se muestran y cómo se introduce input.",
     "agent-flow": "El frontend NO publica directamente agent.execute.request — los agentes se invocan vía LLM tool (invoke_agent durante ai.chat.response) o vía módulos del dominio. Si un agente publica chat.assistant.saved (chat multi-participante futuro), el frontend lo renderiza con la metadata.author = { kind: 'agent', name: ... } para distinguirlo del compañero principal."
-  }
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "implementar_setup_required_panel_y_bootstrap_proyecto_default",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Tras directriz multi-tenancy v1.1.0 (project_id+conversation_id siempre obligatorios), el frontend implementa el bloque canónico setup_required: panel emergente que aparece cuando no hay proyecto activo y/o conversación activa, deshabilitando el input del chat hasta resolverlo. También necesita coordinarse con un módulo backend que cree un proyecto 'default' al primer arranque del repo + abra una conversación inicial.",
+      "componentes_afectados": [
+        "frontend/src/lib/components/SetupRequiredPanel.svelte (nuevo, componente del bloque setup_required).",
+        "frontend/src/lib/stores/contextStore.ts (estado project_id + conversation_id activos; deriva si setup_required debe mostrarse).",
+        "modules/project-manager (extensión: bootstrap del proyecto 'default' al primer arranque).",
+        "modules/conversacion/chat-io (extensión: abrir conversación inicial cuando no haya ninguna en el proyecto activo).",
+        "modules/conversacion/agent-observer (retirar `if(!conversation_id) return` cuando la directriz se aplique en schemas)."
+      ],
+      "criterio_de_cierre": "El frame nunca permite al usuario teclear en el input sin proyecto+conversación. El primer arranque del repo: usuario abre /compañero, ve el chat vacío (proyecto 'default' creado automáticamente), conversación 'inicial' abierta. Si el usuario crea proyecto nuevo y no abre conversación, el panel setup_required aparece al intentar usar el input.",
+      "bloqueado_por": "Implementación efectiva del frontend (hoy DISEÑO-UI.md está absorbido pero el código SvelteKit no implementa todavía todos los bloques canónicos). Coordinar con project-manager para el bootstrap.",
+      "fecha_anotacion": "2026-05-03",
+      "deriva_de": "multi-tenancy.contract v1.1.0"
+    }
+  ]
 }

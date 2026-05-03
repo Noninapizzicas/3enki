@@ -1,9 +1,9 @@
 {
   "_doc": "Captura LA disciplina de aislamiento multi-tenant del sistema event-core: cómo se separa por proyecto (project_id) y por humano (user_id) en TODA la cadena de eventos, persistencia, autorización y observabilidad. La regla maestra: project_id y user_id son carriles obligatorios desde el originador hasta el ejecutor; ninguna operación de dominio se ejecuta sin ambos resueltos. Sin un contrato de multi-tenancy explícito, los datos de un proyecto se mezclan con los de otro, los usuarios ven contenido ajeno, las métricas se confunden y la migración de single-tenant a multi-tenant se vuelve un refactor masivo. Este contrato cierra la decisión desde el primer evento.",
   "id": "multi-tenancy",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-05-03",
-  "supersedes_nota": "Primera versión. Consolida las menciones dispersas a project_id / user_id en chat-flow.contract, agent-flow.contract, security.contract, persistence.contract, y las eleva a contrato transversal autónomo. El sistema corre hoy en modo single-tenant (project_id puede ser null, user_id = 'default') pero el contrato es estricto desde el origen para que la migración a multi-tenant real sea aditiva, no refactor.",
+  "supersedes_nota": "v1.1.0 (directriz UX): project_id y conversation_id SIEMPRE obligatorios — nunca null. La decision project_id_nullable_durante_single_tenant de v1.0.0 queda supersedida. El frontend abre panel emergente (system_panel canonico) cuando faltan, antes de publicar evento alguno. Single-user single-tenant arranca con proyecto 'default' creado y conversacion abierta. Migracion de schemas + frontend implementacion documentada como trabajo_pendiente.\n\nv1.0.0: Primera versión. Consolida las menciones dispersas a project_id / user_id en chat-flow.contract, agent-flow.contract, security.contract, persistence.contract, y las eleva a contrato transversal autónomo. El sistema corre hoy en modo single-tenant (project_id puede ser null, user_id = 'default') pero el contrato es estricto desde el origen para que la migración a multi-tenant real sea aditiva, no refactor.",
 
   "objetivo": "Producir UN JSON output (_outputs/multi-tenancy.json) que define: qué cuenta como ámbito (project_id obligatorio en operaciones de dominio, opcional en eventos cross-tenant cuando aplique), qué cuenta como identidad (user_id obligatorio en operaciones atribuibles), cómo se propaga (sin modificar desde el originador hasta el ejecutor), cómo se aísla en persistencia (storage scoped por project_id), cómo se aísla en observabilidad (métricas etiquetadas por project_id + user_id), qué eventos cross-tenant existen y por qué se permiten, cómo se valida que un consumer no recibe datos fuera de su scope. Validable mecánicamente cruzando contra los handlers de cada módulo (que validan project_id antes de tocar storage), contra los logs (que incluyen project_id + user_id), y contra los publishes (que propagan ambos campos sin modificar).",
 
@@ -102,10 +102,15 @@
       "razon": "La inferencia falla cuando hay multi-tenant simultáneo en el mismo proceso (escenario de cluster). Pasarlo explícito desde el originador hasta el ejecutor escala a cualquier topología."
     },
     {
-      "id": "project_id_nullable_durante_single_tenant",
-      "decision": "project_id es type ['string', 'null']. null permitido durante fase single-tenant; string obligatorio cuando aplique multi-tenant real.",
-      "alternativa_descartada": "Forzar project_id como string desde el principio y usar 'default' como valor especial en single-tenant.",
-      "razon": "null es semánticamente claro ('no hay proyecto, contexto global') vs 'default' que parece un proyecto real. Cuando se introduzcan proyectos reales, null no se confunde con un proyecto llamado 'default'."
+      "id": "project_id_y_conversation_id_siempre_obligatorios",
+      "decision": "project_id y conversation_id son SIEMPRE string obligatorio en todos los eventos del subsistema chat/agentes. Nunca null. NO se admite contexto global anonimo. Si el frontend detecta que el usuario no tiene proyecto activo o conversacion activa al intentar mandar un mensaje, ABRE PANEL EMERGENTE (system_panel canonico de frontend.contract, max 33vh, no bloqueante) para crear/seleccionar antes de publicar el evento. Single-user single-tenant arranca con un proyecto 'default' creado al primer arranque y una conversacion abierta, NO con null implicito.",
+      "alternativa_descartada": "Permitir null en project_id como 'contexto global / sin proyecto', forzando una migracion futura cuando llegue multi-tenant.",
+      "razon": "null produce incertidumbre en cadena: cada handler debe comprobar OR null en cada query, los logs no se pueden filtrar por proyecto, el agent-observer no sabe a qué conversacion inyectar feedback, y la migracion a multi-tenant real se vuelve mas dolorosa porque hay que distinguir 'null legacy' de 'null legitimo'. Forzando obligatorio desde el origen + UI que resuelve el caso de 'usuario sin contexto', la disciplina es uniforme y la experiencia clara (el frame guia al usuario a crear proyecto/conversacion en lugar de aceptar input ambiguo)."
+    },
+    {
+      "id_supersedido": "project_id_nullable_durante_single_tenant",
+      "estado": "supersedido_por_project_id_y_conversation_id_siempre_obligatorios",
+      "nota": "Decision v1.0.0 retirada. Argumentaba null como 'contexto global'. La directriz nueva (v1.1.0) endurece a obligatorio + UI que crea proyecto/conversacion cuando faltan. Documentado en trabajo_pendiente."
     },
     {
       "id": "user_id_string_no_nullable",
@@ -324,7 +329,27 @@
     "http": "Endpoints HTTP que aceptan operaciones de dominio resuelven project_id de la sesión / token / parámetro y lo propagan al evento publicado al bus.",
     "security": "Coherente con security.tenancy_por_project_id e identidad_por_user_id. Este contrato amplía la disciplina al resto de los aspectos del sistema (storage, logs, suscripciones).",
     "frontend": "El frontend tiene un project_id activo + user_id de sesión. Suscripciones MQTT filtran por estos campos. Cambio de proyecto = cambio de filtro, no de página.",
-    "chat-flow": "Los 5 eventos chat_flow incluyen project_id (nullable en single-tenant) + user_id (string obligatorio) — ya aplicado en chat-flow.contract.",
-    "agent-flow": "Igual para los 3 eventos agent_flow."
-  }
+    "chat-flow": "Los 5 eventos chat_flow incluyen project_id (string obligatorio tras directriz v1.1.0) + user_id (string obligatorio) — pendiente migrar schemas chat-flow para retirar null de project_id.",
+    "agent-flow": "Igual para los 4 eventos agent_flow. conversation_id obligatorio cuando el agente nace de chat (siempre, tras directriz)."
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "endurecer_project_id_y_conversation_id_a_obligatorios_en_schemas_y_codigo",
+      "estado": "abierto",
+      "naturaleza": "horizontal_cross_subsistema",
+      "descripcion": "Aplicar la directriz v1.1.0 (project_id y conversation_id SIEMPRE obligatorios) en toda la cadena. Hoy los schemas chat-flow/agent-flow tienen project_id como type:['string','null']; pasa a string. agent-observer ignora cuando falta conversation_id (politica fail-silent); deja de tener sentido. El frontend implementa el panel emergente que crea/selecciona proyecto + conversacion antes de habilitar el input.",
+      "fases_de_implementacion": [
+        "1. Migrar schemas chat-flow/_common.schema.json y agent-flow/_common.schema.json: project_id type 'string' minLength 1 (retirar 'null'). Validators detectaran payloads viejos como drift hasta que se actualicen.",
+        "2. Bootstrap: al primer arranque del repo, crear proyecto 'default' y una conversacion inicial. Single-user usa esos por defecto hasta que el usuario cree algo distinto.",
+        "3. Migrar chat-io.handleSend para rechazar publish si project_id o conversation_id faltan (responde con AUTHORIZATION_REQUIRED al frontend). El frontend NO debe permitir llegar a ese caso — esto es defensa en profundidad.",
+        "4. Frontend implementa system_panel emergente 'setup_required': si el usuario abre el frame sin proyecto/conversacion activos, panel <33vh con UI para crear o seleccionar. Input del chat deshabilitado hasta resolverlo.",
+        "5. agent-observer: retirar el if(!data.conversation_id) return — siempre habra conversation_id, las cards agent_intervention siempre se renderizan.",
+        "6. Pizzepos consumers (carta-digital, etc.): propagar project_id y conversation_id desde el evento que dispara el publish de agent.execute.request. Cuando el disparador es cron sin conversation, usar la conversation 'system' canonica del proyecto."
+      ],
+      "criterio_de_cierre": "Todos los schemas chat-flow/agent-flow tienen project_id obligatorio. Validators no detectan publishes con project_id null. Frontend nunca permite estado sin proyecto/conversacion. Tests cubren el flujo de setup_required.",
+      "bloqueado_por": "Coordinacion con frontend (que aun no esta implementado por completo). Implementacion del bootstrap del proyecto 'default'. Migracion de schemas requiere actualizar tests del subsistema chat (chat-io.test.js, prompt-builder.test.js, etc.) que hoy usan project_id null en algunos casos.",
+      "fecha_anotacion": "2026-05-03"
+    }
+  ]
 }

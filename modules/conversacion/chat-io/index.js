@@ -218,10 +218,26 @@ class ChatIoModule {
     const conversation_id = data.conversation_id;
     const page_id = data.page_id || 'chat';
     const context = data.context || {};
-    const prompt = data.prompt ?? null;
+    // 'prompt' del input UI = id de plantilla (chat-flow lo renombra a prompt_id para
+    // resolver la polisemia con system_prompt construido en chat.prompt.ready).
+    const prompt_id = data.prompt ?? data.prompt_id ?? null;
     const attachments = Array.isArray(data.attachments) ? data.attachments : [];
     const intencion = data.intencion ?? null;
-    const message = data.message;
+    // 'message' del input UI = texto del usuario (chat-flow lo renombra a user_message
+    // para resolver la polisemia con assistant_message del LLM).
+    const user_message = data.message ?? data.user_message;
+    // Identidad y trazabilidad canonicas (chat-flow).
+    // user_id: hoy single-user → 'default' si no viene. Cuando llegue multi-user
+    // vendra de la sesion / token / canal.
+    const user_id = data.user_id || 'default';
+    // correlation_id: si el caller lo trae (canal externo lo genero), se preserva.
+    // Si no, chat-io es el originador y lo genera.
+    const correlation_id = data.correlation_id || crypto.randomUUID();
+    // channel + channel_context: para que la respuesta pueda volver al canal correcto.
+    // Default 'web' (UI nativa). Si data trae channel/channel_context (otro canal
+    // como telegram-service llamando a handleSend), se preservan.
+    const channel = data.channel || 'web';
+    const channel_context = data.channel_context || {};
 
     if (!project_id || !isUUID(project_id)) {
       throw { status: 400, code: 'PROJECT_REQUIRED', message: 'Selecciona un proyecto para chatear' };
@@ -236,7 +252,7 @@ class ChatIoModule {
       throw { status: 400, code: 'CONVERSATION_REQUIRED', message: 'Conversación no existe o no pertenece al proyecto' };
     }
 
-    // Settings de la conversación (los rellenamos en el payload)
+    // Settings de la conversación
     const convRows = await this._db(project_id,
       'SELECT context_window, temperature, max_tokens FROM conversations WHERE id = ?',
       [conversation_id], true
@@ -249,7 +265,7 @@ class ChatIoModule {
     await this._db(project_id,
       `INSERT INTO messages (id, conversation_id, role, content, created_at)
        VALUES (?, ?, 'user', ?, ?)`,
-      [message_id, conversation_id, message, now]
+      [message_id, conversation_id, user_message, now]
     );
     await this._db(project_id,
       'UPDATE conversations SET updated_at = ? WHERE id = ?',
@@ -259,18 +275,27 @@ class ChatIoModule {
     // FIFO
     await this._applyContextFIFO(project_id, conversation_id, settings.context_window);
 
-    // Propagar los 9 campos
+    // chat.message.saved — shape canonico chat-flow v1.0.0
+    // Schema: arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json
     await this.eventBus.publish('chat.message.saved', {
-      project_id,
-      page_id,
+      correlation_id,
       conversation_id,
-      context,
-      settings,
-      prompt,
+      project_id,
+      user_id,
+      channel,
+      channel_context,
+      message_id,
+      user_message,
+      timestamp: new Date().toISOString(),
+      // opcionales canonicos
       attachments,
       intencion,
-      message,
-      message_id   // útil para correlacionar la respuesta
+      settings,
+      page_id,
+      prompt_id,
+      // contexto de pagina opaco — la UI lo manda y el compañero lo usa para enriquecer prompt.
+      // Se preserva en context_addition virtual del prompt-builder.
+      page_context: context && Object.keys(context).length > 0 ? context : undefined
     });
 
     return { conversation_id, message_id };

@@ -57,13 +57,14 @@
     "settings": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Config del LLM para esta interaccion.",
+      "description": "Config del LLM y de la conversacion para esta interaccion.",
       "properties": {
-        "model":       { "type": "string", "minLength": 1 },
-        "provider":    { "type": "string", "minLength": 1 },
-        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
-        "max_tokens":  { "type": "integer", "minimum": 1 },
-        "top_p":       { "type": "number", "minimum": 0, "maximum": 1 }
+        "model":          { "type": "string", "minLength": 1 },
+        "provider":       { "type": "string", "minLength": 1 },
+        "temperature":    { "type": "number", "minimum": 0, "maximum": 2 },
+        "max_tokens":     { "type": "integer", "minimum": 1 },
+        "top_p":          { "type": "number", "minimum": 0, "maximum": 1 },
+        "context_window": { "type": "integer", "minimum": 1, "description": "Tamaño del FIFO de mensajes en la conversacion (cuantos turnos previos se incluyen)." }
       }
     },
     "attachment": {

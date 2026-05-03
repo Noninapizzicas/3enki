@@ -50,6 +50,11 @@
       "type": ["string", "null"],
       "minLength": 1,
       "description": "Id de plantilla de prompt seleccionada por el usuario opcional. Sin polisemia con system_prompt."
+    },
+    "page_context": {
+      "type": "object",
+      "description": "Contexto opaco de la pagina activa (que esta viendo/haciendo el usuario en la UI). El compañero lo usa para enriquecer el system prompt. Cada UI define su shape. additionalProperties:true.",
+      "minProperties": 0
     }
   }
 }

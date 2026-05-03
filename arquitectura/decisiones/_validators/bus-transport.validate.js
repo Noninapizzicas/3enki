@@ -65,6 +65,55 @@ function checkQos2(findings) {
   }
 }
 
+function checkSocketIoEnFrontend(findings) {
+  const FRONTEND_PKG = path.join(REPO_ROOT, 'frontend/package.json');
+  if (fs.existsSync(FRONTEND_PKG)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(FRONTEND_PKG, 'utf-8'));
+      const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+      for (const dep of Object.keys(allDeps)) {
+        if (/^socket\.io/.test(dep)) {
+          findings.warnings.push(`drift_socketio_o_sse_en_frontend: frontend/package.json incluye "${dep}" — solo MQTT sobre WebSocket nativo`);
+        }
+      }
+    } catch (_) {}
+  }
+  // Detectar EventSource (SSE) en frontend
+  const FRONTEND_SRC = path.join(REPO_ROOT, 'frontend/src');
+  if (!fs.existsSync(FRONTEND_SRC)) return;
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full);
+        else if (/\.(svelte|js|ts)$/.test(name)) {
+          const content = fs.readFileSync(full, 'utf-8');
+          if (/\bnew\s+EventSource\s*\(/.test(content)) {
+            findings.warnings.push(`drift_socketio_o_sse_en_frontend: ${path.relative(REPO_ROOT, full)} — new EventSource (SSE prohibido; usar MQTT)`);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  walk(FRONTEND_SRC);
+}
+
+function checkPersistenciaAedes(findings) {
+  const pkg = path.join(REPO_ROOT, 'package.json');
+  if (!fs.existsSync(pkg)) return;
+  try {
+    const p = JSON.parse(fs.readFileSync(pkg, 'utf-8'));
+    const allDeps = { ...(p.dependencies || {}), ...(p.devDependencies || {}) };
+    for (const dep of Object.keys(allDeps)) {
+      if (/^aedes-persistence/.test(dep)) {
+        findings.warnings.push(`drift_persistencia_aedes_habilitada: package.json incluye "${dep}" — aedes embedded no debe persistir mensajes (storage en modulos)`);
+      }
+    }
+  } catch (_) {}
+}
+
 function reportFindings(f) {
   if (f.errors.length) { console.log(`${RED}cross-system errors (${f.errors.length})${RST}`); for (const e of f.errors) console.log(`  ${RED}✗${RST} ${e}`); }
   if (f.warnings.length) { console.log(`${YEL}cross-system warnings (${f.warnings.length})${RST}`); for (const w of f.warnings) console.log(`  ${YEL}!${RST} ${w}`); }
@@ -85,6 +134,8 @@ function main() {
     const f = { errors: [], warnings: [], info: [] };
     checkRequireMqtt(f);
     checkQos2(f);
+    checkSocketIoEnFrontend(f);
+    checkPersistenciaAedes(f);
     reportFindings(f);
   }
   process.exit(0);

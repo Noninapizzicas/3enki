@@ -156,6 +156,36 @@
       "decision": "Configurable a broker externo via config.json. El sistema cumple MQTT 3.1.1+.",
       "alternativa_descartada": "Solo aedes embebido permitido (otros brokers prohibidos).",
       "razon": "Limitar al embedded cierra posibilidades futuras (cluster grande, integración con sistemas existentes). Diseñar para opcional desde el principio cuesta poco."
+    },
+    {
+      "id": "reconnect_automatico_del_cliente",
+      "decision": "El cliente MQTT del core (mqtt.js) configura reconnect automático con backoff. Si el broker se cae temporalmente, el cliente reintenta sin que los módulos lo noten.",
+      "alternativa_descartada": "Cada módulo gestiona reconexión por su cuenta cuando detecta desconexión.",
+      "razon": "Distribuir gestión de reconexión multiplica código duplicado. Centralizar en el cliente del core elimina drift y aplica política única."
+    },
+    {
+      "id": "client_id_unico_por_consumer",
+      "decision": "Cada conexión al broker tiene client_id único (UUID v4 generado al conectar). Sin client_ids hardcoded ni reutilizados entre nodos.",
+      "alternativa_descartada": "client_id derivado del nombre del módulo (ej. 'chat-io', 'ai-gateway').",
+      "razon": "client_id reutilizado entre conexiones rompe MQTT (la nueva conexión expulsa a la antigua). UUID v4 garantiza unicidad incluso en cluster multi-nodo donde múltiples cores tienen el mismo módulo."
+    },
+    {
+      "id": "ws_no_socketio_no_sse",
+      "decision": "Frontend↔broker es WebSocket nativo (vía mqtt.js sobre WS, puerto 9001). NO socket.io, NO SSE.",
+      "alternativa_descartada": "socket.io para 'compatibilidad cross-browser' o SSE para 'simpler than WS'.",
+      "razon": "socket.io añade su propio protocolo encima de WS (con sus propios bugs, su propio reconnect). SSE es unidireccional y no encaja con MQTT pub/sub. WS nativo es la forma más directa y simple."
+    },
+    {
+      "id": "no_persistencia_del_broker_para_dominio",
+      "decision": "Aedes embebido NO persiste mensajes en disco. Si un consumer está caído cuando se publica, pierde el mensaje. La persistencia de dominio es responsabilidad de módulos persistentes.",
+      "alternativa_descartada": "Habilitar persistencia de aedes para que los consumers caídos reciban mensajes al reconectar.",
+      "razon": "Persistencia del broker añade complejidad operacional (qué se persiste, hasta cuándo, política de TTL) y duplica el storage real (datos persistidos por el módulo + retained en broker). Aplicación garantiza durabilidad en su propio storage."
+    },
+    {
+      "id": "publish_async_no_espera_ack",
+      "decision": "publish() es async pero NO espera ack del broker. Devuelve cuando el mensaje está en la cola del cliente. Los módulos NO esperan ack para continuar.",
+      "alternativa_descartada": "publish() bloquea hasta que el broker confirma entrega.",
+      "razon": "Esperar ack añade latencia inversa al QoS (QoS 1 con espera = 2 round trips por publish). El modelo fire-and-forget casa con events.contract: el publisher publica y desentiende. Si necesita confirmación de procesamiento, suscribe al evento .response correspondiente."
     }
   ],
 
@@ -264,6 +294,36 @@
       "regla": "Auditar publishes con retain:true (revisión manual posterior).",
       "como_detectar": "Regex sobre código.",
       "severidad": "info"
+    },
+    {
+      "id": "drift_socketio_o_sse_en_frontend",
+      "regla": "frontend NO importa socket.io ni implementa Server-Sent Events. Solo MQTT sobre WebSocket.",
+      "como_detectar": "Inspeccionar frontend/package.json buscando socket.io* deps; regex sobre frontend/src buscando EventSource(.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_client_id_hardcoded_o_derivado_modulo",
+      "regla": "Conexiones MQTT del core no usan client_id hardcoded ni derivado del nombre del módulo. UUID v4 generado al conectar.",
+      "como_detectar": "Regex sobre core/mqtt: clientId: ['\"`]<string-fijo>['\"`].",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_persistencia_aedes_habilitada",
+      "regla": "Aedes embebido NO tiene persistence configurada (ni in-memory persistence con TTL ni filesystem). Storage de dominio vive en módulos persistentes.",
+      "como_detectar": "Inspeccionar config.json y core/broker/embedded.js buscando aedes-persistence-* require.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_publish_espera_ack_bloqueante",
+      "regla": "Ningún publisher hace `await publish()` con timeout esperando ack del broker. publish es fire-and-forget.",
+      "como_detectar": "Heurística manual.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_topic_con_namespace_de_cluster",
+      "regla": "Ningún topic incluye prefix de nodo/cluster (`<node-id>/<event>`). Topics son nombres de evento puros.",
+      "como_detectar": "Regex sobre código: publishes con topic que comience por uuid o nombre de host.",
+      "severidad": "warning"
     }
   ],
 

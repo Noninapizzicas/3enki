@@ -122,6 +122,54 @@ function checkClaudemdInflado(findings) {
   }
 }
 
+const README_NAMES_PERMITIDOS = new Set(['README.md', 'POC_FINDINGS.md', 'prompt.md']);
+
+function checkDesignDocPropio(findings) {
+  const modDir = path.join(REPO_ROOT, 'modules');
+  if (!fs.existsSync(modDir)) return;
+  function walk(dir, depth) {
+    if (depth > 4 || !fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      if (name === 'node_modules' || name === '_archived' || name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full, depth + 1);
+        else if (name.endsWith('.md') && !README_NAMES_PERMITIDOS.has(name) && !name.endsWith('-system.md')) {
+          findings.warnings.push(`drift_design_doc_propio_de_modulo: ${path.relative(REPO_ROOT, full)} — design docs internos prohibidos (decisiones a contratos cross-modulo o module.json)`);
+        }
+      } catch (_) {}
+    }
+  }
+  walk(modDir, 0);
+}
+
+function checkContratosEnClaudemd(findings) {
+  const claudemd = path.join(REPO_ROOT, 'CLAUDE.md');
+  if (!fs.existsSync(claudemd)) return;
+  const content = fs.readFileSync(claudemd, 'utf-8');
+  const contratosDirs = [
+    path.join(REPO_ROOT, 'arquitectura/decisiones/_contratos'),
+    path.join(REPO_ROOT, 'arquitectura/convenciones/_contratos')
+  ];
+  // Excepciones: contratos no transversales o sub-contratos que pueden vivir referenciados solo en su contexto
+  const EXCLUDED = new Set(['companero-viaje']);
+  for (const dir of contratosDirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.endsWith('.contract.json')) continue;
+      const id = f.replace('.contract.json', '');
+      if (EXCLUDED.has(id)) continue;
+      // Buscar el id como string en CLAUDE.md (case-insensitive, con o sin guiones)
+      const idVariants = [id, id.replace(/-/g, ' '), id.replace(/-/g, '')];
+      const referenced = idVariants.some(v => content.toLowerCase().includes(v.toLowerCase()));
+      if (!referenced) {
+        findings.warnings.push(`drift_contratos_sin_indice_en_claudemd: contrato "${id}" no aparece referenciado en CLAUDE.md (sesion futura no lo descubrira)`);
+      }
+    }
+  }
+}
+
 function reportFindings(f) {
   if (f.errors.length) { console.log(`${RED}cross-system errors (${f.errors.length})${RST}`); for (const e of f.errors) console.log(`  ${RED}✗${RST} ${e}`); }
   if (f.warnings.length) { console.log(`${YEL}cross-system warnings (${f.warnings.length})${RST}`); for (const w of f.warnings) console.log(`  ${YEL}!${RST} ${w}`); }
@@ -144,6 +192,8 @@ function main() {
     checkMarkdownShape(f);
     checkContratoSinValidator(f);
     checkClaudemdInflado(f);
+    checkDesignDocPropio(f);
+    checkContratosEnClaudemd(f);
     reportFindings(f);
   }
   process.exit(0);

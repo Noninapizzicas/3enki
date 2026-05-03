@@ -138,6 +138,36 @@
       "decision": "Los comentarios en código se reservan para explicar WHY no obvio. NO se comentan QUÉ hace el código.",
       "alternativa_descartada": "Documentar exhaustivamente cada función con comentarios JSDoc o equivalente.",
       "razon": "JSDoc descriptivo se desactualiza respecto al código. Forzar nombres claros + tipos (JSDoc tipado opcional) es más útil que prosa narrativa."
+    },
+    {
+      "id": "supersedes_nota_es_changelog_persistente",
+      "decision": "Cada artefacto versionado (contrato, schema, módulo) lleva supersedes_nota actualizado en cada subida de version. Es el changelog que viaja con el artefacto.",
+      "alternativa_descartada": "CHANGELOG.md externo separado mantenido a mano.",
+      "razon": "supersedes_nota persiste con el artefacto incluso si se mueve de repo o git history se trunca. CHANGELOG.md externo se desincroniza."
+    },
+    {
+      "id": "_archived_es_donde_van_los_documentos_obsoletos",
+      "decision": "Documentos obsoletos pero con valor histórico (predecesores absorbidos a contrato, designs antiguos) se mueven a _archived/<fecha>_<contexto>/<archivo>. NO se borran git history pero salen del scope activo.",
+      "alternativa_descartada": "Borrar archivos obsoletos directamente (git history ya los preserva).",
+      "razon": "Borrarlos hace que sea invisible para sesiones futuras qué predecedió al diseño actual. _archived/ permite encontrarlos fácilmente y mantiene el workspace activo limpio."
+    },
+    {
+      "id": "ningun_modulo_tiene_design_doc_propio_separado",
+      "decision": "Cuando un módulo tiene una decisión arquitectónica que afecta otros, va al contrato cross-módulo correspondiente. Sin design docs internos del módulo en markdown.",
+      "alternativa_descartada": "Cada módulo con design.md propio que documenta sus decisiones.",
+      "razon": "Decisiones que solo afectan al propio módulo viven en su código + module.json. Decisiones que afectan a otros viven en contratos cross-módulo. Design docs separados se quedan a medio camino y nadie los lee."
+    },
+    {
+      "id": "claudemd_no_duplica_contratos",
+      "decision": "CLAUDE.md describe ESTRUCTURA del repo y APUNTA a contratos. NO duplica el contenido de los contratos (lista de eventos, schemas, etc.).",
+      "alternativa_descartada": "CLAUDE.md como cheat-sheet con la información clave de cada contrato inline.",
+      "razon": "Cualquier duplicación se desactualiza. Si un contrato cambia, CLAUDE.md queda mintiendo. Apuntar mantiene fuente única."
+    },
+    {
+      "id": "auditorias_extraidas_son_outputs_no_documentos",
+      "decision": "arquitectura/auditoria/_outputs/modulo-completo/<modulo>.json son OUTPUTS extraídos del código + manifest. NO se versionan como documentos editables a mano.",
+      "alternativa_descartada": "Auditorías como documentos vivos editados manualmente en cada cambio del módulo.",
+      "razon": "Editar a mano produce drift inmediato cuando el código cambia. Extracción mecánica garantiza que reflejan el código real en el momento del run."
     }
   ],
 
@@ -250,6 +280,42 @@
       "id": "drift_readme_redundante",
       "regla": "README de módulo no duplica module.json.",
       "como_detectar": "Heurística: comparar tokens.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_design_doc_propio_de_modulo",
+      "regla": "Ningún módulo tiene design.md, ARCHITECTURE.md, NOTES.md propios. Decisiones cross-módulo van a contratos; decisiones internas viven en código + module.json.",
+      "como_detectar": "Listar archivos *.md dentro de modules/ excluyendo README.md, POC_FINDINGS.md y prompt.md. Cualquier otro = drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_supersedes_nota_trivial_en_contrato_v_avanzada",
+      "regla": "Contratos con version > 1.0.0 tienen supersedes_nota detallado (no 'Primera versión.'). Lo enforce versionado.validate también; aquí se referencia.",
+      "como_detectar": "Inspeccionar contratos con version mayor a 1.0.0 y verificar supersedes_nota >50 caracteres.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_archivo_obsoleto_fuera_de_archived",
+      "regla": "Documentos predecesores absorbidos a contrato (frontend/DISEÑO-UI.md ya archivado) viven en _archived/<fecha>_<contexto>/. NO en su ubicación original con marcado 'deprecated'.",
+      "como_detectar": "Auditoría manual + heurística: archivos *.md con header 'DEPRECATED' o '@deprecated' fuera de _archived/.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_jsdoc_descriptivo_en_codigo",
+      "regla": "Comentarios JSDoc que describen QUÉ hace el código (no WHY no obvio) son drift de documentation.contract.comentarios_en_codigo_solo_why.",
+      "como_detectar": "Heurística: bloques /** ... */ con tags @param/@returns sin información que el tipo TypeScript ya capturaría.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_contratos_sin_indice_en_claudemd",
+      "regla": "Cada contrato transversal o sub-contrato existe referenciado en CLAUDE.md (sección 'Decisiones cross-módulo'). Sin referencia, una sesión futura no lo descubre.",
+      "como_detectar": "Cruzar lista de contratos en _contratos/ con apariciones del nombre en CLAUDE.md.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_audit_outputs_modificados_a_mano",
+      "regla": "arquitectura/auditoria/_outputs/ no se edita a mano. Si un audit cambia, se regenera con el extractor correspondiente.",
+      "como_detectar": "Auditoría manual + heurística: git log de cambios en _outputs/ + verificar que coinciden con runs del extractor.",
       "severidad": "info"
     }
   ],

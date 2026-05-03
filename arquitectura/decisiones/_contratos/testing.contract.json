@@ -1,0 +1,330 @@
+{
+  "_doc": "Captura LA disciplina de tests del sistema event-core: organización, naming, ejecución, qué se testea, qué NO se testea, qué stack usar y qué evitar. La regla maestra es UNA: cada handler de subsistema canónico (chat-flow, agent-flow, etc.) tiene su test unitario que valida el shape publicado contra el JSON Schema oficial; sin tests verde, el commit no entra. Los tests son parte del cierre de cualquier migración o feature, no opcional. Sin un contrato de tests, cada módulo inventa su forma de testear (algunos con Jest, otros con tape, otros sin tests), los mocks se vuelven dependencias frágiles, y la suite acumula deuda hasta que correr los tests deja de ser fiable.",
+  "id": "testing",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Recoge las prácticas que ya existen implementadas en los 18 archivos de tests/unit/ y 3 de tests/integration/ y las consolida como transversal autónomo. Patrón observado y canonizado: assert nativo de Node (no Jest/Mocha), AJV strict para validar payloads contra schemas oficiales, mocks via objetos planos con helpers locales (makeMocks), npm scripts test:<modulo>, ejecución en CI vía .github/workflows/validate.yml step a step (no test runner global).",
+
+  "objetivo": "Producir UN JSON output (_outputs/testing.json) que define: estructura de directorios (tests/unit, tests/integration), naming de archivos (<modulo>.test.js), organización interna del archivo (helpers + grupos de tests + ejecución), stack obligatorio (assert nativo + AJV + ajv-formats), patrón de mocks (objetos planos sin libs externas), qué se testea (shapes publicados, validación contra schemas, edge cases de error) y qué NO (UI visual concreta, tests con red real, snapshots), integración en CI (npm scripts + workflow YAML step), criterio de cierre (todos verde antes de commit). Validable mecánicamente cruzando contra los archivos en tests/ y los scripts en package.json.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/testing.contract.json (este archivo)",
+      "package.json (npm scripts test:*)",
+      ".github/workflows/validate.yml (steps de tests en CI)",
+      "tests/unit/*.test.js (suite actual — referencia del patrón)",
+      "tests/integration/*.test.js (tests de integración)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json (tests asociados a cada módulo)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "TESTS SON PARTE DEL CIERRE, NO OPCIONAL. Una migración / feature / refactor termina cuando su test correspondiente está escrito y pasa. Sin tests = no entra a main.",
+
+    "UN TEST POR HANDLER MIGRADO. Cada handler de un sub-contrato (chat-flow, agent-flow, etc.) tiene su test unitario que cubre: shape canónico publicado + validación contra el JSON Schema oficial + edge cases de error. Esta regla la hereda chat-flow.contract y agent-flow.contract.",
+
+    "VALIDAR CONTRA SCHEMA OFICIAL ES INVARIANTE DE RUNTIME. Cada test carga el JSON Schema con AJV strict y valida el payload que el handler publica. Así el contrato del subsistema ejecuta como invariante en cada ejecución del test, no solo como decoración del JSON.",
+
+    "STACK MINIMALISTA. assert de Node + AJV + ajv-formats. Ninguna librería de testing adicional (no Jest, no Mocha, no Tape, no Vitest). El argumento es simple: una librería de testing añade dependencia, configuración, runner global, conceptos (describe/it/beforeEach), y NADA de eso aporta sobre `assert.X` + un `for` o `try/catch`.",
+
+    "MOCKS SON OBJETOS PLANOS. eventBus = { publish: async () => {} }, logger = { info: () => {}, ... }. Helpers locales en cada archivo de test (makeMocks(), instantiate()). Sin sinon, sin proxyquire, sin jest.mock — los mocks via objetos planos son legibles, predecibles, sin sorpresas.",
+
+    "CADA TEST ES INDEPENDIENTE. No hay setup global compartido entre tests. Cada test crea sus mocks y su instancia del módulo desde cero. Tests que dependen del orden de ejecución son drift.",
+
+    "TESTS NO TOCAN RECURSOS REALES. No HTTP a internet, no filesystem persistente, no DB real, no broker MQTT real. Si el módulo necesita uno de estos, se mockea. Excepción documentada: tests/integration/ pueden iniciar el broker embebido (aedes) y módulos en proceso para validación end-to-end de bus interno.",
+
+    "EJECUCIÓN STANDALONE. Cada test se ejecuta con `node tests/unit/<archivo>.test.js`. Sin runner global, sin configuración compartida, sin orden implícito. El npm script test:<modulo> es solo un alias del comando node directo.",
+
+    "CI EJECUTA CADA TEST COMO STEP SEPARADO. .github/workflows/validate.yml tiene un step por suite (`Run chat-io tests`, `Run prompt-builder tests`, etc.). Si uno falla, CI muestra cuál sin mezclar outputs. No hay un step `Run all tests` que oculte qué reventó.",
+
+    "FALSOS POSITIVOS / FALSOS NEGATIVOS SE INVESTIGAN, NO SE SKIPEAN. Un test que fallaba y empieza a pasar sin cambio en código indica drift en el invariante; un test que pasaba y empieza a fallar tras cambio en código apunta a regresión real. Ningún `it.skip` o `xtest` se commitea a main.",
+
+    "COBERTURA NO ES MÉTRICA OBJETIVO. 100% de cobertura no es objetivo — la INTENCIÓN del test (cubrir shape canónico, edge cases conocidos) sí lo es. Líneas no cubiertas son válidas si su comportamiento es trivial (getters, return constantes).",
+
+    "SIN SNAPSHOTS. No usar test snapshots (jest snapshots, etc.). Son frágiles (cualquier cambio formal de output rompe el test sin razón semántica), ocultan la intención (¿qué se está testeando exactamente?), y producen ruido en diffs."
+  ],
+
+  "principios": [
+    {
+      "id": "stack_minimalista_node_assert_ajv",
+      "regla": "Stack canónico: `assert` (built-in de Node), `ajv/dist/2020`, `ajv-formats`. NO se añaden librerías de testing adicionales.",
+      "razon": "Cada dependencia de testing añade superficie (config, plugins, peerdeps), curva de aprendizaje y modos de fallo. assert + AJV cubren el 100% de los casos del repo sin ninguna de esas tasas."
+    },
+    {
+      "id": "ubicacion_canonica",
+      "regla": "Tests unitarios en tests/unit/<modulo>.test.js. Tests de integración en tests/integration/<descripcion>.test.js. Sin __tests__ junto al código, sin .spec, sin .test fuera de tests/.",
+      "razon": "Una sola carpeta hace que `find tests/ -name '*.test.js'` liste TODA la suite. Tests dispersos junto al código rompen scripts genéricos de descubrimiento y la disciplina de wiring a CI."
+    },
+    {
+      "id": "naming_archivo_igual_a_modulo",
+      "regla": "El nombre del archivo de test es <modulo>.test.js exactamente, donde <modulo> es el nombre del módulo testeado. Si el módulo es `chat-io`, el test es `tests/unit/chat-io.test.js`. Sub-módulos del mismo módulo van en el mismo archivo (no se fragmentan en multiples).",
+      "razon": "Mapping 1:1 módulo↔test es trivial de auditar: para cada módulo del repo, ¿existe su archivo de test? La fragmentación introduce ambigüedad."
+    },
+    {
+      "id": "un_test_por_handler",
+      "regla": "Cada handler de un sub-contrato (chat-flow, agent-flow, etc.) tiene un test que cubre: shape canónico publicado + validación AJV contra el JSON Schema oficial + edge cases de error.",
+      "razon": "El test ejecuta el contrato como invariante. Sin test, el shape canónico es solo decoración del JSON y nadie garantiza que el handler cumpla."
+    },
+    {
+      "id": "validacion_ajv_obligatoria",
+      "regla": "Cada test que publica un payload de evento canónico carga el JSON Schema oficial del repo con AJV strict y valida el payload contra él. La validación es parte del test, no opcional.",
+      "razon": "Sin validación AJV, el test puede pasar publicando un payload que el schema rechazaría. La validación cierra el círculo: contrato → schema → handler → test → AJV strict."
+    },
+    {
+      "id": "mocks_objetos_planos",
+      "regla": "Los mocks (eventBus, logger, db, etc.) son objetos planos definidos en helpers locales del archivo de test. No se usan librerías de mocking (sinon, proxyquire, jest.mock).",
+      "razon": "Objetos planos son legibles, predecibles, no introducen 'magia' (auto-restoring, spy chains). Helpers locales mantienen el test self-contained."
+    },
+    {
+      "id": "test_independiente",
+      "regla": "Cada test crea sus mocks y su instancia del módulo desde cero (en una función helper instantiate() o equivalente). No hay setup global, no hay state compartido entre tests del mismo archivo.",
+      "razon": "Tests con state compartido producen falsos positivos/negativos por orden de ejecución. Independencia es la única forma de que el resultado sea reproducible."
+    },
+    {
+      "id": "tests_no_tocan_recursos_reales",
+      "regla": "Tests unitarios no hacen HTTP a internet, no escriben en filesystem persistente, no conectan a DB real, no inician broker MQTT real. Si el módulo necesita uno, se mockea. Tests de integración pueden iniciar broker embebido (aedes) en proceso, justificado y documentado.",
+      "razon": "Recursos reales en tests = lentitud + flakiness + dependencias del entorno (red disponible, puertos libres, permisos de disco). Mocks aíslan la prueba al comportamiento del código bajo test."
+    },
+    {
+      "id": "ejecucion_standalone",
+      "regla": "Cada archivo de test se ejecuta con `node tests/unit/<archivo>.test.js`. El archivo es self-contained: no requiere runner global, no requiere config externa, no requiere variables de entorno especiales (excepto STACK=1 opcional para mostrar stack traces).",
+      "razon": "Standalone garantiza reproducibilidad: el mismo comando produce el mismo resultado en cualquier máquina con Node + las dependencias del package.json. No hay 'pero corre en mi máquina'."
+    },
+    {
+      "id": "ci_step_por_suite",
+      "regla": "En .github/workflows/validate.yml hay un step por suite con su nombre descriptivo. No se agrupan en un único step `Run all tests` que mezcla outputs.",
+      "razon": "Cuando algo revienta en CI, la separación por step muestra cuál fue. Output mezclado obliga a buscar entre cientos de líneas."
+    },
+    {
+      "id": "no_skip_no_focus_en_main",
+      "regla": "Ningún test commiteado a main contiene `.skip`, `.only`, `xtest`, comentarios `// TODO: re-enable`. Si un test no funciona, se arregla o se borra; no se desactiva.",
+      "razon": "Tests skipeados son deuda invisible que se acumula. Si un test es válido, debe correr; si no es válido, no debe existir."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "node_assert_y_ajv_sin_lib_de_testing",
+      "decision": "Stack canónico es assert nativo + AJV + ajv-formats. Sin Jest, Mocha, Tape, Vitest, etc.",
+      "alternativa_descartada": "Adoptar Jest (estándar de facto en Node) por sus features (describe/it, beforeEach, mocking integrado, snapshot, watch mode).",
+      "razon": "Las features de Jest no se necesitan: el repo no tiene tests con setup compartido (cada test es self-contained), no usa snapshots (prohibidos), no necesita watch mode (los tests son rápidos). assert + AJV son ~3 líneas de código vs ~50MB de Jest + plugins. La simplicidad no es minimalismo militante; es que la complejidad añadida no justifica el coste."
+    },
+    {
+      "id": "mocks_objetos_planos_sin_libreria",
+      "decision": "Mocks via objetos planos definidos como helpers locales en cada archivo de test (makeMocks, instantiate).",
+      "alternativa_descartada": "Sinon (spy/stub/mock library) o proxyquire (override de require).",
+      "razon": "Los mocks como objetos planos son explícitos y self-contained. No hay 'magia' (auto-restore tras tests, spy chains que ocultan qué llamadas se esperaban). El coste es duplicación leve entre archivos de test (cada uno define makeMocks similar) — aceptable a cambio de legibilidad."
+    },
+    {
+      "id": "ubicacion_carpeta_tests_no_junto_al_codigo",
+      "decision": "Todos los tests viven en tests/unit/ y tests/integration/, NO junto al código en __tests__ ni *.test.js al lado del módulo.",
+      "alternativa_descartada": "Tests al lado del código (convención común en JS).",
+      "razon": "Una sola carpeta permite scripts genéricos (find tests/ -name '*.test.js' lista TODA la suite, validators auditan tests/unit/ trivialmente). Tests dispersos rompen ese descubrimiento. La proximidad código↔test es estética; la disciplina mecánica vale más."
+    },
+    {
+      "id": "ejecucion_step_por_step_en_ci",
+      "decision": "Cada test corre como step independiente en .github/workflows/validate.yml. No hay un step `npm test` que ejecute todos juntos.",
+      "alternativa_descartada": "Un step único `npm test` que ejecuta toda la suite.",
+      "razon": "Steps separados muestran inmediatamente qué reventó (el step con ✗ rojo). Step único mezcla outputs y obliga a buscar el primer fallo. Coste: el YAML tiene más líneas — aceptable."
+    },
+    {
+      "id": "validacion_ajv_strict_no_loose",
+      "decision": "Los tests que validan payloads contra schemas usan AJV en modo strict con additionalProperties:false enforce-able a nivel de schema.",
+      "alternativa_descartada": "AJV en modo loose o validación parcial (solo campos obligatorios, ignorar extras).",
+      "razon": "Strict es la única forma de detectar drift por adición de campos no documentados. Loose deja pasar payloads que el contrato rechazaría en producción cuando se aplique strict por otro consumer."
+    },
+    {
+      "id": "sin_cobertura_obligatoria",
+      "decision": "El repo NO tiene métrica de cobertura obligatoria (no nyc, no c8, no requisito de % mínimo).",
+      "alternativa_descartada": "Imponer cobertura mínima (ej. 80% obligatorio) verificada en CI.",
+      "razon": "Cobertura como métrica produce tests vacíos que cubren líneas sin testear comportamiento real. La intención del test (cubrir el invariante del contrato + edge cases conocidos) es lo que importa, y eso no se mide en %."
+    },
+    {
+      "id": "sin_snapshots",
+      "decision": "Ningún test usa snapshots (jest snapshots, equivalente).",
+      "alternativa_descartada": "Snapshots para tests de output complejo (HTML render, JSON estructurado).",
+      "razon": "Snapshots son frágiles (cualquier cambio formal rompe el test sin razón semántica) y ocultan la intención (¿qué exactamente se está testeando?). Forzar aserciones explícitas obliga al autor a saber qué espera del output."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "skip_focus_xtest_en_main",
+      "regla": "Ningún archivo en tests/ contiene .skip, .only, xtest, xit, ni comentarios tipo `// TODO: re-enable`.",
+      "enforce": "Validador escanea tests/ con regexes específicos. Severidad ERROR — no entran a main."
+    },
+    {
+      "id": "libreria_de_testing_en_dependencies",
+      "regla": "package.json no incluye Jest, Mocha, Tape, Vitest, Jasmine, etc. en dependencies ni devDependencies.",
+      "enforce": "Validador inspecciona package.json. Severidad ERROR si encuentra alguna."
+    },
+    {
+      "id": "libreria_de_mocking_en_dependencies",
+      "regla": "package.json no incluye Sinon, proxyquire, rewire, jest-mock, etc.",
+      "enforce": "Validador inspecciona package.json. Severidad ERROR."
+    },
+    {
+      "id": "tests_dispersos_fuera_de_tests_dir",
+      "regla": "No hay archivos *.test.js fuera de tests/ (excluyendo node_modules y _archived).",
+      "enforce": "Validador escanea repo con find. Severidad warning durante migración (algunos módulos legacy pueden tener __tests__); ERROR cuando esté limpio."
+    },
+    {
+      "id": "tests_que_tocan_red_real",
+      "regla": "Ningún test unitario importa http/https/fetch/axios apuntando a hosts reales. Tests integration solo a localhost (broker embebido, mock server local).",
+      "enforce": "Validador escanea tests/unit/ buscando URLs no-localhost. Severidad ERROR."
+    },
+    {
+      "id": "tests_que_escriben_filesystem_persistente",
+      "regla": "Ningún test unitario hace fs.writeFile / fs.appendFile a paths fuera de os.tmpdir() o sin cleanup posterior.",
+      "enforce": "Validador escanea tests/unit/ buscando fs.writeFile sin precaución. Severidad warning."
+    },
+    {
+      "id": "tests_dependientes_del_orden",
+      "regla": "Ningún test asume que otro test corrió antes (no state compartido entre tests del mismo archivo más allá de helpers).",
+      "enforce": "Auditoría manual / revisión de PR. Patrones tipo `let counter = 0; counter++; assert(counter === N)` son drift."
+    },
+    {
+      "id": "snapshots",
+      "regla": "Ningún test usa snapshots (jest .toMatchSnapshot ni equivalentes implementados manualmente).",
+      "enforce": "Validador escanea tests/ buscando .toMatchSnapshot, snapshotSerializer, fixtures de snapshot. Severidad ERROR."
+    },
+    {
+      "id": "test_sin_validacion_de_schema",
+      "regla": "Tests que cubren handlers de eventos canónicos (chat-flow, agent-flow, frontend, etc.) DEBEN cargar el JSON Schema oficial con AJV y validar el payload.",
+      "enforce": "Validador inspecciona archivos de test en tests/unit/ asociados a módulos del subsistema y verifica que importan ajv y cargan algún *.schema.json. Severidad warning."
+    },
+    {
+      "id": "test_no_wired_a_package_json",
+      "regla": "Cada archivo en tests/unit/ tiene su correspondiente npm script test:<modulo> en package.json.",
+      "enforce": "Validador cruza listado de tests/unit/*.test.js contra scripts test:* de package.json. Severidad warning si falta wiring."
+    },
+    {
+      "id": "test_no_wired_a_workflow_yml",
+      "regla": "Cada npm script test:* tiene su step correspondiente en .github/workflows/validate.yml.",
+      "enforce": "Validador parsea workflow YAML y cruza con npm scripts. Severidad warning si un test no corre en CI."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/testing.schema.json (a crear). Top-level: _meta, regla_maestra (string), estructura_directorios (object: { tests_unit, tests_integration }), naming_canonico (regex pattern), stack_canonico (object: { assertion_lib: 'node:assert', schema_validator: 'ajv', ... }), prohibidos (lista de patrones de drift detectables), criterios_de_cierre (string lista de checks que deben pasar antes de commit), integracion_ci (object: workflow_path, step_pattern).",
+
+  "reglas_de_extraccion": [
+    "1. Validar este contrato contra _schemas/testing.schema.json (cuando exista).",
+    "2. Listar archivos en tests/unit/ y tests/integration/. Verificar que cumplen naming pattern <modulo>.test.js.",
+    "3. Para cada archivo de test, verificar: usa assert nativo (require('assert')), NO importa Jest/Mocha/etc., usa AJV si testea handlers de eventos canónicos.",
+    "4. Escanear archivos de test buscando .skip, .only, xtest, xit, snapshots. Severidad ERROR si encuentra.",
+    "5. Inspeccionar package.json: dependencies + devDependencies NO incluyen Jest, Mocha, Tape, Vitest, Sinon, proxyquire, rewire.",
+    "6. Cruzar tests/unit/*.test.js con npm scripts test:* en package.json. Reportar tests sin wiring.",
+    "7. Cruzar npm scripts test:* con steps de .github/workflows/validate.yml. Reportar scripts sin step CI.",
+    "8. Reportar PASS/FAIL con findings agrupados por severidad."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/testing.schema.json (a crear)",
+      "regla": "Schema AJV strict del output testing.json."
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/testing.validate.js (a crear)",
+      "regla": "Implementa los 7 cross-checks de reglas_de_extraccion."
+    },
+    {
+      "tipo": "tests_existentes",
+      "items": ["tests/unit/* (18 archivos al cierre del contrato)", "tests/integration/* (3 archivos)"],
+      "regla": "Toda la suite actual cumple este contrato — sirvió como base para extraerlo."
+    },
+    {
+      "tipo": "package_json_scripts",
+      "regla": "package.json.scripts contiene test:<modulo> por cada archivo de test."
+    },
+    {
+      "tipo": "github_workflow",
+      "ubicacion": ".github/workflows/validate.yml",
+      "regla": "Cada test:* tiene su step en el workflow."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección testing cuando exista)",
+      "regla": "Warnings de tests sin wiring quedan en baseline; errores (skip/focus, snapshots, libs prohibidas) no van a baseline."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "testing_contract_estructura_valida",
+      "regla": "testing.contract.json tiene amplitud canónica completa.",
+      "como_detectar": "17 secciones canónicas presentes.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_libreria_de_testing_en_package_json",
+      "regla": "package.json no incluye Jest, Mocha, Tape, Vitest, Jasmine.",
+      "como_detectar": "Inspeccionar dependencies + devDependencies.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_libreria_de_mocking",
+      "regla": "package.json no incluye Sinon, proxyquire, rewire.",
+      "como_detectar": "Inspeccionar dependencies + devDependencies.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_test_skip_focus_xtest",
+      "regla": "Ningún archivo en tests/ contiene .skip, .only, xtest, xit.",
+      "como_detectar": "Regex sobre tests/.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_test_snapshot",
+      "regla": "Ningún archivo en tests/ usa snapshots.",
+      "como_detectar": "Regex: toMatchSnapshot, snapshotSerializer.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_test_sin_validacion_ajv",
+      "regla": "Tests de handlers de eventos canónicos importan AJV y cargan schemas.",
+      "como_detectar": "Inspeccionar imports y require de cada test asociado a módulos de chat-flow/agent-flow.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_test_sin_npm_script",
+      "regla": "Cada test en tests/unit/ tiene su npm script test:* correspondiente.",
+      "como_detectar": "Cruzar listado.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_test_sin_step_ci",
+      "regla": "Cada npm script test:* tiene su step en .github/workflows/validate.yml.",
+      "como_detectar": "Parsear workflow YAML.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_test_disperso_fuera_de_tests_dir",
+      "regla": "No hay archivos *.test.js fuera de tests/ (excluyendo node_modules, _archived).",
+      "como_detectar": "find . -name '*.test.js' -not -path '*/node_modules/*' -not -path '*/_archived/*' -not -path './tests/*'.",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS si testing.contract.json tiene amplitud canónica Y package.json no incluye libs de testing/mocking prohibidas Y ningún test tiene skip/focus/xtest/snapshots Y todos los tests están wired a npm scripts y a workflow YAML. Errors bloquean PASS — son drifts críticos. Warnings son deuda visible (test sin wiring, test sin AJV) que el responsable cierra.",
+
+  "convenciones_complementarias": {
+    "naming": "Los archivos de test siguen el naming pattern `<modulo>.test.js` donde <modulo> coincide con el nombre del módulo (chat-io.test.js, prompt-builder.test.js). naming.contract.json aplica para los nombres de los módulos; este contrato lo extiende para sus tests.",
+    "glossary": "No aplica directamente — los tests no introducen entidades cross-módulo nuevas.",
+    "events": "Los tests verifican que el patrón publish-subscribe del events.contract se cumple (mocks de eventBus capturan publishes; tests inspeccionan el payload).",
+    "errors": "Los tests cubren edge cases de error con códigos canónicos de errors.json (UPSTREAM_TIMEOUT, AGENT_NOT_FOUND, etc.). Validan que error.code está en la lista canónica.",
+    "observability": "Los tests pueden capturar logs (mock logger) y verificar que el handler loguea con metadata correcta (correlation_id presente, no se loguea secreto, etc.).",
+    "lifecycle": "Tests no exigen lifecycle real del módulo — instancian la clase y llaman a handlers directamente saltándose onLoad/onUnload (a menos que el test sea específicamente del lifecycle).",
+    "persistence": "Tests mockean el bus de db.query.request (los módulos que persisten via event-driven). Tests NO escriben en SQLite real ni filesystem persistente.",
+    "http": "Tests no hacen HTTP real. Endpoints HTTP de módulos se testean con supertest local o mocks de req/res.",
+    "security": "Tests no usan credenciales reales. Si el módulo necesita una API key, el test la mockea (credential.resolve.response devuelve un valor falso). NUNCA hardcoded API keys reales en archivos de test.",
+    "frontend": "Tests del frontend (cuando existan) viven en tests/unit/frontend.<componente>.test.js o equivalente, siguiendo el mismo patrón. No hay framework de testing visual (Cypress, Playwright) en este contrato — eso sería decisión separada documentada como excepción justificada.",
+    "chat-flow": "Tests de los handlers chat-flow validan payloads contra los 5 JSON Schemas oficiales con AJV strict. Ya implementado en chat-io.test.js, prompt-builder.test.js, ai-gateway-chat.test.js.",
+    "agent-flow": "Igual que chat-flow para los 3 schemas de agent-flow. Ya implementado en ai-agent-framework.test.js."
+  }
+}

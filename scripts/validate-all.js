@@ -45,7 +45,12 @@ const VALIDATORS = [
   { id: 'testing',       file: 'arquitectura/decisiones/_validators/testing.validate.js' },
   { id: 'multi-tenancy', file: 'arquitectura/decisiones/_validators/multi-tenancy.validate.js' },
   { id: 'documentation', file: 'arquitectura/decisiones/_validators/documentation.validate.js' },
-  { id: 'versionado',    file: 'arquitectura/decisiones/_validators/versionado.validate.js' }
+  { id: 'versionado',    file: 'arquitectura/decisiones/_validators/versionado.validate.js' },
+  { id: 'deployment',    file: 'arquitectura/decisiones/_validators/deployment.validate.js' },
+  { id: 'module-loading',file: 'arquitectura/decisiones/_validators/module-loading.validate.js' },
+  { id: 'bus-transport', file: 'arquitectura/decisiones/_validators/bus-transport.validate.js' },
+  { id: 'scheduling',    file: 'arquitectura/decisiones/_validators/scheduling.validate.js' },
+  { id: 'resilience',    file: 'arquitectura/decisiones/_validators/resilience.validate.js' }
 ];
 
 const RED   = '\x1b[31m';

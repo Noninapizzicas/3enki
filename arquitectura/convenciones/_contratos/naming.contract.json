@@ -1,9 +1,9 @@
 {
   "_doc": "Captura LA convención de naming del sistema event-core: idioma por módulo, forma de los eventos, verbos canónicos por idioma, restricciones léxicas. Es la regla determinista que rige cómo se nombran módulos, eventos, entidades y verbos. Descriptiva del estado canónico, NO del legacy: si un módulo viejo no la cumple, eso se reporta como drift, no como excepción al contrato.",
   "id": "naming",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "creada": "2026-04-30",
-  "supersedes_nota": "v1.1.0 (POC iteration): añadidas clarificaciones en razon de 'masculino_singular_for_es' (nota didáctica sobre identificadores ≠ lenguaje natural) y 'form_canonical' (cuándo usar 2-partes vs 3-partes — single-entity vs multi-entity modules). Sin cambios estructurales en output ni schema. Validado en POC modules/notas-poc/.",
+  "supersedes_nota": "v1.2.0 (auditoría amplitud canónica de transversales): añadida sección decisiones_arquitectonicas con 5 trade-offs explícitos (monolingüe por módulo, idioma declarado en manifest, forma canónica module.entity.verb, ASCII puro en identifiers, verbos canónicos por idioma con whitelist). Coherente con la disciplina transversal-vs-horizontal documentada en CLAUDE.md. Sin cambios en output ni schema.\n\nv1.1.0 (POC iteration): añadidas clarificaciones en razon de 'masculino_singular_for_es' (nota didáctica sobre identificadores ≠ lenguaje natural) y 'form_canonical' (cuándo usar 2-partes vs 3-partes — single-entity vs multi-entity modules). Sin cambios estructurales en output ni schema. Validado en POC modules/notas-poc/.",
 
   "objetivo": "Eliminar ambigüedad y drift en los nombres del sistema. Producir UN JSON output único (_outputs/naming.json) que contiene las reglas, los whitelist de verbos por idioma, y los flags de restricciones léxicas. Validable mecánicamente contra cada module.json y cada evento publicado por cada módulo.",
 
@@ -84,6 +84,39 @@
   ],
 
   "lista_canonica_idiomas": ["es", "en"],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "monolingue_por_modulo",
+      "decision": "Cada módulo elige UN idioma (es | en) y todos sus eventos, entidades y verbos siguen ese idioma. No hay spanglish dentro de un módulo.",
+      "alternativa_descartada": "Permitir mezcla libre de idiomas por gusto del autor (un módulo con eventos en inglés y entidades en español).",
+      "razon": "El spanglish dentro de un módulo es drift incremental: empieza con un evento aislado y termina sin nadie sabiendo qué verbo usar. Forzar monolingüismo por módulo da una regla simple, auditable, sin casos ambiguos."
+    },
+    {
+      "id": "idioma_declarado_en_manifest",
+      "decision": "El idioma se declara explícitamente en module.json.language ('es' | 'en'). Convención adicional: el nombre del directorio coincide con el idioma elegido (`recetas` → es, `dashboard` → en).",
+      "alternativa_descartada": "Inferir el idioma del nombre del directorio o del contenido del código.",
+      "razon": "Inferir tiene casos ambiguos (`config-manager` ¿es o en?). Declarar es invariante mecánicamente verificable y permite que un módulo cambie de idioma sin renombrar el directorio (caso real durante migración)."
+    },
+    {
+      "id": "forma_canonica_eventos_module_entity_verb",
+      "decision": "Forma canónica de evento: `<module-prefix>.<entity>.<verb>` (3 partes) cuando el módulo tiene varias entidades; `<module-prefix>.<verb>` (2 partes) cuando es single-entity.",
+      "alternativa_descartada": "Forma libre por módulo (el autor decide cuántas partes y en qué orden).",
+      "razon": "Una forma canónica permite parsear nombres de evento mecánicamente sin documentación caso a caso. La distinción 2-partes vs 3-partes refleja la realidad: un módulo single-entity (recetas) no necesita repetir el sustantivo; un módulo multi-entity (device-registry con device + firmware + shadow) lo necesita."
+    },
+    {
+      "id": "ascii_puro_en_identifiers",
+      "decision": "Identifiers (nombres de eventos, módulos, archivos, claves de payload) son ASCII puro: sin tildes, sin ñ, sin caracteres no estándar. La prosa en JSON descriptions SÍ usa ortografía completa del idioma.",
+      "alternativa_descartada": "Permitir tildes y ñ en identifiers cuando el idioma del módulo es español (recetas → recéta_creada, compañero → compañero.activo).",
+      "razon": "Los identifiers cruzan herramientas (filesystems case-sensitive, DBs, URLs, JSON keys, code editors). Cualquier carácter no-ASCII introduce fragilidad. Pagar el coste léxico (`compania` en vez de `compañía`) UNA vez en el identifier a cambio de portabilidad mecánica permanente. La prosa narrativa no tiene este problema y debe usar el idioma correctamente."
+    },
+    {
+      "id": "verbos_canonicos_por_idioma",
+      "decision": "Hay un whitelist de verbos canónicos por idioma para los eventos de lifecycle (created, updated, deleted, saved, ready, failed, ... en inglés; creada, actualizada, eliminada, guardada, lista, fallida, ... en español). El validator rechaza verbos fuera del whitelist.",
+      "alternativa_descartada": "Permitir cualquier verbo razonable y dejar la coherencia al revisor humano.",
+      "razon": "Sin whitelist se acumulan sinónimos (created vs added vs inserted; saved vs persisted vs stored) que rompen patrones de búsqueda y subscripción. El whitelist mata la decisión léxica antes de que entre — el autor no piensa qué verbo usar, mira la lista."
+    }
+  ],
 
   "output_shape_resumen": "Ver _schemas/naming.schema.json. Top-level: _meta, regla (string maestra), rules (form, ascii_only, no_accents, no_tilde_n, case_compounds), languages (object con keys 'es' y 'en'; cada uno tiene module_json_language_value y verbs_lifecycle).",
 

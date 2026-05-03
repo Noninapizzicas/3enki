@@ -1,9 +1,9 @@
 {
   "_doc": "Captura los patrones de persistencia disponibles para los módulos del sistema event-core. A diferencia de events/lifecycle/observability/errors (que imponen UNA forma canónica), este contrato es un CATÁLOGO de patrones aceptados — cada módulo elige según su dominio. La uniformidad viene de las reglas mínimas comunes (write atómico, aislamiento, telemetría) que aplican independientemente del patrón elegido. La libertad viene de que NO hay un tipo de persistencia único impuesto al sistema entero.",
   "id": "persistence",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-04-30",
-  "supersedes_nota": "Primera versión. Recoge los patrones detectados en los 66 audits (in-memory, JSON file, SQLite, append-only) y los formaliza con sus reglas mínimas. Validado parcialmente por POC notas (JSON file con write atómico).",
+  "supersedes_nota": "v1.1.0 (auditoría amplitud canónica de transversales): añadida sección decisiones_arquitectonicas con 3 trade-offs explícitos (catálogo no forma única, aislamiento absoluto entre módulos, declaración obligatoria en module.json). Coherente con la disciplina transversal-vs-horizontal documentada en CLAUDE.md y con la amplitud canónica que ya cumplían errors/events/http/lifecycle/observability. Sin cambios en el output ni en patrones_canonicos — solo amplitud de documentación.\n\nv1.0.0: Primera versión. Recoge los patrones detectados en los 66 audits (in-memory, JSON file, SQLite, append-only) y los formaliza con sus reglas mínimas. Validado parcialmente por POC notas (JSON file con write atómico).",
 
   "objetivo": "Producir UN JSON output (_outputs/persistence.json) que enumera los PATRONES DE PERSISTENCIA aceptados, las reglas mínimas comunes que aplican a TODOS los patrones (write atómico, aislamiento, telemetría, declaración en module.json), y las reglas específicas por patrón (transacciones para SQLite, ENOENT graceful para JSON, etc.). Validable mecánicamente cruzando contra las auditorías modulo-completo.",
 
@@ -97,6 +97,27 @@
       "id": "no_plain_secrets_on_disk",
       "regla": "Tokens, passwords, claves privadas que el módulo necesite persistir van cifrados o referenciados via credential-manager (módulo dedicado a esto). NUNCA aparecen en archivos JSON/YAML/SQLite en plano legibles por cualquiera con acceso al disco.",
       "razon": "Coherente con no_secrets_in_logs (observability) y no_secrets_in_messages (errors). Los logs son canales temporales; los archivos persistidos son canales permanentes — fugar un secreto en disco es peor. Si el módulo requiere acceder a un secreto, lo hace via credential-manager (que se encarga del cifrado/almacenamiento seguro)."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "catalogo_no_forma_unica",
+      "decision": "El contrato de persistencia es un CATÁLOGO de patrones aceptados (in-memory, json-file, json-file-per-project, sqlite-per-project, etc.). Cada módulo elige el suyo en module.json.config.persistence.pattern.",
+      "alternativa_descartada": "Imponer UN único sistema de persistencia para todo el repo (ej. SQLite global, o todos via database-manager).",
+      "razon": "Los dominios del repo son heterogéneos: notas, auditoría, sesiones efímeras, agregaciones temporales, configuración. Forzar uniformidad lleva a abusar de la herramienta única (SQLite para datos triviales, JSON para datos relacionales). Catálogo respeta el dominio de cada módulo a cambio de que cada módulo declare explícitamente su elección — la uniformidad real está en la declaración, no en la implementación."
+    },
+    {
+      "id": "aislamiento_absoluto_entre_modulos",
+      "decision": "La persistencia de un módulo es PRIVADA — otros módulos NO leen sus archivos directamente, NO consultan su SQLite, NO inspeccionan su estado en memoria. Para acceder a datos de otro módulo se usa el bus (events).",
+      "alternativa_descartada": "Permitir lectura directa cross-módulo cuando 'es más simple' (ej. dashboard lee directamente la BD de un módulo).",
+      "razon": "Si otros módulos leen tu storage directamente, pierdes la propiedad de tu dominio: cualquier cambio de schema rompe consumers ocultos. El bus impone que los datos cruzan vía eventos canónicos y los consumers son auditables. La 'simplicidad' de la lectura directa es endeudarse contra el futuro."
+    },
+    {
+      "id": "declaracion_obligatoria_en_module_json",
+      "decision": "Todo módulo declara explícitamente en module.json.config.persistence: pattern, restart_resilient (true|false), lost_on_restart (lista de campos/datos), concurrency. Sin defaults inferidos.",
+      "alternativa_descartada": "Inferir desde el código del módulo (heurística sobre uso de fs / sqlite3).",
+      "razon": "Lo implícito invita drift: dos módulos con el mismo pattern pero declaraciones distintas (uno restart_resilient: true por error, otro false correcto) son indistinguibles para auditoría sin inspección manual. Declaración explícita es enforce-able mecánicamente y facilita migrations cuando un módulo cambia de pattern."
     }
   ],
 

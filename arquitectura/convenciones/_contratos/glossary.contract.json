@@ -1,9 +1,9 @@
 {
   "_doc": "Captura el GLOSARIO de términos cross-módulo del sistema event-core: una sola forma canónica por concepto por idioma. Su scope es estrecho: solo conceptos compartidos entre dos o más módulos. Las entidades internas de un único módulo no entran. Sinónimos prohibidos.",
   "id": "glossary",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-04-30",
-  "supersedes_nota": "Primera versión.",
+  "supersedes_nota": "v1.1.0 (auditoría amplitud canónica de transversales): añadida sección decisiones_arquitectonicas con 4 trade-offs explícitos (solo términos cross-módulo, forma canónica única por idioma, bilingüe opcional, dominio clasificatorio no restrictivo). Coherente con la disciplina transversal-vs-horizontal documentada en CLAUDE.md.\n\nv1.0.0: Primera versión.",
 
   "objetivo": "Eliminar drift de sinónimos entre módulos. Si dos módulos hablan del mismo concepto (orden/pedido, factura/recibo, customer/cliente), DEBEN usar el mismo término. El glosario fija ese término por idioma. Validable cruzando glosario contra eventos publicados.",
 
@@ -75,6 +75,33 @@
     "ai",
     "ui",
     "messaging"
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "solo_terminos_cross_modulo",
+      "decision": "El glosario solo recoge términos cross-módulo (que aparecen en dos o más módulos). Términos internos a un único módulo NO entran — el módulo decide su léxico privado.",
+      "alternativa_descartada": "Glosario maximalista que catalogue todos los términos del repo (incluyendo los internos de cada módulo).",
+      "razon": "Un glosario maximalista atrae conceptos sin valor cross-módulo y se vuelve ruidoso. La forma canónica solo importa cuando hay riesgo de divergencia entre módulos. Términos internos no tienen ese riesgo. El criterio cross-módulo es el sweet spot entre disciplina y manejabilidad."
+    },
+    {
+      "id": "forma_canonica_unica_por_idioma",
+      "decision": "Por cada concepto se permite UNA forma canónica en español (`es`) y/o UNA forma canónica en inglés (`en`). Sinónimos prohibidos.",
+      "alternativa_descartada": "Permitir sinónimos legítimos por estilo personal del módulo (mensaje / message / msg / chat).",
+      "razon": "Cada sinónimo es divergencia de naming que se propaga a eventos, payloads, audits, validators. Bloquearlos a nivel de glosario los caza en tiempo de validate antes de que el drift entre al sistema. Un nombre por concepto impone el coste UNA vez (decidir cuál) a cambio de coherencia permanente."
+    },
+    {
+      "id": "bilingue_opcional",
+      "decision": "Cada término puede tener `es`, `en`, o ambos. NO se obliga a tener ambos siempre.",
+      "alternativa_descartada": "Forzar que todo término tenga forma canónica en ambos idiomas.",
+      "razon": "Algunos conceptos no tienen traducción natural en uno de los dos idiomas (device, firmware, shadow, broker — anglicismos consolidados; barra-de-cocina, escandallo — castellanos sin equivalente preciso). Forzar la traducción inventa neologismos falsos que nadie usa. Bilingüe opcional respeta la realidad léxica de cada concepto."
+    },
+    {
+      "id": "dominio_clasificatorio_no_restrictivo",
+      "decision": "Cada término se clasifica en un dominio (horeca, iot, system, auth, ai, ui, messaging). El dominio es orientativo (ayuda a localizar), no restrictivo (un término no está prohibido fuera de su dominio).",
+      "alternativa_descartada": "Dominio como cerca: el término solo puede usarse en módulos de su dominio.",
+      "razon": "Las dominios cruzan en la práctica (ai usa messaging para chat, iot usa system para device-registry). Restringir genera falsos positivos en validate y obliga a duplicar conceptos. La clasificación orientativa basta para descubrir y agrupar."
+    }
   ],
 
   "output_shape_resumen": "Ver _schemas/glossary.schema.json. Top-level: _meta, scope (string), criterio_inclusion (string), concepts (array de { id, domain, es?, en?, notes? }).",

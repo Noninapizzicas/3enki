@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-03T16:44:26.611Z",
+  "generated_at": "2026-05-03T22:24:00.044Z",
   "total": 3738,
   "by_validator": {
     "naming": 52,
@@ -35,7 +35,7 @@
     "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-scheduler publica agent.execute.request en modules/pizzepos/carta-scheduler/index.js:273 — payload.campos_visibles no incluye correlation_id",
     "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/menu-generator publica agent.execute.request en modules/pizzepos/menu-generator/index.js:109 — payload.campos_visibles no incluye correlation_id",
     "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:170 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
-    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:324 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
+    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:335 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
     "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/ai-gateway publica ai.chat.response en modules/conversacion/ai-gateway/index.js:479 — payload.campos_visibles no incluye correlation_id",
     "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/chat-io publica chat.message.saved en modules/conversacion/chat-io/index.js:263 — payload.campos_visibles no incluye correlation_id",
     "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/prompt-builder publica chat.prompt.ready en modules/conversacion/prompt-builder/index.js:252 — payload.campos_visibles no incluye correlation_id",

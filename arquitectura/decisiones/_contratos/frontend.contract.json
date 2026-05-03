@@ -1,9 +1,9 @@
 {
   "_doc": "Captura LA forma canónica del frontend del sistema event-core: pantalla única donde el chat (compañero) es el eje y todos los módulos del backend renderizan su superficie alrededor sin sacar al usuario del espacio. Define el frame común (layout, principios, modelo de extensión, protocolo backend↔frontend, prohibidos) que toda UI del repo respeta. NO entra dentro del contenido visual concreto de cada módulo (UIs específicas como /compañero, /cocina y los renderizados internos de menu-generator, recetas, etc.) — eso es horizontal, propiedad de cada módulo. La regla maestra: el usuario nunca abandona el frame; cada vez que sales del espacio, hay distracciones.",
   "id": "frontend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-05-03",
-  "supersedes_nota": "Primera versión. Absorbe la información que vivía en frontend/DISEÑO-UI.md como fuente JSON autoritativa (validable, cross-referenciable con el resto del sistema). El markdown se archiva — la fuente de verdad pasa a ser este contrato. Recoge los 5 principios fundamentales, el layout canónico de 5 zonas + lateral, el sandwich del chat, el sistema visual (colores de proyecto, iconos de provider), el protocolo MQTT frontend↔backend, y las 8 decisiones arquitectónicas previas. Documento autoritativo del frame; cada módulo backend declara su superficie via module.json.ui_handlers respetando este frame.",
+  "supersedes_nota": "v1.1.0 (patron agente-vive-en-chat): añadida sección bloques_canonicos_inline_render con el tipo agent_intervention (tarjeta colapsable que representa la ejecución de un agente especialista en el chat). Coherente con agent-flow.contract v1.1.0 (chat_inline_rendering) y companero-viaje. Documenta el shape de metadata.block para cada tipo de bloque inline. Lista cerrada extensible — añadir tipo nuevo requiere actualizar el contrato.\n\nv1.0.0: Primera versión. Absorbe la información que vivía en frontend/DISEÑO-UI.md como fuente JSON autoritativa (validable, cross-referenciable con el resto del sistema). El markdown se archiva — la fuente de verdad pasa a ser este contrato. Recoge los 5 principios fundamentales, el layout canónico de 5 zonas + lateral, el sandwich del chat, el sistema visual (colores de proyecto, iconos de provider), el protocolo MQTT frontend↔backend, y las 8 decisiones arquitectónicas previas. Documento autoritativo del frame; cada módulo backend declara su superficie via module.json.ui_handlers respetando este frame.",
 
   "objetivo": "Producir UN JSON output (_outputs/frontend.json) que define: el layout canónico (5 zonas + lateral), los principios maestros (pantalla única, chat como eje, sandwich, no salir nunca), los tipos canónicos de superficie que un módulo backend puede aportar (workspace_module, chat_tool, inline_render, system_panel), el protocolo MQTT canónico entre frontend y backend (publishes/subscribes con su shape mínimo), el sistema visual estándar (paleta de colores de proyecto, mapping provider→icono, badges/estados), los anti-patrones absolutos (modales bloqueantes, navegación SPA, redirects fuera del frame). Validable mecánicamente cruzando contra los module.json del repo (si declaran ui_handlers, su shape cumple el contrato) y contra el código del frontend (que el frame implementado respeta el layout canónico).",
 
@@ -388,6 +388,36 @@
   ],
 
   "salida_validador": "PASS si frontend.contract.json valida estructuralmente Y todos los módulos del repo declaran ui_handlers con type/zone canónicos Y el frontend respeta el layout único (sin rutas hermanas al frame) Y no hay endpoints /ui/* en backend. Errores cross-system bloquean PASS — drift_endpoint_http_ui_intermedio y drift_navigation_spa_en_frontend son ERROR (rompen la regla maestra del frame único). Warnings son drift visible que no bloquea (ui_handler con type/zone no canónico — el módulo aún funciona pero requiere migración). Formato coherente con los demás validators del repo: banner PASS/FAIL + findings agrupados por severidad con archivo:línea cuando aplique.",
+
+  "bloques_canonicos_inline_render": {
+    "descripcion": "Tipos de bloque que pueden aparecer dentro del flujo del chat (en mensajes con metadata.block.type). Lista cerrada — el frontend renderiza UI específica por cada tipo. Añadir un tipo nuevo requiere actualizar este contrato y el frontend coordinadamente.",
+    "tipos": [
+      {
+        "type": "agent_intervention",
+        "descripcion": "Tarjeta colapsable que representa la ejecución de un agente especialista en el chat. Sigue el contrato chat_inline_rendering definido en agent-flow.contract.json.",
+        "publicado_por": "agent-observer (cuando exista) o ai-agent-framework directamente cuando conversation_id presente",
+        "shape_de_metadata_block": {
+          "type": "agent_intervention",
+          "title": "<agent_name>",
+          "status": "open | closed | failed",
+          "request_id": "<uuid del agent.execute.request>",
+          "agent_name": "<id del agente>",
+          "started_at": "<ISO timestamp>",
+          "ended_at": "<ISO timestamp opcional>",
+          "duration_ms": "<integer opcional>",
+          "tool_calls_executed": "<array opcional, lista de tools que invoco el agente>",
+          "error": "<object opcional con code+message si status=failed>",
+          "detail_url": "<string opcional, ruta a system_panel para ver detalle voluminoso>"
+        },
+        "renderizado_canonico": "Tarjeta dentro del scroll del chat. Header: avatar agente + nombre + indicador de actividad (spinner si open, check verde si closed, warning si failed). Cuerpo: assistant_message del chat.assistant.saved correspondiente. Si detail_url presente, botón 'ver detalle' que abre system_panel max 33vh.",
+        "transiciones": "open → closed (success) | open → failed (error). Una vez closed/failed la tarjeta NO vuelve a open — un retry crea NUEVA tarjeta con nuevo request_id pero mismo correlation_id."
+      }
+    ],
+    "tipos_futuros_documentados": [
+      "tool_invocation: cuando el LLM principal invoca una tool (no un agente). Renderizado mas discreto que agent_intervention. Por documentar.",
+      "memory_recall: cuando una memoria modular aporta contexto. Renderizado pequeño con icono 🧠 + source + breve. Por documentar."
+    ]
+  },
 
   "convenciones_complementarias": {
     "naming": "Los nombres de los topics MQTT que el frontend publica/suscribe cumplen la forma <module-prefix>.<entity>.<verb> definida en naming.contract.json. Las acciones (action) en ui_handlers cumplen la convención de naming del módulo (es | en según module.json.language).",

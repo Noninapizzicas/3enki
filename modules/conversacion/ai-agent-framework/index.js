@@ -296,6 +296,17 @@ class AiAgentFrameworkModule {
       timeout
     });
 
+    // Progress canonico (agent-flow.contract.chat_inline_rendering): step='started'.
+    // Solo para shape canonico (no para legacy invoke_agent flow).
+    if (ctx.shape === 'canonical') {
+      this._publishProgress({
+        ...ctx,
+        original_request_id: ctx.request_id,
+        step: 'started',
+        message: `Agente ${ctx.agent_name} iniciando`
+      });
+    }
+
     await this.eventBus.publish('llm.complete.request', {
       request_id: llm_request_id,
       system,
@@ -368,6 +379,12 @@ class AiAgentFrameworkModule {
 
     if (pending.shape === 'canonical') {
       const duration_ms = Date.now() - pending.startedAt;
+      // Progress canonico: step='finalizing' antes de publicar response/failed.
+      this._publishProgress({
+        ...pending,
+        step: 'finalizing',
+        message: success ? `Agente ${pending.agent_name} terminando` : `Agente ${pending.agent_name} fallando`
+      });
       if (!success) {
         return this._publishAgentExecuteFailed({
           ...pending,
@@ -496,6 +513,31 @@ class AiAgentFrameworkModule {
     if ('provider_attempted' in ctx) payload.provider_attempted = ctx.provider_attempted;
 
     return this.eventBus.publish('agent.execute.failed', payload);
+  }
+
+  // ============================================================
+  // Publisher de agent.execute.progress (feedback intermedio canonico)
+  // ============================================================
+
+  _publishProgress(ctx) {
+    if (!ctx.agent_name || !ctx.original_request_id) return;
+    const payload = {
+      correlation_id: ctx.correlation_id || crypto.randomUUID(),
+      request_id:     ctx.original_request_id,
+      user_id:        ctx.user_id || 'default',
+      agent_name:     ctx.agent_name,
+      step:           ctx.step,
+      timestamp:      new Date().toISOString()
+    };
+    if (ctx.conversation_id) payload.conversation_id = ctx.conversation_id;
+    if (ctx.project_id !== null && ctx.project_id !== undefined) payload.project_id = ctx.project_id;
+    if (typeof ctx.iteration === 'number') payload.iteration = ctx.iteration;
+    if (ctx.tool_invoked) payload.tool_invoked = ctx.tool_invoked;
+    if (ctx.message) payload.message = ctx.message;
+    if (ctx.metadata) payload.metadata = ctx.metadata;
+    this.eventBus.publish('agent.execute.progress', payload).catch(err => {
+      this.logger?.debug?.('ai-agent-framework.progress.publish.failed', { error: err.message });
+    });
   }
 
   // ============================================================

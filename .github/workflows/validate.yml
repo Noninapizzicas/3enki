@@ -50,6 +50,9 @@ jobs:
       - name: Run ai-agent-framework tests (agent-flow migration)
         run: npm run test:ai-agent-framework
 
+      - name: Run agent-observer tests (agente-vive-en-chat)
+        run: npm run test:agent-observer
+
       - name: Run mqttRequest unit tests
         run: npm run test:mqtt-request
 

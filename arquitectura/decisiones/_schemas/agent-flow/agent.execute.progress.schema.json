@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/agent-flow/agent.execute.progress.schema.json",
+  "title": "agent.execute.progress — payload schema",
+  "description": "Feedback intermedio del agente al caller mientras ejecuta. Evento OPCIONAL — si el agente no emite progress, el ciclo sigue siendo agent.execute.request → agent.execute.response/failed sin estados intermedios. Cuando se emite, sirve para que la tarjeta del agente en el chat se actualice ('consultando tarifas...', 'iteracion 2/N...') sin crear mensaje nuevo. Publicado por: ai-agent-framework durante la ejecucion del agente, o el propio agente desde su logica si necesita feedback granular. Consumido por: agent-observer (cuando exista) que actualiza la tarjeta inline en el chat. FIRE-AND-FORGET — no se espera ack ni se correlaciona individualmente; solo agrupa por request_id para identificar la tarjeta.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "request_id",
+    "user_id",
+    "agent_name",
+    "step",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "request_id":      { "$ref": "_common.schema.json#/$defs/request_id" },
+    "user_id":         { "$ref": "_common.schema.json#/$defs/user_id" },
+    "agent_name":      { "$ref": "_common.schema.json#/$defs/agent_name" },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" },
+
+    "conversation_id": { "$ref": "_common.schema.json#/$defs/conversation_id" },
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
+
+    "step": {
+      "enum": ["started", "thinking", "tool_call", "tool_result", "iteration", "finalizing"],
+      "description": "Fase canonica del agente. Lista cerrada para que el frontend renderice consistentemente. 'started' = primer evento tras agent.execute.request. 'thinking' = LLM generando. 'tool_call' = el LLM decidio invocar una tool (incluir tool_invoked). 'tool_result' = la tool devolvio (incluir tool_invoked). 'iteration' = nueva iteracion del agentic loop (incluir iteration). 'finalizing' = el LLM produjo respuesta final, preparando agent.execute.response."
+    },
+    "iteration": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Numero de iteracion del agentic loop. Util cuando step='iteration' para mostrar 'iteracion 3 de 10'."
+    },
+    "tool_invoked": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Cuando step='tool_call' o 'tool_result', nombre de la tool (ej. 'tarifas.assign'). Util para tooltip 'el agente esta llamando a tarifas.assign'."
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Texto humano breve para mostrar al usuario ('Consultando precios...'). Si ausente, el frontend deriva del step + tool_invoked."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Datos opacos del agente para debugging — el frontend NO los usa para render."
+    }
+  }
+}

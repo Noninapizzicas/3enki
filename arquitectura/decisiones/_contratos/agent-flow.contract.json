@@ -1,9 +1,9 @@
 {
   "_doc": "Sub-contrato derivado del documento maestro companero-viaje.contract.json. Define el SHAPE EXACTO (validable con JSON Schema) de los 3 eventos canonicos de la categoria agent_flow: agent.execute.request, agent.execute.response, agent.execute.failed. Cualquier modulo que invoque a un agente (ai-gateway via tool invoke_agent, modulos de dominio, scheduler/cron) y el ai-agent-framework cumplen este contrato. El validator agent-flow.validate.js cruza module.json publishes/subscribes con los schemas declarados aqui y detecta drift estructural ANTES de produccion.",
   "id": "agent-flow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-05-03",
-  "supersedes_nota": "Primera version. Deriva del documento maestro del compañero de viaje (companero-viaje.contract v1.0.0). Espejo del patron aplicado en chat-flow v1.0.0. Cierra los drifts detectados durante la auditoria del subsistema agentes: ausencia de correlation_id en agent.execute.*, ausencia de user_id, alias agentName vs agent_name (canonizado a agent_name por consistencia snake_case con el resto del repo), errores inyectados en agent.execute.response como campo error en vez de evento separado (rompe no_silent_failures), publish de chat.assistant.saved con shape legacy (role, content, sin correlation_id) — este ultimo se cierra al migrar el handler en chat-flow, no aqui.",
+  "supersedes_nota": "v1.1.0 (patron agente-vive-en-chat): añadido cuarto evento canonico agent.execute.progress (opcional) para feedback intermedio del agente al caller mientras ejecuta. Documentada la seccion chat_inline_rendering: protocolo visual canonico de como un agente vive en el chat (inline en hilo, tarjeta colapsable, NO popup ni redirect, detalle expandible a max 33vh). Coherente con frontend.contract (chat es eje, no salir nunca) y companero-viaje. Habilita la decision UX donde el usuario sigue el trabajo del agente en el contexto de la conversacion. Schema agent.execute.progress.schema.json + emisor en ai-agent-framework + agent-observer (modulo nuevo) son las derivaciones de implementacion.\n\nv1.0.0: Primera version. Deriva del documento maestro del compañero de viaje (companero-viaje.contract v1.0.0). Espejo del patron aplicado en chat-flow v1.0.0. Cierra los drifts detectados durante la auditoria del subsistema agentes: ausencia de correlation_id en agent.execute.*, ausencia de user_id, alias agentName vs agent_name (canonizado a agent_name por consistencia snake_case con el resto del repo), errores inyectados en agent.execute.response como campo error en vez de evento separado (rompe no_silent_failures), publish de chat.assistant.saved con shape legacy (role, content, sin correlation_id) — este ultimo se cierra al migrar el handler en chat-flow, no aqui.",
 
   "deriva_de": "arquitectura/decisiones/_contratos/companero-viaje.contract.json — protocolos_canonicos.eventos_canonicos.categorias[agent_flow]",
 
@@ -228,7 +228,7 @@
       "id": "agent.execute.failed",
       "name": "agent.execute.failed",
       "publicado_por": "ai-agent-framework (cuando el agente fallo: agente no encontrado, timeout, error LLM upstream, error de tool no recuperable)",
-      "consumido_por": "el modulo que origino el request (correlacionado por request_id) + observabilidad + alerting",
+      "consumido_por": "el modulo que origino el request (correlacionado por request_id) + observabilidad + alerting + agent-observer (cuando exista, para inyectar a chat.assistant.saved si conversation_id presente)",
       "proposito": "Cierra el ciclo en error. Sin esto, los requests de agente colgados sin respuesta. Garantia no_silent_failures aplicada al subsistema agentes.",
       "schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.failed.schema.json",
       "shape_resumen": {
@@ -241,8 +241,65 @@
         "code DEBE ser canonico: AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED, UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_5XX, INTERNAL_ERROR.",
         "iterations_completed util para diagnostico: ¿el agente fallo en la primera iteracion (problema de input) o tras varias (problema en el agentic loop)?"
       ]
+    },
+
+    {
+      "id": "agent.execute.progress",
+      "name": "agent.execute.progress",
+      "publicado_por": "ai-agent-framework (durante la ejecucion del agente, opcional, para feedback intermedio: 'consultando tarifas...', 'analizando productos...', 'iteracion 2/N...').",
+      "consumido_por": "agent-observer (cuando exista) para actualizar la tarjeta del agente en el chat sin crear mensaje nuevo. Otros consumers opcionales: dashboards de monitoring.",
+      "proposito": "Feedback intermedio del agente al caller mientras ejecuta. Sin progress, la tarjeta del agente en el chat se queda quieta minutos hasta que llega response/failed. Con progress, el usuario ve actividad y puede juzgar si esta avanzando o atascado. EVENTO OPCIONAL: el framework lo emite cuando puede (entre iteraciones del agentic loop, cuando una tool se invoca, etc.); el agente concreto puede emitir suyo via this.eventBus.publish('agent.execute.progress', {...}).",
+      "schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.progress.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "request_id", "user_id", "agent_name", "step", "timestamp"],
+        "opcionales":   ["conversation_id", "project_id", "iteration", "tool_invoked", "message", "metadata"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "Evento NUEVO. No reemplaza nada — anade feedback intermedio al ciclo agent.execute.request → agent.execute.response/failed.",
+        "step es la fase canonica: 'started' | 'thinking' | 'tool_call' | 'tool_result' | 'iteration' | 'finalizing'. Lista cerrada para que el frontend renderice consistentemente.",
+        "tool_invoked (opcional): cuando step='tool_call', incluye el nombre de la tool que se invoca (ej. 'tarifas.assign'). Util para tooltip 'el agente esta llamando a tarifas.assign'.",
+        "message (opcional): texto humano breve para mostrar al usuario ('Consultando precios...'). Si ausente, el frontend deriva del step + tool_invoked.",
+        "Es FIRE-AND-FORGET — el caller no espera ack, no correlaciona request individual. Solo sirve para feedback visual al usuario."
+      ]
     }
   ],
+
+  "chat_inline_rendering": {
+    "descripcion": "Patron canonico de como un agente vive en el chat. La regla maestra de frontend.contract (chat es el eje, no salir nunca del frame) determina que el feedback de un agente NO va a ventana emergente ni pagina nueva — va inline en la conversacion como una 'tarjeta colapsable' que se actualiza en tiempo real.",
+    "evento_de_apertura": {
+      "evento": "chat.assistant.saved",
+      "metadata_obligatoria": {
+        "author": { "kind": "agent", "id": "<agent_name>", "name": "<agent_name>" },
+        "block": { "type": "agent_intervention", "title": "<agent_name>", "status": "open" }
+      },
+      "renderizado_frontend": "Tarjeta dentro del flujo del chat con header: avatar agente + nombre + indicador de actividad (spinner). Cuerpo inicialmente vacio o con el task del request_id. La tarjeta es colapsable (clic en header expande/colapsa)."
+    },
+    "evento_de_progreso": {
+      "evento": "agent.execute.progress",
+      "renderizado_frontend": "La tarjeta YA EXISTENTE del agente (correlacionada por request_id) se actualiza con el step actual + mensaje. Indicador de actividad sigue activo. NO se crea una tarjeta nueva por cada progress event — se MUTA la tarjeta abierta."
+    },
+    "evento_de_cierre_exitoso": {
+      "evento": "chat.assistant.saved (segundo, mismo conversation_id)",
+      "metadata_obligatoria": {
+        "author": { "kind": "agent", "id": "<agent_name>" },
+        "block": { "type": "agent_intervention", "title": "<agent_name>", "status": "closed" }
+      },
+      "assistant_message": "Resumen breve del resultado (~200 chars). Si la salida es voluminosa, este resumen incluye el texto resumido y un marcador para expandir.",
+      "renderizado_frontend": "La tarjeta cambia indicador (spinner → check verde). Cuerpo muestra el resumen. Si hay detalle voluminoso, boton 'ver detalle' que expande inline o abre system_panel (max 33vh). Tarjeta queda en el flujo del chat permanentemente — es parte del historial."
+    },
+    "evento_de_cierre_fallido": {
+      "evento": "agent.execute.failed",
+      "renderizado_frontend": "La tarjeta cambia indicador (spinner → warning amarillo o cruz roja segun severidad del error.code). Cuerpo muestra error.message legible (NO error.details con stack). Boton 'reintentar' que reemite agent.execute.request con NUEVO request_id pero MISMO correlation_id (cadena causal preservada)."
+    },
+    "principios_visuales": [
+      "INLINE EN CHAT, NO POPUP. Cualquier opcion que abra ventana nueva, modal bloqueante, redirect o tab adicional viola frontend.contract.modales_bloqueantes y frontend.contract.no_navegacion_spa_tradicional.",
+      "TARJETA COLAPSABLE. El usuario puede colapsar la tarjeta para ver mas chat (spinner sigue rotando como indicador discreto en el header colapsado).",
+      "SIEMPRE EN EL HILO. Las tarjetas viven en el scroll del chat junto a los mensajes humanos. NO se mueven a un panel separado.",
+      "DETALLE EXPANDIBLE A MAX 33VH. Si el resultado del agente es voluminoso (JSON grande, lista de items), se muestra resumen y un boton 'ver detalle' abre un system_panel canonico (frontend.contract.tipos_canonicos_de_extension) limitado a 1/3 de pantalla, sin bloquear el chat.",
+      "LISTA DE AGENTES ACTIVOS EN LATERAL. La barra lateral derecha (frontend.contract.layout_canonico_inmutable) puede mostrar un badge con el numero de agentes corriendo ahora mismo. Sin abrir nada — solo señal."
+    ],
+    "vinculo_con_canales": "Cuando el agente nace de chat (conversation_id presente), el feedback va a la conversacion correspondiente. Cuando nace desde modulo del dominio (cron, webhook, evento interno) SIN conversation_id, el feedback se publica en el canal 'system' o se descarta segun politica del agent-observer (ver derivaciones)."
+  },
 
   "campos_canonicos_compartidos": {
     "descripcion": "Campos que aparecen identicos en multiples eventos agent_flow (heredados del documento maestro y armonizados con chat-flow). Definidos UNA VEZ aqui; los schemas individuales los referencian por $ref a un _common.schema.json del subsistema.",

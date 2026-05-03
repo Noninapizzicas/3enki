@@ -38,7 +38,8 @@ const RST   = '\x1b[0m';
 const AGENT_FLOW_EVENTS = [
   'agent.execute.request',
   'agent.execute.response',
-  'agent.execute.failed'
+  'agent.execute.failed',
+  'agent.execute.progress'
 ];
 
 // Modulos conocidos del subsistema agentes para los chequeos de codigo fuente

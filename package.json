@@ -23,6 +23,7 @@
     "test:prompt-builder": "node tests/unit/prompt-builder.test.js",
     "test:ai-gateway-chat": "node tests/unit/ai-gateway-chat.test.js",
     "test:memory-user-profile": "node tests/unit/memory-user-profile.test.js",
+    "test:agent-observer": "node tests/unit/agent-observer.test.js",
     "test:ai-agent-framework": "node tests/unit/ai-agent-framework.test.js",
     "test:mqtt-request": "node tests/unit/mqtt-request.test.js",
     "test:integration:carta-scheduler": "node tests/integration/carta-scheduler-mqtt-request.test.js",

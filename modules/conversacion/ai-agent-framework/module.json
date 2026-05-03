@@ -1,7 +1,7 @@
 {
   "name": "ai-agent-framework",
-  "version": "1.1.0",
-  "description": "Carga agentes desde agents/*.json + prompts/*.json. Registra la tool invoke_agent (para el LLM) y escucha agent.execute.request (para módulos del dominio). Ambos paths usan el mismo helper interno _runAgent: arma el prompt del agente y llama al LLM via llm.complete.request. Cuando se incluye conversation_id, también publica el resultado como mensaje en la conversación con metadata.author del agente (preparado para chat multi-participante).",
+  "version": "1.2.0",
+  "description": "Carga agentes desde agents/*.json + prompts/*.json. Registra la tool invoke_agent (para el LLM) y escucha agent.execute.request (para módulos del dominio). Ambos paths usan el mismo helper interno _runAgent: arma el prompt del agente y llama al LLM via llm.complete.request. Emite agent.execute.progress (canonico v1.1.0) en step='started' y step='finalizing' para que la tarjeta del agente en el chat se actualice. Cuando se incluye conversation_id, también publica el resultado como mensaje en la conversación con metadata.author del agente (preparado para chat multi-participante).",
   "author": "Event Core Team",
   "language": "en",
   "publishes": [
@@ -14,6 +14,11 @@
       "event": "agent.execute.failed",
       "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.failed.schema.json",
       "description": "Cierre canonico en error (agente no encontrado, timeout, input invalido, error LLM upstream). Sin esto los flujos de agentes quedan colgados — viola garantia no_silent_failures."
+    },
+    {
+      "event": "agent.execute.progress",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.progress.schema.json",
+      "description": "Feedback intermedio del agente (step='started' y 'finalizing' por ahora; el agente puede emitir mas via this.eventBus.publish). Habilita la tarjeta agent_intervention en el chat (ver agent-flow.contract.chat_inline_rendering)."
     },
     "invoke_agent.response",
     "chat.assistant.saved",

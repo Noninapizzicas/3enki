@@ -37,6 +37,8 @@
     "validate:persistence:system": "node arquitectura/decisiones/_validators/persistence.validate.js --check-system",
     "validate:http": "node arquitectura/decisiones/_validators/http.validate.js",
     "validate:http:system": "node arquitectura/decisiones/_validators/http.validate.js --check-system",
+    "validate:chat-flow": "node arquitectura/decisiones/_validators/chat-flow.validate.js",
+    "validate:chat-flow:system": "node arquitectura/decisiones/_validators/chat-flow.validate.js --check-system",
     "validate:all": "node scripts/validate-all.js",
     "validate:all:system": "node scripts/validate-all.js --check-system",
     "validate:ci": "node scripts/validate-all.js --check-system --baseline ./drift-baseline.json",

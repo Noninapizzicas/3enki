@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-02T15:24:50.818Z",
-  "total": 2822,
+  "generated_at": "2026-05-03T00:38:06.000Z",
+  "total": 2826,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -9,13 +9,18 @@
     "observability": 273,
     "errors": 1867,
     "persistence": 193,
-    "http": 191
+    "http": 191,
+    "chat-flow": 4
   },
   "by_severity": {
-    "warning": 2750,
+    "warning": 2754,
     "info": 91
   },
   "signatures": [
+    "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/ai-gateway publica ai.chat.response en modules/conversacion/ai-gateway/index.js:479 — payload.campos_visibles no incluye correlation_id",
+    "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/chat-io publica chat.message.saved en modules/conversacion/chat-io/index.js:263 — payload.campos_visibles no incluye correlation_id",
+    "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/prompt-builder publica chat.prompt.ready en modules/conversacion/prompt-builder/index.js:252 — payload.campos_visibles no incluye correlation_id",
+    "chat-flow|drift_uso_de_campo_fantasma_message_id_user|conversacion__ai-gateway modules/conversacion/ai-gateway/index.js:489 — usar message_id (del usuario) y message_id_assistant (del compañero)",
     "errors|drift_error_como_string_suelto|admin-panel modules/admin-panel/index.js:353 — error como string en lugar de { code, message }",
     "errors|drift_error_como_string_suelto|bot-manager modules/bot-manager/services/download-manager.js:145 — error como string en lugar de { code, message }",
     "errors|drift_error_como_string_suelto|calling-generator modules/calling-generator/index.js:717 — error como string en lugar de { code, message }",

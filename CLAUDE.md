@@ -93,6 +93,65 @@ Vive en `arquitectura/decisiones/` como contratos JSON con schemas + validators.
 
 Todos los validators corren juntos via `npm run validate:ci`. Para añadir un sub-contrato nuevo: contrato JSON → schemas estrictos → validator → registrar en `scripts/validate-all.js` → npm script.
 
+## Estructura de los contratos y para qué se redactan
+
+Un contrato no es documentación general — es la **fuente autoritativa** de una decisión cross-módulo, escrita en un shape que el validator enforce mecánicamente. Si la regla no está en un contrato, no existe; si está, CI la aplica. La amplitud del contrato (las secciones que cubre) es parte de la disciplina: un contrato superficial deja decisiones implícitas que en sesiones futuras se redescubren mal.
+
+Hay tres tipos. Cada uno tiene su shape canónico:
+
+### Contrato transversal (errors, events, lifecycle, observability, persistence, http, naming, glossary)
+
+Gobierna UN aspecto cross-cutting de TODOS los módulos. Autónomo (no deriva de otro). Su validator escanea todo el repo. Secciones canónicas:
+
+- `_doc`, `id`, `version`, `creada`, `supersedes_nota` — metadatos.
+- `objetivo` — qué se valida y cómo.
+- `inputs` — qué archivos lee el validator (obligatorios, opcionales, prohibidos).
+- `filosofia` — premisas en lenguaje natural (lista de afirmaciones-base).
+- `principios` — reglas individuales con `id`, `regla`, `razon`.
+- `decisiones_arquitectonicas` (o `modos`) — trade-offs concretos resueltos en un sentido (no son reglas, son elecciones).
+- `prohibido` — anti-patrones que ningún módulo puede aplicar aunque el schema técnicamente lo permita.
+- `output_shape_resumen` — qué shape produce el output (`_outputs/<id>.json`).
+- `reglas_de_extraccion` — cómo se construye el output a partir de los inputs.
+- `derivaciones` — qué otros contratos / outputs derivan de éste (efecto cascada documentado).
+- `validaciones_cross_realizadas_por_validator` — cada check con `id`, `regla`, `como_detectar`, `severidad` (error/warning/info).
+- `salida_validador` — descripción de PASS/FAIL y qué se imprime.
+- `convenciones_complementarias` — cómo se relaciona con `naming`, `glossary`, otros transversales.
+
+Ejemplos: `arquitectura/decisiones/_contratos/{errors,events,http,lifecycle,observability,persistence}.contract.json`.
+
+### Sub-contrato derivado (chat-flow, agent-flow)
+
+Concreta UN subsistema cuyo "padre" es un documento maestro. Hereda principios; añade los eventos canónicos del subsistema. **Misma amplitud que un transversal** (todas las secciones de arriba aplican igual), MÁS los campos específicos:
+
+- `deriva_de` — ruta al documento maestro del que hereda.
+- `eventos` — catálogo de los N eventos canónicos del subsistema (cada uno con `name`, `publicado_por`, `consumido_por`, `proposito`, `schema_ref`, `shape_resumen` con `obligatorios` / `opcionales`, `notas_de_drift_a_cerrar`).
+- `campos_canonicos_compartidos` — campos del payload definidos UNA vez aquí, referenciados por los schemas individuales con `$ref` a `_common.schema.json`.
+- `transiciones_de_significado_eliminadas` — drifts semánticos cerrados (campo polisémico anterior + significados anteriores + resolución canónica).
+
+Ejemplos: `chat-flow.contract.json`, `agent-flow.contract.json`.
+
+### Documento maestro (companero-viaje)
+
+Captura la **visión arquitectónica** de un subsistema completo (chat/LLM/agentes). Es el "por qué" del que derivan los sub-contratos. No tiene validator propio — los sub-contratos derivados sí. Estructura libre adaptada a la naturaleza del subsistema, típicamente:
+
+- `esencia`, `nucleo_invariante` — qué es y qué nunca debe romper.
+- `modelo_de_extension`, `tipos_canonicos_de_extension` — cómo se amplía sin tocar el núcleo.
+- `protocolos_canonicos` — el catálogo inmutable de eventos / categorías.
+- `garantias` — propiedades observables del modelo.
+- `prohibido` — anti-patrones absolutos del subsistema (lista cerrada).
+- `mapa_al_sistema_actual` — qué módulos existentes implementan partes del modelo y cuáles faltan.
+
+Ejemplo: `arquitectura/decisiones/_contratos/companero-viaje.contract.json`.
+
+### Reglas que aplican siempre (los tres tipos)
+
+- **Auto-referencia**: `_doc` describe en una frase qué captura el contrato. `id` igual al nombre del archivo sin `.contract.json`.
+- **Versionado semver**: cualquier cambio que rompa shape requiere subir mayor; añadir secciones opcionales puede ser minor.
+- **`supersedes_nota`** es el changelog del contrato. Si la nueva versión cierra drifts, lo dice aquí, con qué se cerró y por qué.
+- **`prohibido` no es opcional**, ni siquiera cuando parece obvio. Listarlo evita que una sesión futura lo "redescubra" implementándolo. Si en una revisión te das cuenta que falta un anti-patrón, se añade al contrato — no se queda en la cabeza del que lo notó.
+- **Las secciones que falten dejan rastro**: un contrato sin `derivaciones` sugiere que la decisión no tiene efecto cascada (probablemente miente — todo decisión cross-módulo lo tiene). Un contrato sin `convenciones_complementarias` sugiere que no se relaciona con otros (también probablemente miente).
+- **Amplitud antes que profundidad**. Es preferible un contrato con todas las secciones aunque alguna sea "no aplica explicado" a uno que omite secciones porque "ahora no se me ocurre qué poner".
+
 ## Patrón de migración cross-módulo
 
 Cuando hay drift estructural en un subsistema (varios módulos hablan shapes inconsistentes para los mismos eventos), la disciplina es la misma que se aplicó en chat-flow:

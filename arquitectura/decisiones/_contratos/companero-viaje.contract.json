@@ -454,5 +454,93 @@
     },
 
     "regla_de_oro_de_los_protocolos": "Estos eventos son INMUTABLES en su catalogo (existen estos, no se inventan otros sin justificacion). Su SHAPE EXACTO se valida con JSON Schemas en los contratos derivados. Cualquier modulo del sistema, presente o futuro, se enchufa via subscribe/publish a estos eventos cumpliendo el shape. Si una capacidad nueva no encaja en ningun evento canonico, primero se intenta encajar — solo en ultimo extremo se añade un evento al catalogo, y siempre con un contrato derivado nuevo que lo formaliza."
+  },
+
+  "garantias": {
+    "descripcion": "Las propiedades OBSERVABLES que el modelo del compañero de viaje ASEGURA. No son aspiraciones — son consecuencias del diseño que se pueden verificar (mediante validators, tests, observabilidad operativa, o auditoria del codigo). Si una de estas garantias se rompe en algun modulo, ese modulo viola el modelo y debe corregirse — no se acepta como excepcion.",
+
+    "lista": [
+      {
+        "id": "memoria_sostenida_garantizada",
+        "afirmacion": "Toda interaccion asociada a una conversation_id forma parte de un viaje continuo. El compañero recuerda el historial sin que ningun modulo lo pierda en transito.",
+        "como_se_logra": "(1) conversation_id es campo canonico obligatorio en los eventos chat_flow. (2) chat-io (o equivalente) persiste cada mensaje en almacenamiento por proyecto. (3) prompt-builder reconstruye el historial FIFO en cada turno y lo incluye en messages del payload chat.prompt.ready. (4) chat.context.enriched permite a memorias adicionales aportar info historica de forma modular.",
+        "como_se_verifica": "Validator que comprueba: cualquier modulo que publique chat.* tiene conversation_id obligatorio en el shape. Test E2E: enviar 3 mensajes con misma conversation_id, verificar que el LLM ve los 3 en el historial.",
+        "consecuencia_si_se_rompe": "El sistema se degrada de compañero a chatbot puntual. El usuario nota inmediatamente — pierde el sentimiento de continuidad. Es la garantia mas central."
+      },
+
+      {
+        "id": "especializacion_por_contexto_verificable",
+        "afirmacion": "El compañero adapta su comportamiento al contexto activo (project_id + agente invocado). Cambiar de proyecto cambia el system prompt, las tools disponibles y los agentes accesibles. Invocar un agente cambia la personalidad activa.",
+        "como_se_logra": "(1) project_id viaja en los eventos chat_flow. (2) prompt-builder usa project_id para cargar context.json/prompt.json de los modulos relevantes a ese proyecto. (3) ai-gateway filtra tools por proyecto antes de pasar al LLM. (4) ai-agent-framework carga la configuracion del agente invocado y su system prompt antes de ejecutar.",
+        "como_se_verifica": "Test E2E: enviar el mismo prompt en proyectos distintos, verificar respuestas distintas (el system prompt cambia). Verificar que invocar agente A vs agente B con mismo input produce respuestas con personalidad distinta. Validator: tools declaradas por modulos solo aparecen en proyectos donde el modulo esta activo.",
+        "consecuencia_si_se_rompe": "Compañero generico sin valor diferencial. Se vuelve un ChatGPT mas. Pierde la promesa fundamental de 'sabe DE TU contexto'."
+      },
+
+      {
+        "id": "agnosticismo_de_canal",
+        "afirmacion": "La logica del compañero NO depende del canal de origen del input. El mismo agente, el mismo prompt-builder, el mismo ai-gateway sirven igual para chat web, telegram, voz, whatsapp, cron, webhook externo. Añadir un canal nuevo NO requiere tocar ningun modulo del compañero.",
+        "como_se_logra": "(1) Los modulos del compañero (chat-io interno, prompt-builder, ai-gateway, ai-agent-framework) operan sobre eventos canonicos sin conocer el canal. (2) channel y channel_context viajan opacos en el payload — solo el modulo del canal los entiende. (3) La respuesta vuelve por la cadena con channel_context preservado, lo que permite al canal devolverla al humano correcto.",
+        "como_se_verifica": "Test: añadir un canal mock que publique chat.message.saved con channel='mock' — el flujo del chat funciona sin que ningun otro modulo se entere de que existe ese canal. Validator: ningun modulo del nucleo del compañero importa codigo de modulos de canal especifico.",
+        "consecuencia_si_se_rompe": "Cada canal nuevo requiere modificar el compañero. Multiplicacion de bugs cuando coexisten varios canales. La promesa multi-canal se vuelve mantenimiento perpetuo."
+      },
+
+      {
+        "id": "observabilidad_end_to_end",
+        "afirmacion": "Cualquier interaccion del compañero es TRAZABLE de extremo a extremo. Dado un correlation_id, se pueden reconstruir todos los eventos que ocurrieron en su cadena causal — quien publico que, quien consumio, en que orden, con que latencia, con que coste.",
+        "como_se_logra": "(1) correlation_id es campo canonico OBLIGATORIO en todos los eventos del subsistema. Generado por el originador (canal o cron), propagado SIN modificar a traves de toda la cadena. (2) Cada modulo loguea sus eventos publicados/consumidos con correlation_id. (3) ai-gateway emite metricas de coste/latencia/tokens con correlation_id como label. (4) Queryable post-hoc: 'dame todos los eventos del correlation_id X' devuelve la cadena completa.",
+        "como_se_verifica": "Validator: cualquier publish en codigo del subsistema incluye correlation_id (o lo propaga del sourcePayload — patron _publicarEvento). Test E2E: enviar mensaje, verificar que correlation_id aparece en logs de los 4 modulos del flujo. Operativa: dado un usuario quejandose, recuperar los eventos por correlation_id.",
+        "consecuencia_si_se_rompe": "Cuando algo se rompe en produccion (y se romperá), no se puede investigar. El sistema se vuelve caja negra. Triaje imposible. Costes operativos suben."
+      },
+
+      {
+        "id": "aislamiento_entre_usuarios_y_proyectos",
+        "afirmacion": "Datos, memoria, tools y agentes de un usuario o proyecto NO son accesibles por otros usuarios o proyectos sin autorizacion explicita. La fuga de informacion cross-tenant es un BUG ARQUITECTONICO, no un descuido de programador.",
+        "como_se_logra": "(1) project_id y user_id viajan en los eventos. (2) Modulos de memoria persisten por proyecto/usuario, NUNCA en almacenamiento global. (3) prompt-builder filtra contextos a los del proyecto activo. (4) ai-gateway tags tokens/coste con project_id+user_id (auditable). (5) tools que acceden a datos de proyecto reciben project_id en sus parametros y validan acceso.",
+        "como_se_verifica": "Test E2E con dos usuarios: usuario A guarda algo en su memoria, usuario B no puede verlo en su contexto. Validator: queries de modulos a almacenamiento incluyen filtro por project_id/user_id. Auditoria periodica de logs: ningun acceso cross-tenant sin authorize event.",
+        "consecuencia_si_se_rompe": "Catastrofico. Si el sistema se mueve a multi-tenant comercial, fuga de datos = fin del producto. Mejor no escalar a multi-tenant que escalar con esta garantia rota."
+      },
+
+      {
+        "id": "modularidad_real_no_solo_declarada",
+        "afirmacion": "Añadir un modulo nuevo NO requiere modificar ningun otro modulo. Quitar un modulo NO rompe modulos no dependientes. Las dependencias entre modulos son explicitas y pasan SIEMPRE por el bus de eventos — nunca por acceso directo a otros modulos.",
+        "como_se_logra": "(1) Bus de eventos como unica via de comunicacion (regla event-core). (2) module.json.module_dependencies declara explicitamente las dependencias con su tipo de interaction (subscribe_only, mqttRequest, publish_only, bidirectional). (3) Validator detecta accesos directos via moduleLoader.getModule(...).instance.* como drift estructural. (4) Tests aislados por modulo: cada modulo se carga solo en su test.",
+        "como_se_verifica": "Validator events.context_injection.drift_indicators detecta accesos directos en codigo. Test: cargar el modulo X aislado en tests verifica que no requiere otros modulos en runtime para sus operaciones core. Auditoria: module.json.module_dependencies refleja realmente lo que el codigo hace.",
+        "consecuencia_si_se_rompe": "Sistema acoplado, fragil, dificil de testear. Cada cambio en un modulo rompe otros. La promesa de 'modularidad infinita' se convierte en 'spaghetti infinito'."
+      },
+
+      {
+        "id": "resiliencia_a_cambios_de_proveedor_llm",
+        "afirmacion": "Cambiar el proveedor del LLM (OpenAI → Anthropic, o añadir DeepSeek, o cambiar el modelo, o cambiar la version de la API) NO afecta a ningun modulo distinto de ai-gateway. El resto del sistema NO se entera.",
+        "como_se_logra": "(1) ai-gateway es el UNICO modulo que llama a los proveedores LLM externos (regla del modelo). (2) Los providers del LLM viven dentro de ai-gateway como sub-modulos intercambiables (deepseek, openai, anthropic, etc.). (3) Los eventos chat_flow y llm_generic son agnosticos al provider — su shape no menciona OpenAI ni Anthropic. (4) Si un provider cae, ai-gateway tiene fallback a otro automaticamente.",
+        "como_se_verifica": "Validator http.intra_core_http_call detecta llamadas HTTP a APIs LLM (OpenAI, etc.) desde modulos que NO son ai-gateway — drift. Test: deshabilitar OpenAI en config, verificar que el sistema sigue funcionando con el siguiente provider.",
+        "consecuencia_si_se_rompe": "Cada modulo que llame al LLM directo crea acoplamiento al provider especifico. Cambiar de provider se vuelve proyecto de meses. Costes optimizables por multi-provider se pierden."
+      },
+
+      {
+        "id": "costes_auditables",
+        "afirmacion": "Toda operacion del LLM (chat, agente, llm_generic) es atribuible a usuario+proyecto+conversacion+correlation_id, con metricas de tokens, coste y latencia. El gasto del LLM es auditable hasta el centimo y trazable hasta la causa que lo origino.",
+        "como_se_logra": "(1) ai-gateway emite metricas por cada llamada al LLM con labels { project_id, user_id, conversation_id, correlation_id, agentName?, model, provider }. (2) Los eventos ai.chat.response y agent.execute.response incluyen tokens y cost. (3) channel.input.received marca el inicio de la cadena, ai.chat.response/agent.execute.response/llm.complete.response marcan el cierre. Suma de costes en la cadena = coste total del input del usuario.",
+        "como_se_verifica": "Operativa: dashboard que suma costes del dia agrupados por usuario/proyecto/agente. Test: enviar 10 mensajes, verificar que la suma de tokens y cost coincide con la facturacion del provider. Validator: cualquier llamada al LLM en codigo emite la metrica con todos los labels obligatorios.",
+        "consecuencia_si_se_rompe": "Imposible saber cuanto cuesta cada usuario/proyecto. Imposible facturar B2B. Imposible identificar abusos o fugas de coste. Si el sistema escala, las facturas LLM se vuelven incontrolables."
+      },
+
+      {
+        "id": "no_silent_failures",
+        "afirmacion": "Todo flujo que arranca con un evento canonico TERMINA con un evento canonico — exito o fallo, pero NUNCA colgado. El usuario o el caller siempre recibe respuesta (aunque sea de error).",
+        "como_se_logra": "(1) Cada categoria de evento tiene su evento de exito Y su evento de fallo (chat.message.saved → ai.chat.response O ai.chat.failed; agent.execute.request → agent.execute.response O agent.execute.failed; etc.). (2) ai-gateway tiene timeouts en cada llamada al LLM (regla http-client). (3) ai-agent-framework tiene timeout para la ejecucion completa de un agente. (4) Cualquier excepcion no manejada se traduce a un evento .failed con codigo canonico (UPSTREAM_TIMEOUT, INTERNAL_ERROR, etc.).",
+        "como_se_verifica": "Validator: cualquier handler de evento del subsistema tiene try/catch que publica el evento .failed correspondiente. Test: forzar un fallo del LLM (mock que lanza), verificar que llega ai.chat.failed con el shape canonico — NO que el flujo se queda colgado.",
+        "consecuencia_si_se_rompe": "El usuario manda un mensaje y nunca recibe respuesta. Otros modulos esperan responses que nunca llegan. El sistema acumula promises pendientes hasta agotar memoria. Imposible distinguir 'lento' de 'roto'."
+      },
+
+      {
+        "id": "extensibilidad_sin_reescritura",
+        "afirmacion": "Cualquier capacidad imaginable (presente o futura) se añade como un modulo nuevo cumpliendo un tipo canonico. NUNCA requiere modificar los modulos existentes ni el nucleo. Voz, multi-usuario, RAG, nueva integracion, nuevo agente, nueva tool — siempre por adicion, nunca por modificacion.",
+        "como_se_logra": "(1) Los 5 tipos canonicos (canal, tool, agente, memoria, integracion) cubren todo lo imaginable. (2) Los protocolos canonicos del bus son inmutables — el modulo nuevo se adapta a ellos, no al reves. (3) module.json declara que tipos cumple el modulo y sus dependencias. (4) Validators detectan modulos que pretenden 'modificar el nucleo' o 'añadir un evento al catalogo sin justificar'.",
+        "como_se_verifica": "Cada vez que se añade un modulo nuevo, se mide el delta del nucleo: si hay cero cambios al nucleo, la garantia se cumple. Si hay cambios, se justifica (puede ser que el modelo necesite refinarse — eso esta bien) o se replantea el modulo (probable que no encaje).",
+        "consecuencia_si_se_rompe": "El sistema se vuelve incremental sobre si mismo. Cada feature nueva acumula complejidad en el nucleo. Tras 50 features, el nucleo es ingobernable. La promesa 'sin fin' se vuelve 'sin disciplina'."
+      }
+    ],
+
+    "regla_de_oro_de_las_garantias": "Estas garantias son CONTRATUALES con el modelo. Si una se rompe en produccion, no es 'un bug que se arregla en el modulo' — es 'el modelo se ha violado y hay que restaurar la garantia'. Los validators y tests son los guardianes de las garantias. CI las hace cumplir antes de que el codigo entre a main."
   }
 }

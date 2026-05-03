@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-03T00:45:48.094Z",
-  "total": 2826,
+  "generated_at": "2026-05-03T09:56:21.612Z",
+  "total": 2835,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -10,17 +10,27 @@
     "errors": 1867,
     "persistence": 193,
     "http": 191,
-    "chat-flow": 4
+    "chat-flow": 3,
+    "agent-flow": 10
   },
   "by_severity": {
-    "warning": 2754,
+    "warning": 2763,
     "info": 91
   },
   "signatures": [
+    "agent-flow|drift_modulo_agent_flow_sin_schema_ref|pizzepos/carta-scheduler publica \"agent.execute.request\" sin response_schema_ref/schema_ref en module.json",
+    "agent-flow|drift_modulo_agent_flow_sin_schema_ref|pizzepos/menu-generator publica \"agent.execute.request\" sin response_schema_ref/schema_ref en module.json",
+    "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-digital publica agent.execute.request en modules/pizzepos/carta-digital/index.js:120 — payload.campos_visibles no incluye correlation_id",
+    "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-digital publica agent.execute.request en modules/pizzepos/carta-digital/index.js:147 — payload.campos_visibles no incluye correlation_id",
+    "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-impresion publica agent.execute.request en modules/pizzepos/carta-impresion/index.js:108 — payload.campos_visibles no incluye correlation_id",
+    "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-marketing publica agent.execute.request en modules/pizzepos/carta-marketing/index.js:261 — payload.campos_visibles no incluye correlation_id",
+    "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-scheduler publica agent.execute.request en modules/pizzepos/carta-scheduler/index.js:273 — payload.campos_visibles no incluye correlation_id",
+    "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/menu-generator publica agent.execute.request en modules/pizzepos/menu-generator/index.js:109 — payload.campos_visibles no incluye correlation_id",
+    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:180 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
+    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:191 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
     "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/ai-gateway publica ai.chat.response en modules/conversacion/ai-gateway/index.js:479 — payload.campos_visibles no incluye correlation_id",
     "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/chat-io publica chat.message.saved en modules/conversacion/chat-io/index.js:263 — payload.campos_visibles no incluye correlation_id",
     "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/prompt-builder publica chat.prompt.ready en modules/conversacion/prompt-builder/index.js:252 — payload.campos_visibles no incluye correlation_id",
-    "chat-flow|drift_uso_de_campo_fantasma_message_id_user|conversacion__ai-gateway modules/conversacion/ai-gateway/index.js:489 — usar message_id (del usuario) y message_id_assistant (del compañero)",
     "errors|drift_error_como_string_suelto|admin-panel modules/admin-panel/index.js:353 — error como string en lugar de { code, message }",
     "errors|drift_error_como_string_suelto|bot-manager modules/bot-manager/services/download-manager.js:145 — error como string en lugar de { code, message }",
     "errors|drift_error_como_string_suelto|calling-generator modules/calling-generator/index.js:717 — error como string en lugar de { code, message }",

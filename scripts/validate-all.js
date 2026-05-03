@@ -38,7 +38,8 @@ const VALIDATORS = [
   { id: 'errors',        file: 'arquitectura/decisiones/_validators/errors.validate.js' },
   { id: 'persistence',   file: 'arquitectura/decisiones/_validators/persistence.validate.js' },
   { id: 'http',          file: 'arquitectura/decisiones/_validators/http.validate.js' },
-  { id: 'chat-flow',     file: 'arquitectura/decisiones/_validators/chat-flow.validate.js' }
+  { id: 'chat-flow',     file: 'arquitectura/decisiones/_validators/chat-flow.validate.js' },
+  { id: 'agent-flow',    file: 'arquitectura/decisiones/_validators/agent-flow.validate.js' }
 ];
 
 const RED   = '\x1b[31m';

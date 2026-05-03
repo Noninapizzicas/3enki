@@ -48,6 +48,7 @@ class ProjectManagerModule {
     await this.initializeSystemSchema();
     await this.loadExistingProjects();
     await this.ensureSystemProject();
+    await this.ensureDefaultProject();
 
     this.logger.info('project-manager.loaded', { module: this.name });
   }
@@ -290,6 +291,45 @@ class ProjectManagerModule {
     } catch (error) {
       if (error.code === 'PROJECT_NAME_EXISTS' || error.message?.includes('UNIQUE constraint')) return;
       this.logger.error('project-manager.system.ensure-failed', { error: error.message });
+    }
+  }
+
+  // ============================================================
+  // Bootstrap del proyecto operativo "default" (multi-tenancy v1.1.0
+  // + frontend.contract directriz UX). Tras git clone + npm start, el
+  // usuario tiene UN proyecto operativo donde empezar a trabajar, no
+  // solo el proyecto interno "Sistema". Sin esto, el panel
+  // setup_required del frontend aparece siempre — no es lo que queremos
+  // en single-user.
+  //
+  // Crea SOLO si no existe ningun proyecto NO-system. Si el usuario ya
+  // tiene proyectos creados, esto es no-op.
+  // ============================================================
+  async ensureDefaultProject() {
+    const existingNonSystem = Array.from(this.projects.values()).find(
+      p => !p.metadata?.is_system && !p.parent_project_id
+    );
+    if (existingNonSystem) return existingNonSystem;
+
+    try {
+      const project = await this.createProject(
+        'Mi Proyecto',
+        'Proyecto inicial creado automaticamente al primer arranque. Renombrar o crear proyectos adicionales segun haga falta.',
+        { color: 'green', icon: '🌱', workspaceType: 'general', is_default_bootstrap: true },
+        crypto.randomUUID()
+      );
+      // Activar automaticamente para que el frame tenga contexto al primer load
+      const cid = crypto.randomUUID();
+      await this.queryDatabase('UPDATE projects SET is_active = 1 WHERE id = ?', [project.id], false, cid);
+      project.is_active = true;
+      this.activeProjectIds.add(project.id);
+      this.logger.info('project-manager.default_bootstrap.created', {
+        project_id: project.id, name: project.name
+      });
+      return project;
+    } catch (error) {
+      if (error.code === 'PROJECT_NAME_EXISTS') return;
+      this.logger.error('project-manager.default_bootstrap.failed', { error: error.message });
     }
   }
 

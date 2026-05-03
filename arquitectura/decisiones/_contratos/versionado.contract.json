@@ -1,0 +1,281 @@
+{
+  "_doc": "Captura LA disciplina de versionado del sistema event-core: cómo se versiona cada cosa que evoluciona (contratos, schemas, módulos, eventos, outputs), qué cuenta como breaking change vs cambio compatible, cómo se documenta el cambio (supersedes_nota), cómo se gestionan migraciones cuando rompen compatibilidad. La regla maestra: semver semántico aplicado a cada artefacto versionado, con criterios explícitos de qué es mayor / menor / patch. Sin un contrato de versionado, las versiones se asignan por intuición, los cambios breaking se cuelan como minor, los consumers se rompen sin previo aviso, y el sistema acumula incompatibilidades silenciosas.",
+  "id": "versionado",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Consolida las prácticas que ya existen (contratos con `version` semver, supersedes_nota como changelog, npm version en package.json, schemas con $id versionado implícito) y las eleva a contrato transversal autónomo. Cierra la asignación intuitiva de versiones — cada artefacto sigue un criterio explícito.",
+
+  "objetivo": "Producir UN JSON output (_outputs/versionado.json) que define: qué se versiona (contratos, schemas, módulos, eventos canónicos, package.json del repo), formato canónico (semver MAJOR.MINOR.PATCH), criterios explícitos de breaking change vs minor vs patch para cada tipo de artefacto, cómo se documenta el cambio (supersedes_nota como changelog interno + commit message), cómo se gestiona migración de breaking changes (deprecation en una version, eliminación en la siguiente), versionado de eventos canónicos (ev1.0.0 implícito en chat-flow, agent-flow vía version del sub-contrato). Validable mecánicamente cruzando contra los versions actuales y detectando regressions.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/versionado.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/*.contract.json (todos los contratos versionados)",
+      "modules/*/module.json (module.version de cada módulo)",
+      "package.json (version del repo)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "arquitectura/decisiones/_outputs/*.json (outputs versionados implícitamente vía version del contrato)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "SEMVER ES UNIVERSAL EN EL REPO. MAJOR.MINOR.PATCH aplica a contratos, schemas, módulos, paquete del repo. Sin formatos custom (ej. 1.2.3-beta-7-revision-3) — semver puro o nada.",
+
+    "CADA ARTEFACTO TIENE SU CRITERIO DE BREAKING. Lo que es breaking en un módulo (cambia su event published shape) NO es lo mismo que en un contrato (añade prohibido nuevo). Cada tipo tiene su definición explícita.",
+
+    "BREAKING CHANGE REQUIERE DEPRECATION INTERMEDIA. Romper compatibilidad es transitorio: en versión N se marca deprecated (con warn), en versión N+1 (mayor) se elimina. No se rompe en una sola versión sin aviso.",
+
+    "SUPERSEDES_NOTA ES CHANGELOG INTERNO. Cada artefacto versionado lleva supersedes_nota que documenta el cambio (qué cierra, por qué). Es el changelog que sobrevive aunque git history se trunque.",
+
+    "COMMIT MESSAGE ES CHANGELOG EXTERNO. Cada cambio que sube version se documenta en el commit (qué es breaking, qué cierra, qué tests cubren). Esto vive en git log.",
+
+    "VERSION DEL CONTRATO REVERBERA A SUS DERIVADOS. Cuando un contrato sube mayor, sus schemas y validator suben mayor coordinadamente. Cuando sube minor (añadir secciones opcionales), schemas pueden quedarse en su mayor pero suben minor.",
+
+    "EVENTOS CANÓNICOS SE VERSIONAN POR EL CONTRATO. chat-flow v1.0.0 implica chat.message.saved v1.0.0. Cuando chat-flow sube a v2.0.0 (cambio breaking), los events del subsistema heredan ese mayor. No hay versionado independiente por evento.",
+
+    "MÓDULO VERSIONA SU IMPLEMENTACIÓN, NO SU SHAPE. Un módulo sube minor cuando refactoriza internamente sin cambiar publishes/subscribes ni shape. Sube mayor cuando rompe compatibilidad de eventos (deja de publicar X, cambia shape de Y). Sube patch en bug fixes.",
+
+    "PACKAGE.JSON DEL REPO VERSIONA EL TODO. Version del repo refleja la madurez del sistema agregado, no de un artefacto específico. Hoy 0.x.y indica preview; cuando todos los contratos lleguen a v1.0.0 y la suite esté estable, el repo sube a 1.0.0.",
+
+    "DEPRECATION ES PÚBLICA Y AUDITABLE. Marcar algo como deprecated requiere: log warn cuando se usa, anotación en supersedes_nota, fecha estimada de eliminación, alternativa recomendada. Sin deprecation pública, los consumers no saben que algo va a desaparecer."
+  ],
+
+  "principios": [
+    {
+      "id": "semver_universal",
+      "regla": "Todo artefacto versionado del repo usa formato MAJOR.MINOR.PATCH (semver puro). Sin pre-release ni build metadata salvo en versiones experimentales (0.x.y).",
+      "razon": "Un solo formato hace que las versiones sean comparables mecánicamente y los criterios sean uniformes."
+    },
+    {
+      "id": "criterio_breaking_explicito_por_tipo",
+      "regla": "Cada tipo de artefacto (contrato, schema, módulo, repo) tiene criterio explícito de qué cuenta como breaking, minor, patch. Listado en este contrato.",
+      "razon": "Sin criterio, las versiones se asignan por intuición y los breaking se cuelan como minor."
+    },
+    {
+      "id": "deprecation_intermedia_obligatoria",
+      "regla": "Romper compatibilidad requiere fase deprecation: en versión N se marca como deprecated con warn (sigue funcionando), en versión N+1 (mayor) se elimina. Mínimo una versión de aviso.",
+      "razon": "Eliminar sin aviso rompe a los consumers. Deprecation da ventana para migrar antes del corte."
+    },
+    {
+      "id": "supersedes_nota_obligatoria",
+      "regla": "Toda subida de version (mayor o minor) actualiza supersedes_nota del artefacto documentando: qué cambia, por qué, qué cierra, qué deprecate.",
+      "razon": "supersedes_nota persiste aunque git history se trunque o se pierda. Es el changelog interno del artefacto."
+    },
+    {
+      "id": "commit_message_documenta_breaking",
+      "regla": "Commits que suben mayor o introducen deprecations llevan en el mensaje: BREAKING CHANGE / DEPRECATED + descripción. Los consumers leen git log y se enteran.",
+      "razon": "git log es buscable. Sin marca explícita, los consumers no saben qué versión introdujo el cambio."
+    },
+    {
+      "id": "version_de_contrato_reverbera_a_derivados",
+      "regla": "Cuando un contrato sube mayor, sus schemas asociados suben mayor. Cuando sube minor (sección opcional añadida), los schemas pueden mantenerse o subir minor según el cambio.",
+      "razon": "Mantener versions desincronizadas entre contrato y sus derivados causa que un consumer cargue mismatch."
+    },
+    {
+      "id": "eventos_versionados_por_subsistema",
+      "regla": "Los eventos canónicos no se versionan individualmente — heredan la version del sub-contrato (chat-flow v1.0.0 → todos los chat.* events son v1.0.0).",
+      "razon": "Versionar evento por evento multiplica el campo de variabilidad. Versionar a nivel de subsistema mantiene un único punto de cambio."
+    },
+    {
+      "id": "modulo_versiona_implementacion",
+      "regla": "module.version sube minor en refactor interno sin cambio de events/subscribes. Sube mayor cuando rompe compatibilidad de events (deja de publicar uno, cambia shape de otro). Sube patch en bug fixes sin cambio funcional.",
+      "razon": "module.version comunica al loader y a otros módulos qué nivel de cambio esperar al actualizar."
+    },
+    {
+      "id": "package_json_repo_madurez",
+      "regla": "package.json.version del repo refleja la madurez agregada del sistema. 0.x.y = preview / WIP. 1.0.0 cuando todos los contratos están estables y la suite es producción-ready.",
+      "razon": "El repo es un agregado; su version es el commitment público con consumers externos (si los hubiera)."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "semver_puro_sin_extensiones",
+      "decision": "Formato MAJOR.MINOR.PATCH sin pre-release tags, sin build metadata, sin custom (1.2.3-rc1, 1.2.3+sha, 1.2.3-beta-7).",
+      "alternativa_descartada": "Permitir tags de pre-release como 1.0.0-rc1 para versiones inestables.",
+      "razon": "Tags adicionales complican la comparación mecánica y producen drift de naming. La preview se hace con 0.x.y; cuando estable, salto a 1.0.0 sin pre-release."
+    },
+    {
+      "id": "deprecation_intermedia_obligatoria",
+      "decision": "Romper compatibilidad requiere mínimo una versión intermedia donde el artefacto deprecated funciona pero loguea warn.",
+      "alternativa_descartada": "Permitir breaking change directo en una sola subida de mayor.",
+      "razon": "Sin deprecation, los consumers se rompen al actualizar. Una versión de aviso da ventana para migrar."
+    },
+    {
+      "id": "supersedes_nota_como_changelog_interno",
+      "decision": "Cada artefacto versionado lleva supersedes_nota actualizado con cada subida. Es el changelog DENTRO del artefacto.",
+      "alternativa_descartada": "Mantener CHANGELOG.md externo separado.",
+      "razon": "supersedes_nota viaja con el artefacto incluso si se mueve de repo. CHANGELOG externo se desincroniza."
+    },
+    {
+      "id": "version_subsistema_no_evento",
+      "decision": "Los eventos canónicos heredan version del sub-contrato que los define (chat-flow, agent-flow). No se versionan individualmente.",
+      "alternativa_descartada": "Cada evento con su version (chat.message.saved v1.0.0, ai.chat.response v1.0.0, etc.).",
+      "razon": "Versionar evento por evento multiplica los puntos de cambio. Un cambio que toca dos eventos del subsistema sube versions desincronizadas y rompe la coherencia."
+    },
+    {
+      "id": "modulo_version_separa_implementacion_de_shape",
+      "decision": "module.version sube por implementación; el shape de los events del módulo está gobernado por la version del sub-contrato canónico (cuando aplique).",
+      "alternativa_descartada": "module.version captura todo (refactor + cambio de shape).",
+      "razon": "Los consumers de un módulo se preocupan por el SHAPE de sus events (gobernado por subsistema), no por refactors internos. Separar permite que un módulo refactorice sin obligar a updates a consumers."
+    },
+    {
+      "id": "package_json_repo_indica_madurez",
+      "decision": "package.json.version del repo es 0.x.y mientras hay contratos no completados o features no estables. Salto a 1.0.0 cuando todos los contratos transversales y subsistemas estén cerrados.",
+      "alternativa_descartada": "1.0.0 desde el primer commit aunque el sistema sea preview.",
+      "razon": "0.x.y es la convención semver para preview — los consumers externos saben que minor breaks pueden ocurrir. Saltar a 1.0.0 prematuramente compromete con stability que no se cumple."
+    }
+  ],
+
+  "criterios_breaking_por_tipo": {
+    "contrato_transversal_o_subcontrato": {
+      "patch": "Errata, clarificación de wording sin cambio semántico, ajuste de ejemplos.",
+      "minor": "Añadir sección opcional, añadir entrada a `decisiones_arquitectonicas` o `prohibido` sin invalidar implementaciones existentes, ampliar lista de eventos canónicos del subsistema (sin retirar ninguno).",
+      "major": "Eliminar sección canónica, retirar evento canónico del subsistema, cambiar shape de campo canónico compartido, invalidar implementaciones existentes."
+    },
+    "schema_json": {
+      "patch": "Aclaración de descriptions, sin cambio en validación.",
+      "minor": "Añadir property opcional, ampliar enum (con valores nuevos válidos retroactivamente), relajar minLength.",
+      "major": "Añadir property required, retirar property, restringir enum (eliminar valores), endurecer minLength, cambiar type."
+    },
+    "modulo": {
+      "patch": "Bug fix sin cambio en publishes/subscribes ni shape.",
+      "minor": "Refactor interno, añadir publish/subscribe nuevo, añadir tool nueva, añadir handler nuevo. Sin retirar nada.",
+      "major": "Retirar publish/subscribe, cambiar shape de event publicado (que no esté gobernado por sub-contrato), cambiar tool signature, retirar handler, cambiar persistence pattern."
+    },
+    "package_json_repo": {
+      "patch": "Bug fix en código sin cambio de API ni de contratos.",
+      "minor": "Añadir módulo nuevo, añadir contrato nuevo, añadir feature sin breaking.",
+      "major": "Retirar módulo, retirar contrato, breaking change agregado en algún subsistema."
+    }
+  },
+
+  "prohibido": [
+    {
+      "id": "version_format_no_semver",
+      "regla": "Ningún artefacto del repo tiene version en formato distinto a MAJOR.MINOR.PATCH.",
+      "enforce": "Validador escanea version de contratos, modules/*/module.json, package.json. Severidad ERROR si encuentra otro formato."
+    },
+    {
+      "id": "breaking_change_sin_subir_mayor",
+      "regla": "Ningún cambio breaking (retirar evento canónico, cambiar shape required, retirar property) entra sin subir MAJOR.",
+      "enforce": "Auditoría manual + git diff. Validador puede comparar shape entre versiones consecutivas y detectar breaking encubierto."
+    },
+    {
+      "id": "breaking_change_sin_deprecation_previa",
+      "regla": "Ningún cambio breaking se ejecuta sin haber pasado por una versión intermedia con deprecation marcada (warn + supersedes_nota).",
+      "enforce": "Auditoría manual / revisión de PR. Excepción documentada solo cuando el cambio es de seguridad crítica."
+    },
+    {
+      "id": "supersedes_nota_no_actualizada",
+      "regla": "Ninguna subida de version (mayor o minor) entra sin actualizar supersedes_nota del artefacto.",
+      "enforce": "Validador compara version actual vs version anterior (git history) y verifica que supersedes_nota cambió."
+    },
+    {
+      "id": "version_desincronizada_contrato_schema",
+      "regla": "Cuando un contrato sube mayor, sus schemas asociados suben mayor coordinadamente.",
+      "enforce": "Validador cruza version de contrato vs version de schemas (cuando los schemas tengan version explícita)."
+    },
+    {
+      "id": "downgrade_de_version",
+      "regla": "Las versions solo suben (nunca bajan). Un commit que reduce la version de un artefacto es drift severo (probablemente revert mal hecho).",
+      "enforce": "Validador compara version actual vs version anterior (git history). Severidad ERROR si downgrade."
+    },
+    {
+      "id": "modulo_que_rompe_event_canonico_sin_pasar_por_contrato",
+      "regla": "Un módulo no cambia el shape de un event canónico (gobernado por sub-contrato como chat-flow / agent-flow) por su cuenta. Para cambiar shape, primero se actualiza el sub-contrato (sube su version) y se regeneran schemas + validator + tests.",
+      "enforce": "Validador cruza payloads publicados (audit) con schema oficial."
+    },
+    {
+      "id": "version_pre_release_o_build_metadata",
+      "regla": "Ninguna version contiene -rc, -beta, -alpha, +build, +sha. Solo MAJOR.MINOR.PATCH puro.",
+      "enforce": "Validador con regex sobre versions."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/versionado.schema.json (a crear). Top-level: _meta, regla_maestra (string), formato_canonico (string: 'MAJOR.MINOR.PATCH'), criterios_por_tipo (object: { contrato_transversal_o_subcontrato, schema_json, modulo, package_json_repo } cada uno con { patch, minor, major }), proceso_deprecation (description + flujo), patrones_de_drift (regexes que el validador usa).",
+
+  "reglas_de_extraccion": [
+    "1. Validar contrato contra _schemas/versionado.schema.json.",
+    "2. Listar todos los artefactos versionados del repo: contratos en _contratos/, modules/*/module.json, package.json (raíz). Verificar formato semver puro en `version` field.",
+    "3. Para cada artefacto, verificar que supersedes_nota existe y se actualizó cuando version cambió (cruzando git history).",
+    "4. Detectar cambios breaking encubiertos: comparar shape de cada contrato/schema con versión anterior (git diff) y validar que cualquier cambio breaking subió mayor.",
+    "5. Verificar coordinación contrato↔schema (cuando un contrato sube mayor, schemas asociados también).",
+    "6. Reportar PASS/FAIL."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/versionado.schema.json (a crear)"
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/versionado.validate.js (a crear)"
+    },
+    {
+      "tipo": "artefactos_versionados",
+      "items": ["arquitectura/decisiones/_contratos/*.contract.json", "arquitectura/convenciones/_contratos/*.contract.json", "arquitectura/auditoria/_contratos/*.contract.json", "modules/*/module.json", "package.json (raíz)"],
+      "regla": "Cada uno cumple semver puro y mantiene supersedes_nota."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección versionado cuando exista)",
+      "regla": "Warnings de modulos sin supersedes_nota inicial quedan en baseline durante migración."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "versionado_contract_estructura_valida",
+      "regla": "El contrato tiene amplitud canónica.",
+      "como_detectar": "17 secciones canónicas presentes.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_version_format_no_semver",
+      "regla": "Ningún artefacto tiene version en formato no-semver.",
+      "como_detectar": "Regex sobre version de cada artefacto.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_supersedes_nota_no_actualizada",
+      "regla": "Cada subida de version actualiza supersedes_nota.",
+      "como_detectar": "Comparar git diff: si version cambió en HEAD pero supersedes_nota no, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_version_downgrade",
+      "regla": "Las versions solo suben.",
+      "como_detectar": "Comparar version actual vs anterior en git history.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_breaking_change_sin_subir_mayor",
+      "regla": "Cambios breaking detectables (campo required removido, enum restringido) van con subida de mayor.",
+      "como_detectar": "Diff de schema entre versions.",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS si todos los artefactos versionados tienen formato semver puro Y supersedes_nota actualizado coherentemente Y no hay downgrades Y los breaking changes detectables suben mayor. Errors para downgrade y formato no-semver. Warnings para supersedes_nota no actualizado y breaking encubierto.",
+
+  "convenciones_complementarias": {
+    "naming": "El campo `version` es nombre canónico en todos los artefactos. Naming.contract aplica para nombres de los archivos versionados (no para el campo version mismo).",
+    "glossary": "Términos: version, semver, breaking change, deprecation. Forma canónica en glossary.json (cuando se añadan).",
+    "events": "Los eventos canónicos heredan version del sub-contrato. No hay version individual por evento.",
+    "errors": "No aplica directamente.",
+    "observability": "Logs pueden incluir version del módulo/contrato en metadata cuando aporta diagnóstico.",
+    "lifecycle": "module.version se incluye en el log de carga del módulo (ai-agent-framework.loaded { version: '1.1.0' }).",
+    "persistence": "No aplica directamente.",
+    "http": "No aplica directamente — endpoints HTTP no se versionan por path (sin /v1/, /v2/) en este repo. Si se introduce versionado de API HTTP, será via header o sub-contrato específico.",
+    "security": "No aplica directamente.",
+    "frontend": "frontend.contract tiene version. El frontend en sí (app SvelteKit) versiona via package.json del propio frontend cuando aplique.",
+    "testing": "Tests no se versionan individualmente — son parte del módulo testeado.",
+    "multi-tenancy": "No aplica directamente.",
+    "documentation": "supersedes_nota es parte de la documentación canónica. documentation.contract aplica la regla general; este contrato la concreta para versionado."
+  }
+}

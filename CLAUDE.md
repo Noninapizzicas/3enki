@@ -72,6 +72,59 @@ node arquitectura/convenciones/_validators/glossary.validate.js --check-system
 node arquitectura/auditoria/_validators/modulo-completo.validate.js <slug>
 ```
 
+Para correr los 9 validators juntos contra el sistema completo (lo que corre CI):
+
+```bash
+npm run validate:ci                  # falla si hay drift NUEVO vs drift-baseline.json
+npm run validate:baseline:update     # regenera baseline tras cierre legítimo de drift
+```
+
+`drift-baseline.json` congela los warnings/info conocidos. CI bloquea cuando aparece drift nuevo, no cuando hay warnings. Si bajas warnings legítimamente (porque cerraste deuda) regeneras baseline.
+
+## Decisiones cross-módulo (subsistemas y políticas)
+
+Vive en `arquitectura/decisiones/` como contratos JSON con schemas + validators. Cada uno fija UNA política observable across-modules.
+
+- **`_contratos/companero-viaje.contract.json`** — visión maestra del subsistema chat/LLM/agentes. Define las 4 capacidades del compañero (memoria sostenida, especialización por contexto, acceso al sistema, modularidad infinita), los 5 tipos canónicos de extensión (canal, tool, agente, memoria, integración), los 13 eventos canónicos del subsistema, los 8 campos canónicos del payload y las 10 garantías observables. Documento autoritativo: cualquier sub-contrato del subsistema (chat-flow, agent-flow, etc.) deriva de aquí.
+
+- **`_contratos/chat-flow.contract.json`** + **`_schemas/chat-flow/*.json`** — sub-contrato derivado: 5 eventos canónicos del flujo del chat (`chat.message.saved`, `chat.context.enriched`, `chat.prompt.ready`, `ai.chat.response`, `ai.chat.failed`). Schemas estrictos AJV `additionalProperties:false`.
+
+- **Otros contratos transversales:** `events`, `lifecycle`, `observability`, `errors`, `persistence`, `http`. Cada uno con su validator en `_validators/<n>.validate.js` y su sección en `drift-baseline.json`.
+
+Todos los validators corren juntos via `npm run validate:ci`. Para añadir un sub-contrato nuevo: contrato JSON → schemas estrictos → validator → registrar en `scripts/validate-all.js` → npm script.
+
+## Patrón de migración cross-módulo
+
+Cuando hay drift estructural en un subsistema (varios módulos hablan shapes inconsistentes para los mismos eventos), la disciplina es la misma que se aplicó en chat-flow:
+
+1. **Contrato primero** — `<subsistema>.contract.json` lista los eventos canónicos, los principios, los drifts cerrados, las validaciones cross que el validator deberá hacer. Sin contrato no se toca código.
+2. **Schemas estrictos** — un JSON Schema 2020-12 `additionalProperties:false` por evento + `_common.schema.json` con $defs compartidos. Validables con AJV strict.
+3. **Validator** — script Node que detecta drifts estructurales en `module.json` y en código fuente (heurísticas regex sobre publishers conocidos). Registrar en `scripts/validate-all.js` y en npm scripts.
+4. **Migrar handlers** — uno por uno, cada módulo del subsistema. Compat transitoria autorizada: aceptar shape legacy con `logger.warn('<modulo>.<handler>.shape_legacy', ...)` durante la migración. La compat NO se mezcla con código canónico — vive en una rama defensiva al inicio del handler que normaliza al shape canónico.
+5. **Tests por handler** — uno por handler migrado. Cubre shape canónico + validación contra el JSON Schema oficial (cargado con AJV) + edge cases de error. Wirear a `package.json` (`test:<modulo>`) y `.github/workflows/validate.yml`.
+6. **Cierre legacy** — eliminar las ramas `shape_legacy` cuando todos los emisores estén migrados. El warn era red de seguridad; sin emisores legacy, sobra y solo confunde. Borrar también los tests del shape legacy.
+
+Después de los pasos 1-3 main puede mergear sin migración (validator solo añade warnings al baseline). Después del 4-5 el subsistema acepta ambos shapes. Después del 6 solo canónico — futuros publish con shape antiguo fallarán contra schema en lugar de pasar con warn.
+
+## Garantías obligatorias en payloads
+
+Estas reglas las enforce el conjunto de validators + schemas. Si las rompes en un publish nuevo, CI te corta.
+
+- **`correlation_id`** se genera en el originador (canal, cron, webhook) y se propaga sin modificar por toda la cadena de eventos. Sin él no hay traza causal y el debugging multi-módulo es ciego.
+- **`no_silent_failures`** — todo evento de "cierre" tiene par success/failure separado. No inyectar errores como texto en el evento de éxito. Ejemplo: `ai.chat.response` (éxito) + `ai.chat.failed` (error con `error.code` canónico de `errors.contract.json`).
+- **No incluir `stack` ni datos sensibles en `error.details`** publicados en el bus. El validator de errors flaggea `drift_respuesta_con_stack_trace` como ERROR (no warning).
+- **Campos polisémicos prohibidos.** Un mismo nombre de campo no significa cosas distintas en eventos distintos. Ejemplo cerrado: `message` en chat era ambiguo (mensaje del usuario o del asistente) → reemplazado por `user_message` / `assistant_message`.
+
+## Puntos de extensión modulares
+
+Algunos eventos están diseñados como contratos abiertos a múltiples emisores plug-and-play, para que añadir piezas nuevas no requiera tocar el módulo consumer:
+
+- **`chat.context.enriched`** — cualquier módulo de memoria (`memory-user-profile`, `memory-rag`, `memory-long-term`, `memory-project-knowledge`...) publica este evento con `priority` (0-99 contexto base, 100-499 perfil, 500-999 RAG, 1000+ especulativa) y `prompt-builder` lo agrega al system prompt ordenado por priority. Añadir una memoria nueva no toca prompt-builder.
+- **`agent.execute.request`** (pendiente de canonización en agent-flow) — cualquier módulo del dominio puede invocar a un agente especialista emitiendo este evento. El agente reacciona y devuelve `agent.execute.response`.
+- **`channel-*`** — cada canal (`channel-telegram`, `channel-voice`, etc.) recibe del exterior y publica `chat.message.saved` con su `channel` correspondiente. chat-io no conoce los canales.
+
+Cuando diseñes un evento nuevo, pregúntate: ¿debería ser un punto de extensión? Si más de un módulo plausiblemente querrá publicarlo o consumirlo, sí — define el shape en un contrato y deja que cada implementación sea pluggable.
+
 ---
 
 # Protocolo de trabajo
@@ -96,3 +149,5 @@ node arquitectura/auditoria/_validators/modulo-completo.validate.js <slug>
    - ¿A qué reacciona cada subscribe?
 
    El mapa va en la auditoría del módulo. Sin mapa, no se toca el módulo.
+
+6. **Tests por handler con validación de schema.** Cada handler de un módulo del subsistema chat (y cualquier sub-contrato similar a futuro) tiene su test unitario en `tests/unit/<modulo>.test.js`. Cubre: shape canónico de los eventos publicados + carga del JSON Schema oficial con AJV y validación del payload + edge cases de error. Wirear el test a `package.json` como `test:<modulo>` y al workflow `.github/workflows/validate.yml`. Sin tests, el commit no entra: la suite verde es parte del cierre, no opcional.

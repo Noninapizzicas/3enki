@@ -214,24 +214,72 @@ class PromptBuilderModule {
   // Pipeline: chat.message.saved → chat.prompt.ready
   // ============================================================
 
+  /**
+   * onMessageSaved — handler de chat.message.saved (chat-flow v1.0.0).
+   *
+   * Espera shape canonico:
+   *   { correlation_id, conversation_id, project_id, user_id, channel,
+   *     channel_context, message_id, user_message, timestamp,
+   *     attachments?, intencion?, settings?, page_id?, prompt_id?,
+   *     page_context? }
+   *
+   * Construye el system prompt completo agregando:
+   *   1. base.prompt.json + module prompt + user prompt (cache interna)
+   *   2. context aportado por chat.context.enriched (memorias modulares)
+   *   3. Publica chat.prompt.ready con shape canonico para ai-gateway.
+   *
+   * Compatibilidad transitoria: si llega del shape legacy ('message',
+   * 'prompt' como id, 'context' como page_context), lo acepta pero
+   * loguea warn.
+   */
   async onMessageSaved(event) {
     const data = event.data || event;
     const {
-      project_id, page_id, conversation_id,
-      context, settings, prompt: promptId,
-      attachments, intencion, message, message_id
+      // shape canonico
+      user_message, prompt_id, page_context, user_id, channel, channel_context, correlation_id,
+      // comunes
+      project_id, page_id, conversation_id, message_id, attachments, intencion, settings,
+      // compatibilidad transitoria
+      message: legacy_message, prompt: legacy_prompt, context: legacy_context
     } = data;
 
-    if (!project_id || !conversation_id || !message) return;
+    // Normalizacion de shape (compat transitoria)
+    const userMessageNorm = user_message ?? legacy_message;
+    const promptIdNorm = prompt_id ?? legacy_prompt ?? null;
+    const pageContextNorm = page_context ?? legacy_context ?? {};
+    if (!user_message && legacy_message) {
+      this.logger.warn('prompt-builder.onMessageSaved.shape_legacy', {
+        reason: 'caller publica con campo legacy "message" en vez de "user_message" — drift chat-flow',
+        conversation_id, correlation_id
+      });
+    }
+
+    if (!project_id || !conversation_id || !userMessageNorm) return;
 
     const moduleName = this._resolveModule(page_id);
-    const promptObj = this._resolvePromptContent(promptId, moduleName);
-    const systemPrompt = this._buildSystemPrompt({
-      moduleName, promptObj, context: context || {},
+    const promptObj = this._resolvePromptContent(promptIdNorm, moduleName);
+    let systemPrompt = this._buildSystemPrompt({
+      moduleName, promptObj, context: pageContextNorm,
       project_id, conversation_id, page_id
     });
 
-    // Historial: últimos N mensajes activos (excluyendo el que acabamos de guardar)
+    // Agregar contexto aportado por memorias modulares (chat.context.enriched).
+    // Las enriquecidas se acumulan en _pendingEnrichments por message_id desde
+    // onContextEnriched. Aqui las recogemos y agregamos al system prompt por priority.
+    if (this._pendingEnrichments && message_id) {
+      const list = this._pendingEnrichments.get(message_id) || [];
+      const now = Date.now();
+      const valid = list
+        .filter(e => !e.expires_at || new Date(e.expires_at).getTime() > now)
+        .sort((a, b) => a.priority - b.priority);
+      if (valid.length > 0) {
+        const additions = valid.map(e => `[${e.source}]\n${e.context_addition}`).join('\n\n');
+        systemPrompt = `${systemPrompt}\n\n--- contexto adicional aportado por memorias ---\n${additions}`;
+        this._pendingEnrichments.delete(message_id);
+      }
+    }
+
+    // Historial: ultimos N mensajes activos (excluyendo el que acabamos de guardar)
     const limit = settings?.context_window || 20;
     let history = [];
     try {
@@ -243,25 +291,73 @@ class PromptBuilderModule {
       );
       history = rows.reverse().map(r => ({ role: r.role, content: r.content }));
     } catch (err) {
-      this.logger.warn('prompt-builder.history.failed', { error: err.message });
+      this.logger.warn('prompt-builder.history.failed', { error: err.message, correlation_id });
     }
 
-    const messages = [...history, { role: 'user', content: message }];
+    const messages = [...history, { role: 'user', content: userMessageNorm }];
 
-    // Propagamos los 9 campos. prompt pasa de id → string final.
+    // chat.prompt.ready — shape canonico chat-flow v1.0.0
     await this.eventBus.publish('chat.prompt.ready', {
-      project_id,
-      page_id,
+      correlation_id,
       conversation_id,
-      context: context || {},
-      settings,
-      prompt: systemPrompt,
-      attachments: attachments || [],
-      intencion: intencion ?? null,
-      message,
+      project_id,
+      user_id: user_id || 'default',
+      channel: channel || 'web',
+      channel_context: channel_context || {},
+      message_id,
+      system_prompt: systemPrompt,
       messages,
-      message_id
+      timestamp: new Date().toISOString(),
+      // opcionales canonicos
+      settings,
+      intencion: intencion ?? undefined,
+      attachments: attachments && attachments.length > 0 ? attachments : undefined
     });
+  }
+
+  /**
+   * onContextEnriched — handler de chat.context.enriched (chat-flow v1.0.0, NUEVO).
+   *
+   * Una memoria modular (memory-rag, memory-user-profile, memory-long-term, etc.)
+   * publica este evento aportando contexto adicional para una conversation_id +
+   * message_id concreta. prompt-builder agrega multiples enriquecimientos por
+   * priority cuando construye el system prompt en onMessageSaved.
+   *
+   * Race condition: la memoria puede publicar chat.context.enriched ANTES o
+   * DESPUES de que llegue chat.message.saved. Se acumulan en _pendingEnrichments
+   * por message_id; cuando onMessageSaved se ejecuta para ese message_id, lee
+   * los acumulados y los limpia.
+   *
+   * Politica simple: se acepta enrichment hasta 30s tras message_id; pasado
+   * ese tiempo, se descarta (la respuesta ya fue construida o nunca llego).
+   */
+  async onContextEnriched(event) {
+    const data = event.data || event;
+    const { conversation_id, message_id, source, context_addition, priority } = data;
+    if (!message_id || !source || !context_addition) return;
+
+    if (!this._pendingEnrichments) this._pendingEnrichments = new Map();
+    const list = this._pendingEnrichments.get(message_id) || [];
+    list.push({
+      source,
+      context_addition,
+      priority: typeof priority === 'number' ? priority : 1000,
+      expires_at: data.expires_at,
+      received_at: Date.now()
+    });
+    this._pendingEnrichments.set(message_id, list);
+
+    this.logger.debug('prompt-builder.context.enriched', {
+      conversation_id, message_id, source, priority
+    });
+
+    // GC: limpia entradas viejas (>5 min) — proteccion contra leak
+    if (this._pendingEnrichments.size > 1000) {
+      const cutoff = Date.now() - 5 * 60 * 1000;
+      for (const [k, v] of this._pendingEnrichments) {
+        if (v.length === 0 || v[0].received_at < cutoff) this._pendingEnrichments.delete(k);
+      }
+    }
   }
 }
 

@@ -20,6 +20,7 @@
     "test:carta-scheduler": "node tests/unit/carta-scheduler.test.js",
     "test:cocina-poc": "node tests/unit/cocina-poc.test.js",
     "test:chat-io": "node tests/unit/chat-io.test.js",
+    "test:prompt-builder": "node tests/unit/prompt-builder.test.js",
     "test:mqtt-request": "node tests/unit/mqtt-request.test.js",
     "test:integration:carta-scheduler": "node tests/integration/carta-scheduler-mqtt-request.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",

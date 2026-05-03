@@ -38,6 +38,9 @@ jobs:
       - name: Run chat-io tests (chat-flow migration)
         run: npm run test:chat-io
 
+      - name: Run prompt-builder tests (chat-flow migration)
+        run: npm run test:prompt-builder
+
       - name: Run mqttRequest unit tests
         run: npm run test:mqtt-request
 

@@ -1,0 +1,277 @@
+{
+  "_doc": "Sub-contrato derivado del documento maestro companero-viaje.contract.json. Define el SHAPE EXACTO (validable con JSON Schema) de los 5 eventos canonicos de la categoria chat_flow: chat.message.saved, chat.context.enriched, chat.prompt.ready, ai.chat.response, ai.chat.failed. Cualquier modulo del subsistema que publique o consuma estos eventos cumple este contrato. El validator chat-flow.validate.js cruza module.json publishes/subscribes con los schemas declarados aqui y detecta drift estructural ANTES de produccion.",
+  "id": "chat-flow",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera version. Deriva del documento maestro del compañero de viaje (companero-viaje.contract v1.0.0). Captura el shape canonico que reemplaza el hilvanado manual actual entre chat-io, prompt-builder, ai-gateway. Cierra los drifts semanticos detectados durante la creacion del documento maestro: 'message' polisemico, 'message_id_user' fantasma, ausencia de correlation_id, ausencia de user_id, ausencia de chat.context.enriched para memorias modulares.",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/companero-viaje.contract.json — protocolos_canonicos.eventos_canonicos.categorias[chat_flow]",
+
+  "objetivo": "Producir UN JSON output (_outputs/chat-flow.json) y CINCO JSON Schemas estrictos (uno por evento) que formalizan el shape de los eventos chat_flow. Validable mecanicamente cruzando contra los module.json del subsistema (chat-io, prompt-builder, ai-gateway, ai-agent-framework, futuras memorias modulares). Aplicable: cualquier modulo que publique o consuma uno de estos 5 eventos declara request_schema_ref / response_schema_ref en sus subscribes/publishes apuntando a estos schemas.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/companero-viaje.contract.json (documento maestro)",
+      "arquitectura/decisiones/_outputs/events.json (catalogo canonico de eventos del repo)",
+      "arquitectura/decisiones/_outputs/errors.json (codigos canonicos para ai.chat.failed.error.code)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "modules/conversacion/chat-io/index.js (publishes actuales — referencia de drift a cerrar)",
+      "modules/conversacion/prompt-builder/index.js (publishes actuales)",
+      "modules/conversacion/ai-gateway/index.js (publishes actuales)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL SHAPE ES CONTRATO. Si un modulo publica chat.message.saved con un campo distinto al schema, no es 'flexibilidad' — es drift. CI debe detectarlo y bloquear el merge.",
+
+    "EL CATALOGO ES INMUTABLE. Estos 5 eventos son los UNICOS chat_flow events. No se inventan otros sin replantear el documento maestro. Si una capacidad nueva requiere otro evento, primero se evalua si encaja en uno existente (especialmente chat.context.enriched que es deliberadamente extensible).",
+
+    "CAMPOS DRIFTED SEMANTICAMENTE SE RENOMBRAN. 'message' significaba cosas distintas en distintos eventos. Se elimina como nombre generico y se sustituye por nombres especificos (user_message, assistant_message, system_prompt). Sin ambiguedad.",
+
+    "CAMPOS FANTASMA SE ELIMINAN. 'message_id_user' existia para dejar 'message_id' libre para el id del mensaje del LLM, pero ese id nunca se publicaba. Se elimina message_id_user y se introduce message_id_assistant cuando aplica. Cero campos sin proposito.",
+
+    "CORRELATION_ID Y USER_ID OBLIGATORIOS. Son los carriles de la observabilidad y la multi-tenancy. Sin ellos, las garantias del modelo se rompen. Aunque el sistema sea single-user hoy, user_id existe (puede valer 'default').",
+
+    "CHAT.CONTEXT.ENRICHED ES LA PUERTA DE LAS MEMORIAS MODULARES. Hoy ningun modulo lo emite todavia. El schema lo declara desde el principio para que añadir memory-rag, memory-user-profile, memory-long-term en el futuro NO requiera inventar nada nuevo — solo cumplir este shape.",
+
+    "EL SHAPE ES MINIMAL. Solo campos que el modelo justifica. No se mete 'por si acaso lo necesitamos' nada. Si un campo aparece, hay un consumer concreto que lo necesita. Lo demas viaja en details/metadata estructurado.",
+
+    "ATTACHMENTS, INTENCION, SETTINGS, PAGE_ID SON OPCIONALES. No todo input del usuario los lleva. Pero si aparecen, su shape esta definido. No campo libre.",
+
+    "TIMESTAMP RECOMENDADO PERO NO BLOQUEANTE. Util para debugging temporal. Si un modulo lo omite, el bus puede inyectarlo. No es razon de drift critico.",
+
+    "TOOL_CALLS_EXECUTED EN AI.CHAT.RESPONSE ES AUDITORIA, NO LOGICA. Es para que conversation-export pueda reconstruir que paso. Ningun modulo del flujo lo usa para tomar decisiones.",
+
+    "AI.CHAT.FAILED CIERRA EL CICLO. Sin este evento, los flujos que fallan quedan colgados sin que chat-io pueda informar al usuario. Es la garantia no_silent_failures aplicada al chat."
+  ],
+
+  "principios": [
+    {
+      "id": "shape_estricto_validable_con_ajv",
+      "regla": "Cada uno de los 5 eventos tiene UN JSON Schema 2020-12 strict (additionalProperties:false en todos los niveles). Cualquier modulo que publique el evento cumple el schema EXACTO — ni un campo de mas, ni uno de menos de los obligatorios.",
+      "razon": "Sin schema estricto, cada modulo añade su propio campo extra que otros no esperan, y se acumula drift. Con additionalProperties:false, añadir campos requiere actualizar el schema (decision consciente)."
+    },
+    {
+      "id": "campos_canonicos_obligatorios",
+      "regla": "Todo evento chat_flow incluye OBLIGATORIAMENTE: correlation_id, conversation_id, project_id, user_id, channel, channel_context, timestamp. Estos campos heredados del documento maestro NO son opcionales en chat_flow — son carriles del modelo.",
+      "razon": "El subsistema chat es donde la observabilidad y la multi-tenancy del compañero se manifiestan. Hacer estos campos opcionales abre la puerta al drift que rompe garantias."
+    },
+    {
+      "id": "renombrado_de_campos_polisemicos",
+      "regla": "El campo 'message' del actual chat_flow se elimina. Se sustituye por nombres especificos por evento: 'user_message' (en chat.message.saved y chat.prompt.ready), 'assistant_message' (en ai.chat.response). El system prompt construido se llama 'system_prompt' (no 'prompt' — 'prompt' era polisemico tambien).",
+      "razon": "Un mismo nombre con distinto significado entre eventos rompe la trazabilidad y obliga a documentacion mental. Nombres especificos eliminan la ambiguedad."
+    },
+    {
+      "id": "eliminacion_de_campos_fantasma",
+      "regla": "'message_id_user' se elimina. Si una respuesta necesita referenciar el mensaje del usuario que la origino, se incluye 'message_id' (id del usuario). Si necesita ID propio, 'message_id_assistant'. Sin redundancia.",
+      "razon": "Campos sin proposito real son ruido. Cada vez que aparecen, alguien tiene que entender por que estan. Si no se usan para nada, se eliminan."
+    },
+    {
+      "id": "extensibilidad_via_chat_context_enriched",
+      "regla": "chat.context.enriched es el evento abierto para que CUALQUIER modulo de memoria (presente o futuro) aporte contexto al system prompt sin tocar prompt-builder. Su shape soporta source (id de la memoria), context_addition (texto a incluir), priority (orden de inclusion).",
+      "razon": "Hoy las memorias estan dentro de prompt-builder hardcoded. Mañana se quieren añadir memory-rag, memory-user-profile, etc. Sin este evento, cada nueva memoria requiere modificar prompt-builder. Con el evento, las memorias son modulos independientes."
+    },
+    {
+      "id": "errores_canonicos_en_ai_chat_failed",
+      "regla": "ai.chat.failed.error.code DEBE ser uno de los codigos canonicos de errors.json (UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR, etc.). Sin codigos inventados.",
+      "razon": "El consumidor (chat-io) maneja errores de forma uniforme. Si cada modulo inventa codigos, chat-io tiene que conocerlos todos. Con codigos canonicos, hay una sola tabla de mapeo error → mensaje al usuario."
+    },
+    {
+      "id": "el_validator_cruza_module_json_con_schemas",
+      "regla": "chat-flow.validate.js detecta drift cuando un module.json declara que publica/consume un evento chat_flow pero NO declara request_schema_ref/response_schema_ref apuntando al schema oficial. El campo schema_ref es el que conecta declaracion del modulo con shape canonico.",
+      "razon": "Sin esta validacion, los schemas existen pero nadie los aplica. Forzar el schema_ref en module.json hace que el sistema sea autoconsistente."
+    }
+  ],
+
+  "eventos": [
+    {
+      "id": "chat.message.saved",
+      "name": "chat.message.saved",
+      "publicado_por": "chat-io (canal web), telegram-service (cuando el input es 'mensaje al compañero'), futuros canales (voice, whatsapp, etc.)",
+      "consumido_por": "prompt-builder (siempre); modulos de memoria modular (chat.context.enriched downstream)",
+      "proposito": "El usuario ha mandado un mensaje al compañero, persistido en la conversacion. Es el TRIGGER del razonamiento del compañero.",
+      "schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "conversation_id", "project_id", "user_id", "channel", "channel_context", "message_id", "user_message", "timestamp"],
+        "opcionales":   ["attachments", "intencion", "settings", "page_id", "prompt_id"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "El campo actual 'message' se renombra a 'user_message' (semantica clara: es texto del usuario).",
+        "Falta correlation_id obligatorio en el shape actual.",
+        "Falta user_id (sistema asume single-user implicitamente).",
+        "El campo 'prompt' actual era polisemico — aqui se llama 'prompt_id' (es id de plantilla)."
+      ]
+    },
+
+    {
+      "id": "chat.context.enriched",
+      "name": "chat.context.enriched",
+      "publicado_por": "modulos de memoria modular (memory-rag, memory-user-profile, memory-long-term, memory-project-knowledge — cuando existan)",
+      "consumido_por": "prompt-builder",
+      "proposito": "Una memoria aporta contexto adicional al system prompt para una conversacion concreta. Multiples memorias pueden publicar para una misma message_id; prompt-builder agrega por orden de priority. Evento NUEVO: hoy ningun modulo lo emite todavia, pero el schema esta para que añadir memorias futuras NO requiera inventar nada.",
+      "schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "conversation_id", "message_id", "source", "context_addition", "priority", "timestamp"],
+        "opcionales":   ["expires_at", "metadata"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "Evento NUEVO. No hay drift que cerrar — se introduce limpio.",
+        "Habilita el patron: memorias modulares como modulos independientes, sin tocar prompt-builder."
+      ]
+    },
+
+    {
+      "id": "chat.prompt.ready",
+      "name": "chat.prompt.ready",
+      "publicado_por": "prompt-builder",
+      "consumido_por": "ai-gateway",
+      "proposito": "El system prompt completo esta construido (incluye contexto base + todas las memorias agregadas). Ya se puede invocar al LLM.",
+      "schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.prompt.ready.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "conversation_id", "project_id", "user_id", "channel", "channel_context", "message_id", "system_prompt", "messages", "timestamp"],
+        "opcionales":   ["tools_disponibles", "settings", "intencion", "attachments"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "El campo 'prompt' actual se renombra a 'system_prompt' (semantica clara: es el system prompt construido).",
+        "El campo 'message' actual desaparece — ya esta dentro de 'messages' (historial completo, ultimo elemento es el del usuario actual).",
+        "Falta correlation_id obligatorio.",
+        "Falta user_id."
+      ]
+    },
+
+    {
+      "id": "ai.chat.response",
+      "name": "ai.chat.response",
+      "publicado_por": "ai-gateway (cuando el LLM termino exitosamente, incluyendo todo su agentic loop con tools)",
+      "consumido_por": "chat-io (para reenviar al canal de origen); telegram-service / voice-output / etc. cuando sean canales activos; conversation-export (auditoria); observabilidad",
+      "proposito": "El compañero produjo una respuesta. Cierra el flujo iniciado en chat.message.saved.",
+      "schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.response.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "conversation_id", "project_id", "user_id", "channel", "channel_context", "message_id", "message_id_assistant", "assistant_message", "model", "provider", "tokens", "duration_ms", "timestamp"],
+        "opcionales":   ["tool_calls_executed", "iterations", "cost", "finish_reason"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "El campo 'message' actual (con texto del LLM) se renombra a 'assistant_message'. Sin ambiguedad.",
+        "El campo 'message_id_user' actual se elimina. Se sustituye por 'message_id' (refiere al mensaje del usuario que origino la respuesta) y nuevo 'message_id_assistant' (id del mensaje del compañero).",
+        "Falta correlation_id obligatorio.",
+        "tokens se estructura: { input, output, total } (no campo plano)."
+      ]
+    },
+
+    {
+      "id": "ai.chat.failed",
+      "name": "ai.chat.failed",
+      "publicado_por": "ai-gateway (cuando algo fallo: timeout LLM, todos los providers caidos, credencial no resuelta, etc.)",
+      "consumido_por": "chat-io (para informar al usuario); observabilidad; alerting",
+      "proposito": "Cierra el flujo iniciado en chat.message.saved con resultado de error. Sin este evento, los flujos que fallan quedan colgados sin respuesta al usuario.",
+      "schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.failed.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "conversation_id", "user_id", "channel", "channel_context", "message_id", "error", "timestamp"],
+        "opcionales":   ["project_id", "duration_ms", "provider_attempted"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "Evento NUEVO formalmente. Hoy ai-gateway captura errores pero los inyecta en ai.chat.response como mensaje de error — eso es drift. Aqui se separa: success → ai.chat.response, failure → ai.chat.failed.",
+        "error sigue shape canonico de errors.contract: { code, message, details? }.",
+        "code DEBE ser canonico de errors.codes_infrastructure (UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_5XX, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR, etc.)."
+      ]
+    }
+  ],
+
+  "campos_canonicos_compartidos": {
+    "descripcion": "Campos que aparecen identicos en multiples eventos (heredados del documento maestro). Definidos UNA VEZ aqui; los schemas individuales los referencian por $ref.",
+    "campos": {
+      "correlation_id": { "type": "string", "minLength": 1, "descripcion": "Hilo causal, UUID o cadena opaca generada por el originador." },
+      "conversation_id": { "type": "string", "minLength": 1, "descripcion": "Identifica el viaje. Sin esto no hay viaje." },
+      "project_id": { "type": ["string", "null"], "descripcion": "Proyecto activo. null si single-tenant aun." },
+      "user_id": { "type": "string", "minLength": 1, "descripcion": "Identifica al humano. 'default' en single-user." },
+      "channel": { "enum": ["web", "telegram", "voice", "whatsapp", "discord", "email", "sms", "cron", "webhook", "test"], "descripcion": "Canal de origen / destino. Lista cerrada para evitar drift." },
+      "channel_context": { "type": "object", "descripcion": "Datos opacos del canal. additionalProperties:true (cada canal define su shape interno)." },
+      "message_id": { "type": "string", "minLength": 1, "descripcion": "Id del mensaje del usuario que inicia el ciclo." },
+      "timestamp": { "type": "string", "format": "date-time", "descripcion": "ISO 8601." }
+    }
+  },
+
+  "transiciones_de_significado_eliminadas": [
+    {
+      "campo_polisemico_anterior": "message",
+      "significados_distintos_anteriores": [
+        "En chat.message.saved: texto del usuario.",
+        "En chat.prompt.ready: texto del usuario (mismo).",
+        "En ai.chat.response: texto del LLM (¡distinto!)."
+      ],
+      "resolucion_canonica": "Se elimina 'message' como campo. Se introduce 'user_message' (chat.message.saved, chat.prompt.ready) y 'assistant_message' (ai.chat.response). Sin ambiguedad."
+    },
+    {
+      "campo_polisemico_anterior": "prompt",
+      "significados_distintos_anteriores": [
+        "En chat.message.saved: prompt_id (id de plantilla seleccionada por el usuario).",
+        "En chat.prompt.ready: el systemPrompt construido (string completo).",
+        "En ai.chat.response: el systemPrompt que se envio al LLM (mismo)."
+      ],
+      "resolucion_canonica": "Se elimina 'prompt' como campo. Se introduce 'prompt_id' (chat.message.saved, opcional, id de plantilla) y 'system_prompt' (chat.prompt.ready, ai.chat.response, string completo)."
+    },
+    {
+      "campo_polisemico_anterior": "message_id",
+      "significados_distintos_anteriores": [
+        "En chat.message.saved / chat.prompt.ready: id del mensaje del usuario.",
+        "En ai.chat.response: renombrado a 'message_id_user' para dejar 'message_id' libre — pero 'message_id' nunca se emite. Campo fantasma."
+      ],
+      "resolucion_canonica": "'message_id' siempre refiere al mensaje del usuario que inicia el ciclo. Cuando ai-gateway publica ai.chat.response, AÑADE 'message_id_assistant' (id NUEVO del mensaje del compañero). Sin renombrados ni fantasmas."
+    },
+    {
+      "campo_eliminado": "messages (historial)",
+      "estado_anterior": "Aparecia solo en chat.prompt.ready, se perdia en ai.chat.response.",
+      "resolucion_canonica": "El historial sigue viajando solo en chat.prompt.ready (es input al LLM). NO se reenvia en ai.chat.response (no aporta valor al consumer y aumenta tamaño del payload). Si se necesita auditoria, conversation-export reconstruye el historial desde chat-io persistido."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "chat_flow_json_estructura_valida",
+      "regla": "chat-flow.json valida estructuralmente contra chat-flow.schema.json.",
+      "como_detectar": "AJV strict.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_evento_chat_flow_sin_schema_ref",
+      "regla": "Cualquier modulo que publique o consuma un evento chat_flow declara request_schema_ref / response_schema_ref en su module.json apuntando al schema oficial.",
+      "como_detectar": "Cruzar module.json events.publishes/subscribes con catalogo de eventos chat_flow. Si el modulo declara uno y NO tiene schema_ref, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_publish_chat_flow_no_canonico_en_codigo",
+      "regla": "El payload publicado en codigo cumple el schema canonico (campos obligatorios presentes, sin campos extra fuera del schema).",
+      "como_detectar": "Inspeccionar publishes en codigo con audit modulo-completo (campos_visibles del payload). Cruzar con campos obligatorios del schema. Faltantes o extras = drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_uso_de_campo_polisemico_message",
+      "regla": "Ningun publish de chat_flow usa el campo 'message' (renombrado a user_message o assistant_message). Codigo que aun lo usa es legacy.",
+      "como_detectar": "Regex en codigo: publish chat.* o ai.chat.* con field 'message:' literal en object.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_uso_de_campo_fantasma_message_id_user",
+      "regla": "Ningun publish usa 'message_id_user' (eliminado a favor de 'message_id' + 'message_id_assistant').",
+      "como_detectar": "Regex en codigo: 'message_id_user'.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_ai_chat_failed_sin_codigo_canonico",
+      "regla": "ai.chat.failed.error.code es uno de los codes_infrastructure de errors.json (UPSTREAM_*, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR, etc.).",
+      "como_detectar": "Inspeccionar publishes de ai.chat.failed: error.code debe estar en lista canonica.",
+      "severidad": "error"
+    },
+    {
+      "id": "module_chat_flow_audit_completeness",
+      "regla": "El audit modulo-completo de los modulos del subsistema (chat-io, prompt-builder, ai-gateway, ai-agent-framework) tiene los campos visibles de los publishes detallados.",
+      "como_detectar": "Inspeccionar audit: campos_visibles vacio en publishes chat_flow. Severidad info — apunta a re-auditar.",
+      "severidad": "info"
+    }
+  ],
+
+  "salida_validador": "PASS si chat-flow.json valida estructuralmente Y todos los modulos del subsistema declaran schema_ref correctamente Y el codigo publica payloads conformes. Errores cross-system bloquean PASS — payload chat_flow sin codigo canonico de error es ERROR (rompe garantia no_silent_failures). Warnings son drift visible que no bloquea (campo polisemico aun usado, schema_ref ausente). Info son heuristicas (audit incompleto). Formato coherente con los demas validators del repo: banner PASS/FAIL + findings agrupados por severidad con archivo:linea cuando aplique."
+}

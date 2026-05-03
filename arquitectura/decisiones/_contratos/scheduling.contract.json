@@ -1,0 +1,282 @@
+{
+  "_doc": "Captura LA disciplina de programación de tareas del sistema event-core: cómo un módulo programa trabajo futuro (cron, timers, retries diferidas), qué biblioteca canónica se usa, cómo se gestionan cleanup en onUnload, cómo se aísla el state de scheduling de la lógica de negocio. La regla maestra: cualquier módulo que tenga scheduling lo declara en su lifecycle (registra en onLoad, limpia en onUnload), usa primitivas estándar de Node (setInterval, setTimeout) o node-cron para expresiones cron, y NO crea schedulers globales fuera de su scope. Sin un contrato de scheduling, los timers se filtran (memory leaks por handlers no clearTimeout en unload), los crons se registran fuera del lifecycle del módulo, y los retries diferidos invaden la lógica de negocio.",
+  "id": "scheduling",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Recoge las prácticas dispersas en módulos que ya hacen scheduling: pizzepos/cocina-poc (snapshot-storage timer), pizzepos/comandero, pizzepos/productos (timers), telegram-service (cron polling), pizzepos/carta-impresion (retry timers), carta-scheduler (cron real para activación de cartas por franja horaria). Eleva a contrato transversal autónomo con criterios de cleanup, biblioteca canónica (node-cron para cron expressions), y antipatrones (schedulers globales, polling con setInterval cuando hay events).",
+
+  "objetivo": "Producir UN JSON output (_outputs/scheduling.json) que define: primitivas canónicas (setTimeout, setInterval, node-cron), patrones aceptados (timer dentro del módulo + clearTimeout en onUnload, cron con expresión válida + cron.stop() en onUnload, retry diferido con backoff exponencial), antipatrones (timers globales fuera de lifecycle, polling cuando hay events disponibles, cron con timezone implícito), naming canónico (módulo declara timer/cron en estado_memoria del audit), cleanup obligatorio. Validable mecánicamente cruzando contra audits modulo-completo (estado_memoria.timers + estado_memoria.crons) y contra implementaciones de onUnload (que limpian).",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/scheduling.contract.json (este archivo)",
+      "package.json (dependencia node-cron)",
+      "modules/*/index.js (módulos que usan setTimeout/setInterval/cron)"
+    ],
+    "obligatorios_si_existen": [
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json (estado_memoria.timers, estado_memoria.crons)"
+    ],
+    "opcionales_para_contexto": [],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "PRIMITIVAS NODE PARA TIEMPO RELATIVO. setTimeout para 'una vez en X ms', setInterval para 'cada X ms repetido'. Sin librerías adicionales para esto.",
+
+    "NODE-CRON PARA EXPRESIONES CRON. Cuando se necesita programar por expresión cron (cada lunes a las 9, cada 15 min en horas de oficina, etc.), se usa node-cron (npm). Sin alternativas (cron, node-schedule).",
+
+    "TIMEZONE EXPLÍCITO EN CRONS. Toda expresión cron declara su timezone explícitamente (`{ timezone: 'Europe/Madrid' }`). NO se confía en TZ del proceso (puede variar entre Termux y Linux server, entre development y producción).",
+
+    "TIMER ES STATE DEL MÓDULO. Cualquier setTimeout/setInterval/cron registrado por un módulo es state del módulo. Vive en this.<algo> (this.snapshotTimer, this.cronJob, etc.) — NO es global.",
+
+    "ONUNLOAD LIMPIA TODO. onUnload del módulo invoca clearTimeout / clearInterval / cron.stop() para CADA timer/cron que registró. Sin excepción. Memory leak por timer = drift severo.",
+
+    "DECLARADO EN AUDIT. estado_memoria del audit del módulo lista cada timer/cron con su propósito (este timer hace snapshot cada 5min, este cron activa cartas a las 8am, etc.). El audit refleja state real, no aspirations.",
+
+    "POLLING CUANDO NO HAY EVENTS DISPONIBLES. Si un servicio externo no expone webhooks, polling es válido (telegram polling, gateway-manager health). Si hay events en el bus, polling al bus es drift — suscríbete y ya.",
+
+    "RETRY DIFERIDO ES SCHEDULING TAMBIÉN. Cuando un módulo reintenta una operación tras error con backoff exponencial (1s, 2s, 4s, 8s), eso usa setTimeout. La política de retry vive en resilience.contract; aquí solo se garantiza que los setTimeout se limpian.",
+
+    "JOBS DURABLES NO SON SCHEDULING. Si un módulo necesita 'job que sobrevive a restart del proceso' (procesar pago en 24h aunque el proceso se reinicie), eso es un módulo dedicado de jobs queue (BullMQ, etc.) — NO un setTimeout que se pierde con el proceso.",
+
+    "GRANULARIDAD SUBSEGUNDO ES MAL OLOR. Timers con intervalo < 100ms son señal de polling agresivo o de algoritmo mal diseñado. Repensar el patrón antes de programar timers tan rápidos.",
+
+    "EL SCHEDULER NO ES UN MÓDULO GLOBAL. No hay un módulo `scheduler` que reciba 'register this cron' de otros. Cada módulo gestiona sus propios timers/crons en su scope.",
+
+    "EL EVENTO PROGRAMADO ES UN PUBLISH NORMAL. Cuando un cron dispara, el handler del cron publica un evento canónico al bus (el mismo que cualquier otro handler). El cron es solo el trigger temporal — la lógica vive en el handler que él invoca."
+  ],
+
+  "principios": [
+    {
+      "id": "setimeout_setinterval_para_tiempo_relativo",
+      "regla": "setTimeout / setInterval son las primitivas canónicas para tiempo relativo (X ms desde ahora, cada X ms).",
+      "razon": "Estándar de Node, sin dependencias adicionales."
+    },
+    {
+      "id": "node_cron_para_expresiones_cron",
+      "regla": "Para expresiones cron (a las 8am cada día, cada lunes a las 9, etc.) se usa biblioteca node-cron. Sin alternativas.",
+      "razon": "Una sola biblioteca para cron evita drift de comportamiento (parsing de expresiones, timezone) entre módulos."
+    },
+    {
+      "id": "timezone_explicito",
+      "regla": "Toda expresión cron incluye timezone: cron.schedule(expr, fn, { timezone: 'Europe/Madrid' }). No se confía en process.env.TZ.",
+      "razon": "TZ del proceso varía entre entornos (Termux Android default UTC, Linux server local, container otra). Explícito = comportamiento consistente."
+    },
+    {
+      "id": "timer_es_state_del_modulo",
+      "regla": "Cada setTimeout/setInterval/cron registrado vive en this.<algo> (instancia del módulo). No hay timers en variables globales del módulo.",
+      "razon": "this.<timer> permite que onUnload limpie sin requerir registro adicional."
+    },
+    {
+      "id": "onunload_limpia_todo",
+      "regla": "onUnload invoca clearTimeout / clearInterval / cron.stop() para cada timer/cron registrado. Sin excepción.",
+      "razon": "Sin cleanup, los timers siguen disparando handlers de un módulo descargado, generando errores y memory leaks."
+    },
+    {
+      "id": "declarado_en_audit_estado_memoria",
+      "regla": "El audit modulo-completo del módulo declara en estado_memoria.timers o estado_memoria.crons cada timer/cron con su propósito.",
+      "razon": "Permite auditar: qué timers existen, cuál es su intervalo, cuál es su propósito. Sin declaración, los timers son invisibles."
+    },
+    {
+      "id": "no_polling_al_bus_local",
+      "regla": "Si un módulo necesita reaccionar a eventos del bus, se suscribe (events-driven). NO usa setInterval para preguntar al bus 'hay eventos?'.",
+      "razon": "Bus es push; polling es pull. Polling sobre push desperdicia CPU y añade latencia."
+    },
+    {
+      "id": "polling_externo_si_no_webhooks",
+      "regla": "Si un servicio externo no expone webhooks (ej. Telegram polling), polling con setInterval es válido. Documentar el intervalo elegido.",
+      "razon": "Sin webhooks, polling es la única opción. Lo importante es justificar el intervalo (cada X seg) y limpiarlo en onUnload."
+    },
+    {
+      "id": "no_scheduler_global",
+      "regla": "No hay módulo `scheduler` central que reciba registros de otros módulos. Cada módulo gestiona sus propios timers/crons.",
+      "razon": "Centralizar añade acoplamiento (todos dependen del scheduler) y un punto único de fallo. Distribuido en cada módulo es más simple y aislado."
+    },
+    {
+      "id": "evento_programado_es_publish_normal",
+      "regla": "Cuando un cron/timer dispara, el handler invocado publica un evento canónico al bus. La lógica de dominio vive en el handler que escucha ese evento.",
+      "razon": "Separar trigger (cron) de lógica (handler) permite reusar la lógica desde otros disparadores (manual, otro evento)."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "node_cron_no_alternativas",
+      "decision": "Biblioteca canónica para expresiones cron: node-cron. Otras (cron, node-schedule, agenda) NO se usan.",
+      "alternativa_descartada": "Permitir múltiples bibliotecas según preferencia del módulo.",
+      "razon": "Una sola biblioteca elimina drift de comportamiento (parsing distinto, timezone defaults distintos) entre módulos. node-cron es maintained y suficientemente expresivo."
+    },
+    {
+      "id": "scheduling_distribuido_no_central",
+      "decision": "Cada módulo gestiona sus timers/crons en su scope. No hay scheduler central.",
+      "alternativa_descartada": "Módulo `scheduler` que reciba `scheduler.register(cron, handler)` de otros y dispare events.",
+      "razon": "Central añade acoplamiento (módulos dependen de que scheduler esté cargado) y SPOF. Distribuido aísla cada caso."
+    },
+    {
+      "id": "timezone_explicito_obligatorio",
+      "decision": "Toda expresión cron declara timezone explícitamente.",
+      "alternativa_descartada": "Confiar en process.env.TZ del proceso.",
+      "razon": "TZ del proceso varía entre entornos. Explícito = comportamiento consistente en Termux + Linux server + tests CI."
+    },
+    {
+      "id": "no_polling_al_bus",
+      "decision": "Polling al bus interno está prohibido. Para eventos del bus se usa subscribe.",
+      "alternativa_descartada": "Polling al bus para 'preguntar hay nuevos eventos'.",
+      "razon": "Bus MQTT es push nativo. Polling sobre push desperdicia recursos y rompe el modelo event-driven."
+    },
+    {
+      "id": "polling_externo_permitido_documentado",
+      "decision": "Polling a APIs externas que no exponen webhooks es válido (Telegram, etc.). Documentado en el módulo con intervalo justificado.",
+      "alternativa_descartada": "Prohibir polling categóricamente.",
+      "razon": "Algunas APIs externas no exponen webhooks. Sin polling no se puede integrarlas. Lo importante es que el polling se limpie en onUnload."
+    },
+    {
+      "id": "jobs_durables_son_modulo_separado",
+      "decision": "Si una funcionalidad necesita 'job que sobrevive a restart' (ej. procesar pago en 24h), eso es un módulo dedicado con su storage. NO setTimeout.",
+      "alternativa_descartada": "setTimeout largo (24h) que se pierde con restart del proceso.",
+      "razon": "setTimeout es in-memory; restart pierde el job programado. Para durabilidad real se necesita storage + worker que recupera jobs pendientes al arrancar."
+    },
+    {
+      "id": "granularidad_minima_100ms",
+      "decision": "Timers con intervalo < 100ms son drift (warning). Repensar el patrón antes de programar tan rápido.",
+      "alternativa_descartada": "Permitir cualquier granularidad.",
+      "razon": "< 100ms casi siempre indica polling agresivo o algoritmo mal diseñado. La granularidad subsegundo en Node tiene problemas (event loop saturado, drift de tiempo)."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "timer_global_fuera_de_lifecycle",
+      "regla": "Ningún módulo registra setTimeout/setInterval/cron en variables globales del archivo (module-level let/const). Solo en this.<x> de la instancia.",
+      "enforce": "Validador escanea código de módulos buscando setTimeout/setInterval con asignación a variable global. Severidad warning."
+    },
+    {
+      "id": "onunload_no_limpia",
+      "regla": "Si un módulo registra timers/crons, su onUnload los limpia. Sin clearTimeout/clearInterval/cron.stop, drift.",
+      "enforce": "Validador inspecciona implementaciones: si onLoad tiene setInterval pero onUnload no tiene clearInterval, drift."
+    },
+    {
+      "id": "polling_al_bus",
+      "regla": "Ningún módulo usa setInterval para preguntar al bus por eventos. Eventos del bus se consumen via subscribe.",
+      "enforce": "Auditoría manual. Patrones tipo `setInterval(() => eventBus.publish('check.events'), ...)` son drift."
+    },
+    {
+      "id": "cron_sin_timezone",
+      "regla": "Toda expresión cron incluye timezone explícito. Cron sin timezone = drift.",
+      "enforce": "Validador escanea código buscando `cron.schedule(...)` sin segundo argumento o sin `timezone:` en options. Severidad warning."
+    },
+    {
+      "id": "biblioteca_cron_no_canonica",
+      "regla": "Solo node-cron se usa. Otras bibliotecas (cron, node-schedule, agenda) son drift.",
+      "enforce": "Validador inspecciona package.json.dependencies. Severidad error si encuentra biblioteca alternativa."
+    },
+    {
+      "id": "timer_sub_100ms",
+      "regla": "Ningún setInterval con intervalo < 100ms. Si necesitas mayor frecuencia, repensar el patrón.",
+      "enforce": "Validador escanea código buscando `setInterval(..., <100>)`. Severidad warning."
+    },
+    {
+      "id": "scheduler_global_de_otro_modulo",
+      "regla": "Ningún módulo expone API tipo `scheduler.register(...)` para que otros módulos registren sus crons. Cada módulo gestiona los suyos.",
+      "enforce": "Auditoría manual."
+    },
+    {
+      "id": "jobs_durables_via_settimeout",
+      "regla": "Ningún módulo programa setTimeout > 1 hora para tareas de dominio (esperando que el proceso siga vivo). Si necesita durabilidad, es módulo separado con storage.",
+      "enforce": "Validador escanea código buscando `setTimeout(..., <gran número>)`. Severidad warning si > 3600000 (1h)."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/scheduling.schema.json (a crear). Top-level: _meta, regla_maestra, primitivas_canonicas (object: setTimeout, setInterval, node-cron), patrones_aceptados (array: timer + cleanup, cron + timezone, retry con backoff), patrones_prohibidos (array), naming_en_audit (cómo se declaran timers/crons en estado_memoria), patrones_de_drift.",
+
+  "reglas_de_extraccion": [
+    "1. Validar contrato.",
+    "2. Verificar package.json: node-cron es la única biblioteca de cron en deps.",
+    "3. Escanear módulos buscando setInterval con intervalo < 100ms, setTimeout > 1h, cron sin timezone.",
+    "4. Cruzar audits modulo-completo: si un módulo declara timers en estado_memoria, su onLoad tiene setInterval/setTimeout y su onUnload tiene clearInterval/clearTimeout.",
+    "5. Escanear código buscando timers globales (no en this.) — drift warning.",
+    "6. Escanear bibliotecas alternativas (cron, node-schedule, agenda) — drift error.",
+    "7. Reportar PASS/FAIL."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/scheduling.schema.json (a crear)"
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/scheduling.validate.js (a crear)"
+    },
+    {
+      "tipo": "modulos_consumidores",
+      "items": ["pizzepos/carta-scheduler (cron real para activación de cartas)", "telegram-service (polling)", "pizzepos/cocina-poc (snapshot timer)", "pizzepos/comandero, productos, cuentas-canales (timers)", "carta-impresion (retry timer)"],
+      "regla": "Cada uno cumple el contrato."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección scheduling cuando exista)"
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "scheduling_contract_estructura_valida",
+      "regla": "Amplitud canónica.",
+      "como_detectar": "17 secciones canónicas presentes.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_biblioteca_cron_alternativa",
+      "regla": "Solo node-cron en deps.",
+      "como_detectar": "package.json.dependencies.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_setinterval_subsegundo",
+      "regla": "Ningún setInterval con < 100ms.",
+      "como_detectar": "Regex sobre código.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_settimeout_largo_para_jobs",
+      "regla": "Ningún setTimeout > 1h.",
+      "como_detectar": "Regex sobre código.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_cron_sin_timezone",
+      "regla": "Toda llamada a cron.schedule incluye timezone.",
+      "como_detectar": "Regex sobre código.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_timer_global",
+      "regla": "Timers viven en this.<x>, no en variables globales.",
+      "como_detectar": "Heurística sobre código.",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS si el contrato es válido Y solo node-cron en deps Y no hay timers subsegundo ni setTimeouts mayores a 1h Y los crons declaran timezone. Errors solo para biblioteca alternativa. Warnings para deuda visible.",
+
+  "convenciones_complementarias": {
+    "naming": "Variables que guardan timers/crons en módulos siguen naming convention (camelCase en JS): this.snapshotTimer, this.cronJob, this.pollInterval.",
+    "glossary": "Términos: timer, cron, polling, retry, backoff, jitter. Forma canónica en glossary.json.",
+    "events": "Cuando un cron/timer dispara, el handler publica al bus. La lógica vive en el handler que escucha — no en el cron.",
+    "errors": "Errores en handler de cron/timer se reportan con observability normal y, si aplican, publican event .failed con error.code canónico.",
+    "observability": "Logs cuando un cron arranca / dispara / falla. Métricas: número de ejecuciones, duraciones.",
+    "lifecycle": "onLoad registra timers/crons. onUnload los limpia. Sin excepción. Coherente con lifecycle.contract.",
+    "persistence": "Timers/crons NO son persistencia. Estado durable vive en módulos persistentes.",
+    "http": "No aplica directamente.",
+    "security": "Crons no acceden a secretos sin pasar por credential-manager.",
+    "frontend": "El frontend no programa crons. Si necesita tarea programada, lo hace el backend y el frontend recibe el resultado via bus.",
+    "testing": "Tests pueden mockear setTimeout/setInterval con `jest.useFakeTimers()` equivalente — pero como no usamos jest, lo hacemos via inyección manual del clock.",
+    "multi-tenancy": "Si un cron itera sobre proyectos, publica N eventos hijos uno por project_id, no opera 'cross-tenant'. Coherente con multi-tenancy.contract.no_modo_admin_global.",
+    "documentation": "Cron expressions complejas se documentan inline (`'0 8 * * 1-5'  // cada día laborable 8am`).",
+    "versionado": "node-cron tiene su semver propio en package.json.",
+    "deployment": "Crons solo corren cuando el proceso está vivo. Si el proceso se cae, los disparos durante el downtime se pierden (a menos que sea jobs durables — ver decisiones_arquitectonicas).",
+    "module-loading": "Cargar un módulo con cron requiere que ese módulo esté en su lifecycle correctamente (onLoad registra, onUnload limpia).",
+    "bus-transport": "Crons publican via this.eventBus.publish. Coherente con bus-transport.contract.transporte_opaco_para_modulos."
+  }
+}

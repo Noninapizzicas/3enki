@@ -383,7 +383,7 @@ class AiGatewayModule {
 
     const maxIterations = this.config.max_tool_iterations || 10;
     let result, iteration = 0;
-    let totalTokens = 0, totalCost = 0;
+    let totalInput = 0, totalOutput = 0, totalCost = 0;
     const allToolResults = [];
 
     while (iteration < maxIterations) {
@@ -392,8 +392,9 @@ class AiGatewayModule {
         () => provider.chatCompletion(workingMessages, chatOptions),
         chatOptions.retryConfig
       );
-      totalTokens += result.usage?.total_tokens || 0;
-      totalCost += result.cost || 0;
+      totalInput  += result.usage?.input_tokens  || 0;
+      totalOutput += result.usage?.output_tokens || 0;
+      totalCost   += result.cost || 0;
 
       if (!result.tool_calls || result.tool_calls.length === 0) break;
 
@@ -431,10 +432,11 @@ class AiGatewayModule {
       content: result?.content || '',
       tool_calls_executed: allToolResults,
       iterations: iteration,
-      tokens: totalTokens,
+      tokens: { input: totalInput, output: totalOutput, total: totalInput + totalOutput },
       cost: totalCost,
       model: result?.model,
-      provider: providerNameUsed
+      provider: providerNameUsed,
+      finish_reason: result?.finish_reason
     };
   }
 
@@ -444,21 +446,49 @@ class AiGatewayModule {
 
   async onChatPromptReady(event) {
     const data = event.data || event;
-    const {
-      project_id, page_id, conversation_id,
-      context, settings, prompt: systemPrompt,
-      attachments, intencion, message, messages,
-      message_id
-    } = data;
 
-    if (!project_id || !conversation_id) return;
+    // Shape canonico (chat-flow v1.0.0): system_prompt + messages.
+    // Shape legacy (transitorio): prompt + message singular + context.
+    // Aceptamos ambos con warn legacy hasta que prompt-builder/chat-io esten 100% migrados.
+    const isLegacy = (data.system_prompt === undefined) && (data.prompt !== undefined || data.message !== undefined);
+    if (isLegacy) {
+      this.logger.warn('ai-gateway.onChatPromptReady.shape_legacy', {
+        conversation_id: data.conversation_id,
+        message_id: data.message_id
+      });
+    }
 
-    const tools = this._getTools(page_id);
-    const history = Array.isArray(messages) ? messages : [{ role: 'user', content: message }];
+    const correlation_id  = data.correlation_id;
+    const conversation_id = data.conversation_id;
+    const project_id      = data.project_id ?? null;
+    const user_id         = data.user_id || 'default';
+    const channel         = data.channel || 'web';
+    const channel_context = data.channel_context || {};
+    const message_id      = data.message_id;
+    const page_id         = data.page_id;
+    const settings        = data.settings;
+    const attachments     = data.attachments;
+    const intencion       = data.intencion ?? null;
+    const tools_disponibles = data.tools_disponibles;
+    const systemPrompt    = data.system_prompt ?? data.prompt ?? '';
+    const history = Array.isArray(data.messages)
+      ? data.messages
+      : (data.message ? [{ role: 'user', content: data.message }] : []);
 
-    let llmResult;
+    if (!conversation_id || !message_id) {
+      this.logger.warn('ai-gateway.onChatPromptReady.invalid_payload', { conversation_id, message_id });
+      return;
+    }
+
+    const tools = tools_disponibles && tools_disponibles.length > 0
+      ? tools_disponibles
+      : this._getTools(page_id);
+
+    const startedAt = Date.now();
+    let providerAttempted = null;
+
     try {
-      llmResult = await this._executeLLM({
+      const llmResult = await this._executeLLM({
         system: systemPrompt,
         messages: history,
         tools,
@@ -467,33 +497,95 @@ class AiGatewayModule {
         project_id,
         conversation_id,
         page_id,
-        context,
+        context: data.context,
         prompt: systemPrompt,
         intencion
       });
+      providerAttempted = llmResult.provider || null;
+
+      const payload = {
+        correlation_id:       correlation_id || crypto.randomUUID(),
+        conversation_id,
+        project_id,
+        user_id,
+        channel,
+        channel_context,
+        message_id,
+        message_id_assistant: crypto.randomUUID(),
+        assistant_message:    llmResult.content || '',
+        model:                llmResult.model || 'unknown',
+        provider:             llmResult.provider || 'unknown',
+        tokens:               llmResult.tokens,
+        duration_ms:          Date.now() - startedAt,
+        timestamp:            new Date().toISOString()
+      };
+      if (Array.isArray(llmResult.tool_calls_executed) && llmResult.tool_calls_executed.length > 0) {
+        payload.tool_calls_executed = llmResult.tool_calls_executed
+          .map(t => ({
+            name:          t.name,
+            args:          (typeof t.args === 'object' && t.args !== null) ? t.args : {},
+            result_status: t.status === 'success' ? 'ok' : (t.status === 'timeout' ? 'timeout' : 'error'),
+            ...(t.duration_ms !== undefined ? { duration_ms: t.duration_ms } : {}),
+            ...(t.error ? { error_code: 'INTERNAL_ERROR' } : {})
+          }));
+      }
+      if (typeof llmResult.iterations === 'number' && llmResult.iterations >= 1) {
+        payload.iterations = llmResult.iterations;
+      }
+      if (typeof llmResult.cost === 'number' && llmResult.cost > 0) {
+        payload.cost = { amount: llmResult.cost, currency: 'USD' };
+      }
+      if (llmResult.finish_reason) payload.finish_reason = llmResult.finish_reason;
+
+      await this.eventBus.publish('ai.chat.response', payload);
     } catch (err) {
-      this.logger.error('ai-gateway.chat.failed', { error: err.message, conversation_id });
-      llmResult = { content: `Error: ${err.message}`, tool_calls_executed: [], iterations: 0, tokens: 0, cost: 0 };
+      const error = this._classifyError(err);
+      this.logger.error('ai-gateway.chat.failed', { code: error.code, error: error.message, conversation_id, message_id });
+
+      await this.eventBus.publish('ai.chat.failed', {
+        correlation_id: correlation_id || crypto.randomUUID(),
+        conversation_id,
+        user_id,
+        channel,
+        channel_context,
+        message_id,
+        error,
+        timestamp: new Date().toISOString(),
+        ...(project_id !== null ? { project_id } : {}),
+        duration_ms: Date.now() - startedAt,
+        provider_attempted: providerAttempted
+      });
+    }
+  }
+
+  // ============================================================
+  // Clasificacion canonica de errores LLM/credenciales/red
+  // ============================================================
+
+  _classifyError(err) {
+    const raw = (err && err.message) ? String(err.message) : 'unknown error';
+    const lower = raw.toLowerCase();
+
+    let code = 'INTERNAL_ERROR';
+    if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) {
+      code = 'CREDENTIAL_NOT_FOUND';
+    } else if (/no hay providers? disponibles?|no providers available/i.test(raw)) {
+      code = 'CREDENTIAL_NOT_FOUND';
+    } else if (lower.includes('timeout') || lower.includes('etimedout')) {
+      code = 'UPSTREAM_TIMEOUT';
+    } else if (/429|rate.?limit/.test(lower)) {
+      code = 'UPSTREAM_RATE_LIMITED';
+    } else if (/401|403|unauthorized|forbidden|invalid api key/.test(lower)) {
+      code = 'UPSTREAM_AUTH_FAILED';
+    } else if (/5\d\d|internal server error|bad gateway|service unavailable/.test(lower)) {
+      code = 'UPSTREAM_5XX';
+    } else if (/econnrefused|enotfound|network|unreachable|fetch failed/.test(lower)) {
+      code = 'UPSTREAM_UNREACHABLE';
+    } else if (/invalid response|malformed|parse|unexpected token/.test(lower)) {
+      code = 'UPSTREAM_INVALID_RESPONSE';
     }
 
-    await this.eventBus.publish('ai.chat.response', {
-      project_id,
-      page_id,
-      conversation_id,
-      context: context || {},
-      settings,
-      prompt: systemPrompt,
-      attachments: attachments || [],
-      intencion: intencion ?? null,
-      message: llmResult.content,
-      message_id_user: message_id,
-      tool_calls_executed: llmResult.tool_calls_executed,
-      iterations: llmResult.iterations,
-      tokens: llmResult.tokens,
-      cost: llmResult.cost,
-      model: llmResult.model,
-      provider: llmResult.provider
-    });
+    return { code, message: raw, details: {} };
   }
 
   // ============================================================

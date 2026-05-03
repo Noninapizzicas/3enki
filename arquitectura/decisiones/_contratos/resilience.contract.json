@@ -144,6 +144,36 @@
       "decision": "Política de retry se configura en module.json.config.retry. NO en código del módulo.",
       "alternativa_descartada": "Configuración hardcoded en el código.",
       "razon": "Configuración en manifest permite ajustar por entorno (development con max_attempts=1 para fail-fast en tests; production con max_attempts=3) sin tocar código."
+    },
+    {
+      "id": "fail_fast_para_tests_max_attempts_1",
+      "decision": "En tests (process.env.NODE_ENV === 'test') la política override max_attempts=1 (sin retries) para que tests fallen rápido en lugar de esperar backoff completo.",
+      "alternativa_descartada": "Tests con misma política que producción.",
+      "razon": "Tests con retry+backoff tardan minutos cuando una operación está mal configurada. max_attempts=1 hace que el test falle en segundos con el primer error real, acelerando feedback en CI."
+    },
+    {
+      "id": "circuit_breaker_solo_para_upstreams_inestables",
+      "decision": "Circuit breaker NO es default. Se introduce solo en módulos que llaman upstreams con histórico de inestabilidad (rate-limits frecuentes, caídas regulares).",
+      "alternativa_descartada": "Circuit breaker obligatorio en todos los módulos con upstreams.",
+      "razon": "Circuit breaker añade complejidad (state machine open/half-open/closed, configuración de N y M, métricas adicionales). Para upstreams normalmente fiables, withRetry simple cubre. Introducir circuit breaker es decisión consciente cuando los datos lo justifican."
+    },
+    {
+      "id": "graceful_degradation_devuelve_failed_explicito",
+      "decision": "Cuando una dependencia no está disponible y el módulo no puede operar, publica .failed con código canónico (UPSTREAM_UNREACHABLE, BROKER_DISCONNECTED, etc.). NO devuelve cached value silente ni default que oculta la situación.",
+      "alternativa_descartada": "Devolver cached/default silenciosamente para que el caller no se entere de que la dependencia está caída.",
+      "razon": "Degradación silente engaña al caller — cree que la operación funcionó cuando en realidad respondió con datos viejos o default. .failed explícito permite que el caller decida (mostrar error al usuario, retry manual, etc.)."
+    },
+    {
+      "id": "retry_state_no_persiste_entre_invocaciones",
+      "decision": "El state del retry (cuántos intentos llevamos, último error) vive en variables locales de la función withRetry. NO persiste en this.<x> ni en storage.",
+      "alternativa_descartada": "Persistir state de retry para reanudar tras restart del proceso.",
+      "razon": "Persistir retry state contradice fire-and-forget de events. Si el proceso se cae durante un retry, el evento se pierde de todos modos (QoS 1 sin persistencia). Reanudar añade complejidad sin valor en single-process."
+    },
+    {
+      "id": "timeout_propagado_al_caller",
+      "regla": "Cuando un módulo agota retries por timeout, el .failed publicado incluye duration_ms total y error.code=UPSTREAM_TIMEOUT. El caller puede decidir reintentar con timeout más largo o abortar.",
+      "alternativa_descartada": "Reportar solo 'failed' sin detalle de cuánto tardó.",
+      "razon": "duration_ms en .failed permite al caller distinguir 'timeout corto' (red intermitente, retry razonable) de 'timeout largo total' (upstream realmente caído, no reintentar)."
     }
   ],
 
@@ -255,6 +285,42 @@
       "regla": "Cuando se agotan los intentos, el módulo publica .failed canónico.",
       "como_detectar": "Heurística sobre código.",
       "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_con_retry_sin_config_en_module_json",
+      "regla": "Módulos que usan withRetry declaran su política en module.json.config.retry (max_attempts, initial_delay_ms, etc.).",
+      "como_detectar": "Inspeccionar módulos con withRetry en código y verificar module.json.config.retry presente.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_default_silencioso_en_dependencia_caida",
+      "regla": "Cuando una dependencia falla, el módulo publica .failed (no devuelve cached/default silente).",
+      "como_detectar": "Heurística manual: try/catch alrededor de upstream calls donde el catch hace return de valor por defecto sin publish.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_circuit_breaker_state_en_variable_global",
+      "regla": "Si un módulo implementa circuit breaker, el state vive en this.<x> (instancia). NO en variables module-level.",
+      "como_detectar": "Heurística sobre código: variables let con keywords circuitState/breakerOpen/etc.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_retry_state_persistido",
+      "regla": "Ningún módulo persiste state de retry (intentos llevados, último error) en disco/SQLite.",
+      "como_detectar": "Auditoría manual.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_failed_sin_duration_ms",
+      "regla": "Eventos .failed publicados al agotar retries incluyen duration_ms total.",
+      "como_detectar": "Inspeccionar audits: campos_visibles del publish .failed debe incluir duration_ms.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_modulo_con_retry_pero_sin_provider_attempted_en_failed",
+      "regla": "Eventos .failed publicados tras retry incluyen provider_attempted (cuál upstream se intentó al fallar).",
+      "como_detectar": "Inspeccionar audits.",
+      "severidad": "info"
     }
   ],
 

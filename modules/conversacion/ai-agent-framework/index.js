@@ -154,57 +154,112 @@ class AiAgentFrameworkModule {
 
   // ============================================================
   // Handler: invoke_agent (publicado por ai-gateway durante agentic loop del LLM)
+  // Mantiene shape legacy — invoke_agent.response es el contrato propio del
+  // ai-gateway tool flow, NO un evento agent_flow. Si en el futuro se canoniza,
+  // sera migracion separada.
   // ============================================================
 
   async onInvokeAgent(event) {
-    return this._runAgent(event, 'invoke_agent.response');
+    return this._runAgentLegacy(event);
   }
 
   // ============================================================
-  // Handler: agent.execute.request (publicado por módulos del dominio)
+  // Handler: agent.execute.request (CANONICO agent-flow v1.0.0)
   //
-  // Mismo flujo que onInvokeAgent. Cambia el evento de respuesta y permite
-  // que módulos como menu-generator, carta-digital, carta-impresion, etc.
-  // disparen agentes desde su lógica event-driven (no solo desde el LLM).
+  // Acepta payload canonico segun arquitectura/decisiones/_schemas/agent-flow/
+  // agent.execute.request.schema.json. Compat transitoria con shape legacy
+  // (alias agentName) con warn shape_legacy.
+  //
+  // En SUCCESS: publica agent.execute.response canonico (result aplanado;
+  // result.agent y result.tool_calls_executed se mantienen DUPLICADAMENTE
+  // dentro de result para compat transitoria con consumers legacy — pizzepos
+  // modules — hasta que se migren).
+  //
+  // En ERROR: publica agent.execute.failed canonico (NO inyecta error en
+  // agent.execute.response). Cumple no_silent_failures.
   // ============================================================
 
   async onAgentExecuteRequest(event) {
-    return this._runAgent(event, 'agent.execute.response');
-  }
-
-  // ============================================================
-  // Helper común — ejecuta un agente y devuelve el resultado al evento dado
-  //
-  // Acepta payload:
-  //   - request_id (obligatorio)
-  //   - agent_name | agentName (obligatorio, soporta ambos por compat)
-  //   - task (obligatorio)
-  //   - context (opcional, objeto)
-  //   - session_id (opcional, para sesiones persistentes futuras)
-  //   - prev_state (opcional, estado de turno anterior — futuro)
-  //   - conversation_id (opcional, para inyectar mensaje del agente — futuro)
-  // ============================================================
-
-  async _runAgent(event, responseEventName) {
     const data = event.data || event;
-    const request_id = data.request_id;
-    const agent_name = data.agent_name || data.agentName;
-    const task = data.task;
-    const context = data.context || {};
-    // Cimentaciones para visión futura — hoy se preservan tal cual, se devuelven en la respuesta
-    const session_id = data.session_id ?? null;
-    const prev_state = data.prev_state ?? null;
-    const conversation_id = data.conversation_id ?? context.conversation_id ?? null;
 
-    const agent = this.agents.get(agent_name);
-    if (!agent) {
-      return this.eventBus.publish(responseEventName, {
-        request_id, session_id,
-        error: `Agente '${agent_name}' no encontrado`
+    // Compat transitoria: alias 'agentName' (camelCase) en vez del canonico 'agent_name'.
+    if (data.agentName !== undefined && data.agent_name === undefined) {
+      this.logger.warn('ai-agent-framework.onAgentExecuteRequest.shape_legacy', {
+        reason: "caller usa 'agentName' (camelCase) en vez de 'agent_name' (snake_case canonico) — drift agent-flow",
+        request_id: data.request_id
       });
     }
 
-    // Construir el system prompt del agente
+    const correlation_id  = data.correlation_id || crypto.randomUUID();
+    const request_id      = data.request_id;
+    const agent_name      = data.agent_name || data.agentName;
+    const user_id         = data.user_id || 'default';
+    const project_id      = data.project_id ?? null;
+    const conversation_id = data.conversation_id ?? data.context?.conversation_id ?? null;
+    const channel         = data.channel;
+    const channel_context = data.channel_context;
+    const task            = data.task;
+    const context         = data.context || {};
+    const settings        = data.settings || {};
+    const session_id      = data.session_id ?? null;
+    const prev_state      = data.prev_state ?? null;
+
+    const startedAt = Date.now();
+    const baseEnvelope = {
+      correlation_id, request_id, user_id, agent_name,
+      conversation_id, project_id, channel, channel_context, startedAt
+    };
+
+    if (!request_id) {
+      this.logger.warn('ai-agent-framework.onAgentExecuteRequest.invalid_payload', {
+        reason: 'request_id obligatorio'
+      });
+      return;
+    }
+    if (!agent_name) {
+      return this._publishAgentExecuteFailed({
+        ...baseEnvelope,
+        error: { code: 'AGENT_INPUT_INVALID', message: 'agent_name obligatorio' },
+        iterations_completed: 0,
+        provider_attempted: null
+      });
+    }
+
+    const agent = this.agents.get(agent_name);
+    if (!agent) {
+      return this._publishAgentExecuteFailed({
+        ...baseEnvelope,
+        error: { code: 'AGENT_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` },
+        iterations_completed: 0,
+        provider_attempted: null
+      });
+    }
+
+    // Validar al menos task O context (anyOf del schema)
+    if (!task && (!context || Object.keys(context).length === 0)) {
+      return this._publishAgentExecuteFailed({
+        ...baseEnvelope,
+        error: { code: 'AGENT_INPUT_INVALID', message: 'Debe proporcionar task o context' },
+        iterations_completed: 0,
+        provider_attempted: null
+      });
+    }
+
+    return this._dispatchToLlm({
+      ...baseEnvelope,
+      shape: 'canonical',
+      agent, task, context, session_id, prev_state, settings
+    });
+  }
+
+  // ============================================================
+  // Internals: dispatch comun al ai-gateway
+  // ============================================================
+
+  async _dispatchToLlm(ctx) {
+    const { agent, task, context, session_id, prev_state, settings } = ctx;
+
+    // System prompt
     const sections = [];
     if (this.basePromptText) sections.push(this.basePromptText);
     if (agent.prompt_text) sections.push(agent.prompt_text);
@@ -214,106 +269,262 @@ class AiAgentFrameworkModule {
     sections.push('CONTEXTO ENTREGADO:\n' + JSON.stringify(ctxToInject, null, 2));
     const system = sections.join('\n\n---\n\n');
 
-    // Tools del agente: filtramos del moduleLoader las que el agente declara
+    // Tools del agente
     const allTools = this.moduleLoader?.getToolsForAI?.() || [];
     const toolsForAgent = agent.tools.length > 0
       ? allTools.filter(t => agent.tools.includes(t.name))
       : [];
 
-    // Pedimos al ai-gateway que ejecute la completion
     const llm_request_id = crypto.randomUUID();
+    const timeout_ms = settings?.timeout_ms || agent.timeout_ms;
+
     const timeout = setTimeout(() => {
       const pending = this.pendingLlm.get(llm_request_id);
       if (!pending) return;
       this.pendingLlm.delete(llm_request_id);
-      this.eventBus.publish(responseEventName, {
-        request_id, session_id,
-        error: `Timeout esperando agente ${agent_name} (${agent.timeout_ms}ms)`
-      });
-    }, agent.timeout_ms);
+      if (pending.shape === 'canonical') {
+        this._publishAgentExecuteFailed({
+          ...pending,
+          error: { code: 'AGENT_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` },
+          iterations_completed: 0,
+          provider_attempted: null
+        });
+      } else {
+        this.eventBus.publish(pending.response_event, {
+          request_id: pending.original_request_id, session_id: pending.session_id,
+          error: { code: 'AGENT_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` }
+        });
+      }
+    }, timeout_ms);
 
     this.pendingLlm.set(llm_request_id, {
-      original_request_id: request_id,
-      response_event: responseEventName,
-      agent_name,
+      ...ctx,
+      original_request_id: ctx.request_id,
       session_id,
-      conversation_id
+      timeout
     });
-    // Guardamos timeout aparte para no perder la referencia
-    this.pendingLlm.get(llm_request_id).timeout = timeout;
 
     await this.eventBus.publish('llm.complete.request', {
       request_id: llm_request_id,
       system,
-      messages: [{ role: 'user', content: task }],
+      messages: [{ role: 'user', content: task || '' }],
       tools: toolsForAgent,
-      settings: { temperature: agent.temperature, max_tokens: agent.max_tokens },
+      settings: {
+        temperature: settings?.temperature ?? agent.temperature,
+        max_tokens:  settings?.max_tokens  ?? agent.max_tokens,
+        ...(settings?.model || agent.model ? { model: settings?.model || agent.model } : {})
+      },
       attachments: [],
-      project_id: context.project_id || null,
-      conversation_id,
+      project_id: ctx.project_id ?? context?.project_id ?? null,
+      conversation_id: ctx.conversation_id,
       page_id: null,
-      provider: agent.provider
+      provider: settings?.provider || agent.provider
+    });
+  }
+
+  // ============================================================
+  // Legacy invoke_agent path (NO migrado — shape propio del LLM tool flow)
+  // ============================================================
+
+  async _runAgentLegacy(event) {
+    const data = event.data || event;
+    const request_id = data.request_id;
+    const agent_name = data.agent_name || data.agentName;
+    const task = data.task;
+    const context = data.context || {};
+    const session_id = data.session_id ?? null;
+    const prev_state = data.prev_state ?? null;
+    const conversation_id = data.conversation_id ?? context.conversation_id ?? null;
+
+    const agent = this.agents.get(agent_name);
+    if (!agent) {
+      return this.eventBus.publish('invoke_agent.response', {
+        request_id, session_id,
+        error: { code: 'AGENT_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` }
+      });
+    }
+
+    return this._dispatchToLlm({
+      shape: 'legacy',
+      response_event: 'invoke_agent.response',
+      original_request_id: request_id,
+      request_id,
+      agent_name,
+      agent,
+      task, context,
+      session_id, prev_state,
+      conversation_id,
+      project_id: context.project_id || null,
+      settings: {}
     });
   }
 
   // ============================================================
   // Handler: llm.complete.response
-  //
-  // Despacha la respuesta del LLM al evento original (invoke_agent.response
-  // o agent.execute.response) según haya sido el origen.
+  // Despacha al shape canonico (agent.execute.response/failed) o al legacy
+  // (invoke_agent.response) segun pending.shape.
   // ============================================================
 
   async onLlmCompleteResponse(event) {
     const data = event.data || event;
-    const { request_id, success, error, content, tool_calls_executed } = data;
+    const { request_id, success, error, content, tool_calls_executed, model, provider, usage } = data;
 
     const pending = this.pendingLlm.get(request_id);
     if (!pending) return;
     clearTimeout(pending.timeout);
     this.pendingLlm.delete(request_id);
 
-    const basePayload = {
-      request_id: pending.original_request_id,
-      session_id: pending.session_id,
-      // Cimentaciones futuras — hoy fijas
-      next_state: null,
-      should_continue: false
-    };
-
-    if (!success) {
-      return this.eventBus.publish(pending.response_event, {
-        ...basePayload,
-        error: error || 'agent execution failed'
+    if (pending.shape === 'canonical') {
+      const duration_ms = Date.now() - pending.startedAt;
+      if (!success) {
+        return this._publishAgentExecuteFailed({
+          ...pending,
+          error: this._classifyLlmError(error || 'agent execution failed'),
+          duration_ms,
+          iterations_completed: 0,
+          provider_attempted: provider || null
+        });
+      }
+      return this._publishAgentExecuteResponse({
+        ...pending,
+        content,
+        tool_calls_executed: tool_calls_executed || [],
+        model, provider, usage,
+        duration_ms
       });
     }
 
-    // Inyectar mensaje del agente en la conversación si se nos dio conversation_id
-    // (Cimentación para Fase 8 — chat multi-participante. Hoy conversation_id casi siempre es null.)
-    if (pending.conversation_id) {
+    // Legacy invoke_agent.response (shape propio)
+    if (!success) {
+      const errObj = (typeof error === 'object' && error !== null)
+        ? error
+        : this._classifyLlmError(error || 'agent execution failed');
+      return this.eventBus.publish('invoke_agent.response', {
+        request_id: pending.original_request_id,
+        session_id: pending.session_id,
+        next_state: null, should_continue: false,
+        error: errObj
+      });
+    }
+    return this.eventBus.publish('invoke_agent.response', {
+      request_id: pending.original_request_id,
+      session_id: pending.session_id,
+      next_state: null, should_continue: false,
+      result: { agent: pending.agent_name, content, tool_calls_executed: tool_calls_executed || [] }
+    });
+  }
+
+  // ============================================================
+  // Publishers canonicos agent-flow
+  // ============================================================
+
+  async _publishAgentExecuteResponse(ctx) {
+    const tool_calls = ctx.tool_calls_executed || [];
+    const payload = {
+      correlation_id: ctx.correlation_id,
+      request_id:     ctx.original_request_id,
+      user_id:        ctx.user_id,
+      agent_name:     ctx.agent_name,
+      result: {
+        content: ctx.content || '',
+        // COMPAT TRANSITORIA: legacy consumers (pizzepos modules) leen
+        // result.agent y result.tool_calls_executed. Se elimina cuando los
+        // consumers migren al shape canonico (root-level agent_name + root
+        // tool_calls_executed).
+        agent: ctx.agent_name,
+        tool_calls_executed: tool_calls
+      },
+      duration_ms: ctx.duration_ms,
+      timestamp:   new Date().toISOString(),
+      tool_calls_executed: tool_calls,
+      next_state:  null,
+      should_continue: false
+    };
+    if (ctx.conversation_id) payload.conversation_id = ctx.conversation_id;
+    if (ctx.project_id !== null && ctx.project_id !== undefined) payload.project_id = ctx.project_id;
+    if (ctx.channel)         payload.channel = ctx.channel;
+    if (ctx.channel_context) payload.channel_context = ctx.channel_context;
+    if (ctx.model)           payload.model = ctx.model;
+    if (ctx.provider)        payload.provider = ctx.provider;
+    if (ctx.usage) payload.tokens = {
+      input:  ctx.usage.input_tokens  || 0,
+      output: ctx.usage.output_tokens || 0,
+      total:  ctx.usage.total_tokens  || ((ctx.usage.input_tokens || 0) + (ctx.usage.output_tokens || 0))
+    };
+
+    // Inyectar como mensaje en la conversacion si aplica (chat multi-participante).
+    // Usa shape CANONICO de chat-flow (no el legacy con role/content).
+    if (ctx.conversation_id) {
       try {
         await this.eventBus.publish('chat.assistant.saved', {
-          conversation_id: pending.conversation_id,
-          role: 'agent',
-          content,
-          metadata: {
-            author: { kind: 'agent', id: pending.agent_name, name: pending.agent_name },
-            block: { type: 'agent_intervention', title: pending.agent_name, status: 'closed' },
-            tool_calls: tool_calls_executed || []
-          }
+          correlation_id: ctx.correlation_id,
+          project_id:     ctx.project_id ?? null,
+          conversation_id: ctx.conversation_id,
+          message_id:     crypto.randomUUID(),
+          assistant_message: ctx.content || '',
+          metadata: JSON.stringify({
+            author: { kind: 'agent', id: ctx.agent_name, name: ctx.agent_name },
+            block:  { type: 'agent_intervention', title: ctx.agent_name, status: 'closed' },
+            tool_calls: tool_calls
+          })
         });
       } catch (err) {
-        this.logger?.warn?.('agent.message.publish.failed', { error: err.message, agent: pending.agent_name });
+        this.logger?.warn?.('ai-agent-framework.chat.assistant.saved.publish.failed', {
+          error: err.message, agent: ctx.agent_name
+        });
       }
     }
 
-    return this.eventBus.publish(pending.response_event, {
-      ...basePayload,
-      result: {
-        agent: pending.agent_name,
-        content,
-        tool_calls_executed: tool_calls_executed || []
-      }
+    return this.eventBus.publish('agent.execute.response', payload);
+  }
+
+  async _publishAgentExecuteFailed(ctx) {
+    this.logger.error('ai-agent-framework.agent.failed', {
+      correlation_id: ctx.correlation_id,
+      request_id:     ctx.original_request_id || ctx.request_id,
+      agent_name:     ctx.agent_name,
+      code:           ctx.error.code,
+      message:        ctx.error.message
     });
+    const payload = {
+      correlation_id: ctx.correlation_id,
+      request_id:     ctx.original_request_id || ctx.request_id,
+      user_id:        ctx.user_id || 'default',
+      agent_name:     ctx.agent_name || 'unknown',
+      error:          ctx.error,
+      timestamp:      new Date().toISOString()
+    };
+    if (ctx.conversation_id) payload.conversation_id = ctx.conversation_id;
+    if (ctx.project_id !== null && ctx.project_id !== undefined) payload.project_id = ctx.project_id;
+    if (ctx.channel)         payload.channel = ctx.channel;
+    if (ctx.channel_context) payload.channel_context = ctx.channel_context;
+    if (typeof ctx.duration_ms === 'number') payload.duration_ms = ctx.duration_ms;
+    else if (ctx.startedAt)  payload.duration_ms = Date.now() - ctx.startedAt;
+    if (typeof ctx.iterations_completed === 'number') payload.iterations_completed = ctx.iterations_completed;
+    if ('provider_attempted' in ctx) payload.provider_attempted = ctx.provider_attempted;
+
+    return this.eventBus.publish('agent.execute.failed', payload);
+  }
+
+  // ============================================================
+  // Clasificacion canonica de errores LLM (heredada de ai-gateway)
+  // ============================================================
+
+  _classifyLlmError(rawMessage) {
+    const raw = (rawMessage && typeof rawMessage === 'string') ? rawMessage : 'unknown error';
+    const lower = raw.toLowerCase();
+
+    let code = 'INTERNAL_ERROR';
+    if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) code = 'CREDENTIAL_NOT_FOUND';
+    else if (/no hay providers? disponibles?|no providers available/i.test(raw)) code = 'CREDENTIAL_NOT_FOUND';
+    else if (lower.includes('timeout') || lower.includes('etimedout')) code = 'UPSTREAM_TIMEOUT';
+    else if (/429|rate.?limit/.test(lower)) code = 'UPSTREAM_RATE_LIMITED';
+    else if (/401|403|unauthorized|forbidden|invalid api key/.test(lower)) code = 'UPSTREAM_AUTH_FAILED';
+    else if (/5\d\d|internal server error|bad gateway|service unavailable/.test(lower)) code = 'UPSTREAM_5XX';
+    else if (/econnrefused|enotfound|network|unreachable|fetch failed/.test(lower)) code = 'UPSTREAM_UNREACHABLE';
+    else if (/invalid response|malformed|parse|unexpected token/.test(lower)) code = 'UPSTREAM_INVALID_RESPONSE';
+
+    return { code, message: raw, details: {} };
   }
 }
 

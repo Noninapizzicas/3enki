@@ -342,8 +342,11 @@ class AiGatewayModule {
         if (data.request_id !== request_id) return;
         clearTimeout(timeout);
         if (unsub) unsub();
-        if (data.error) reject(new Error(data.error));
-        else resolve(data.result);
+        if (data.error) {
+          // El error puede venir como string (legacy) o como { code, message } (canonico).
+          const msg = (typeof data.error === 'object' && data.error !== null) ? data.error.message : data.error;
+          reject(new Error(msg));
+        } else resolve(data.result);
       });
       this.eventBus.publish(toolName, { request_id, ...enrichedArgs });
     });

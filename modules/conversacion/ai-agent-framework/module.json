@@ -5,19 +5,31 @@
   "author": "Event Core Team",
   "language": "en",
   "publishes": [
+    {
+      "event": "agent.execute.response",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.response.schema.json",
+      "description": "Agente termino exitosamente. Result aplanado a nivel raiz; agent.execute.failed maneja errores."
+    },
+    {
+      "event": "agent.execute.failed",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.failed.schema.json",
+      "description": "Cierre canonico en error (agente no encontrado, timeout, input invalido, error LLM upstream). Sin esto los flujos de agentes quedan colgados — viola garantia no_silent_failures."
+    },
     "invoke_agent.response",
-    "agent.execute.response",
     "chat.assistant.saved",
     "llm.complete.request"
   ],
   "subscribes": [
     {
       "event": "invoke_agent",
-      "handler": "onInvokeAgent"
+      "handler": "onInvokeAgent",
+      "description": "Tool del LLM (agentic loop de ai-gateway). Mantiene shape propio del invoke_agent flow — NO es evento agent_flow canonico."
     },
     {
       "event": "agent.execute.request",
-      "handler": "onAgentExecuteRequest"
+      "handler": "onAgentExecuteRequest",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
+      "description": "Entry point canonico para invocar agentes desde modulos del dominio, scheduler/cron, etc."
     },
     {
       "event": "llm.complete.response",

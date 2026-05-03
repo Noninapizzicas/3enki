@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-05-03T09:56:21.612Z",
-  "total": 2835,
+  "generated_at": "2026-05-03T10:32:22.310Z",
+  "total": 2838,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
     "events": 205,
     "lifecycle": 59,
     "observability": 273,
-    "errors": 1867,
+    "errors": 1866,
     "persistence": 193,
     "http": 191,
     "chat-flow": 3,
-    "agent-flow": 10
+    "agent-flow": 14
   },
   "by_severity": {
-    "warning": 2763,
+    "warning": 2766,
     "info": 91
   },
   "signatures": [
@@ -26,8 +26,12 @@
     "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-marketing publica agent.execute.request en modules/pizzepos/carta-marketing/index.js:261 — payload.campos_visibles no incluye correlation_id",
     "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-scheduler publica agent.execute.request en modules/pizzepos/carta-scheduler/index.js:273 — payload.campos_visibles no incluye correlation_id",
     "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/menu-generator publica agent.execute.request en modules/pizzepos/menu-generator/index.js:109 — payload.campos_visibles no incluye correlation_id",
-    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:180 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
-    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:191 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
+    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:171 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
+    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:185 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
+    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:186 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
+    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:188 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
+    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:195 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
+    "agent-flow|drift_uso_de_alias_agentName|conversacion__ai-agent-framework modules/conversacion/ai-agent-framework/index.js:332 — usar agent_name (snake_case canonico) en lugar del alias camelCase",
     "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/ai-gateway publica ai.chat.response en modules/conversacion/ai-gateway/index.js:479 — payload.campos_visibles no incluye correlation_id",
     "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/chat-io publica chat.message.saved en modules/conversacion/chat-io/index.js:263 — payload.campos_visibles no incluye correlation_id",
     "chat-flow|drift_publish_chat_flow_sin_correlation_id|conversacion/prompt-builder publica chat.prompt.ready en modules/conversacion/prompt-builder/index.js:252 — payload.campos_visibles no incluye correlation_id",
@@ -55,7 +59,6 @@
     "errors|drift_error_como_string_suelto|code-executor modules/code-executor/index.js:396 — error como string en lugar de { code, message }",
     "errors|drift_error_como_string_suelto|code-executor modules/code-executor/index.js:509 — error como string en lugar de { code, message }",
     "errors|drift_error_como_string_suelto|code-executor modules/code-executor/index.js:534 — error como string en lugar de { code, message }",
-    "errors|drift_error_como_string_suelto|conversacion/ai-agent-framework modules/conversacion/ai-agent-framework/index.js:231 — error como string en lugar de { code, message }",
     "errors|drift_error_como_string_suelto|credential-manager modules/credential-manager/index.js:1009 — error como string en lugar de { code, message }",
     "errors|drift_error_como_string_suelto|credential-manager modules/credential-manager/index.js:1051 — error como string en lugar de { code, message }",
     "errors|drift_error_como_string_suelto|credential-manager modules/credential-manager/index.js:1074 — error como string en lugar de { code, message }",

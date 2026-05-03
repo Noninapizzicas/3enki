@@ -47,6 +47,9 @@ jobs:
       - name: Run memory-user-profile tests (memoria modular)
         run: npm run test:memory-user-profile
 
+      - name: Run ai-agent-framework tests (agent-flow migration)
+        run: npm run test:ai-agent-framework
+
       - name: Run mqttRequest unit tests
         run: npm run test:mqtt-request
 

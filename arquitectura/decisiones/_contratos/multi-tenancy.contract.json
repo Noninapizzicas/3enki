@@ -136,6 +136,30 @@
       "decision": "Operaciones administrativas (gestión del cluster, métricas globales, alertas de salud) NO se hacen con un user_id 'admin' que vea todos los datos. Se hacen con user_id 'system' iterando proyectos uno a uno (operaciones por scope).",
       "alternativa_descartada": "user_id 'admin' o 'root' con permisos de leer cualquier project_id.",
       "razon": "Modo admin = superficie de leak permanente + tentación de bypass. Iterar publish-by-publish mantiene el aislamiento incluso en operaciones administrativas."
+    },
+    {
+      "id": "user_id_default_no_user_id_null",
+      "decision": "En single-user el user_id vale 'default' (string explícito). NO se admite null/undefined en user_id.",
+      "alternativa_descartada": "user_id null en single-user que se interpreta implícitamente.",
+      "razon": "user_id 'default' es un valor explícito, indexable en logs/métricas, fácil de migrar (cuando llegue multi-user, los datos con user_id='default' son del usuario primario actual). null obliga a comprobaciones defensivas en cada handler."
+    },
+    {
+      "id": "system_user_id_para_acciones_no_humanas",
+      "decision": "Acciones automáticas (cron, webhooks externos, módulos del sistema) usan user_id = 'system' explícito. No se omite el campo.",
+      "alternativa_descartada": "Usar user_id null para 'acción automática sin humano detrás'.",
+      "razon": "'system' es indexable, distinguible en auditoría ('quién hizo X' = 'el sistema'). null obliga a OR null cada query, complicando filtros."
+    },
+    {
+      "id": "tenancy_aplicada_en_handler_no_en_query",
+      "decision": "El handler de cada operación valida project_id presente ANTES de hacer la query. NO se delega la validación al WHERE de la query.",
+      "alternativa_descartada": "Confiar en que la query con WHERE project_id = ? falle si project_id es undefined.",
+      "razon": "Confiar en la query es frágil — un bug en el query builder o un undefined coerced a string puede saltar el filtro. Validación explícita en el handler garantiza que la query NUNCA se ejecuta sin project_id."
+    },
+    {
+      "id": "cross_tenant_iterativo_no_global",
+      "decision": "Cuando un agente del sistema necesita actuar sobre N proyectos (ej. backup nocturno), publica N eventos individuales con su project_id, NO un evento global que el consumer expanda internamente.",
+      "alternativa_descartada": "Evento system.backup.all que el consumer interpreta como 'iterar todos los proyectos'.",
+      "razon": "Evento global con scope implícito requiere que el consumer conozca cómo enumerar proyectos — duplica conocimiento. Eventos individuales mantienen project_id en el payload de cada uno; el aislamiento es criptográfico."
     }
   ],
 
@@ -254,6 +278,36 @@
       "regla": "Log emitido desde handler con project_id en scope que no incluye el label.",
       "como_detectar": "Heurísticas regex sobre código.",
       "severidad": "warning"
+    },
+    {
+      "id": "drift_user_id_null_o_omitido",
+      "regla": "Ningún publish con atribución humana usa user_id null/undefined ni omite el campo.",
+      "como_detectar": "Inspeccionar audits: campos_visibles debe incluir user_id en eventos chat.message.saved, agent.execute.request, ai.chat.response, etc.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_query_sin_where_project_id",
+      "regla": "Queries SQL del repo que tocan tablas con columna project_id incluyen WHERE project_id = ? obligatorio.",
+      "como_detectar": "Regex sobre código: SELECT/UPDATE/DELETE FROM <tabla> sin WHERE project_id en handlers de operaciones de dominio.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_evento_global_que_expande_internamente",
+      "regla": "Ningún módulo recibe un evento global y lo 'expande internamente' iterando todos los proyectos. Si necesita iterar, el publisher genera N eventos.",
+      "como_detectar": "Auditoría manual + heurística: handlers que enumeren proyectos via DB y publiquen N eventos en respuesta a UN evento.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_storage_path_sin_project_id_segregation",
+      "regla": "Módulos con persistence.pattern json-file-per-project o sqlite-per-project escriben en directorios separados por project_id.",
+      "como_detectar": "Auditoría: si pattern es per-project pero el código escribe en data/<modulo>/global.json, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_log_meta_sin_project_id_user_id",
+      "regla": "Logs emitidos desde handlers con project_id en scope incluyen estos campos en el metadata.",
+      "como_detectar": "Heurística sobre código: logger.info(...) en handler que tiene project_id en variable local pero no lo pasa al log.",
+      "severidad": "info"
     }
   ],
 

@@ -148,6 +148,30 @@
       "decision": "Ningún test usa snapshots (jest snapshots, equivalente).",
       "alternativa_descartada": "Snapshots para tests de output complejo (HTML render, JSON estructurado).",
       "razon": "Snapshots son frágiles (cualquier cambio formal rompe el test sin razón semántica) y ocultan la intención (¿qué exactamente se está testeando?). Forzar aserciones explícitas obliga al autor a saber qué espera del output."
+    },
+    {
+      "id": "tests_no_dependen_de_red_externa",
+      "decision": "Tests unitarios no realizan fetch/HTTP a hosts externos (api.openai.com, github.com, etc.). Tests de integración solo conectan a localhost (broker embebido en proceso de test, mock server local).",
+      "alternativa_descartada": "Permitir tests con red real para validación 'end-to-end' contra upstreams reales.",
+      "razon": "Red externa en tests = flakiness (red caída, rate limit, cambio de respuesta del proveedor) + lentitud + acoplamiento a credenciales reales. La validación contra upstream real es manual, no automatizada en CI."
+    },
+    {
+      "id": "tests_no_escriben_filesystem_persistente",
+      "decision": "Tests unitarios no escriben en directorios del repo (ej. data/, projects/) ni en paths fuera de os.tmpdir(). Cuando necesitan filesystem, usan mocks o tmpdir con cleanup.",
+      "alternativa_descartada": "Tests que escriben en directorios persistentes para 'simular uso real'.",
+      "razon": "Tests con state persistente entre runs producen resultados no deterministas (fail al primer run, pass al segundo). Cleanup obligatorio o mocks."
+    },
+    {
+      "id": "process_exit_1_en_fail_no_throw",
+      "decision": "Tests que fallan invocan process.exit(1) directamente (vía assert que tira o vía catch global). NO se confía en mecanismos externos para detectar fallo.",
+      "alternativa_descartada": "Tests que solo console.error y dejan el proceso terminar con exit code 0.",
+      "razon": "CI evalúa exit code para decidir pass/fail del step. Si un test falla pero exit es 0, CI cree que pasó. process.exit(1) es la única forma robusta de comunicar fallo a CI."
+    },
+    {
+      "id": "tests_self_contained_sin_setup_global",
+      "decision": "Cada archivo de test es self-contained: importa sus dependencias, define sus mocks, ejecuta sus aserciones, exit. NO hay archivo setup.js compartido, beforeAll global, fixtures cross-test.",
+      "alternativa_descartada": "Setup global en beforeAll/beforeEach compartido entre tests del mismo suite.",
+      "razon": "Setup global hace que un test dependa del orden de ejecución y del estado dejado por otros. Self-contained garantiza que `node tests/unit/X.test.js` produce el mismo resultado siempre."
     }
   ],
 
@@ -308,6 +332,36 @@
       "regla": "No hay archivos *.test.js fuera de tests/ (excluyendo node_modules, _archived).",
       "como_detectar": "find . -name '*.test.js' -not -path '*/node_modules/*' -not -path '*/_archived/*' -not -path './tests/*'.",
       "severidad": "warning"
+    },
+    {
+      "id": "drift_test_red_externa",
+      "regla": "Tests unitarios no hacen fetch/http.request/axios/got a hosts externos (no-localhost).",
+      "como_detectar": "Regex sobre tests/unit/*.js: fetch|http\\.request|axios|got con URL que no sea http://localhost o http://127.0.0.1.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_test_filesystem_persistente",
+      "regla": "Tests unitarios no escriben en paths fuera de os.tmpdir() ni en data/ del repo.",
+      "como_detectar": "Regex sobre tests/unit/*.js: fs.writeFile(Sync) sin os.tmpdir() y sin pattern de mock.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_test_sin_process_exit_en_fail",
+      "regla": "Test files terminan con catch global que invoca process.exit(1) en caso de error no manejado.",
+      "como_detectar": "Inspeccionar pattern al final del archivo: presencia de .catch(err => { ...; process.exit(1) }) o try/catch que termina con exit.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_test_setup_global_compartido",
+      "regla": "Tests no comparten state entre archivos via require de setup.js global o equivalente.",
+      "como_detectar": "Buscar require('./setup') o similar en tests/unit/.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_test_de_handler_canonico_sin_publish_assertion",
+      "regla": "Tests de handlers de eventos canónicos (chat-flow, agent-flow) NO solo invocan el handler — también verifican que publica el evento esperado al mock del eventBus.",
+      "como_detectar": "Heurística: tests con `m.onXyz()` deben tener `assert(mocks.published.find(p => p[0] === 'evento'))`.",
+      "severidad": "info"
     }
   ],
 

@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-03T16:04:50.030Z",
-  "total": 3706,
+  "generated_at": "2026-05-03T16:07:06.032Z",
+  "total": 3721,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -14,7 +14,7 @@
     "agent-flow": 14,
     "frontend": 523,
     "security": 1,
-    "testing": 14,
+    "testing": 29,
     "multi-tenancy": 270,
     "documentation": 63,
     "versionado": 1,
@@ -23,7 +23,7 @@
     "scheduling": 2
   },
   "by_severity": {
-    "warning": 3640,
+    "warning": 3655,
     "info": 92,
     "error": 1
   },
@@ -3719,6 +3719,21 @@
     "scheduling|drift_setinterval_subsegundo|modules/log-manager/index.js:103 — setInterval cada 24ms (limite 100ms). Repensar el patron.",
     "scheduling|drift_setinterval_subsegundo|modules/pizzepos/cuentas-canales/index.js:324 — setInterval cada 60ms (limite 100ms). Repensar el patron.",
     "security|drift_secret_en_log|modules/conversation-export/index.js:114 — variable sospechosa (apiKey/token/password/authorization) en objeto de logger; verificar manualmente que no expone valor",
+    "testing|drift_test_filesystem_persistente|tests/unit/cocina-poc.test.js:160 — fs.mkdirSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/cocina-poc.test.js:161 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/esp32-flasher.test.js:87 — fs.mkdirSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/esp32-flasher.test.js:89 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/firmware-manager.test.js:100 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/firmware-manager.test.js:184 — fs.mkdirSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/firmware-manager.test.js:185 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/firmware-manager.test.js:194 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/firmware-manager.test.js:908 — fs.mkdirSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/firmware-manager.test.js:909 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/firmware-manager.test.js:921 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/firmware-manager.test.js:98 — fs.mkdirSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/mqtt-request.test.js:64 — fs.mkdirSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/mqtt-request.test.js:65 — fs.writeFileSync fuera de os.tmpdir()",
+    "testing|drift_test_filesystem_persistente|tests/unit/mqtt-request.test.js:67 — fs.writeFileSync fuera de os.tmpdir()",
     "testing|drift_test_sin_npm_script|certificate-authority.test.js sin script \"test:certificate-authority\" en package.json",
     "testing|drift_test_sin_npm_script|conversation-manager.test.js sin script \"test:conversation-manager\" en package.json",
     "testing|drift_test_sin_npm_script|esp32-dev.test.js sin script \"test:esp32-dev\" en package.json",

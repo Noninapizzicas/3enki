@@ -120,6 +120,50 @@ function checkWiringWorkflow(findings) {
   }
 }
 
+function checkRedExterna(findings) {
+  for (const file of listTestFiles()) {
+    if (!file.includes('/unit/')) continue; // integration puede usar localhost
+    const content = fs.readFileSync(file, 'utf-8');
+    // Detect URLs no-localhost en fetch/axios/http.request/got
+    const rx = /(?:fetch|axios|got|https?\.request|https?\.get)\s*\(\s*['"`](https?:\/\/[^'"`\s]+)['"`]/gi;
+    let m;
+    while ((m = rx.exec(content)) !== null) {
+      const url = m[1];
+      if (/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(url)) continue;
+      const ln = lineOfOffset(content, m.index);
+      findings.errors.push(`drift_test_red_externa: ${path.relative(REPO_ROOT, file)}:${ln} — call a host externo "${url}"`);
+    }
+  }
+}
+
+function checkFilesystemPersistente(findings) {
+  for (const file of listTestFiles()) {
+    if (!file.includes('/unit/')) continue;
+    const content = fs.readFileSync(file, 'utf-8');
+    const rx = /fs\.(writeFile|writeFileSync|appendFile|appendFileSync|mkdirSync)\s*\(\s*([^,)]+)/g;
+    let m;
+    while ((m = rx.exec(content)) !== null) {
+      const target = m[2];
+      // Whitelist: usa os.tmpdir() o variable que parece tmp
+      if (/os\.tmpdir|tmpDir|tmpdir|tempDir|tmpPath|\/tmp\//i.test(target)) continue;
+      const ln = lineOfOffset(content, m.index);
+      findings.warnings.push(`drift_test_filesystem_persistente: ${path.relative(REPO_ROOT, file)}:${ln} — fs.${m[1]} fuera de os.tmpdir()`);
+    }
+  }
+}
+
+function checkSetupGlobalCompartido(findings) {
+  for (const file of listTestFiles()) {
+    const content = fs.readFileSync(file, 'utf-8');
+    const rx = /require\s*\(\s*['"`]\.\/(setup|fixtures|test-helpers)['"`]\s*\)/g;
+    let m;
+    while ((m = rx.exec(content)) !== null) {
+      const ln = lineOfOffset(content, m.index);
+      findings.warnings.push(`drift_test_setup_global_compartido: ${path.relative(REPO_ROOT, file)}:${ln} — require de ${m[0]} (tests deben ser self-contained)`);
+    }
+  }
+}
+
 function reportFindings(f) {
   if (f.errors.length) { console.log(`${RED}cross-system errors (${f.errors.length})${RST}`); for (const e of f.errors) console.log(`  ${RED}✗${RST} ${e}`); }
   if (f.warnings.length) { console.log(`${YEL}cross-system warnings (${f.warnings.length})${RST}`); for (const w of f.warnings) console.log(`  ${YEL}!${RST} ${w}`); }
@@ -145,6 +189,9 @@ function main() {
     checkValidacionAjv(f);
     checkWiringPackageJson(f);
     checkWiringWorkflow(f);
+    checkRedExterna(f);
+    checkFilesystemPersistente(f);
+    checkSetupGlobalCompartido(f);
     reportFindings(f);
   }
   process.exit(0);

@@ -24,14 +24,15 @@
       "handler": "onDbQueryResponse"
     }
   ],
+  "dependencies": ["database-manager"],
   "config": {
     "enabled": true,
     "priority_in_prompt": 100,
     "max_facts_per_user": 200,
     "min_fact_length": 4,
     "persistence": {
-      "pattern": "event-driven-via-database-manager",
-      "restart_resilient": true,
+      "pattern": "in-memory",
+      "restart_resilient": false,
       "concurrency": "single-writer",
       "lost_on_restart": ["pendingDb", "schemaReady"]
     }

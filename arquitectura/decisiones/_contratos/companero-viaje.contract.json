@@ -542,5 +542,227 @@
     ],
 
     "regla_de_oro_de_las_garantias": "Estas garantias son CONTRATUALES con el modelo. Si una se rompe en produccion, no es 'un bug que se arregla en el modulo' — es 'el modelo se ha violado y hay que restaurar la garantia'. Los validators y tests son los guardianes de las garantias. CI las hace cumplir antes de que el codigo entre a main."
+  },
+
+  "prohibido": {
+    "descripcion": "Anti-patrones que ROMPEN el modelo del compañero de viaje. Cada uno viola una o varias garantias. Los validators los detectan en codigo. Si aparecen en un modulo, ese modulo NO esta conforme al modelo y debe corregirse — no se acepta como excepcion.",
+    "lista": [
+      {
+        "id": "acceso_directo_entre_modulos",
+        "regla": "Un modulo del subsistema NO accede a otro via this.moduleLoader.getModule(slug).instance.toolX(...) o equivalente. Toda comunicacion cross-modulo va por el bus (eventBus.publish/subscribe o context.mqttRequest).",
+        "viola_garantias": ["modularidad_real_no_solo_declarada"],
+        "como_detectar": "Validator events.context_injection.drift_indicators (regex moduleLoader.getModule, .instance.tool[A-Z], .instance.handle[A-Z]).",
+        "alternativa_correcta": "await this.mqttRequest('peer-modulo', 'accion', payload, options)."
+      },
+      {
+        "id": "llamada_directa_a_proveedor_llm",
+        "regla": "Ningun modulo distinto de ai-gateway llama directamente a la API de un proveedor LLM (OpenAI, Anthropic, etc.). Para razonamiento del LLM se usa eventBus.publish('llm.complete.request') o se invoca un agente via agent.execute.request.",
+        "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm", "costes_auditables"],
+        "como_detectar": "Validator http.intra_core_http_call detecta llamadas a hosts api.openai.com / api.anthropic.com / api.deepseek.com / generativelanguage.googleapis.com / api.groq.com en codigo de modulos NO ai-gateway.",
+        "alternativa_correcta": "await this.eventBus.publish('llm.complete.request', { request_id, system_prompt, messages, settings }) — y suscribirse a 'llm.complete.response' filtrando por request_id."
+      },
+      {
+        "id": "evento_de_chat_sin_correlation_id",
+        "regla": "Cualquier evento del subsistema chat/agentes (channel.*, chat.*, ai.chat.*, agent.*, llm.*) DEBE incluir correlation_id en el payload. Generado por el originador (canal o cron), propagado SIN modificar.",
+        "viola_garantias": ["observabilidad_end_to_end"],
+        "como_detectar": "Validator que cruza events.publishes con shape: si publica un evento del subsistema sin correlation_id en los campos visibles del audit, drift.",
+        "alternativa_correcta": "Usar el helper canonico _publicarEvento(event, payload, sourcePayload) que propaga correlation_id automaticamente."
+      },
+      {
+        "id": "evento_chat_flow_sin_conversation_id",
+        "regla": "Cualquier evento de la categoria chat_flow (chat.message.saved, chat.context.enriched, chat.prompt.ready, ai.chat.response, ai.chat.failed) DEBE incluir conversation_id. Sin conversation_id no hay viaje, hay request suelto.",
+        "viola_garantias": ["memoria_sostenida_garantizada"],
+        "como_detectar": "Validator: handler de chat_flow events sin conversation_id en los campos visibles del payload publicado.",
+        "alternativa_correcta": "Asegurar que conversation_id viaja desde el momento del input del usuario y se propaga en toda la cadena del chat."
+      },
+      {
+        "id": "memoria_sin_aislamiento_por_tenant",
+        "regla": "Modulos de memoria (chat-io, prompt-builder cache, memory-rag futuro, etc.) NO almacenan ni recuperan informacion sin filtrar por project_id Y user_id. Acceso cross-tenant solo con autorizacion explicita y auditada.",
+        "viola_garantias": ["aislamiento_entre_usuarios_y_proyectos"],
+        "como_detectar": "Code review obligatorio en modulos de memoria. Validator parcial: queries SQL/file reads que NO incluyen WHERE project_id = ? AND user_id = ? son sospechosos. Test E2E: usuario A guarda algo, usuario B no lo recibe en su contexto.",
+        "alternativa_correcta": "Toda operacion de memoria toma project_id y user_id como parametros obligatorios. Los validators deben verificarlo."
+      },
+      {
+        "id": "canal_que_razona",
+        "regla": "Modulos de canal (chat-io, telegram-service, voice-input, etc.) NO razonan sobre el contenido del mensaje. Solo traducen formato (canal externo ↔ evento canonico). Toda inteligencia esta en el compañero o en agentes — nunca en el canal.",
+        "viola_garantias": ["agnosticismo_de_canal"],
+        "como_detectar": "Code review: codigo en modulo de canal que llama al LLM, decide intenciones, manipula el contenido del mensaje — drift. Auditoria: modulo de canal que importa schemas de dominio o llama a tools de negocio — drift.",
+        "alternativa_correcta": "El canal publica el input crudo (chat.message.saved con el texto). prompt-builder, ai-gateway o agentes se encargan del razonamiento."
+      },
+      {
+        "id": "agente_como_codigo_javascript",
+        "regla": "Un agente NO es codigo JavaScript con su propia clase. Es CONFIGURACION + SYSTEM PROMPT en archivos de datos (agents/<nombre>.json + prompts/<nombre>-system.md). Lo ejecuta ai-agent-framework, no un require.",
+        "viola_garantias": ["extensibilidad_sin_reescritura"],
+        "como_detectar": "Code review: clase JS llamada AgenteXxx o XxxAgent que implementa logica de razonamiento — drift. Hint: si para añadir un agente nuevo hay que escribir codigo (en lugar de añadir 2 archivos de datos), drift.",
+        "alternativa_correcta": "Crear agents/<nombre>.json (descripcion + tools_disponibles) + prompts/<nombre>-system.md (system prompt en lenguaje natural). ai-agent-framework lo ejecuta automaticamente."
+      },
+      {
+        "id": "evento_inventado_fuera_del_catalogo",
+        "regla": "Modulos del subsistema NO inventan eventos nuevos del subsistema fuera del catalogo de eventos canonicos. Si una capacidad nueva exige un evento, primero se intenta encajar en uno existente; solo si no se puede, se añade al catalogo (con justificacion documentada y contrato derivado).",
+        "viola_garantias": ["extensibilidad_sin_reescritura"],
+        "como_detectar": "Validator que cruza eventos publicados/escuchados en module.json con el catalogo canonico (channel.*, chat.*, ai.chat.*, agent.*, llm.*). Eventos del subsistema fuera del catalogo son drift.",
+        "alternativa_correcta": "Si necesitas notificar algo nuevo, primero comprueba si encaja en chat.context.enriched, agent.execute.request, llm.complete.*, etc. Solo en ultimo extremo, propon ampliar el catalogo."
+      },
+      {
+        "id": "modificar_el_nucleo_para_añadir_capacidad",
+        "regla": "Añadir una capacidad NO requiere modificar el nucleo del compañero (chat-io, ai-gateway, ai-agent-framework, prompt-builder). Se añade un modulo que cumple un tipo canonico. Si la capacidad fuerza tocar el nucleo, se replantea el modelo o el modulo.",
+        "viola_garantias": ["extensibilidad_sin_reescritura", "modularidad_real_no_solo_declarada"],
+        "como_detectar": "Auditoria de PRs: cada PR que añade una capacidad nueva se mide por delta del nucleo. Delta > 0 requiere justificacion arquitectonica.",
+        "alternativa_correcta": "Diseñar la capacidad como modulo independiente. Si encaja en uno de los 5 tipos canonicos, se enchufa al bus. Si no encaja, replantear si es realmente extension o si es nucleo nuevo (raro)."
+      },
+      {
+        "id": "flujo_que_no_termina_en_evento_canonico",
+        "regla": "Todo flujo iniciado por un evento canonico TERMINA con un evento canonico — exito o fallo, pero NUNCA colgado. Los handlers tienen try/catch que publican el evento .failed correspondiente con codigo canonico.",
+        "viola_garantias": ["no_silent_failures"],
+        "como_detectar": "Validator que detecta handlers async de eventos canonicos sin try/catch en el cuerpo principal — pueden lanzar y dejar el flujo colgado. Test: forzar fallo en mock, verificar que llega evento .failed.",
+        "alternativa_correcta": "Patron canonico: handler envuelto en try/catch que en el catch publica el evento .failed con error.code canonico (UPSTREAM_TIMEOUT, INTERNAL_ERROR, RESOURCE_NOT_FOUND, etc.)."
+      }
+    ]
+  },
+
+  "mapa_al_sistema_actual": {
+    "descripcion": "Estado real de los modulos del subsistema chat/agentes del repo a fecha de creacion del documento. Para cada modulo: tipo canonico que cumple, conformidad con el modelo (ALINEADO / PARCIAL / DRIFT), drifts especificos detectados y acciones para alinear. Este mapa es snapshot — se actualiza con cada migracion.",
+
+    "modulos": [
+      {
+        "modulo": "modules/conversacion/chat-io",
+        "tipo_canonico": ["canal (web)", "memoria (sqlite por proyecto)"],
+        "conformidad": "PARCIAL",
+        "drifts_detectados": [
+          "El campo 'message' significa cosa distinta en chat.message.saved (texto del usuario) vs en ai.chat.response (texto del LLM) — drift semantico.",
+          "El campo 'message_id' se renombra a 'message_id_user' en ai.chat.response sin razon clara y el correspondiente 'message_id_assistant' nunca aparece — campo fantasma.",
+          "Sin campo correlation_id en los publishes — incumple observability_end_to_end.",
+          "Sin campo user_id explicito (asume single-user) — bloqueante para multi-tenant futuro."
+        ],
+        "acciones_para_alinear": [
+          "Renombrar 'message' → contenido especifico segun evento (user_message en chat.message.saved, assistant_message en ai.chat.response).",
+          "Eliminar message_id_user (es solo message_id) y emitir message_id_assistant cuando publica al LLM la respuesta.",
+          "Añadir correlation_id (generarlo si es originador, propagarlo si reenvia).",
+          "Preparar campo user_id (puede valer 'default' en single-user, pero existe el campo)."
+        ]
+      },
+      {
+        "modulo": "modules/conversacion/prompt-builder",
+        "tipo_canonico": ["nucleo (constructor de system prompt)"],
+        "conformidad": "PARCIAL",
+        "drifts_detectados": [
+          "Construye el system prompt con todas las memorias hardcoded en su codigo (cache de modulos, user prompts). Modular pero fixed — no permite añadir tipos de memoria adicionales sin tocar prompt-builder.",
+          "Publica chat.prompt.ready con 9 campos hilvanados manualmente sin shape declarado.",
+          "Sin correlation_id en los publishes.",
+          "Sin uso de chat.context.enriched (el evento canonico nuevo del modelo) — todas las memorias estan dentro del modulo."
+        ],
+        "acciones_para_alinear": [
+          "Refactorizar para escuchar chat.context.enriched de cualquier numero de modulos de memoria externos. Lo que prompt-builder construia internamente puede seguir, pero ya no es la unica via.",
+          "Declarar shape de chat.prompt.ready con JSON Schema y validacion en CI (request_schema_ref del contrato events).",
+          "Añadir correlation_id (helper canonico _publicarEvento).",
+          "Documentar en module.json que es nucleo, no extension."
+        ]
+      },
+      {
+        "modulo": "modules/conversacion/ai-gateway",
+        "tipo_canonico": ["nucleo (motor del LLM)", "integracion (proveedores LLM externos)"],
+        "conformidad": "PARCIAL — POC2 en main demostro la disciplina canonica con deepseek-only",
+        "drifts_detectados": [
+          "Original: errores propagados como string sin codigo canonico ('Error: <msg>').",
+          "Original: cero metricas (audit confirmaba metricas_emitidas: []).",
+          "Original: onUnload vacio (timeouts no clearados, leak).",
+          "Original: 6 providers ademas de deepseek con la misma disciplina sin aplicar.",
+          "Sin chat.context.enriched (no escucha el evento nuevo del modelo)."
+        ],
+        "acciones_para_alinear": [
+          "Migrar la disciplina del POC2 a los otros 6 providers (anthropic, openai, gemini, groq, ollama, claude-cli).",
+          "Aplicar mapeo UPSTREAM_* canonico.",
+          "Declarar config.persistence (in-memory + eviction_strategy ya hecho en POC2).",
+          "onUnload limpio con clearTimeout (ya hecho en POC2).",
+          "Helper _emitMetric con API canonica (increment/gauge/timing) — ya hecho en POC2."
+        ]
+      },
+      {
+        "modulo": "modules/conversacion/ai-agent-framework",
+        "tipo_canonico": ["nucleo (executor de agentes)"],
+        "conformidad": "PARCIAL",
+        "drifts_detectados": [
+          "Carga 14 agentes desde agents/*.json + prompts/*.json — ESTO ESTA ALINEADO al modelo, los agentes son configuracion no codigo.",
+          "Sin embargo: probablemente acceso directo a otros modulos via moduleLoader (a verificar).",
+          "Eventos publicados (invoke_agent, agent.execute.request, llm.complete.response) coherentes con catalogo canonico.",
+          "Sin correlation_id explicito en algunos publishes — verificar."
+        ],
+        "acciones_para_alinear": [
+          "Auditar accesos a otros modulos: si usa moduleLoader.getModule, migrar a mqttRequest.",
+          "Verificar que correlation_id se propaga en agent.execute.response y llm.complete.response.",
+          "Asegurar que agent.execute.failed se publica si el agente falla (no_silent_failures)."
+        ]
+      },
+      {
+        "modulo": "modules/prompt-manager",
+        "tipo_canonico": ["memoria (gestion de prompts persistentes con versionado)"],
+        "conformidad": "DESCONOCIDO — modulo grande (1702 LOC) sin migrar todavia",
+        "drifts_detectados": [
+          "Audit detecta uso de moduleLoader probable (verificar).",
+          "Probable drift de errors string, sin telemetria, sin shape canonico — patron del repo antes de los 8 contratos."
+        ],
+        "acciones_para_alinear": [
+          "Auditar y planificar migracion in-place (similar a cobros) o POC paralelo si requiere reestructuracion grande."
+        ]
+      },
+      {
+        "modulo": "modules/project-manager",
+        "tipo_canonico": ["nucleo (gestion del project_id activo)"],
+        "conformidad": "DESCONOCIDO — modulo grande (1162 LOC) sin migrar todavia",
+        "drifts_detectados": [
+          "Audit detecta consumes composition-manager y context-manager via eventos — esto esta bien.",
+          "Resto sin auditar contra el modelo."
+        ],
+        "acciones_para_alinear": [
+          "Auditar contra el modelo del compañero. project_id es campo canonico — project-manager es el dueño de su ciclo de vida."
+        ]
+      },
+      {
+        "modulo": "modules/conversation-export",
+        "tipo_canonico": ["integracion (endpoint HTTP publico de exportacion)"],
+        "conformidad": "PARCIAL",
+        "drifts_detectados": [
+          "Ya tiene config.persistence declarado (manifest-only de hoy).",
+          "Sin migrar errors, telemetria, paths canonicos."
+        ],
+        "acciones_para_alinear": [
+          "Migracion in-place de errors a shape canonico (similar a cobros)."
+        ]
+      },
+      {
+        "modulo": "modules/telegram-service",
+        "tipo_canonico": ["canal (telegram)", "integracion (Telegram Bot API)"],
+        "conformidad": "DESCONOCIDO — sin auditar contra el modelo",
+        "drifts_detectados": [
+          "Probable: no usa chat.message.saved canonico (puede usar evento propio).",
+          "Probable: no preserva channel_context para que las respuestas vuelvan al chat correcto."
+        ],
+        "acciones_para_alinear": [
+          "Auditar y alinear al canal canonico: publicar chat.message.saved con channel='telegram' y channel_context={ chat_id, message_id_telegram }.",
+          "Suscribirse a ai.chat.response y devolver al chat correcto via Telegram API."
+        ]
+      },
+      {
+        "modulo": "modules/credential-manager",
+        "tipo_canonico": ["integracion (gestion de credenciales)"],
+        "conformidad": "PARCIAL",
+        "drifts_detectados": [
+          "Audit detecta archivo persistente y memoria — probable drift de declaracion de persistence.",
+          "Sin migrar contra los 8 contratos."
+        ],
+        "acciones_para_alinear": [
+          "Auditar y migrar contra los contratos."
+        ]
+      }
+    ],
+
+    "resumen": {
+      "total_modulos_subsistema": 9,
+      "alineados": 0,
+      "parciales": 5,
+      "desconocidos": 4,
+      "drift_total_estimado": "alto — el subsistema chat/agentes esta entre los modulos con mas deuda contractual del repo. Ningun modulo del subsistema esta 100% alineado al modelo todavia.",
+      "siguiente_paso_recomendado": "Cuando se decida migrar el subsistema, EMPEZAR por chat-io (es el limite con el usuario, su drift contamina toda la cadena downstream). Despues prompt-builder (puente). Despues ai-gateway con la disciplina del POC2 portada a los 7 providers. Despues ai-agent-framework. Los demas (prompt-manager, project-manager, telegram-service, credential-manager) en paralelo conforme den problemas reales."
+    }
   }
 }

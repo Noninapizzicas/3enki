@@ -1,0 +1,321 @@
+{
+  "_doc": "Captura LA disciplina de despliegue del sistema event-core: dónde corre, cómo arranca, qué entornos soporta canónicamente (Termux + Linux), qué env vars son obligatorias, cómo se configura, cómo se actualiza. La regla maestra: el sistema corre como UN único proceso Node con módulos cargados in-process; cluster horizontal opcional via multi-nodo con mTLS. Sin Docker, sin orquestadores externos (Kubernetes, etc.), sin daemon obligatorio. Pensado para vivir en el dispositivo del usuario (móvil con Termux, mini-PC con Linux, raspberry, servidor doméstico). Sin un contrato de deployment, cada despliegue inventa su forma (variables distintas, entry points distintos, configuraciones divergentes) y se pierde la portabilidad entre entornos.",
+  "id": "deployment",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Recoge las prácticas que ya existen: entry point `node index.js` (npm start), config split en config.json (committed) + config.example.json (template) + module config en module.json.config, env vars NODE_ENV/HTTP_PORT/FRONTEND_URL, soporte canónico Termux + Linux con scripts dedicados (scripts/install-termux.sh, scripts/install-linux.sh), Node >= 18. Eleva a contrato transversal autónomo con criterios explícitos.",
+
+  "objetivo": "Producir UN JSON output (_outputs/deployment.json) que define: entry point canónico (npm start → node index.js), entornos soportados (Termux Android, Linux desktop/server, sin Docker), variables de entorno canónicas (con valor default cuando aplica), shape canónico de config.json (core, http, mqtt, modules), proceso de instalación (scripts/install-termux.sh, scripts/install-linux.sh), proceso de arranque (foreground por defecto, daemon opcional), proceso de actualización (git pull + npm install + restart), modelo de cluster (multi-nodo via mTLS, opcional). Validable mecánicamente cruzando contra package.json, config.json, env vars referenciadas en código, e INSTALL.md.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/deployment.contract.json (este archivo)",
+      "package.json (entry point, engines, scripts start/dev)",
+      "config.example.json (template canónico de configuración)",
+      "INSTALL.md (proceso de instalación documentado)"
+    ],
+    "obligatorios_si_existen": [
+      "config.json (configuración local — nunca debería commitearse con valores reales de producción)",
+      "scripts/install-termux.sh",
+      "scripts/install-linux.sh"
+    ],
+    "opcionales_para_contexto": [
+      "core/index.js (lógica de arranque del core)",
+      "modules/*/index.js (referencias a process.env)"
+    ],
+    "prohibido_leer": [
+      ".env (si existiera — contiene secretos)"
+    ]
+  },
+
+  "filosofia": [
+    "UN PROCESO NODE, MÓDULOS IN-PROCESS. El core corre como UN único proceso Node.js. Los módulos se cargan dinámicamente DENTRO de ese proceso; no se ejecutan como procesos separados ni microservicios. La comunicación inter-módulo es bus MQTT embebido, no IPC ni HTTP entre procesos.",
+
+    "EMBEDDED BROKER POR DEFECTO. El broker MQTT (aedes) corre embebido en el mismo proceso del core. Configurable a broker externo, pero el default canónico es embebido — sin broker externo a instalar.",
+
+    "TERMUX Y LINUX SON IGUALES EN CAPACIDAD. El sistema corre canónicamente en Termux (Android) y en Linux desktop/server. Cualquier feature que solo funcione en uno de los dos rompe el contrato — los caminos comunes (Node 18+, MQTT, filesystem, fs.watch, child_process) son la base.",
+
+    "SIN DOCKER, SIN KUBERNETES. El sistema no se distribuye como imagen Docker ni se orquesta con Kubernetes. La filosofía es 'vive en tu dispositivo': móvil con Termux, mini-PC, raspberry, servidor casero. Docker añade capa de containerización innecesaria para el modelo de uso esperado.",
+
+    "SIN DAEMON OBLIGATORIO. El proceso corre por defecto en foreground (terminal). En Termux: termux-wake-lock + foreground service. En Linux: systemd unit OPCIONAL para autostart, pero no requerido. El proceso no es un servicio de sistema obligatorio.",
+
+    "FOREGROUND-FRIENDLY. Logs van a stdout/stderr por defecto (no a archivos rotados). Esto encaja con foreground en terminal, con `journalctl` cuando corre via systemd, y con `logcat` en Termux. Si se requiere persistencia, se redirige externamente.",
+
+    "ENV VARS PARA SECRETOS / OVERRIDES. Las env vars se reservan para: (a) secretos cuando aplique (sin hardcoding en config.json) — pero credenciales reales viven en credential-manager; (b) overrides en runtime (HTTP_PORT, NODE_ENV); (c) feature flags experimentales. La configuración estructural vive en config.json.",
+
+    "CONFIG.JSON COMMITTED CON DEFAULTS SEGUROS. El repo committea config.json con defaults razonables para development. config.example.json es la plantilla de referencia. Los valores que dependen de cada despliegue (host, puertos cuando colisionan) se documentan como overridables via env var.",
+
+    "INSTALACIÓN ES UN SCRIPT, NO MAGIA. scripts/install-termux.sh y scripts/install-linux.sh son los puntos canónicos. Hacen lo mínimo necesario (instalar Node si falta, npm install, configurar permisos de Termux si aplica). Sin frameworks de provisioning (Ansible, Chef) — bash directo.",
+
+    "ACTUALIZACIÓN ES git pull + npm install + restart. No hay sistema de update propietario. El usuario hace `git pull` (recibe nuevos contratos, módulos, código), `npm install` (resuelve nuevas deps), y reinicia el proceso. La idempotencia del repo + del config viva en disco garantiza que no se pierde estado.",
+
+    "CLUSTER MULTI-NODO ES OPCIONAL VIA mTLS. Cuando se quieran varios nodos del core comunicándose (ej. uno en Termux + uno en mini-PC), se autentican con mTLS via certificate-authority (security.contract). Single-nodo es el default; multi-nodo es escalado horizontal opcional.",
+
+    "SIN STATE EXTERNO MÁS ALLÁ DEL FILESYSTEM. El sistema no requiere servicios externos (Postgres, Redis, RabbitMQ). Toda persistencia vive en filesystem local (JSON, SQLite, broker embebido)."
+  ],
+
+  "principios": [
+    {
+      "id": "entry_point_unico_canonico",
+      "regla": "El entry point del sistema es `node index.js`, expuesto como `npm start` en package.json. El comando `npm run dev` añade `--log-level debug`. No hay otros entry points alternativos.",
+      "razon": "Un único entry point hace la documentación trivial y elimina ambigüedad sobre cómo arrancar."
+    },
+    {
+      "id": "node_18_plus_motor_canonico",
+      "regla": "package.json.engines.node >= 18.0.0. Versiones anteriores no soportadas — la suite usa features de Node 18+ (fetch nativo, AbortController, etc.).",
+      "razon": "Node 18 es LTS y está disponible en Termux + distros Linux modernas. Soportar versiones anteriores requeriría polyfills que añaden complejidad."
+    },
+    {
+      "id": "termux_y_linux_canonicos",
+      "regla": "Los dos entornos canónicos son Termux (Android) y Linux. Cualquier feature que requiera otro entorno (macOS, Windows nativo) se documenta como excepción justificada — el contrato no garantiza soporte.",
+      "razon": "Los autores y casos de uso del sistema viven en estos dos entornos. macOS/Windows pueden funcionar pero no son test environments oficiales."
+    },
+    {
+      "id": "in_process_no_microservicios",
+      "regla": "Los módulos se cargan dinámicamente dentro del proceso Node único. No hay separación por procesos, ni containers por módulo, ni microservicios.",
+      "razon": "Comunicación in-process via bus MQTT embebido es órdenes de magnitud más rápida que HTTP entre procesos. Y la complejidad operacional de microservicios no se justifica para el modelo de uso (single device, escala doméstica)."
+    },
+    {
+      "id": "broker_embebido_default",
+      "regla": "Aedes corre embebido en el mismo proceso del core por defecto. Configurable a broker externo (Mosquitto, etc.) en config.json, pero embedded es el camino canónico.",
+      "razon": "Embedded elimina dependencia operacional. Externo solo se justifica cuando el cluster es grande o el broker externo aporta features no disponibles en aedes."
+    },
+    {
+      "id": "env_vars_para_overrides_no_estructura",
+      "regla": "Las env vars overridean valores específicos de runtime (puertos, hosts, log level). La estructura de configuración vive en config.json, no se splittea entre 47 env vars.",
+      "razon": "Config en JSON estructurado es legible y validable. Env vars planas son frágiles para shapes complejos (objetos, arrays). Cada herramienta para su caso."
+    },
+    {
+      "id": "config_json_committed_safe_defaults",
+      "regla": "config.json se committea al repo con defaults seguros (development environment, ports estándar, sin secretos). config.example.json es la plantilla pública. Valores específicos de despliegue (production, custom ports) se overridean via env var o config local no commiteado.",
+      "razon": "Committed defaults garantiza que `git clone + npm install + npm start` funciona sin configuración previa. Sin secretos en el committed."
+    },
+    {
+      "id": "instalacion_es_script_no_framework",
+      "regla": "scripts/install-termux.sh y scripts/install-linux.sh son los puntos canónicos. Bash directo, sin frameworks de provisioning. Hacen: verificar Node, npm install, configurar Termux storage permission si aplica.",
+      "razon": "Bash es universal. Ansible/Chef/Puppet añaden dependencias adicionales que rompen la simplicidad de 'clone y arranca'."
+    },
+    {
+      "id": "actualizacion_via_git_pull",
+      "regla": "Actualizar el sistema es: `git pull && npm install && restart_proceso`. No hay sistema de auto-update ni binarios firmados — el repo es la fuente.",
+      "razon": "Git es estándar, auditable, reversible (rollback con `git checkout <sha>`). Auto-update propietario añade superficie de attack y opacidad."
+    },
+    {
+      "id": "single_nodo_default_cluster_opcional",
+      "regla": "El sistema corre por defecto como single-nodo. Multi-nodo (varios cores comunicándose entre dispositivos) es opcional, autenticado con mTLS de certificate-authority.",
+      "razon": "La mayoría de usuarios corren single-device. Cluster es feature avanzada con su propia complejidad — no debe ser default."
+    },
+    {
+      "id": "filesystem_unica_persistencia_externa",
+      "regla": "El sistema NO depende de servicios externos (Postgres, Redis, RabbitMQ). Toda persistencia es filesystem local: JSON files, SQLite, broker embebido.",
+      "razon": "Cero dependencias externas = cero servicios a instalar. El sistema arranca con `npm start` sin docker-compose ni servicios sysv/systemd previos."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "in_process_no_microservicios",
+      "decision": "Módulos cargados dinámicamente in-process. Comunicación via bus MQTT embebido. UN proceso Node.",
+      "alternativa_descartada": "Microservicios: cada módulo es un proceso separado, comunicación HTTP/gRPC, orquestación con Docker Compose o Kubernetes.",
+      "razon": "Microservicios añaden complejidad operacional (descubrimiento, health checks, deployment coordinado, network) sin valor en escala doméstica. El modelo de uso (single device, decenas de módulos) encaja perfecto en single-process. La performance in-process bus >> HTTP entre procesos."
+    },
+    {
+      "id": "termux_linux_canonicos_no_macos_windows",
+      "decision": "Entornos soportados oficialmente: Termux (Android) y Linux (desktop/server). macOS y Windows pueden funcionar pero no son test environments — sin garantía.",
+      "alternativa_descartada": "Soporte oficial cross-platform incluyendo macOS y Windows.",
+      "razon": "El soporte cross-platform multiplica los entornos de test y los modos de fallo. El equipo y los casos de uso viven en Termux + Linux. Soportar oficialmente macOS/Windows requeriría CI en esos entornos y soluciones a sus particularidades (paths, permissions, fs.watch behavior)."
+    },
+    {
+      "id": "sin_docker_sin_orquestador",
+      "decision": "El sistema NO se distribuye como imagen Docker ni se orquesta con Kubernetes/Docker Swarm/etc. Vive directamente en el sistema operativo del dispositivo.",
+      "alternativa_descartada": "Distribuir Docker image con docker-compose.yml para arranque consistente.",
+      "razon": "Docker asume que la app es portable entre hosts iguales (Linux x86_64 server). El modelo de uso es 'vive en tu dispositivo' — móvil ARM con Termux, raspberry ARM, mini-PC x86_64 — y Docker en Termux es complicado/imposible. La portabilidad real la da Node + npm."
+    },
+    {
+      "id": "broker_aedes_embebido_default",
+      "decision": "Broker MQTT aedes corre embebido en el mismo proceso del core. Externo es opcional via config.",
+      "alternativa_descartada": "Broker externo (Mosquitto) como default obligatorio.",
+      "razon": "Embedded elimina dependencia adicional a instalar. La performance de aedes in-process es suficiente para escala doméstica. Cluster grande o features de broker externo (HA, persistencia avanzada) son casos de excepción configurable, no default."
+    },
+    {
+      "id": "config_committed_con_safe_defaults",
+      "decision": "config.json se committea con valores de development. config.example.json como plantilla de referencia. Sin secretos commited.",
+      "alternativa_descartada": "config.json en .gitignore — cada usuario crea el suyo desde cero copiando config.example.json.",
+      "razon": "Committed garantiza `git clone + npm start` funciona inmediatamente. Sin secretos commited (eso lo enforce security.contract). Despliegue específico se overridea via env vars o file local."
+    },
+    {
+      "id": "env_vars_para_overrides_runtime",
+      "decision": "Env vars se usan SOLO para overrides de runtime (NODE_ENV, HTTP_PORT, FRONTEND_URL) y feature flags. Configuración estructural vive en config.json.",
+      "alternativa_descartada": "12-factor-app: TODA la config en env vars (decenas de variables planas).",
+      "razon": "12-factor encaja para apps cloud con decenas de instancias deploying. Para single-device con shape complejo de config, JSON estructurado es legible. Env vars planas para shapes profundos son frágiles."
+    },
+    {
+      "id": "git_pull_como_actualizacion",
+      "decision": "Actualizar = git pull + npm install + restart. Sin sistema propietario.",
+      "alternativa_descartada": "Auto-update con binarios firmados, electron-updater o similar.",
+      "razon": "Git es estándar, auditable, reversible. Auto-update propietario añade superficie de attack y opacidad sobre qué cambia."
+    },
+    {
+      "id": "filesystem_unica_persistencia_externa_obligatoria",
+      "decision": "Cero dependencias externas. Todo storage local.",
+      "alternativa_descartada": "Soporte first-class para Postgres / MongoDB / Redis externos como storage canónico.",
+      "razon": "Storage externo = servicio adicional a instalar/mantener/securizar. Para escala doméstica, SQLite + JSON files cubren todo. Storage externo se puede añadir como módulo opcional pero no es base."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "dependencia_de_servicio_externo_obligatorio",
+      "regla": "Ningún módulo del repo requiere un servicio externo (Postgres, Redis, RabbitMQ, MongoDB, etc.) para arrancar. Si un módulo necesita uno, es opcional con fallback in-memory o local.",
+      "enforce": "Validador inspecciona module.json.dependencies y config buscando referencias a servicios externos sin fallback. Severidad warning."
+    },
+    {
+      "id": "feature_solo_en_un_entorno",
+      "regla": "Ningún módulo del repo introduce una feature que solo funciona en Linux y no en Termux (o viceversa). Si requiere capacidad específica, se hace opcional con detección.",
+      "enforce": "Auditoría manual + revisión de PR. Patrones tipo `if (os.platform() === 'android')` con código exclusivo Linux son drift."
+    },
+    {
+      "id": "docker_required",
+      "regla": "Ningún módulo asume que corre en Docker. No hay Dockerfile committed como entry point obligatorio. Si alguien quiere Docker, lo crea fuera del scope del contrato.",
+      "enforce": "Validador verifica que no hay Dockerfile en raíz del repo (excepto en _archived)."
+    },
+    {
+      "id": "spawn_de_procesos_separados_para_modulos",
+      "regla": "Ningún módulo arranca otro módulo como proceso separado (child_process.spawn de otro módulo del repo). El loader carga módulos in-process.",
+      "enforce": "Auditoría manual. Patrones tipo `child_process.spawn('node', [otroModulo])` son drift."
+    },
+    {
+      "id": "secrets_en_config_json_committed",
+      "regla": "config.json no contiene secretos reales (API keys, tokens, passwords). Esos viven en credential-manager.",
+      "enforce": "security.validate.js detecta hardcoded keys en cualquier archivo. Aplica también aquí."
+    },
+    {
+      "id": "auto_update_propietario",
+      "regla": "Ningún módulo introduce sistema de auto-update propietario (descargar binarios firmados, ejecutar self-update). Actualización es git pull + npm install.",
+      "enforce": "Auditoría manual. Patrones tipo fetch sobre URLs de releases + ejecutar binario son drift severo."
+    },
+    {
+      "id": "daemon_obligatorio",
+      "regla": "Ningún módulo requiere correr como daemon de sistema (systemd unit, init script). Daemon es opcional.",
+      "enforce": "Auditoría manual. Documentación que prescribe systemd como obligatorio es drift."
+    },
+    {
+      "id": "node_version_inferior_a_18",
+      "regla": "Ningún módulo usa features que rompan en Node 18 (no más bajo) ni asume features experimentales no estables en 18.",
+      "enforce": "package.json.engines.node ya enforce el minimum. CI corre con Node 18+."
+    },
+    {
+      "id": "logs_a_archivos_rotados_obligatorios",
+      "regla": "Ningún módulo abre archivos de log persistentes propios. Logs van a stdout/stderr; el deployment decide si redirigir.",
+      "enforce": "Auditoría: módulos con fs.createWriteStream sobre archivos *.log son drift."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/deployment.schema.json (a crear). Top-level: _meta, regla_maestra (string), entry_point (object: command, npm_script), entornos_canonicos (array de Termux + Linux con detalle), env_vars_canonicas (object: { NODE_ENV: { default, valores_aceptados }, HTTP_PORT: { default, override_via }, FRONTEND_URL: { ... }, ... }), config_json_shape (referenciado a config.example.json), proceso_instalacion (object con scripts canónicos), proceso_actualizacion (object con pasos), modelo_cluster (object: single-nodo default, multi-nodo via mTLS opcional), patrones_de_drift (regexes que el validador usa).",
+
+  "reglas_de_extraccion": [
+    "1. Validar contrato contra _schemas/deployment.schema.json.",
+    "2. Verificar package.json: scripts.start = 'node index.js', scripts.dev incluye --log-level, engines.node >= 18.0.0.",
+    "3. Verificar que index.js existe en raíz como entry point.",
+    "4. Verificar que config.example.json existe y tiene shape canónico (core, http, mqtt). config.json puede existir con valores de development.",
+    "5. Verificar que scripts/install-termux.sh y scripts/install-linux.sh existen y son ejecutables.",
+    "6. Escanear módulos: ningún Dockerfile committed como obligatorio, ninguna referencia a servicios externos sin fallback, ningún child_process.spawn sobre otros módulos del repo.",
+    "7. Verificar env vars referenciadas en código (process.env.X) están documentadas en este contrato.",
+    "8. Reportar PASS/FAIL."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/deployment.schema.json (a crear)"
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/deployment.validate.js (a crear)"
+    },
+    {
+      "tipo": "scripts_canonicos",
+      "items": ["scripts/install-termux.sh", "scripts/install-linux.sh"],
+      "regla": "Puntos de entrada canónicos para instalación. Cualquier instalación oficial pasa por uno de los dos."
+    },
+    {
+      "tipo": "documento_referencia_humana",
+      "ubicacion": "INSTALL.md (raíz)",
+      "regla": "Apunta a los scripts y documenta los pasos manuales mínimos. NO duplica el contrato."
+    },
+    {
+      "tipo": "config_template",
+      "ubicacion": "config.example.json",
+      "regla": "Plantilla pública de configuración. Cualquier campo nuevo en config.json se añade aquí también con valor seguro de default."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección deployment cuando exista)",
+      "regla": "Warnings de módulos con servicios externos opcionales documentados quedan en baseline."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "deployment_contract_estructura_valida",
+      "regla": "Amplitud canónica completa.",
+      "como_detectar": "17 secciones canónicas presentes.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_entry_point_distinto_a_node_index_js",
+      "regla": "package.json.scripts.start es 'node index.js'.",
+      "como_detectar": "Inspeccionar package.json.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_node_version_inferior_a_18",
+      "regla": "package.json.engines.node >= 18.0.0.",
+      "como_detectar": "Inspeccionar package.json.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_dockerfile_committed_obligatorio",
+      "regla": "No hay Dockerfile en raíz del repo.",
+      "como_detectar": "fs.existsSync.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_config_example_json_ausente",
+      "regla": "config.example.json existe en raíz.",
+      "como_detectar": "fs.existsSync.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_install_scripts_ausentes",
+      "regla": "scripts/install-termux.sh y scripts/install-linux.sh existen.",
+      "como_detectar": "fs.existsSync.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_env_var_no_documentada",
+      "regla": "Cada process.env.X en código está documentado en deployment.contract.env_vars_canonicas.",
+      "como_detectar": "Escanear código + cruzar con lista canónica.",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS si el contrato es válido Y package.json cumple entry point + Node >= 18 Y existen install scripts y config template. Errors solo para violaciones críticas (Node version inferior, entry point distinto). Warnings para deuda visible. Info para sugerencias preventivas.",
+
+  "convenciones_complementarias": {
+    "naming": "naming.contract.json aplica a nombres de archivos y env vars (UPPER_SNAKE_CASE para env vars: HTTP_PORT, NODE_ENV, FRONTEND_URL).",
+    "glossary": "Términos: entry_point, broker, cluster, single-nodo, multi-nodo. Forma canónica en glossary.json (cuando se añadan).",
+    "events": "El sistema arranca el bus MQTT (aedes embebido) en onLoad del core. Antes de eso no hay events.",
+    "errors": "Errores de arranque (env var faltante crítica, broker no levanta) se reportan con códigos canónicos: STARTUP_FAILED, BROKER_NOT_AVAILABLE.",
+    "observability": "Logs del arranque incluyen versión del repo (package.json.version) y entorno detectado (Termux | Linux | otro).",
+    "lifecycle": "Coherente con lifecycle.contract: el core llama onLoad de cada módulo en el orden correcto durante el arranque. El proceso de arranque ES el lifecycle macro del sistema.",
+    "persistence": "El filesystem es la única persistencia del sistema. config.json + module storage local + broker embebido SQLite/disco.",
+    "http": "El servidor HTTP escucha en HTTP_PORT (env var override) o config.json.http.port. El path canónico de health check es /health.",
+    "security": "Coherente con security: secretos viven en credential-manager (no en config.json committed). Cluster multi-nodo usa mTLS de certificate-authority. SSH/keys para acceso al device del usuario están fuera del scope del repo.",
+    "frontend": "El frontend (SvelteKit en frontend/) se sirve via HTTP del core. Su build se hace con `npm run build` dentro de frontend/. Deployment del frontend es parte de este contrato — se sirve desde el mismo proceso que el core.",
+    "testing": "Tests corren en CI en GitHub Actions con Node 18 (validate.yml). Localmente: `npm run test:<modulo>` en cualquiera de los entornos canónicos.",
+    "multi-tenancy": "El despliegue es por usuario / dispositivo. Multi-tenancy real (varios usuarios en un mismo deployment) usa el aislamiento por project_id + user_id que define multi-tenancy.contract.",
+    "documentation": "INSTALL.md narra el proceso humano. Este contrato es la fuente autoritativa estructurada.",
+    "versionado": "package.json.version del repo es 0.x.y mientras hay contratos no completados. Salto a 1.0.0 cuando estable. Coherente con versionado.contract.package_json_repo_madurez."
+  }
+}

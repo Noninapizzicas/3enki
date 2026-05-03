@@ -1,9 +1,9 @@
 {
   "id": "image-processor",
   "name": "image-processor",
-  "description": "Agente con VISIÓN que analiza imágenes y decide cómo optimizarlas para OCR",
+  "description": "Agente con VISIÓN que analiza imágenes y decide cómo optimizarlas para OCR. DESHABILITADO 2026-05-03: sus tools sharp_resize/sharp_convert/sharp_crop/sharp_trim/sharp_prepare_ocr NO existen en ningún module.json del repo (sharp es dep pero ningún módulo expone tools). Reactivar cuando se cree un módulo image-processor que registre las 5 tools — ver agent-flow.contract.trabajo_pendiente.",
   "version": "2.0.0",
-  "enabled": true,
+  "enabled": false,
   "prompt_file": "prompts/image-processor.json",
   "subscribes": [
     "imagen.optimizar.request"

@@ -477,6 +477,16 @@
       "bloqueado_por": "Implementacion del bootstrap del proyecto 'default' + UI setup_required en frontend (multi-tenancy.contract.trabajo_pendiente). Pizzepos consumers necesitan saber qué conversacion esta activa por proyecto — esto motiva un patron de propagacion (active-conversation-registry o equivalente).",
       "fecha_anotacion": "2026-05-03",
       "deriva_de": "multi-tenancy.contract v1.1.0 (decision project_id_y_conversation_id_siempre_obligatorios)"
+    },
+    {
+      "id": "image_processor_agent_sin_tools_implementadas",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Detectado en auditoria de agentes (2026-05-03): el agente image-processor declara 5 tools (sharp_resize, sharp_convert, sharp_crop, sharp_trim, sharp_prepare_ocr) que NO existen en ningun module.json del repo. sharp esta en package.json.dependencies pero ningun modulo expone tools. Si el LLM principal lo invoca, falla con AGENT_TOOL_FAILED. Para cerrar inmediatamente, el agente queda deshabilitado (enabled:false en agents/image-processor.json).",
+      "criterio_de_cierre": "Crear modules/image-processor que registre las 5 tools sharp_* conforme a la convencion (module.json.tools como array de objetos con name + handler). Reactivar enabled:true en el agente cuando las tools esten disponibles. Test del agente que verifica las 5 tools registradas en moduleLoader.toolsRegistry.",
+      "deuda_visible": "Si en el futuro se necesita procesamiento de imagenes via agente (OCR de facturas, optimizacion de fotos de productos, etc.), reactivar este agente — el prompt y la logica del agente ya existen.",
+      "fecha_anotacion": "2026-05-03",
+      "fecha_deshabilitacion": "2026-05-03"
     }
   ]
 }

@@ -1,0 +1,303 @@
+{
+  "_doc": "Captura LA forma canónica en la que el sistema event-core maneja secretos, credenciales, autenticación y autorización. Define cómo un módulo accede a una API key sin tocarla directamente, cómo se autentica un nodo del core distribuido frente a otro, cómo se aisla por project_id y user_id, y qué se puede / no se puede loguear o publicar. Sin un contrato de seguridad, cada módulo inventa su forma de leer secretos, los logs filtran tokens, los nodos del core no se autentican entre sí y los módulos cruzan project_id sin garantía de aislamiento. Este contrato es la pareja de errors+observability+persistence: un secreto que se usa, un secreto que NUNCA se observa, un secreto que NUNCA se persiste en plano.",
+  "id": "security",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Recoge las prácticas que ya existen implementadas en credential-manager (resolución event-driven de API keys), certificate-authority (mTLS para autenticación de nodos del core distribuido), y las políticas dispersas en errors.contract (no_secrets_in_messages) y observability.contract (no_secrets_in_logs) y las consolida en un transversal autónomo. Documento autoritativo de la disciplina de seguridad — cualquier nuevo flujo que toque secretos, autenticación o autorización deriva de aquí.",
+
+  "objetivo": "Producir UN JSON output (_outputs/security.json) que define: qué cuenta como secreto (lista canónica de tipos), cómo se almacena (cifrado en reposo via credential-manager), cómo se accede (event-driven via credential.resolve.request, NUNCA leyendo archivos directamente), cómo se autentica un módulo del core distribuido (mTLS con certificados emitidos por certificate-authority), cómo se aísla por tenancy (project_id como ámbito, user_id como identidad), qué nunca puede aparecer en logs ni en payloads del bus ni en respuestas HTTP, política de rotación, política de revocación. Validable mecánicamente cruzando contra el código de cada módulo (que no instancia su propio acceso a secretos) y contra los logs/eventos publicados (que no contienen patterns de secreto reconocibles).",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/security.contract.json (este archivo)",
+      "arquitectura/decisiones/_outputs/errors.json (porque hereda no_secrets_in_messages)",
+      "arquitectura/decisiones/_outputs/observability.json (porque hereda no_secrets_in_logs)",
+      "modules/credential-manager/module.json (módulo dedicado a la gestión de secretos)",
+      "modules/certificate-authority/module.json (módulo dedicado a la autenticación mTLS de nodos)"
+    ],
+    "obligatorios_si_existen": [
+      "arquitectura/auditoria/_outputs/modulo-completo/credential-manager.json",
+      "arquitectura/auditoria/_outputs/modulo-completo/certificate-authority.json"
+    ],
+    "opcionales_para_contexto": [
+      "modules/credential-manager/index.js (implementación de resolve event-driven)",
+      "modules/certificate-authority/mtls-middleware.js (middleware mTLS)"
+    ],
+    "prohibido_leer": [
+      "Cualquier archivo de configuración con credenciales reales (.env, secrets/, credentials/) — el validator NO debe leer su contenido."
+    ]
+  },
+
+  "filosofia": [
+    "UN MÓDULO ES EL DUEÑO DE LOS SECRETOS. credential-manager es el único módulo que persiste, cifra, lee y resuelve credenciales. Ningún otro módulo instancia su propio acceso a archivos de credentials, .env, vault, etc.",
+
+    "CONSUMIR SECRETOS ES EVENT-DRIVEN. Para usar una credencial, un módulo publica credential.resolve.request con el id del secreto y espera credential.resolve.response. Nunca lee filesystem directamente para obtener una API key.",
+
+    "CIFRADO EN REPOSO ES OBLIGATORIO. credential-manager cifra todas las credenciales en disco. Las API keys, tokens, passwords, OAuth refresh tokens NUNCA viven en plano en filesystem ni en SQLite ni en JSON.",
+
+    "EL SECRETO NO ATRAVIESA EL BUS NI LOS LOGS. credential.resolve.response viaja una sola vez por el bus, llega solo al modulo que lo solicitó (correlated por request_id). El secreto NO se loguea, NO se replica, NO se reenvía. observability.contract y errors.contract aplican esta regla; este contrato la refuerza.",
+
+    "AUTENTICACIÓN DE NODOS ES mTLS. Cuando el core es distribuido (varios nodos), cada nodo tiene un certificado emitido por certificate-authority. La conexión entre nodos del core es mTLS — no hay HTTP plano ni MQTT sin TLS entre nodos.",
+
+    "AUTORIZACIÓN ES PROJECT_ID + USER_ID. Cualquier acción sobre datos de dominio se aísla por project_id (tenancy) y user_id (identidad del humano). Sin estos campos en el payload, la acción es ambigua: NO se ejecuta o se rechaza.",
+
+    "FRONTEND ES UN CLIENTE NO PRIVILEGIADO. El frontend NO tiene acceso a secretos del backend. Cuando el frontend necesita autenticarse (sesión de usuario), es un flujo separado del de credenciales del sistema (API keys de proveedores LLM, tokens de servicios externos).",
+
+    "LA ROTACIÓN ES ASUMIBLE. Cualquier credencial puede invalidarse en cualquier momento. Un módulo que la consume NO la cachea más allá del proceso, NO la persiste con copia local, escucha credential.deleted / credential.updated y limpia su caché en memoria.",
+
+    "REVOCACIÓN INMEDIATA. Cuando credential-manager publica credential.deleted o el certificate-authority publica certificate.revoked, los consumidores invalidan inmediatamente — no hay grace period que permita un uso adicional.",
+
+    "EL VALIDADOR DE SEGURIDAD ES PARANOICO. Cualquier patrón sospechoso (string que parece API key en un log, archivo .env hardcoded, llamada a fs.readFileSync sobre rutas de credenciales) es ERROR — no warning. La paranoia es barata; los leaks son caros."
+  ],
+
+  "principios": [
+    {
+      "id": "credential_manager_unica_via",
+      "regla": "credential-manager es el único módulo que persiste y resuelve credenciales. Ningún otro módulo lee archivos de credenciales, .env, ni cualquier storage propio para esto.",
+      "razon": "Centralizar el acceso a secretos en un módulo dedicado permite cifrado uniforme, rotación uniforme, auditoría uniforme. Distribuir el acceso multiplica las superficies de leak."
+    },
+    {
+      "id": "consumo_event_driven",
+      "regla": "Para consumir un secreto, el módulo publica credential.resolve.request con { request_id, credential_id, project_id?, correlation_id? } y consume credential.resolve.response correlacionado por request_id.",
+      "razon": "Event-driven mantiene el desacoplamiento y permite a credential-manager interceptar todas las peticiones (auditoría, autorización, rate limiting, rotación)."
+    },
+    {
+      "id": "cifrado_en_reposo",
+      "regla": "Todas las credenciales que credential-manager persiste están cifradas en disco. La clave maestra de cifrado vive fuera del repositorio (variable de entorno o keystore del sistema operativo).",
+      "razon": "Plain-text en disco = un acceso al filesystem expone TODO. Cifrado en reposo limita el blast radius a la clave maestra."
+    },
+    {
+      "id": "secreto_no_se_loguea",
+      "regla": "Ningún log del sistema incluye un secreto. Los logs que tocan credenciales referencian su credential_id (string opaco) y enmascaran cualquier valor con `***` (configurable por longitud para no revelar siquiera el tamaño exacto).",
+      "razon": "Los logs son canales temporales que pueden persistirse, replicarse, indexarse externamente. Un secreto en log = un secreto en N lugares."
+    },
+    {
+      "id": "secreto_no_se_publica",
+      "regla": "Ningún payload publicado en el bus (excepto credential.resolve.response, único caso autorizado) contiene un secreto. Los códigos de error que mencionan credenciales (CREDENTIAL_NOT_FOUND, UPSTREAM_AUTH_FAILED) NO incluyen el valor de la credencial en error.message ni error.details.",
+      "razon": "El bus replica payloads a múltiples consumers; un secreto en payload = leak a todos los suscriptores."
+    },
+    {
+      "id": "autenticacion_de_nodos_mtls",
+      "regla": "Cuando el core corre distribuido, cada nodo se autentica frente a otros con mTLS. Los certificados los emite certificate-authority. Sin certificado válido, el nodo no puede unirse al cluster.",
+      "razon": "Sin autenticación de nodos, cualquier nodo malicioso en la red puede inyectar eventos al bus o leer eventos privados. mTLS hace que la pertenencia al cluster sea criptográfica, no por configuración."
+    },
+    {
+      "id": "tenancy_por_project_id",
+      "regla": "Cualquier operación sobre datos de dominio (recetas, mensajes, archivos, etc.) lleva project_id en el payload. Sin project_id, la operación es ambigua y se rechaza con AUTHORIZATION_REQUIRED.",
+      "razon": "project_id es el ámbito de aislamiento. Sin él, los datos de un proyecto se mezclan con otro. Hacerlo obligatorio desde el primer evento del flow elimina la posibilidad de leak por defecto."
+    },
+    {
+      "id": "identidad_por_user_id",
+      "regla": "Cualquier operación que tenga atribución humana (mensajes del usuario, acciones manuales) incluye user_id. En single-user vale 'default'; en multi-user es el identificador real.",
+      "razon": "user_id permite auditoría retroactiva (¿quién hizo X?), aislamiento horizontal (Bob no ve datos de Alice), y rotación específica (revocar la sesión de Alice sin afectar a Bob)."
+    },
+    {
+      "id": "rotacion_invalida_cache",
+      "regla": "Todo consumer de credenciales escucha credential.updated y credential.deleted. Al recibir uno, invalida inmediatamente su caché en memoria de la credencial afectada y vuelve a resolver via event-driven cuando la necesite.",
+      "razon": "Si los consumers cachean indefinidamente, la rotación tarda en propagarse y una credencial revocada sigue funcionando. Invalidación inmediata es la única forma de garantizar revocación efectiva."
+    },
+    {
+      "id": "frontend_sin_secretos",
+      "regla": "El frontend NUNCA recibe API keys, tokens de provider LLM, refresh tokens OAuth ni nada similar. La autenticación del usuario en el frontend (sesión web) es un flujo separado, gestionado por un módulo de auth dedicado (cuando exista) que emite session_token al frontend tras login. Ese session_token NO da acceso a credenciales del sistema.",
+      "razon": "El frontend corre en el navegador del usuario; cualquier credencial allí es exfiltrable trivialmente (devtools, extensiones, XSS). La regla es absoluta: el backend usa las credenciales, el frontend solo recibe los resultados."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "credential_manager_modulo_dedicado",
+      "decision": "Existe UN módulo dedicado (credential-manager) que es la única vía de acceso a secretos. Otros módulos consumen via event credential.resolve.request.",
+      "alternativa_descartada": "Cada módulo lee sus propias credenciales desde su propio .env o archivo local.",
+      "razon": "Distribuir el acceso multiplica las superficies de leak (un .env por módulo, varios formatos, sin cifrado uniforme). Centralizar concentra la disciplina (un solo módulo a auditar, un solo formato de cifrado, una sola política de rotación)."
+    },
+    {
+      "id": "resolucion_event_driven_no_sincrona",
+      "decision": "credential-manager expone su resolución via bus (publish/subscribe) — NO via API HTTP ni IPC ni librería compartida.",
+      "alternativa_descartada": "Librería compartida que cada módulo importa para llamar a credentialManager.resolve(id) síncronamente.",
+      "razon": "Librería compartida fuerza acoplamiento de versiones (todos los módulos en la misma versión de la lib). Event-driven mantiene módulos desacoplados, auditable (cada resolve es un evento en el bus que se loguea por observability), e interceptable (rate limiting, autorización por consumer)."
+    },
+    {
+      "id": "cifrado_en_reposo_obligatorio",
+      "decision": "Todas las credenciales persistidas por credential-manager se cifran en disco con clave maestra externa al repositorio.",
+      "alternativa_descartada": "Plain-text en disco con permisos de filesystem restrictivos (chmod 600).",
+      "razon": "chmod 600 protege solo del usuario del SO; un backup/snapshot/dump del disco expone todo en plano. Cifrado en reposo requiere comprometer adicionalmente la clave maestra."
+    },
+    {
+      "id": "mtls_para_nodos_distribuidos",
+      "decision": "Cuando el core es distribuido, los nodos se autentican entre sí con mTLS usando certificados emitidos por certificate-authority. No hay 'shared secret' simple ni 'trust por IP'.",
+      "alternativa_descartada": "Shared secret (un token común a todos los nodos) o trust por IP (lista blanca de IPs autorizadas).",
+      "razon": "Shared secret = comprometer uno = comprometer todos. Trust por IP = cualquier nodo en la red puede impersonar. mTLS criptográficamente vincula la identidad del nodo a un certificado revocable individualmente."
+    },
+    {
+      "id": "tenancy_explicita_no_inferida",
+      "decision": "project_id y user_id se incluyen explícitamente en el payload de cualquier operación. No se infieren del 'usuario actual del proceso' ni del 'directorio en que corre'.",
+      "alternativa_descartada": "Deducir project_id de variables globales de proceso o de configuración estática del módulo.",
+      "razon": "Cuando el sistema escala a multi-user / multi-tenant simultáneo en un mismo proceso, las inferencias se vuelven imposibles. Pasarlo explícito desde el originador hasta el ejecutor es la única forma de mantener aislamiento garantizado."
+    },
+    {
+      "id": "frontend_sin_acceso_a_secretos",
+      "decision": "El frontend nunca recibe credenciales del sistema. La autenticación del usuario web es un flujo separado (session_token sin permisos de leer credenciales).",
+      "alternativa_descartada": "Pasar API keys al frontend para que llame directamente al provider LLM (saltarse el ai-gateway).",
+      "razon": "El frontend corre en cliente no confiable. Cualquier secret allí es público en cuestión de minutos. La barrera arquitectónica (backend usa secretos, frontend usa resultados) es la única defensa robusta."
+    },
+    {
+      "id": "validador_paranoico",
+      "decision": "El validador de seguridad reporta como ERROR (no warning) cualquier patrón sospechoso: hardcoded API keys, fs.readFileSync sobre rutas de credenciales, secretos en logs detectables por regex, payloads publicados al bus que contengan tokens.",
+      "alternativa_descartada": "Reportar como warning para no bloquear desarrollo cuando aparece un falso positivo.",
+      "razon": "Falsos positivos se cierran con justificación documentada en el commit; falsos negativos se cierran con un leak en producción. El asimetría de costes justifica la paranoia."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "leer_credenciales_directamente_del_filesystem",
+      "regla": "Ningún módulo distinto de credential-manager hace fs.readFileSync / fs.readFile / require sobre archivos de credenciales (.env, secrets/, credentials/, *.key, *.pem, *.token).",
+      "enforce": "Validador escanea código de cada módulo. Patrones: require('dotenv'), fs.readFile sobre paths con keywords credential/secret/token/key/.env. Severidad ERROR."
+    },
+    {
+      "id": "hardcoded_api_keys",
+      "regla": "Ningún archivo del repo contiene API keys, tokens, passwords hardcoded en texto plano. Patrones canónicos a detectar: sk-... (OpenAI), claude-..., AKIA... (AWS), ghp_... (GitHub), tokens JWT con payload visible.",
+      "enforce": "Validador escanea TODO el repo (excepto _archived/) con regexes específicos de cada proveedor conocido. Severidad ERROR. Falsos positivos se documentan en una whitelist explícita."
+    },
+    {
+      "id": "secretos_en_logs",
+      "regla": "Ningún log incluye el valor de un secreto. Authorization headers, cookies, tokens, claves se enmascaran a `***` o se omiten enteros del log. observability.contract aplica esto globalmente; este contrato lo refuerza.",
+      "enforce": "Validador escanea código buscando logger.X(...) que pasen variables nombradas 'apiKey', 'token', 'password', 'secret', 'authorization', 'authHeader' como parte del payload. Severidad ERROR."
+    },
+    {
+      "id": "secretos_en_payloads_del_bus",
+      "regla": "Ningún publish al bus incluye un secreto, EXCEPTO credential.resolve.response (único autorizado). Los códigos de error que mencionan credenciales referencian credential_id, no el valor.",
+      "enforce": "Validador escanea código buscando publish() con propiedades que contengan apiKey/token/password/secret. Severidad ERROR salvo en credential-manager."
+    },
+    {
+      "id": "secretos_en_respuestas_http",
+      "regla": "Ningún endpoint HTTP responde con un secreto en el body ni en headers (excepto el endpoint de creación de credencial inmediatamente tras setear, donde el caller la necesita una vez). http.contract aplica esto; este contrato lo refuerza.",
+      "enforce": "Validador escanea handlers HTTP buscando res.json() / res.send() con campos sospechosos. Severidad ERROR."
+    },
+    {
+      "id": "comunicacion_entre_nodos_sin_tls",
+      "regla": "Cuando el core es distribuido, ningún nodo se comunica con otro sobre HTTP plano o MQTT sin TLS. Solo mTLS con certificados de certificate-authority.",
+      "enforce": "Validador inspecciona configuración de aedes, conexiones MQTT cross-nodo, peerings entre instancias del core. Severidad ERROR."
+    },
+    {
+      "id": "operacion_sin_project_id",
+      "regla": "Ninguna operación de dominio (lectura, escritura, modificación de datos del usuario) se ejecuta sin project_id en el payload. El handler rechaza con AUTHORIZATION_REQUIRED si falta.",
+      "enforce": "Auditoría de handlers de cada módulo: si una operación que toca DB no valida project_id, drift. Severidad warning (porque hoy single-tenant lo permite, pero es deuda)."
+    },
+    {
+      "id": "operacion_atribuida_sin_user_id",
+      "regla": "Ninguna operación con atribución humana (publicar mensaje, crear receta, etc.) se ejecuta sin user_id. Single-user = 'default'.",
+      "enforce": "Auditoría de eventos chat-flow / agent-flow / similares. Coherente con principios de chat-flow y agent-flow que ya hacen user_id obligatorio."
+    },
+    {
+      "id": "frontend_recibe_credencial",
+      "regla": "Ningún payload del backend hacia el frontend (publish MQTT en topic frontend/) incluye una credencial real. Si el frontend muestra 'Credencial X configurada', es un boolean, no el valor.",
+      "enforce": "Validador escanea código frontend (suscripciones MQTT) y backend (publishes a topics frontend/) buscando shapes que incluyan campos de credencial. Severidad ERROR."
+    },
+    {
+      "id": "cache_de_credencial_persistente",
+      "regla": "Ningún consumer de credentials cachea el valor en disco / persistente. La caché en memoria es válida durante la vida del proceso, pero se invalida con credential.updated / credential.deleted.",
+      "enforce": "Auditoría manual + revisión de PR. Patrones tipo fs.writeFile con valor de credencial son ERROR via la regla leer_credenciales_directamente_del_filesystem (porque escribir es leer al revés)."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/security.schema.json (a crear). Top-level: _meta, regla_maestra (string), tipos_canonicos_de_secreto (array de { id, descripcion, ejemplos, vida_util_recomendada, rotacion }), modulo_responsable (string = 'credential-manager'), eventos_canonicos (array de eventos credential.* con shape), autenticacion_de_nodos (objeto con mTLS + certificate-authority), tenancy (objeto con project_id + user_id reglas), telemetria_de_seguridad (qué se loguea sobre operaciones de credenciales), patrones_de_deteccion_de_drift (regexes que el validador usa).",
+
+  "reglas_de_extraccion": [
+    "1. Validar este contrato contra _schemas/security.schema.json (cuando exista). FAIL si no compila.",
+    "2. Verificar que credential-manager existe en modules/ y declara los eventos canónicos del subsistema (credential.saved, credential.updated, credential.deleted, credential.resolved, credential.resolve.request, credential.resolve.response).",
+    "3. Verificar que certificate-authority existe en modules/ y declara los eventos de gestión de certificados (certificate.issued, certificate.revoked).",
+    "4. Escanear código de TODOS los módulos del repo (excepto credential-manager y certificate-authority) buscando patrones de drift: require('dotenv'), fs.readFile sobre paths con keywords credential/secret/token/key/.env, hardcoded API keys con regexes específicos de proveedor.",
+    "5. Escanear logs (handlers logger.X) buscando paso de variables sospechosas (apiKey, token, password, secret, authorization).",
+    "6. Escanear publishes al bus y responses HTTP buscando shapes con campos de credencial.",
+    "7. Verificar que módulos del subsistema chat (chat-io, prompt-builder, ai-gateway) no incluyen credenciales en sus eventos canónicos. Coherente con chat-flow.contract.",
+    "8. Reportar PASS/FAIL con findings agrupados por severidad."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/security.schema.json (a crear)",
+      "regla": "Schema AJV strict del output security.json."
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/security.validate.js (a crear)",
+      "regla": "Implementa los 7+ cross-checks. Registrar en scripts/validate-all.js."
+    },
+    {
+      "tipo": "modulos_responsables",
+      "items": ["credential-manager (gestor de secretos)", "certificate-authority (autoridad de certificación mTLS)"],
+      "regla": "Estos módulos son los implementadores del contrato. Cualquier cambio en sus events afecta al contrato."
+    },
+    {
+      "tipo": "modulos_consumidores",
+      "items": ["ai-gateway (resuelve API keys de providers via credential.resolve.request)", "todos los módulos que necesiten credenciales externas (gateway-manager, firmware-manager con OTA, etc.)"],
+      "regla": "Cumplen el patrón event-driven sin instanciar acceso propio."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección security cuando exista)",
+      "regla": "Warnings de operaciones sin project_id (deuda single-tenant) quedan en baseline. Errors (secretos en logs, hardcoded API keys) NO van a baseline — bloquean siempre."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "security_contract_estructura_valida",
+      "regla": "security.contract.json valida estructuralmente (amplitud canónica completa).",
+      "como_detectar": "Verificar que tiene las 17 secciones canónicas.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_lectura_directa_de_credenciales",
+      "regla": "Ningún módulo distinto de credential-manager hace fs.readFile / require sobre archivos de credenciales.",
+      "como_detectar": "Regex sobre código: require('dotenv'), fs.readFileSync con paths que contengan credential|secret|token|\\.env|\\.key|\\.pem.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_hardcoded_api_key",
+      "regla": "Ningún archivo del repo contiene API keys hardcoded.",
+      "como_detectar": "Regex de proveedores conocidos: sk-[A-Za-z0-9]{20,}, claude-[A-Za-z0-9-]{20,}, ghp_[A-Za-z0-9]{36}, AKIA[A-Z0-9]{16}, JWT tokens (eyJ...).",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_secret_en_log",
+      "regla": "Ningún logger pasa variables nombradas como secreto.",
+      "como_detectar": "Regex: this.logger\\.\\w+\\([^)]*\\b(apiKey|token|password|secret|authorization|authHeader)\\b.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_secret_en_publish",
+      "regla": "Ningún publish al bus contiene campos de credencial (excepto credential.resolve.response).",
+      "como_detectar": "Regex: eventBus.publish\\([^,]+,\\s*\\{[^}]*\\b(apiKey|token|password|secret)\\b. Excluir credential-manager.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_endpoint_http_responde_con_credencial",
+      "regla": "Ningún res.json() / res.send() incluye campos de credencial.",
+      "como_detectar": "Regex sobre handlers HTTP. Severidad ERROR.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_operacion_sin_project_id",
+      "regla": "Operaciones de dominio que tocan DB validan project_id presente.",
+      "como_detectar": "Auditoría de cada handler: si lee/escribe DB y no valida project_id, drift.",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS si security.contract.json es estructuralmente válido Y credential-manager / certificate-authority existen y declaran sus eventos canónicos Y ningún módulo distinto de ellos lee credenciales directamente Y ningún archivo contiene hardcoded API keys Y ningún log o publish contiene secretos. Errores cross-system bloquean PASS — los drifts de seguridad son ERROR (no warning) por la asimetría de costes documentada en filosofia. Warnings solo para deuda no crítica (single-tenant operations sin project_id explícito). Formato coherente con los demás validators.",
+
+  "convenciones_complementarias": {
+    "naming": "Los eventos canónicos del subsistema (credential.saved, credential.resolve.request, etc.) cumplen la forma <module-prefix>.<entity>.<verb>. Verbos: saved, updated, deleted, resolved, resolve, issue, revoke.",
+    "glossary": "Las entidades del subsistema (credential, certificate, token, secret) tienen forma canónica única en glossary.json del idioma del módulo (credential-manager es 'en', usa credential / certificate / token).",
+    "events": "Hereda los principios generales: comunicación asíncrona, no esperar respuesta sincrona del propio publish. credential.resolve.request espera credential.resolve.response correlacionado por request_id.",
+    "errors": "Los códigos canónicos relacionados con seguridad ya viven en errors.json: CREDENTIAL_NOT_FOUND, UPSTREAM_AUTH_FAILED, AUTHORIZATION_REQUIRED. Este contrato refuerza no_secrets_in_messages — ningún error.message ni error.details contiene un secreto.",
+    "observability": "Refuerza no_secrets_in_logs. Las operaciones de credential-manager se loguean con metadata { credential_id, project_id, action } — NUNCA con el valor.",
+    "lifecycle": "credential-manager y certificate-authority cumplen lifecycle.contract. Sus subscribes están declarados en module.json para auto-wire.",
+    "persistence": "credential-manager usa pattern sqlite-encrypted o similar (cifrado en reposo). El pattern exacto se documenta en su module.json.config.persistence.",
+    "http": "El subsistema seguridad NO expone HTTP genérico de lectura de credenciales. credential-manager puede tener endpoints HTTP de gestión (crear, eliminar) protegidos con auth de admin, pero la lectura siempre es event-driven.",
+    "frontend": "El frontend no recibe credenciales reales. Si necesita mostrar 'Credencial X configurada', recibe un boolean o un opaque id (sin valor). Coherente con frontend.contract.frontend_sin_acceso_a_secretos."
+  }
+}

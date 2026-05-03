@@ -198,6 +198,12 @@
     },
     {
       "domain": "project",
+      "action": "get-default-conversation",
+      "handler": "handleUIGetDefaultConversation",
+      "description": "Modelo 'una via fija' (agent-flow v1.3.0): devuelve conversation_id canonica del proyecto. Si no existe, la crea via mqttRequest a chat-io. Llamado por ai-agent-framework cuando llega agent.execute.request con project_id pero sin conversation_id."
+    },
+    {
+      "domain": "project",
       "action": "setAIConfig",
       "handler": "handleUISetAIConfig"
     },

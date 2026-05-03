@@ -38,6 +38,7 @@ class ProjectManagerModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
+    this.mqttRequest = core.mqttRequest || null;
 
     // Load config from loader-injected moduleConfig
     this.config = core.moduleConfig || {};
@@ -641,6 +642,61 @@ class ProjectManagerModule {
     project.last_conversation_id = conversationId;
     project.updated_at = now;
     return project;
+  }
+
+  // ============================================================
+  // Modelo "una via fija" (agent-flow v1.3.0):
+  // Cada proyecto tiene una conversation canonica donde caen los
+  // resultados de agentes disparados sin chat humano (cron, eventos
+  // del dominio, webhooks). Esta funcion devuelve esa conversation_id
+  // y la crea via mqttRequest a chat-io si todavia no existe.
+  // ============================================================
+  async getOrCreateDefaultConversation(projectId, correlationId) {
+    const project = this.projects.get(projectId);
+    if (!project) {
+      const err = new Error(`Project not found: ${projectId}`);
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+    if (project.last_conversation_id) {
+      return { conversation_id: project.last_conversation_id, created: false };
+    }
+    if (!this.mqttRequest) {
+      const err = new Error('project-manager: mqttRequest no disponible para crear conversation canonica');
+      err.code = 'INTERNAL_ERROR';
+      throw err;
+    }
+    try {
+      const result = await this.mqttRequest('chat-io', 'create', {
+        project_id: projectId,
+        title: `Actividad del sistema — ${project.name}`
+      }, { timeout_ms: 5000 });
+      const conversation_id = result?.conversation_id || result?.conversation?.id;
+      if (!conversation_id) {
+        throw new Error('chat-io.create no devolvio conversation_id');
+      }
+      await this.setLastConversation(projectId, conversation_id, correlationId);
+      this.logger.info('project-manager.default_conversation.created', {
+        project_id: projectId, conversation_id
+      });
+      return { conversation_id, created: true };
+    } catch (err) {
+      this.logger.error('project-manager.default_conversation.failed', {
+        project_id: projectId, error: err.message
+      });
+      throw err;
+    }
+  }
+
+  async handleUIGetDefaultConversation(data) {
+    const { project_id } = data || {};
+    if (!project_id) {
+      throw { status: 400, code: 'VALIDATION_ERROR', message: 'project_id is required' };
+    }
+    if (!this.getProject(project_id)) {
+      throw { status: 404, code: 'NOT_FOUND', message: 'Project not found' };
+    }
+    return await this.getOrCreateDefaultConversation(project_id, crypto.randomUUID());
   }
 
   async setProjectAIConfig(projectId, aiConfig, correlationId) {

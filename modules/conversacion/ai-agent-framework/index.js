@@ -37,6 +37,11 @@ class AiAgentFrameworkModule {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
     this.moduleLoader = context.moduleLoader || null;
+    this.mqttRequest = context.mqttRequest || null;
+    // Cache in-memory de conversation_default_id por project_id (TTL 5min) para
+    // evitar mqttRequest en cada agent.execute.request del mismo proyecto.
+    this._conversationCache = new Map();
+    this._conversationCacheTTL = 5 * 60 * 1000;
 
     this._loadBasePrompt();
     this._loadAgents();
@@ -237,11 +242,51 @@ class AiAgentFrameworkModule {
       });
     }
 
+    // Modelo "una via fija" (agent-flow v1.3.0): si no viene conversation_id,
+    // resolvemos a la conversation_default_id del proyecto via project-manager.
+    // Asi ningun agente queda en saco roto — el feedback siempre tiene destino.
+    let resolved_conversation_id = conversation_id;
+    if (!resolved_conversation_id && project_id) {
+      resolved_conversation_id = await this._resolveDefaultConversationId(project_id);
+    }
+
     return this._dispatchToLlm({
       ...baseEnvelope,
+      conversation_id: resolved_conversation_id,
       shape: 'canonical',
       agent, task, context, session_id, prev_state, settings
     });
+  }
+
+  // ============================================================
+  // Modelo "una via fija" — resuelve conversation_id canonica del
+  // proyecto cuando agent.execute.request llega sin ella.
+  // ============================================================
+  async _resolveDefaultConversationId(project_id) {
+    if (!project_id) return null;
+    const cached = this._conversationCache.get(project_id);
+    if (cached && (Date.now() - cached.at) < this._conversationCacheTTL) {
+      return cached.conversation_id;
+    }
+    if (!this.mqttRequest) {
+      this.logger?.warn?.('ai-agent-framework.resolve_conversation.no_mqtt_request', {
+        project_id, reason: 'mqttRequest no disponible en contexto'
+      });
+      return null;
+    }
+    try {
+      const result = await this.mqttRequest('project', 'get-default-conversation', { project_id }, { timeout_ms: 5000 });
+      const conversation_id = result?.conversation_id || null;
+      if (conversation_id) {
+        this._conversationCache.set(project_id, { conversation_id, at: Date.now() });
+      }
+      return conversation_id;
+    } catch (err) {
+      this.logger?.warn?.('ai-agent-framework.resolve_conversation.failed', {
+        project_id, error: err.message
+      });
+      return null;
+    }
   }
 
   // ============================================================

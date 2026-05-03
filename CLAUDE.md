@@ -152,6 +152,21 @@ Ejemplo: `arquitectura/decisiones/_contratos/companero-viaje.contract.json`.
 - **Las secciones que falten dejan rastro**: un contrato sin `derivaciones` sugiere que la decisión no tiene efecto cascada (probablemente miente — todo decisión cross-módulo lo tiene). Un contrato sin `convenciones_complementarias` sugiere que no se relaciona con otros (también probablemente miente).
 - **Amplitud antes que profundidad**. Es preferible un contrato con todas las secciones aunque alguna sea "no aplica explicado" a uno que omite secciones porque "ahora no se me ocurre qué poner".
 
+## Disciplina transversal vs horizontal
+
+**Regla absoluta**: antes de empezar cualquier horizontal (sub-contratos derivados, módulos concretos, código de features, UIs), TODOS los contratos transversales del sistema deben estar cerrados y unificados. La fase es estricta — no se alterna.
+
+**Por qué**: el "modo transversal" tiene un cargador mental específico (decisiones cross-cutting, secciones canónicas, patrones de validator, derivaciones cascada). Saltar a un horizontal en medio pierde ese contexto. Al regresar a un transversal nuevo, se redescubre mal — los transversales escritos después de horizontales salen más estrechos que los escritos en bloque seguido. Caso real: chat-flow y agent-flow se escribieron tras una pausa horizontal y les faltaban 6 secciones canónicas vs los transversales originales (errors, events, http, ...) — hubo que ampliarlos retroactivamente.
+
+**Concreto**:
+
+- Si entramos en fase transversal, completamos TODOS los transversales que el sistema necesita antes de tocar ningún horizontal. La "lista de transversales pendientes" se cierra primero, después se ejecuta entera.
+- Si un horizontal en curso revela la necesidad de un transversal nuevo (caso real: `agent-flow` descubrió que faltaban códigos `AGENT_*` en `errors.json`), se **pausa el horizontal**, se completa el transversal en commit separado, y luego se retoma. Nunca se mete el transversal como "excepción" dentro del horizontal.
+- Si un horizontal aparece como urgente operativamente y los transversales no están cerrados, la deuda del horizontal se documenta como `trabajo_pendiente` dentro de su propio contrato y se pospone hasta que la fase transversal termine. Pasos terminados de un horizontal no se cierran (paso 6 = legacy cleanup) si los transversales necesarios siguen abiertos.
+- Identificar transversales pendientes es parte del protocolo: antes de declarar "ya están todos", se hace un inventario explícito (qué transversales existen, cuáles están al ancho canónico, cuáles faltan). Sin inventario, la afirmación es una inferencia.
+
+**Anti-patrón**: "termino este sub-contrato y de paso añado un transversal nuevo que descubrí". Resulta en transversales con menos amplitud que los originales y en horizontales contaminados con decisiones que no son su responsabilidad.
+
 ## Patrón de migración cross-módulo
 
 Cuando hay drift estructural en un subsistema (varios módulos hablan shapes inconsistentes para los mismos eventos), la disciplina es la misma que se aplicó en chat-flow:

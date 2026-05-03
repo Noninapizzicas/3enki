@@ -375,5 +375,24 @@
     "persistence": "ai-agent-framework NO persiste estado del agente entre invocaciones (cada agent.execute.request es atomico). El catalogo de agentes (agents/*.json) y sus prompts (prompts/*.json) viven en filesystem, leidos en onLoad. session_id / prev_state / next_state son cimentaciones para agentes con estado futuro — cuando se implementen tendran su propio storage declarado en config.persistence.",
     "http": "El subsistema agentes NO expone HTTP. Comunicacion 100% via bus. Los modulos publisher (pizzepos, ai-gateway) sirven sus propias frontera HTTP/MQTT pero los eventos agent_flow son siempre internos.",
     "chat-flow": "Cuando un agente nace de chat (invocado por LLM via tool invoke_agent durante un chat.prompt.ready -> ai.chat.response), comparte correlation_id, conversation_id, channel, channel_context con la cadena chat. Si el agente publica chat.assistant.saved (chat multi-participante), cumple el shape canonico de chat-flow — no inventa shape propio."
-  }
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "paso_6_cerrar_legacy_agentName",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Eliminar las ramas defensivas que aceptan el alias agentName (camelCase) en ai-agent-framework. Eliminar tambien los tests del shape legacy (test 'onAgentExecuteRequest acepta alias agentName con warn'). Tras este cierre, futuros publish con agentName fallaran contra schema en lugar de pasar con warn — disciplina canonica completa.",
+      "drifts_que_cierra": [
+        "drift_uso_de_alias_agentName en modules/conversacion/ai-agent-framework/index.js (6 ocurrencias en baseline)"
+      ],
+      "modulos_afectados_pre_cierre": [
+        "conversacion/ai-agent-framework (publisher canonico — quita compat)",
+        "pizzepos/carta-digital, carta-impresion, carta-marketing, carta-scheduler, menu-generator (consumers que aun publican agent.execute.request sin correlation_id ni schema_ref — deben migrarse al shape canonico ANTES del cierre, si no se rompen al perder el alias agentName)"
+      ],
+      "criterio_de_cierre": "Validador agent-flow.validate.js sin warnings drift_uso_de_alias_agentName ni drift_publish_agent_flow_sin_correlation_id. Pizzepos modules con request_schema_ref declarado y correlation_id propagado.",
+      "bloqueado_por": "Disciplina transversal-vs-horizontal (CLAUDE.md): no se cierran horizontales hasta que la fase transversal termine — todos los contratos transversales del sistema deben estar cerrados primero.",
+      "fecha_anotacion": "2026-05-03"
+    }
+  ]
 }

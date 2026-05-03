@@ -447,17 +447,6 @@ class AiGatewayModule {
   async onChatPromptReady(event) {
     const data = event.data || event;
 
-    // Shape canonico (chat-flow v1.0.0): system_prompt + messages.
-    // Shape legacy (transitorio): prompt + message singular + context.
-    // Aceptamos ambos con warn legacy hasta que prompt-builder/chat-io esten 100% migrados.
-    const isLegacy = (data.system_prompt === undefined) && (data.prompt !== undefined || data.message !== undefined);
-    if (isLegacy) {
-      this.logger.warn('ai-gateway.onChatPromptReady.shape_legacy', {
-        conversation_id: data.conversation_id,
-        message_id: data.message_id
-      });
-    }
-
     const correlation_id  = data.correlation_id;
     const conversation_id = data.conversation_id;
     const project_id      = data.project_id ?? null;
@@ -470,10 +459,8 @@ class AiGatewayModule {
     const attachments     = data.attachments;
     const intencion       = data.intencion ?? null;
     const tools_disponibles = data.tools_disponibles;
-    const systemPrompt    = data.system_prompt ?? data.prompt ?? '';
-    const history = Array.isArray(data.messages)
-      ? data.messages
-      : (data.message ? [{ role: 'user', content: data.message }] : []);
+    const systemPrompt    = data.system_prompt ?? '';
+    const history = Array.isArray(data.messages) ? data.messages : [];
 
     if (!conversation_id || !message_id) {
       this.logger.warn('ai-gateway.onChatPromptReady.invalid_payload', { conversation_id, message_id });
@@ -497,7 +484,6 @@ class AiGatewayModule {
         project_id,
         conversation_id,
         page_id,
-        context: data.context,
         prompt: systemPrompt,
         intencion
       });

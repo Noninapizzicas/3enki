@@ -497,42 +497,27 @@ class ChatIoModule {
    * Espera shape: { correlation_id, conversation_id, project_id, user_id,
    *   channel, channel_context, message_id, message_id_assistant,
    *   assistant_message, model, provider, tokens: { input, output, total },
-   *   duration_ms, timestamp, [tool_calls_executed], [iterations], [cost],
-   *   [finish_reason] }
-   *
-   * Compatibilidad transitoria: si llega del shape antiguo (campo 'message'
-   * en vez de 'assistant_message'), lo acepta pero loggea warn — para
-   * detectar callers no migrados todavia.
+   *   { correlation_id, conversation_id, project_id, user_id, channel,
+   *     channel_context, message_id, message_id_assistant, assistant_message,
+   *     model, provider, tokens:{input,output,total}, duration_ms, timestamp,
+   *     [tool_calls_executed], [iterations], [cost], [finish_reason] }
    */
   async onAiResponse(event) {
     const data = event.data || event;
     const {
       project_id, conversation_id,
-      // shape canonico
       assistant_message,
       message_id_assistant,
-      // compatibilidad transitoria con shape antiguo
-      message: legacy_message,
       tokens, cost, tool_calls_executed,
       settings,
       channel, channel_context, correlation_id
     } = data;
 
-    // Compatibilidad transitoria — caller del shape viejo (drift)
-    const content = assistant_message ?? legacy_message;
-    if (!assistant_message && legacy_message) {
-      this.logger.warn('chat-io.onAiResponse.shape_legacy', {
-        reason: 'caller publica con campo legacy "message" en vez de "assistant_message" — drift chat-flow',
-        conversation_id, correlation_id
-      });
-    }
-
-    if (!project_id || !conversation_id || !content) return;
+    if (!project_id || !conversation_id || !assistant_message) return;
 
     const message_id = message_id_assistant || crypto.randomUUID();
     const now = Date.now();
-    // tokens canonico es objeto { input, output, total }; legacy era number plano.
-    const tokens_total = (typeof tokens === 'object' && tokens !== null) ? tokens.total : tokens;
+    const tokens_total = tokens?.total ?? null;
     const metadata = tool_calls_executed?.length
       ? JSON.stringify({ tool_calls: tool_calls_executed.map(t => ({ name: t.name, status: t.result_status || t.status })) })
       : null;
@@ -541,7 +526,7 @@ class ChatIoModule {
       await this._db(project_id,
         `INSERT INTO messages (id, conversation_id, role, content, tokens, cost, metadata, created_at)
          VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
-        [message_id, conversation_id, content, tokens_total || null, cost?.amount ?? cost ?? null, metadata, now]
+        [message_id, conversation_id, assistant_message, tokens_total, cost?.amount ?? null, metadata, now]
       );
       await this._db(project_id,
         'UPDATE conversations SET updated_at = ? WHERE id = ?',
@@ -557,7 +542,7 @@ class ChatIoModule {
 
     await this.eventBus.publish('chat.assistant.saved', {
       project_id, conversation_id, message_id,
-      assistant_message: content,
+      assistant_message,
       metadata,
       correlation_id
     });
@@ -571,7 +556,7 @@ class ChatIoModule {
           JSON.stringify({
             id: message_id,
             role: 'assistant',
-            content,
+            content: assistant_message,
             metadata,
             timestamp: new Date(now).toISOString()
           }),

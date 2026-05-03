@@ -5,7 +5,7 @@
  *  - handleSend publica chat.message.saved con shape canonico (correlation_id,
  *    user_id, channel, channel_context, user_message en vez de message, etc.).
  *  - onAiResponse acepta shape canonico (assistant_message + message_id_assistant
- *    + tokens objeto) y mantiene compatibilidad transitoria con shape legacy.
+ *    + tokens objeto).
  *  - onAiFailed mapea error codes canonicos a mensajes legibles al usuario.
  *  - El payload publicado VALIDA contra el schema chat-flow JSON Schema.
  *
@@ -195,25 +195,6 @@ async function testAsync(description, fn) {
     assert.ok(savedEv);
     assert.strictEqual(savedEv[1].assistant_message, 'Hola, dime');
     assert.strictEqual(savedEv[1].correlation_id, 'corr-1');
-  });
-
-  await testAsync('onAiResponse acepta shape LEGACY (message en vez de assistant_message) y loguea warn', async () => {
-    const mocks = makeMocks();
-    const m = instantiateAndStub(mocks);
-    await m.onAiResponse({
-      project_id: uuid1,
-      conversation_id: uuid2,
-      message: 'Respuesta legacy',  // shape antiguo
-      tokens: 25,                    // legacy: number plano
-      cost: 0.0002                   // legacy: number plano
-    });
-    const warnLegacy = mocks.logs.find(l => l[1] === 'chat-io.onAiResponse.shape_legacy');
-    assert.ok(warnLegacy, 'debe loguear shape_legacy con shape antiguo');
-    // Persiste igual
-    const insertCall = mocks.dbCalls.find(c => /INSERT INTO messages/.test(c.sql));
-    assert.ok(insertCall);
-    assert.strictEqual(insertCall.params[2], 'Respuesta legacy');
-    assert.strictEqual(insertCall.params[3], 25, 'tokens legacy number plano');
   });
 
   await testAsync('onAiResponse con channel=telegram NO publica MQTT al frontend web', async () => {

@@ -227,39 +227,20 @@ class PromptBuilderModule {
    *   1. base.prompt.json + module prompt + user prompt (cache interna)
    *   2. context aportado por chat.context.enriched (memorias modulares)
    *   3. Publica chat.prompt.ready con shape canonico para ai-gateway.
-   *
-   * Compatibilidad transitoria: si llega del shape legacy ('message',
-   * 'prompt' como id, 'context' como page_context), lo acepta pero
-   * loguea warn.
    */
   async onMessageSaved(event) {
     const data = event.data || event;
     const {
-      // shape canonico
       user_message, prompt_id, page_context, user_id, channel, channel_context, correlation_id,
-      // comunes
-      project_id, page_id, conversation_id, message_id, attachments, intencion, settings,
-      // compatibilidad transitoria
-      message: legacy_message, prompt: legacy_prompt, context: legacy_context
+      project_id, page_id, conversation_id, message_id, attachments, intencion, settings
     } = data;
 
-    // Normalizacion de shape (compat transitoria)
-    const userMessageNorm = user_message ?? legacy_message;
-    const promptIdNorm = prompt_id ?? legacy_prompt ?? null;
-    const pageContextNorm = page_context ?? legacy_context ?? {};
-    if (!user_message && legacy_message) {
-      this.logger.warn('prompt-builder.onMessageSaved.shape_legacy', {
-        reason: 'caller publica con campo legacy "message" en vez de "user_message" — drift chat-flow',
-        conversation_id, correlation_id
-      });
-    }
-
-    if (!project_id || !conversation_id || !userMessageNorm) return;
+    if (!project_id || !conversation_id || !user_message) return;
 
     const moduleName = this._resolveModule(page_id);
-    const promptObj = this._resolvePromptContent(promptIdNorm, moduleName);
+    const promptObj = this._resolvePromptContent(prompt_id ?? null, moduleName);
     let systemPrompt = this._buildSystemPrompt({
-      moduleName, promptObj, context: pageContextNorm,
+      moduleName, promptObj, context: page_context ?? {},
       project_id, conversation_id, page_id
     });
 
@@ -294,7 +275,7 @@ class PromptBuilderModule {
       this.logger.warn('prompt-builder.history.failed', { error: err.message, correlation_id });
     }
 
-    const messages = [...history, { role: 'user', content: userMessageNorm }];
+    const messages = [...history, { role: 'user', content: user_message }];
 
     // chat.prompt.ready — shape canonico chat-flow v1.0.0
     await this.eventBus.publish('chat.prompt.ready', {

@@ -3,7 +3,6 @@
  *
  * Foco:
  *  - onChatPromptReady acepta shape canonico (system_prompt + messages + canales).
- *  - onChatPromptReady acepta shape LEGACY (prompt + message singular) con warn.
  *  - On exito publica ai.chat.response con shape canonico:
  *      assistant_message, message_id_assistant (NUEVO uuid),
  *      tokens objeto {input,output,total}, duration_ms, timestamp,
@@ -144,25 +143,6 @@ async function testAsync(description, fn) {
     const payload = mocks.published.find(p => p[0] === 'ai.chat.response')[1];
     const ok = validateResponse(payload);
     assert.ok(ok, `payload debe validar. errors: ${JSON.stringify(validateResponse.errors)}`);
-  });
-
-  await testAsync('onChatPromptReady acepta shape LEGACY (prompt + message singular) con warn', async () => {
-    const mocks = makeMocks();
-    const m = instantiate(mocks);
-    await m.onChatPromptReady({
-      project_id: 'p',
-      conversation_id: 'conv-1',
-      message_id: 'm-1',
-      prompt: 'system legacy',     // <-- legacy
-      message: 'hola legacy'       // <-- legacy
-    });
-    const warn = mocks.logs.find(l => l[1] === 'ai-gateway.onChatPromptReady.shape_legacy');
-    assert.ok(warn, 'warn shape_legacy emitido');
-    const ev = mocks.published.find(p => p[0] === 'ai.chat.response');
-    assert.ok(ev, 'aun publica ai.chat.response (compat transitoria)');
-    assert.strictEqual(ev[1].assistant_message, 'hola humano');
-    assert.strictEqual(ev[1].user_id, 'default', 'user_id default si no llega del caller');
-    assert.strictEqual(ev[1].channel, 'web', 'channel default si no llega del caller');
   });
 
   await testAsync('onChatPromptReady sin conversation_id descarta payload silenciosamente con warn', async () => {

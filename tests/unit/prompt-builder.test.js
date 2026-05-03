@@ -3,7 +3,6 @@
  *
  * Foco:
  *  - onMessageSaved acepta shape canonico de chat.message.saved.
- *  - onMessageSaved acepta shape LEGACY con warn (compat transitoria).
  *  - publish chat.prompt.ready con shape canonico (system_prompt, no prompt;
  *    correlation_id, user_id, channel preservados).
  *  - onContextEnriched acumula contextos de memorias modulares por message_id.
@@ -103,25 +102,6 @@ async function testAsync(description, fn) {
     assert.strictEqual(lastMsg.content, 'Hola compañero');
     assert.strictEqual(payload.message, undefined, 'campo message no debe existir');
     assert.strictEqual(payload.prompt, undefined, 'campo prompt no debe existir (se usa system_prompt)');
-    // No warn shape_legacy
-    assert.ok(!mocks.logs.find(l => l[1] === 'prompt-builder.onMessageSaved.shape_legacy'));
-  });
-
-  await testAsync('onMessageSaved acepta shape LEGACY (message + prompt + context) con warn', async () => {
-    const mocks = makeMocks();
-    const m = instantiateAndStub(mocks);
-    await m.onMessageSaved({
-      project_id: 'proj-1',
-      conversation_id: 'conv-1',
-      message_id: 'm-1',
-      message: 'Hola legacy',          // <-- legacy
-      prompt: 'plantilla-x',           // <-- legacy
-      context: { from_legacy: true }   // <-- legacy
-    });
-    const warn = mocks.logs.find(l => l[1] === 'prompt-builder.onMessageSaved.shape_legacy');
-    assert.ok(warn, 'warn shape_legacy emitido');
-    const payload = mocks.published.find(p => p[0] === 'chat.prompt.ready')[1];
-    assert.strictEqual(payload.system_prompt && /Hola legacy/.test(payload.messages[payload.messages.length - 1].content), true);
   });
 
   await testAsync('chat.prompt.ready VALIDA contra el JSON Schema oficial', async () => {

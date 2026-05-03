@@ -291,8 +291,8 @@ async function loadModule(mocks, configOverrides = {}) {
     assert.strictEqual(m._getPendientes('p1').size, 1);
     const ev = findEvent(mocks.published, 'agent.execute.request');
     assert.ok(ev, 'debe publicar agent.execute.request al dispatcher');
-    assert.strictEqual(ev[1].agentName, 'scheduler-dispatcher');
-    assert.strictEqual(ev[1].context.project_id, 'p1');
+    assert.strictEqual(ev[1].agent_name, 'scheduler-dispatcher');
+    assert.strictEqual(ev[1].project_id, 'p1');
     await m.onUnload();
     fs.rmSync(tmp, { recursive: true, force: true });
   });

@@ -141,7 +141,7 @@ function checkSchemaRefDeclared(findings) {
 function checkUsoDeCampoPolisemico(findings) {
   // Detectar publish chat.* o ai.chat.* con field 'message:' literal en object literal
   // Heuristica: regex sobre source. Solo escaneamos modulos del subsistema chat.
-  const SUBSYSTEM_SLUGS = ['conversacion__chat-io', 'conversacion__prompt-builder', 'conversacion__ai-gateway', 'conversacion__ai-agent-framework'];
+  const SUBSYSTEM_SLUGS = ['conversacion__chat-io', 'conversacion__prompt-builder', 'conversacion__ai-gateway', 'conversacion__ai-agent-framework', 'conversacion__memory-user-profile'];
   for (const slug of SUBSYSTEM_SLUGS) {
     for (const file of listModuleSourceFiles(slug)) {
       const content = fs.readFileSync(file, 'utf-8');
@@ -158,7 +158,7 @@ function checkUsoDeCampoPolisemico(findings) {
 }
 
 function checkUsoDeCampoFantasma(findings) {
-  const SUBSYSTEM_SLUGS = ['conversacion__chat-io', 'conversacion__prompt-builder', 'conversacion__ai-gateway', 'conversacion__ai-agent-framework'];
+  const SUBSYSTEM_SLUGS = ['conversacion__chat-io', 'conversacion__prompt-builder', 'conversacion__ai-gateway', 'conversacion__ai-agent-framework', 'conversacion__memory-user-profile'];
   for (const slug of SUBSYSTEM_SLUGS) {
     for (const file of listModuleSourceFiles(slug)) {
       const content = fs.readFileSync(file, 'utf-8');

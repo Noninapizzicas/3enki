@@ -44,6 +44,9 @@ jobs:
       - name: Run ai-gateway chat tests (chat-flow migration)
         run: npm run test:ai-gateway-chat
 
+      - name: Run memory-user-profile tests (memoria modular)
+        run: npm run test:memory-user-profile
+
       - name: Run mqttRequest unit tests
         run: npm run test:mqtt-request
 

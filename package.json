@@ -22,6 +22,7 @@
     "test:chat-io": "node tests/unit/chat-io.test.js",
     "test:prompt-builder": "node tests/unit/prompt-builder.test.js",
     "test:ai-gateway-chat": "node tests/unit/ai-gateway-chat.test.js",
+    "test:memory-user-profile": "node tests/unit/memory-user-profile.test.js",
     "test:mqtt-request": "node tests/unit/mqtt-request.test.js",
     "test:integration:carta-scheduler": "node tests/integration/carta-scheduler-mqtt-request.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",

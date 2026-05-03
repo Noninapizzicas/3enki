@@ -1,0 +1,39 @@
+{
+  "name": "memory-user-profile",
+  "version": "1.0.0",
+  "description": "Memoria modular del compañero. Acumula hechos sobre el usuario extraidos de sus mensajes (ej. 'me gusta el espresso', 'soy de Madrid', 'trabajo de medico') y los inyecta en cada chat.prompt.ready vía chat.context.enriched. Primer modulo de memoria modular del subsistema — demuestra que añadir memorias futuras (memory-rag, memory-long-term, memory-project-knowledge) no requiere tocar prompt-builder.",
+  "author": "Event Core Team",
+  "language": "es",
+  "publishes": [
+    {
+      "event": "chat.context.enriched",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
+      "description": "Aporta el perfil acumulado del user_id como contexto adicional al system prompt (priority 100 — perfil de usuario)."
+    },
+    "db.query.request"
+  ],
+  "subscribes": [
+    {
+      "event": "chat.message.saved",
+      "handler": "onMessageSaved",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
+      "description": "Cada mensaje del usuario: extrae hechos nuevos, persiste, emite chat.context.enriched con el perfil completo."
+    },
+    {
+      "event": "db.query.response",
+      "handler": "onDbQueryResponse"
+    }
+  ],
+  "config": {
+    "enabled": true,
+    "priority_in_prompt": 100,
+    "max_facts_per_user": 200,
+    "min_fact_length": 4,
+    "persistence": {
+      "pattern": "event-driven-via-database-manager",
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["pendingDb", "schemaReady"]
+    }
+  }
+}

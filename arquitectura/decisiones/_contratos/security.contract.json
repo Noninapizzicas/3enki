@@ -145,6 +145,36 @@
       "decision": "El validador de seguridad reporta como ERROR (no warning) cualquier patrón sospechoso: hardcoded API keys, fs.readFileSync sobre rutas de credenciales, secretos en logs detectables por regex, payloads publicados al bus que contengan tokens.",
       "alternativa_descartada": "Reportar como warning para no bloquear desarrollo cuando aparece un falso positivo.",
       "razon": "Falsos positivos se cierran con justificación documentada en el commit; falsos negativos se cierran con un leak en producción. El asimetría de costes justifica la paranoia."
+    },
+    {
+      "id": "rotacion_invalida_cache_via_eventos",
+      "decision": "La invalidación de caches de credentials cuando hay rotación se hace via eventos (credential.updated, credential.deleted publicados por credential-manager) que cada consumer escucha y limpia su caché in-memory. NO via push de credential nueva.",
+      "alternativa_descartada": "credential-manager publica el VALOR de la nueva credencial al bus para que los consumers actualicen su caché directamente.",
+      "razon": "Publicar el valor en bus expondría la credencial a cualquier suscriptor (incluido un consumer comprometido o un módulo no autorizado). Invalidar la caché y forzar a cada consumer a re-resolver via credential.resolve.request mantiene la disciplina de control de acceso (credential-manager decide en cada resolve si el caller puede)."
+    },
+    {
+      "id": "fail_closed_no_fail_open_para_credentials",
+      "decision": "Si credential-manager NO está disponible o no puede resolver una credencial requerida, la operación FALLA con CREDENTIAL_NOT_FOUND. NO se ejecuta sin credenciales bajo el supuesto de 'mejor algo que nada'.",
+      "alternativa_descartada": "Fail-open: si credential-manager falla, ejecutar la operación con credenciales por defecto, env vars del proceso, o sin auth.",
+      "razon": "Fail-open en seguridad es la fuente clásica de breaches (defaults inseguros, env leak, request sin auth llegando a upstream). Fail-closed obliga a configurar correctamente — el sistema no funciona hasta que las credenciales están bien resueltas."
+    },
+    {
+      "id": "log_de_acceso_a_credentials",
+      "decision": "Cada credential.resolve.request es loguead a por credential-manager con metadata { credential_id, requester_module, project_id, correlation_id, success }. Sin valor del secreto. Es auditoría de acceso.",
+      "alternativa_descartada": "Sin logs de acceso: el resolve es silencioso para no producir ruido.",
+      "razon": "Sin log no se puede auditar quién pidió qué credencial. En caso de breach, esa información es esencial para forense (qué módulos accedieron a qué secretos antes de la fuga). El log NO contiene el valor — solo metadata."
+    },
+    {
+      "id": "principio_de_menor_privilegio_por_modulo",
+      "decision": "Cada módulo solo puede resolver las credentials que necesita declaradas en module.json.config.credentials_required (cuando exista esa convención). credential-manager rechaza requests por credential_ids fuera de esa whitelist con CREDENTIAL_NOT_AUTHORIZED.",
+      "alternativa_descartada": "Cualquier módulo puede resolver cualquier credencial (modelo plano sin permisos).",
+      "razon": "Modelo plano = un módulo comprometido accede a todas las credenciales. Whitelist por módulo limita el blast radius. Cuando se introduzca, los module.json declaran su lista; credential-manager hace enforce."
+    },
+    {
+      "id": "secrets_en_disco_solo_en_credential_manager",
+      "decision": "Solo credential-manager puede escribir archivos cifrados con credenciales en disco. Otros módulos que necesitan persistir información sensible (tokens cortos, signed URLs) lo hacen via credential.save publicado al bus → credential-manager los almacena.",
+      "alternativa_descartada": "Cada módulo gestiona sus propios secretos en archivos locales separados.",
+      "razon": "Cada archivo cifrado adicional es otra superficie con su propia clave maestra y su propio formato. Centralizar en credential-manager elimina duplicación de cifrado y de auditoría."
     }
   ],
 
@@ -284,6 +314,60 @@
       "regla": "Operaciones de dominio que tocan DB validan project_id presente.",
       "como_detectar": "Auditoría de cada handler: si lee/escribe DB y no valida project_id, drift.",
       "severidad": "warning"
+    },
+    {
+      "id": "drift_credential_manager_no_existe_o_sin_publishes_canonicos",
+      "regla": "El módulo credential-manager existe en modules/ y declara los eventos canónicos: credential.saved, credential.updated, credential.deleted, credential.resolve.request (subscribe), credential.resolve.response (publish).",
+      "como_detectar": "Verificar existencia de modules/credential-manager/module.json y cruzar publishes/subscribes con la lista canónica.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_certificate_authority_no_existe",
+      "regla": "El módulo certificate-authority existe en modules/ y declara eventos certificate.issued, certificate.revoked.",
+      "como_detectar": "fs.existsSync de modules/certificate-authority/module.json + cruzar publishes.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_password_en_string_literal",
+      "regla": "Ningún archivo del repo contiene strings literales que parezcan password real (longitud > 8, caracteres mixtos, asignados a variable que parezca password).",
+      "como_detectar": "Regex sobre código buscando `password\\s*[=:]\\s*['\"`][^'\"`]{8,}['\"`]` excluyendo placeholders ('changeme', 'password', 'YOUR_PASSWORD_HERE').",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_jwt_token_hardcoded",
+      "regla": "Ningún archivo contiene tokens JWT hardcoded (patrón eyJ... base64.base64.base64).",
+      "como_detectar": "Regex: `\\beyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\b`.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_no_declara_credentials_required",
+      "regla": "Cuando se introduzca la convención: módulos que necesitan credentials declaran credentials_required en module.json.config. Hoy es info preventivo.",
+      "como_detectar": "Inspeccionar módulos que llaman credential.resolve.request en código y verificar que su module.json.config.credentials_required existe.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_fail_open_en_credential_resolve_failure",
+      "regla": "Cuando un módulo no logra resolver una credencial, NO ejecuta la operación con default/fallback. Debe publicar .failed con CREDENTIAL_NOT_FOUND.",
+      "como_detectar": "Heurística sobre código: try/catch alrededor de credential.resolve donde el catch hace return de default value en vez de throw.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_log_sin_metadata_de_acceso",
+      "regla": "credential-manager loguea cada resolve con metadata { credential_id, requester_module, project_id, correlation_id, success }. Sin esos campos, drift de auditoría.",
+      "como_detectar": "Inspeccionar logs de credential-manager.onResolveRequest.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_secrets_persistidos_fuera_credential_manager",
+      "regla": "Ningún módulo distinto de credential-manager escribe archivos cifrados con secrets en disco.",
+      "como_detectar": "Regex: fs.writeFile sobre paths con keywords credential|secret|token + uso de crypto.createCipher en el mismo módulo.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_dotenv_path_en_repo",
+      "regla": "Ningún archivo .env real está committeado (excepto .env.example o .env.template). El repo NO contiene .env reales.",
+      "como_detectar": "Listar archivos .env, .env.production, .env.local, etc. en el repo (excluyendo node_modules, _archived).",
+      "severidad": "error"
     }
   ],
 

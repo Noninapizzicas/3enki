@@ -125,6 +125,95 @@ function checkSecretEnPublish(findings) {
   }
 }
 
+function checkCredentialManagerExiste(findings) {
+  const cmDir = path.join(MODULES_DIR, 'credential-manager');
+  const cmManifest = path.join(cmDir, 'module.json');
+  if (!fs.existsSync(cmManifest)) {
+    findings.errors.push(`drift_credential_manager_no_existe_o_sin_publishes_canonicos: modules/credential-manager/module.json no existe`);
+    return;
+  }
+  try {
+    const manifest = loadJson(cmManifest);
+    const publishes = (manifest.events?.publishes || []).map(p => typeof p === 'string' ? p : p.event);
+    const subscribes = (manifest.events?.subscribes || []).map(s => typeof s === 'string' ? s : s.event);
+    const required_pub = ['credential.saved', 'credential.updated', 'credential.deleted'];
+    const required_sub = ['credential.resolve.request'];
+    for (const ev of required_pub) if (!publishes.includes(ev)) findings.errors.push(`drift_credential_manager_no_existe_o_sin_publishes_canonicos: credential-manager no publica "${ev}"`);
+    for (const ev of required_sub) if (!subscribes.includes(ev)) findings.errors.push(`drift_credential_manager_no_existe_o_sin_publishes_canonicos: credential-manager no subscribe "${ev}"`);
+  } catch (_) {}
+}
+
+function checkCertificateAuthorityExiste(findings) {
+  const caManifest = path.join(MODULES_DIR, 'certificate-authority/module.json');
+  if (!fs.existsSync(caManifest)) {
+    findings.warnings.push(`drift_certificate_authority_no_existe: modules/certificate-authority/module.json no existe (mTLS para cluster requiere su presencia cuando aplique)`);
+  }
+}
+
+const PASSWORD_LITERAL_RX = /\bpassword\s*[=:]\s*['"`]([^'"`]{8,})['"`]/gi;
+const PASSWORD_PLACEHOLDERS = new Set(['changeme', 'password', 'YOUR_PASSWORD_HERE', 'your_password', 'placeholder', 'example', 'redacted', 'xxxxxxxx', '********']);
+
+function checkPasswordLiteral(findings) {
+  for (const file of listSourceFiles()) {
+    const content = fs.readFileSync(file, 'utf-8');
+    let m;
+    while ((m = PASSWORD_LITERAL_RX.exec(content)) !== null) {
+      const value = m[1];
+      if (PASSWORD_PLACEHOLDERS.has(value.toLowerCase())) continue;
+      // Heurística adicional: si contiene espacios o solo letras minúsculas, probablemente texto legible (placeholder)
+      if (/^[a-z\s]{8,}$/.test(value)) continue;
+      const ln = lineOfOffset(content, m.index);
+      const rel = path.relative(REPO_ROOT, file);
+      findings.errors.push(`drift_password_en_string_literal: ${rel}:${ln} — password literal de longitud ${value.length} (revisar si es placeholder o secreto real)`);
+    }
+  }
+}
+
+const JWT_RX = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g;
+
+function checkJwtHardcoded(findings) {
+  for (const file of listSourceFiles()) {
+    const content = fs.readFileSync(file, 'utf-8');
+    let m;
+    while ((m = JWT_RX.exec(content)) !== null) {
+      const ln = lineOfOffset(content, m.index);
+      const rel = path.relative(REPO_ROOT, file);
+      findings.errors.push(`drift_jwt_token_hardcoded: ${rel}:${ln} — patron de JWT detectado`);
+    }
+  }
+}
+
+function checkDotenvFiles(findings) {
+  function walk(dir, depth) {
+    if (depth > 4 || !fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      if (name === 'node_modules' || name === '_archived' || name === '.git') continue;
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full, depth + 1);
+        else if (/^\.env(\.|$)/.test(name) && !/\.example$|\.template$|\.sample$/.test(name)) {
+          findings.errors.push(`drift_dotenv_path_en_repo: ${path.relative(REPO_ROOT, full)} — archivo .env real committeado (solo .env.example/.template/.sample permitidos)`);
+        }
+      } catch (_) {}
+    }
+  }
+  walk(REPO_ROOT, 0);
+}
+
+function checkSecretsPersistidosFueraCredentialManager(findings) {
+  // Detectar fs.writeFile sobre paths sospechosos + crypto.createCipher en mismo archivo (heurística)
+  for (const file of listSourceFiles()) {
+    if (file.includes('credential-manager')) continue;
+    const content = fs.readFileSync(file, 'utf-8');
+    const writesCredFile = /fs\.writeFile(?:Sync)?\s*\([^)]*(credential|secret|\.token|\.key|\.pem|encrypted)/i.test(content);
+    const usesCipher = /crypto\.createCipher|crypto\.createCipheriv|crypto\.scryptSync\s*\([^)]*['"`](pbkdf2|aes)/.test(content);
+    if (writesCredFile && usesCipher) {
+      findings.errors.push(`drift_secrets_persistidos_fuera_credential_manager: ${path.relative(REPO_ROOT, file)} — escribe archivo con credential/secret/token + usa crypto cipher (lógica de cifrado fuera de credential-manager)`);
+    }
+  }
+}
+
 function reportFindings(findings) {
   if (findings.errors.length > 0) { console.log(`${RED}cross-system errors (${findings.errors.length})${RST}`); for (const e of findings.errors) console.log(`  ${RED}✗${RST} ${e}`); }
   if (findings.warnings.length > 0) { console.log(`${YEL}cross-system warnings (${findings.warnings.length})${RST}`); for (const w of findings.warnings) console.log(`  ${YEL}!${RST} ${w}`); }
@@ -149,6 +238,12 @@ function main() {
     checkHardcodedApiKey(findings);
     checkSecretEnLog(findings);
     checkSecretEnPublish(findings);
+    checkCredentialManagerExiste(findings);
+    checkCertificateAuthorityExiste(findings);
+    checkPasswordLiteral(findings);
+    checkJwtHardcoded(findings);
+    checkDotenvFiles(findings);
+    checkSecretsPersistidosFueraCredentialManager(findings);
     reportFindings(findings);
   }
   process.exit(0);

@@ -90,6 +90,96 @@
     }
   ],
 
+  "decisiones_arquitectonicas": [
+    {
+      "id": "agent_name_en_snake_case",
+      "decision": "El campo canonico es 'agent_name' (snake_case). El alias 'agentName' (camelCase) que usa el codigo actual queda como compat transitoria con warn shape_legacy hasta migracion.",
+      "alternativa_descartada": "Mantener 'agentName' como canonico (lo que el documento maestro lista en campos_minimos).",
+      "razon": "TODO el resto del repo (chat-flow, payloads de pizzepos, etc.) usa snake_case en payloads. Mantener una excepcion camelCase introduce friccion mental por convencion incoherente. El coste de migrar (warn transitorio + cierre legacy) es bajo comparado con perpetuar la divergencia. Documento maestro debe armonizarse a posteriori a snake_case."
+    },
+    {
+      "id": "separar_agent_execute_response_de_agent_execute_failed",
+      "decision": "Cuando un agente falla, NO se publica agent.execute.response con campo 'error'; se publica agent.execute.failed.",
+      "alternativa_descartada": "Reusar agent.execute.response añadiendo campo 'error' opcional cuando falla (lo que el codigo actual hace).",
+      "razon": "Mismo argumento que en chat-flow: separar fuerza al consumer a tener 2 handlers limpios y elimina el estado intermedio 'success-with-error'. Aplica garantia no_silent_failures del documento maestro al subsistema agentes."
+    },
+    {
+      "id": "result_aplanado_no_anidado",
+      "decision": "agent.execute.response.result es la salida estructurada del agente (objeto libre). agent_name vive a nivel raiz. tool_calls_executed vive a nivel raiz como auditoria, separada del output semantico.",
+      "alternativa_descartada": "Mantener result anidado como { agent, content, tool_calls_executed } (lo que el codigo actual publica).",
+      "razon": "El anidamiento mezcla auditoria (tool_calls_executed) con output semantico (content) y duplica info (agent_name dentro y fuera). Aplanar separa concerns: el caller que solo quiere result lo lee directo; el que quiere auditar lee tool_calls_executed; agent_name es metadato del envoltorio."
+    },
+    {
+      "id": "task_o_context_obligatorio",
+      "decision": "agent.execute.request requiere al menos uno de los dos: task (instruccion en lenguaje natural) o context (datos estructurados). El schema impone esto via anyOf.",
+      "alternativa_descartada": "Hacer ambos opcionales y dejar que cada agente valide en su logica.",
+      "razon": "Un agente sin task ni context no tiene input — es un payload sin sentido. Detectarlo a nivel de schema da feedback inmediato al caller en vez de un fallo semantico tardio. anyOf con properties redefinidas funciona bajo AJV strict."
+    },
+    {
+      "id": "context_libre_no_validado_por_schema",
+      "decision": "context es objeto libre con additionalProperties:true. El schema no valida la estructura interna; eso es responsabilidad del agente.",
+      "alternativa_descartada": "Definir un schema por agente y validarlo en el contrato cross-modulo.",
+      "razon": "Forzar shape de context a nivel de schema agent_flow obligaria a inventar un schema por agente y mantenerlo sincronizado. El agente conoce su propio shape y puede validar internamente. El contrato cross-modulo asegura el envoltorio comun, no el contenido especifico."
+    },
+    {
+      "id": "request_id_y_correlation_id_juntos",
+      "decision": "request_id (correlaciona request con response de UNA ejecucion) y correlation_id (hilo causal de la cadena entera) son ambos obligatorios.",
+      "alternativa_descartada": "Solo request_id (lo que el codigo actual hace).",
+      "razon": "request_id permite que el caller espere la response correcta. correlation_id permite reconstruir la cadena causal completa cuando un agente nace de chat -> invoke_agent -> agent.execute.* -> result -> chat. Sin correlation_id, el debugging multi-modulo es ciego."
+    },
+    {
+      "id": "user_id_obligatorio_aunque_single_user",
+      "decision": "user_id es obligatorio en los 3 eventos. En single-user vale 'default'.",
+      "alternativa_descartada": "Hacer user_id opcional hasta que haya multi-user real.",
+      "razon": "Agentes que escriben en sistemas con identidad (mensajeria, calendario, archivos del usuario) necesitan saber a quien atribuir desde dia uno. Hacer obligatorio desde el principio evita drift retroactivo cuando llegue multi-user."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "agent_execute_response_con_campo_error",
+      "regla": "Ningun publish de agent.execute.response incluye campo 'error'. Si el agente fallo, se publica agent.execute.failed.",
+      "enforce": "Schema de agent.execute.response no declara 'error'; additionalProperties:false rechaza el payload. Validador escanea publish('agent.execute.response', { ... error: ... }) en codigo del subsistema y reporta drift severidad ERROR."
+    },
+    {
+      "id": "result_inflado_con_metadatos",
+      "regla": "result NO contiene agent_name, tool_calls_executed, model, provider, tokens, cost. Esos viven a nivel raiz del payload.",
+      "enforce": "Schema valida que result es objeto libre con minProperties:1; el validador puede inspeccionar codigo emisor para detectar reanidamiento accidental."
+    },
+    {
+      "id": "agentName_en_codigo_nuevo",
+      "regla": "Codigo nuevo NO usa el alias 'agentName' (camelCase). El campo canonico es 'agent_name'.",
+      "enforce": "Validador escanea codigo del subsistema buscando 'agentName' como key literal o destructuring. Drift severidad warning durante transicion; pasa a error tras cierre legacy."
+    },
+    {
+      "id": "agent_request_sin_task_ni_context",
+      "regla": "Ningun publish de agent.execute.request omite ambos campos. Al menos uno debe estar presente.",
+      "enforce": "Schema impone anyOf con properties redefinidas; AJV rechaza payload sin task ni context."
+    },
+    {
+      "id": "regenerar_correlation_id_en_la_cadena",
+      "regla": "Ningun handler regenera correlation_id si ya viene en el payload. Solo el originador (canal, cron, webhook) lo genera; el subsistema agentes propaga.",
+      "enforce": "Validador inspecciona codigo: si publica agent.execute.* con correlation_id: crypto.randomUUID() cuando habia uno en input, drift."
+    },
+    {
+      "id": "code_de_error_no_canonico",
+      "regla": "agent.execute.failed.error.code DEBE estar en lista canonica: AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED, UPSTREAM_*, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR. Codigos inventados son drift severidad ERROR.",
+      "enforce": "Validador inspecciona codigo emisor de agent.execute.failed; cruza error.code contra lista canonica; ERROR si fuera de ella."
+    },
+    {
+      "id": "stack_trace_en_error_details",
+      "regla": "Ningun publish de agent.execute.failed incluye stack trace en error.details.",
+      "enforce": "errors.contract aplica esta regla globalmente con drift_respuesta_con_stack_trace severidad error."
+    },
+    {
+      "id": "llamada_directa_a_ai_agent_framework",
+      "regla": "Ningun modulo llama directamente a metodos del ai-agent-framework. La unica via canonica es publish('agent.execute.request') (o invoke_agent dentro de un agentic loop del LLM, que internamente termina en lo mismo).",
+      "enforce": "events.contract aplica esta regla globalmente."
+    }
+  ],
+
+  "output_shape_resumen": "El sub-contrato no produce un _outputs/agent-flow.json — el output autoritativo son los 4 schemas en _schemas/agent-flow/ (3 eventos + _common.schema.json) mas el comportamiento del validator agent-flow.validate.js. Un consumidor del contrato (un modulo que invoca agentes, un test) carga el schema oficial con AJV strict y valida payloads contra el. El validator emite PASS si los schemas compilan, todos los module.json del subsistema (ai-agent-framework + cualquier modulo que publique agent.execute.request) declaran schema_ref para los eventos agent_flow que tocan, el codigo no usa el alias agentName, no inyecta error en agent.execute.response, y publica con correlation_id.",
+
   "eventos": [
     {
       "id": "agent.execute.request",
@@ -190,6 +280,50 @@
     }
   ],
 
+  "reglas_de_extraccion": [
+    "1. Compilar los 4 schemas (3 eventos + _common) con AJV strict 2020-12. Si alguno no compila, FAIL inmediato.",
+    "2. Cargar el companero-viaje.contract.json y verificar que los 3 eventos agent_flow listados aqui coinciden con la categoria agent_flow del documento maestro. Si hay deriva, ERROR.",
+    "3. Iterar audits modulo-completo del subsistema (ai-agent-framework + cualquier modulo que publique agent.execute.request: pizzepos modules, scheduler, etc.). Para cada publish/subscribe de evento agent_flow, verificar que module.json declara request_schema_ref / response_schema_ref apuntando al schema oficial.",
+    "4. Escanear codigo fuente de los modulos del subsistema (regex sobre publishes y handlers): buscar 'agentName' (alias deprecado), publish('agent.execute.response', { ... error: ... }) (rompe separacion success/failure).",
+    "5. Cruzar audit campos_visibles del publish con campos obligatorios del schema. Faltantes (correlation_id, request_id, user_id, agent_name, timestamp en request; los mismos + result + duration_ms en response) = drift warning.",
+    "6. Para agent.execute.failed, verificar que error.code en codigo emisor esta en lista canonica de codigos del subsistema (AGENT_*) o codes_infrastructure heredados (UPSTREAM_*, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR). Codigo invalido = drift error.",
+    "7. Reportar PASS/FAIL siguiendo formato comun de validators del repo: banner colorizado + findings agrupados por severidad."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/agent-flow/",
+      "items": ["_common.schema.json", "agent.execute.request.schema.json", "agent.execute.response.schema.json", "agent.execute.failed.schema.json"],
+      "regla": "Cualquier cambio en este contrato (campo nuevo, renombrado, eliminado) requiere regenerar / actualizar los schemas en bloque. Sin sincronia, el validator detecta divergencia."
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/agent-flow.validate.js",
+      "regla": "Implementa los 5 cross-checks listados en validaciones_cross_realizadas_por_validator. Cada nueva validacion cross-modulo se añade aqui."
+    },
+    {
+      "tipo": "modulo_consumer_canonico",
+      "items": ["conversacion/ai-agent-framework"],
+      "regla": "Unico consumer canonico de agent.execute.request. Publica agent.execute.response y agent.execute.failed. Su module.json declara los 3 schema_refs. Su codigo cumple shape canonico (sin alias agentName, sin error en response, con correlation_id propagado)."
+    },
+    {
+      "tipo": "modulos_publishers_potenciales",
+      "items": ["conversacion/ai-gateway (via tool invoke_agent durante agentic loop del LLM)", "pizzepos/carta-digital, pizzepos/carta-impresion, pizzepos/carta-marketing, pizzepos/carta-scheduler, pizzepos/menu-generator (modulos del dominio que ya publican agent.execute.request — drift de correlation_id ausente registrado en baseline)", "futuras invocaciones desde scheduler/cron"],
+      "regla": "Cada modulo que publica agent.execute.request declara schema_ref en su module.json y propaga correlation_id desde su input. La migracion de los modulos pizzepos al shape canonico es trabajo separado del cierre del subsistema agentes."
+    },
+    {
+      "tipo": "tests",
+      "items": ["tests/unit/ai-agent-framework.test.js (a crear en paso 5 de la migracion)"],
+      "regla": "Tests cargan los schemas oficiales con AJV y validan los payloads que ai-agent-framework publica. El contrato ejecuta como invariante de runtime."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (seccion agent-flow)",
+      "regla": "Warnings conocidos quedan registrados aqui (10 entradas en baseline tras paso 3: 2x agentName + 2x sin schema_ref + 6x sin correlation_id). Drift NUEVO bloquea CI."
+    }
+  ],
+
   "validaciones_cross_realizadas_por_validator": [
     {
       "id": "agent_flow_schemas_validos",
@@ -229,5 +363,17 @@
     }
   ],
 
-  "salida_validador": "PASS si los 3 schemas validan estructuralmente Y todos los modulos del subsistema declaran schema_ref correctamente Y el codigo no inyecta error en agent.execute.response. Errores cross-system bloquean PASS — payload agent_flow sin codigo canonico de error es ERROR (rompe garantia no_silent_failures); agent.execute.response con campo 'error' es ERROR (rompe separacion success/failure). Warnings son drift visible que no bloquea (alias agentName aun usado, schema_ref ausente). Formato coherente con los demas validators del repo: banner PASS/FAIL + findings agrupados por severidad con archivo:linea cuando aplique."
+  "salida_validador": "PASS si los 3 schemas validan estructuralmente Y todos los modulos del subsistema declaran schema_ref correctamente Y el codigo no inyecta error en agent.execute.response. Errores cross-system bloquean PASS — payload agent_flow sin codigo canonico de error es ERROR (rompe garantia no_silent_failures); agent.execute.response con campo 'error' es ERROR (rompe separacion success/failure). Warnings son drift visible que no bloquea (alias agentName aun usado, schema_ref ausente). Formato coherente con los demas validators del repo: banner PASS/FAIL + findings agrupados por severidad con archivo:linea cuando aplique.",
+
+  "convenciones_complementarias": {
+    "naming": "Los nombres de los 3 eventos (agent.execute.request, agent.execute.response, agent.execute.failed) cumplen la forma <module-prefix>.<entity>.<verb> definida en naming.contract.json. Verbos canonicos: request, response, failed. agent_name dentro del payload usa el pattern ^[a-z][a-z0-9-]*[a-z0-9]$ (kebab-case minusculo) coherente con nombres de modulo del repo.",
+    "glossary": "Las entidades cross-modulo (conversacion, mensaje, contexto) usan la forma canonica del glossary.json cuando aparecen en el payload. 'agente' es entidad central del subsistema agentes — no esta en glossary global porque es interna al subsistema, no cross-modulo en el sentido del glossary.",
+    "events": "Hereda los principios de events.contract: publish-subscribe asincrono, no esperar respuesta sincrona del propio publish. La correlacion request/response se hace via request_id incluido en ambos eventos — el caller filtra por su request_id.",
+    "errors": "agent.execute.failed.error sigue shape canonico {code, message, details?} de errors.contract. error.code esta en codes_infrastructure (UPSTREAM_*, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR) o en codigos especificos del subsistema agentes (AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED). Estos ultimos son de naturaleza infraestructura/sistema (no dominio) — un fallo de tool del agente es infraestructura del subsistema, no del negocio.",
+    "observability": "Cada publish de agent_flow loguea con metadata correlation_id + request_id + agent_name + (conversation_id cuando aplique). El handler emisor cumple observability.contract con event_name = 'ai-agent-framework.<accion>' o '<modulo-publisher>.<accion>' segun corresponda.",
+    "lifecycle": "ai-agent-framework declara sus subscribes en module.json para auto-wire en onLoad. Limpia pendingLlm timeouts en onUnload. Publishers (modulos pizzepos, ai-gateway) declaran agent.execute.request con schema_ref.",
+    "persistence": "ai-agent-framework NO persiste estado del agente entre invocaciones (cada agent.execute.request es atomico). El catalogo de agentes (agents/*.json) y sus prompts (prompts/*.json) viven en filesystem, leidos en onLoad. session_id / prev_state / next_state son cimentaciones para agentes con estado futuro — cuando se implementen tendran su propio storage declarado en config.persistence.",
+    "http": "El subsistema agentes NO expone HTTP. Comunicacion 100% via bus. Los modulos publisher (pizzepos, ai-gateway) sirven sus propias frontera HTTP/MQTT pero los eventos agent_flow son siempre internos.",
+    "chat-flow": "Cuando un agente nace de chat (invocado por LLM via tool invoke_agent durante un chat.prompt.ready -> ai.chat.response), comparte correlation_id, conversation_id, channel, channel_context con la cadena chat. Si el agente publica chat.assistant.saved (chat multi-participante), cumple el shape canonico de chat-flow — no inventa shape propio."
+  }
 }

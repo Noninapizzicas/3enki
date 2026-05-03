@@ -35,6 +35,9 @@ jobs:
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc
 
+      - name: Run chat-io tests (chat-flow migration)
+        run: npm run test:chat-io
+
       - name: Run mqttRequest unit tests
         run: npm run test:mqtt-request
 

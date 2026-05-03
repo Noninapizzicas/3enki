@@ -491,26 +491,57 @@ class ChatIoModule {
   // OUT: escucha ai.chat.response → guarda assistant + MQTT push
   // ============================================================
 
+  /**
+   * onAiResponse — handler de ai.chat.response (shape canonico chat-flow v1.0.0).
+   *
+   * Espera shape: { correlation_id, conversation_id, project_id, user_id,
+   *   channel, channel_context, message_id, message_id_assistant,
+   *   assistant_message, model, provider, tokens: { input, output, total },
+   *   duration_ms, timestamp, [tool_calls_executed], [iterations], [cost],
+   *   [finish_reason] }
+   *
+   * Compatibilidad transitoria: si llega del shape antiguo (campo 'message'
+   * en vez de 'assistant_message'), lo acepta pero loggea warn — para
+   * detectar callers no migrados todavia.
+   */
   async onAiResponse(event) {
     const data = event.data || event;
     const {
-      project_id, conversation_id, message_id: ignored,
-      message: content, settings,
-      tokens, cost, tool_calls_executed
+      project_id, conversation_id,
+      // shape canonico
+      assistant_message,
+      message_id_assistant,
+      // compatibilidad transitoria con shape antiguo
+      message: legacy_message,
+      tokens, cost, tool_calls_executed,
+      settings,
+      channel, channel_context, correlation_id
     } = data;
+
+    // Compatibilidad transitoria — caller del shape viejo (drift)
+    const content = assistant_message ?? legacy_message;
+    if (!assistant_message && legacy_message) {
+      this.logger.warn('chat-io.onAiResponse.shape_legacy', {
+        reason: 'caller publica con campo legacy "message" en vez de "assistant_message" — drift chat-flow',
+        conversation_id, correlation_id
+      });
+    }
+
     if (!project_id || !conversation_id || !content) return;
 
-    const message_id = crypto.randomUUID();
+    const message_id = message_id_assistant || crypto.randomUUID();
     const now = Date.now();
+    // tokens canonico es objeto { input, output, total }; legacy era number plano.
+    const tokens_total = (typeof tokens === 'object' && tokens !== null) ? tokens.total : tokens;
     const metadata = tool_calls_executed?.length
-      ? JSON.stringify({ tool_calls: tool_calls_executed.map(t => ({ name: t.name, status: t.status })) })
+      ? JSON.stringify({ tool_calls: tool_calls_executed.map(t => ({ name: t.name, status: t.result_status || t.status })) })
       : null;
 
     try {
       await this._db(project_id,
         `INSERT INTO messages (id, conversation_id, role, content, tokens, cost, metadata, created_at)
          VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
-        [message_id, conversation_id, content, tokens || null, cost || null, metadata, now]
+        [message_id, conversation_id, content, tokens_total || null, cost?.amount ?? cost ?? null, metadata, now]
       );
       await this._db(project_id,
         'UPDATE conversations SET updated_at = ? WHERE id = ?',
@@ -520,27 +551,117 @@ class ChatIoModule {
       const cw = settings?.context_window || 20;
       await this._applyContextFIFO(project_id, conversation_id, cw);
     } catch (err) {
-      this.logger.error('chat-io.save_assistant.failed', { error: err.message });
+      this.logger.error('chat-io.save_assistant.failed', { error: err.message, correlation_id });
       return;
     }
 
     await this.eventBus.publish('chat.assistant.saved', {
-      project_id, conversation_id, message_id, message: content, metadata
+      project_id, conversation_id, message_id,
+      assistant_message: content,
+      metadata,
+      correlation_id
     });
 
-    if (this.mqtt) {
-      this.mqtt.publish(
-        `conversation/${conversation_id}/message`,
-        JSON.stringify({
-          id: message_id,
-          role: 'assistant',
-          content,
-          metadata,
-          timestamp: new Date(now).toISOString()
-        }),
-        { qos: 1 }
-      );
+    // Reenvio al canal segun channel_context (agnosticismo de canal)
+    if (channel === 'web' || !channel) {
+      // Default web: MQTT push al frontend (shape historico que la UI consume)
+      if (this.mqtt) {
+        this.mqtt.publish(
+          `conversation/${conversation_id}/message`,
+          JSON.stringify({
+            id: message_id,
+            role: 'assistant',
+            content,
+            metadata,
+            timestamp: new Date(now).toISOString()
+          }),
+          { qos: 1 }
+        );
+      }
     }
+    // Otros canales (telegram, voice, etc.) los maneja su propio modulo de canal,
+    // que escucha ai.chat.response y devuelve via su API. chat-io NO conoce
+    // esos canales — agnosticismo respetado.
+  }
+
+  /**
+   * onAiFailed — handler de ai.chat.failed (chat-flow v1.0.0).
+   *
+   * Se ejecuta cuando ai-gateway publica un fallo del flujo (timeout LLM,
+   * credencial, todos los providers caidos, etc.). chat-io traduce el error
+   * canonico a un mensaje legible al usuario por su canal — cierra el ciclo
+   * iniciado en chat.message.saved (garantia no_silent_failures).
+   *
+   * Espera shape: { correlation_id, conversation_id, user_id, channel,
+   *   channel_context, message_id, error: { code, message, details }, timestamp,
+   *   [project_id], [duration_ms], [provider_attempted] }
+   */
+  async onAiFailed(event) {
+    const data = event.data || event;
+    const {
+      project_id, conversation_id, message_id,
+      error, channel, channel_context, correlation_id
+    } = data;
+
+    if (!conversation_id || !error) return;
+
+    // Mapeo error code → mensaje legible al usuario.
+    // Sin exponer detalles internos (stack, paths, secrets) — solo lo que
+    // el usuario necesita saber para entender que paso y que hacer.
+    const userMessage = this._userMessageForErrorCode(error.code, error.message);
+
+    this.logger.warn('chat-io.ai_failed', {
+      conversation_id, correlation_id, error_code: error.code,
+      provider_attempted: data.provider_attempted, duration_ms: data.duration_ms
+    });
+
+    // Persistir como mensaje 'system' para que la conversacion preserve el rastro
+    if (project_id) {
+      try {
+        const fail_id = crypto.randomUUID();
+        const now = Date.now();
+        await this._db(project_id,
+          `INSERT INTO messages (id, conversation_id, role, content, metadata, created_at)
+           VALUES (?, ?, 'system', ?, ?, ?)`,
+          [fail_id, conversation_id, userMessage, JSON.stringify({ error_code: error.code, system: 'ai-failed' }), now]
+        );
+      } catch (_) { /* best-effort */ }
+    }
+
+    // Reenviar al canal de origen (agnosticismo)
+    if (channel === 'web' || !channel) {
+      if (this.mqtt) {
+        this.mqtt.publish(
+          `conversation/${conversation_id}/message`,
+          JSON.stringify({
+            id: crypto.randomUUID(),
+            role: 'system',
+            content: userMessage,
+            metadata: { error_code: error.code, system: 'ai-failed' },
+            timestamp: new Date().toISOString()
+          }),
+          { qos: 1 }
+        );
+      }
+    }
+  }
+
+  /**
+   * Traduce un error.code canonico a mensaje legible al usuario.
+   * Sin tecnicismos. Sin exponer detalles del sistema.
+   */
+  _userMessageForErrorCode(code, raw_message) {
+    const M = {
+      'UPSTREAM_TIMEOUT':         'Tardé más de la cuenta en responder. Inténtalo de nuevo en un momento.',
+      'UPSTREAM_RATE_LIMITED':    'Estoy recibiendo muchas peticiones. Inténtalo en unos minutos.',
+      'UPSTREAM_AUTH_FAILED':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
+      'UPSTREAM_5XX':             'El motor del lenguaje tiene un fallo temporal. Inténtalo en un momento.',
+      'UPSTREAM_UNREACHABLE':     'No puedo conectar con el motor del lenguaje ahora mismo. Inténtalo más tarde.',
+      'UPSTREAM_INVALID_RESPONSE':'El motor del lenguaje devolvió algo que no entiendo. Inténtalo de nuevo.',
+      'CREDENTIAL_NOT_FOUND':     'No tengo credenciales configuradas para responder. Avisa al administrador.',
+      'INTERNAL_ERROR':           'Algo se rompió por mi parte. Inténtalo de nuevo o avisa si persiste.'
+    };
+    return M[code] || `No pude completar la respuesta (${code || 'error desconocido'}). Inténtalo de nuevo.`;
   }
 }
 

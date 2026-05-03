@@ -141,6 +141,36 @@
       "decision": "Timers con intervalo < 100ms son drift (warning). Repensar el patrón antes de programar tan rápido.",
       "alternativa_descartada": "Permitir cualquier granularidad.",
       "razon": "< 100ms casi siempre indica polling agresivo o algoritmo mal diseñado. La granularidad subsegundo en Node tiene problemas (event loop saturado, drift de tiempo)."
+    },
+    {
+      "id": "tarea_programada_emite_evento_canonico",
+      "decision": "Cuando un cron/timer dispara, el handler invocado publica un evento canónico al bus. La lógica de dominio vive en el handler que escucha — NO inline en el callback del cron.",
+      "alternativa_descartada": "El callback del cron ejecuta la lógica directamente.",
+      "razon": "Inline mezcla disparador con lógica — se vuelve imposible reusar la lógica desde otros disparadores (manual, otro evento). Publicar evento separa concerns: cron = trigger temporal; handler = lógica reusable."
+    },
+    {
+      "id": "intervalos_largos_documentados",
+      "decision": "setTimeout / setInterval con intervalo > 60000ms (1 min) se documentan inline con un comentario explicando por qué (cleanup nocturno, recheck cada hora, etc.).",
+      "alternativa_descartada": "Magic numbers sin contexto.",
+      "razon": "Un setTimeout de 86400000 sin comentario obliga al revisor a calcular '24h?' a mano. Comentario inline elimina la fricción y previene cambios accidentales (alguien lo reduce a 8640000 = 2.4h sin notarlo)."
+    },
+    {
+      "id": "cron_jobs_se_ejecutan_solo_si_proceso_vive",
+      "decision": "Los cron jobs son in-process: solo disparan cuando el proceso está vivo. Si el proceso se cae durante una hora canonica de disparo, ese disparo se pierde (NO se ejecuta cuando vuelve).",
+      "alternativa_descartada": "Persistencia de cron jobs con catch-up al arranque (ejecutar disparos perdidos durante el downtime).",
+      "razon": "Catch-up al arranque puede ejecutar 24 disparos al volver tras un día caído — peor que perderse uno. Si el caso requiere durabilidad, es módulo de jobs queue separado, no scheduling con catch-up."
+    },
+    {
+      "id": "jitter_en_crons_de_misma_hora",
+      "decision": "Cuando varios cron jobs se programan a la misma hora canonica (ej. todos a las 0:00), se aplica jitter aleatorio ±N segundos en cada uno para distribuir la carga.",
+      "alternativa_descartada": "Disparar todos exactamente a la misma hora exacta.",
+      "razon": "Sin jitter, todos los handlers se disparan en el mismo tick del event loop, saturando CPU y triggering posibles race conditions con storage compartido. Jitter dispersa los handlers en una ventana de 30-60 segundos."
+    },
+    {
+      "id": "event_loop_no_se_bloquea_con_logica_pesada_en_callback",
+      "decision": "El callback de un cron/timer NO ejecuta lógica pesada síncrona (loops grandes, JSON.parse de archivos enormes, hash de datos voluminosos). Si necesita trabajo pesado, lo delega via publish a otro handler que corre asíncrono.",
+      "alternativa_descartada": "Permitir lógica síncrona en callback con argumento 'es solo en arranque, no afecta'.",
+      "razon": "Bloquear el event loop bloquea TODO (incluido el broker MQTT, el HTTP server, etc.). 'Solo en arranque' suele convertirse en 'cada 5 min' tras refactor — la regla evita la deuda."
     }
   ],
 
@@ -255,6 +285,36 @@
       "regla": "Timers viven en this.<x>, no en variables globales.",
       "como_detectar": "Heurística sobre código.",
       "severidad": "warning"
+    },
+    {
+      "id": "drift_settimeout_largo_para_jobs_durables",
+      "regla": "Ningún setTimeout con duración > 1h sin comentario inline justificando.",
+      "como_detectar": "Regex: setTimeout con valor > 3600000 + verificar línea anterior tiene comentario.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_callback_de_cron_con_logica_inline",
+      "regla": "El callback de un cron debe ser slim — invoca un handler o publica un evento. NO contiene 50+ líneas de lógica.",
+      "como_detectar": "Heurística: cron.schedule(expr, () => { ...lineas... }) con cuerpo > N líneas.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_event_loop_blocking_en_callback_de_timer",
+      "regla": "Callbacks de timer/cron NO usan loops síncronos sobre arrays grandes ni JSON.parse de archivos enormes ni operaciones crypto pesadas.",
+      "como_detectar": "Auditoría manual + heurística sobre código (fs.readFileSync síncronos en callback de cron).",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_modulo_no_limpia_timer_en_onunload",
+      "regla": "Si onLoad registra setTimeout/setInterval/cron en this.<x>, onUnload invoca clearTimeout/clearInterval/cron.stop sobre cada uno.",
+      "como_detectar": "Heurística: comparar onLoad y onUnload del módulo, contar setInterval vs clearInterval.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_jitter_no_aplicado_en_crons_concurrentes",
+      "regla": "Múltiples crons programados a la misma hora canonica aplican jitter (Math.random * N segundos) para distribuir la carga.",
+      "como_detectar": "Inspeccionar audits + módulos con cron a horas redondas (0 0 * * *) cuando hay >1 cron así.",
+      "severidad": "info"
     }
   ],
 

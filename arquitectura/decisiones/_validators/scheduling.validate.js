@@ -51,6 +51,31 @@ function checkBibliotecaCronAlternativa(findings) {
   }
 }
 
+function checkSetTimeoutLargo(findings) {
+  // setTimeout > 1h (3600000ms) sin comentario inline
+  for (const file of listSourceFiles()) {
+    const content = fs.readFileSync(file, 'utf-8');
+    const rx = /setTimeout\s*\(\s*[^,]+,\s*(\d+)\b/g;
+    let m;
+    while ((m = rx.exec(content)) !== null) {
+      const ms = parseInt(m[1], 10);
+      if (ms > 3600000) {
+        // Verificar si hay comentario inline en la misma linea o anterior
+        const offset = m.index;
+        const lineStart = content.lastIndexOf('\n', offset) + 1;
+        const lineEnd = content.indexOf('\n', offset);
+        const line = content.slice(lineStart, lineEnd);
+        const prevLineStart = content.lastIndexOf('\n', lineStart - 2) + 1;
+        const prevLine = content.slice(prevLineStart, lineStart - 1);
+        if (!/\/\//.test(line) && !/\/\//.test(prevLine)) {
+          const ln = lineOfOffset(content, m.index);
+          findings.warnings.push(`drift_settimeout_largo_para_jobs_durables: ${path.relative(REPO_ROOT, file)}:${ln} — setTimeout ${ms}ms (>1h) sin comentario inline justificando`);
+        }
+      }
+    }
+  }
+}
+
 function checkSetIntervalSubsegundo(findings) {
   for (const file of listSourceFiles()) {
     const content = fs.readFileSync(file, 'utf-8');
@@ -87,6 +112,7 @@ function main() {
     const f = { errors: [], warnings: [], info: [] };
     checkBibliotecaCronAlternativa(f);
     checkSetIntervalSubsegundo(f);
+    checkSetTimeoutLargo(f);
     reportFindings(f);
   }
   process.exit(0);

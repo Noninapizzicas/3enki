@@ -1,0 +1,276 @@
+{
+  "_doc": "Captura LA disciplina de aislamiento multi-tenant del sistema event-core: cómo se separa por proyecto (project_id) y por humano (user_id) en TODA la cadena de eventos, persistencia, autorización y observabilidad. La regla maestra: project_id y user_id son carriles obligatorios desde el originador hasta el ejecutor; ninguna operación de dominio se ejecuta sin ambos resueltos. Sin un contrato de multi-tenancy explícito, los datos de un proyecto se mezclan con los de otro, los usuarios ven contenido ajeno, las métricas se confunden y la migración de single-tenant a multi-tenant se vuelve un refactor masivo. Este contrato cierra la decisión desde el primer evento.",
+  "id": "multi-tenancy",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Consolida las menciones dispersas a project_id / user_id en chat-flow.contract, agent-flow.contract, security.contract, persistence.contract, y las eleva a contrato transversal autónomo. El sistema corre hoy en modo single-tenant (project_id puede ser null, user_id = 'default') pero el contrato es estricto desde el origen para que la migración a multi-tenant real sea aditiva, no refactor.",
+
+  "objetivo": "Producir UN JSON output (_outputs/multi-tenancy.json) que define: qué cuenta como ámbito (project_id obligatorio en operaciones de dominio, opcional en eventos cross-tenant cuando aplique), qué cuenta como identidad (user_id obligatorio en operaciones atribuibles), cómo se propaga (sin modificar desde el originador hasta el ejecutor), cómo se aísla en persistencia (storage scoped por project_id), cómo se aísla en observabilidad (métricas etiquetadas por project_id + user_id), qué eventos cross-tenant existen y por qué se permiten, cómo se valida que un consumer no recibe datos fuera de su scope. Validable mecánicamente cruzando contra los handlers de cada módulo (que validan project_id antes de tocar storage), contra los logs (que incluyen project_id + user_id), y contra los publishes (que propagan ambos campos sin modificar).",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/multi-tenancy.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/chat-flow.contract.json (referencia: project_id + user_id obligatorios en payloads)",
+      "arquitectura/decisiones/_contratos/agent-flow.contract.json (referencia: igual)",
+      "arquitectura/decisiones/_contratos/security.contract.json (tenancy_por_project_id, identidad_por_user_id)",
+      "arquitectura/decisiones/_contratos/persistence.contract.json (aislamiento_absoluto_entre_modulos — base del aislamiento)"
+    ],
+    "obligatorios_si_existen": [
+      "modules/project-manager/module.json (gestor del catálogo de proyectos)"
+    ],
+    "opcionales_para_contexto": [
+      "modules/conversacion/chat-io/index.js (referencia: chat-io scope por project_id en SQLite)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "PROJECT_ID ES EL ÁMBITO. Todo lo que es 'datos del usuario en el contexto de UN proyecto' (recetas, mensajes de conversación, configuraciones, archivos persistidos) tiene scope project_id. Si una operación toca esos datos sin project_id resuelto, es ambigua y se rechaza.",
+
+    "USER_ID ES LA IDENTIDAD. Todo lo que tiene atribución humana (mensajes del usuario en chat, acciones manuales en UI, decisiones tomadas) lleva user_id. En single-user actual, vale 'default'; en multi-user real, identifica al humano concreto.",
+
+    "AMBOS SON CARRILES OBLIGATORIOS DESDE EL ORIGINADOR. project_id y user_id se generan / resuelven en el originador (canal web autentica al usuario y resuelve su proyecto activo; cron tiene su user_id system y opera sobre todos los proyectos a iterar). De ahí en adelante NO se modifican — se propagan tal cual por toda la cadena.",
+
+    "STORAGE AISLADO POR PROJECT_ID. Cada módulo que persiste datos de dominio scope-a por project_id en el storage: sqlite-per-project, json-file-per-project, prefijos de keys, etc. Datos de proyecto A nunca se leen al ejecutar una operación con project_id de proyecto B.",
+
+    "EVENTOS CROSS-TENANT SON EXCEPCIÓN DOCUMENTADA. La mayoría de los eventos van con project_id; algunos eventos del SISTEMA (no de dominio) son intencionalmente cross-tenant: device-registry escanea todos los proyectos, métricas globales del cluster, alertas de salud, etc. Esos eventos están listados explícitamente.",
+
+    "OBSERVABILIDAD ETIQUETADA POR TENANT. Cada log y cada métrica del sistema incluye project_id + user_id en su metadata cuando aplican. Sin esa etiqueta, no se puede atribuir un fallo a un proyecto/usuario concreto en producción.",
+
+    "CONSUMER VALIDA SCOPE EN INPUT. Cuando un módulo recibe un evento (subscribe), valida que el project_id del evento coincide con el scope del consumer cuando aplica (ej. dashboard de proyecto X solo procesa eventos con project_id == X). Si no coincide, ignora el evento.",
+
+    "MIGRACIÓN SINGLE→MULTI ES ADITIVA. Hoy el sistema corre con project_id = null (single-tenant) y user_id = 'default' (single-user). Mañana se introducen valores reales — el contrato no cambia, solo los valores. Por eso project_id es type ['string', 'null'] y user_id type 'string' (con default), pero ambos viajan SIEMPRE en el payload.",
+
+    "NO HAY 'MODO ADMIN' QUE BYPASEE EL SCOPE. Acciones administrativas (gestión del cluster, métricas globales) NO se hacen 'saltándose' project_id — se hacen con un user_id de tipo 'system' y el storage se scope-a en consecuencia. Los datos de admin viven en su propio proyecto/scope, no en una vista privilegiada que puede ver datos cruzados.",
+
+    "EL FRONTEND CONOCE SOLO SU SCOPE. La sesión web del usuario tiene un project_id activo + su user_id. El frontend solo se suscribe a eventos con esos campos coincidiendo. Cambiar de proyecto activo es cambiar el filtro de suscripción, no recargar la página."
+  ],
+
+  "principios": [
+    {
+      "id": "project_id_obligatorio_en_dominio",
+      "regla": "Todo evento que toca datos de dominio (recetas, mensajes, archivos, escandallos, configuraciones de proyecto, etc.) incluye project_id. Tipo: string no vacío en multi-tenant; null permitido solo durante fase single-tenant.",
+      "razon": "Sin project_id, un consumer que lee datos no sabe a qué proyecto pertenece. La opción 'project actual del proceso' fallaría en multi-tenant simultáneo. Forzar el campo desde el primer evento elimina la ambigüedad."
+    },
+    {
+      "id": "user_id_obligatorio_en_atribucion",
+      "regla": "Todo evento con atribución humana (chat.message.saved, agent.execute.request iniciado por usuario, acción manual de UI) incluye user_id. Tipo: string no vacío. Single-user → 'default'.",
+      "razon": "user_id permite auditoría retroactiva, multi-user real cuando llegue, y aislamiento horizontal (Bob nunca recibe el contexto de Alice)."
+    },
+    {
+      "id": "propagacion_sin_modificacion",
+      "regla": "Ningún handler intermedio modifica project_id ni user_id. Se propagan desde el originador hasta el ejecutor tal cual. La única excepción es en operaciones cross-tenant explícitas (ej. agent system que escanea N proyectos publica N eventos hijos, cada uno con su project_id).",
+      "razon": "Modificar el ámbito en medio de la cadena rompe la trazabilidad y abre puerta a leak (handler bug que pone otro project_id por error). Inmutabilidad es la garantía de aislamiento."
+    },
+    {
+      "id": "storage_scope_por_project_id",
+      "regla": "Cada módulo que persiste datos de dominio scope-a en el storage por project_id: archivos en data/<project_id>/<modulo>.json, tablas con WHERE project_id = ?, prefijos de keys, etc.",
+      "razon": "Sin scope físico en storage, una query incorrecta puede devolver datos de otro proyecto. Scope físico hace imposible el leak por bug de query (la información está en directorios separados / con WHERE obligatorio)."
+    },
+    {
+      "id": "observabilidad_con_etiquetas_de_tenant",
+      "regla": "Cada log y métrica que se emite incluye project_id + user_id en su metadata cuando aplican. observability.contract aplica la regla general de logs estructurados; este contrato la concreta exigiendo estos campos.",
+      "razon": "En producción, sin estos labels no se puede filtrar logs/métricas por proyecto ni por usuario. Filtros = troubleshooting; sin filtros = ruido."
+    },
+    {
+      "id": "consumer_valida_scope_si_aplica",
+      "regla": "Cuando un módulo se suscribe a un evento de dominio, valida en el handler que project_id del evento coincide con su scope (cuando el módulo es project-scoped) e ignora si no.",
+      "razon": "Subscribir a 'todos los eventos del bus' y filtrar en el handler es el patrón canónico. Sin ese filtro, el módulo procesa eventos de proyectos ajenos."
+    },
+    {
+      "id": "eventos_cross_tenant_documentados",
+      "regla": "Los eventos cross-tenant (que no llevan project_id porque son del sistema) están listados explícitamente en el contrato. Cualquier evento nuevo debe declarar si es project-scoped o cross-tenant.",
+      "razon": "Sin lista cerrada, un evento de dominio puede colarse sin project_id por descuido y nadie lo nota hasta que produce un leak."
+    },
+    {
+      "id": "frontend_filtra_por_scope_activo",
+      "regla": "El frontend tiene un project_id activo + user_id. Sus suscripciones MQTT solo procesan eventos con esos campos coincidiendo. Cambiar de proyecto activo cambia el filtro, no recarga el frame.",
+      "razon": "Coherente con frontend.contract.pantalla_unica: el frame no se expulsa al cambiar de proyecto, simplemente cambia el contenido visible."
+    },
+    {
+      "id": "no_modo_admin_bypass",
+      "regla": "Operaciones administrativas no usan un user_id privilegiado que vea datos de todos los proyectos. Si un agente del sistema necesita iterar sobre N proyectos, publica N operaciones distintas, cada una con su project_id.",
+      "razon": "Un 'modo admin' que ve todo es una superficie de leak permanente. Iterar publish-by-publish mantiene el aislamiento criptográfico (cada operación tiene su scope)."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "ambitos_explicitos_no_inferidos",
+      "decision": "project_id y user_id viajan EXPLÍCITAMENTE en cada payload. No se infieren del 'contexto del proceso' ni del 'directorio de configuración'.",
+      "alternativa_descartada": "Inferir project_id activo de variable global del proceso o de un singleton.",
+      "razon": "La inferencia falla cuando hay multi-tenant simultáneo en el mismo proceso (escenario de cluster). Pasarlo explícito desde el originador hasta el ejecutor escala a cualquier topología."
+    },
+    {
+      "id": "project_id_nullable_durante_single_tenant",
+      "decision": "project_id es type ['string', 'null']. null permitido durante fase single-tenant; string obligatorio cuando aplique multi-tenant real.",
+      "alternativa_descartada": "Forzar project_id como string desde el principio y usar 'default' como valor especial en single-tenant.",
+      "razon": "null es semánticamente claro ('no hay proyecto, contexto global') vs 'default' que parece un proyecto real. Cuando se introduzcan proyectos reales, null no se confunde con un proyecto llamado 'default'."
+    },
+    {
+      "id": "user_id_string_no_nullable",
+      "decision": "user_id es type 'string', minLength 1. En single-user vale 'default' (string explícito). Nunca null.",
+      "alternativa_descartada": "user_id nullable como project_id.",
+      "razon": "Toda acción tiene un actor; en peor caso es 'default' o 'system'. Hacerlo nullable invita a olvidar quién hizo la acción y rompe la auditoría retroactiva."
+    },
+    {
+      "id": "storage_scope_fisico_no_logico",
+      "decision": "Cuando un módulo es project-scoped, su storage se separa físicamente: directorios distintos por project_id, ficheros distintos por project_id, o tablas con WHERE project_id obligatorio enforcable a nivel de query builder.",
+      "alternativa_descartada": "Storage compartido + filtro lógico en cada query (WHERE project_id = ?).",
+      "razon": "Filtro lógico depende de que el desarrollador no olvide ponerlo. Un único query sin WHERE = leak de datos cross-proyecto. Separación física hace imposible el leak por bug de query."
+    },
+    {
+      "id": "eventos_cross_tenant_lista_cerrada",
+      "decision": "Los eventos del bus son project-scoped por defecto (llevan project_id). Los cross-tenant son una lista cerrada documentada (eventos de salud del sistema, métricas globales, gestión del cluster).",
+      "alternativa_descartada": "Cualquier evento puede ser cross-tenant si el publisher decide.",
+      "razon": "Por defecto project-scoped es la postura segura: olvidar project_id = evento rechazado, no leak. Lista cerrada de excepciones documenta intencionalidad y previene drift."
+    },
+    {
+      "id": "observabilidad_con_labels_de_tenant_obligatorios",
+      "decision": "Logs y métricas del sistema incluyen labels project_id + user_id cuando aplican. observability.contract aplica la regla general; este contrato la hace estricta para los campos de tenancy.",
+      "alternativa_descartada": "Labels opcionales (cada módulo decide si los incluye).",
+      "razon": "Sin estos labels, en producción no se puede atribuir un error a un proyecto/usuario concreto. Aplicar fallback razonable a posteriori (parsear el log) es frágil."
+    },
+    {
+      "id": "no_modo_admin_global",
+      "decision": "Operaciones administrativas (gestión del cluster, métricas globales, alertas de salud) NO se hacen con un user_id 'admin' que vea todos los datos. Se hacen con user_id 'system' iterando proyectos uno a uno (operaciones por scope).",
+      "alternativa_descartada": "user_id 'admin' o 'root' con permisos de leer cualquier project_id.",
+      "razon": "Modo admin = superficie de leak permanente + tentación de bypass. Iterar publish-by-publish mantiene el aislamiento incluso en operaciones administrativas."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "operacion_de_dominio_sin_project_id",
+      "regla": "Ningún handler de operación de dominio se ejecuta si project_id falta del payload (en multi-tenant real; en single-tenant null permitido). Rechaza con AUTHORIZATION_REQUIRED si falta cuando es obligatorio.",
+      "enforce": "Auditoría de cada handler que toca datos de dominio: si lee/escribe sin validar project_id presente, drift. Severidad warning durante single-tenant; ERROR cuando se active multi-tenant."
+    },
+    {
+      "id": "operacion_atribuible_sin_user_id",
+      "regla": "Ningún publish con atribución humana omite user_id. chat-flow.contract y agent-flow.contract ya lo aplican; aquí se generaliza.",
+      "enforce": "Schemas estrictos de cada subsistema. Validador escanea publishes."
+    },
+    {
+      "id": "modificar_project_id_o_user_id_intermedio",
+      "regla": "Ningún handler intermedio cambia project_id ni user_id del payload. Excepción: operaciones cross-tenant explícitas que producen N eventos hijos con project_id distinto al padre.",
+      "enforce": "Auditoría manual + revisión de PR. Patrones tipo `payload.project_id = otroProyecto` en código que no es originador son drift."
+    },
+    {
+      "id": "storage_compartido_sin_scope",
+      "regla": "Ningún módulo project-scoped persiste datos de dominio en un storage compartido sin WHERE/filtro por project_id obligatorio. Filesystem: directorios separados. SQLite: WHERE en cada query o columna NOT NULL forced.",
+      "enforce": "Auditoría de implementaciones de _db / persistencia de cada módulo. Severidad ERROR — un leak de datos es crítico."
+    },
+    {
+      "id": "log_sin_labels_de_tenant_aplicables",
+      "regla": "Ningún log de operación de dominio omite project_id + user_id en su metadata cuando esos campos están disponibles en el contexto.",
+      "enforce": "Auditoría de cada handler. Patrones tipo `this.logger.info('algo', { /* sin tenant */ })` cuando el handler tiene project_id en scope son drift."
+    },
+    {
+      "id": "consumer_que_no_filtra_scope",
+      "regla": "Ningún módulo project-scoped procesa todos los eventos sin filtrar por su scope. Si el módulo es scoped a project_id X, solo procesa eventos con project_id == X.",
+      "enforce": "Auditoría manual. Auditoría de subscribers."
+    },
+    {
+      "id": "modo_admin_que_lee_todos_los_proyectos",
+      "regla": "Ningún módulo expone un 'modo admin' que lee datos de todos los proyectos en una sola query. Si necesita iterar, itera publish-by-publish.",
+      "enforce": "Auditoría manual de PR."
+    },
+    {
+      "id": "frontend_se_suscribe_sin_filtro_de_scope",
+      "regla": "Suscripciones MQTT del frontend tienen filtro por project_id activo + user_id. No hay 'subscribe a todo' aunque la sesión sea de un solo proyecto.",
+      "enforce": "Auditoría de código frontend buscando suscripciones sin filtro de scope."
+    },
+    {
+      "id": "evento_de_dominio_no_documentado_como_cross_tenant_publicado_sin_project_id",
+      "regla": "Si un evento se publica sin project_id, debe estar listado explícitamente en el contrato como cross-tenant. Caso contrario, drift.",
+      "enforce": "Validador cruza eventos publicados vs lista canónica de eventos cross-tenant. Severidad warning durante migración."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/multi-tenancy.schema.json (a crear). Top-level: _meta, regla_maestra (string), campo_project_id (object: tipo, obligatoriedad por contexto, ejemplos), campo_user_id (object: tipo, obligatoriedad, valores especiales 'default', 'system'), eventos_project_scoped (lista de eventos canónicos), eventos_cross_tenant (lista cerrada con justificación de cada uno), observabilidad_con_labels (descripción de cómo aplican los labels), aislamiento_de_storage (patrones aceptados: directorios separados, WHERE obligatorio, prefijos de keys), patrones_de_drift (regexes que detectan violaciones).",
+
+  "reglas_de_extraccion": [
+    "1. Validar contrato contra _schemas/multi-tenancy.schema.json.",
+    "2. Cargar audits modulo-completo. Para cada módulo, identificar publishes y verificar: (a) si el evento es project-scoped, payload incluye project_id; (b) si es cross-tenant, está en la lista canónica.",
+    "3. Cargar handlers que persisten datos. Verificar que validan project_id presente antes de tocar storage. Reportar warning si no.",
+    "4. Verificar que logs / métricas (cuando se emiten desde handlers con project_id en scope) incluyen el label.",
+    "5. Verificar que el frontend (cuando exista la auditoría) tiene filtro por project_id activo en sus suscripciones.",
+    "6. Reportar PASS/FAIL con findings."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/multi-tenancy.schema.json (a crear)"
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/multi-tenancy.validate.js (a crear)"
+    },
+    {
+      "tipo": "modulo_responsable",
+      "items": ["project-manager (gestor del catálogo de proyectos: crear, listar, activar, desactivar)"],
+      "regla": "Implementador del concepto de proyecto. Cualquier cambio en sus events afecta al contrato."
+    },
+    {
+      "tipo": "modulos_consumidores",
+      "items": ["TODOS los módulos del repo que persisten datos de dominio o emiten eventos de dominio"],
+      "regla": "Cumplen el contrato propagando project_id + user_id sin modificar y validando scope."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección multi-tenancy cuando exista)",
+      "regla": "Warnings de operaciones single-tenant sin project_id quedan en baseline (aceptables hoy); pasan a ERROR cuando se active multi-tenant real."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "multi_tenancy_contract_estructura_valida",
+      "regla": "El contrato tiene amplitud canónica (17 secciones).",
+      "como_detectar": "Inspección de keys.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_publish_dominio_sin_project_id",
+      "regla": "Eventos de dominio publicados sin project_id en el payload (que no están en la lista cross-tenant).",
+      "como_detectar": "Cruzar audits modulo-completo (campos_visibles del publish) con catálogo de eventos.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_publish_atribuible_sin_user_id",
+      "regla": "Eventos de atribución humana sin user_id.",
+      "como_detectar": "Cruzar audits.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_handler_no_valida_project_id",
+      "regla": "Handler que toca DB no valida project_id presente.",
+      "como_detectar": "Auditoría manual + heurísticas regex sobre código.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_log_sin_label_de_tenant",
+      "regla": "Log emitido desde handler con project_id en scope que no incluye el label.",
+      "como_detectar": "Heurísticas regex sobre código.",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS si el contrato es estructuralmente válido Y las publicaciones de dominio incluyen project_id Y los handlers validan scope antes de persistir Y los logs etiquetan con labels de tenancy. Errors solo para violaciones explícitas (storage compartido sin scope, modo admin con bypass). Warnings para deuda single-tenant que cierra en migración a multi-tenant.",
+
+  "convenciones_complementarias": {
+    "naming": "project_id y user_id son nombres canónicos definidos en glossary.json (cuando se añadan al glossary global). Naming no introduce reglas adicionales.",
+    "glossary": "project_id, user_id, tenancy son términos cross-módulo — su forma canónica vive en glossary.json (a actualizar como derivación de este contrato).",
+    "events": "Hereda los principios generales. Este contrato concreta que el shape de los eventos de dominio incluye project_id + user_id como campos canónicos del payload.",
+    "errors": "AUTHORIZATION_REQUIRED es el código canónico cuando una operación se rechaza por falta de scope. CREDENTIAL_NOT_FOUND aplica si la sesión del usuario no resuelve.",
+    "observability": "Cada log y métrica con scope incluye labels project_id + user_id. observability.contract aplica el patrón general; este contrato lo concreta para tenancy.",
+    "lifecycle": "Los módulos cargan sin scope concreto (a nivel de proceso). El scope se aplica por evento — no se cargan N instancias del módulo, una por proyecto. Esto preserva la simplicidad del lifecycle.",
+    "persistence": "El aislamiento absoluto entre módulos (persistence.contract) se complementa con aislamiento por project_id dentro del storage de cada módulo. Coherente con persistence.patrones_canonicos: sqlite-per-project, json-file-per-project.",
+    "http": "Endpoints HTTP que aceptan operaciones de dominio resuelven project_id de la sesión / token / parámetro y lo propagan al evento publicado al bus.",
+    "security": "Coherente con security.tenancy_por_project_id e identidad_por_user_id. Este contrato amplía la disciplina al resto de los aspectos del sistema (storage, logs, suscripciones).",
+    "frontend": "El frontend tiene un project_id activo + user_id de sesión. Suscripciones MQTT filtran por estos campos. Cambio de proyecto = cambio de filtro, no de página.",
+    "chat-flow": "Los 5 eventos chat_flow incluyen project_id (nullable en single-tenant) + user_id (string obligatorio) — ya aplicado en chat-flow.contract.",
+    "agent-flow": "Igual para los 3 eventos agent_flow."
+  }
+}

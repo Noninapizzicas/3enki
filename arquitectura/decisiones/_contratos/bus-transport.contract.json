@@ -1,0 +1,290 @@
+{
+  "_doc": "Captura LA disciplina del transporte del bus de mensajería del sistema event-core: qué broker se usa (aedes embebido), cómo se configuran las conexiones (TCP + WebSocket), cómo se autentican los clientes locales vs externos, cómo se conectan nodos del cluster cuando hay multi-nodo, qué QoS se usa por defecto, cómo se nombran los topics. La regla maestra: aedes embebido en el mismo proceso del core, dos puertos (1883 TCP para clientes locales del proceso, 9001 WebSocket para frontend), mTLS entre nodos del cluster (referencia security.contract). Sin un contrato de bus-transport, el transporte se inventa por aplicación, los topics derivan, y la migración a broker externo o a cluster multi-nodo se vuelve refactor masivo.",
+  "id": "bus-transport",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Recoge la implementación que ya existe en core/broker/embedded.js (aedes embebido) y core/mqtt/{client,index,pool,topics}.js (cliente MQTT del core para hablar con el broker propio). Eleva a contrato transversal autónomo que separa LA SEMÁNTICA del bus (gobernada por events.contract) de LA INFRAESTRUCTURA del bus (transporte, broker, autenticación).",
+
+  "objetivo": "Producir UN JSON output (_outputs/bus-transport.json) que define: broker canónico (aedes embebido), puertos canónicos (1883 TCP + 9001 WebSocket), naming canónico de topics (heredado de events.contract: <module-prefix>.<entity>.<verb>), QoS por defecto (1 al least once para persistencia), retain por defecto (false — no retain), modelo de cluster (single-nodo default; multi-nodo opcional con mTLS), autenticación de clientes (allow-local por defecto, mTLS para externos del cluster), wildcard subscriptions permitidos, y antipatrones (broker externo sin necesidad, topics fuera del naming canónico, retained messages como state store).",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/bus-transport.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/events.contract.json (gobierna semántica del publish/subscribe — este contrato concreta el transporte)",
+      "core/broker/embedded.js (aedes embebido)",
+      "core/mqtt/index.js, client.js, pool.js, topics.js (cliente del core)",
+      "config.json (sección mqtt.broker con puertos)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "modules/*/index.js (módulos que llaman this.eventBus.publish/subscribe)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "AEDES EMBEBIDO ES EL DEFAULT. El broker MQTT corre en el mismo proceso del core via biblioteca aedes. No hay broker externo a instalar para uso normal.",
+
+    "DOS PUERTOS CANÓNICOS. 1883 (MQTT TCP) para clientes que hablen MQTT nativo y para el cliente interno del core. 9001 (MQTT sobre WebSocket) para el frontend (que solo puede hablar WebSocket desde browser).",
+
+    "MQTT.JS COMO CLIENTE. El core usa mqtt.js (npm) para conectarse a su propio broker (loopback localhost). Los módulos del core NO instancian mqtt.js — usan this.eventBus.{publish,subscribe} que es una abstracción inyectada por el loader.",
+
+    "TOPICS = NOMBRES DE EVENTO. El topic en MQTT es exactamente el nombre del evento (chat.message.saved, agent.execute.request, etc.). No hay namespace adicional — el naming canónico de events ya garantiza unicidad.",
+
+    "QOS 1 (AT LEAST ONCE) POR DEFECTO. El publish y subscribe del core usan QoS 1: el broker garantiza entrega al menos una vez. QoS 0 (at most once) es opcional para tráfico de alto volumen tolerante a pérdida (telemetría puntual). QoS 2 (exactly once) NO se usa por su overhead.",
+
+    "RETAINED MESSAGES NO COMO STATE STORE. Los retained messages (que el broker guarda y entrega a nuevos suscriptores) NO son el state store del sistema. Estado vive en módulos persistentes (storage). Retain=true se reserva para casos puntuales documentados (ej. último heartbeat de un device).",
+
+    "WILDCARD SUBSCRIPTIONS PERMITIDOS PERO MEDIDOS. Suscribirse a `chat.+.saved` o `agent.execute.+` es válido para handlers que procesan familia de eventos. Pero suscribirse a `#` (todos los topics) es prohibido salvo en módulos auditoría / observability con justificación.",
+
+    "AUTH LOCAL ABIERTA, EXTERNA CON mTLS. Clientes en localhost (cliente interno del core, frontend) sin autenticación. Clientes externos (otro nodo del cluster) requieren mTLS con cert emitido por certificate-authority.",
+
+    "SINGLE-NODO ES DEFAULT. El sistema corre por defecto con UN solo broker en el proceso. Multi-nodo (varios cores conectados) es opcional, con bridge MQTT entre brokers o conexión cruzada autenticada.",
+
+    "TRANSPORTE OPACO PARA MÓDULOS. Un módulo no debe saber si está hablando con broker embebido o externo, single-nodo o cluster. La abstracción eventBus.{publish,subscribe} le esconde el transporte.",
+
+    "BROKER EXTERNO ES OPCIÓN, NO PROHIBIDO. Configurar config.json.mqtt.broker.external = true cambia a Mosquitto/EMQX/etc. en lugar de aedes embebido. El sistema sigue funcionando si el broker externo cumple la spec MQTT 3.1.1.",
+
+    "TOPIC PREFIX NUNCA SE DUPLICA. Si un módulo se llama `chat-io`, sus eventos son `chat.message.saved`, `chat.assistant.saved` (no `chat-io.chat.message.saved`). El prefix de naming.contract ya define el namespace.",
+
+    "NO HAY MENSAJERÍA DIFERIDA EN EL BROKER. El broker no programa entregas futuras (no es un job queue como BullMQ). Para programación se usa scheduling.contract (cron/timers) y para jobs durables se usa un módulo dedicado."
+  ],
+
+  "principios": [
+    {
+      "id": "aedes_embebido_default",
+      "regla": "El broker MQTT canónico es aedes (npm) embebido en el proceso del core. Sin proceso separado, sin instalación externa.",
+      "razon": "Cero dependencias operacionales. La performance de aedes in-process es suficiente para escala doméstica."
+    },
+    {
+      "id": "puertos_canonicos_1883_9001",
+      "regla": "1883 (MQTT TCP) para clientes nativos. 9001 (MQTT sobre WebSocket) para frontend browser. Configurables en config.json.mqtt.broker.{port, wsPort}.",
+      "razon": "1883 es el puerto estándar IANA de MQTT; 9001 es la convención de Eclipse Mosquitto para WS — interoperabilidad inmediata con cualquier herramienta MQTT."
+    },
+    {
+      "id": "mqtt_js_cliente_canonico",
+      "regla": "El core usa biblioteca mqtt.js para conectarse a su propio broker en localhost.",
+      "razon": "mqtt.js es la implementación más madura en Node, soporta MQTT 3.1.1 y 5.0, y sigue el estándar — interoperable con cualquier broker."
+    },
+    {
+      "id": "modulos_no_usan_mqtt_directo",
+      "regla": "Ningún módulo del repo importa mqtt.js ni se conecta directo al broker. Usan this.eventBus.{publish,subscribe} que el loader inyecta.",
+      "razon": "Abstracción permite cambiar el transporte (broker externo, in-memory para tests, etc.) sin tocar código de módulos."
+    },
+    {
+      "id": "topic_es_nombre_de_evento",
+      "regla": "El topic MQTT == nombre del evento. Sin prefix adicional, sin namespace de cluster.",
+      "razon": "Mantener topic == evento simplifica enormemente: lo que un módulo declara que publica es lo que va al broker, sin transformaciones."
+    },
+    {
+      "id": "qos_1_por_defecto",
+      "regla": "publish y subscribe usan QoS 1 (at least once) por defecto. QoS 0 opcional para telemetría tolerante a pérdida. QoS 2 prohibido por overhead.",
+      "razon": "QoS 1 garantiza entrega; QoS 2 garantiza unicidad pero requiere round trips adicionales. El overhead de QoS 2 no se justifica para nuestro caso de uso (idempotencia se logra a nivel aplicación con request_id)."
+    },
+    {
+      "id": "retained_no_state_store",
+      "regla": "retained=true se reserva para casos puntuales (último heartbeat, configuración de cluster). NO se usa como reemplazo de storage.",
+      "razon": "Retained messages tienen semántica frágil (último publisher gana, sin atomicidad, sin queries). Storage real (SQLite, JSON) es la fuente de estado."
+    },
+    {
+      "id": "wildcards_medidos_no_hash_global",
+      "regla": "Wildcards `+` y `#` permitidos en subscribe. PERO `#` global solo en módulos auditoría/observability con justificación. Resto: `+` puntual.",
+      "razon": "`#` global suscribe a todo — útil para auditoría pero peligroso para módulos normales (procesan eventos no relevantes, gastan CPU). Limitarlo a casos justificados es la disciplina."
+    },
+    {
+      "id": "auth_local_abierta_externa_mtls",
+      "regla": "Localhost: sin autenticación (loopback es trusted). Externos (otro nodo del cluster): mTLS con certificado emitido por certificate-authority.",
+      "razon": "Loopback no es atacable desde red. Externos sí — mTLS es la defensa criptográfica. Coherente con security.contract.autenticacion_de_nodos_mtls."
+    },
+    {
+      "id": "transporte_opaco_para_modulos",
+      "regla": "Un módulo no consulta config.json.mqtt ni introspecta el transporte. Solo conoce this.eventBus.{publish,subscribe}.",
+      "razon": "Abstracción protege a módulos del cambio de transporte (broker externo, in-memory, etc.). Si un módulo introspecta, se rompe al cambiar."
+    },
+    {
+      "id": "broker_externo_opcional_documentado",
+      "regla": "Cambiar a broker externo via config.json.mqtt.broker.external = true + URL + credenciales. El sistema funciona si el broker externo cumple MQTT 3.1.1+.",
+      "razon": "Externo se justifica para clusters grandes, persistencia avanzada, o integración con sistemas que ya usan un broker. No imponer aedes preserva la flexibilidad."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "aedes_vs_mosquitto_externo",
+      "decision": "aedes embebido como broker default. Mosquitto / EMQX / VerneMQ son externos opcionales.",
+      "alternativa_descartada": "Mosquitto externo como default obligatorio (requeriría instalación previa).",
+      "razon": "Aedes elimina dependencia operacional. La performance de aedes embebido es suficiente para escala doméstica (decenas de módulos, miles de mensajes/seg). Cluster grande o features de Mosquitto (HA, persistencia ACID) son casos de excepción."
+    },
+    {
+      "id": "1883_y_9001_no_solo_uno",
+      "decision": "Dos puertos: 1883 TCP + 9001 WebSocket.",
+      "alternativa_descartada": "Solo 9001 WebSocket (cubre frontend + cliente del core).",
+      "razon": "Cliente MQTT nativo (mqtt.js servidor) es más eficiente sobre TCP que sobre WS. 1883 para tráfico interno (volumen alto), 9001 para frontend (volumen bajo). Doble puerto cuesta cero."
+    },
+    {
+      "id": "mqtt_js_no_alternativas",
+      "decision": "Biblioteca cliente: mqtt.js (npm). Sin alternativas (ej. async-mqtt, mqtt-connection).",
+      "alternativa_descartada": "Múltiples bibliotecas según preferencia.",
+      "razon": "Una sola biblioteca reduce la superficie de testing y el bundle size. mqtt.js es la más madura y popular."
+    },
+    {
+      "id": "topic_es_evento_no_namespace_extra",
+      "decision": "El topic == nombre canónico del evento. Sin prefijos de cluster, sin separadores adicionales.",
+      "alternativa_descartada": "Prefix por nodo (`<node-id>/<event>`) o por proyecto (`<project_id>/<event>`).",
+      "razon": "Naming.contract ya garantiza unicidad. Prefix adicional duplica información que viaja en el payload (project_id) y rompe wildcards naturales (`chat.+.saved`)."
+    },
+    {
+      "id": "qos_1_default_no_qos_2",
+      "decision": "QoS 1 por defecto. QoS 0 opcional para telemetría. QoS 2 prohibido.",
+      "alternativa_descartada": "QoS 2 para garantizar unicidad de entrega.",
+      "razon": "QoS 2 requiere 4 round trips por mensaje vs 2 de QoS 1. La idempotencia se logra a nivel aplicación con request_id (handlers detectan duplicados por id). El overhead de QoS 2 no se justifica."
+    },
+    {
+      "id": "retained_no_es_state_store",
+      "decision": "Retain=true solo para casos puntuales documentados. No es un sustituto de storage.",
+      "alternativa_descartada": "Usar retained messages como cache distribuida ('última config publicada') sin storage explícito.",
+      "razon": "Retained es frágil (sin atomicidad, sin queries, sin TTL nativo). Storage real (módulos persistentes) es robusto."
+    },
+    {
+      "id": "auth_local_loopback_trusted",
+      "decision": "Clientes en localhost no requieren autenticación. Externos requieren mTLS.",
+      "alternativa_descartada": "Auth obligatoria incluso en localhost (username/password).",
+      "razon": "Loopback ya está protegido por el SO (no atacable desde red). Auth en local añade complejidad sin valor (qué username usar, dónde guardarlo)."
+    },
+    {
+      "id": "broker_externo_opcional_no_prohibido",
+      "decision": "Configurable a broker externo via config.json. El sistema cumple MQTT 3.1.1+.",
+      "alternativa_descartada": "Solo aedes embebido permitido (otros brokers prohibidos).",
+      "razon": "Limitar al embedded cierra posibilidades futuras (cluster grande, integración con sistemas existentes). Diseñar para opcional desde el principio cuesta poco."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "modulo_importa_mqtt_directo",
+      "regla": "Ningún módulo importa mqtt.js ni se conecta directo al broker. Solo this.eventBus.{publish,subscribe}.",
+      "enforce": "Validador escanea código de cada módulo buscando `require('mqtt')` o `mqtt.connect(...)`. Severidad error fuera de core/."
+    },
+    {
+      "id": "topic_no_canonico",
+      "regla": "Ningún publish usa topic que no cumpla forma <module-prefix>.<entity>.<verb> de naming.contract.",
+      "enforce": "naming.validate aplica esta regla; bus-transport refuerza."
+    },
+    {
+      "id": "wildcard_global_hash_sin_justificacion",
+      "regla": "Ningún módulo se suscribe a `#` salvo módulos auditoría/observability con razón documentada.",
+      "enforce": "Validador escanea subscribes (audits) buscando topic == '#'. Severidad error si no es en lista permitida."
+    },
+    {
+      "id": "qos_2_en_publish_subscribe",
+      "regla": "Ningún publish/subscribe usa QoS 2.",
+      "enforce": "Validador escanea código buscando `qos: 2`. Severidad warning."
+    },
+    {
+      "id": "retained_como_state_store",
+      "regla": "Ningún módulo usa retained=true para guardar estado de dominio (configuración persistente, último mensaje del usuario, etc.).",
+      "enforce": "Auditoría manual. Patrones tipo `publish(..., { retain: true })` se revisan caso a caso."
+    },
+    {
+      "id": "broker_externo_sin_mtls_para_cluster",
+      "regla": "Si se configura broker externo Y el cluster tiene multi-nodo, las conexiones entre nodos requieren mTLS. No se permite cluster con broker externo y auth simple (username/password).",
+      "enforce": "security.contract.autenticacion_de_nodos_mtls aplica esta regla."
+    },
+    {
+      "id": "topic_prefix_duplicado",
+      "regla": "El nombre del módulo no se duplica en el topic (chat-io publica `chat.message.saved`, NO `chat-io.chat.message.saved`).",
+      "enforce": "Validador escanea publishes detectando duplicación de prefix."
+    },
+    {
+      "id": "broker_alternativo_no_compatible_con_mqtt_311",
+      "regla": "Si se cambia broker externo, debe cumplir MQTT 3.1.1 o superior. RabbitMQ con plugin MQTT, Redis Pub/Sub, etc. NO son alternativas válidas.",
+      "enforce": "Documentación + validación manual."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/bus-transport.schema.json (a crear). Top-level: _meta, regla_maestra (string), broker_canonico (object: aedes embebido), puertos (object: 1883 TCP, 9001 WS), cliente_libreria (string: 'mqtt'), qos_default (integer: 1), retained_default (boolean: false), wildcard_policy (object: + permitido, # restringido), auth_policy (object: local abierta, externa mTLS), broker_externo_opcional (object: cómo configurar), topic_naming (referencia a events.contract), patrones_de_drift (regexes que el validador usa).",
+
+  "reglas_de_extraccion": [
+    "1. Validar contrato.",
+    "2. Verificar que core/broker/embedded.js existe (aedes embebido).",
+    "3. Verificar que config.json.mqtt.broker tiene port y wsPort.",
+    "4. Escanear módulos buscando require('mqtt') fuera de core/.",
+    "5. Escanear publishes buscando qos:2 (drift warning).",
+    "6. Escanear subscribes buscando topic '#' (drift error si no en allowlist).",
+    "7. Cruzar publishes con naming.contract (drift de topic no canónico ya lo captura naming.validate; aquí solo se referencia).",
+    "8. Reportar PASS/FAIL."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/bus-transport.schema.json (a crear)"
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/bus-transport.validate.js (a crear)"
+    },
+    {
+      "tipo": "implementacion_canonica",
+      "items": ["core/broker/embedded.js", "core/mqtt/{client,index,pool,topics}.js"]
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección bus-transport cuando exista)"
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "bus_transport_contract_estructura_valida",
+      "regla": "Amplitud canónica completa.",
+      "como_detectar": "17 secciones canónicas presentes.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_importa_mqtt_directo",
+      "regla": "Ningún módulo fuera de core/ importa mqtt.js.",
+      "como_detectar": "Regex: `require\\(['\"`]mqtt['\"`]\\)`.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_subscribe_hash_global",
+      "regla": "Ningún subscribe tiene topic '#' (excepto allowlist auditoría).",
+      "como_detectar": "Inspeccionar audits y código.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_qos_2",
+      "regla": "Ningún publish/subscribe usa qos:2.",
+      "como_detectar": "Regex sobre código.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_retained_message",
+      "regla": "Auditar publishes con retain:true (revisión manual posterior).",
+      "como_detectar": "Regex sobre código.",
+      "severidad": "info"
+    }
+  ],
+
+  "salida_validador": "PASS si el contrato es válido Y ningún módulo importa mqtt.js directo Y no hay subscribes a '#' fuera de allowlist Y no hay qos:2. Errors solo para violaciones críticas (mqtt directo, # global). Warnings/info para revisión.",
+
+  "convenciones_complementarias": {
+    "naming": "El topic MQTT == nombre del evento. naming.contract gobierna el shape <module>.<entity>.<verb>. Este contrato concreta cómo viaja el topic por el wire.",
+    "glossary": "Términos: broker, topic, publish, subscribe, QoS, retained, wildcard, mTLS. Forma canónica en glossary.json.",
+    "events": "events.contract gobierna la SEMÁNTICA del bus (publish-subscribe asíncrono, no-esperar-respuesta). Este contrato gobierna la INFRAESTRUCTURA (broker, transporte, autenticación).",
+    "errors": "Errores de transporte: BROKER_DISCONNECTED ya está en errors.json codes_infrastructure.",
+    "observability": "Métricas del broker (conexiones activas, mensajes por segundo, drops) se exponen via observability.contract. Logs de conexión/desconexión llevan client_id + project_id si aplicable.",
+    "lifecycle": "El broker arranca en onLoad del core (antes de cargar módulos). Se detiene en onUnload tras unloadAll de módulos.",
+    "persistence": "El broker NO persiste mensajes (in-memory). Si un consumer está caído cuando se publica, pierde el mensaje. Persistencia se hace a nivel aplicación (handlers que escriben a storage).",
+    "http": "9001 es WebSocket (protocolo WS upgrade desde HTTP). El servidor HTTP del core puede compartir puerto 80/443 con el WS si hay reverse proxy, o el WS escucha solo (default).",
+    "security": "Coherente con security.autenticacion_de_nodos_mtls. Localhost sin auth; externos con mTLS y certificate-authority.",
+    "frontend": "El frontend conecta al broker via WS (puerto 9001). frontend.contract concreta este aspecto desde el lado UI; este contrato lo concreta desde el lado broker.",
+    "testing": "Tests del bus arrancan broker embebido en proceso de test (no broker externo). Coherente con testing.contract.tests_no_tocan_recursos_reales (excepto integration que sí inicia aedes embebido).",
+    "multi-tenancy": "Topics no llevan project_id (el aislamiento es por payload, no por topic). Coherente con multi-tenancy.contract.",
+    "documentation": "INSTALL.md menciona puertos 1883 + 9001. Este contrato es la fuente autoritativa.",
+    "versionado": "Aedes y mqtt.js tienen sus propios semvers en package.json. Cambios mayores requieren testing del bus.",
+    "deployment": "El broker arranca con el proceso del core. Coherente con deployment.contract.broker_aedes_embebido_default.",
+    "module-loading": "Los módulos reciben eventBus inyectado por el loader. Este contrato concreta de qué transporte está hecho ese eventBus."
+  }
+}

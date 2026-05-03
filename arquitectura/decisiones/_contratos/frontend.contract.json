@@ -1,0 +1,308 @@
+{
+  "_doc": "Captura LA forma canónica del frontend del sistema event-core: pantalla única donde el chat (compañero) es el eje y todos los módulos del backend renderizan su superficie alrededor sin sacar al usuario del espacio. Define el frame común (layout, principios, modelo de extensión, protocolo backend↔frontend, prohibidos) que toda UI del repo respeta. NO entra dentro del contenido visual concreto de cada módulo (UIs específicas como /compañero, /cocina y los renderizados internos de menu-generator, recetas, etc.) — eso es horizontal, propiedad de cada módulo. La regla maestra: el usuario nunca abandona el frame; cada vez que sales del espacio, hay distracciones.",
+  "id": "frontend",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Absorbe la información que vivía en frontend/DISEÑO-UI.md como fuente JSON autoritativa (validable, cross-referenciable con el resto del sistema). El markdown se archiva — la fuente de verdad pasa a ser este contrato. Recoge los 5 principios fundamentales, el layout canónico de 5 zonas + lateral, el sandwich del chat, el sistema visual (colores de proyecto, iconos de provider), el protocolo MQTT frontend↔backend, y las 8 decisiones arquitectónicas previas. Documento autoritativo del frame; cada módulo backend declara su superficie via module.json.ui_handlers respetando este frame.",
+
+  "objetivo": "Producir UN JSON output (_outputs/frontend.json) que define: el layout canónico (5 zonas + lateral), los principios maestros (pantalla única, chat como eje, sandwich, no salir nunca), los tipos canónicos de superficie que un módulo backend puede aportar (workspace_module, chat_tool, inline_render, system_panel), el protocolo MQTT canónico entre frontend y backend (publishes/subscribes con su shape mínimo), el sistema visual estándar (paleta de colores de proyecto, mapping provider→icono, badges/estados), los anti-patrones absolutos (modales bloqueantes, navegación SPA, redirects fuera del frame). Validable mecánicamente cruzando contra los module.json del repo (si declaran ui_handlers, su shape cumple el contrato) y contra el código del frontend (que el frame implementado respeta el layout canónico).",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/frontend.contract.json (este archivo)",
+      "arquitectura/decisiones/_schemas/frontend.schema.json (cuando exista — schema del output)",
+      "arquitectura/auditoria/_outputs/manifest-completo/*.json (declaraciones ui_handlers de cada módulo)",
+      "arquitectura/decisiones/_contratos/chat-flow.contract.json (el frame se ancla en chat — el chat-flow es el flujo conversacional que el frame visualiza)"
+    ],
+    "obligatorios_si_existen": [
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json (auditoría real del código de cada módulo, para verificar que el ui_handlers declarado coincide con lo que el código expone)"
+    ],
+    "opcionales_para_contexto": [
+      "frontend/src/ (código real de la app SvelteKit — referencia del frame implementado)",
+      "frontend/DISEÑO-UI.md (predecesor markdown — archivable tras absorción)"
+    ],
+    "prohibido_leer": [
+      "Contenido visual concreto de UIs específicas (/compañero, /cocina) — esas son horizontales, fuera del scope del transversal."
+    ]
+  },
+
+  "filosofia": [
+    "PANTALLA ÚNICA. El usuario trabaja en UNA vista. No hay rutas de navegación tipo SPA tradicional, no hay tabs que abren 'ventanas' separadas, no hay pestañas que cambien el contexto entero. Todo lo que el usuario necesita aparece dentro del frame.",
+
+    "CADA VEZ QUE SALES, HAY DISTRACCIONES. La regla maestra del compañero de viaje aplicada al espacio físico de la pantalla: si tienes que salir a otra herramienta, otra pestaña, otra app, pierdes contexto y entras en distracción. El frame nunca expulsa al usuario; cualquier funcionalidad nueva se construye DENTRO.",
+
+    "EL CHAT ES EL EJE. El compañero (chat) ocupa el centro y es la interfaz universal. Cualquier módulo del backend conversa con el usuario a través del chat, no inventando su propia UI conversacional. Los módulos que añaden superficie lo hacen como herramientas alrededor del chat (icono en barra, panel cuando se clica), no como pantallas independientes.",
+
+    "1 CLIC = 1 PANEL. Sin doble-clic, sin long-press, sin gestos especiales. Un clic abre lo que tiene que abrirse. Discoverable, accesible, sin curva de aprendizaje gestual.",
+
+    "LENGUAJE VISUAL ANTES QUE TEXTUAL. Iconos y colores son la primera capa; el texto es secundario. Un icono de provider (🤖 OpenAI / 🧠 Claude / 🔮 DeepSeek) comunica más rápido que el nombre escrito. Los colores son identidad (cada proyecto tiene su color).",
+
+    "ICONOS DINÁMICOS REFLEJAN ESTADO. Los iconos no son decoración estática — cambian según el estado actual. El icono de credenciales muestra ✓ si están ok o ⚠️ si falta alguna; el icono de proyecto lleva el color del proyecto activo. El icono ES el estado.",
+
+    "EL FRAME ES INMUTABLE EN ESTRUCTURA. Las 5 zonas (barra módulos, área chat, barra superior, input, barra inferior) y la lateral derecha son fijas. Un módulo nuevo añade contenido a una de las zonas existentes — no inventa una zona sexta ni mueve la posición del input.",
+
+    "CONTENIDO VARIABLE POR PROYECTO/CONTEXTO. La barra de módulos de trabajo cambia según el workspace activo (POS pizzería muestra menu/productos/ventas; desarrollo muestra build/test/deploy/git). El frame se adapta al dominio sin romper la estructura.",
+
+    "PANELES SUPERPUESTOS, NO PANTALLAS NUEVAS. Cuando un módulo necesita más espacio que su icono (ej. file browser), abre un panel temporal sobre el frame. El panel ocupa máximo 33vh (1/3 de pantalla), se cierra con clic fuera, y el chat sigue visible debajo. Nunca un panel toma el control completo de la pantalla.",
+
+    "MQTT DIRECTO BACKEND↔FRONTEND. Sin endpoints HTTP /ui/* intermedios. El frontend habla MQTT (vía WebSocket) directamente con el broker. El backend publica eventos canónicos (chat.message.saved, ai.chat.response, etc.); el frontend se suscribe. La transformación a UI vive en el frontend.",
+
+    "EL FRONTEND ES EL CANAL 'web' DEL CHAT-FLOW. Cuando el usuario manda un mensaje desde la UI, viaja como chat.message.saved con channel: 'web'. Cuando llega ai.chat.response con channel: 'web', el frontend lo renderiza. El contrato chat-flow gobierna el shape; este contrato gobierna el frame y la entrega visual.",
+
+    "EL LAYOUT MANDA SOBRE EL CONTENIDO. Si una funcionalidad nueva no encaja en las zonas existentes ni en el modelo de extensión, NO se inventa una nueva zona — se rediseña la funcionalidad para que encaje. La estabilidad del frame vale más que la flexibilidad ad-hoc.",
+
+    "DECLARACIÓN EN MODULE.JSON. Cada módulo backend que aporta superficie al frame lo declara en module.json.ui_handlers (acción, path, panel-tipo). El frontend descubre dinámicamente; no hay hard-coding por módulo en el frontend."
+  ],
+
+  "principios": [
+    {
+      "id": "pantalla_unica_sin_navegacion",
+      "regla": "La aplicación es una sola vista. No hay router que cambie de página; todo aparece dentro del frame. Las URLs sirven para deep-link a estados (panel abierto, conversación seleccionada) pero no rompen el frame.",
+      "razon": "Salir del frame = perder contexto = distracción. El compañero de viaje requiere continuidad espacial."
+    },
+    {
+      "id": "chat_es_el_eje",
+      "regla": "El chat ocupa el centro físico de la pantalla y es la interfaz primaria. Los módulos backend que necesitan input del usuario lo piden vía chat (mensajes, no formularios propios) salvo cuando el dominio exige formulario estructurado (ej. crear receta con campos).",
+      "razon": "Conversación es la modalidad universal. Reduce la curva de aprendizaje (todo se hace hablando con el compañero). Las excepciones (formularios) viven dentro de paneles que no expulsan del frame."
+    },
+    {
+      "id": "layout_canonico_inmutable",
+      "regla": "Las 5 zonas (barra módulos arriba, área chat, barra chat superior, input, barra chat inferior) + lateral derecha son fijas. Un módulo nuevo se renderiza en una zona existente; no inventa zonas.",
+      "razon": "Estabilidad estructural permite que el usuario tenga reflejos (el input siempre está abajo, el chat siempre en el medio). Inventar zonas rompe esos reflejos y obliga a explorar cada feature."
+    },
+    {
+      "id": "modelo_de_extension_cerrado",
+      "regla": "Los tipos de superficie que un módulo backend puede aportar son una lista cerrada: workspace_module, chat_tool, inline_render, system_panel. No se inventan tipos nuevos sin actualizar este contrato.",
+      "razon": "Una lista cerrada permite que el frontend descubra y renderice automáticamente. Tipos abiertos requieren código frontend específico por módulo, rompiendo el modelo declarativo."
+    },
+    {
+      "id": "declaracion_en_module_json",
+      "regla": "Cada módulo backend que aporta superficie al frame declara explícitamente en module.json.ui_handlers su tipo (workspace_module | chat_tool | inline_render | system_panel), su acción (action), y su slot (zone). No hay hard-coding por módulo en código frontend.",
+      "razon": "Frontend declarativo por descubrimiento. Añadir un módulo backend nuevo no requiere tocar código frontend: el frontend lee module.json y compone el frame."
+    },
+    {
+      "id": "mqtt_directo_sin_endpoints_ui",
+      "regla": "El frontend habla MQTT vía WebSocket directamente con el broker. NO existen endpoints HTTP /ui/* intermedios entre el frontend y los módulos backend.",
+      "razon": "Doble vía (HTTP + MQTT) duplica shapes y crea drift entre lo que el módulo publica al bus y lo que el frontend consume. MQTT directo cierra esa divergencia: el frontend ve los mismos eventos canónicos que cualquier otro consumer."
+    },
+    {
+      "id": "iconos_dinamicos_sobre_estaticos",
+      "regla": "Los iconos del frame reflejan estado actual cuando aplique: provider activo, color del proyecto, ✓/⚠️ de credenciales, badge numérico de conversaciones. Iconos estáticos solo donde el estado no varía (ej. ⚙️ config en lateral).",
+      "razon": "El icono comunica estado sin texto; reduce el ruido visual. Estáticos requieren mirar y leer; dinámicos se interpretan en milisegundos."
+    },
+    {
+      "id": "un_clic_un_panel",
+      "regla": "Un clic abre lo que tiene que abrirse. Sin doble-clic, long-press ni gestos compuestos.",
+      "razon": "Discoverable y accesible. Cualquier gesto compuesto requiere descubrir + recordar; un clic simple es universal."
+    },
+    {
+      "id": "paneles_no_modales_bloqueantes",
+      "regla": "Los paneles superpuestos NO bloquean el chat ni la barra de módulos. Ocupan máx 33vh, se cierran con clic fuera. El chat sigue siendo accesible visualmente y por scroll mientras el panel está abierto.",
+      "razon": "Modal bloqueante = expulsión temporal del frame = distracción. El chat es eje y siempre debe estar presente."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "absorber_diseno_ui_md_a_json",
+      "decision": "El conocimiento del diseño UI vive como JSON canónico (este contrato + su output _outputs/frontend.json) y es fuente única autoritativa. El markdown frontend/DISEÑO-UI.md se archiva.",
+      "alternativa_descartada": "Mantener el diseño en markdown narrado para humanos y duplicar las reglas en código.",
+      "razon": "JSON es validable contra schema, cross-referenciable con module.json y otros contratos, y consumible por LLMs sin parsing narrativo. El markdown es decoración humana — si alguien quiere narrativa, se genera desde el JSON; la fuente de verdad es JSON."
+    },
+    {
+      "id": "frame_inmutable_5_zonas_lateral",
+      "decision": "Layout canónico fijo: barra módulos arriba (plegable), área chat (centro, mayor espacio), barra chat superior (config), input chat, barra chat inferior (herramientas), barra lateral derecha (sistema). Lista cerrada.",
+      "alternativa_descartada": "Layout configurable por proyecto / por usuario (drag & drop de zonas).",
+      "razon": "Configurabilidad rompe los reflejos del usuario y obliga a re-aprender por proyecto. La estructura inmutable cambia el contenido de cada zona pero nunca su posición; el usuario aprende UNA estructura y la lleva a todos los proyectos."
+    },
+    {
+      "id": "modelo_de_extension_cerrado_4_tipos",
+      "decision": "Lista cerrada de tipos de superficie: workspace_module (icono en barra módulos arriba), chat_tool (icono en barra chat inferior), inline_render (componente que aparece dentro del flujo del chat), system_panel (icono en lateral derecha). Ninguno más sin replantear el contrato.",
+      "alternativa_descartada": "Tipos abiertos donde cada módulo declara su slot custom y el frontend hace fallback genérico.",
+      "razon": "Tipos abiertos producen UI inconsistente (cada slot custom mira distinto, se posiciona distinto). Lista cerrada garantiza que el frontend renderiza coherentemente sin código específico por módulo."
+    },
+    {
+      "id": "mqtt_directo_sin_endpoints_ui_intermedios",
+      "decision": "Frontend habla MQTT (WebSocket puerto 9001) directamente con el broker. No hay endpoints HTTP /ui/* en los módulos backend ni gateway HTTP→MQTT específico para UI.",
+      "alternativa_descartada": "Endpoints HTTP /ui/* en cada módulo (REST tradicional) + MQTT solo para eventos en tiempo real.",
+      "razon": "Doble vía (HTTP + MQTT) duplica el shape del payload (lo que devuelve REST vs lo que publica MQTT termina divergiendo). MQTT único cierra el shape: el frontend consume los mismos eventos canónicos que cualquier consumer del bus."
+    },
+    {
+      "id": "no_navegacion_spa_tradicional",
+      "decision": "No hay router que cambie de página/componente raíz. Las URLs sirven para deep-link a estado (panel abierto, conversación seleccionada) pero el componente raíz es siempre el frame.",
+      "alternativa_descartada": "Router SPA tradicional con páginas separadas (/recetas, /menu, /stats).",
+      "razon": "Cambiar de página = expulsión temporal del frame = distracción. El usuario pierde el chat de vista cada vez que navega. Frame único con paneles superpuestos preserva la continuidad."
+    },
+    {
+      "id": "colores_como_identidad_de_proyecto",
+      "decision": "Cada proyecto tiene UN color de la paleta canónica (8 colores: green, blue, purple, orange, red, yellow, cyan, pink). El icono del proyecto en la barra superior lleva ese color. La paleta es cerrada.",
+      "alternativa_descartada": "Color libre (hex picker) por proyecto.",
+      "razon": "Paleta cerrada garantiza distinguibilidad visual (8 colores son fácilmente distinguibles a primera vista; 1000 hex no). Si hay >8 proyectos, se reusan colores con suficiente separación temporal o se complementa con icono distinto."
+    },
+    {
+      "id": "iconos_provider_canonicos",
+      "decision": "Cada provider de LLM tiene un icono canónico fijo (openai 🤖, anthropic 🧠, deepseek 🔮, ollama 🦙, ...). Lista cerrada extensible cuando se añada provider nuevo.",
+      "alternativa_descartada": "Icono libre por provider configurado por el usuario.",
+      "razon": "Reconocimiento visual instantáneo. El usuario asocia 🧠 = Claude sin leer texto. Iconos custom rompen ese reconocimiento."
+    },
+    {
+      "id": "tecnologias_fijadas",
+      "decision": "Stack frontend canónico: SvelteKit (framework), Svelte stores (estado), MQTT.js (sobre WebSocket puerto 9001, comunicación), Monaco Editor (text-editor), PDF.js (pdf-viewer), Tailwind CSS (estilo).",
+      "alternativa_descartada": "Stack libre por contributor (React + Redux, Vue + Pinia, etc.).",
+      "razon": "Un solo stack reduce el coste cognitivo de mantenimiento, el bundle size, y permite que features cross-módulo (paneles, drawers, modales) compartan implementación. Cambios de stack requieren replantear el contrato."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "modales_bloqueantes",
+      "regla": "Ningún módulo abre modales que tomen el control completo de la pantalla y bloqueen el chat. Los paneles son superpuestos pero el chat sigue visible y scrolleable detrás.",
+      "enforce": "Auditoría visual / revisión de PR. Validador podría escanear código frontend buscando patrones tipo `<dialog>` con backdrop, librerías de modal bloqueante, etc."
+    },
+    {
+      "id": "navegacion_spa_tradicional",
+      "regla": "Ningún módulo introduce un router que cambie el componente raíz del frame. Si necesitas mostrar contenido propio, usa los tipos de superficie canónicos (workspace_module, chat_tool, inline_render, system_panel).",
+      "enforce": "Validador escanea frontend/src/routes y reporta drift si hay rutas que no son sub-rutas de deep-link al frame único."
+    },
+    {
+      "id": "redirects_fuera_del_frame",
+      "regla": "Ningún módulo redirige al usuario fuera del frame (window.location, target='_blank' en flujo principal, etc.) salvo casos genuinamente externos (descargar archivo, abrir documentación externa).",
+      "enforce": "Auditoría revisión de PR. Cualquier window.location o target='_blank' requiere justificación documentada."
+    },
+    {
+      "id": "endpoints_http_ui_intermedios",
+      "regla": "Ningún módulo backend expone endpoints HTTP /ui/* específicos para el frontend. La comunicación es MQTT directo. http.contract.json aplica esta regla globalmente; este transversal lo refuerza para frontend específicamente.",
+      "enforce": "validate:http detecta endpoints con prefijo /ui/ o naming similar y reporta drift."
+    },
+    {
+      "id": "ui_handlers_sin_declaracion_en_module_json",
+      "regla": "Ningún módulo backend renderiza superficie en el frame sin declarar el handler en module.json.ui_handlers con su tipo canónico, action y zone. Frontend declarativo por descubrimiento.",
+      "enforce": "validate:frontend (a crear) cruza ui_handlers declarados con código frontend que los registra. Drift si hay registro frontend sin declaración backend."
+    },
+    {
+      "id": "color_libre_fuera_de_paleta",
+      "regla": "Ningún proyecto usa un color fuera de la paleta canónica de 8 colores. Configurar un proyecto con hex custom es drift.",
+      "enforce": "validate:frontend valida project.color contra la lista canónica."
+    },
+    {
+      "id": "icono_provider_no_canonico",
+      "regla": "Ningún provider de LLM usa un icono distinto al canónico. Configurar un provider con emoji custom es drift.",
+      "enforce": "validate:frontend valida provider.icon contra el mapping canónico."
+    },
+    {
+      "id": "doble_clic_long_press_gestos_compuestos",
+      "regla": "Ningún módulo requiere doble-clic, long-press, drag o gesto compuesto para una acción primaria. Solo clic simple.",
+      "enforce": "Auditoría revisión de PR. Patrones de event listeners ondblclick / pointerdown con timer son señal de drift."
+    },
+    {
+      "id": "panel_que_excede_33vh",
+      "regla": "Ningún panel supera 33vh (1/3 de la altura). Si un módulo necesita más espacio, replantea la división en sub-paneles o flujo conversacional.",
+      "enforce": "Auditoría visual. Validador puede escanear estilos buscando max-height > 33vh en componentes panel."
+    },
+    {
+      "id": "ui_propia_que_compite_con_el_chat",
+      "regla": "Ningún módulo construye su propia UI conversacional independiente del chat principal. Si un módulo conversa con el usuario, usa el chat. Excepción: formularios estructurados de dominio (crear receta con N campos), pero NO chats paralelos.",
+      "enforce": "Auditoría visual / revisión de PR."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/frontend.schema.json (a crear). Top-level: _meta, layout_canonico (objeto con las 5 zonas + lateral, cada una con su shape: id, posicion, comportamiento, contenido, fija | plegable | flotante), tipos_canonicos_de_extension (array de 4: workspace_module, chat_tool, inline_render, system_panel; cada uno con shape: id, descripcion, zone, modulo_declara_via, ejemplos), protocolo_mqtt (objeto con frontend_publishes y frontend_subscribes; cada array con shape: topic, descripcion, payload_shape_resumen, evento_canonico_relacionado), sistema_visual (objeto con paleta_proyecto, iconos_provider, badges_estados), tecnologias (objeto: framework, estado, comunicacion, editor, pdf, css), decisiones_arquitectonicas (lista de 8 decisiones explicadas).",
+
+  "reglas_de_extraccion": [
+    "1. Validar este contrato contra _schemas/frontend.schema.json (cuando exista). Si no compila o no valida, FAIL.",
+    "2. Iterar audits modulo-completo del repo. Para cada módulo que declare ui_handlers en module.json, verificar que cada handler tiene type ∈ {workspace_module, chat_tool, inline_render, system_panel}, action (string no vacío) y zone (∈ las 5 zonas + lateral). Faltantes o tipos inventados = drift.",
+    "3. Escanear frontend/src/routes/. Verificar que el componente raíz es UNO solo (el frame). Cualquier ruta hermana al frame raíz es drift de navigation_spa_tradicional.",
+    "4. Escanear frontend/src/lib/components/. Verificar que componentes panel/modal cumplen las restricciones (max-height ≤ 33vh, no backdrop bloqueante).",
+    "5. Cruzar handlers MQTT del frontend (suscriptores en código) contra el catálogo de eventos canónicos del repo. Si el frontend se suscribe a un topic no documentado en este contrato como protocolo_mqtt.frontend_subscribes, drift.",
+    "6. Validar que los proyectos persistidos (project-manager) usan colores de la paleta canónica y los providers (ai-gateway) tienen icono asignado del catálogo.",
+    "7. Reportar PASS/FAIL siguiendo formato común de validators del repo: banner colorizado + findings agrupados por severidad."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/frontend.schema.json (a crear)",
+      "regla": "Schema AJV strict del output frontend.json. Cualquier cambio de shape en el contrato requiere actualizar el schema."
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/frontend.validate.js (a crear)",
+      "regla": "Implementa los 7 cross-checks de reglas_de_extraccion. Registrar en scripts/validate-all.js."
+    },
+    {
+      "tipo": "modulos_consumidores",
+      "items": ["frontend/ (app SvelteKit principal)", "todos los módulos backend que declaran ui_handlers (credential-manager, project-manager, prompt-manager, file-browser, text-editor, pdf-viewer, recetas, escandallo, viabilidad, gateway-manager, device-*, firmware-*, esp32-*, perifericos, pizzepos/*, etc.)"],
+      "regla": "Los módulos declaran su superficie en module.json.ui_handlers respetando los tipos canónicos. El frontend descubre y renderiza."
+    },
+    {
+      "tipo": "uis_especificas_horizontales",
+      "items": ["frontend/src/routes/compañero/", "frontend/src/routes/cocina/"],
+      "regla": "FUERA del scope del transversal. Estas UIs específicas son horizontales (propiedad de los módulos correspondientes). Respetan el frame canónico que este contrato define pero su contenido visual no entra aquí."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección frontend cuando exista)",
+      "regla": "Warnings conocidos de módulos con ui_handlers no canónicos quedan registrados aquí hasta su migración."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "frontend_contract_estructura_valida",
+      "regla": "frontend.contract.json valida estructuralmente contra frontend.schema.json (cuando exista).",
+      "como_detectar": "AJV strict.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_ui_handler_sin_type_canonico",
+      "regla": "Cualquier módulo que declare ui_handlers en module.json incluye type ∈ {workspace_module, chat_tool, inline_render, system_panel}.",
+      "como_detectar": "Iterar manifest-completo. Inspeccionar module.json.ui_handlers de cada módulo.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_ui_handler_sin_zone_canonica",
+      "regla": "Cualquier ui_handler declara zone ∈ {barra_modulos, area_chat, barra_chat_superior, input_chat, barra_chat_inferior, lateral_derecha} (las 5 zonas + lateral).",
+      "como_detectar": "Iterar manifest-completo.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_navigation_spa_en_frontend",
+      "regla": "frontend/src/routes/ no contiene rutas hermanas al frame único — todas son sub-rutas de deep-link.",
+      "como_detectar": "Escanear estructura de carpetas en frontend/src/routes.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_panel_excede_33vh",
+      "regla": "Ningún componente panel/drawer en frontend/src/lib supera 33vh.",
+      "como_detectar": "Regex sobre estilos: max-height: <valor> donde valor > 33vh.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_color_proyecto_fuera_paleta",
+      "regla": "Project.color de cada proyecto persistido está en la paleta canónica (8 colores).",
+      "como_detectar": "Cargar projects desde project-manager (cuando esté disponible) y validar contra lista.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_endpoint_http_ui_intermedio",
+      "regla": "Ningún módulo backend expone endpoints HTTP con prefijo /ui/.",
+      "como_detectar": "Iterar manifest-completo. Inspeccionar apis_http de cada módulo.",
+      "severidad": "error"
+    }
+  ],
+
+  "salida_validador": "PASS si frontend.contract.json valida estructuralmente Y todos los módulos del repo declaran ui_handlers con type/zone canónicos Y el frontend respeta el layout único (sin rutas hermanas al frame) Y no hay endpoints /ui/* en backend. Errores cross-system bloquean PASS — drift_endpoint_http_ui_intermedio y drift_navigation_spa_en_frontend son ERROR (rompen la regla maestra del frame único). Warnings son drift visible que no bloquea (ui_handler con type/zone no canónico — el módulo aún funciona pero requiere migración). Formato coherente con los demás validators del repo: banner PASS/FAIL + findings agrupados por severidad con archivo:línea cuando aplique.",
+
+  "convenciones_complementarias": {
+    "naming": "Los nombres de los topics MQTT que el frontend publica/suscribe cumplen la forma <module-prefix>.<entity>.<verb> definida en naming.contract.json. Las acciones (action) en ui_handlers cumplen la convención de naming del módulo (es | en según module.json.language).",
+    "glossary": "Las entidades en topics MQTT (conversation, project, provider, file, etc.) usan la forma canónica del glossary.json del idioma del módulo emisor.",
+    "events": "Hereda los principios de events.contract: comunicación asíncrona vía bus, no esperar respuesta síncrona. El frontend publica y suscribe eventos canónicos del repo — no inventa eventos privados frontend↔backend.",
+    "errors": "Cuando un evento .failed llega al frontend (ai.chat.failed, agent.execute.failed, etc.), el frontend mapea error.code a mensaje legible al usuario. La paleta de mensajes legibles se mantiene en el frontend; los códigos canónicos vienen de errors.contract.",
+    "observability": "El frontend NO emite métricas propias al backend; consume las métricas que el backend ya publica. Si el frontend necesita logging de errores propios, los emite localmente (console + Sentry o similar) sin afectar el flujo del bus.",
+    "lifecycle": "El frontend conecta al broker MQTT al cargar y se desconecta limpiamente al cerrar (beforeunload). Reconnect automático con backoff exponencial. NO depende de orden de carga de módulos backend — descubre dinámicamente vía manifest.",
+    "persistence": "El frontend NO persiste estado de dominio (recetas, proyectos, mensajes, etc.) — eso es backend. Persiste solo preferencias UI locales (panel abierto/cerrado, último workspace, tema) en localStorage. Coherente con persistence.contract.aislamiento_absoluto: el frontend no lee directamente el storage de ningún módulo backend.",
+    "http": "Frontend habla MQTT, no HTTP, con los módulos backend (decisión arquitectónica mqtt_directo). El único HTTP que el frontend hace es para descargas de archivos (atachments, PDFs) y assets estáticos. http.contract aplica para esos casos; este transversal lo refuerza prohibiendo /ui/* específicos.",
+    "chat-flow": "El frontend ES el canal 'web' del chat-flow. Cuando el usuario manda mensaje, viaja como chat.message.saved con channel: 'web', channel_context: { ws_session_id, ... }. Cuando llega ai.chat.response con channel: 'web', el frontend lo renderiza en el área chat. El shape de los 5 eventos chat_flow es responsabilidad de chat-flow.contract; este transversal solo gobierna cómo se muestran y cómo se introduce input.",
+    "agent-flow": "El frontend NO publica directamente agent.execute.request — los agentes se invocan vía LLM tool (invoke_agent durante ai.chat.response) o vía módulos del dominio. Si un agente publica chat.assistant.saved (chat multi-participante futuro), el frontend lo renderiza con la metadata.author = { kind: 'agent', name: ... } para distinguirlo del compañero principal."
+  }
+}

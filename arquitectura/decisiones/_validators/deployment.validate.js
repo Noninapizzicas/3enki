@@ -62,6 +62,96 @@ function checkInstallScripts(findings) {
   }
 }
 
+function checkModuloArchivoLogPersistente(findings) {
+  const MODULES_DIR = path.join(REPO_ROOT, 'modules');
+  if (!fs.existsSync(MODULES_DIR)) return;
+  function walk(dir, depth) {
+    if (depth > 5 || !fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      if (name === 'node_modules' || name === '_archived' || name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full, depth + 1);
+        else if (name.endsWith('.js')) {
+          const content = fs.readFileSync(full, 'utf-8');
+          if (/fs\.createWriteStream\s*\([^)]*['"`][^'"`]*\.log['"`]/.test(content)) {
+            findings.warnings.push(`drift_modulo_archivo_log_persistente: ${path.relative(REPO_ROOT, full)} — fs.createWriteStream sobre archivo .log (logs deben ir a stdout/stderr)`);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  walk(MODULES_DIR, 0);
+}
+
+function checkDockerCompose(findings) {
+  for (const f of ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml']) {
+    if (fs.existsSync(path.join(REPO_ROOT, f))) {
+      findings.warnings.push(`drift_dockerfile_o_docker_compose_obligatorio: ${f} presente en raiz`);
+    }
+  }
+}
+
+function checkSpawnDeOtroModulo(findings) {
+  const MODULES_DIR = path.join(REPO_ROOT, 'modules');
+  if (!fs.existsSync(MODULES_DIR)) return;
+  function walk(dir, depth) {
+    if (depth > 5 || !fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      if (name === 'node_modules' || name === '_archived' || name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full, depth + 1);
+        else if (name.endsWith('.js')) {
+          const content = fs.readFileSync(full, 'utf-8');
+          // child_process.spawn|exec|fork con primer arg que apunte a modules/
+          const rx = /(?:child_process\.|cp\.)\s*(?:spawn|exec|fork)\s*\(\s*['"`][^'"`]*\bmodules\//g;
+          let m;
+          while ((m = rx.exec(content)) !== null) {
+            const ln = content.slice(0, m.index).split('\n').length;
+            findings.errors.push(`drift_modulo_spawn_de_otro_modulo: ${path.relative(REPO_ROOT, full)}:${ln} — child_process spawn de otro modulo (in-process via bus, no procesos separados)`);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  walk(MODULES_DIR, 0);
+}
+
+function checkSecretEnConfigJson(findings) {
+  const cfg = path.join(REPO_ROOT, 'config.json');
+  if (!fs.existsSync(cfg)) return;
+  const content = fs.readFileSync(cfg, 'utf-8');
+  const HARDCODED_KEYS = [
+    /\bsk-[A-Za-z0-9]{32,}\b/,
+    /\bsk-ant-api[0-9]{2}-[A-Za-z0-9_-]{40,}\b/,
+    /\bAKIA[A-Z0-9]{16}\b/,
+    /\bghp_[A-Za-z0-9]{36,}\b/,
+    /\bgithub_pat_[A-Za-z0-9_]{50,}\b/
+  ];
+  for (const rx of HARDCODED_KEYS) {
+    if (rx.test(content)) {
+      findings.errors.push(`drift_secret_en_config_json_committed: config.json contiene patron de API key hardcoded`);
+      break;
+    }
+  }
+}
+
+function checkInstallScriptsEjecutables(findings) {
+  for (const s of ['scripts/install-termux.sh', 'scripts/install-linux.sh']) {
+    const full = path.join(REPO_ROOT, s);
+    if (!fs.existsSync(full)) continue;
+    try {
+      const stat = fs.statSync(full);
+      if (!(stat.mode & 0o100)) {
+        findings.info.push(`drift_install_script_no_ejecutable: ${s} sin bit ejecutable (chmod +x necesario para usuarios)`);
+      }
+    } catch (_) {}
+  }
+}
+
 function reportFindings(f) {
   if (f.errors.length) { console.log(`${RED}cross-system errors (${f.errors.length})${RST}`); for (const e of f.errors) console.log(`  ${RED}✗${RST} ${e}`); }
   if (f.warnings.length) { console.log(`${YEL}cross-system warnings (${f.warnings.length})${RST}`); for (const w of f.warnings) console.log(`  ${YEL}!${RST} ${w}`); }
@@ -85,6 +175,11 @@ function main() {
     checkDockerfile(f);
     checkConfigExample(f);
     checkInstallScripts(f);
+    checkModuloArchivoLogPersistente(f);
+    checkDockerCompose(f);
+    checkSpawnDeOtroModulo(f);
+    checkSecretEnConfigJson(f);
+    checkInstallScriptsEjecutables(f);
     reportFindings(f);
   }
   process.exit(0);

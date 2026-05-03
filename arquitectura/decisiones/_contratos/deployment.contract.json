@@ -160,6 +160,30 @@
       "decision": "Cero dependencias externas. Todo storage local.",
       "alternativa_descartada": "Soporte first-class para Postgres / MongoDB / Redis externos como storage canónico.",
       "razon": "Storage externo = servicio adicional a instalar/mantener/securizar. Para escala doméstica, SQLite + JSON files cubren todo. Storage externo se puede añadir como módulo opcional pero no es base."
+    },
+    {
+      "id": "logs_a_stdout_no_archivos",
+      "decision": "Logs van a stdout/stderr. NO se rotan archivos *.log internos. Si se requiere persistencia, el deployment redirige (`node index.js > /var/log/event-core.log` en Linux server, logcat en Termux).",
+      "alternativa_descartada": "Cada módulo abre su propio archivo de log con winston/pino y lo rota.",
+      "razon": "Log a stdout encaja con foreground en terminal, journalctl cuando corre via systemd, logcat en Termux, y docker logs si alguien lo containeriza por su cuenta. Archivos internos rotados duplican la mecánica que el SO ya provee, fragmentan los logs entre módulos, y consumen disco sin política central."
+    },
+    {
+      "id": "puertos_canonicos_no_aleatorios",
+      "decision": "Puertos canónicos: 3000 HTTP del core, 1883 MQTT TCP, 9001 MQTT WebSocket. Override via env (HTTP_PORT) o config.json. SIN puertos asignados aleatoriamente al arrancar.",
+      "alternativa_descartada": "Asignación aleatoria de puerto libre al arrancar (`server.listen(0)`).",
+      "razon": "Puertos fijos hacen que la documentación, el firewall, los scripts de monitorización y el frontend (que se conecta) sean predecibles. Aleatorio rompe todo eso. Override por env permite resolver colisiones cuando aplique."
+    },
+    {
+      "id": "default_environment_es_development",
+      "decision": "config.json.core.environment por defecto es 'development'. Productivos overridean via NODE_ENV=production o config local.",
+      "alternativa_descartada": "Sin default — obligar a declarar siempre.",
+      "razon": "Default development hace que `git clone + npm start` funcione inmediatamente con logs verbose y sin restricciones de production. El operador que despliegue a producción overridea explícitamente — paso consciente, no accidental."
+    },
+    {
+      "id": "fail_fast_si_env_var_critica_falta",
+      "decision": "Si un módulo requiere una env var crítica (ej. NODE_ENV='production' + servicio externo URL), valida en onLoad y si falta lanza error que el loader aísla. NO se ejecuta con defaults inseguros.",
+      "alternativa_descartada": "Continuar con defaults silenciosos cuando una env var falta.",
+      "razon": "Coherente con security.fail_closed_no_fail_open. Defaults silenciosos enmascaran configuración incorrecta. Fail-fast en arranque hace visible el problema antes de que cause daño."
     }
   ],
 
@@ -297,6 +321,48 @@
       "regla": "Cada process.env.X en código está documentado en deployment.contract.env_vars_canonicas.",
       "como_detectar": "Escanear código + cruzar con lista canónica.",
       "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_archivo_log_persistente",
+      "regla": "Ningún módulo abre fs.createWriteStream sobre archivos *.log persistentes. Logs van a stdout/stderr.",
+      "como_detectar": "Regex sobre código: fs.createWriteStream(...\\.log).",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_dependencia_servicio_externo_obligatorio",
+      "regla": "Ningún módulo requiere arrancar Postgres/Redis/MongoDB/RabbitMQ/etc para funcionar. Si los usa, son opcionales con fallback in-memory o local.",
+      "como_detectar": "Inspeccionar package.json buscando dependencias tipo pg/redis/mongodb/amqplib en deps de módulos sin fallback documentado.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_dockerfile_o_docker_compose_obligatorio",
+      "regla": "No hay Dockerfile ni docker-compose.yml committeado en raíz como entry point obligatorio.",
+      "como_detectar": "fs.existsSync de Dockerfile, docker-compose.yml en raíz.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_spawn_de_otro_modulo",
+      "regla": "Ningún módulo del repo arranca otro módulo como child_process.",
+      "como_detectar": "Regex sobre código: child_process.spawn / exec / fork con primer argumento que apunte a modules/.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_node_version_no_especificada",
+      "regla": "package.json.engines.node está definido. Sin él, npm no enforce versión mínima.",
+      "como_detectar": "Inspeccionar package.json.engines.node.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_secret_en_config_json_committed",
+      "regla": "config.json (committeado) NO contiene secretos reales (API keys, tokens, passwords) — solo defaults seguros.",
+      "como_detectar": "Aplicar las regex de hardcoded API keys de security.contract sobre config.json.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_install_script_no_ejecutable",
+      "regla": "scripts/install-termux.sh y scripts/install-linux.sh tienen permisos de ejecución (mode 0755).",
+      "como_detectar": "fs.statSync.mode & 0o100 para verificar bit ejecutable del owner.",
+      "severidad": "info"
     }
   ],
 

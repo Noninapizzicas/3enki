@@ -6,6 +6,13 @@
   "language": "es",
   "main": "index.js",
   "events": {
+    "publishes": [
+      {
+        "event": "agent.execute.request",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
+        "description": "Invoca agentes de marketing (cartadigital-ofertas, marketing-strategist, etc.) cuando detecta necesidades."
+      }
+    ],
     "subscribes": [
       {
         "event": "project.activated",

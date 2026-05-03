@@ -259,10 +259,14 @@ class CartaMarketingModule {
 
   async dispatchAgente(necesidad, cartaId, projectId, perfil) {
     await this.eventBus.publish('agent.execute.request', {
-      agentName: necesidad.agente,
+      correlation_id: crypto.randomUUID(),
+      request_id: crypto.randomUUID(),
+      user_id: 'system',
+      agent_name: necesidad.agente,
+      project_id: projectId,
+      timestamp: new Date().toISOString(),
       context: {
         carta_id: cartaId,
-        project_id: projectId,
         perfil_marca: perfil,
         necesidad: necesidad
       },

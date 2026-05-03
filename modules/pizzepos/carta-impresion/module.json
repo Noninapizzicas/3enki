@@ -10,6 +10,11 @@
       {
         "event": "carta.impresion.lista",
         "description": "HTML imprimible generado y guardado"
+      },
+      {
+        "event": "agent.execute.request",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
+        "description": "Invoca agente impresion-architect para decidir layout optimo"
       }
     ],
     "subscribes": [

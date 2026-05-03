@@ -3,7 +3,7 @@
  *
  * Foco:
  *  - onAgentExecuteRequest acepta shape canonico → publica agent.execute.response canonico.
- *  - Acepta alias agentName (legacy) con warn shape_legacy.
+ *  - (alias agentName retirado en paso 6 de agent-flow tras migracion completa de pizzepos consumers)
  *  - Validacion: sin agent_name → publica agent.execute.failed AGENT_INPUT_INVALID.
  *  - Validacion: agent no existe → publica agent.execute.failed AGENT_NOT_FOUND.
  *  - Validacion: sin task ni context → publica agent.execute.failed AGENT_INPUT_INVALID.
@@ -160,21 +160,6 @@ async function testAsync(description, fn) {
     const payload = mocks.published.find(p => p[0] === 'agent.execute.response')[1];
     const ok = validateResponse(payload);
     assert.ok(ok, `payload debe validar. errors: ${JSON.stringify(validateResponse.errors)}`);
-  });
-
-  await testAsync('onAgentExecuteRequest acepta alias agentName (legacy) con warn', async () => {
-    const mocks = makeMocks();
-    const m = instantiate(mocks);
-    await m.onAgentExecuteRequest({
-      correlation_id: 'corr-2', request_id: 'req-2', user_id: 'default',
-      agentName: 'recipe-analyzer',  // <-- legacy
-      timestamp: '2026-05-03T10:00:00.000Z',
-      task: 'analiza'
-    });
-    await nextTick(); await nextTick();
-    const warn = mocks.logs.find(l => l[1] === 'ai-agent-framework.onAgentExecuteRequest.shape_legacy');
-    assert.ok(warn, 'warn shape_legacy emitido');
-    assert.ok(mocks.published.find(p => p[0] === 'agent.execute.response'), 'aun publica response');
   });
 
   // Group 2 — Validaciones de input

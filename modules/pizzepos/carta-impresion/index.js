@@ -15,6 +15,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const crypto = require('crypto');
 
 class CartaImpresionModule {
   constructor() {
@@ -106,9 +107,13 @@ class CartaImpresionModule {
     });
 
     await this.eventBus.publish('agent.execute.request', {
-      agentName: 'impresion-architect',
+      correlation_id: crypto.randomUUID(),
+      request_id: crypto.randomUUID(),
+      user_id: 'system',
+      agent_name: 'impresion-architect',
+      project_id: projectId,
+      timestamp: new Date().toISOString(),
       context: {
-        project_id: projectId,
         carta_id: cartaId
       },
       task: `Analiza la carta "${cartaId}" del proyecto "${projectId}" y decide el layout óptimo para impresión. Luego dispara al builder pasándole tu guión.`

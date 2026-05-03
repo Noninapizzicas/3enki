@@ -166,9 +166,9 @@ class AiAgentFrameworkModule {
   // ============================================================
   // Handler: agent.execute.request (CANONICO agent-flow v1.0.0)
   //
-  // Acepta payload canonico segun arquitectura/decisiones/_schemas/agent-flow/
-  // agent.execute.request.schema.json. Compat transitoria con shape legacy
-  // (alias agentName) con warn shape_legacy.
+  // Solo shape canonico segun arquitectura/decisiones/_schemas/agent-flow/
+  // agent.execute.request.schema.json. El alias legacy 'agentName' fue
+  // retirado tras migracion completa de pizzepos consumers.
   //
   // En SUCCESS: publica agent.execute.response canonico (result aplanado;
   // result.agent y result.tool_calls_executed se mantienen DUPLICADAMENTE
@@ -182,17 +182,9 @@ class AiAgentFrameworkModule {
   async onAgentExecuteRequest(event) {
     const data = event.data || event;
 
-    // Compat transitoria: alias 'agentName' (camelCase) en vez del canonico 'agent_name'.
-    if (data.agentName !== undefined && data.agent_name === undefined) {
-      this.logger.warn('ai-agent-framework.onAgentExecuteRequest.shape_legacy', {
-        reason: "caller usa 'agentName' (camelCase) en vez de 'agent_name' (snake_case canonico) — drift agent-flow",
-        request_id: data.request_id
-      });
-    }
-
     const correlation_id  = data.correlation_id || crypto.randomUUID();
     const request_id      = data.request_id;
-    const agent_name      = data.agent_name || data.agentName;
+    const agent_name      = data.agent_name;
     const user_id         = data.user_id || 'default';
     const project_id      = data.project_id ?? null;
     const conversation_id = data.conversation_id ?? data.context?.conversation_id ?? null;

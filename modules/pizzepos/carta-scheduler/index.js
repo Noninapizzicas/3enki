@@ -184,9 +184,12 @@ class CartaSchedulerModule {
 
     // Notificar al agente dispatcher (fire-and-forget, propaga correlation_id)
     await this._publicarEvento('agent.execute.request', {
-      agentName: 'scheduler-dispatcher',
-      context:   { project_id: projectId, pendiente_id: pendiente.id, regla, cambios: regla.cambios },
-      task:      `Cambio de carta programado listo. Avisa al usuario y pide confirmacion. Regla: "${regla.descripcion}". Cambios: ${JSON.stringify(regla.cambios)}.`
+      request_id: crypto.randomUUID(),
+      user_id:    'system',
+      agent_name: 'scheduler-dispatcher',
+      project_id: projectId,
+      context:    { pendiente_id: pendiente.id, regla, cambios: regla.cambios },
+      task:       `Cambio de carta programado listo. Avisa al usuario y pide confirmacion. Regla: "${regla.descripcion}". Cambios: ${JSON.stringify(regla.cambios)}.`
     }, payload);
   }
 

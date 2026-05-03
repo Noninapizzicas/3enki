@@ -22,6 +22,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const crypto = require('crypto');
 
 class CartaDigitalModule {
   constructor() {
@@ -118,9 +119,13 @@ class CartaDigitalModule {
 
     // Dispatch composer para recomponer
     await this.eventBus.publish('agent.execute.request', {
-      agentName: 'cartadigital-composer',
+      correlation_id: data?.correlation_id || crypto.randomUUID(),
+      request_id: crypto.randomUUID(),
+      user_id: 'system',
+      agent_name: 'cartadigital-composer',
+      project_id: projectId,
+      timestamp: new Date().toISOString(),
       context: {
-        project_id: projectId,
         carta_id: data?.meta?.id
       },
       task: `Recomponer carta pública para proyecto "${projectId}". La carta base ha cambiado.`
@@ -145,8 +150,13 @@ class CartaDigitalModule {
 
     // Recomponer
     await this.eventBus.publish('agent.execute.request', {
-      agentName: 'cartadigital-composer',
-      context: { project_id: projectId },
+      correlation_id: data?.correlation_id || crypto.randomUUID(),
+      request_id: crypto.randomUUID(),
+      user_id: 'system',
+      agent_name: 'cartadigital-composer',
+      project_id: projectId,
+      timestamp: new Date().toISOString(),
+      context: {},
       task: `Recomponer carta pública para proyecto "${projectId}". La asignación de cartas a canales ha cambiado.`
     });
 

@@ -14,7 +14,7 @@
       { "event": "carta-scheduler.cambio.aplicado",   "description": "El usuario confirmo el pendiente y los cambios fueron aplicados via tarifas." },
       { "event": "carta-scheduler.cambio.rechazado",  "description": "El usuario rechazo el pendiente. No se aplico ningun cambio." },
       { "event": "carta-scheduler.cambio.vencido",    "description": "Un pendiente expiro (24h sin confirmacion). Estado paso a 'vencido'." },
-      { "event": "agent.execute.request",             "description": "Dispatcher al agente externo cuando un cambio dispara y necesita confirmacion del usuario." }
+      { "event": "agent.execute.request", "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json", "description": "Dispatcher al agente externo cuando un cambio dispara y necesita confirmacion del usuario." }
     ],
     "subscribes": [
       {

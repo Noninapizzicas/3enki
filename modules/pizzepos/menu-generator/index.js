@@ -17,6 +17,7 @@
 
 const path = require('path');
 const fs = require('fs').promises;
+const crypto = require('crypto');
 const ServiceExecutor = require('../../../core/service-executor');
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif'];
@@ -107,10 +108,14 @@ class MenuGeneratorModule {
     });
 
     await this.eventBus.publish('agent.execute.request', {
-      agentName: 'menu-structurer',
+      correlation_id: crypto.randomUUID(),
+      request_id: crypto.randomUUID(),
+      user_id: 'system',
+      agent_name: 'menu-structurer',
+      project_id,
+      timestamp: new Date().toISOString(),
       context: {
         texto,
-        project_id,
         nombre
       },
       task: `Estructura este texto de carta de restaurante en JSON. Nombre: "${nombre}". Guarda con carta.save pasando project_id="${project_id}".`

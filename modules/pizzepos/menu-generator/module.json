@@ -17,6 +17,7 @@
       },
       {
         "event": "agent.execute.request",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
         "description": "Invoca agente menu-structurer para estructurar carta"
       },
       {

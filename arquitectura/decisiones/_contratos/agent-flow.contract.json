@@ -380,19 +380,23 @@
   "trabajo_pendiente": [
     {
       "id": "paso_6_cerrar_legacy_agentName",
-      "estado": "abierto",
+      "estado": "cerrado",
       "naturaleza": "horizontal",
-      "descripcion": "Eliminar las ramas defensivas que aceptan el alias agentName (camelCase) en ai-agent-framework. Eliminar tambien los tests del shape legacy (test 'onAgentExecuteRequest acepta alias agentName con warn'). Tras este cierre, futuros publish con agentName fallaran contra schema en lugar de pasar con warn — disciplina canonica completa.",
-      "drifts_que_cierra": [
-        "drift_uso_de_alias_agentName en modules/conversacion/ai-agent-framework/index.js (6 ocurrencias en baseline)"
+      "descripcion": "Eliminar las ramas defensivas que aceptan el alias agentName (camelCase) en ai-agent-framework. Eliminar tambien los tests del shape legacy. Tras este cierre, futuros publish con agentName fallaran contra schema en lugar de pasar con warn — disciplina canonica completa.",
+      "drifts_que_cerro": [
+        "drift_uso_de_alias_agentName en modules/conversacion/ai-agent-framework/index.js (6 ocurrencias eliminadas)",
+        "drift_publish_agent_flow_sin_correlation_id en pizzepos consumers (5 modulos migrados)"
       ],
-      "modulos_afectados_pre_cierre": [
-        "conversacion/ai-agent-framework (publisher canonico — quita compat)",
-        "pizzepos/carta-digital, carta-impresion, carta-marketing, carta-scheduler, menu-generator (consumers que aun publican agent.execute.request sin correlation_id ni schema_ref — deben migrarse al shape canonico ANTES del cierre, si no se rompen al perder el alias agentName)"
+      "modulos_migrados": [
+        "conversacion/ai-agent-framework: eliminada rama compat de agentName en onAgentExecuteRequest. Mantenido alias en _runAgentLegacy (invoke_agent flow no canonizado).",
+        "pizzepos/carta-digital (2 publishes), carta-impresion (1), menu-generator (1), carta-marketing (1), carta-scheduler (1) — 6 publishes total migrados al shape canonico (correlation_id, request_id, user_id='system', agent_name snake_case, project_id, timestamp)."
       ],
-      "criterio_de_cierre": "Validador agent-flow.validate.js sin warnings drift_uso_de_alias_agentName ni drift_publish_agent_flow_sin_correlation_id. Pizzepos modules con request_schema_ref declarado y correlation_id propagado.",
-      "bloqueado_por": "Disciplina transversal-vs-horizontal (CLAUDE.md): no se cierran horizontales hasta que la fase transversal termine — todos los contratos transversales del sistema deben estar cerrados primero.",
-      "fecha_anotacion": "2026-05-03"
+      "test_eliminado": "tests/unit/ai-agent-framework.test.js: test 'onAgentExecuteRequest acepta alias agentName (legacy) con warn' retirado. Suite de 10 tests verde.",
+      "deuda_residual_post_cierre": [
+        "modules/facturas/pipeline/invoice-pipeline.js (lineas 474, 732): usa agentName como argumento de services.call('agent','invoke',...) — pertenece al invoke_agent flow legacy (no agent-flow canonico). NO se migra hasta que invoke_agent se canonice formalmente. Drift queda visible en baseline."
+      ],
+      "fecha_anotacion": "2026-05-03",
+      "fecha_cierre": "2026-05-03"
     }
   ]
 }

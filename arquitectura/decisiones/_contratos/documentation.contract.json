@@ -1,0 +1,273 @@
+{
+  "_doc": "Captura LA disciplina de documentación cross-módulo del sistema event-core: qué se documenta, dónde, en qué formato, cómo se mantiene actualizado. La regla maestra: la información estructurada vive en JSON validado contra schemas (contratos, auditorías, outputs). Markdown solo para narrativa humana cuando el JSON no encaja (CLAUDE.md como índice, READMEs específicos cuando aportan). Sin un contrato de documentación, las explicaciones se acumulan en READMEs dispersos, los markdown se desactualizan respecto al código, y el conocimiento del sistema queda fragmentado entre commits, comentarios y memoria humana.",
+  "id": "documentation",
+  "version": "1.0.0",
+  "creada": "2026-05-03",
+  "supersedes_nota": "Primera versión. Consolida las prácticas que ya existen: contratos JSON en arquitectura/decisiones/_contratos/, auditorías en arquitectura/auditoria/_outputs/, CLAUDE.md como índice maestro, READMEs puntuales cuando aplican (ej. modules/credential-manager/README.md). Eleva a contrato transversal autónomo y prohíbe explícitamente el uso de markdown como fuente autoritativa cuando hay shape estructurable (caso real cerrado: frontend/DISEÑO-UI.md absorbido a frontend.contract.json).",
+
+  "objetivo": "Producir UN JSON output (_outputs/documentation.json) que define: qué tipos de documentación existen (contratos, auditorías, índice CLAUDE.md, READMEs específicos), su formato canónico (JSON validado para datos estructurados, markdown solo para narrativa), su ubicación canónica (arquitectura/decisiones/, arquitectura/auditoria/, raíz CLAUDE.md, modules/<name>/README.md cuando aplica), su criterio de inclusión (cuándo crear un README, cuándo extraer a contrato), y su mantenimiento (cómo se actualiza tras cambios de código, validators que detectan drift documentación↔código).",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/documentation.contract.json (este archivo)",
+      "CLAUDE.md (índice maestro)",
+      "arquitectura/decisiones/_contratos/*.contract.json (todos los contratos)",
+      "arquitectura/auditoria/_contratos/*.contract.json (contratos de auditoría)"
+    ],
+    "obligatorios_si_existen": [
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json (auditorías por módulo)",
+      "arquitectura/README.md (si existe — índice de la carpeta arquitectura/)"
+    ],
+    "opcionales_para_contexto": [
+      "modules/*/README.md (READMEs por módulo cuando existen)"
+    ],
+    "prohibido_leer": [
+      "_archived/ (documentación archivada, fuera de la disciplina actual)"
+    ]
+  },
+
+  "filosofia": [
+    "JSON ES LA FUENTE AUTORITATIVA. Todo conocimiento estructurable del sistema (decisiones arquitectónicas, shapes de eventos, configuraciones de módulos, auditorías) vive en JSON validado contra schema. El JSON es lo que el validador y los LLMs consumen — el humano lo lee como fallback.",
+
+    "MARKDOWN ES SOLO NARRATIVA HUMANA. Markdown se usa SOLO cuando el contenido no tiene shape estructurable: índice general (CLAUDE.md), explicación didáctica de un módulo complejo (README específico), guía de migración manual. Si la información puede ser estructurada como objeto, va en JSON.",
+
+    "EL CONTRATO ABSORBE EL MARKDOWN. Cuando un markdown empieza a tener shape (lista de reglas, tabla de eventos, decisiones con justificación), se extrae a contrato JSON. Caso real: frontend/DISEÑO-UI.md fue absorbido a frontend.contract.json y archivado. Esta regla aplica retroactivamente a cualquier markdown del repo que contenga shape.",
+
+    "CLAUDE.md ES ÍNDICE, NO TEXTBOOK. CLAUDE.md apunta a los contratos, audits, validators. NO contiene la información estructural en sí — esa vive en los JSONs. Si CLAUDE.md crece más allá del rol de índice, se ha incumplido el patrón.",
+
+    "READMEs DE MÓDULO SON EXCEPCIÓN JUSTIFICADA. Un módulo crea README.md SOLO cuando: (a) tiene una API pública compleja que necesita ejemplos didácticos, (b) tiene un setup específico que el module.json no captura (ej. credenciales OAuth requeridas en credential-manager). NO se crea README por defecto en cada módulo.",
+
+    "AUDITORÍAS REFLEJAN CÓDIGO REAL. Los outputs en arquitectura/auditoria/_outputs/modulo-completo/ son la 'verdad' del módulo (qué eventos publica realmente, qué subscribes están wired, etc.) extraída del código. Cuando el código cambia, la auditoría se regenera — no se mantiene a mano.",
+
+    "LA DOCUMENTACIÓN MUERE SI NO SE VALIDA. Cualquier documentación que no esté validada contra el código (via validator que cruza ambos) se desactualiza inevitablemente. Por eso los contratos tienen validators y las auditorías son extracciones — la documentación que no se ejecuta como invariante no merece existir.",
+
+    "CADA CONTRATO ES SU PROPIO DOCUMENTO. Los 17 secciones canónicas de un contrato (filosofia, principios, decisiones, prohibido, etc.) son el documento — sin necesidad de README adicional explicándolo. Si un contrato necesita README explicativo aparte, está mal escrito (faltan secciones).",
+
+    "COMMIT MESSAGES SON DOCUMENTACIÓN CRÍTICA. El changelog real del sistema vive en los commits. Los commits son detallados (qué cambia, por qué, qué cierra). supersedes_nota de cada contrato resume cambios estructurales del propio contrato.",
+
+    "CÓDIGO NO LLEVA COMENTARIOS DESCRIPTIVOS. Los comentarios en código se reservan para WHY no obvio (workaround para bug específico, hidden constraint, invariant subtle). Los comentarios que explican QUÉ hace el código son ruido — el nombre y el cuerpo lo dicen."
+  ],
+
+  "principios": [
+    {
+      "id": "json_para_estructurable",
+      "regla": "Toda información estructurable (lista, tabla, mapping, decisiones con campos repetibles) vive en JSON validado contra schema. Markdown SOLO para narrativa libre.",
+      "razon": "JSON es validable, parseable por LLMs sin parsing narrativo, cross-referenciable con otros JSONs por path. Markdown es decoración."
+    },
+    {
+      "id": "ubicacion_canonica_de_documentos",
+      "regla": "Contratos transversales: arquitectura/decisiones/_contratos/<id>.contract.json. Sub-contratos: igual. Auditorías: arquitectura/auditoria/_outputs/. Índice maestro: CLAUDE.md (raíz). READMEs específicos: modules/<modulo>/README.md (cuando aplica).",
+      "razon": "Ubicación predecible permite scripts genéricos de descubrimiento (find arquitectura/decisiones/_contratos -name '*.contract.json' lista TODOS los contratos)."
+    },
+    {
+      "id": "naming_canonico_de_archivos",
+      "regla": "Contratos: <id>.contract.json (kebab-case). Schemas: <id>.schema.json. Validators: <id>.validate.js. Outputs: <id>.json. README de módulo: README.md (mayúsculas — convención unix).",
+      "razon": "Naming uniforme permite mapping mecánico contrato↔schema↔validator↔output."
+    },
+    {
+      "id": "claudemd_como_indice",
+      "regla": "CLAUDE.md apunta a los contratos y audits — no contiene la información estructural en sí. Su rol es 'navegador' para sesiones futuras (humanos y LLMs).",
+      "razon": "Si CLAUDE.md duplica info de los contratos, se desactualiza. Si solo apunta a ellos, se mantiene mínimo y fiable."
+    },
+    {
+      "id": "readme_de_modulo_es_excepcion",
+      "regla": "Crear modules/<modulo>/README.md SOLO cuando el módulo tiene API pública compleja (ejemplos de uso) o setup específico no capturable en module.json. NO se crea README por defecto.",
+      "razon": "READMEs por defecto se quedan vacíos o duplican module.json. Solo crear cuando aporta."
+    },
+    {
+      "id": "auditoria_extraida_no_mantenida",
+      "regla": "arquitectura/auditoria/_outputs/modulo-completo/<modulo>.json se extrae del código + manifest. Cuando el código cambia, se regenera — no se edita a mano.",
+      "razon": "Auditorías mantenidas a mano se desactualizan en horas. Extraídas mecánicamente reflejan el código real."
+    },
+    {
+      "id": "documentacion_validada_o_no_existe",
+      "regla": "Cualquier documentación estructural debe tener un validator que cruce con el código. Sin validator, la documentación se desactualiza y se considera ruido.",
+      "razon": "La disciplina del repo es contratos+validators. Una documentación sin validator no encaja en esa disciplina y produce drift invisible."
+    },
+    {
+      "id": "commit_messages_detallados",
+      "regla": "Cada commit incluye: qué cambia, por qué, qué drifts cierra, qué tests pasa, qué próximo paso desbloquea (cuando aplique). Commits oneliner no se aceptan en cambios estructurales.",
+      "razon": "El changelog real del sistema vive en los commits. Detallarlos es documentación que persiste."
+    },
+    {
+      "id": "no_comentarios_descriptivos_en_codigo",
+      "regla": "Comentarios en código solo para WHY no obvio (workaround, invariant subtle, hidden constraint). NO se comenta lo que hace el código (eso lo dice el nombre + cuerpo).",
+      "razon": "Comentarios descriptivos se desactualizan respecto al código y se vuelven mentirosos. Los nombres y la estructura comunican QUÉ; los comentarios reservan su valor para WHY."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "json_es_fuente_autoritativa",
+      "decision": "Toda información estructural del sistema vive en JSON validado contra schema. Markdown está reservado para narrativa libre que no estructura.",
+      "alternativa_descartada": "Markdown como fuente principal con JSON solo para configuración mecánica.",
+      "razon": "Markdown no es validable mecánicamente — su contenido se desactualiza sin que nadie lo note. JSON con schema cierra el círculo: cambia el shape, falla el validator, alguien lo actualiza."
+    },
+    {
+      "id": "claudemd_como_indice_no_textbook",
+      "decision": "CLAUDE.md es un índice navegable (apunta a los JSONs). Mantiene un mínimo razonable de prosa (descripción de qué es cada contrato, dónde vive, cómo se relaciona) pero no duplica la información estructural.",
+      "alternativa_descartada": "CLAUDE.md como documento maestro autocontenido con todas las reglas inline.",
+      "razon": "Documento autocontenido se desactualiza cada vez que un contrato cambia. Índice + JSONs separados mantiene fuente única (los contratos) e índice ligero."
+    },
+    {
+      "id": "readmes_por_excepcion_no_por_defecto",
+      "decision": "modules/<modulo>/README.md solo cuando aporta valor real (API pública compleja, setup específico). NO por defecto.",
+      "alternativa_descartada": "README.md en cada módulo por convención (estilo npm packages).",
+      "razon": "READMEs por defecto se quedan vacíos o duplican module.json. Convención sin valor produce ruido."
+    },
+    {
+      "id": "auditorias_extraidas_mecanicamente",
+      "decision": "arquitectura/auditoria/_outputs/modulo-completo/ se extrae del código + module.json mediante el validator de auditoría. NO se edita a mano.",
+      "alternativa_descartada": "Auditorías mantenidas manualmente como documentos vivos.",
+      "razon": "Auditorías a mano se desactualizan en horas. Extracción mecánica garantiza que reflejan el código real."
+    },
+    {
+      "id": "absorber_markdown_a_contrato_cuando_estructura",
+      "decision": "Cuando un markdown contiene shape estructurable (listas de reglas, tablas de decisiones, mapping), se extrae a contrato JSON y el markdown se archiva.",
+      "alternativa_descartada": "Mantener markdown como fuente paralela.",
+      "razon": "Dos fuentes para la misma información se desincronizan. Una fuente JSON validable es mejor que dos fuentes ricas pero divergentes."
+    },
+    {
+      "id": "commits_detallados_son_changelog",
+      "decision": "Los commit messages son la documentación canónica del cambio. Se escriben detallados (qué, por qué, drift cerrado, tests, próximo). NO se mantiene CHANGELOG.md adicional.",
+      "alternativa_descartada": "CHANGELOG.md mantenido a mano.",
+      "razon": "CHANGELOG.md duplica los commits y se desactualiza. git log ya es el changelog si los commits son detallados."
+    },
+    {
+      "id": "comentarios_en_codigo_solo_why",
+      "decision": "Los comentarios en código se reservan para explicar WHY no obvio. NO se comentan QUÉ hace el código.",
+      "alternativa_descartada": "Documentar exhaustivamente cada función con comentarios JSDoc o equivalente.",
+      "razon": "JSDoc descriptivo se desactualiza respecto al código. Forzar nombres claros + tipos (JSDoc tipado opcional) es más útil que prosa narrativa."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "markdown_como_fuente_estructurable",
+      "regla": "Ningún markdown del repo (excepto CLAUDE.md como índice y READMEs específicos justificados) contiene listas de decisiones arquitectónicas, tablas de eventos canónicos, especificaciones de shape, etc. Eso va en contrato JSON.",
+      "enforce": "Validador escanea *.md fuera de los archivos permitidos detectando patrones tipo `## Decisiones Arquitectónicas`, `## Eventos`, `## Reglas` y reporta como drift."
+    },
+    {
+      "id": "claudemd_inflado",
+      "regla": "CLAUDE.md mantiene un tamaño razonable (~200-300 líneas). Si crece mucho más, se está duplicando información que pertenece a contratos.",
+      "enforce": "Validador advierte si CLAUDE.md supera 500 líneas."
+    },
+    {
+      "id": "readme_redundante_con_module_json",
+      "regla": "README.md de un módulo NO duplica información que ya está en su module.json (eventos, dependencias, descripción). Solo añade lo que el manifest no captura.",
+      "enforce": "Auditoría manual + heurística: comparar tokens del README con tokens del module.json. Severidad warning."
+    },
+    {
+      "id": "auditoria_editada_a_mano",
+      "regla": "Ningún archivo en arquitectura/auditoria/_outputs/ se edita a mano. Se regenera con el validator/extractor correspondiente.",
+      "enforce": "Convención + revisión de PR. Cualquier edición manual de _outputs/ se rechaza."
+    },
+    {
+      "id": "documentacion_sin_validator_o_extractor",
+      "regla": "Cualquier documento estructural nuevo (contrato, auditoría, output) tiene su validator (o se extrae mecánicamente con script). Sin validador, la documentación se considera deuda.",
+      "enforce": "Lista de validators registrados en scripts/validate-all.js. Cualquier _contratos/*.contract.json sin validator correspondiente es drift."
+    },
+    {
+      "id": "commit_oneliner_para_cambios_estructurales",
+      "regla": "Commits que tocan contratos, schemas, validators o estructura del repo NO son oneliner. Mínimo: 3-5 líneas explicando qué cambia y por qué.",
+      "enforce": "Auditoría manual / convención. Hooks de git pre-commit que rechazan commits estructurales con mensaje corto."
+    },
+    {
+      "id": "comentarios_descriptivos_que_repiten_el_codigo",
+      "regla": "Comentarios en código que solo describen QUÉ hace la siguiente línea son ruido. Solo se comenta WHY no obvio.",
+      "enforce": "Auditoría manual durante revisión de PR."
+    },
+    {
+      "id": "duplicar_info_en_multiples_documentos",
+      "regla": "Una decisión arquitectónica vive en UN contrato. No se replica en CLAUDE.md, README, ni audits. Otros documentos APUNTAN al contrato sin duplicar el contenido.",
+      "enforce": "Auditoría manual. Reglas que aparecen en dos sitios son drift."
+    }
+  ],
+
+  "output_shape_resumen": "Ver _schemas/documentation.schema.json (a crear). Top-level: _meta, regla_maestra (string), tipos_de_documentacion (object: contratos, auditorias, indice_claudemd, readme_modulo), formato_canonico (object por tipo: json|markdown, ubicacion, naming), criterios_de_inclusion (cuándo crear cada tipo), patrones_de_drift (regexes que el validador usa), prohibidos (markdown como fuente estructurable, etc.).",
+
+  "reglas_de_extraccion": [
+    "1. Validar contrato contra _schemas/documentation.schema.json.",
+    "2. Listar todos los .md del repo (excluyendo node_modules, _archived). Verificar que están en la whitelist (CLAUDE.md, arquitectura/README.md, modules/<modulo>/README.md justificados, frontend/docs cuando exista) y que no contienen patrones de shape estructurable.",
+    "3. Verificar que cada contrato en _contratos/ tiene su validator en _validators/ correspondiente (mapping <id>.contract.json ↔ <id>.validate.js).",
+    "4. Verificar que CLAUDE.md no excede 500 líneas (advertencia preventiva).",
+    "5. Verificar que ningún archivo en arquitectura/auditoria/_outputs/ ha sido editado fuera del extractor (heurística: comparar git history vs runs del extractor).",
+    "6. Reportar PASS/FAIL."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/documentation.schema.json (a crear)"
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/documentation.validate.js (a crear)"
+    },
+    {
+      "tipo": "indice_maestro",
+      "ubicacion": "CLAUDE.md (raíz)",
+      "regla": "Apunta a los contratos y audits. Mantenido como índice ligero."
+    },
+    {
+      "tipo": "auditorias",
+      "ubicacion": "arquitectura/auditoria/_outputs/",
+      "regla": "Outputs extraídos mecánicamente. NO editados a mano."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (sección documentation cuando exista)",
+      "regla": "Warnings de markdown disperso o auditoría desincronizada quedan en baseline hasta su cierre."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "documentation_contract_estructura_valida",
+      "regla": "El contrato tiene amplitud canónica.",
+      "como_detectar": "17 secciones canónicas presentes.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_markdown_con_shape_estructurable",
+      "regla": "Ningún markdown fuera del whitelist contiene patrones tipo lista de decisiones arquitectónicas, tablas de eventos, etc.",
+      "como_detectar": "Regex sobre *.md.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_contrato_sin_validator",
+      "regla": "Cada contrato en _contratos/ tiene su validator en _validators/.",
+      "como_detectar": "Cruzar listados.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_claudemd_inflado",
+      "regla": "CLAUDE.md no excede 500 líneas.",
+      "como_detectar": "wc -l.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_readme_redundante",
+      "regla": "README de módulo no duplica module.json.",
+      "como_detectar": "Heurística: comparar tokens.",
+      "severidad": "info"
+    }
+  ],
+
+  "salida_validador": "PASS si el contrato es válido Y no hay markdown con shape estructurable fuera de whitelist Y cada contrato tiene su validator. Errors solo para violaciones explícitas (auditoría editada a mano detectable). Warnings para deuda visible (markdown que debería absorberse, contratos sin validator). Info para advertencias preventivas (CLAUDE.md acercándose al límite).",
+
+  "convenciones_complementarias": {
+    "naming": "Naming canónico de archivos de documentación: <id>.contract.json, <id>.schema.json, <id>.validate.js, <id>.json. README.md en mayúsculas. CLAUDE.md en mayúsculas (convención del producto Claude Code).",
+    "glossary": "Términos cross-módulo de documentación (contrato, schema, validator, auditoría, manifest) están en glossary.json del idioma adecuado.",
+    "events": "No aplica directamente — la documentación no genera eventos.",
+    "errors": "No aplica directamente.",
+    "observability": "No aplica directamente.",
+    "lifecycle": "No aplica directamente.",
+    "persistence": "Los archivos de documentación viven en filesystem (git repo). No hay storage de DB para documentación.",
+    "http": "No aplica directamente.",
+    "security": "Coherente con security: ningún archivo de documentación contiene secretos hardcoded (regla de security se aplica también a markdown y JSON públicos).",
+    "frontend": "frontend/DISEÑO-UI.md fue absorbido a frontend.contract.json (caso real de aplicación de este contrato). Cualquier markdown del frontend que tenga shape se absorbe igual.",
+    "testing": "Coherente con testing: este contrato no documenta cómo testear (eso vive en testing.contract); este contrato documenta cómo se documenta el sistema en general.",
+    "multi-tenancy": "No aplica directamente — la documentación es global, no project-scoped."
+  }
+}

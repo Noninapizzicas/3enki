@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/agent-flow/agent.execute.response.schema.json",
+  "title": "agent.execute.response — payload schema",
+  "description": "El agente termino exitosamente y produjo resultado. Cierra el ciclo iniciado en agent.execute.request. Publicado por ai-agent-framework. Consumido por: el modulo que origino el request (lo identifica por request_id) + observabilidad + conversation-export (cuando conversation_id presente). NO contiene campo error — los errores van a agent.execute.failed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "request_id",
+    "user_id",
+    "agent_name",
+    "result",
+    "duration_ms",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "request_id":      { "$ref": "_common.schema.json#/$defs/request_id" },
+    "user_id":         { "$ref": "_common.schema.json#/$defs/user_id" },
+    "agent_name":      { "$ref": "_common.schema.json#/$defs/agent_name" },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" },
+
+    "conversation_id": { "$ref": "_common.schema.json#/$defs/conversation_id" },
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
+    "channel":         { "$ref": "_common.schema.json#/$defs/channel" },
+    "channel_context": { "$ref": "_common.schema.json#/$defs/channel_context" },
+
+    "result": {
+      "type": "object",
+      "description": "Salida estructurada del agente. Shape libre — cada agente declara en su agents/<name>.json qué produce. additionalProperties:true. Convenciones recomendadas: campo 'content' (string, output principal) si el agente es de tipo conversacional; campos especificos del dominio (recipe_id, carta_id, etc.) si el agente es de tipo accion.",
+      "additionalProperties": true,
+      "minProperties": 1
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Tiempo total desde que ai-agent-framework recibio agent.execute.request hasta este publish. Incluye agentic loop completo del agente."
+    },
+
+    "tool_calls_executed": {
+      "type": "array",
+      "description": "Auditoria de tools ejecutadas por el agente durante su agentic loop interno. Para conversation-export y debugging — separado del output semantico (result).",
+      "items": { "$ref": "_common.schema.json#/$defs/tool_call_executed" }
+    },
+    "iterations": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Numero de iteraciones del agentic loop interno del agente (1 = LLM respondio sin invocar tools)."
+    },
+    "tokens": { "$ref": "_common.schema.json#/$defs/tokens" },
+    "cost":   { "$ref": "_common.schema.json#/$defs/cost" },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Modelo del LLM que ejecuto el agente (puede diferir del default si se override por settings)."
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Proveedor del LLM."
+    },
+    "finish_reason": {
+      "enum": ["stop", "length", "tool_calls", "content_filter", "error"],
+      "description": "Razon por la que el LLM termino de generar dentro del agente."
+    },
+    "next_state": {
+      "type": ["object", "null"],
+      "description": "Cimentacion futura: estado a preservar para el proximo turno con este agente (sesiones persistentes). Hoy null."
+    },
+    "should_continue": {
+      "type": "boolean",
+      "description": "Cimentacion futura: el agente indica si la sesion debe continuar (espera input adicional del usuario). Hoy false."
+    }
+  }
+}

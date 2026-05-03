@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/agent-flow/_common.schema.json",
+  "title": "agent-flow common definitions",
+  "description": "Definiciones canonicas compartidas por los 3 schemas agent_flow. Cualquier schema agent_flow las referencia con $ref. Heredadas del documento maestro companero-viaje.contract.json y armonizadas con chat-flow/_common.schema.json para que un evento que cruza ambos subsistemas (ej. agente invocado desde chat) reuse semantica.",
+
+  "$defs": {
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Hilo causal de la cadena de eventos. Heredado del originador (canal, cron, webhook). Cuando el agente fue invocado desde chat, igual al correlation_id de la cadena chat. Se propaga sin modificar."
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifica esta ejecucion concreta del agente. Lo genera el caller (modulo que publica agent.execute.request). La response/failed lo devuelve sin modificar para correlacion."
+    },
+    "agent_name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "description": "Nombre del agente del catalogo ai-agent-framework/agents/<name>.json. snake_case con guiones (kebab-case interno) coherente con el resto del repo."
+    },
+    "conversation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Solo si el agente nace de una conversacion del chat. Permite que el resultado pueda inyectarse de vuelta como mensaje en la conversacion (chat multi-participante futuro)."
+    },
+    "project_id": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Proyecto activo. null si single-tenant aun. String no vacio si multi-tenant."
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifica al humano. 'default' en single-user. Imprescindible para aislamiento."
+    },
+    "channel": {
+      "enum": ["web", "telegram", "voice", "whatsapp", "discord", "email", "sms", "cron", "webhook", "test"],
+      "description": "Canal de origen. Misma lista cerrada que chat-flow."
+    },
+    "channel_context": {
+      "type": "object",
+      "description": "Datos opacos del canal — solo presentes si la respuesta del agente debe routearse al canal de origen.",
+      "minProperties": 0
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601."
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Override de config del agente para esta invocacion concreta. El agente tiene defaults en su agents/<name>.json; settings los pisa.",
+      "properties": {
+        "model":       { "type": "string", "minLength": 1 },
+        "provider":    { "type": "string", "minLength": 1 },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+        "max_tokens":  { "type": "integer", "minimum": 1 },
+        "timeout_ms":  { "type": "integer", "minimum": 1 }
+      }
+    },
+    "tool_call_executed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "result_status"],
+      "description": "Auditoria: una tool ejecutada por el agente dentro de su agentic loop interno.",
+      "properties": {
+        "name":          { "type": "string", "minLength": 1 },
+        "args":          { "type": "object" },
+        "result_status": { "enum": ["ok", "error", "timeout"] },
+        "duration_ms":   { "type": "integer", "minimum": 0 },
+        "error_code":    { "type": "string" }
+      }
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "output", "total"],
+      "description": "Consumo de tokens del LLM en la ejecucion del agente.",
+      "properties": {
+        "input":  { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 },
+        "total":  { "type": "integer", "minimum": 0 }
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount", "currency"],
+      "description": "Coste calculado de la ejecucion (segun pricing del provider).",
+      "properties": {
+        "amount":   { "type": "number", "minimum": 0 },
+        "currency": { "enum": ["USD", "EUR"] }
+      }
+    },
+    "error_canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "description": "Error canonico segun errors.contract. code en lista canonica del subsistema agentes (AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED) o codes_infrastructure heredados (UPSTREAM_*, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR).",
+      "properties": {
+        "code":    { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*[A-Z0-9]$" },
+        "message": { "type": "string", "minLength": 1 },
+        "details": { "type": "object" }
+      }
+    }
+  }
+}

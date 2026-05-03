@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/agent-flow/agent.execute.failed.schema.json",
+  "title": "agent.execute.failed — payload schema",
+  "description": "El agente fallo: agente no encontrado en el catalogo, timeout del agente, error LLM upstream, error de tool no recuperable, input invalido. Cierra el ciclo iniciado en agent.execute.request con resultado de error. Sin este evento, los requests de agente colgados sin respuesta — viola garantia no_silent_failures. Publicado por ai-agent-framework. Consumido por el modulo que origino el request (correlacionado por request_id) + observabilidad + alerting.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "request_id",
+    "user_id",
+    "agent_name",
+    "error",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "request_id":      { "$ref": "_common.schema.json#/$defs/request_id" },
+    "user_id":         { "$ref": "_common.schema.json#/$defs/user_id" },
+    "agent_name":      { "$ref": "_common.schema.json#/$defs/agent_name" },
+    "error":           { "$ref": "_common.schema.json#/$defs/error_canonical" },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" },
+
+    "conversation_id": { "$ref": "_common.schema.json#/$defs/conversation_id" },
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
+    "channel":         { "$ref": "_common.schema.json#/$defs/channel" },
+    "channel_context": { "$ref": "_common.schema.json#/$defs/channel_context" },
+
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Tiempo desde que ai-agent-framework recibio agent.execute.request hasta el fallo. Util para diagnosticar timeouts vs errores rapidos (input invalido, agente no encontrado)."
+    },
+    "iterations_completed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Numero de iteraciones completadas del agentic loop interno antes del fallo. 0 = el agente nunca llego a llamar al LLM (fallo de input o agent_not_found). >=1 = fallo en medio del loop."
+    },
+    "provider_attempted": {
+      "type": ["string", "null"],
+      "description": "Provider que se intento al fallar. Null si el fallo fue antes de elegir provider (agente no encontrado, input invalido)."
+    }
+  }
+}

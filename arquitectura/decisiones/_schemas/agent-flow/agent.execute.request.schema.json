@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/agent-flow/agent.execute.request.schema.json",
+  "title": "agent.execute.request — payload schema",
+  "description": "Disparar la ejecucion de un agente especialista. Es la UNICA via canonica de activar agentes — invoke_agent (la tool del LLM en ai-gateway) es una fachada que internamente publica este evento. Publicado por: cualquier modulo que necesite invocar un agente. Consumido por: ai-agent-framework (unico consumer canonico).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "request_id",
+    "user_id",
+    "agent_name",
+    "timestamp"
+  ],
+  "anyOf": [
+    { "required": ["task"],    "properties": { "task":    { "type": "string", "minLength": 1 } } },
+    { "required": ["context"], "properties": { "context": { "type": "object", "additionalProperties": true } } }
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "request_id":      { "$ref": "_common.schema.json#/$defs/request_id" },
+    "user_id":         { "$ref": "_common.schema.json#/$defs/user_id" },
+    "agent_name":      { "$ref": "_common.schema.json#/$defs/agent_name" },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" },
+
+    "conversation_id": { "$ref": "_common.schema.json#/$defs/conversation_id" },
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
+    "channel":         { "$ref": "_common.schema.json#/$defs/channel" },
+    "channel_context": { "$ref": "_common.schema.json#/$defs/channel_context" },
+    "settings":        { "$ref": "_common.schema.json#/$defs/settings" },
+
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Instruccion en lenguaje natural para el agente. Util cuando el caller es el LLM via invoke_agent. Opcional si solo se pasa context estructurado, pero al menos uno de task/context debe estar presente (anyOf)."
+    },
+    "context": {
+      "type": "object",
+      "description": "Datos estructurados que el agente necesita para su tarea. Cada agente declara en su agents/<name>.json qué espera dentro. additionalProperties:true — el envoltorio es el contrato; el contenido es responsabilidad del agente.",
+      "additionalProperties": true
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Cimentacion futura: identificador de sesion persistente del agente entre turnos. Hoy null."
+    },
+    "prev_state": {
+      "type": ["object", "null"],
+      "description": "Cimentacion futura: estado del turno anterior del agente para continuar conversacion multi-turno con el. Hoy null."
+    }
+  }
+}

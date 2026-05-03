@@ -59,12 +59,22 @@ function makeMocks() {
   return { logs, published, logger, eventBus };
 }
 
-function instantiate(mocks, { agents, llmResult, llmError } = {}) {
+function instantiate(mocks, { agents, llmResult, llmError, mqttRequestImpl } = {}) {
   const m = new AiAgentFrameworkModule();
   m.logger   = mocks.logger;
   m.eventBus = mocks.eventBus;
   m.basePromptText = 'BASE PROMPT';
   m.moduleLoader = { getToolsForAI: () => [] };
+  m._conversationCache = new Map();
+  m._conversationCacheTTL = 5 * 60 * 1000;
+  // mqttRequest mockeado: por defecto devuelve conversation_id 'conv-default-<project>'.
+  // Permite override por test via mqttRequestImpl.
+  m.mqttRequest = mqttRequestImpl || (async (domain, action, payload) => {
+    if (domain === 'project' && action === 'get-default-conversation') {
+      return { conversation_id: 'conv-default-' + payload.project_id, created: false };
+    }
+    return null;
+  });
 
   // Instalar agentes mockeados
   const defaultAgents = agents || [
@@ -306,6 +316,123 @@ async function testAsync(description, fn) {
       const got = m._classifyLlmError(msg).code;
       assert.strictEqual(got, expected, `${msg} → esperaba ${expected}, fue ${got}`);
     }
+  });
+
+  // Group 7 — Modelo "una via fija": resolucion canonica de conversation_id
+
+  await testAsync('resolucion: request CON project_id SIN conversation_id resuelve a conversation_default del proyecto', async () => {
+    const mocks = makeMocks();
+    const calls = [];
+    const m = instantiate(mocks, {
+      mqttRequestImpl: async (domain, action, payload) => {
+        calls.push({ domain, action, payload });
+        return { conversation_id: 'conv-canonica-de-proj-1', created: false };
+      }
+    });
+    await m.onAgentExecuteRequest({
+      correlation_id: 'corr-r', request_id: 'req-r', user_id: 'system',
+      agent_name: 'recipe-analyzer', timestamp: '2026-05-03T10:00:00.000Z',
+      task: 'analiza',
+      project_id: 'proj-1'
+      // sin conversation_id
+    });
+    await nextTick(); await nextTick();
+    // Verificar que se llamo a project-manager
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].domain, 'project');
+    assert.strictEqual(calls[0].action, 'get-default-conversation');
+    assert.strictEqual(calls[0].payload.project_id, 'proj-1');
+    // Verificar que el response publicado incluye la conversation_id resuelta
+    const ev = mocks.published.find(p => p[0] === 'agent.execute.response');
+    assert.ok(ev, 'response publicado');
+    assert.strictEqual(ev[1].conversation_id, 'conv-canonica-de-proj-1');
+  });
+
+  await testAsync('resolucion: request CON conversation_id explicita NO consulta project-manager', async () => {
+    const mocks = makeMocks();
+    const calls = [];
+    const m = instantiate(mocks, {
+      mqttRequestImpl: async (domain, action, payload) => {
+        calls.push({ domain, action, payload });
+        return { conversation_id: 'NO_DEBERIA_USARSE' };
+      }
+    });
+    await m.onAgentExecuteRequest({
+      correlation_id: 'c', request_id: 'r', user_id: 'u',
+      agent_name: 'recipe-analyzer', timestamp: '2026-05-03T10:00:00.000Z',
+      task: 'analiza',
+      project_id: 'proj-1',
+      conversation_id: 'conv-humana-explicita'
+    });
+    await nextTick(); await nextTick();
+    assert.strictEqual(calls.length, 0, 'no debe consultar project-manager si conversation_id viene en input');
+    const ev = mocks.published.find(p => p[0] === 'agent.execute.response');
+    assert.strictEqual(ev[1].conversation_id, 'conv-humana-explicita');
+  });
+
+  await testAsync('resolucion: cache in-memory evita mqttRequest repetido para el mismo project_id', async () => {
+    const mocks = makeMocks();
+    let calls = 0;
+    const m = instantiate(mocks, {
+      mqttRequestImpl: async () => {
+        calls++;
+        return { conversation_id: 'conv-default-cached' };
+      }
+    });
+    // Primera invocacion: hace mqttRequest
+    await m.onAgentExecuteRequest({
+      correlation_id: 'c', request_id: 'r1', user_id: 'u',
+      agent_name: 'recipe-analyzer', timestamp: '2026-05-03T10:00:00.000Z',
+      task: 't', project_id: 'proj-cache'
+    });
+    await nextTick(); await nextTick();
+    // Segunda invocacion al mismo project_id: NO debe hacer mqttRequest (cache hit)
+    await m.onAgentExecuteRequest({
+      correlation_id: 'c', request_id: 'r2', user_id: 'u',
+      agent_name: 'recipe-analyzer', timestamp: '2026-05-03T10:00:01.000Z',
+      task: 't', project_id: 'proj-cache'
+    });
+    await nextTick(); await nextTick();
+    assert.strictEqual(calls, 1, 'mqttRequest llamado solo una vez gracias al cache');
+    const responses = mocks.published.filter(p => p[0] === 'agent.execute.response');
+    assert.strictEqual(responses.length, 2);
+    assert.strictEqual(responses[0][1].conversation_id, 'conv-default-cached');
+    assert.strictEqual(responses[1][1].conversation_id, 'conv-default-cached');
+  });
+
+  await testAsync('resolucion: si mqttRequest falla, agente continua sin conversation_id (degradacion graceful)', async () => {
+    const mocks = makeMocks();
+    const m = instantiate(mocks, {
+      mqttRequestImpl: async () => { throw new Error('project-manager unavailable'); }
+    });
+    await m.onAgentExecuteRequest({
+      correlation_id: 'c', request_id: 'r-fail', user_id: 'u',
+      agent_name: 'recipe-analyzer', timestamp: '2026-05-03T10:00:00.000Z',
+      task: 't', project_id: 'proj-x'
+    });
+    await nextTick(); await nextTick();
+    const ev = mocks.published.find(p => p[0] === 'agent.execute.response');
+    assert.ok(ev, 'response publicado pese al fallo de resolucion');
+    assert.strictEqual(ev[1].conversation_id, undefined, 'conversation_id ausente — agent-observer simplemente no renderiza');
+    // El warn de fallo de resolucion deberia estar en logs
+    const warn = mocks.logs.find(l => l[1] === 'ai-agent-framework.resolve_conversation.failed');
+    assert.ok(warn, 'warn registrado por fallo de resolucion');
+  });
+
+  await testAsync('resolucion: sin project_id NO se intenta resolver conversation_id', async () => {
+    const mocks = makeMocks();
+    let calls = 0;
+    const m = instantiate(mocks, {
+      mqttRequestImpl: async () => { calls++; return { conversation_id: 'NO' }; }
+    });
+    await m.onAgentExecuteRequest({
+      correlation_id: 'c', request_id: 'r-np', user_id: 'u',
+      agent_name: 'recipe-analyzer', timestamp: '2026-05-03T10:00:00.000Z',
+      task: 't'
+      // sin project_id ni conversation_id
+    });
+    await nextTick(); await nextTick();
+    assert.strictEqual(calls, 0, 'no debe consultar sin project_id');
   });
 
   console.log('\nai-agent-framework: todos los tests pasaron ✓');

@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-04T12:06:28.922Z",
-  "total": 4052,
+  "generated_at": "2026-05-04T12:13:52.550Z",
+  "total": 4053,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -19,13 +19,13 @@
     "security": 1,
     "testing": 29,
     "multi-tenancy": 270,
-    "documentation": 84,
+    "documentation": 85,
     "versionado": 1,
     "deployment": 4,
     "scheduling": 2
   },
   "by_severity": {
-    "warning": 3714,
+    "warning": 3715,
     "info": 355,
     "error": 10
   },
@@ -189,6 +189,7 @@
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/conversacion-ref/prompt-engine/FORMATO.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/esp32-modules-analysis.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/migracion/README.md contiene patron estructurable — considerar absorber a contrato JSON",
+    "documentation|drift_markdown_con_shape_estructurable|arquitectura/migracion/_outputs/PROGRESO.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|docs/AI_AGENTS_ARCHITECTURE.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|docs/ARQUITECTURA_COMPOSICION_PROYECTOS.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|docs/CONTEXT_POS.md contiene patron estructurable — considerar absorber a contrato JSON",

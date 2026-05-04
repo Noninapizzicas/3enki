@@ -5,7 +5,9 @@ Plataforma operativa para reescribir cada módulo del repo cumpliendo los 24 con
 ## Qué hay aquí
 
 - **`_outputs/modulos-roadmap.json`** — inventario priorizado de los 73 módulos. Cada entry lleva: `slug`, `path`, `layer` (core/infra/dominio/tooling), `loc`, `drifts` (heurística contra baseline), `dependencies` upstream, `events_publishes`, `events_subscribes`, `tools`, `agents`, `language`, `version`, `orden_migracion`. Generado por `scripts/inventario.js`. Regenerable cuando los módulos cambien.
+- **`_outputs/PROGRESO.md`** — panel de control humano-legible: estado global, % por capa, tabla de módulos migrados (con commit + drifts antes/después), tabla de próximos en la cola, lecciones operativas, próximo módulo recomendado. Generado por `scripts/progreso.js`. **Regenerar tras cada migración**.
 - **`scripts/inventario.js`** — scanner que descubre módulos, los clasifica y prioriza. Reglas de clasificación inline (sets `CORE_SLUGS`, `INFRA_SLUGS`, `TOOLING_SLUGS`; el resto es dominio).
+- **`scripts/progreso.js`** — detecta automáticamente qué módulos están migrados (criterio: `tests/unit/<slug>.test.js` existe AND drifts actuales ≤ 30% del valor del roadmap). Cruza con `git log` para extraer commit hash + fecha. Genera PROGRESO.md.
 - **`README.md`** — este archivo.
 
 Y fuera de `arquitectura/migracion/`:
@@ -51,9 +53,11 @@ Pasos canónicos para cada uno de los 73:
    git push origin claude/...
    ```
 
-9. **Regenerar roadmap** tras la migración para que el siguiente módulo a migrar tenga datos frescos:
+9. **Regenerar roadmap + progreso** tras la migración:
    ```bash
-   node arquitectura/migracion/scripts/inventario.js
+   node arquitectura/migracion/scripts/inventario.js   # roadmap.json fresco
+   node arquitectura/migracion/scripts/progreso.js     # PROGRESO.md actualizado
+   git add arquitectura/migracion/_outputs/ && git commit -m "<modulo>: actualizar roadmap + PROGRESO tras migracion"
    ```
 
 ## Orden recomendado

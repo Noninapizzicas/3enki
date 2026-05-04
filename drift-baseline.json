@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-04T11:06:10.876Z",
-  "total": 3750,
+  "generated_at": "2026-05-04T11:31:54.890Z",
+  "total": 3751,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -17,13 +17,13 @@
     "security": 1,
     "testing": 29,
     "multi-tenancy": 270,
-    "documentation": 83,
+    "documentation": 84,
     "versionado": 1,
     "deployment": 4,
     "scheduling": 2
   },
   "by_severity": {
-    "warning": 3683,
+    "warning": 3684,
     "info": 94
   },
   "signatures": [
@@ -42,6 +42,7 @@
     "deployment|drift_dockerfile_o_docker_compose_obligatorio|docker-compose.yml presente en raiz",
     "deployment|drift_install_script_no_ejecutable|scripts/install-linux.sh sin bit ejecutable (chmod +x necesario para usuarios)",
     "deployment|drift_install_script_no_ejecutable|scripts/install-termux.sh sin bit ejecutable (chmod +x necesario para usuarios)",
+    "documentation|drift_contrato_sin_validator|tools sin validator en _validators/tools.validate.js",
     "documentation|drift_contratos_sin_indice_en_claudemd|contrato \"bus-transport\" no aparece referenciado en CLAUDE.md (sesion futura no lo descubrira)",
     "documentation|drift_contratos_sin_indice_en_claudemd|contrato \"deployment\" no aparece referenciado en CLAUDE.md (sesion futura no lo descubrira)",
     "documentation|drift_contratos_sin_indice_en_claudemd|contrato \"documentation\" no aparece referenciado en CLAUDE.md (sesion futura no lo descubrira)",

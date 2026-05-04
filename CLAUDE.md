@@ -97,6 +97,8 @@ Vive en `arquitectura/decisiones/` como contratos JSON con schemas + validators.
 
 - **`_contratos/tools.contract.json`** + **`_schemas/tools/*.json`** — contrato transversal puro: shape canónico de cada `module.json.tools[]` (tool.declaration) y del retorno del handler en runtime (tool.response). Reglas de naming (`<module-prefix>.<entity>` kebab-case), parameters como JSON Schema 2020-12 válido, handler como referencia a método, errores_conocidos del catálogo errors.contract, retorno canónico `{status, data | error: {code, message}}`. Aplicable a cualquier módulo del sistema que declare tools invocables por el LLM.
 
+- **`_contratos/agents-config.contract.json`** + **`_schemas/agents-config/agent.config.schema.json`** — sub-contrato derivado de companero-viaje (tipo canónico "agente"): formaliza el shape de `agents/<name>.json` (id+name+filename coincidiendo, version semver, enabled boolean, prompt_file path relativo a `.md`, tools como subset acotado del catálogo del repo, provider del enum cerrado, temperature/max_tokens/timeout_ms/max_retries/context_enabled como parámetros del LLM). Reglas para `prompts/<name>-system.md`: markdown puro sin frontmatter YAML, h1 con nombre del agente, longitud mínima 200 chars. Stats runtime PROHIBIDOS en archivo declarativo.
+
 - **Otros contratos transversales:** `events`, `lifecycle`, `observability`, `errors`, `persistence`, `http`. Cada uno con su validator en `_validators/<n>.validate.js` y su sección en `drift-baseline.json`.
 
 Todos los validators corren juntos via `npm run validate:ci`. Para añadir un sub-contrato nuevo: contrato JSON → schemas estrictos → validator → registrar en `scripts/validate-all.js` → npm script.

@@ -54,6 +54,8 @@
     "validate:llm-flow:system": "node arquitectura/decisiones/_validators/llm-flow.validate.js --check-system",
     "validate:tools": "node arquitectura/decisiones/_validators/tools.validate.js",
     "validate:tools:system": "node arquitectura/decisiones/_validators/tools.validate.js --check-system",
+    "validate:agents-config": "node arquitectura/decisiones/_validators/agents-config.validate.js",
+    "validate:agents-config:system": "node arquitectura/decisiones/_validators/agents-config.validate.js --check-system",
     "validate:frontend": "node arquitectura/decisiones/_validators/frontend.validate.js",
     "validate:frontend:system": "node arquitectura/decisiones/_validators/frontend.validate.js --check-system",
     "validate:security": "node arquitectura/decisiones/_validators/security.validate.js",

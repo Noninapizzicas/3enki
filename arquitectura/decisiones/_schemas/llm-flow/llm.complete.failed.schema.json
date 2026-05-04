@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/llm-flow/llm.complete.failed.schema.json",
+  "title": "llm.complete.failed",
+  "description": "Cierre con error de llm.complete.request. Publicado por ai-gateway cuando la generacion falla (credencial ausente, upstream timeout, rate limit, todos los providers caidos). El caller correlaciona con su request por request_id y debe manejar la degradacion graceful (publicar a su vez un evento .failed propio coherente con su flow — agent.execute.failed, memory-conversation-summary.summarize.failed, etc.).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["correlation_id", "request_id", "error", "duration_ms", "timestamp"],
+  "properties": {
+    "correlation_id":   { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "request_id":       { "$ref": "_common.schema.json#/$defs/request_id" },
+    "error":            { "$ref": "_common.schema.json#/$defs/error" },
+    "provider_attempted": { "$ref": "_common.schema.json#/$defs/provider" },
+    "model_attempted":  { "$ref": "_common.schema.json#/$defs/model" },
+    "duration_ms":      { "$ref": "_common.schema.json#/$defs/duration_ms" },
+    "timestamp":        { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

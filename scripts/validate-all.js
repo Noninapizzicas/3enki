@@ -40,6 +40,7 @@ const VALIDATORS = [
   { id: 'http',          file: 'arquitectura/decisiones/_validators/http.validate.js' },
   { id: 'chat-flow',     file: 'arquitectura/decisiones/_validators/chat-flow.validate.js' },
   { id: 'agent-flow',    file: 'arquitectura/decisiones/_validators/agent-flow.validate.js' },
+  { id: 'llm-flow',      file: 'arquitectura/decisiones/_validators/llm-flow.validate.js' },
   { id: 'frontend',      file: 'arquitectura/decisiones/_validators/frontend.validate.js' },
   { id: 'security',      file: 'arquitectura/decisiones/_validators/security.validate.js' },
   { id: 'testing',       file: 'arquitectura/decisiones/_validators/testing.validate.js' },

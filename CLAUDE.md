@@ -89,6 +89,12 @@ Vive en `arquitectura/decisiones/` como contratos JSON con schemas + validators.
 
 - **`_contratos/chat-flow.contract.json`** + **`_schemas/chat-flow/*.json`** — sub-contrato derivado: 5 eventos canónicos del flujo del chat (`chat.message.saved`, `chat.context.enriched`, `chat.prompt.ready`, `ai.chat.response`, `ai.chat.failed`). Schemas estrictos AJV `additionalProperties:false`.
 
+- **`_contratos/agent-flow.contract.json`** + **`_schemas/agent-flow/*.json`** — sub-contrato derivado: 4 eventos canónicos del flujo de agentes (`agent.execute.request`, `agent.execute.response`, `agent.execute.failed`, `agent.execute.progress`). Documenta también la sección `chat_inline_rendering` (cómo el agente vive en el chat como tarjeta `agent_intervention`) y la `resolucion_de_conversation_id_canonica` del modelo "una vía fija".
+
+- **`_contratos/llm-flow.contract.json`** + **`_schemas/llm-flow/*.json`** — sub-contrato derivado: 3 eventos canónicos para invocar al LLM SIN contexto de chat (`llm.complete.request`, `llm.complete.response`, `llm.complete.failed`). Usado por agentes (ai-agent-framework), memorias modulares (memory-conversation-summary) y módulos del dominio que necesiten razonamiento del LLM. Par success/failure separados — NO existe shape mixto con flag `success`. Migración del shape legacy del ai-gateway documentada como `trabajo_pendiente`.
+
+- **`_contratos/embedding-flow/_*.schema.json`** — schemas canónicos para `embedding.generate.{request,response,failed}` consumidos por ai-gateway. Lo usan memory-rag y memorias semánticas futuras.
+
 - **Otros contratos transversales:** `events`, `lifecycle`, `observability`, `errors`, `persistence`, `http`. Cada uno con su validator en `_validators/<n>.validate.js` y su sección en `drift-baseline.json`.
 
 Todos los validators corren juntos via `npm run validate:ci`. Para añadir un sub-contrato nuevo: contrato JSON → schemas estrictos → validator → registrar en `scripts/validate-all.js` → npm script.

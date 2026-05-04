@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/llm-flow/llm.complete.request.schema.json",
+  "title": "llm.complete.request",
+  "description": "Solicitud generica al LLM. Cualquier modulo del subsistema (ai-agent-framework, memory-conversation-summary, modulos del dominio) lo publica para invocar el LLM SIN contexto de chat. Lo consume ai-gateway: resuelve credencial, ejecuta agentic loop si hay tools, devuelve llm.complete.response (exito) o llm.complete.failed (error).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["correlation_id", "request_id", "system_prompt", "messages", "timestamp"],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "request_id":     { "$ref": "_common.schema.json#/$defs/request_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "system_prompt":  { "$ref": "_common.schema.json#/$defs/system_prompt" },
+    "messages":       { "$ref": "_common.schema.json#/$defs/messages" },
+    "tools":          { "$ref": "_common.schema.json#/$defs/tools" },
+    "settings":       { "$ref": "_common.schema.json#/$defs/settings" },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Modulo que origina el request. Util para observabilidad y tagging de costes."
+    },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

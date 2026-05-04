@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-04T01:22:23.876Z",
-  "total": 3744,
+  "generated_at": "2026-05-04T11:06:10.876Z",
+  "total": 3750,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -12,6 +12,7 @@
     "http": 191,
     "chat-flow": 3,
     "agent-flow": 8,
+    "llm-flow": 6,
     "frontend": 526,
     "security": 1,
     "testing": 29,
@@ -22,7 +23,7 @@
     "scheduling": 2
   },
   "by_severity": {
-    "warning": 3677,
+    "warning": 3683,
     "info": 94
   },
   "signatures": [
@@ -2953,6 +2954,12 @@
     "lifecycle|drift_signature_no_canonica|staff-manager modules/staff-manager/index.js:66 — método prohibido \"initialize\" (usar onLoad/onUnload)",
     "lifecycle|drift_signature_no_canonica|system-inspector modules/system-inspector/index.js:135 — método prohibido \"start\" (usar onLoad/onUnload)",
     "lifecycle|drift_signature_no_canonica|system-inspector modules/system-inspector/index.js:91 — método prohibido \"stop\" (usar onLoad/onUnload)",
+    "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-agent-framework consume \"llm.complete.response\" sin request_schema_ref/schema_ref en module.json",
+    "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-agent-framework publica \"llm.complete.request\" sin response_schema_ref/schema_ref en module.json",
+    "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-gateway consume \"llm.complete.request\" sin request_schema_ref/schema_ref en module.json",
+    "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-gateway publica \"llm.complete.response\" sin response_schema_ref/schema_ref en module.json",
+    "llm-flow|drift_publish_response_con_error_inyectado|conversacion__ai-gateway modules/conversacion/ai-gateway/index.js:602 — publish \"llm.complete.response\" con campo 'error' (drift legacy, separar a llm.complete.failed)",
+    "llm-flow|drift_publish_response_con_success_flag|conversacion__ai-gateway modules/conversacion/ai-gateway/index.js:602 — publish \"llm.complete.response\" con flag 'success:' (drift legacy, separar response/failed)",
     "multi-tenancy|drift_publish_atribuible_sin_user_id|conversacion/ai-gateway publica ai.chat.response en modules/conversacion/ai-gateway/index.js:479 — sin user_id en campos_visibles",
     "multi-tenancy|drift_publish_atribuible_sin_user_id|conversacion/chat-io publica chat.message.saved en modules/conversacion/chat-io/index.js:263 — sin user_id en campos_visibles",
     "multi-tenancy|drift_publish_atribuible_sin_user_id|pizzepos/carta-digital publica agent.execute.request en modules/pizzepos/carta-digital/index.js:120 — sin user_id en campos_visibles",

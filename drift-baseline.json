@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-04T01:17:02.454Z",
-  "total": 3743,
+  "generated_at": "2026-05-04T01:22:23.876Z",
+  "total": 3744,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -12,7 +12,7 @@
     "http": 191,
     "chat-flow": 3,
     "agent-flow": 8,
-    "frontend": 525,
+    "frontend": 526,
     "security": 1,
     "testing": 29,
     "multi-tenancy": 270,
@@ -22,7 +22,7 @@
     "scheduling": 2
   },
   "by_severity": {
-    "warning": 3676,
+    "warning": 3677,
     "info": 94
   },
   "signatures": [
@@ -2197,6 +2197,7 @@
     "events|drift_rpc_over_pubsub|text-editor — evento \"editor.validate.response\" termina en \".response\" (RPC sobre pub/sub) modules/text-editor/index.js:296",
     "events|drift_rpc_over_pubsub|text-editor — evento \"editor.validate.response\" termina en \".response\" (RPC sobre pub/sub) modules/text-editor/index.js:302",
     "events|drift_silent_catch|esp32-flasher modules/esp32-flasher/index.js:398 — .publish().catch(()=>{}) sin log",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/SetupRequiredPanel.svelte:100 — #f5f5f5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/base/Badge.svelte:72 — #f59e0b fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/base/Button.svelte:57 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/base/Chip.svelte:57 — #e5e5e5 fuera de paleta canonica",
@@ -2245,10 +2246,10 @@
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/esp32/DevTab.svelte:211 — #1a1a1a fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/esp32/FirmwareTab.svelte:333 — #1a1a1a fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/esp32/FlashTab.svelte:389 — #1a1a1a fuera de paleta canonica",
-    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/layout/AppShell.svelte:188 — #121212 fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/layout/AppShell.svelte:192 — #121212 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/layout/ChatArea.svelte:154 — #a3a3a3 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/layout/ChatConfig.svelte:84 — #a3a3a3 fuera de paleta canonica",
-    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/layout/ChatInput.svelte:122 — #fbbf24 fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/layout/ChatInput.svelte:125 — #fbbf24 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/layout/ChatTools.svelte:88 — #a3a3a3 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/layout/LazyPanel.svelte:98 — #2a2a2a fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/layout/LazyShell.svelte:185 — #121212 fuera de paleta canonica",

@@ -41,6 +41,7 @@
   import ChatInput from './ChatInput.svelte';
   import ChatTools from './ChatTools.svelte';
   import LazyPanel from './LazyPanel.svelte';
+  import SetupRequiredPanel from '$lib/components/SetupRequiredPanel.svelte';
   import { ToastContainer } from '$lib/components/base';
 
   // Props opcionales para configuración
@@ -159,6 +160,9 @@
         <ChatTools />
       {/if}
     </div>
+
+    <!-- SetupRequiredPanel: aparece cuando falta project o conversation activos -->
+    <SetupRequiredPanel />
   </main>
 
   <!-- System Bar (floating right) -->

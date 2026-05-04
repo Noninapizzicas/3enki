@@ -463,7 +463,7 @@
   "trabajo_pendiente": [
     {
       "id": "implementar_setup_required_panel_y_bootstrap_proyecto_default",
-      "estado": "abierto",
+      "estado": "parcialmente_cerrado",
       "naturaleza": "horizontal",
       "descripcion": "Tras directriz multi-tenancy v1.1.0 (project_id+conversation_id siempre obligatorios), el frontend implementa el bloque canónico setup_required: panel emergente que aparece cuando no hay proyecto activo y/o conversación activa, deshabilitando el input del chat hasta resolverlo. También necesita coordinarse con un módulo backend que cree un proyecto 'default' al primer arranque del repo + abra una conversación inicial.",
       "componentes_afectados": [
@@ -473,9 +473,22 @@
         "modules/conversacion/chat-io (extensión: abrir conversación inicial cuando no haya ninguna en el proyecto activo).",
         "modules/conversacion/agent-observer (retirar `if(!conversation_id) return` cuando la directriz se aplique en schemas)."
       ],
+      "componentes_cerrados_2026_05_04": [
+        "frontend/src/lib/stores/contextStore.ts: derived store que combina activeProjectId (projects.ts) y activeConversationId (conversations.ts) y expone setupRequired: 'project' | 'conversation' | 'both' | null. Tambien hasFullContext derived = setupRequired === null.",
+        "frontend/src/lib/components/SetupRequiredPanel.svelte: panel inline absoluto bottom, max-height 33vh, NO modal. Renderiza solo cuando $setupRequired !== null. Acciones: 'Configurar proyecto' (openPanel('projects')) si falta proyecto, 'Iniciar conversacion' (createConversation('Nueva conversacion')) si solo falta conversacion. Estilo coherente con el frame oscuro del frontend.",
+        "frontend/src/lib/components/layout/ChatInput.svelte: integrado $setupRequired; cuando needsSetup=true, isBlocked=true, textarea disabled y placeholder cambia a 'Necesitas un proyecto y conversacion activos'.",
+        "frontend/src/lib/components/layout/AppShell.svelte: importa y monta <SetupRequiredPanel/> dentro de <main>, fuera de bottom-area, position:absolute para superponerse al frame.",
+        "modules/project-manager: bootstrap del proyecto 'Mi Proyecto' YA implementado en commit 445cb1ac (2026-05-03) — ensureDefaultProject() corre tras ensureSystemProject() en onLoad.",
+        "modules/project-manager: race conditions en getOrCreateDefaultConversation cerradas en commit 2a856f1 (2026-05-04) — pendingDefaultConversations Map evita creates duplicados concurrentes; getProject() coherente entre validate y create."
+      ],
       "criterio_de_cierre": "El frame nunca permite al usuario teclear en el input sin proyecto+conversación. El primer arranque del repo: usuario abre /compañero, ve el chat vacío (proyecto 'default' creado automáticamente), conversación 'inicial' abierta. Si el usuario crea proyecto nuevo y no abre conversación, el panel setup_required aparece al intentar usar el input.",
-      "bloqueado_por": "Implementación efectiva del frontend (hoy DISEÑO-UI.md está absorbido pero el código SvelteKit no implementa todavía todos los bloques canónicos). Coordinar con project-manager para el bootstrap.",
+      "trabajo_pendiente_residual": [
+        "Verificar el panel en navegador con npm run dev en /frontend: ver que aparece cuando no hay project/conversation, que se cierra al resolver, que el input queda bien deshabilitado, que la posicion absoluta no rompe layout en mobile/desktop. NO se pudo verificar en la sesion porque frontend/node_modules no estaba instalado en el entorno Claude.",
+        "modules/conversacion/chat-io: cuando un proyecto NO tiene ninguna conversacion, mostrar setup_required de tipo 'conversation' es lo correcto — pero la UX podria ser mas suave si chat-io ofrece auto-crear la conversacion 'inicial' al activar proyecto sin conversaciones (como hace project-manager con conversation canonica para agentes). Decision pendiente: hacerlo o dejar al user pulsar 'Iniciar conversacion'.",
+        "modules/conversacion/agent-observer: retirar el `if(!data.conversation_id) return` en sus 4 handlers cuando se endurezcan los schemas agent-flow (project_id + conversation_id obligatorios) — esto pertenece al trabajo_pendiente endurecer_project_id_y_conversation_id_a_obligatorios_en_agent_flow del agent-flow.contract, no a este horizontal."
+      ],
       "fecha_anotacion": "2026-05-03",
+      "fecha_cierre_parcial": "2026-05-04",
       "deriva_de": "multi-tenancy.contract v1.1.0"
     }
   ]

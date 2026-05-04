@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/tools/tool.declaration.schema.json",
+  "title": "Tool declaration in module.json",
+  "description": "Shape canonico de cada entry de module.json.tools[]. Declarativo: que tool ofrece el modulo, su nombre, descripcion legible para el LLM, parametros como JSON Schema, handler como referencia a metodo, errores que puede emitir. Validado por tools.validate.js cruzando con el codigo del modulo.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "description", "parameters", "handler"],
+
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "minLength": 3,
+      "maxLength": 80,
+      "description": "Nombre canonico de la tool. Forma <module-prefix>.<entity>(.verb)? en kebab-case. Ej: 'pdf.extract', 'tarifas.assign', 'carta-scheduler.crear_regla'. Prefijo del modulo obligatorio para disambiguacion cross-modulo."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 500,
+      "description": "Frase legible para el LLM (8-500 caracteres) que explica QUE hace y CUANDO se invoca. En idioma de module.json.language. Sin jerga de codigo."
+    },
+    "parameters": {
+      "type": "object",
+      "description": "JSON Schema 2020-12 que describe los argumentos de la tool. ai-gateway lo pasa al provider (OpenAI/Gemini/Anthropic) que lo usa para forzar al LLM a generar args bien tipados.",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "const": "object",
+          "description": "Siempre 'object' a nivel raiz — los args van como pares clave/valor."
+        },
+        "properties": {
+          "type": "object",
+          "description": "Mapa de nombre del parametro a su sub-schema (type, description, enum, etc.)."
+        },
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Lista de nombres de parametros required. Cada uno debe existir en properties."
+        },
+        "additionalProperties": {
+          "description": "Recomendado false (no extras). Algunos providers son permisivos."
+        }
+      }
+    },
+    "handler": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "Nombre del metodo del modulo que implementa la tool. El framework lo invoca via this[handler](args). Ej: 'handleExtractPdf', 'crearRegla', 'toolGenerate'. NO incluye parentesis ni argumentos."
+    },
+    "errores_conocidos": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]*$",
+        "description": "Codigo canonico del catalogo errors.contract.json en UPPER_SNAKE_CASE."
+      },
+      "uniqueItems": true,
+      "description": "Codigos que el handler PUEDE emitir bajo sus condiciones de error normales. Refleja la realidad del codigo. Si el handler nunca emite error, puede estar vacio o ausente."
+    },
+    "response_schema_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path opcional a un JSON Schema que valida el shape de data en exito (mas alla del shape canonico {status, data}). Ej: 'arquitectura/decisiones/_schemas/tarifas/tarifa.schema.json'."
+    },
+    "returns_description": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "Descripcion opcional del shape de data en exito. Legible para el LLM. Util cuando el data tiene shape no obvio."
+    }
+  }
+}

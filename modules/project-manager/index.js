@@ -30,6 +30,7 @@ class ProjectManagerModule {
     this.activeProjectIds = new Set();
     this.pendingDbRequests = new Map();
     this.pendingCompositionRequests = new Map();
+    this.pendingDefaultConversations = new Map();
     this.projectsBasePath = path.join(process.cwd(), 'data', 'projects');
   }
 
@@ -692,12 +693,13 @@ class ProjectManagerModule {
   // y la crea via mqttRequest a chat-io si todavia no existe.
   // ============================================================
   async getOrCreateDefaultConversation(projectId, correlationId) {
-    const project = this.projects.get(projectId);
+    const project = this.getProject(projectId);
     if (!project) {
       const err = new Error(`Project not found: ${projectId}`);
       err.code = 'NOT_FOUND';
       throw err;
     }
+    const realId = project.id;
     if (project.last_conversation_id) {
       return { conversation_id: project.last_conversation_id, created: false };
     }
@@ -706,26 +708,35 @@ class ProjectManagerModule {
       err.code = 'INTERNAL_ERROR';
       throw err;
     }
-    try {
-      const result = await this.mqttRequest('chat-io', 'create', {
-        project_id: projectId,
-        title: `Actividad del sistema — ${project.name}`
-      }, { timeout_ms: 5000 });
-      const conversation_id = result?.conversation_id || result?.conversation?.id;
-      if (!conversation_id) {
-        throw new Error('chat-io.create no devolvio conversation_id');
-      }
-      await this.setLastConversation(projectId, conversation_id, correlationId);
-      this.logger.info('project-manager.default_conversation.created', {
-        project_id: projectId, conversation_id
-      });
-      return { conversation_id, created: true };
-    } catch (err) {
-      this.logger.error('project-manager.default_conversation.failed', {
-        project_id: projectId, error: err.message
-      });
-      throw err;
+    if (this.pendingDefaultConversations.has(realId)) {
+      return await this.pendingDefaultConversations.get(realId);
     }
+    const promise = (async () => {
+      try {
+        const result = await this.mqttRequest('chat-io', 'create', {
+          project_id: realId,
+          title: `Actividad del sistema — ${project.name}`
+        }, { timeout_ms: 5000 });
+        const conversation_id = result?.conversation_id || result?.conversation?.id;
+        if (!conversation_id) {
+          throw new Error('chat-io.create no devolvio conversation_id');
+        }
+        await this.setLastConversation(realId, conversation_id, correlationId);
+        this.logger.info('project-manager.default_conversation.created', {
+          project_id: realId, conversation_id
+        });
+        return { conversation_id, created: true };
+      } catch (err) {
+        this.logger.error('project-manager.default_conversation.failed', {
+          project_id: realId, error: err.message
+        });
+        throw err;
+      } finally {
+        this.pendingDefaultConversations.delete(realId);
+      }
+    })();
+    this.pendingDefaultConversations.set(realId, promise);
+    return await promise;
   }
 
   async handleUIGetDefaultConversation(data) {

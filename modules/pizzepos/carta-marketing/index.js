@@ -200,9 +200,10 @@ class CartaMarketingModule {
       necesidades: necesidades.map(n => n.tipo)
     });
 
-    // Dispatch agentes según necesidades
+    // Dispatch agentes según necesidades — propaga correlation_id del evento entrante
+    const sourceCorrelationId = data?.correlation_id || null;
     for (const necesidad of necesidades) {
-      await this.dispatchAgente(necesidad, cartaId, projectId, perfil);
+      await this.dispatchAgente(necesidad, cartaId, projectId, perfil, sourceCorrelationId);
     }
 
     // Marcar como procesado DESPUÉS de dispatch (el agente guardará con carta.save
@@ -257,9 +258,9 @@ class CartaMarketingModule {
   // Dispatch de agentes
   // ==========================================
 
-  async dispatchAgente(necesidad, cartaId, projectId, perfil) {
+  async dispatchAgente(necesidad, cartaId, projectId, perfil, sourceCorrelationId = null) {
     await this.eventBus.publish('agent.execute.request', {
-      correlation_id: crypto.randomUUID(),
+      correlation_id: sourceCorrelationId || crypto.randomUUID(),
       request_id: crypto.randomUUID(),
       user_id: 'system',
       agent_name: necesidad.agente,

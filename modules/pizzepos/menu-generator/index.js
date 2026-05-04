@@ -58,7 +58,7 @@ class MenuGeneratorModule {
   // Tool — el único: generar
   // ==========================================
 
-  async toolGenerate({ nombre, texto, filePath, project_id }) {
+  async toolGenerate({ nombre, texto, filePath, project_id, correlation_id }) {
     if (!nombre) {
       return {
         status: 400,
@@ -108,7 +108,7 @@ class MenuGeneratorModule {
     });
 
     await this.eventBus.publish('agent.execute.request', {
-      correlation_id: crypto.randomUUID(),
+      correlation_id: correlation_id || crypto.randomUUID(),
       request_id: crypto.randomUUID(),
       user_id: 'system',
       agent_name: 'menu-structurer',
@@ -308,7 +308,7 @@ class MenuGeneratorModule {
     const data = event.data || event.payload || event;
     const { project_id, nombre, filePath, texto, request_id, correlation_id } = data;
     try {
-      const result = await this.toolGenerate({ project_id, nombre, filePath, texto });
+      const result = await this.toolGenerate({ project_id, nombre, filePath, texto, correlation_id });
       if (result.error) {
         await this.eventBus.publish('carta.generar.fallida', {
           request_id, correlation_id, project_id, nombre,

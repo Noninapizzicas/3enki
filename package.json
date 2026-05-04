@@ -24,6 +24,8 @@
     "test:ai-gateway-chat": "node tests/unit/ai-gateway-chat.test.js",
     "test:memory-user-profile": "node tests/unit/memory-user-profile.test.js",
     "test:memory-conversation-summary": "node tests/unit/memory-conversation-summary.test.js",
+    "test:memory-rag": "node tests/unit/memory-rag.test.js",
+    "test:ai-gateway-embedding": "node tests/unit/ai-gateway-embedding.test.js",
     "test:agent-observer": "node tests/unit/agent-observer.test.js",
     "test:ai-agent-framework": "node tests/unit/ai-agent-framework.test.js",
     "test:mqtt-request": "node tests/unit/mqtt-request.test.js",

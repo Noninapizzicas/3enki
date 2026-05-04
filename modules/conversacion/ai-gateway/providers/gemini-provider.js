@@ -363,6 +363,54 @@ class GeminiProvider extends BaseProvider {
       );
     });
   }
+
+  /**
+   * Generate embedding for a text input via Gemini embedContent API.
+   * Endpoint: POST /models/{model}:embedContent
+   * Body:    { model: "models/{model}", content: { parts: [{ text }] } }
+   * Returns: { vector, model, dimensions, tokens: { input } }
+   */
+  async generateEmbedding(text, options = {}) {
+    if (!await this.isAvailable()) {
+      throw new Error('Gemini provider not available (check API key)');
+    }
+    if (typeof text !== 'string' || text.length === 0) {
+      throw new Error('generateEmbedding requires non-empty string');
+    }
+
+    const model = options.model || 'embedding-001';
+    const endpoint = `/models/${model}:embedContent`;
+    const headers = { 'x-goog-api-key': this.apiKey };
+    const body = {
+      model: `models/${model}`,
+      content: { parts: [{ text }] }
+    };
+
+    this.logger.info('gemini.embedding.request', {
+      model, length: text.length
+    });
+
+    const response = await this.withRetry(
+      () => this.makeRequest('POST', endpoint, body, headers),
+      options.retryConfig || {}
+    );
+
+    const vector = response?.embedding?.values;
+    if (!Array.isArray(vector) || vector.length === 0) {
+      throw new Error('gemini embedding response missing values');
+    }
+
+    return {
+      vector,
+      model,
+      dimensions: vector.length,
+      tokens: { input: this.countTokens(text) }
+    };
+  }
+
+  supportsEmbeddings() {
+    return true;
+  }
 }
 
 module.exports = GeminiProvider;

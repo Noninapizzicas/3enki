@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/embedding-flow/embedding.generate.response.schema.json",
+  "title": "embedding.generate.response",
+  "description": "Cierre exitoso de embedding.generate.request. Publicado por ai-gateway con el vector resultante. El caller correlaciona por request_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["correlation_id", "request_id", "vector", "model", "provider", "duration_ms", "timestamp"],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "request_id": { "$ref": "_common.schema.json#/$defs/request_id" },
+    "vector": { "$ref": "_common.schema.json#/$defs/vector" },
+    "dimensions": { "$ref": "_common.schema.json#/$defs/dimensions" },
+    "model": { "$ref": "_common.schema.json#/$defs/model" },
+    "provider": { "$ref": "_common.schema.json#/$defs/provider" },
+    "tokens": { "$ref": "_common.schema.json#/$defs/tokens" },
+    "duration_ms": { "$ref": "_common.schema.json#/$defs/duration_ms" },
+    "timestamp": { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

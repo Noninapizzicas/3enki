@@ -558,7 +558,7 @@ class AiGatewayModule {
     let code = 'INTERNAL_ERROR';
     if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) {
       code = 'CREDENTIAL_NOT_FOUND';
-    } else if (/no hay providers? disponibles?|no providers available/i.test(raw)) {
+    } else if (/no hay providers?.*disponibles?|no providers? available/i.test(raw)) {
       code = 'CREDENTIAL_NOT_FOUND';
     } else if (lower.includes('timeout') || lower.includes('etimedout')) {
       code = 'UPSTREAM_TIMEOUT';
@@ -604,6 +604,105 @@ class AiGatewayModule {
       success: !error,
       ...(error ? { error } : { ...result })
     });
+  }
+
+  // ============================================================
+  // Entry 3: embedding.generate.request → embedding.generate.response | failed
+  // ============================================================
+
+  async onEmbeddingGenerateRequest(event) {
+    const data = event.data || event;
+    const {
+      correlation_id, request_id, project_id, user_id, content,
+      settings, source
+    } = data;
+
+    if (!correlation_id || !request_id || !project_id || !content) {
+      this.logger.warn('ai-gateway.embedding.invalid_payload', {
+        has_correlation: !!correlation_id, has_request: !!request_id,
+        has_project: !!project_id, has_content: !!content
+      });
+      return;
+    }
+
+    const start = Date.now();
+    const desiredProvider = settings?.provider;
+    let providerInstance = null;
+    let providerName = null;
+
+    try {
+      const selected = await this._selectEmbeddingProvider(desiredProvider, project_id);
+      providerInstance = selected.provider;
+      providerName = selected.name;
+      providerInstance.setContext({ projectId: project_id });
+
+      const opts = {
+        model: settings?.model,
+        dimensions: settings?.dimensions
+      };
+      const result = await providerInstance.generateEmbedding(content, opts);
+
+      const duration_ms = Date.now() - start;
+      this.logger.info('ai-gateway.embedding.completed', {
+        provider: providerName, model: result.model,
+        dimensions: result.dimensions, duration_ms,
+        source: source || 'unknown'
+      });
+
+      await this.eventBus.publish('embedding.generate.response', {
+        correlation_id,
+        request_id,
+        vector: result.vector,
+        dimensions: result.dimensions,
+        model: result.model,
+        provider: providerName,
+        tokens: result.tokens || { input: 0 },
+        duration_ms,
+        timestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      const duration_ms = Date.now() - start;
+      const classified = this._classifyError(err);
+      this.logger.error('ai-gateway.embedding.failed', {
+        error: err.message, code: classified.code, request_id,
+        provider_attempted: providerName, duration_ms
+      });
+
+      await this.eventBus.publish('embedding.generate.failed', {
+        correlation_id,
+        request_id,
+        error: { code: classified.code, message: classified.message },
+        ...(providerName ? { provider_attempted: providerName } : {}),
+        ...(settings?.model ? { model_attempted: settings.model } : {}),
+        duration_ms,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
+  /**
+   * Selecciona provider para embeddings. A diferencia de _selectProvider (LLM),
+   * filtra por providers que SOPORTAN embeddings (gemini, openai). Si el caller
+   * pide explicitamente uno que no soporta o no esta disponible, lanza con
+   * mensaje claro. Si no pide ninguno, prefiere por priority entre los que
+   * soportan embeddings.
+   */
+  async _selectEmbeddingProvider(requestedName, projectId) {
+    if (requestedName && requestedName !== 'auto') {
+      const p = this.providers.get(requestedName);
+      if (!p) throw new Error(`Provider '${requestedName}' no disponible`);
+      if (!p.supportsEmbeddings()) throw new Error(`Provider '${requestedName}' no soporta embeddings`);
+      if (!await p.isAvailable({ projectId })) throw new Error(`Provider '${requestedName}' sin credencial`);
+      return { name: requestedName, provider: p };
+    }
+    const candidates = Array.from(this.providers.entries())
+      .filter(([, p]) => p.supportsEmbeddings())
+      .map(([name, p]) => ({ name, provider: p, priority: this.config.providers?.[name]?.priority || 99 }))
+      .sort((a, b) => a.priority - b.priority);
+    for (const e of candidates) {
+      if (await e.provider.isAvailable({ projectId })) return { name: e.name, provider: e.provider };
+    }
+    throw new Error('No hay providers de embeddings disponibles. Verifica las API keys (gemini, openai).');
   }
 }
 

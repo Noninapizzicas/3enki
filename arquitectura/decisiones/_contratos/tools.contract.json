@@ -1,0 +1,384 @@
+{
+  "_doc": "Captura LA disciplina de declaracion de tools del sistema event-core: qué es una tool, qué la diferencia de un agente, cómo se declara en module.json, qué shape tiene su handler, qué codigos canonicos puede emitir. Una TOOL es una CAPACIDAD CONCRETA del LLM: una funcion bien definida con parametros estructurados, ejecucion deterministica (o casi-deterministica como una llamada HTTP), y resultado canonico. Es lo que el LLM PIDE EXPLICITAMENTE en su agentic loop: 'invoca pdf.extract con file_path=X', 'invoca tarifas.assign con producto_id=Y'. Una tool NO razona — solo ejecuta lo que el caller le pide. Si necesita razonar, es agente, no tool.\n\nSin un contrato de tools, cada modulo declara sus tools de forma distinta: algunos con name kebab-case, otros camelCase, algunos con parameters JSON Schema, otros con descripcion textual de los args; algunos handlers devuelven {status, data}, otros devuelven directamente el valor, otros lanzan excepciones; algunos declaran errores_conocidos, otros omiten el campo. El LLM recibe estas tools via ai-gateway que las pasa a la API del provider — la inconsistencia se traduce en confusion del LLM, fallos al ejecutar, y degradacion del agentic loop. Con el contrato hay UN shape canonico, validable mecanicamente, que cualquier modulo del sistema cumple para que sus tools sean enchufables al compañero sin friccion.",
+  "id": "tools",
+  "version": "1.0.0",
+  "creada": "2026-05-04",
+  "supersedes_nota": "Primera version. Recoge las practicas que ya existen implementadas en modulos como carta-scheduler (tools crear_regla / eliminar_regla / detectar_conflictos / confirmar / rechazar — todas con shape canonico response { status, data | error }), tarifas (tools assign / unassign), pdf-extractor (tool pdf.extract), credential-manager (tool credential.resolve). Eleva a contrato transversal autonomo con criterios canonicos (kebab-case prefijado, parameters JSON Schema 2020-12, handler obligatorio, errores_conocidos del catalogo errors.contract, retorno canonico). Habilita auditoria mecanica de los 66 modulos del sistema durante el horizontal de migracion: cada tool de cada modulo se valida contra el contrato y los drifts quedan en baseline.",
+
+  "objetivo": "Producir UN JSON output (_outputs/tools.json) que define: shape canonico de cada entry de module.json.tools[] (name, description, parameters, handler, errores_conocidos), shape canonico del retorno del handler (success: { status: 200|201|202, data } | error: { status: 4xx|5xx, error: { code, message, details } }), reglas de naming (kebab-case, prefijo del modulo, ej: 'pdf.extract' no 'extractPdf'), patterns aceptados (handler async que devuelve shape canonico, parameters JSON Schema validable AJV), patterns prohibidos (tool que llama a otro modulo via moduleLoader.getModule, tool que lanza excepciones en lugar de devolver { error }, tool con name camelCase, tool sin errores_conocidos cuando el handler claramente puede fallar). Producir DOS JSON Schemas (tool.declaration y tool.response) que validan respectivamente cada entry de tools[] en module.json y cada respuesta del handler en runtime. Validable mecanicamente cruzando contra el codigo y contra las auditorias modulo-completo.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/tools.contract.json (este archivo)",
+      "arquitectura/decisiones/_outputs/errors.json (catalogo de codigos canonicos para errores_conocidos)",
+      "arquitectura/decisiones/_outputs/naming.json (convencion de naming: prefijo del modulo, kebab-case, idioma)",
+      "arquitectura/decisiones/_outputs/glossary.json (formas canonicas de las entidades cross-modulo)",
+      "arquitectura/decisiones/_contratos/companero-viaje.contract.json (tipo canonico 'tool' del modelo del compañero)"
+    ],
+    "obligatorios_si_existen": [
+      "arquitectura/auditoria/_outputs/modulo-completo/*.json (audits de modulos para detectar tools sin shape canonico)"
+    ],
+    "opcionales_para_contexto": [
+      "modules/pizzepos/carta-scheduler/index.js (referencia de tools al ancho canonico)",
+      "modules/credential-manager/index.js (tool credential.resolve canonico)",
+      "modules/conversacion/ai-gateway/index.js (consumidor de tools en agentic loop, conoce el shape esperado)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "UNA TOOL ES UNA FUNCION, NO UN ACTOR. La tool ejecuta lo que se le pide y devuelve resultado. No decide, no razona, no espera, no orquesta. Si una pieza necesita razonar, es agente; si necesita orquestar, es modulo del dominio. Una tool 'pdf.extract' recibe file_path y devuelve text — no decide qué hacer con el texto.",
+
+    "EL LLM ES EL CALLER, NO EL DESARROLLADOR. Una tool se diseña para que el LLM la invoque dentro de su agentic loop. Esto cambia decisiones: name autoexplicativo (no 'execTool42'), description en lenguaje natural (no jerga de codigo), parameters con JSON Schema que el LLM puede leer y respetar, errors con mensajes que el LLM entienda y pueda manejar (intentar otra tool, pedir clarificacion al usuario).",
+
+    "PREFIJO DE MODULO ES OBLIGATORIO. Cada tool lleva prefijo del modulo que la registra: 'pdf.extract' (modulo pdf-extractor), 'tarifas.assign' (modulo tarifas), 'carta-scheduler.crear_regla'. Sin prefijo, dos modulos podrian declarar la misma name y el LLM no sabria a quien va. El prefijo es disambiguacion canonica.",
+
+    "PARAMETERS ES JSON SCHEMA, NO COMENTARIO. Los parametros de la tool se declaran como JSON Schema 2020-12 valido (type, properties, required). NO como string descriptivo ni como ejemplo informal. ai-gateway pasa este schema al provider (OpenAI/Gemini/Anthropic) que lo usa para forzar al LLM a generar args bien tipados. Sin schema valido, el LLM alucina argumentos.",
+
+    "DESCRIPTION ESTA EN EL IDIOMA DEL MODULO. Si module.json.language es 'es', description en español. Si 'en', en ingles. Coherencia con naming.contract: los modulos en español usan verbos canonicos español; las descriptions de sus tools tambien.",
+
+    "RETORNO CANONICO O DRIFT. Toda tool devuelve { status, data } (exito) o { status, error: { code, message } } (error). status es codigo HTTP-style (200/201/202/400/404/409/500/etc.). Sin este shape, los consumidores (ai-gateway agentic loop, otros modulos via mqttRequest) tienen que hacer adivinacion sobre el resultado.",
+
+    "ERRORES_CONOCIDOS DOCUMENTA EL CONTRATO. Cada tool declara en module.json los codigos canonicos que su handler PUEDE emitir. Cuando un caller lee tools[].errores_conocidos sabe que esperar — no es sorpresa. Si la tool emite un codigo no declarado, drift de auditoria.",
+
+    "HANDLER ES UNA REFERENCIA, NO INLINE. La declaracion de la tool en module.json apunta a un metodo del modulo (handler: 'handleExtractPdf'). El metodo vive en el index.js del modulo. Inlining funcion en module.json es drift — module.json es declarativo, no codigo.",
+
+    "TOOLS SE COMPONEN, NO SE ANIDAN. Una tool puede llamar a otras tools del SISTEMA via mqttRequest. NO via require ni acceso directo. La composicion va por el bus, no por la pila de llamadas.",
+
+    "DETERMINISMO ES PREFERIBLE PERO NO OBLIGATORIO. Una tool ideal es deterministica (mismos args → mismo resultado). En la practica muchas son casi-deterministicas (llamada HTTP que puede fallar, timestamp en respuesta). Lo importante es que NO sea aleatoria por diseño. Si necesita aleatoriedad, declarararlo en description ('genera un id aleatorio').",
+
+    "TOOL NO MANTIENE ESTADO PROPIO. La tool no recuerda invocaciones anteriores. Cada invocacion es independiente. Si necesita estado (cache, contador), ese estado vive en el modulo que la registra (this.cache, this.counter), no en la tool en si.",
+
+    "ASINCRONIA OBLIGATORIA. Toda tool es async. Aun si la operacion es CPU-bound (calculo numerico), el handler es async. Esto permite a ai-gateway gestionar timeouts, paralelismo, cancelacion uniformemente.",
+
+    "TIMEOUT POR TOOL HEREDA DEL MODULO. Cada modulo declara su tool_timeout_ms en config (default 30000ms). Si la tool excede, ai-gateway corta y la trata como error UPSTREAM_TIMEOUT o INTERNAL_ERROR (segun naturaleza). El handler NO es responsable del timeout — el caller (ai-gateway) lo es.",
+
+    "OBSERVABILIDAD ES OBLIGATORIA. Cada invocacion de tool emite metric con labels { tool_name, modulo, project_id?, status_class }. Sin esto, no se puede saber qué tools se usan, cuanto tardan, cuantas fallan. observability.contract aplica."
+  ],
+
+  "principios": [
+    {
+      "id": "name_kebab_case_prefijo_modulo",
+      "regla": "Toda tool name cumple <module-prefix>.<entity>(.verb)? en kebab-case. Ej: 'pdf.extract', 'tarifas.assign', 'carta-scheduler.crear_regla', 'credential.resolve'. NO camelCase, NO snake_case dentro del name (snake_case dentro de prefix esta OK como en 'crear_regla' tras kebab-case del modulo).",
+      "razon": "Sin prefijo dos modulos colisionan en name; sin kebab-case el LLM las confunde con nombres de variables JS; consistencia cross-modulo simplifica que el LLM aprenda el patron y lo respete al invocar."
+    },
+    {
+      "id": "description_legible_para_llm",
+      "regla": "description es una frase corta legible (8-30 palabras tipicamente), en idioma del modulo, que explica QUE hace la tool y CUANDO se usa. NO incluye jerga de codigo, NO empieza con 'This function...', NO incluye ejemplos. Idealmente menciona los parametros principales en lenguaje natural.",
+      "razon": "El LLM lee esta descripcion para decidir si invocar la tool. Si es opaca, el LLM la ignora; si es ambigua, el LLM la usa para casos equivocados. Frase corta y clara orienta correctamente."
+    },
+    {
+      "id": "parameters_es_json_schema_2020_12_valido",
+      "regla": "tool.parameters es un JSON Schema 2020-12 estrictamente valido: { type: 'object', properties: { ... }, required: [...] }. additionalProperties: false recomendado. Cada propiedad declara type + description + enum si aplica.",
+      "razon": "ai-gateway pasa este schema al provider (OpenAI tool calling, Gemini function calling) que lo usa internamente para forzar al LLM a generar args coherentes. Schema invalido se ignora o causa errores en runtime del agentic loop."
+    },
+    {
+      "id": "handler_referencia_metodo_no_funcion_inline",
+      "regla": "tool.handler es el NOMBRE (string) de un metodo del modulo. Ej: 'handleExtractPdf', 'crearRegla'. El framework de carga (ai-gateway o moduleLoader) lo invoca via this[handlerName](args). NO se inlining funciones en module.json (que es JSON, no JS).",
+      "razon": "module.json es declarativo. Inlining funcion rompe la separacion declaracion vs ejecucion. Tambien dificulta tests: el handler es invocable directamente con this.X(args)."
+    },
+    {
+      "id": "retorno_canonico_status_data_o_status_error",
+      "regla": "Handler async devuelve { status: number, data: any } en exito, { status: number, error: { code: string, message: string, details?: object } } en error. status es codigo HTTP-style. NUNCA lanza (excepto bugs criticos).",
+      "razon": "Shape canonico evita adivinacion en el caller. Lanzar excepciones rompe el agentic loop del LLM (queda sin response a su tool_call). Code en error.code permite mapeo a mensaje legible cross-modulo."
+    },
+    {
+      "id": "error_code_del_catalogo_errors_contract",
+      "regla": "error.code es un codigo canonico del catalogo errors.contract.json (RESOURCE_NOT_FOUND, VALIDATION_FAILED, AUTHORIZATION_REQUIRED, INTERNAL_ERROR, UPSTREAM_*, etc.). NO se inventan codigos locales por modulo.",
+      "razon": "Catalogo cerrado permite que ai-gateway mapee errores a respuesta del LLM uniformemente. Codigos inventados rompen ese mapeo."
+    },
+    {
+      "id": "errores_conocidos_documenta_lo_que_handler_emite",
+      "regla": "tools[].errores_conocidos es un array de codigos canonicos que el handler PUEDE emitir bajo sus condiciones de error normales. Refleja la realidad — si el handler emite un codigo NO listado, drift de auditoria. Si lista codigos que NUNCA emite, drift tambien.",
+      "razon": "Sin errores_conocidos, el caller (ai-gateway, otro modulo) no sabe qué errores manejar. La auditoria modulo-completo cruza este campo con el codigo real."
+    },
+    {
+      "id": "tool_no_acceso_directo_a_otros_modulos",
+      "regla": "Si un handler de tool necesita acceder a otro modulo, lo hace via mqttRequest o publish/subscribe — NUNCA via this.moduleLoader.getModule(slug).instance.X(...). Esta es la regla event-core aplicada a tools.",
+      "razon": "Acceso directo crea acoplamiento que rompe modularidad infinita. Si la tool 'invoice.persist' necesita database-manager, publica db.query.request y se suscribe a db.query.response — no llama a database-manager.handleQuery directamente."
+    },
+    {
+      "id": "tool_async_y_acotada_por_timeout",
+      "regla": "Todo handler de tool es async. ai-gateway lo invoca con tool_timeout_ms (default 30000ms en ai-gateway.config.tool_timeout_ms, override por modulo en module.json.config.tool_timeout_ms). Si excede, ai-gateway aborta y traduce a error.",
+      "razon": "Sincronia bloquea el agentic loop entero. Sin timeout, una tool colgada bloquea al LLM indefinidamente. Async + timeout es la combinacion canonica."
+    },
+    {
+      "id": "tool_emite_metric_y_log_canonicos",
+      "regla": "Cada handler envuelve su logica en try/catch que en exito incrementa metric '<modulo>.<tool>.success' y loguea info; en error incrementa '<modulo>.<tool>.errors' con labels {error_code} y loguea error.",
+      "razon": "observability.contract aplica. Sin estos hooks, el coste/latencia/fallos por tool es invisible y triaje en produccion es ciego."
+    },
+    {
+      "id": "tool_id_unico_cross_repo",
+      "regla": "Dos modulos del repo NO declaran dos tools con el mismo name. Aunque tecnicamente pueda funcionar (cada modulo invoca el suyo), el LLM se confunde si recibe el mismo name dos veces en su tool list. El validator detecta colisiones y flagea drift.",
+      "razon": "Disambiguacion absoluta. La unica tool 'pdf.extract' es la del modulo pdf-extractor, no puede haber otra. Si un segundo modulo necesita extraer PDF, llama a pdf.extract via tool composition o invoca pdf-extractor via mqttRequest."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "tools_inline_en_module_json_no_archivos_separados",
+      "decision": "Las tools se declaran INLINE en module.json.tools[] como array de objetos. NO en archivos tools/<name>.json separados.",
+      "razon": "Cohesion: el modulo y sus tools van juntos. Si el modulo se elimina, sus tools desaparecen automaticamente. Archivos separados crean archivos huerfanos cuando se borra un modulo. Excepcion: agentes (que TAMBIEN se podrian declarar inline) viven en agents/<name>.json porque son configuracion + prompt en lenguaje natural — distinto caso."
+    },
+    {
+      "id": "handler_string_no_funcion",
+      "decision": "tool.handler es el string del nombre del metodo del modulo. El framework lo invoca via this[name](args).",
+      "razon": "JSON no admite funciones. Si quisieramos funcion inline, deberiamos parsear strings con eval (inseguro y opaco). String + lookup runtime es estandar y testable."
+    },
+    {
+      "id": "args_validacion_en_handler_no_en_framework",
+      "decision": "ai-gateway pasa al handler los args ya validados contra parameters JSON Schema (gracias a la API del provider). PERO el handler valida defensivamente igual: cada parametro requerido se chequea, y si falla devuelve { status: 400, error: { code: 'VALIDATION_FAILED', ... } }.",
+      "razon": "Defense in depth. Si el LLM hace tool call directo sin pasar por el provider (raro pero posible en agentes con tool calls custom), la validacion del schema no aplica. El handler debe ser robusto."
+    },
+    {
+      "id": "retorno_status_HTTP_style_no_enum_propio",
+      "decision": "El campo 'status' del retorno es codigo HTTP-style (200, 201, 202, 400, 404, 409, 500, 503). NO un enum custom (ok|fail|partial). NO un boolean.",
+      "razon": "Conocido cross-industria, mapeable a apis HTTP, mapeable a UI (toast verde 2xx, amarillo 4xx, rojo 5xx). Enums custom obligan a documentacion local; HTTP-style esta autoexplicado."
+    },
+    {
+      "id": "errors_estructurado_no_string",
+      "decision": "El campo 'error' del retorno (en caso de error) es OBJETO { code, message, details? }. NO string suelto. NO array de errores (un solo error por respuesta).",
+      "razon": "Estructurado permite mapeo automatico (code → mensaje legible al usuario). String pierde el codigo. Array obliga a logica de 'cual mostrar' que no aporta valor en una unica invocacion de tool."
+    },
+    {
+      "id": "tools_no_versionadas_individualmente",
+      "decision": "Las tools NO llevan version propia (ej: 'pdf.extract.v2'). Versionado va con el modulo (module.version). Si una tool cambia incompatiblemente, el modulo sube version major y los callers deciden si actualizar.",
+      "razon": "Versionado por tool fragmenta. Versionado por modulo es la unidad de despliegue real (un modulo se carga entero o no). Si necesitas dos comportamientos coexistentes, son dos modulos distintos."
+    },
+    {
+      "id": "tool_invoke_agent_es_meta_tool_del_sistema",
+      "decision": "La tool 'invoke_agent' la registra ai-gateway en runtime (no en module.json) y permite al LLM principal invocar agentes especialistas. Es la UNICA meta-tool del sistema con permisos especiales (acceso al framework de agentes).",
+      "razon": "Sin meta-tool, el LLM no podria invocar agentes — habria que hardcodear logica. Con la meta-tool, el LLM decide cuando invocar especialistas via su agentic loop natural. La excepcion al patron de 'tool en module.json' esta justificada y unica."
+    },
+    {
+      "id": "parameters_open_o_strict_decision_por_modulo",
+      "decision": "additionalProperties:false en parameters es RECOMENDADO pero no obligatorio. Algunos providers (Anthropic) toleran args extras; otros (Gemini con strict mode) los rechazan. El modulo decide segun a quien apunta.",
+      "razon": "Forzar additionalProperties:false rompe compatibilidad con providers permisivos. Dejarlo siempre abierto pierde robustez. Decision por tool segun caso."
+    },
+    {
+      "id": "errores_conocidos_obligatorio_si_handler_devuelve_error",
+      "decision": "Si el handler tiene cualquier path que devuelve error, errores_conocidos[] DEBE estar presente y NO vacio. Si la tool es 'pure' (siempre exito, nunca error), errores_conocidos puede estar vacio o ausente.",
+      "razon": "Documentacion de contrato: el caller necesita saber que errores esperar. Una tool que jamas falla es excepcional pero existe (ej: utility de calculo determinista que valida args en handler con result garantizado)."
+    },
+    {
+      "id": "naming_idioma_propaga_del_modulo",
+      "decision": "El idioma de tool name + description hereda de module.json.language. Modulo en español tiene tools 'crear_regla', 'eliminar_regla' (verbos canonicos español del naming.contract). Modulo en ingles tiene 'create_rule', 'delete_rule'.",
+      "razon": "Coherencia entre naming.contract (eventos, modulos, tools en idioma del modulo) y glossary.contract (entidades cross-modulo en forma canonica del idioma)."
+    },
+    {
+      "id": "tools_contratuales_no_son_apis_http",
+      "decision": "tools[].handler NO es una ruta HTTP. Las tools del modulo y las apis HTTP del modulo (module.json.apis_http[]) son superficies DISTINTAS. Una tool se invoca por LLM via ai-gateway. Una api HTTP se invoca por cliente HTTP via http-gateway. Pueden compartir el handler subyacente del dominio, pero la declaracion es separada.",
+      "razon": "Mezclar ambas confunde: una api publica con autenticacion por header es muy distinta de una tool del LLM que se valida por shape de args. Declaracion separada permite politicas de seguridad/auth/rate-limit independientes."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "tool_que_lanza_excepcion_no_capturada",
+      "regla": "El handler de una tool NUNCA lanza una excepcion no capturada. Devuelve { status: 5xx, error: { code: 'INTERNAL_ERROR', ... } } incluso para errores 'imposibles' del codigo (bugs).",
+      "viola_garantias": ["no_silent_failures", "extensibilidad_sin_reescritura"],
+      "como_detectar": "Validator: cualquier handler de tool con un throw sin try/catch que envuelva ese path es drift. Tambien: handlers async que no devuelven nada en algun branch.",
+      "alternativa_correcta": "try { ...logica... return { status: 200, data: result }; } catch (err) { this.logger.error(...); this.metrics.increment(...); return { status: 500, error: { code: 'INTERNAL_ERROR', message: err.message } }; }"
+    },
+    {
+      "id": "tool_con_acceso_directo_a_otros_modulos",
+      "regla": "El handler de tool NO usa this.moduleLoader.getModule(slug).instance.X(...). Si necesita otro modulo, va por bus (publish/subscribe o mqttRequest).",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator events.context_injection.drift_indicators (ya existente) cubre este caso para cualquier metodo. Para tools especificamente, el cross-check sobre los handlers declarados en tools[].",
+      "alternativa_correcta": "await this.mqttRequest('peer-modulo', 'accion', payload, options) ó await this.eventBus.publish('peer.evento', data) si es fire-and-forget."
+    },
+    {
+      "id": "tool_con_name_camelCase_o_sin_prefijo",
+      "regla": "tool.name NO es 'extractPdf' ni 'pdf_extract' ni 'PdfExtract'. Es 'pdf.extract'. Y NO es 'extract' (sin prefijo).",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator: regex sobre tool.name. Falla si !/^[a-z0-9-]+\\.[a-z0-9_]+$/.test(name) (kebab-case con prefijo de modulo y entity en kebab o snake).",
+      "alternativa_correcta": "Renombrar a kebab-case con prefijo del modulo. Si el modulo tiene name compuesto (ej: 'carta-scheduler'), el prefijo lo refleja: 'carta-scheduler.crear_regla'."
+    },
+    {
+      "id": "tool_que_inventa_error_code",
+      "regla": "tool.errores_conocidos[] NO contiene codigos fuera del catalogo errors.contract.json. NO inventa codigos como 'PDF_BROKEN' (debe ser 'UPSTREAM_INVALID_RESPONSE' si viene de servicio externo, o 'VALIDATION_FAILED' si es input invalido, o 'INTERNAL_ERROR' si es bug interno).",
+      "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm"],
+      "como_detectar": "Validator: cargar lista de codigos canonicos de errors.json. Para cada tool.errores_conocidos[i], verificar que esta en la lista. Si no, drift.",
+      "alternativa_correcta": "Mapear el caso al codigo canonico mas cercano. Si genuinamente no encaja en ninguno, abrir el catalogo errors.contract para añadir un nuevo codigo (decision arquitectonica), NO inventar localmente."
+    },
+    {
+      "id": "tool_handler_que_devuelve_valor_pelado",
+      "regla": "Handler NO devuelve directamente el valor (ej: return 'extracted text'). Devuelve { status: 200, data: 'extracted text' }. Sin shape canonico, el caller (ai-gateway) tiene que detectar si es exito o error inspeccionando el tipo, lo que es fragil.",
+      "viola_garantias": ["no_silent_failures"],
+      "como_detectar": "Validator: AST analysis de los handlers. Si el return no es un object con propiedad 'status' o 'data' o 'error', drift.",
+      "alternativa_correcta": "return { status: 200, data: result }. Para ergonomia del codigo del modulo, helpers internos pueden devolver el valor pelado y el handler envuelve."
+    },
+    {
+      "id": "tool_que_modifica_global_state",
+      "regla": "Handler de tool NO modifica module.exports global, NO altera process.env, NO toca filesystem fuera del scope del modulo (storage/ del proyecto, etc.).",
+      "viola_garantias": ["aislamiento_entre_usuarios_y_proyectos"],
+      "como_detectar": "Code review + validator parcial: detectar process.env.X = ... o fs.writeFile fuera de patrones canonicos.",
+      "alternativa_correcta": "Si la tool necesita persistir, lo hace via db.query.request a database-manager (con project_id como filtro) o via fs.write.request a filesystem (con paths del proyecto)."
+    },
+    {
+      "id": "tool_con_parameters_no_validable",
+      "regla": "tool.parameters NO es un string descriptivo ('un object con file_path y options'), NO es un ejemplo informal ({ file_path: '/tmp/file.pdf' }). Es un JSON Schema 2020-12 valido.",
+      "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm"],
+      "como_detectar": "Validator: para cada tool.parameters, intentar compilar como JSON Schema con AJV. Si falla, drift.",
+      "alternativa_correcta": "Convertir a JSON Schema: { type: 'object', properties: { file_path: { type: 'string', description: 'Ruta absoluta al PDF' }, options: { type: 'object' } }, required: ['file_path'] }."
+    },
+    {
+      "id": "tool_handler_no_async",
+      "regla": "Handler de tool NO es funcion sincrona. Aunque la operacion sea trivial (calculo + return), debe ser async.",
+      "viola_garantias": ["no_silent_failures"],
+      "como_detectar": "Validator: AST. Si el handler declarado en tool.handler no esta marcado async, drift.",
+      "alternativa_correcta": "async <handlerName>(args) { ... }"
+    },
+    {
+      "id": "tool_que_invoca_LLM_directamente",
+      "regla": "Handler de tool NO llama directamente a una API de LLM (api.openai.com, api.anthropic.com, etc.). Si necesita razonamiento, es agente, no tool. Si necesita LLM para una sub-tarea acotada (ej: clasificar texto), publica llm.complete.request al bus.",
+      "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm", "costes_auditables"],
+      "como_detectar": "Validator http.intra_core_http_call ya cubre llamadas directas a APIs LLM desde modulos no ai-gateway. Cross-check adicional: si el handler de una tool publica llm.complete.request, considerarse 'tool con razonamiento embebido' — bandera info para revision (puede ser legitimo si esta acotado).",
+      "alternativa_correcta": "Si la tarea requiere razonamiento del LLM, expone un AGENTE en lugar de una tool. Si necesita una clasificacion sintetica acotada, publish('llm.complete.request', ...) y manejar response/failed."
+    },
+    {
+      "id": "dos_tools_con_mismo_name_en_repo",
+      "regla": "Dos modulos del repo NO declaran tools con el mismo name. El validator cruza module.json.tools[].name de todos los modulos y flagea colisiones.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator: scaneo de todos los module.json, build map name -> [modulos]. Si algun name tiene 2+ modulos, drift critico.",
+      "alternativa_correcta": "Renombrar una de las dos tools para reflejar su semantica especifica. Si genuinamente hacen lo mismo, consolidar en un solo modulo."
+    }
+  ],
+
+  "output_shape_resumen": "_outputs/tools.json contiene: { id: 'tools', version, schema_files: ['tool.declaration.schema.json', 'tool.response.schema.json'], total_tools_in_repo: N, tools_by_module: { <modulo>: [...names...] }, drifts_observed_baseline: { naming: N1, sin_errores_conocidos: N2, parameters_no_jsonschema: N3, ... }, modulos_alineados: [...], modulos_con_drift: [...] }. Snapshot del estado canonico del catalogo de tools del repo en el momento de regeneracion.",
+
+  "reglas_de_extraccion": [
+    "El validator scaneando los module.json del repo recoge cada entry de tools[] con su nombre, modulo donde vive, descripcion, parameters (compilado AJV), handler, errores_conocidos.",
+    "Cruza con el codigo del modulo (index.js, lib/, services/) para verificar que el handler existe como metodo, es async, devuelve shape canonico.",
+    "Cruza con auditoria modulo-completo donde aplique (errores_conocidos vs codigos emitidos en codigo).",
+    "El output _outputs/tools.json es snapshot del estado: tools alineadas, tools con drift, drift counts por tipo.",
+    "Si dos modulos colisionan en name, el output marca esos pares como drift critico."
+  ],
+
+  "derivaciones": [
+    {
+      "documento": "arquitectura/decisiones/_schemas/tools/tool.declaration.schema.json",
+      "rol": "Schema canonico de cada entry de module.json.tools[]. Required: name, description, parameters, handler. Opcionales: errores_conocidos, response_schema_ref, returns_description."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/tools/tool.response.schema.json",
+      "rol": "Schema canonico del retorno del handler en runtime. Ramas success ({status, data}) y error ({status, error: {code, message}}) con additionalProperties:false."
+    },
+    {
+      "documento": "arquitectura/decisiones/_validators/tools.validate.js",
+      "rol": "Compila los 2 schemas + cross-checks: naming canonico, errores_conocidos en catalogo errors, parameters JSON Schema valido, handler async existente, no acceso directo a otros modulos, colisiones de name cross-modulo."
+    },
+    {
+      "documento": "arquitectura/decisiones/_outputs/tools.json",
+      "rol": "Snapshot del catalogo de tools del repo, con conteo de drifts por tipo."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "tools_schemas_compile_ok",
+      "regla": "Los 2 schemas (tool.declaration + tool.response) compilan AJV strict 2020-12 con additionalProperties:false en todos los niveles.",
+      "como_detectar": "Compilacion AJV en arranque. Falla critica si no compilan.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_tool_name_sin_prefijo_de_modulo",
+      "regla": "tool.name cumple regex /^[a-z0-9-]+\\.[a-z0-9_]+$/ (prefijo del modulo en kebab + entity en kebab o snake).",
+      "como_detectar": "Para cada module.json.tools[], chequear regex sobre name. Drift si no cumple.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_tool_parameters_no_jsonschema_valido",
+      "regla": "tool.parameters compila como JSON Schema 2020-12 valido (intentar ajv.compile y capturar error).",
+      "como_detectar": "Para cada tools[].parameters, intentar ajv.compile(parameters). Si lanza, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_tool_sin_handler_o_handler_inexistente",
+      "regla": "tool.handler es string. El metodo nombrado existe en el modulo (en index.js o en lib/services/).",
+      "como_detectar": "Para cada tool, leer index.js del modulo. Buscar def del metodo (heuristica regex async <handler>(...) o <handler>: async (...) o <handler>(...) seguido de async). Drift si no encuentra.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_tool_handler_no_async",
+      "regla": "El handler declarado en tool.handler es funcion async (regex /async\\s+<handler>\\b/).",
+      "como_detectar": "Buscar la def del metodo en codigo. Si async ausente, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_tool_errores_conocidos_codigo_no_canonico",
+      "regla": "Cada codigo en tools[].errores_conocidos esta en el catalogo de codes_* de errors.json (codes_resource, codes_validation, codes_authorization, codes_business, codes_infrastructure, codes_internal).",
+      "como_detectar": "Cargar errors.json. Para cada code en tools[].errores_conocidos, verificar pertenencia. Drift si no.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_tool_errores_conocidos_vacio_pero_handler_devuelve_error",
+      "regla": "Si tools[].errores_conocidos es vacio o ausente, el handler NO debe tener returns con shape error en su codigo. Heuristica: regex /return\\s*\\{[^}]*error\\s*:/ dentro del handler.",
+      "como_detectar": "Para cada tool con errores_conocidos vacio, leer su handler en codigo. Si tiene returns con error, drift de auditoria (errores_conocidos NO documenta lo que el handler emite).",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_tool_handler_con_throw_no_capturado",
+      "regla": "Handler NO contiene throw fuera de try/catch. Si lanza, debe ser dentro de try cuyo catch devuelve { error }.",
+      "como_detectar": "AST analysis o regex robusta. Heuristica: contar throw lines vs try/catch envolvente. Severidad info por dificultad de deteccion fiable.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_tool_handler_acceso_directo_a_otros_modulos",
+      "regla": "Handler NO usa moduleLoader.getModule(slug).instance.X(...). Cross-check con events.context_injection.drift_indicators existente.",
+      "como_detectar": "Regex sobre el cuerpo del handler buscando moduleLoader.getModule.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_dos_modulos_con_misma_tool_name",
+      "regla": "Build map global name -> [modulos]. Si algun name tiene 2+ modulos, drift critico.",
+      "como_detectar": "Scaneo cross-repo. Si colision, listar las dos.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_tool_description_idioma_distinto_al_modulo",
+      "regla": "tools[].description esta en module.language (es o en). Heuristica: detectar palabras tipicas del otro idioma (ej: modulo en es con description que empieza por 'Calculate' o 'Returns').",
+      "como_detectar": "Heuristica lexica. Severidad info por margen de error.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_tool_invoca_llm_directamente",
+      "regla": "Handler de tool NO llama directamente a APIs LLM externas (api.openai.com, api.anthropic.com, generativelanguage.googleapis.com, api.groq.com, api.deepseek.com). Si necesita razonamiento, debe pasar por ai-gateway via llm.complete.request.",
+      "como_detectar": "Cross-check con http.contract.intra_core_http_call. Si el handler tiene esos hosts, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_tool_invoke_agent_declarada_en_module_json",
+      "regla": "La tool 'invoke_agent' es meta-tool registrada en runtime por ai-gateway. NUNCA aparece en module.json.tools[] de ningun modulo (ni siquiera ai-gateway). Si aparece, drift de duplicacion.",
+      "como_detectar": "Scaneo: ningun module.json.tools[].name === 'invoke_agent'. Drift si aparece.",
+      "severidad": "error"
+    }
+  ],
+
+  "salida_validador": "PASS si los 2 schemas compilan estructuralmente (AJV strict). Errores cross-system bloquean PASS — colisiones de name son ERROR (riesgo activo de confusion del LLM), invoke_agent declarada en module.json es ERROR (drift estructural). Warnings (drift_*) listados pero no bloquean — quedan en baseline. Info son heuristicas para revision manual. Formato coherente con chat-flow/agent-flow/llm-flow validators: banner PASS/FAIL + bloque cross-system con findings agrupados por severidad y ubicacion archivo:linea.",
+
+  "convenciones_complementarias": [
+    "naming.contract: tools[].name cumple <module-prefix>.<entity>(.verb)? en idioma del modulo. naming.json declara el prefijo de cada modulo (modulo 'pdf-extractor' tiene prefijo 'pdf'; modulo 'carta-scheduler' tiene prefijo 'carta-scheduler' o 'scheduler' segun glossary).",
+    "glossary.contract: las entidades en tool name (ej: 'pdf' en 'pdf.extract', 'carta' en 'carta-scheduler.crear_regla') usan la forma canonica del glossary del idioma del modulo. Sinonimos prohibidos.",
+    "events.contract: tools NO publican eventos directamente desde el handler — los eventos los publica el modulo en otros contextos (onLoad, listeners). Si una tool quiere notificar el resultado al bus tras ejecutarse, publica un evento canonico del dominio (ej: tool 'tarifas.assign' publica 'tarifas.actualizada').",
+    "errors.contract: tools[].errores_conocidos[] son codigos del catalogo cerrado. error.code en runtime tambien. Codigos inventados son drift.",
+    "lifecycle.contract: handlers de tools son invocados DESPUES de onLoad y ANTES de onUnload. Durante onUnload, ai-gateway debe terminar invocaciones en curso (timeout o cancelacion graceful).",
+    "observability.contract: cada invocacion de tool emite metric con labels {tool_name, modulo, project_id?, status_class, duration_ms} y log estructurado (info en exito, error en fallo). Sin esto, costes_auditables y triaje en produccion se rompen.",
+    "persistence.contract: si una tool persiste (DB, filesystem, cache), lo hace via db.query.request o fs.write.request al modulo correspondiente — NUNCA acceso directo. La tool no instancia su propio DB.",
+    "http.contract: si una tool llama a un upstream HTTP, cumple http.contract: timeout obligatorio, retry policy declarada, telemetria, redaccion de secretos en URL/headers, mapeo de errores externos a UPSTREAM_*.",
+    "chat-flow.contract: las tools no consumen eventos chat_flow directamente — el flujo del chat las invoca a traves de ai-gateway que las pasa al LLM como tool list. Las tools del modulo activo en el proyecto se filtran por project_id antes de pasar al LLM (responsabilidad de ai-gateway).",
+    "agent-flow.contract: los agentes USAN tools (un subset acotado declarado en agents/<n>.json.tools_disponibles[]). El validator de agent-flow cruza tools_disponibles con el catalogo de tools del repo — si un agente declara una tool que no existe, drift.",
+    "llm-flow.contract: cuando ai-gateway invoca al LLM con tools (en llm.complete.request.tools[]), el shape de cada tool en el array sigue el contrato openai/gemini function calling (name, description, parameters). ai-gateway adapta la declaracion canonica del repo (con campos como handler, errores_conocidos) al shape que el provider espera (sin esos campos extra).",
+    "frontend.contract: el frontend NO conoce las tools del repo directamente. El LLM las invoca dentro del agentic loop y el frontend solo ve las consecuencias (mensajes del compañero, eventos de dominio publicados por las tools). Si una tool genera un bloque inline (tool_invocation block del frontend.contract), el evento canonico que la representa contiene los campos que el frontend renderiza.",
+    "security.contract: tools.parameters NO declara campos para credenciales/secretos como input. Las credenciales viven en credential-manager y se resuelven via credential.resolve.request. Si una tool necesita autenticarse a un servicio externo, esa credencial vive en credential-manager NO en los args de la tool.",
+    "testing.contract: cada tool tiene test unitario que cubre: shape canonico de retorno (status, data | error), error paths (cada errores_conocidos[] mappeado a un test que lo dispara), parameters validation (handler defensivo aunque AJV en provider lo cubra), no acceso directo a otros modulos (mock del bus/mqttRequest).",
+    "multi-tenancy.contract: si la tool opera sobre datos por proyecto, parameters DEBE incluir project_id como required. Si project_id es ausente, error VALIDATION_FAILED. Tools globales del sistema (sin project_id) son excepciones documentadas.",
+    "documentation.contract: tools[].description es la unica documentacion canonica de la tool. NO se permiten archivos README.md por tool ni docs internos. Si la description no basta, refactorizar la tool en multiples mas simples.",
+    "versionado.contract: cambio en tool.parameters required = mayor (rompe callers). Cambio en parameters opcional o description = menor. Cambio en handler implementation con mismo shape = patch. Versionado se hereda del modulo, no por tool.",
+    "deployment.contract: tools son parte del modulo — deploy del modulo entero deploya sus tools. NO existe deploy parcial 'solo esta tool'.",
+    "module-loading.contract: tools se registran en moduleLoader.toolsRegistry durante onLoad. Si onLoad falla, las tools del modulo NO son invocables y ai-gateway las omite del tool list pasado al LLM.",
+    "bus-transport.contract: invocacion de tool via mqttRequest viaja por el bus principal MQTT. ai-gateway invoca tools del mismo proceso via referencia directa (this.toolsRegistry.get(name).handler) por performance — no via bus. La regla event-core de 'bus para cross-modulo' aplica: si la tool vive en otro modulo, la invocacion va por bus si ai-gateway esta en otro proceso (caso futuro multi-process).",
+    "scheduling.contract: tools pueden ser invocadas por scheduler (cron) tambien — el scheduler publica un evento que dispara la tool indirectamente, o invoca via mqttRequest si se conoce explicitamente. El correlation_id lo genera el scheduler.",
+    "resilience.contract: ai-gateway aplica timeout (config.tool_timeout_ms) y retry policy en la invocacion de tools — no es responsabilidad del handler. El handler asume que se le invoca una vez por tool_call del LLM y dentro de su timeout."
+  ]
+}

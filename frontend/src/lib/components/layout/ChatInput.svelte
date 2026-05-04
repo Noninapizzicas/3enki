@@ -11,11 +11,13 @@
 
   import { hasAttachments } from '$lib/stores/attachments';
   import { sendMessage, isStreaming, stopGeneration, agentWorking, agentWorkingName, agentWorkingStep } from '$lib/stores';
+  import { setupRequired } from '$lib/stores/contextStore';
 
   let inputValue = '';
   let textareaEl: HTMLTextAreaElement;
 
-  $: isBlocked = $isStreaming || $agentWorking;
+  $: needsSetup = $setupRequired !== null;
+  $: isBlocked = $isStreaming || $agentWorking || needsSetup;
   $: canSend = (inputValue.trim().length > 0 || $hasAttachments) && !isBlocked;
 
   async function handleSend() {
@@ -76,7 +78,8 @@
     bind:value={inputValue}
     on:keydown={handleKeydown}
     on:input={handleInput}
-    placeholder="Escribe un mensaje..."
+    placeholder={needsSetup ? 'Necesitas un proyecto y conversación activos' : 'Escribe un mensaje...'}
+    disabled={needsSetup}
     rows="1"
   ></textarea>
 

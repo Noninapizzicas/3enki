@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/embedding-flow/_common.schema.json",
+  "title": "embedding-flow common definitions",
+  "description": "Definiciones canonicas compartidas por los 3 schemas embedding_flow. Hereda los campos de companero-viaje.contract.json (campos_canonicos_de_payload) ajustados al sub-subsistema de generacion de embeddings.",
+
+  "$defs": {
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Hilo causal de la cadena de eventos. Generado por el originador, propagado SIN modificar."
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Id unico de un request especifico para correlacionar con su response."
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Proyecto activo. Imprescindible para que ai-gateway resuelva credencial del provider correcto por proyecto."
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifica al humano que origina la cadena. 'system' valido cuando el request lo dispara un modulo del dominio (ej. memory-rag indexando)."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601. Generado por el modulo emisor, NO modificado en transito."
+    },
+    "duration_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Latencia total del proceso (incluye resolucion de credencial + llamada al provider)."
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identificador del modelo de embedding usado. Ej: 'text-embedding-3-small', 'embedding-001'."
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["openai", "gemini", "voyage", "cohere", "ollama"],
+      "description": "Proveedor que genero el embedding. Lista cerrada para evitar drift."
+    },
+    "vector": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 1,
+      "description": "Vector de embedding. La dimension depende del modelo (ej: text-embedding-3-small=1536, embedding-001=768). El consumidor (memory-rag) debe verificar consistencia entre vectores que va a comparar."
+    },
+    "dimensions": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Tamaño del vector. Util cuando se persisten embeddings de modelos distintos para no comparar dimensiones distintas."
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Texto a vectorizar. El caller decide qué meter (mensaje completo, segmento, summary, query). ai-gateway no procesa el contenido, solo lo pasa al provider."
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input": { "type": "integer", "minimum": 0 }
+      },
+      "description": "Tokens consumidos por el provider en este request. Solo input (los embeddings no producen output tokens)."
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": "string", "minLength": 1 },
+        "provider": { "type": "string", "minLength": 1 },
+        "dimensions": { "type": "integer", "minimum": 1, "description": "Dimension solicitada (algunos providers permiten output truncado)." }
+      },
+      "description": "Settings opcionales del provider. Si se omiten, ai-gateway usa los defaults del provider."
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "CREDENTIAL_NOT_FOUND",
+            "UPSTREAM_TIMEOUT",
+            "UPSTREAM_AUTH_FAILED",
+            "UPSTREAM_RATE_LIMITED",
+            "UPSTREAM_5XX",
+            "UPSTREAM_UNREACHABLE",
+            "UPSTREAM_INVALID_RESPONSE",
+            "VALIDATION_FAILED",
+            "INTERNAL_ERROR"
+          ],
+          "description": "Codigo canonico del catalogo errors.contract.json. NO se inventan codigos nuevos."
+        },
+        "message": { "type": "string", "minLength": 1 },
+        "details": {
+          "type": "object",
+          "description": "Detalles opcionales no sensibles. NO incluir stack ni secretos.",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

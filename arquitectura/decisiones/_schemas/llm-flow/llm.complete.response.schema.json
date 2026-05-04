@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/llm-flow/llm.complete.response.schema.json",
+  "title": "llm.complete.response",
+  "description": "Cierre exitoso de llm.complete.request. Publicado por ai-gateway con la respuesta del LLM. NO incluye campo error ni success — esos son shape legacy. Para errores hay evento separado llm.complete.failed. El caller correlaciona con su request por request_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["correlation_id", "request_id", "content", "model", "provider", "tokens", "duration_ms", "timestamp"],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "request_id":     { "$ref": "_common.schema.json#/$defs/request_id" },
+    "content": {
+      "type": "string",
+      "description": "Texto producido por el LLM. Puede ser cadena vacia si el LLM solo emitio tool_calls (en agentic loop sin texto final)."
+    },
+    "tool_calls_executed": {
+      "type": "array",
+      "items": { "$ref": "_common.schema.json#/$defs/tool_call_executed" },
+      "description": "Lista de tools ejecutadas durante el agentic loop. Auditoria — los consumidores no toman decisiones a partir de esto."
+    },
+    "iterations": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Numero de iteraciones del agentic loop. 1 = single-turn sin tools."
+    },
+    "tokens":         { "$ref": "_common.schema.json#/$defs/tokens" },
+    "cost": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Coste estimado en USD. ai-gateway lo calcula a partir de tokens y precios del provider/model."
+    },
+    "model":          { "$ref": "_common.schema.json#/$defs/model" },
+    "provider":       { "$ref": "_common.schema.json#/$defs/provider" },
+    "finish_reason":  { "$ref": "_common.schema.json#/$defs/finish_reason" },
+    "duration_ms":    { "$ref": "_common.schema.json#/$defs/duration_ms" },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

@@ -16,6 +16,16 @@
       "description": "Cierre canonico en error (timeout LLM, credencial no resuelta, todos los providers caidos). Sin esto los flujos quedan colgados — viola garantia no_silent_failures."
     },
     "llm.complete.response",
+    {
+      "event": "embedding.generate.response",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/embedding-flow/embedding.generate.response.schema.json",
+      "description": "Embedding generado exitosamente. Cierra ciclo iniciado en embedding.generate.request, correlacion por request_id."
+    },
+    {
+      "event": "embedding.generate.failed",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/embedding-flow/embedding.generate.failed.schema.json",
+      "description": "Cierre canonico en error (credencial ausente, upstream timeout, rate limit). El caller maneja degradacion graceful."
+    },
     "credential.resolve.request",
     "fs.read.request"
   ],
@@ -29,6 +39,12 @@
     {
       "event": "llm.complete.request",
       "handler": "onLlmCompleteRequest"
+    },
+    {
+      "event": "embedding.generate.request",
+      "handler": "onEmbeddingGenerateRequest",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/embedding-flow/embedding.generate.request.schema.json",
+      "description": "Entry point embeddings: cualquier modulo (memory-rag, futuras memorias semanticas) solicita generar embedding. Selecciona provider que soporte embeddings (gemini, openai), resuelve credencial, llama API, publica response/failed."
     },
     {
       "event": "credential.resolve.response",

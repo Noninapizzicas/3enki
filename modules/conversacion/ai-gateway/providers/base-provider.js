@@ -97,6 +97,24 @@ class BaseProvider {
   }
 
   /**
+   * Generate embedding for a text input.
+   * Returns { vector: number[], model, dimensions, tokens?: { input } }.
+   * Throws if the provider does not support embeddings (default behavior).
+   * Subclasses that support embeddings (gemini, openai) override this.
+   */
+  async generateEmbedding(text, options = {}) {
+    throw new Error(`${this.name} does not support embeddings`);
+  }
+
+  /**
+   * Indicates whether the provider supports embeddings. Default false;
+   * providers that override generateEmbedding override this to true.
+   */
+  supportsEmbeddings() {
+    return false;
+  }
+
+  /**
    * Count tokens (approximate)
    */
   countTokens(text) {

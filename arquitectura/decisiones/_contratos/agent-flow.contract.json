@@ -519,6 +519,43 @@
       "deuda_visible": "Si en el futuro se necesita procesamiento de imagenes via agente (OCR de facturas, optimizacion de fotos de productos, etc.), reactivar este agente — el prompt y la logica del agente ya existen.",
       "fecha_anotacion": "2026-05-03",
       "fecha_deshabilitacion": "2026-05-03"
+    },
+    {
+      "id": "auditoria_activate_flow_2026_05_04",
+      "estado": "parcialmente_cerrado",
+      "naturaleza": "horizontal",
+      "descripcion": "Auditoria del flujo project-activate / agent-dispatch / conversation-resolution buscando race conditions y bugs en el modelo 'una via fija' (v1.3.0). Detectados 3 issues, 2 cerrados en este commit + 1 documentado como deuda no urgente.",
+      "issues_detectados": [
+        {
+          "id": "lookup_inconsistente_handleUIGetDefaultConversation",
+          "severidad": "media",
+          "estado": "cerrado",
+          "descripcion": "handleUIGetDefaultConversation usaba this.getProject(project_id) (acepta UUID o slug) para validar existencia, pero getOrCreateDefaultConversation usaba this.projects.get(projectId) (solo UUID). Si el caller mandaba un slug ('mi-proyecto' en lugar del UUID), el chequeo pasaba pero la creacion fallaba con 'Project not found' incoherente.",
+          "fix_aplicado": "getOrCreateDefaultConversation usa this.getProject(projectId) y resuelve realId = project.id antes de usarlo en mqttRequest y setLastConversation. Coherente con el patron de activateProject (linea 608)."
+        },
+        {
+          "id": "race_condition_creates_concurrentes_default_conversation",
+          "severidad": "baja_pero_real",
+          "estado": "cerrado",
+          "descripcion": "Si dos agentes se disparaban simultaneamente para el mismo proyecto sin conversation_id (cache miss simultaneo en ai-agent-framework._conversationCache TTL 5min), ambos llegaban a getOrCreateDefaultConversation, ambos veian last_conversation_id=null, ambos hacian mqttRequest('chat-io','create',...) y se creaban DOS conversations. La segunda sobreescribia la primera con setLastConversation, dejando una huerfana en chat-io.",
+          "fix_aplicado": "Map this.pendingDefaultConversations: si hay create en flight para realId, los siguientes callers reutilizan la misma promise. Tras resolver/rechazar, el slot se libera (finally). Una sola conversation creada por proyecto incluso bajo concurrencia."
+        },
+        {
+          "id": "cache_conversacion_no_invalidado_si_proyecto_borrado",
+          "severidad": "baja",
+          "estado": "documentado_no_urgente",
+          "descripcion": "ai-agent-framework._conversationCache cachea (project_id, conversation_id) con TTL 5min. Si el proyecto se borra durante esos 5min, el cache devolveria un conversation_id de un proyecto que ya no existe. Subsiguientes intentos de publicar a esa conversation fallarian en chat-io con NOT_FOUND.",
+          "razon_no_urgente": "En single-user el borrado activo de proyectos es operacion rara. La degradacion es graceful: chat-io rechaza, agent-observer no renderiza tarjeta, observabilidad estandar cubre. No bloquea el flujo de ejecucion del agente. Si el sistema se mueve a multi-tenant comercial, repensar.",
+          "criterio_de_cierre_si_se_decide_arreglar": "Suscribir ai-agent-framework a project.deleted y purgar cache.delete(project_id) al recibir. O reducir TTL a 60s aceptando mas mqttRequests."
+        }
+      ],
+      "tests_existentes_que_validan_el_fix": [
+        "tests/unit/ai-agent-framework.test.js: 'resolucion: cache in-memory evita mqttRequest repetido para el mismo project_id' — verifica que el cache funciona; complementario al fix de race en project-manager (que cubre el caso de cache miss simultaneo).",
+        "tests/unit/agent-observer.test.js: 9 verdes tras fix.",
+        "Tests de project-manager no existen como suite dedicada actualmente — el fix es defensivo, no rompe tests de modulos consumidores."
+      ],
+      "fecha_anotacion": "2026-05-04",
+      "fecha_cierre_parcial": "2026-05-04"
     }
   ]
 }

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/embedding-flow/embedding.generate.request.schema.json",
+  "title": "embedding.generate.request",
+  "description": "Solicitud generica de generacion de embedding. Cualquier modulo (tipicamente memory-rag o memorias semanticas futuras) publica este evento. Lo consume ai-gateway, resuelve la credencial del provider configurado para el proyecto, llama a la API de embedding, devuelve embedding.generate.response o embedding.generate.failed con request_id que permite al caller correlacionar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["correlation_id", "request_id", "project_id", "user_id", "content", "timestamp"],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "request_id": { "$ref": "_common.schema.json#/$defs/request_id" },
+    "project_id": { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id": { "$ref": "_common.schema.json#/$defs/user_id" },
+    "content": { "$ref": "_common.schema.json#/$defs/content" },
+    "settings": { "$ref": "_common.schema.json#/$defs/settings" },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Modulo que origina el request. Util para observabilidad y tagging de costes."
+    },
+    "timestamp": { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

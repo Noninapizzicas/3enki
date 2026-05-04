@@ -83,6 +83,7 @@ class CartaImpresionModule {
     if (!projectId || !cartaId) return;
 
     const key = `${projectId}:${cartaId}`;
+    const sourceCorrelationId = data?.correlation_id || null;
 
     // Cancelar timer previo
     if (this.debounceTimers.has(key)) {
@@ -92,7 +93,7 @@ class CartaImpresionModule {
     // Programar regeneración tras DEBOUNCE_MS sin más cambios
     const timer = setTimeout(() => {
       this.debounceTimers.delete(key);
-      this.dispatchGeneracion(projectId, cartaId);
+      this.dispatchGeneracion(projectId, cartaId, sourceCorrelationId);
     }, this.DEBOUNCE_MS);
 
     this.debounceTimers.set(key, timer);
@@ -101,13 +102,13 @@ class CartaImpresionModule {
     });
   }
 
-  async dispatchGeneracion(projectId, cartaId) {
+  async dispatchGeneracion(projectId, cartaId, sourceCorrelationId = null) {
     this.logger.info('carta-impresion.generacion.iniciada', {
       project_id: projectId, carta_id: cartaId
     });
 
     await this.eventBus.publish('agent.execute.request', {
-      correlation_id: crypto.randomUUID(),
+      correlation_id: sourceCorrelationId || crypto.randomUUID(),
       request_id: crypto.randomUUID(),
       user_id: 'system',
       agent_name: 'impresion-architect',
@@ -221,11 +222,11 @@ class CartaImpresionModule {
     return { status: 200, data: result };
   }
 
-  async toolGenerar({ project_id, carta_id }) {
+  async toolGenerar({ project_id, carta_id, correlation_id }) {
     if (!project_id || !carta_id) {
       return { status: 400, error: 'Se requiere project_id y carta_id' };
     }
-    await this.dispatchGeneracion(project_id, carta_id);
+    await this.dispatchGeneracion(project_id, carta_id, correlation_id || null);
     return {
       status: 202,
       data: { message: `Generación iniciada para carta "${carta_id}". Los agentes están trabajando.` }

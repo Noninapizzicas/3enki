@@ -1,0 +1,53 @@
+{
+  "name": "memory-conversation-summary",
+  "version": "1.0.0",
+  "description": "Memoria modular del compañero. Genera resumenes LLM de los tramos de conversacion que el FIFO va a recortar, y los inyecta en chat.prompt.ready via chat.context.enriched (priority 200). Sin esto, cuando una conversacion se hace larga y FIFO recorta el principio, el compañero pierde la esencia del histórico — con esto, el viaje sostiene memoria narrativa de la conversacion.",
+  "author": "Event Core Team",
+  "language": "es",
+  "publishes": [
+    {
+      "event": "chat.context.enriched",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
+      "description": "Aporta el resumen de la conversacion como contexto adicional al system prompt (priority 200 — narrativa conversacional, antes de perfil de usuario)."
+    },
+    "db.query.request",
+    "llm.complete.request"
+  ],
+  "subscribes": [
+    {
+      "event": "chat.message.saved",
+      "handler": "onMessageSaved",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
+      "description": "Cuenta mensajes por conversacion. Si pasa threshold, dispara summarizacion. Siempre publica el summary actual (si existe) para enriquecer prompt."
+    },
+    {
+      "event": "db.query.response",
+      "handler": "onDbQueryResponse"
+    },
+    {
+      "event": "llm.complete.response",
+      "handler": "onLlmResponse"
+    },
+    {
+      "event": "llm.complete.failed",
+      "handler": "onLlmFailed"
+    }
+  ],
+  "dependencies": ["database-manager", "ai-gateway"],
+  "config": {
+    "enabled": true,
+    "priority_in_prompt": 200,
+    "summarize_after_messages": 20,
+    "summary_max_chars": 800,
+    "llm_model": "deepseek-chat",
+    "llm_provider": "deepseek",
+    "llm_temperature": 0.3,
+    "llm_max_tokens": 400,
+    "persistence": {
+      "pattern": "in-memory",
+      "restart_resilient": false,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["pendingDb", "pendingLlm", "schemaReady", "messageCounters"]
+    }
+  }
+}

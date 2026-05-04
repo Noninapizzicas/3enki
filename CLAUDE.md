@@ -89,6 +89,16 @@ Vive en `arquitectura/decisiones/` como contratos JSON con schemas + validators.
 
 - **`_contratos/chat-flow.contract.json`** + **`_schemas/chat-flow/*.json`** — sub-contrato derivado: 5 eventos canónicos del flujo del chat (`chat.message.saved`, `chat.context.enriched`, `chat.prompt.ready`, `ai.chat.response`, `ai.chat.failed`). Schemas estrictos AJV `additionalProperties:false`.
 
+- **`_contratos/agent-flow.contract.json`** + **`_schemas/agent-flow/*.json`** — sub-contrato derivado: 4 eventos canónicos del flujo de agentes (`agent.execute.request`, `agent.execute.response`, `agent.execute.failed`, `agent.execute.progress`). Documenta también la sección `chat_inline_rendering` (cómo el agente vive en el chat como tarjeta `agent_intervention`) y la `resolucion_de_conversation_id_canonica` del modelo "una vía fija".
+
+- **`_contratos/llm-flow.contract.json`** + **`_schemas/llm-flow/*.json`** — sub-contrato derivado: 3 eventos canónicos para invocar al LLM SIN contexto de chat (`llm.complete.request`, `llm.complete.response`, `llm.complete.failed`). Usado por agentes (ai-agent-framework), memorias modulares (memory-conversation-summary) y módulos del dominio que necesiten razonamiento del LLM. Par success/failure separados — NO existe shape mixto con flag `success`. Migración del shape legacy del ai-gateway documentada como `trabajo_pendiente`.
+
+- **`_contratos/embedding-flow/_*.schema.json`** — schemas canónicos para `embedding.generate.{request,response,failed}` consumidos por ai-gateway. Lo usan memory-rag y memorias semánticas futuras.
+
+- **`_contratos/tools.contract.json`** + **`_schemas/tools/*.json`** — contrato transversal puro: shape canónico de cada `module.json.tools[]` (tool.declaration) y del retorno del handler en runtime (tool.response). Reglas de naming (`<module-prefix>.<entity>` kebab-case), parameters como JSON Schema 2020-12 válido, handler como referencia a método, errores_conocidos del catálogo errors.contract, retorno canónico `{status, data | error: {code, message}}`. Aplicable a cualquier módulo del sistema que declare tools invocables por el LLM.
+
+- **`_contratos/agents-config.contract.json`** + **`_schemas/agents-config/agent.config.schema.json`** — sub-contrato derivado de companero-viaje (tipo canónico "agente"): formaliza el shape de `agents/<name>.json` (id+name+filename coincidiendo, version semver, enabled boolean, prompt_file path relativo a `.md`, tools como subset acotado del catálogo del repo, provider del enum cerrado, temperature/max_tokens/timeout_ms/max_retries/context_enabled como parámetros del LLM). Reglas para `prompts/<name>-system.md`: markdown puro sin frontmatter YAML, h1 con nombre del agente, longitud mínima 200 chars. Stats runtime PROHIBIDOS en archivo declarativo.
+
 - **Otros contratos transversales:** `events`, `lifecycle`, `observability`, `errors`, `persistence`, `http`. Cada uno con su validator en `_validators/<n>.validate.js` y su sección en `drift-baseline.json`.
 
 Todos los validators corren juntos via `npm run validate:ci`. Para añadir un sub-contrato nuevo: contrato JSON → schemas estrictos → validator → registrar en `scripts/validate-all.js` → npm script.

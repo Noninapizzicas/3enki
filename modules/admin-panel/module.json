@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "description": "Web-based admin panel for managing Event Core system",
   "language": "en",
-  "dependencies": [
-    "ui-renderer"
-  ],
+  "dependencies": [],
   "apis": [
     {
       "method": "GET",

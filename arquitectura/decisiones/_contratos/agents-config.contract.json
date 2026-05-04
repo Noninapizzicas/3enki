@@ -1,0 +1,407 @@
+{
+  "_doc": "Sub-contrato derivado del documento maestro companero-viaje.contract.json — categoria 'agente' del modelo del compañero. Define el SHAPE EXACTO (validable con JSON Schema) de la declaracion de un agente especialista: qué archivos requiere (agents/<name>.json + prompts/<name>-system.md), qué campos lleva la configuracion, qué reglas cumple el system prompt, cómo se relaciona con tools (subset acotado del catalogo), cómo se resuelve el provider/model. Cualquier modulo que registre agentes (hoy ai-agent-framework) cumple este contrato. El validator agents-config.validate.js cruza los archivos de agents/*.json + prompts/*.md con el catalogo de tools, el catalogo de providers de ai-gateway, y la auditoria del modulo que los carga.\n\nUn AGENTE es una PERSONALIDAD ESPECIALIZADA del compañero — system prompt propio + tools acotadas + identidad. NO es codigo JavaScript con una clase Agent. Es CONFIGURACION + LENGUAJE NATURAL que el motor (ai-agent-framework) ejecuta dispatching la invocacion. Anadir un agente nuevo es anadir DOS archivos: agents/<nombre>.json (configuracion declarativa) y prompts/<nombre>-system.md (system prompt en lenguaje natural). Sin contrato escrito, cada agente actual lleva campos distintos (algunos con stats embebido, otros sin enabled, algunos con prompt_file relativo, otros con path absoluto). Al reescribir los agentes durante el horizontal, sin contrato cada uno saldria con su criterio. Con el contrato hay UN shape, validable mecanicamente, que cualquier agente cumple.",
+  "id": "agents-config",
+  "version": "1.0.0",
+  "creada": "2026-05-04",
+  "supersedes_nota": "Primera version. Recoge las practicas que ya existen en los 30 agentes de ai-agent-framework/agents/*.json (architect, cartadigital-composer, escandallo-analyzer, etc.) y normaliza al shape canonico. Cierra los drifts detectados durante la auditoria de agentes (2026-05-03): campos runtime mezclados con declarativos (stats), prompt_file no validado, tools fantasma que apuntan a nombres no registrados (image-processor declarando sharp_*), agentes sin enabled (asumido true), provider/temperature/max_tokens con tipos mixtos (algunos string, otros number), inconsistencia entre id y name (algunos coinciden, otros divergen).\n\nDeriva de companero-viaje.contract v1.1.0 — tipos_canonicos_de_extension.agente. Espejo del patron aplicado en chat-flow, agent-flow, llm-flow: contrato JSON con secciones canonicas + JSON Schema estricto + validator + cross-checks contra el codigo y la auditoria.",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/companero-viaje.contract.json — tipos_canonicos_de_extension.agente",
+
+  "objetivo": "Producir UN JSON output (_outputs/agents-config.json) y UN JSON Schema estricto (agent.config.schema.json) que formaliza el shape de cada agents/<name>.json del repo. Producir tambien un documento canonico (system-prompt.canonico.md o equivalente declarativo) con las reglas que cumple cada prompts/<name>-system.md (idioma del modulo, h1 con nombre del agente, sin frontmatter YAML, sin codigo JS embebido). Validable mecanicamente cruzando contra los archivos de agentes existentes. Aplicable: cualquier modulo que registre agentes (presente o futuro) declara su carpeta de agentes y cumple el shape.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/agents-config.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/companero-viaje.contract.json (documento maestro — tipo canonico 'agente')",
+      "arquitectura/decisiones/_outputs/tools.json (catalogo de tools del repo — para validar agent.tools[])",
+      "arquitectura/decisiones/_contratos/agent-flow.contract.json (eventos canonicos del flujo de agentes — request/response/failed/progress)",
+      "arquitectura/decisiones/_contratos/llm-flow.contract.json (llm.complete.* que el agente invoca via ai-gateway)",
+      "arquitectura/decisiones/_outputs/naming.json (idioma del modulo que carga agentes, verbos canonicos)",
+      "arquitectura/decisiones/_outputs/glossary.json (entidades cross-modulo en forma canonica)"
+    ],
+    "obligatorios_si_existen": [
+      "modules/conversacion/ai-agent-framework/agents/*.json (los 30 agentes actuales — referencia de drift a cerrar)",
+      "modules/conversacion/ai-agent-framework/prompts/*-system.md (los system prompts actuales)"
+    ],
+    "opcionales_para_contexto": [
+      "modules/conversacion/ai-agent-framework/index.js (loader de agentes — conoce el shape esperado)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL AGENTE ES CONFIGURACION + LENGUAJE NATURAL, NO CODIGO. Un agente nuevo se anade con DOS archivos: agents/<name>.json y prompts/<name>-system.md. Sin lineas de JS, sin require, sin clase. Si para anadir un agente hay que escribir codigo, el modelo se ha violado.",
+
+    "EL AGENTE TIENE PERSONALIDAD, NO SOLO LOGICA. El system prompt define la identidad: nombre, dominio, tono, restricciones eticas, voz. No es 'eres un asistente' generico. Es 'eres el escandallo-analyzer, especialista en costes de receta del proyecto pizzepos, hablas con precision de chef tecnico'. Esto cambia decisivamente las respuestas del LLM.",
+
+    "TOOLS DEL AGENTE SON UN SUBSET ACOTADO. El agente NO tiene acceso a TODAS las tools del sistema. Solo a las que su rol justifica. Un escandallo-analyzer no necesita carta.delete; un cartadigital-composer no necesita scheduler.create. Acotar protege contra acciones equivocadas y reduce la complejidad cognitiva del LLM.",
+
+    "TOOLS REFERENCIADAS EXISTEN EN EL CATALOGO DEL REPO. Si un agente declara 'sharp.resize' en tools[] pero ningun module.json registra esa tool, drift critico — al ejecutar el agente fallaria con AGENT_TOOL_NOT_FOUND. El validator detecta esto cruzando agent.tools[] con el catalogo de tools (output del validator de tools.contract).",
+
+    "PROMPT_FILE ES OBLIGATORIO Y RELATIVO AL DIRECTORIO DEL AGENTE. El campo prompt_file apunta a un .md que existe. La ruta es relativa al directorio que carga los agentes (ai-agent-framework). NO rutas absolutas, NO inline content del prompt en el JSON.",
+
+    "EL SYSTEM PROMPT ESTA EN MARKDOWN PURO SIN FRONTMATTER. NO YAML al inicio, NO json embebido. Solo h1 con el nombre del agente, descripcion del rol, secciones de proceso. Markdown estandar legible por humano y por LLM.",
+
+    "EL AGENTE ESTA EN EL IDIOMA DEL MODULO QUE LO CARGA. Si ai-agent-framework declara language:'es' en module.json, todos sus agentes tienen description, system prompt y comentarios en español. Coherencia con naming.contract y glossary.contract.",
+
+    "PROVIDER PUEDE SER EXPLICITO O 'auto'. Si el agente declara provider:'gemini', ai-gateway lo respeta (si tiene credencial). Si declara 'auto', ai-gateway selecciona segun priority de su config (deepseek primero, gemini ultimo). 'auto' es lo mas comun — el agente no necesita decidir el provider salvo casos justificados.",
+
+    "TEMPERATURE Y MAX_TOKENS REFLEJAN LA NATURALEZA DEL AGENTE. Un escandallo-analyzer es deterministica (calcula precios, tiene que ser preciso): temperature 0.1, max_tokens generoso. Un brand-keeper es creativo (genera ideas): temperature 0.7. La declaracion documenta la decision por agente.",
+
+    "ENABLED ES EXPLICITO. El campo enabled (boolean) decide si el agente esta operativo. Si false, ai-agent-framework lo ignora aunque exista. Util cuando un agente esta en desarrollo (declaras false para evitar invocaciones), o cuando se desactiva temporalmente (caso real: image-processor con tools fantasma).",
+
+    "STATS NO VIVE EN EL ARCHIVO DE DECLARACION. Las estadisticas de uso del agente (executions, successes, failures, tokens, cost, avg_latency) son ESTADO RUNTIME — viven en memoria del modulo, en DB, o en sistema de metrics. NO en agents/<name>.json. Mezclarlos crea drift cada vez que el archivo se sobreescribe en runtime para actualizar contadores.",
+
+    "METADATA ES OPCIONAL Y SIRVE PARA TAGGING/DISCOVERY. metadata.type (ej: 'domain-agent', 'system-agent', 'meta-agent'), metadata.domain (ej: 'carta-digital'), metadata.tags (array). Util para filtrar agentes en UI o para debugging. NO afecta el comportamiento del agente.",
+
+    "SCOPE LIMITA DONDE EL AGENTE OPERA. scope: ['carta-digital'] indica que el agente solo es relevante en el dominio carta-digital. ai-agent-framework puede usarlo para filtrar tools_disponibles relevantes al scope. NO confundir con tools — scope es taxonomia, tools es capacidad ejecutable.",
+
+    "EL AGENTE NO MANTIENE ESTADO PROPIO ENTRE INVOCACIONES. Cada invocacion es independiente. Si el agente necesita continuidad (ej: 'recuerda la conversacion previa'), eso pasa via conversation_id en el agent.execute.request — el agente NO memoriza por su cuenta. Si necesita estado persistente del dominio (ej: 'historico de mis decisiones'), el modulo del dominio lo gestiona, no el agente.",
+
+    "ID Y NAME DEBEN COINCIDIR. Por convencion, agent.id === agent.name === <nombre-del-archivo-sin-extension>. Tres formas distintas de nombrar lo mismo es drift; una sola fuente de verdad es lo canonico."
+  ],
+
+  "principios": [
+    {
+      "id": "agents_config_y_prompt_son_dos_archivos",
+      "regla": "Cada agente vive en agents/<name>.json (configuracion) + prompts/<name>-system.md (system prompt). NO en un solo archivo combinado, NO inline en module.json. La separacion es disciplina.",
+      "razon": "Cohesion de cada artefacto: el JSON es estructurado (validable), el .md es lenguaje natural (legible). Mezclarlos rompe la herramienta natural para cada uno (jq/AJV para JSON, editor de markdown para .md)."
+    },
+    {
+      "id": "agent_id_name_y_filename_coinciden",
+      "regla": "Para un archivo agents/cartadigital-composer.json, agent.id === agent.name === 'cartadigital-composer'. El prompt_file === 'prompts/cartadigital-composer-system.md'. Tres fuentes de verdad alineadas.",
+      "razon": "Si id y name divergen, los logs/metricas/eventos pueden referirse a uno u otro y la trazabilidad se confunde. Un solo nombre canonico simplifica todo."
+    },
+    {
+      "id": "agent_tools_existen_en_el_catalogo_del_repo",
+      "regla": "Cada string en agent.tools[] coincide con una tool registrada en algun module.json.tools[].name del repo. Si el agente declara una tool fantasma, drift critico — al ejecutar fallaria.",
+      "razon": "Validacion estatica detecta tools fantasma ANTES de invocar el agente en runtime. Sin esto, image-processor publicado con sharp_resize, sharp_crop... fantasma se descubre solo cuando el LLM lo invoca y falla."
+    },
+    {
+      "id": "system_prompt_existe_y_no_esta_vacio",
+      "regla": "agent.prompt_file apunta a un .md que existe en el filesystem y tiene al menos 200 caracteres de contenido (no archivo vacio, no placeholder).",
+      "razon": "Un agente sin system prompt no es un agente — el LLM se vuelve generico y pierde identidad. 200 caracteres es umbral minimo para definir rol + scope."
+    },
+    {
+      "id": "system_prompt_h1_con_nombre_del_agente",
+      "regla": "El primer encabezado h1 del .md (linea que empieza por '# ') es el nombre del agente en lenguaje natural. Ej: '# Compositor de Carta Publica' (no requiere ser literal el id, debe ser legible).",
+      "razon": "Estructura predictible. El h1 es la identidad del agente. Si falta o esta vacio, el LLM empieza sin saber quién es."
+    },
+    {
+      "id": "enabled_explicito_no_implicito",
+      "regla": "agent.enabled es boolean, presente. NO se asume true por omision. Si un agente esta en desarrollo o desactivado, enabled:false; al ai-agent-framework lo ignora.",
+      "razon": "Implicito 'siempre habilitado' confunde — un agente roto sigue siendo invocable hasta que alguien lo borre. Boolean explicito es disciplina: cada agente declara su estado activo."
+    },
+    {
+      "id": "provider_de_la_lista_canonica_o_auto",
+      "regla": "agent.provider es uno de {auto, deepseek, anthropic, openai, groq, gemini, ollama, claude-cli}. NO valores libres. 'auto' es lo recomendado salvo justificacion.",
+      "razon": "Lista cerrada coherente con ai-gateway providers. Si un agente declara 'gpt' en lugar de 'openai', ai-gateway no lo encuentra y el agente falla en ejecucion."
+    },
+    {
+      "id": "temperature_max_tokens_timeout_max_retries_son_numeros",
+      "regla": "agent.temperature es number 0-2. agent.max_tokens es integer positivo. agent.timeout_ms es integer positivo. agent.max_retries es integer 0-N. NO strings ('0.1' vs 0.1), NO booleanos.",
+      "razon": "Tipos correctos evitan errores de conversion en runtime. Algunos providers son estrictos con tipos y un string '0.1' rompe la llamada."
+    },
+    {
+      "id": "stats_no_persistido_en_archivo",
+      "regla": "agent.stats NO esta presente en agents/<name>.json. Las estadisticas runtime (executions, successes, failures, tokens, cost) viven en memoria del modulo o en DB.",
+      "razon": "Sobreescribir el archivo declarativo en runtime introduce drift constante (cambia cada invocacion). Tambien complica el VCS: un commit no deberia llevar 'agent.stats.executions: 47' como cambio. Estado runtime fuera del archivo declarativo."
+    },
+    {
+      "id": "metadata_y_scope_son_opcionales",
+      "regla": "agent.metadata y agent.scope son OPCIONALES. Si presentes, metadata.tags es array de strings, metadata.domain es string, scope es array de strings. Si ausentes, el agente es global y sin tags.",
+      "razon": "Algunos agentes son genericos (sin domain especifico) — forzarlos a declarar scope los hace declarar 'global' redundante. Opcional con defaults inferidos es mas limpio."
+    },
+    {
+      "id": "system_prompt_sin_frontmatter_yaml",
+      "regla": "El .md NO empieza con --- ... --- de frontmatter YAML. Solo markdown puro a partir del h1.",
+      "razon": "Frontmatter YAML lo usan otros sistemas (Jekyll, Hugo) pero rompe la disciplina aqui — el shape de la metadata vive en el .json, no duplicado en el .md. Markdown puro es legible y predictible."
+    },
+    {
+      "id": "system_prompt_no_codigo_js_embebido",
+      "regla": "El .md NO incluye bloques de codigo JavaScript que parezcan ejecutables. Puede incluir snippets ilustrativos en bloques fenced code, pero el LLM nunca los ejecuta — son referencias para entender, no para correr.",
+      "razon": "Si el system prompt fuerza codigo JS, el agente esta en la frontera entre 'configuracion + lenguaje natural' (correcto) y 'logica embebida' (drift). Ejemplos OK; ejecutables NO."
+    },
+    {
+      "id": "context_enabled_decide_si_recibe_chat_history",
+      "regla": "agent.context_enabled es boolean. Si true, ai-agent-framework pasa el FIFO de la conversation al agente; si false, el agente arranca limpio sin historico (single-turn). Default false.",
+      "razon": "Algunos agentes (cartadigital-composer) no necesitan historial — son single-turn dispatchers. Otros (chat-companion) si lo necesitan. Boolean explicito documenta la decision por agente."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "agentes_no_estan_en_module_json",
+      "decision": "Los agentes NO se declaran inline en module.json (a diferencia de las tools). Viven en agents/<name>.json + prompts/<name>-system.md, archivos separados.",
+      "razon": "Un agente tiene system prompt extenso (multiples KB de markdown) — meterlo inline en module.json hace ese archivo ilegible. Tambien: cada agente puede ser editado por usuarios no-tecnicos (escribir el prompt es escribir lenguaje natural), tener archivos separados es accesible. Tools son cortas y estructuradas, agentes son extensos y narrativos — distintas naturalezas, distinta ubicacion."
+    },
+    {
+      "id": "carpeta_agents_y_prompts_paralelas",
+      "decision": "Estructura del directorio: agents/ con los .json, prompts/ con los .md. Hermanas dentro del modulo que los carga (modules/conversacion/ai-agent-framework/agents/ y prompts/).",
+      "razon": "Separar configuracion (json) de prompt (md) por carpeta facilita: ediciones de prompt sin tocar json (cambio de tono sin cambio de configuracion), validacion de cada uno con su herramienta (AJV para json, linter de markdown para md), navegacion mental clara."
+    },
+    {
+      "id": "id_y_name_y_filename_la_misma_cadena",
+      "decision": "Por convencion: agent.id === agent.name === filename sin extension === prompt_file basename sin '-system.md' === handler en codigo. UNA sola cadena identificadora.",
+      "razon": "Multi-naming confunde: 'cartadigital-composer' como id pero 'cartaDigitalComposer' como name interno y 'composer-cartadigital' como filename es real-bug propenso. Una unica cadena (kebab-case) cross-archivos elimina ambigüedad."
+    },
+    {
+      "id": "kebab_case_en_filenames_y_ids",
+      "decision": "Filenames son kebab-case (escandallo-analyzer.json, no escandalloAnalyzer.json). Ids son kebab-case. Es coherente con naming.contract.",
+      "razon": "Cross-OS friendly (Linux/macOS/Windows tratan diferente uppercase en filenames). Tambien es lo que la convencion del repo usa para tools, modulos, y archivos en general."
+    },
+    {
+      "id": "stats_runtime_separadas_del_archivo",
+      "decision": "stats vive en memoria de ai-agent-framework (this.agentStats Map) o en una DB dedicada. NO en agents/<name>.json. ai-agent-framework actualiza stats sin tocar el archivo declarativo.",
+      "razon": "Si runtime sobrescribe el archivo, cada git commit lleva ruido (stats.executions: 1, 2, 3...). El historico VCS se vuelve inutil. Stats fuera del archivo permite VCS limpio del declarativo."
+    },
+    {
+      "id": "provider_auto_default",
+      "decision": "Si agent.provider esta ausente o es 'auto', ai-gateway selecciona segun priority. Solo casos justificados ponen provider explicito (ej: agente que requiere multimodal pasa 'gemini' o 'openai' especificamente).",
+      "razon": "Lock-in a provider es drift de resilience.contract — si OpenAI cae, todos los agentes con provider:'openai' quedan rotos. 'auto' permite fallback automatico. Override solo cuando hay razon real."
+    },
+    {
+      "id": "tools_array_de_strings_no_objetos",
+      "decision": "agent.tools es array de strings (los names de tools del catalogo). NO array de objetos con shape completo. La declaracion completa de cada tool vive en su modulo, el agente solo referencia.",
+      "razon": "DRY (Don't Repeat Yourself). Si la declaracion estuviera duplicada en cada agente que usa la tool, cambios en parameters obligan a actualizar N agentes. Referencia por name pone la fuente de verdad en un solo sitio (el modulo dueño de la tool)."
+    },
+    {
+      "id": "context_enabled_default_false",
+      "decision": "Si agent.context_enabled esta ausente, se asume false (sin historial). Solo agentes que explicitamente necesitan contexto de conversation declaran true.",
+      "razon": "La mayoria de agentes son single-turn dispatchers (escandallo-analyzer recibe 'analiza esta receta' y responde, sin historial necesario). Default false reduce coste de tokens (no se envian mensajes innecesarios)."
+    },
+    {
+      "id": "max_retries_default_2",
+      "decision": "Si agent.max_retries esta ausente, default 2 (3 intentos en total). Configurable por agente segun naturaleza.",
+      "razon": "Coherente con resilience.contract (max_attempts default 3). Algunos agentes pueden permitirse menos (operacion idempotente cara) o mas (operacion barata y critica)."
+    },
+    {
+      "id": "timeout_ms_default_60000",
+      "decision": "Si agent.timeout_ms esta ausente, default 60000 (60 segundos). Cubre 95% de casos (LLM responde en <30s normalmente; agentic loop completo <60s). Casos especiales (image-processor procesando OCR) pueden subir a 120000.",
+      "razon": "Sin timeout, un agente colgado bloquea el caller indefinidamente. Default razonable cubre el caso comun; override permite los excepcionales."
+    },
+    {
+      "id": "scope_no_filtra_invocacion_solo_organiza",
+      "decision": "agent.scope es taxonomico (para UI, debugging, discovery), NO afecta la invocacion en runtime. Cualquier modulo puede invocar a cualquier agente independientemente de scope.",
+      "razon": "Si scope filtrara invocacion, un cron del modulo X no podria invocar al agente del modulo Y aunque tuviera sentido. Mantener scope solo declarativo deja flexibilidad runtime y simplifica debugging."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "agente_como_clase_javascript",
+      "regla": "NO existe class CartaComposerAgent extends BaseAgent en codigo. Los agentes son archivos json+md, no clases JS.",
+      "viola_garantias": ["extensibilidad_sin_reescritura"],
+      "como_detectar": "Validator: regex sobre el codigo del modulo cargador buscando class ... Agent extends. Si aparece, drift critico.",
+      "alternativa_correcta": "Crear agents/<nombre>.json con shape canonico + prompts/<nombre>-system.md. ai-agent-framework lo carga automaticamente sin tocar codigo."
+    },
+    {
+      "id": "agente_con_tools_fantasma",
+      "regla": "agent.tools[] NO contiene strings que no correspondan a una tool registrada en algun module.json.tools[].name del repo.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator: cargar catalogo de tools (output de tools.validate). Cruzar agent.tools[] con el catalogo. Strings huerfanos = drift.",
+      "alternativa_correcta": "Si el agente necesita una capacidad nueva, primero crear la tool en el modulo correspondiente (con su declaracion canonica), DESPUES referenciarla en agent.tools[]."
+    },
+    {
+      "id": "system_prompt_inline_en_json",
+      "regla": "El system prompt NO va embebido como string en agents/<name>.json (en un campo system_prompt o similar). Va en prompts/<name>-system.md, referenciado por prompt_file.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator: agent config con campo system_prompt o prompt_content que sea string >100 chars = drift.",
+      "alternativa_correcta": "Mover el contenido a prompts/<name>-system.md y dejar prompt_file: 'prompts/<name>-system.md' en el json."
+    },
+    {
+      "id": "stats_persistidos_en_archivo_declarativo",
+      "regla": "agents/<name>.json NO contiene campo 'stats' con counters runtime. Si lo tiene, drift de mezcla declarativo+runtime.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator: cualquier agent config con campo stats es drift.",
+      "alternativa_correcta": "ai-agent-framework mantiene stats en this.agentStats Map (memoria) o en database via db.query.request. Sin tocar el archivo declarativo."
+    },
+    {
+      "id": "frontmatter_yaml_en_system_prompt",
+      "regla": "prompts/<name>-system.md NO empieza con frontmatter YAML (--- ... ---). Solo markdown puro a partir del h1.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator: leer .md, si las primeras lineas son '---' seguido de YAML, drift.",
+      "alternativa_correcta": "Borrar el frontmatter. Si la metadata existia ahi, moverla al .json (campos canonicos: metadata.tags, metadata.domain, etc.)."
+    },
+    {
+      "id": "provider_no_canonico",
+      "regla": "agent.provider es uno de {auto, deepseek, anthropic, openai, groq, gemini, ollama, claude-cli}. NO 'gpt', 'claude', 'modelo', 'llm-1', etc.",
+      "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm"],
+      "como_detectar": "Validator: enum cerrado en el JSON Schema. AJV rechaza valores fuera.",
+      "alternativa_correcta": "Usar el name canonico del provider en ai-gateway providers list."
+    },
+    {
+      "id": "tools_acceso_a_capacidades_fuera_del_rol",
+      "regla": "agent.tools[] solo incluye tools que el rol del agente justifica. Un escandallo-analyzer NO declara carta.delete (no es su responsabilidad). Esto es politica, no validable estrictamente — pero el validator puede flagear casos sospechosos (ej: agente con >20 tools = drift potencial de 'agente que hace de todo').",
+      "viola_garantias": ["especializacion_por_contexto_verificable"],
+      "como_detectar": "Heuristica info: agent con >20 tools es candidato a revision (puede ser legitimo en agentes orquestadores, pero raro).",
+      "alternativa_correcta": "Acotar tools al subset minimo. Si el agente necesita muchas capacidades, considerar dividirlo en agentes especializados que se invocan entre si (orquestador + especialistas)."
+    },
+    {
+      "id": "id_distinto_de_name_de_filename",
+      "regla": "agent.id === agent.name === filename sin extension. Si divergen, drift de identidad multiple.",
+      "viola_garantias": ["observabilidad_end_to_end"],
+      "como_detectar": "Validator: para cada archivo agents/<X>.json, comprobar agent.id === X && agent.name === X. Si no coincide, drift.",
+      "alternativa_correcta": "Renombrar uno de los dos campos para alinear con el filename. Aplicar el cambio cross-archivos (codigo, tests, docs) en el mismo commit."
+    }
+  ],
+
+  "output_shape_resumen": "_outputs/agents-config.json contiene: { id: 'agents-config', version, schema_files: ['agent.config.schema.json'], total_agents_in_repo: N, agents_by_module: { <modulo>: [...names...] }, agents_enabled: M, agents_disabled: K, drifts_observed_baseline: { tools_fantasma: N1, stats_persistido: N2, frontmatter_yaml: N3, id_name_divergente: N4, prompt_file_inexistente: N5, ... }, modulos_alineados: [...], modulos_con_drift: [...] }. Snapshot del estado de los agentes del repo.",
+
+  "reglas_de_extraccion": [
+    "El validator scaneando los modulos del repo busca carpetas agents/ y prompts/ junto a un module.json.",
+    "Para cada agents/<name>.json carga el contenido y valida contra agent.config.schema.json (AJV strict).",
+    "Cruza agent.tools[] con el catalogo de tools (output de tools.validate). Tools fantasma = drift.",
+    "Verifica que prompts/<name>-system.md existe y cumple reglas (h1 con nombre, sin frontmatter YAML, longitud minima).",
+    "Verifica que agent.id === agent.name === filename basename.",
+    "El output _outputs/agents-config.json es snapshot del estado de los agentes del repo con drifts por tipo."
+  ],
+
+  "derivaciones": [
+    {
+      "documento": "arquitectura/decisiones/_schemas/agents-config/agent.config.schema.json",
+      "rol": "Schema canonico de cada agents/<name>.json. Required: id, name, description, version, enabled, prompt_file, tools, provider. Opcionales: temperature, max_tokens, timeout_ms, max_retries, context_enabled, metadata, scope. PROHIBIDO: stats, system_prompt inline, prompt_content."
+    },
+    {
+      "documento": "arquitectura/decisiones/_validators/agents-config.validate.js",
+      "rol": "Compila el schema + cross-checks: tools fantasma, prompt_file inexistente, id/name/filename coincidentes, frontmatter YAML, provider canonico, h1 en md, longitud minima del prompt."
+    },
+    {
+      "documento": "arquitectura/decisiones/_outputs/agents-config.json",
+      "rol": "Snapshot del catalogo de agentes del repo con drift counts por tipo."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "agents_config_schema_compile_ok",
+      "regla": "agent.config.schema.json compila AJV strict 2020-12 con additionalProperties:false a nivel raiz.",
+      "como_detectar": "Compilacion AJV en arranque del validator. Falla critica si no compila.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agent_no_cumple_schema",
+      "regla": "Cada agents/<name>.json valida contra el schema. Required presentes, tipos correctos, enum respetados, additionalProperties false.",
+      "como_detectar": "Para cada archivo, ajv validate. Reportar errores estructurales.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agent_id_name_filename_divergen",
+      "regla": "agent.id === agent.name === filename basename. Divergencia es drift.",
+      "como_detectar": "Para cada archivo X.json, verificar config.id === config.name === X.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agent_tools_fantasma",
+      "regla": "Cada string en agent.tools[] existe como tool registrada en algun module.json.tools[].name del repo.",
+      "como_detectar": "Cargar catalogo de tools (scaneo de module.json del repo). Cruzar agent.tools[] con el catalogo. Strings huerfanos son drift critico.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agent_prompt_file_inexistente",
+      "regla": "agent.prompt_file apunta a un .md que existe en el filesystem.",
+      "como_detectar": "Resolver path relativo al directorio del agente. Si fs.existsSync false, drift.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agent_prompt_file_demasiado_corto",
+      "regla": "El .md tiene al menos 200 caracteres de contenido (excluyendo whitespace).",
+      "como_detectar": "Leer el archivo, trim, contar caracteres. Si <200, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agent_prompt_file_sin_h1",
+      "regla": "El .md tiene un h1 (linea que empieza por '# ') en las primeras 10 lineas no vacias.",
+      "como_detectar": "Leer el archivo, escanear primeras lineas. Si no hay match /^# /, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agent_prompt_file_con_frontmatter_yaml",
+      "regla": "El .md NO empieza con --- (frontmatter YAML).",
+      "como_detectar": "Leer primera linea (trim). Si comienza con '---', drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agent_stats_persistido",
+      "regla": "agents/<name>.json NO contiene campo stats con counters.",
+      "como_detectar": "schema strict + check explicito en validator. Drift si presente.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agent_provider_no_canonico",
+      "regla": "agent.provider es uno de {auto, deepseek, anthropic, openai, groq, gemini, ollama, claude-cli}.",
+      "como_detectar": "schema strict (enum). AJV rechaza valores fuera.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agent_demasiadas_tools",
+      "regla": "agent.tools[] tiene <=20 entradas como umbral conservador.",
+      "como_detectar": "Para cada agente, contar tools[]. Si >20, info para revision (puede ser legitimo en orquestadores).",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_agent_disabled_sin_razon_documentada",
+      "regla": "Si agent.enabled is false, el agente debe tener metadata.disabled_reason o un comentario en el JSON explicando porque. Heuristica info — JSON no soporta comentarios formales, pero el validator puede sugerir mover la razon a un campo opcional metadata.disabled_reason.",
+      "como_detectar": "Para cada agente con enabled:false, verificar presencia de metadata.disabled_reason (o equivalente).",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_agent_idioma_inconsistente_con_modulo",
+      "regla": "agent.description y prompt_file estan en module.language del modulo cargador. Heuristica lexica.",
+      "como_detectar": "Detectar palabras tipicas del otro idioma (modulo en es con description que empieza por 'Generate' o 'Returns').",
+      "severidad": "info"
+    }
+  ],
+
+  "salida_validador": "PASS si el schema compila estructuralmente. Errors cross-system bloquean: tools fantasma (riesgo activo de fallo en runtime) y prompt_file inexistente (agente roto al cargar). Warnings (drift_*) listados pero no bloquean — quedan en baseline. Info son heuristicas para revision manual. Formato coherente con tools/chat-flow/agent-flow/llm-flow validators: banner PASS/FAIL + bloque cross-system con findings agrupados por severidad.",
+
+  "convenciones_complementarias": [
+    "naming.contract: agent.id, name, filename son kebab-case. agent.description y prompt_file en idioma de module.language del modulo cargador (ai-agent-framework declara 'es'/'en' y todos sus agentes lo respetan).",
+    "glossary.contract: las entidades en agent.metadata.domain (ej: 'carta-digital', 'escandallo') usan la forma canonica del glossary del idioma del modulo.",
+    "events.contract: agentes son invocados via agent.execute.request (agent-flow). NO via require ni acceso directo. agents-config no introduce eventos nuevos — usa el catalogo de agent-flow.",
+    "errors.contract: cuando un agente falla, el error.code que ai-agent-framework publica en agent.execute.failed es del catalogo cerrado (AGENT_NOT_FOUND, AGENT_TOOL_NOT_FOUND, AGENT_TOOL_FAILED, AGENT_INPUT_INVALID, UPSTREAM_*, INTERNAL_ERROR).",
+    "lifecycle.contract: agentes se cargan en ai-agent-framework.onLoad (escaneo de agents/*.json). En onUnload se descartan. agents-config NO declara lifecycle propio.",
+    "observability.contract: cada invocacion de agente emite metric con labels {agent_name, project_id?, tools_used_count, status, duration_ms, tokens_total}. Sin esto, costes_auditables y triaje por agente se rompen.",
+    "persistence.contract: agents/*.json y prompts/*.md son ARCHIVOS persistidos en repo (VCS). Stats runtime viven en memoria o en DB del modulo cargador, NO en estos archivos.",
+    "http.contract: agentes no hacen llamadas HTTP directas — invocan tools que sí pueden hacerlas (las tools cumplen http.contract con timeouts, retries, redaccion de secretos).",
+    "chat-flow.contract: agentes pueden ser invocados desde el chat (a traves del LLM principal con tool invoke_agent) — el agente publica chat.assistant.saved con metadata.author={kind:'agent', name:<id>} para distinguirse del compañero principal.",
+    "agent-flow.contract: este sub-contrato (agents-config) FORMA el agente; agent-flow ORQUESTA su invocacion. agent-flow define request/response/failed/progress; agents-config define qué es un agente. Complementarios y obligatorios juntos.",
+    "llm-flow.contract: ai-agent-framework cuando invoca un agente publica internamente llm.complete.request a ai-gateway con system_prompt = contenido del prompt_file + tools = subset segun agent.tools[]. agents-config y llm-flow se acoplan en ese punto.",
+    "tools.contract: agent.tools[] es array de strings que referencian tools registradas via tools.contract. Un agente con una tool fantasma rompe el cruce — error critico detectado por ambos validators.",
+    "frontend.contract: agentes se renderizan en el chat como tarjetas agent_intervention (definidas en frontend.contract.bloques_canonicos_inline_render). agent-observer traduce eventos agent_flow en chat.assistant.saved con metadata.block.type='agent_intervention'.",
+    "security.contract: el system prompt NO contiene credenciales ni secretos (esos viven en credential-manager). Si un agente necesita autenticarse a un servicio externo, su tool resuelve la credencial — el prompt no la lleva.",
+    "testing.contract: cada agente tiene test fixture en tests/fixtures/agents/<name>.test-cases.json con casos de uso esperados. ai-agent-framework tests usan estos fixtures para verificar comportamiento.",
+    "multi-tenancy.contract: los agentes son globales del sistema (no per-proyecto), pero las invocaciones llevan project_id que el agente recibe en context. agent.scope acota dominio pero no aisla por tenant.",
+    "documentation.contract: prompts/<name>-system.md ES la documentacion canonica del agente. NO se permiten archivos README.md adicionales por agente.",
+    "versionado.contract: agent.version cambia segun semver: cambio breaking del shape (drop de tool, cambio incompatible del prompt) = mayor; nueva tool añadida o ajuste de tono = menor; correccion de typos del prompt = patch. Versionado individual por agente, no del modulo cargador.",
+    "deployment.contract: agentes se deployan con el modulo cargador. NO existe deploy parcial 'solo este agente'. agents/ y prompts/ son del modulo y van con el.",
+    "module-loading.contract: ai-agent-framework escanea agents/*.json en onLoad. Si un .json no parsea o el .md referenciado no existe, ai-agent-framework loguea error y omite ese agente del registry. Otros agentes siguen funcionando.",
+    "bus-transport.contract: invocacion de agente viaja por el bus principal MQTT (agent.execute.request). NO subbuses ni canales privados. Coherente con event-core.",
+    "scheduling.contract: agentes pueden ser disparados por cron — el scheduler publica agent.execute.request con correlation_id propio. agents-config no introduce reglas extra para este caso.",
+    "resilience.contract: agent.max_retries y agent.timeout_ms heredan la disciplina de retry policy y timeouts de resilience.contract. Sin estos campos en el agente, ai-agent-framework usa los defaults de resilience.contract.",
+    "companero-viaje.contract: agentes son uno de los 5 tipos canonicos de extension del compañero. agents-config formaliza este tipo. Si un agente nuevo no cumple el contrato, viola el modelo del compañero — no se acepta como excepcion."
+  ],
+
+  "trabajo_pendiente": [
+    {
+      "id": "migrar_30_agentes_existentes_al_shape_canonico",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Los 30 agentes actuales en modules/conversacion/ai-agent-framework/agents/*.json tienen drifts conocidos: campo stats persistido con counters (drift_agent_stats_persistido), id/name/filename coincidiendo (OK), pero tools potencialmente fantasma (image-processor.json tiene sharp_* que no existen — ya documentado en agent-flow.contract.trabajo_pendiente.image_processor_agent_sin_tools_implementadas).",
+      "criterio_de_cierre": "Cada agents/*.json valida contra el schema sin warnings de stats, sin tools fantasma. ai-agent-framework migra stats a memoria/DB.",
+      "modulos_afectados": [
+        "modules/conversacion/ai-agent-framework: migrar persistencia de stats fuera del archivo declarativo. Mover los stats existentes a un Map en memoria (o tabla agent_stats en DB).",
+        "Cada agents/<name>.json: eliminar campo stats. Verificar tools fantasma."
+      ],
+      "fecha_anotacion": "2026-05-04"
+    },
+    {
+      "id": "system_prompt_canonico_documento_canonico_separado",
+      "estado": "consideracion_para_v1_1",
+      "naturaleza": "transversal_potencial",
+      "descripcion": "Considerar si crear un documento canonico (system-prompt.canonico.md) que liste ejemplos de buenos system prompts y reglas extra (estructura recomendada de secciones, lenguaje, longitud por tipo de agente). NO obligatorio en v1.0.0 — los principios + cross-checks ya cubren las reglas validables.",
+      "criterio_de_decision_recomendado": "Si emerge necesidad real (varios system prompts de baja calidad o inconsistencia visible al ejecutar agentes), crear el documento. Mientras tanto, las reglas estan distribuidas en filosofia + principios + prohibido del contrato actual.",
+      "fecha_anotacion": "2026-05-04"
+    }
+  ]
+}

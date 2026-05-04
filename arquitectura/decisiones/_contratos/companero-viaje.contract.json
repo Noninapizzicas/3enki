@@ -1,9 +1,9 @@
 {
   "_doc": "Documento maestro del subsistema chat/agentes. Captura la vision de producto del 'compañero de viaje' como modelo arquitectonico inmutable, no como un chat o asistente generico. Es la piedra angular conceptual de la que se derivan los contratos especificos del subsistema (chat-flow, agent-flow, channel-flow, memory-flow, tool-flow). Si una decision tecnica contradice este documento, gana este documento.",
   "id": "companero-viaje",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-05-02",
-  "supersedes_nota": "Primera version. Captura la vision del producto en palabras del autor: compañero de viaje + especialistas reactivos (agentes). Modelo abierto a cualquier extension futura sin tocar el nucleo. Validado parcialmente por los modulos existentes del subsistema conversacion (chat-io, ai-gateway, prompt-builder, ai-agent-framework) — su mapeo se documenta en seccion 8 cuando se complete el documento.",
+  "supersedes_nota": "v1.1.0 (2026-05-04): añadida seccion routing_de_canales_externos_pendiente_de_modelar capturando el analisis hecho en sesion sobre canal-telegram. Cuatro caminos articulados (bot global / bot-por-proyecto / bot-por-(proyecto,intencion) con discovery / routing matricial completo); decision arquitectonica pospuesta hasta cerrar (a) cual canal externo merece la inversion inicial — Telegram vs WhatsApp vs Slack vs otros, (b) modelo de routing canonico que cubra todos los canales por igual. Mientras tanto el subsistema funciona end-to-end via canal web (chat-io) + modelo 'una via fija' (conversacion canonica del proyecto resuelta por project-manager). Actualizada entrada del mapa_al_sistema_actual para telegram-service reflejando esta decision. v1.0.0 (2026-05-02): primera version. Captura la vision del producto en palabras del autor: compañero de viaje + especialistas reactivos (agentes). Modelo abierto a cualquier extension futura sin tocar el nucleo. Validado parcialmente por los modulos existentes del subsistema conversacion (chat-io, ai-gateway, prompt-builder, ai-agent-framework) — su mapeo se documenta en seccion 8 cuando se complete el documento.",
 
   "esencia": {
     "afirmacion": "El subsistema chat/agentes NO es un chat. Es un compañero de viaje con especialistas reactivos. La distincion no es semantica — define como se piensa, modela y evoluciona TODO el subsistema.",
@@ -620,6 +620,149 @@
     ]
   },
 
+  "routing_de_canales_externos_pendiente_de_modelar": {
+    "_doc": "Deuda arquitectonica documentada en sesion del 2026-05-04. Al intentar arrancar el primer adapter de canal externo (channel-telegram) se detecta que el sistema NO tiene un modelo formal de routing entre el subsistema chat/agentes y los canales externos (telegram, whatsapp, slack, voz, email...). El catalogo canonico de eventos (protocolos_canonicos.eventos_canonicos.channel_io) ya prevee channel.input.received / channel.output.sent, pero no especifica COMO se resuelve la matriz (usuario × proyecto × intencion) → (canal_concreto, identificador_canal). Esta seccion captura el analisis hecho para que la proxima sesion que retome el tema NO empiece de cero.",
+    "estado": "pospuesto",
+    "fecha_pospuesto": "2026-05-04",
+    "razon_de_posponer": "El usuario considera que el camino, aunque importante, NO es el primero a despejar. Antes hay que decidir (a) que canal externo merece la inversion inicial — el coste de implementar Telegram vs WhatsApp vs Slack vs otros depende del uso real esperado, no de la facilidad tecnica; (b) si vale la pena dedicar tiempo a UN canal especifico ahora o esperar a tener el modelo de routing transversal cerrado para que cualquier canal sea enchufable cumpliendo el mismo contrato. Mientras esa decision no se toma, el subsistema funciona end-to-end via el canal web (chat-io) + modelo 'una via fija' (cada proyecto tiene su conversacion canonica donde caen los outputs del compañero/agentes resueltos automaticamente por project-manager).",
+
+    "contexto_de_la_decision": {
+      "punto_de_partida": "Tras cerrar el modelo 'una via fija' (resolucion canonica de conversation_id desde project_id), el siguiente horizontal logico era levantar channel-telegram para abrir el subsistema al exterior. El usuario tiene un bot configurado en credential-manager y telegram-service ya existe como proveedor low-level (publica telegram.text.received con { botName, chatId, messageId, from, text }).",
+      "lo_que_falta": "Lo que NO existe es un modulo adapter (channel-telegram) que traduzca telegram.text.received → chat.message.saved canonico (entrada) y suscriba a ai.chat.response/agent.execute.response → telegram.send_message.request (salida). Pero implementarlo obliga a cerrar antes el modelo de routing.",
+      "dimensiones_detectadas_en_el_routing": [
+        {
+          "dimension": "proyecto",
+          "descripcion": "A que proyecto pertenece la operacion. Determina conversation_id, tools disponibles, system prompt, agentes accesibles."
+        },
+        {
+          "dimension": "intencion",
+          "descripcion": "Que clase de operacion es: 'subir factura', 'recibir notificacion', 'conversacion general', 'alerta de cocina', 'recordatorio'. Un mismo proyecto puede tener varios bots especializados por intencion (ej: bot 'facturas-pizzepos' para subir tickets vs bot 'general-pizzepos' para conversar)."
+        },
+        {
+          "dimension": "usuario",
+          "descripcion": "Cada usuario humano tiene SU mapping particular con cada bot — su chat_id propio. La salida del sistema hacia un usuario X via intencion Y de proyecto Z requiere conocer el chat_id que ese usuario tiene con el bot que cubre (Y, Z)."
+        }
+      ],
+      "matriz_resultante": "(usuario × proyecto × intencion) → (canal_concreto, identificador_canal). Densa: si el sistema crece a 5 proyectos × 3 intenciones × 10 usuarios, son 150 mappings posibles. La pregunta arquitectonica es donde vive esa matriz, como se descubre/se configura, y cual es la jerarquia de fallback cuando un cell concreto esta vacio."
+    },
+
+    "caminos_analizados": [
+      {
+        "id": "camino_1_bot_global_single_user",
+        "nombre": "Un solo bot global, single-user. Iterar despues.",
+        "descripcion": "Un unico bot del usuario para toda entrada/salida. Routing por contenido (comandos /factura, /notif o lo deduce el LLM del prompt).",
+        "pro": [
+          "Arrancable en horas — no requiere modelar nada.",
+          "Suficiente para single-user inicial donde solo hay un humano y un proyecto activo a la vez.",
+          "Sirve como prueba de concepto para validar la cadena entrada-salida del adapter sin meterse en routing."
+        ],
+        "con": [
+          "No escala a multi-bot conceptual: cuando el usuario quiera 'bot exclusivo para facturas' o 'bot del proyecto cocina', se rehace el adapter.",
+          "Routing por contenido es fragil — el LLM tiene que adivinar la intencion en lugar de recibirla codificada por canal.",
+          "Crea precedente de 'todo va al bot global' que cuesta deshacer cuando el resto del modelo se formalice."
+        ],
+        "cuando_elegirlo": "Si el objetivo prioritario es ver el flujo end-to-end por telegram funcionando este mes, y se acepta que la primera implementacion sera reescrita cuando se cierre el modelo formal."
+      },
+      {
+        "id": "camino_2_bot_por_proyecto",
+        "nombre": "Bot asociado a proyecto, fallback a global (la idea inicial del usuario).",
+        "descripcion": "credential-manager almacena la asociacion bot ↔ project_id. Cuando llega telegram.text.received, channel-telegram consulta credential-manager via mqttRequest: si el botName esta asociado a un project_id, ese es el proyecto. Si NO (bot global), se descarta la entrada o se cae a fallback (proyecto activo del usuario, proyecto Sistema, etc.). La salida hace el camino inverso: si el proyecto tiene bot propio, usar ese; si no, bot global.",
+        "pro": [
+          "Modelo simple: un proyecto = un bot. Onboarding directo (usuario crea bot, lo asocia a proyecto en credential-manager).",
+          "El bot global puede quedar como salida-only para notificaciones del sistema sin contexto de proyecto.",
+          "credential-manager ya gestiona credenciales de bots — solo hace falta añadir un campo project_id opcional al shape de la credencial."
+        ],
+        "con": [
+          "No separa intenciones: factura, conversacion, notificacion van todas por el mismo bot del proyecto. Un usuario que quiera bot dedicado a subir tickets se queda sin solucion.",
+          "Cuando un proyecto tiene varios usuarios humanos, todos comparten el mismo bot. La identificacion cae al from.id del telegram_user — no esta clara la politica de matching con user_id del sistema."
+        ],
+        "cuando_elegirlo": "Si el caso de uso real es 1-3 proyectos con un bot dedicado cada uno y conversacion general como unico tipo de interaccion. Encaja con single-user / 1-2 humanos."
+      },
+      {
+        "id": "camino_3_bot_por_proyecto_intencion_con_discovery",
+        "nombre": "Bot declara su rol (proyecto + intencion). Discovery automatico del chat_id por usuario.",
+        "descripcion": "Cada bot lleva metadata declarativa: { project_id, intent }. Ejemplos: 'facturas-pizzepos' { project: 'pizzepos', intent: 'factura' }, 'general-pizzepos' { project: 'pizzepos', intent: 'conversacion' }, 'global-system' { project: null, intent: 'notif' }. Cuando un usuario habla por primera vez a un bot, el sistema registra (telegram_user_id, bot_name, chat_id) en una tabla de discovery. Cuando el sistema quiere mandar (user, project, intent) a un humano, busca el bot mas especifico que case Y que tenga discovery del chat_id de ese user. Jerarquia de fallback: bot exacto (project, intent) → bot del proyecto sin intent → bot global con intent → bot global sin intent.",
+        "pro": [
+          "Patron que escala: anadir un nuevo bot especialista (ej: 'cocina-alertas') es solo registrarlo en credential-manager con su metadata. Cero codigo en channel-telegram.",
+          "Onboarding simple desde el lado del usuario humano: habla con el bot, queda registrado. La configuracion no es del usuario humano sino del operador del sistema (definir que bots existen y para que).",
+          "Cubre el caso real que el usuario describe: 'bot para subir factura, bot para recibir notificaciones, bot para conversar — y cada usuario tiene SU chat_id con cada bot'.",
+          "Compatible con multi-canal: el dia que se haga channel-whatsapp o channel-voice, la misma metadata { project, intent } y la misma tabla de discovery sirven sin cambios — el adapter especifico de cada canal solo traduce su shape."
+        ],
+        "con": [
+          "Requiere trabajo medio: campo metadata en credential-manager por credencial, tabla de discovery con persistencia, modulo channel-router que centraliza la resolucion (entrada y salida), adapter channel-telegram, sub-contrato 'channels' que formalice todo.",
+          "Onboarding del primer mensaje: si el sistema quiere mandar (user_X, project_Y, intent_Z) pero user_X nunca habló con el bot que case, no hay chat_id descubierto — fallback a un bot generico o descarte con warning. Hay que pensar la UX de este caso."
+        ],
+        "cuando_elegirlo": "Si la vision es multi-bot multi-intencion como modelo de producto (no caso excepcional). Es el patron que el usuario describio en sesion."
+      },
+      {
+        "id": "camino_4_routing_matricial_completo",
+        "nombre": "Tabla densa configurable user × project × intent → channel + address.",
+        "descripcion": "Maxima flexibilidad: el usuario humano configura explicitamente 'para mi, las facturas del proyecto X van por telegram bot Y; las notifs del proyecto X van por email Z; las del proyecto W van por slack canal V'. Multi-canal nativo. El sistema solo lee la tabla — no infiere nada.",
+        "pro": [
+          "Cubre cualquier escenario imaginable. Es el endpoint a largo plazo del modelo.",
+          "Multi-canal trivial: añadir canales nuevos solo requiere extender el campo channel del enum."
+        ],
+        "con": [
+          "Onboarding pesado: cada usuario configura N×M×K mappings.",
+          "Sobre-ingenieria para single-user actual donde el sistema todavia no tiene varios humanos ni varios canales en paralelo.",
+          "El usuario humano debe entender el modelo (proyectos, intenciones, canales) — friccion."
+        ],
+        "cuando_elegirlo": "Cuando el sistema tenga 5+ usuarios, 3+ canales operativos y casos reales donde el routing por defecto no encaja. Es destino, no punto de partida."
+      }
+    ],
+
+    "recomendacion_tecnica_dejada_por_la_sesion": {
+      "primera_eleccion": "camino_3_bot_por_proyecto_intencion_con_discovery",
+      "razon": "Es el modelo que el usuario articulo en sus propias palabras durante la sesion ('un bot para cada accion, cada usuario tendría que al mandar a ese bot un id distinto según el usuario configurado'). Encaja con la vision de modularidad infinita del compañero (cada bot es un canal especialista enchufable). Y es el unico que escala bien a multi-canal cuando llegue WhatsApp/Slack/voz.",
+      "trabajo_que_implica": [
+        "Sub-contrato 'channels.contract.json' (transversal) que formalice el modelo: campo metadata { project_id?, intent } por credencial bot, tabla de discovery de chat_id por (telegram_user_id, bot), eventos canonicos channel.input.received / channel.output.sent (ya en catalogo) usados por todos los canales por igual, jerarquia de fallback documentada, casos de error (chat_id no descubierto, bot caido, intencion sin bot que case).",
+        "Schemas estrictos AJV para los nuevos eventos del sub-contrato.",
+        "Validator que detecte drifts (canal que no preserva channel_context, canal que razona, modulo que llama directo a telegram-service sin pasar por channel-router).",
+        "credential-manager: añadir campo metadata { project_id, intent } a la shape de credencial. Migracion no bloqueante (campo opcional inicialmente).",
+        "Modulo nuevo channel-router con tabla de discovery persistente por usuario, resolucion bidireccional (entrada: bot → project+intent; salida: (user, project, intent) → bot+chat_id), invalidacion de cache por credential.saved/credential.deleted.",
+        "Adapter channel-telegram (modules/conversacion/channel-telegram/) que traduce telegram.text.received ↔ chat.message.saved/ai.chat.response y delega resolucion a channel-router.",
+        "Tests por handler con validacion contra los nuevos JSON Schemas.",
+        "Auditar telegram-service contra el nuevo contrato y refactorizar si hace falta."
+      ],
+      "estimacion_de_sesiones": "2-3 sesiones bien dimensionadas, asumiendo que la fase transversal (contrato + schemas + validator) es una sesion y la fase horizontal (modulos + tests) es otra o dos."
+    },
+
+    "alternativa_pragmatica_si_se_prefiere_velocidad": {
+      "opcion": "camino_1_bot_global_single_user con deuda explicita",
+      "razon": "Si el objetivo es ver telegram funcionando en single-user este mes para validar el flujo end-to-end del compañero por un canal externo, y se acepta refactor cuando llegue el modelo formal.",
+      "criterio_de_cierre_de_la_deuda": "Cuando se decida cerrar este pendiente (camino_3) la implementacion del camino_1 se elimina entera — no se intenta evolucionar. El bot global queda solo como fallback de notificaciones del sistema sin contexto de proyecto.",
+      "registro": "Si se elige este camino, debe quedar explicitamente anotado en la entrada del modulo channel-telegram en mapa_al_sistema_actual con conformidad: 'NO_ALINEADO — implementacion provisional para validar canal externo, refactor pendiente cuando se cierre routing_de_canales_externos_pendiente_de_modelar'."
+    },
+
+    "dilema_estrategico_mas_amplio": {
+      "_doc": "El usuario expreso en sesion una pregunta meta sobre todo este horizontal: '¿merece la pena tanto telegram porque cada vez está también whatsapp está slack y hay 40000 cosas? entonces habrá que analizar bien los tiempos invertidos y si cerraron un camino o invertir ese tiempo para otro uso'. Esta seccion deja la pregunta como decision arquitectonica abierta para que la proxima sesion no la redescubra.",
+      "pregunta_a_responder_antes_de_codear": "¿Que canal externo concreto merece la inversion inicial: Telegram, WhatsApp Business, Slack, Discord, voz (STT/TTS), email, multiples a la vez, o ninguno?",
+      "factores_a_considerar": [
+        "Coste de implementacion por canal (telegram-service ya existe como proveedor low-level — telegram tiene head start en este repo). WhatsApp Business requiere cuenta empresarial verificada y/o BSP + costes por mensaje. Slack es directo si el caso es team-internal. Discord similar a Slack para comunidades. Voz requiere proveedor STT (OpenAI Whisper, Deepgram, Google) + TTS + canal real (telefono via Twilio/SignalWire o app propia).",
+        "Uso real esperado por el usuario humano (¿manda mas mensajes de WhatsApp o de Telegram en su dia a dia? ¿quiere notificaciones de cocina por SMS o por una app?).",
+        "Caso de uso del proyecto operativo (pizzepos): los usuarios reales de un negocio de pizzeria ¿usan Telegram, WhatsApp, llamada de voz, email? Esto deberia guiar mas que la facilidad tecnica.",
+        "Coste vs valor del modelo de routing canonico: si el modelo (camino_3) se cierra primero, anadir el segundo, tercero, cuarto canal cuesta significativamente menos que el primero. Inversion inicial alta paga dividendos largos.",
+        "Si la respuesta es 'ningun canal externo prioritario ahora' es legitimo — el subsistema funciona via canal web (chat-io) + modelo 'una via fija'. No es un agujero, es una decision."
+      ],
+      "criterio_de_decision_recomendado": "Antes de retomar, el usuario pregunta a su entorno real cual canal usan sus usuarios reales y mide cuanto valdria automatizar la entrada/salida via ese canal. Si el delta es claro (ej: 'mis usuarios mandan facturas por WhatsApp todo el dia y las paso a mano'), ese canal entra primero. Si no hay delta claro, prioridad baja en backlog."
+    },
+
+    "criterios_para_retomar_este_pendiente": [
+      "Decidir si se va a camino_3 (formal, 2-3 sesiones) o camino_1 (provisional, dias) — antes de teclear codigo.",
+      "Si camino_3: el primer paso es redactar channels.contract.json siguiendo la disciplina de los sub-contratos derivados (chat-flow.contract es el modelo). Sin contrato no se toca codigo.",
+      "Si camino_1: documentar explicitamente en el commit que es deuda y registrar la entrada en mapa_al_sistema_actual con la conformidad NO_ALINEADO.",
+      "Decidir cual es el primer canal externo a implementar (Telegram por defecto si no hay otra senal, pero ver dilema_estrategico_mas_amplio).",
+      "Antes de codear, releer esta seccion entera + protocolos_canonicos.eventos_canonicos.channel_io + tipos_canonicos_de_extension.canal. Todo el contexto esta documentado."
+    ],
+
+    "que_pasa_mientras_tanto_en_el_subsistema": [
+      "El canal web (chat-io) sigue siendo el unico canal humano operativo. La cadena chat.message.saved → chat.context.enriched → chat.prompt.ready → ai.chat.response/failed funciona end-to-end.",
+      "El modelo 'una via fija' (resolucion canonica de conversation_id desde project_id implementada en project-manager + ai-agent-framework) garantiza que cualquier salida de agente o respuesta del compañero tiene destino persistente: la conversacion canonica del proyecto. Ningun feedback queda en saco roto.",
+      "agent-observer renderiza tarjetas inline de actividad de agentes en la conversacion canonica del proyecto. La observabilidad UX del compañero en single-user ya funciona sin canales externos.",
+      "Cuando llegue el momento de canales externos, no hay urgencia operativa — es feature, no parche."
+    ]
+  },
+
   "mapa_al_sistema_actual": {
     "descripcion": "Estado real de los modulos del subsistema chat/agentes del repo a fecha de creacion del documento. Para cada modulo: tipo canonico que cumple, conformidad con el modelo (ALINEADO / PARCIAL / DRIFT), drifts especificos detectados y acciones para alinear. Este mapa es snapshot — se actualiza con cada migracion.",
 
@@ -731,15 +874,18 @@
       },
       {
         "modulo": "modules/telegram-service",
-        "tipo_canonico": ["canal (telegram)", "integracion (Telegram Bot API)"],
-        "conformidad": "DESCONOCIDO — sin auditar contra el modelo",
+        "tipo_canonico": ["proveedor low-level de Telegram Bot API (NO es un canal del modelo todavia)"],
+        "conformidad": "INTENCIONALMENTE_NO_ALINEADO — proveedor low-level que falta envolver con un adapter channel-telegram",
+        "rol_real_actual": "Multi-bot manager: descubre bots de credential-manager, hace polling, publica eventos low-level (telegram.text.received con shape { botName, chatId, messageId, from, text }). Acepta requests para enviar (telegram.send_message.request, telegram.send_photo.request, etc.). NO publica chat.message.saved canonico — eso seria responsabilidad de un adapter superior.",
         "drifts_detectados": [
-          "Probable: no usa chat.message.saved canonico (puede usar evento propio).",
-          "Probable: no preserva channel_context para que las respuestas vuelvan al chat correcto."
+          "No es realmente un canal del modelo. Sus eventos no son canonicos del subsistema (telegram.* en lugar de chat.message.saved). Es un proveedor que necesita un adapter channel-telegram que traduzca su shape al canonico.",
+          "El adapter no existe todavia — pendiente de modelar segun routing_de_canales_externos_pendiente_de_modelar.",
+          "Ningun modulo del subsistema chat/agentes consume telegram-service por ahora, lo que es CORRECTO: el desacoplamiento esta bien hasta que se decida el modelo de routing."
         ],
         "acciones_para_alinear": [
-          "Auditar y alinear al canal canonico: publicar chat.message.saved con channel='telegram' y channel_context={ chat_id, message_id_telegram }.",
-          "Suscribirse a ai.chat.response y devolver al chat correcto via Telegram API."
+          "Pospuesto. Ver routing_de_canales_externos_pendiente_de_modelar para el plan completo.",
+          "Cuando se cierre el modelo de routing, crear modules/conversacion/channel-telegram/ que: suscriba telegram.text.received → resuelva (project, intent, user) via channel-router → publique chat.message.saved canonico. Y suscriba ai.chat.response/agent.execute.response → resuelva bot+chat_id via channel-router → publique telegram.send_message.request.",
+          "telegram-service como proveedor probablemente NO se modifica — su rol es traducir Telegram Bot API ↔ eventos low-level. El adapter channel-telegram es lo que hay que crear."
         ]
       },
       {

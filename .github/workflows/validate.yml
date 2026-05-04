@@ -32,6 +32,9 @@ jobs:
       - name: Run unit tests (carta-scheduler)
         run: npm run test:carta-scheduler
 
+      - name: Run unit tests (scheduler — migracion canonica)
+        run: npm run test:scheduler
+
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc
 
@@ -46,6 +49,15 @@ jobs:
 
       - name: Run memory-user-profile tests (memoria modular)
         run: npm run test:memory-user-profile
+
+      - name: Run memory-conversation-summary tests (memoria narrativa)
+        run: npm run test:memory-conversation-summary
+
+      - name: Run ai-gateway embedding tests (embedding-flow)
+        run: npm run test:ai-gateway-embedding
+
+      - name: Run memory-rag tests (memoria semantica)
+        run: npm run test:memory-rag
 
       - name: Run ai-agent-framework tests (agent-flow migration)
         run: npm run test:ai-agent-framework

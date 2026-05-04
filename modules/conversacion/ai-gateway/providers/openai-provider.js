@@ -241,6 +241,54 @@ class OpenAIProvider extends BaseProvider {
       );
     });
   }
+
+  /**
+   * Generate embedding via OpenAI Embeddings API.
+   * Endpoint: POST /embeddings
+   * Body: { model, input, dimensions? }
+   * Returns: { vector, model, dimensions, tokens: { input } }
+   */
+  async generateEmbedding(text, options = {}) {
+    if (!await this.isAvailable()) {
+      throw new Error('OpenAI provider not available (check API key)');
+    }
+    if (typeof text !== 'string' || text.length === 0) {
+      throw new Error('generateEmbedding requires non-empty string');
+    }
+
+    const model = options.model || 'text-embedding-3-small';
+    const headers = {
+      'Authorization': `Bearer ${this.apiKey}`,
+      'Content-Type': 'application/json'
+    };
+    const body = { model, input: text };
+    if (options.dimensions) body.dimensions = options.dimensions;
+
+    this.logger.info('openai.embedding.request', {
+      model, length: text.length
+    });
+
+    const response = await this.withRetry(
+      () => this.makeRequest('POST', '/embeddings', body, headers),
+      options.retryConfig || {}
+    );
+
+    const vector = response?.data?.[0]?.embedding;
+    if (!Array.isArray(vector) || vector.length === 0) {
+      throw new Error('openai embedding response missing embedding');
+    }
+
+    return {
+      vector,
+      model: response.model || model,
+      dimensions: vector.length,
+      tokens: { input: response?.usage?.prompt_tokens || this.countTokens(text) }
+    };
+  }
+
+  supportsEmbeddings() {
+    return true;
+  }
 }
 
 module.exports = OpenAIProvider;

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/tools/tool.response.schema.json",
+  "title": "Tool response shape (runtime)",
+  "description": "Shape canonico que el handler de una tool devuelve en runtime. Dos ramas exclusivas: success ({status, data}) o error ({status, error: {code, message, details?}}). status es codigo HTTP-style. error.code es del catalogo errors.contract.json. Sin shape canonico, los callers (ai-gateway agentic loop, otros modulos via mqttRequest) hacen adivinacion sobre el resultado.",
+
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "data"],
+      "properties": {
+        "status": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 299,
+          "description": "Codigo HTTP-style de exito. 200 OK, 201 Created, 202 Accepted (operacion asincrona aceptada)."
+        },
+        "data": {
+          "description": "Resultado estructurado de la operacion. Shape libre — depende de la tool. Puede ser objeto, array, primitive. Si la tool tiene response_schema_ref declarado, data cumple ese schema."
+        }
+      },
+      "not": { "required": ["error"] },
+      "description": "Rama de exito: status 2xx + data. NO incluye campo error."
+    },
+    {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "error"],
+      "properties": {
+        "status": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599,
+          "description": "Codigo HTTP-style de error. 4xx para errores de cliente (validation, auth, not found, conflict). 5xx para errores de servidor (internal, upstream)."
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "description": "Codigo canonico del catalogo errors.contract.json en UPPER_SNAKE_CASE. NO se inventan codigos locales."
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Mensaje legible que explica el error. NO incluye stack trace, NO incluye secretos."
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Detalles opcionales no sensibles. Ej: { kind: 'domain', field: 'project_id' }, { entity_type: 'project', entity_id: 'p1' }. NO incluye stack ni secretos."
+            }
+          }
+        }
+      },
+      "not": { "required": ["data"] },
+      "description": "Rama de error: status 4xx/5xx + error{code, message, details?}. NO incluye campo data."
+    }
+  ]
+}

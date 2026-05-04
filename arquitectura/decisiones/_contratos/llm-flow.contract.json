@@ -1,0 +1,410 @@
+{
+  "_doc": "Sub-contrato derivado del documento maestro companero-viaje.contract.json. Define el SHAPE EXACTO (validable con JSON Schema) de los 3 eventos canonicos de la categoria llm_generic: llm.complete.request, llm.complete.response, llm.complete.failed. Cualquier modulo que publique o consuma estos eventos cumple este contrato. El validator llm-flow.validate.js cruza module.json publishes/subscribes con los schemas declarados aqui y detecta drift estructural ANTES de produccion.\n\nllm.complete.* es el camino canonico para invocar al LLM SIN contexto de chat — usado por agentes (ai-agent-framework lo invoca por cada agent.execute.request), por memorias modulares que necesitan razonamiento del LLM (memory-conversation-summary genera resumenes), y por cualquier modulo del dominio que requiera un razonamiento. Es complementario al flujo chat (chat.prompt.ready → ai.chat.response/failed) que SI lleva contexto de conversacion.",
+  "id": "llm-flow",
+  "version": "1.1.0",
+  "creada": "2026-05-04",
+  "supersedes_nota": "v1.1.0 (mismo dia): profundizado a la amplitud canonica de los transversales originales (errors, events, http, lifecycle, observability, persistence, resilience). Ampliados: principios 8→11, decisiones_arquitectonicas 4→12, prohibido 5→8, validaciones_cross 7→11, convenciones_complementarias 7→18. Sin cambios al shape de los 3 schemas — todos los ensanches son sobre el porque y los anti-patrones, no sobre los campos validables. El validator no se modifica.\n\nv1.0.0: Primera version. Deriva del documento maestro companero-viaje.contract v1.1.0 — categoria llm_generic. Cierra el drift estructural detectado en sesion 2026-05-04: ai-gateway publica llm.complete.response con shape ad-hoc {request_id, success, error?, ...spread_result} que mezcla success/error en un solo evento — viola la garantia no_silent_failures (par exito/fallo separados). El contrato canonico introduce llm.complete.failed como evento separado. La migracion del ai-gateway y de sus consumidores (ai-agent-framework para invoke_agent/agent.execute, memory-conversation-summary) queda anotada como trabajo_pendiente — el contrato + schemas + validator entran primero (transversal) y la migracion del codigo (horizontal) se ejecuta en commit posterior con tests.\n\nA dia de hoy llm.complete.* tiene 3 callers conocidos: ai-agent-framework (en _executeLLM cuando el agente invoca al LLM con su system prompt + tools), memory-conversation-summary (para resumir conversaciones tras N mensajes), y ai-agent-framework legacy invoke_agent flow. Los 3 cumpliran el shape canonico tras la migracion.",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/companero-viaje.contract.json — protocolos_canonicos.eventos_canonicos.categorias[llm_generic]",
+
+  "objetivo": "Producir UN JSON output (_outputs/llm-flow.json) y TRES JSON Schemas estrictos (uno por evento) + _common.schema.json con $defs compartidos. Validable mecanicamente cruzando contra los module.json del subsistema (ai-gateway, ai-agent-framework, memory-conversation-summary, futuros consumidores). Cualquier modulo que publique o consuma uno de estos 3 eventos declara request_schema_ref / response_schema_ref en sus subscribes/publishes apuntando a estos schemas.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/companero-viaje.contract.json (documento maestro)",
+      "arquitectura/decisiones/_outputs/events.json (catalogo canonico de eventos del repo)",
+      "arquitectura/decisiones/_outputs/errors.json (codigos canonicos para llm.complete.failed.error.code)"
+    ],
+    "obligatorios_si_existen": [],
+    "opcionales_para_contexto": [
+      "modules/conversacion/ai-gateway/index.js (publishes actuales — referencia de drift a cerrar)",
+      "modules/conversacion/ai-agent-framework/index.js (caller actual)",
+      "modules/conversacion/memory-conversation-summary/index.js (caller actual)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL SHAPE ES CONTRATO. Si un modulo publica llm.complete.* con un campo distinto al schema, no es 'flexibilidad' — es drift. CI debe detectarlo y bloquear el merge.",
+
+    "EL CATALOGO ES INMUTABLE. Estos 3 eventos son los UNICOS llm_generic events. No se inventan otros sin replantear el documento maestro. Si una capacidad nueva requiere otro evento, primero se evalua si encaja en uno existente.",
+
+    "PAR SUCCESS/FAILURE SEPARADOS. llm.complete.response cierra exito; llm.complete.failed cierra error. NUNCA un evento que mezcle ambos con flag success. Esta es una violacion de no_silent_failures que existia en el codigo legacy de ai-gateway (success: !error + spread result en mismo evento). El contrato la elimina: dos eventos, dos shapes claros.",
+
+    "REQUEST_ID OBLIGATORIO PARA CORRELACION. El caller publica con request_id propio y se suscribe a la response/failed filtrando por ese request_id. Sin este campo, los responses no se pueden mapear a sus requests cuando hay concurrencia (ej: multiples agentes ejecutando en paralelo).",
+
+    "CORRELATION_ID OBLIGATORIO PARA TRAZABILIDAD. Coherente con companero-viaje: cualquier evento del subsistema chat/agentes incluye correlation_id. Permite reconstruir 'que paso a partir de este input del usuario' incluso cuando hay LLM calls de agentes anidados.",
+
+    "USER_ID OPCIONAL PERO RECOMENDADO. A diferencia de chat_flow (donde es obligatorio), en llm_generic puede no haber humano detras (cron, webhook, refactor automatico). Por tanto user_id es opcional pero, cuando aplique, debe ir.",
+
+    "CONVERSATION_ID NO APLICA. llm.complete.* es deliberadamente APAGADO de contexto de chat. Si el caller necesita pasar contexto historico, lo mete en messages[] manualmente. Esto distingue llm_generic de chat_flow: aqui no hay 'viaje', hay request puntual de razonamiento.",
+
+    "PROJECT_ID OPCIONAL PERO RECOMENDADO. Para que ai-gateway resuelva la credencial del provider correcto por proyecto. En entornos system-wide (sin proyecto especifico), se omite y ai-gateway usa la credencial global.",
+
+    "SETTINGS PARA CONTROL EXPLICITO. Model, provider, temperature, max_tokens son del caller (ej: memory-conversation-summary quiere temperature baja para resumenes deterministas). Si se omiten, ai-gateway usa los defaults del provider.",
+
+    "TOOLS OPCIONALES. Si el caller quiere agentic loop (ej: agente con tools), los pasa en tools[]. Si no, ai-gateway hace single-turn completion sin loop. Mismo evento, comportamiento adaptativo.",
+
+    "MESSAGES OBLIGATORIO. La conversacion (sea single-turn o multi-turn synthetic) viaja en messages[]. system_prompt es campo separado para que el provider lo coloque correctamente (en SystemInstruction de Gemini, system message de OpenAI, etc.).",
+
+    "ERROR.CODE CANONICO. llm.complete.failed.error.code DEBE ser uno del catalogo errors.contract.json (UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR). Sin codigos inventados.",
+
+    "DURATION_MS PARA OBSERVABILIDAD. Tanto en response como en failed: tiempo total del processo (resolucion de credencial + llamada al provider + parsing). Permite SLOs/alerting.",
+
+    "TOKENS Y COST PARA AUDITORIA DE COSTES. response incluye tokens {input, output, total} y cost. Permite agrupar gasto LLM por correlation_id, project_id, agent invocador. Coherente con garantia costes_auditables del documento maestro."
+  ],
+
+  "principios": [
+    {
+      "id": "shape_estricto_validable_con_ajv",
+      "regla": "Cada uno de los 3 eventos tiene UN JSON Schema 2020-12 strict (additionalProperties:false en todos los niveles). Cualquier modulo que publique el evento cumple el schema EXACTO — ni un campo de mas, ni uno de menos de los obligatorios.",
+      "razon": "Sin schema estricto, cada modulo añade su propio campo extra que otros no esperan, y se acumula drift. Con additionalProperties:false, añadir campos requiere actualizar el schema (decision consciente)."
+    },
+    {
+      "id": "par_success_failure_separados",
+      "regla": "llm.complete.response cierra exito; llm.complete.failed cierra error. NO existe evento mixto con flag success. NO se inyecta error como string en response.",
+      "razon": "no_silent_failures del documento maestro: cuando el caller espera respuesta a su request, recibe O response (con vector/result) O failed (con error.code canonico). El consumidor maneja cada caso por separado, sin necesidad de inspeccionar flags. El drift legacy del ai-gateway viola esto."
+    },
+    {
+      "id": "request_id_y_correlation_id_obligatorios",
+      "regla": "request_id obligatorio (correlacion request↔response). correlation_id obligatorio (trazabilidad cross-modulo). user_id opcional. project_id opcional pero recomendado.",
+      "razon": "Sin request_id, callers concurrentes mezclan responses. Sin correlation_id, observabilidad ciega cuando agentes anidados generan llm.complete.* en cascada."
+    },
+    {
+      "id": "system_y_messages_separados",
+      "regla": "system_prompt es campo separado de messages[]. messages[] solo contiene {role: 'user'|'assistant', content}. Ningun mensaje con role 'system' dentro del array.",
+      "razon": "Cada provider (Gemini, Anthropic, OpenAI) coloca el system prompt en lugar distinto de su API. ai-gateway lo adapta. Si el caller pone 'system' como primer mensaje del array, ai-gateway tiene que detectarlo y moverlo — drift implicito. Mejor campo explicito."
+    },
+    {
+      "id": "tools_opcionales_loop_implicito",
+      "regla": "Si el caller pasa tools[], ai-gateway hace agentic loop hasta que el LLM no quiera mas tool calls (o hasta max_tool_iterations). Si no pasa tools, single-turn completion. response.tool_calls_executed y response.iterations documentan que paso.",
+      "razon": "Mismo evento sirve para single-turn (resumir conversacion) y agentic loop (agente con tools). El caller decide; ai-gateway ejecuta. Sin un evento por modo."
+    },
+    {
+      "id": "errores_canonicos_en_failed",
+      "regla": "llm.complete.failed.error.code DEBE ser uno de los codigos canonicos de errors.json. Sin codigos inventados.",
+      "razon": "El consumidor maneja errores de forma uniforme. Con codigos canonicos, hay una sola tabla de mapeo error → mensaje legible. Inventar codigos nuevos por proveedor obliga a cada caller a conocer todos los providers."
+    },
+    {
+      "id": "no_conversation_id_en_llm_generic",
+      "regla": "Los eventos llm.complete.* NO llevan conversation_id. Si lleva, es drift — el evento esta usando llm_generic donde deberia usar chat_flow.",
+      "razon": "llm_generic es para razonamiento del LLM sin contexto de conversacion. Si el caller necesita conversation_id, esta haciendo chat (debe publicar chat.prompt.ready, no llm.complete.request)."
+    },
+    {
+      "id": "duration_ms_y_tokens_para_observabilidad",
+      "regla": "response y failed incluyen duration_ms (latencia total). response incluye tokens {input, output, total} y cost. Imprescindible para auditoria de costes y alerting.",
+      "razon": "Coherente con garantia costes_auditables del documento maestro. Sin estos campos, el gasto LLM se vuelve caja negra y no se puede atribuir a usuario/proyecto/agente."
+    },
+    {
+      "id": "tools_resultado_estructurado_no_string",
+      "regla": "Cuando una tool se ejecuta dentro del agentic loop, su resultado (capturado en response.tool_calls_executed[].result) es un objeto estructurado, NUNCA una cadena. Si la tool devuelve string, se envuelve en { content: string } antes de incluirla en tool_calls_executed.",
+      "razon": "Resultados como string suelto pierden la posibilidad de incluir metadata, status code, errores parciales. Objeto estructurado deja sitio para extender sin romper consumidores."
+    },
+    {
+      "id": "cost_calculado_por_ai_gateway_no_caller",
+      "regla": "response.cost es calculado por ai-gateway a partir de tokens consumidos y precios del provider/model. El caller NO lo manda en el request ni puede sobreescribirlo.",
+      "razon": "Coste auditable requiere fuente unica de verdad. Si cada caller calcula su propio cost, los numeros divergen y la atribucion por usuario/proyecto se vuelve poco fiable."
+    },
+    {
+      "id": "iterations_documenta_agentic_loop",
+      "regla": "response.iterations refleja cuantas vueltas dio el LLM en el agentic loop. iterations=1 implica single-turn (el LLM no invoco tools o fue una pregunta directa). iterations>1 implica que el LLM invoco tools, ai-gateway las ejecuto, y volvio a llamar al LLM con los resultados.",
+      "razon": "Sin este campo, no se puede distinguir un caso 'LLM rapido pregunta directa' de 'LLM con 5 tool calls anidados'. Para alerting de loops infinitos y para optimizar prompts que disparan demasiadas iteraciones, este dato es imprescindible."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "tres_eventos_canonicos",
+      "decision": "Tres eventos: llm.complete.request (entrada), llm.complete.response (cierre exitoso), llm.complete.failed (cierre error). NO un cuarto evento de progress (a diferencia de agent-flow que SI lo tiene como evento opcional).",
+      "razon": "El LLM es atomic en su llamada — no hay progreso intermedio que reportar mas alla del agentic loop interno (cuyas iteraciones se documentan en response.iterations). Si el futuro requiere streaming de tokens del LLM al caller (UX 'escribiendo en tiempo real'), seria un cuarto evento llm.complete.delta — pero hoy NO se necesita."
+    },
+    {
+      "id": "shape_legacy_drift_a_cerrar_horizontal",
+      "decision": "ai-gateway hoy publica llm.complete.response con shape {request_id, success, error?, ...result_spread} (no canonico). NO se migra el codigo en este commit — el contrato + schemas + validator entran primero. La migracion del ai-gateway y de sus 3 callers (ai-agent-framework, memory-conversation-summary, invoke_agent legacy) queda anotada en trabajo_pendiente como horizontal. Mientras tanto, el validator marca drift que se anota en baseline.",
+      "razon": "Disciplina del repo: transversal antes que horizontal. La migracion afecta a 3 callers en paralelo y requiere tests por cada uno. Trabajo de sesion dedicada, no de cierre rapido."
+    },
+    {
+      "id": "settings_compatibles_con_provider_neutral",
+      "decision": "settings tiene shape minimo cross-provider: {model, provider, temperature, max_tokens, dimensions?}. Provider-specific extras NO entran en este shape. Si Gemini necesita topK y OpenAI no, ai-gateway aplica defaults — el caller no lo controla.",
+      "razon": "El contrato es provider-neutral. Si cada caller pudiera pasar settings provider-specific, romperia la garantia resiliencia_a_cambios_de_proveedor_llm: cambiar de provider rompe a todos los callers que pasaban opciones del antiguo."
+    },
+    {
+      "id": "no_streaming_synchronous_request_response",
+      "decision": "El patron es sincrono request/response (con request_id). NO streaming token-by-token. Si el LLM tarda 5 segundos en responder, el caller espera 5 segundos.",
+      "razon": "Streaming aumenta complejidad significativa (mas eventos canonicos, mas estado en callers). Para los casos de uso actuales (agentes razonando, summaries) no aporta UX visible — el output llega cuando llega. Si el chat web quiere streaming visible al usuario, ese es chat_flow no llm_generic."
+    },
+    {
+      "id": "request_id_generado_por_caller_no_ai_gateway",
+      "decision": "El request_id lo genera el caller antes de publicar el request. ai-gateway lo PROPAGA tal cual al response/failed. NUNCA lo regenera ni lo modifica.",
+      "razon": "Si ai-gateway generara su propio request_id, el caller no podria correlacionar response con su request original. El caller necesita controlarlo desde origen."
+    },
+    {
+      "id": "tools_son_subset_no_obligatorias",
+      "decision": "Si el caller pasa tools[] no vacio, ai-gateway hace agentic loop. Si pasa tools[] vacio o lo omite, single-turn completion. Mismo evento, comportamiento adaptativo.",
+      "razon": "No tiene sentido un evento aparte para 'invocar LLM con tools' vs 'sin tools'. La presencia de tools es input — no cambia el contrato de salida (response.tool_calls_executed sera array vacio si no hubo loop)."
+    },
+    {
+      "id": "agentic_loop_max_iteraciones_configurable",
+      "decision": "ai-gateway tiene un cap maximo de iteraciones del agentic loop (config.max_tool_iterations, default 10). Si el LLM intenta invocar tools mas alla del cap, ai-gateway corta el loop y publica response con iterations=N (el cap) y finish_reason='length' o equivalente.",
+      "razon": "Sin cap, un LLM en bucle (intenta una tool, falla, vuelve a intentar...) consume tokens infinitos. El cap es defensa: incluso si el caller olvido configurar timeout, el loop tiene fin."
+    },
+    {
+      "id": "temperature_default_no_caller_default",
+      "decision": "Si settings.temperature es ausente en el request, ai-gateway aplica el default del provider (NO un default global del subsistema). Cada provider expone su propio default razonable (gemini 0.7, openai 1.0, etc.).",
+      "razon": "Hardcodear un default global obliga a sobrescribirlo cada vez que se quiere el comportamiento natural del provider. Mejor que el default sea provider-specific y el caller solo lo toque cuando quiera comportamiento NO-default (ej: temperature 0.3 para resumenes deterministas)."
+    },
+    {
+      "id": "messages_orden_cronologico_obligatorio",
+      "decision": "messages[] viaja en orden cronologico — del mas antiguo al mas reciente. El ultimo elemento es el turno mas nuevo. ai-gateway respeta este orden al pasarlo al provider.",
+      "razon": "Algunos providers ordenan messages internamente (Anthropic) y otros confian en el orden recibido (OpenAI). Dejar el orden 'no especificado' fuerza a ai-gateway a tener heuristicas de ordenacion. Mejor regla clara cross-caller."
+    },
+    {
+      "id": "tool_call_id_generado_por_provider_no_caller",
+      "decision": "Cuando el LLM invoca una tool, el id de cada tool_call lo genera el provider (OpenAI 'call_xyz', Gemini con un fallback). El caller NO lo controla. ai-gateway captura ese id en tool_calls_executed[].name (junto a name + arguments + result).",
+      "razon": "El id no tiene valor para el caller — solo sirve para que el LLM pueda correlacionar resultados de tools en multiples iteraciones. Si el caller intentara setear ids, romperia el agentic loop interno del provider."
+    },
+    {
+      "id": "failed_no_revierte_consumir_tokens",
+      "decision": "Si el LLM consume tokens en una iteracion y la siguiente falla (ej: timeout en llamada upstream), llm.complete.failed REPORTA los tokens y duration_ms hasta el momento del fallo. NO se 'revierten' como si no hubieran ocurrido — el provider los facturara igual.",
+      "razon": "Coste auditable requiere honestidad: si gastaste tokens, queda registrado aunque el flujo final fallara. Ocultarlos en failed haria los dashboards de coste mentir."
+    },
+    {
+      "id": "caller_implementa_su_propia_idempotencia",
+      "decision": "ai-gateway NO mantiene cache de requests. Si el caller publica el mismo request_id dos veces, ai-gateway ejecuta dos veces el LLM (consume tokens dos veces). El caller es responsable de su propia idempotencia (deduplicar antes de publicar, retry con backoff).",
+      "razon": "Cache de requests en ai-gateway introduce TTL, eviction, claves complicadas (mismo content puede legitimamente requerir respuestas distintas con temperature alta). Mas simple: ai-gateway hace exactamente lo que se le pide, una vez por publish."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "publicar_response_con_error_inyectado",
+      "regla": "NO publicar llm.complete.response con campo error. NUNCA. Para errores, publicar llm.complete.failed con shape canonico.",
+      "viola_garantias": ["no_silent_failures"],
+      "como_detectar": "validator: regex en codigo 'publish.*llm\\.complete\\.response.*error'. Drift critico.",
+      "alternativa_correcta": "try { result = await execute(); publish('llm.complete.response', {request_id, ...result}); } catch (err) { publish('llm.complete.failed', {request_id, error: { code: classify(err), message: err.message }}); }"
+    },
+    {
+      "id": "incluir_conversation_id_en_llm_generic",
+      "regla": "NO incluir conversation_id en llm.complete.* — si tu caso lleva conversation_id, debes usar chat_flow events, no llm_generic.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "validator: cualquier publish a llm.complete.request/response/failed cuyo audit campos_visibles incluya conversation_id es drift.",
+      "alternativa_correcta": "Para chat con historico de conversacion, publicar chat.prompt.ready (chat_flow). llm.complete.* es para razonamiento sin contexto de chat."
+    },
+    {
+      "id": "inventar_error_code",
+      "regla": "llm.complete.failed.error.code NO puede ser un codigo fuera del catalogo errors.contract.json. NO 'GEMINI_FAILED' ni 'OPENAI_DOWN' — usar UPSTREAM_5XX, UPSTREAM_RATE_LIMITED, etc.",
+      "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm"],
+      "como_detectar": "schema enforce: error.code es enum cerrado. AJV strict rechaza.",
+      "alternativa_correcta": "ai-gateway._classifyError mapea cualquier error del provider al codigo canonico. Si aparece un caso nuevo no cubierto, AÑADIR al catalogo errors.contract.json (decision arquitectonica), NO inventar localmente."
+    },
+    {
+      "id": "stream_tokens_via_llm_generic",
+      "regla": "NO inventar eventos llm.complete.delta o similar para streaming. Si se decide soportar streaming, sera con un sub-contrato dedicado y revision del documento maestro.",
+      "viola_garantias": ["extensibilidad_sin_reescritura"],
+      "como_detectar": "validator: cualquier evento publish con prefijo llm. fuera del catalogo {request, response, failed} es drift critico.",
+      "alternativa_correcta": "Sincrono por ahora. Si emerge necesidad real, abrir contrato dedicado con discusion."
+    },
+    {
+      "id": "system_role_dentro_de_messages",
+      "regla": "messages[] NO contiene mensajes con role 'system'. Si se quiere dar instrucciones, va en system_prompt (campo separado).",
+      "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm"],
+      "como_detectar": "schema: messages[].role enum solo permite 'user' y 'assistant'. AJV rechaza 'system'.",
+      "alternativa_correcta": "Pasar la instruccion en el campo system_prompt del request. ai-gateway la coloca correctamente segun el provider (systemInstruction Gemini, system message OpenAI, etc.)."
+    },
+    {
+      "id": "incluir_attachments_en_llm_generic",
+      "regla": "llm.complete.request NO lleva campo attachments. Los adjuntos son del flujo del chat (chat_flow) — viajan en chat.message.saved.attachments y prompt-builder los embebe en messages como text content antes de publicar chat.prompt.ready.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "schema strict: el shape de llm.complete.request NO declara attachments. AJV rechaza con additionalProperties:false.",
+      "alternativa_correcta": "Si necesitas pasar contenido adjunto al LLM (PDF, imagen), embebe ese contenido como texto dentro del message del usuario antes de invocar llm.complete.request. Ejemplo: 'Analiza este PDF: <texto extraido>'."
+    },
+    {
+      "id": "pasar_secretos_en_messages_o_system_prompt",
+      "regla": "NO incluir API keys, contraseñas, tokens de auth, datos personales sensibles, secretos de cliente, ni cualquier credencial en system_prompt o messages[]. El payload completo del bus se loguea por observabilidad — los secretos quedarian visibles.",
+      "viola_garantias": ["aislamiento_entre_usuarios_y_proyectos", "costes_auditables"],
+      "como_detectar": "Validator heuristico: regex sobre patrones tipicos (API key 'sk-', 'Bearer ', 'AIza', 'ghp_', etc.) en source que se concatenen al system_prompt o messages. Severidad: ERROR (no warning) — riesgo de seguridad activo.",
+      "alternativa_correcta": "Las credenciales viven en credential-manager. ai-gateway las resuelve via credential.resolve.request. NUNCA viajan en payload del bus. Si una tool necesita autenticarse a un servicio externo, esa tool resuelve su propia credencial — no la mete en el prompt."
+    },
+    {
+      "id": "mockear_llm_response_inyectando_al_bus_en_produccion",
+      "regla": "NO inyectar llm.complete.response sintetica al bus en runtime de produccion para 'simular' un LLM. Los mocks son herramienta de tests — viven dentro de tests/, no en codigo de modulos.",
+      "viola_garantias": ["costes_auditables", "observabilidad_end_to_end"],
+      "como_detectar": "Code review: cualquier modulo que NO sea ai-gateway publicando llm.complete.response es drift. Validator: detectar publish('llm.complete.response') en codigo fuera de modules/conversacion/ai-gateway/.",
+      "alternativa_correcta": "Para tests, mockear el bus dentro del harness del test. Para entornos sandbox/staging sin LLM real, configurar ollama-provider con modelo local — mantiene la disciplina canonica sin inyectar al bus."
+    }
+  ],
+
+  "output_shape_resumen": "_outputs/llm-flow.json contiene: { id: 'llm-flow', version, schema_files: ['_common.schema.json', 'llm.complete.request.schema.json', 'llm.complete.response.schema.json', 'llm.complete.failed.schema.json'], events: [...los 3 con descripcion + publishers/consumers conocidos del repo], drifts_observed_baseline: [...el shape legacy del ai-gateway hasta migrar] }.",
+
+  "reglas_de_extraccion": [
+    "El validator scaneando module.json del subsistema cuenta el numero de modulos que declaran request/response_schema_ref apuntando a estos schemas.",
+    "El validator scaneando codigo busca patrones de drift conocidos (publish llm.complete.response con error, publish con conversation_id, etc.).",
+    "El output _outputs/llm-flow.json es snapshot del estado: 'cuantos modulos cumplen el contrato hoy', 'cuantos drifts conocidos en baseline', 'que migracion falta'."
+  ],
+
+  "derivaciones": [
+    {
+      "documento": "arquitectura/decisiones/_schemas/llm-flow/_common.schema.json",
+      "rol": "$defs canonicos compartidos (correlation_id, request_id, project_id, user_id, error con codigos cerrados, settings, message)."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.request.schema.json",
+      "rol": "Shape exacto de la solicitud al LLM. Required: correlation_id, request_id, system_prompt, messages, settings, timestamp. Opcionales: project_id, user_id, tools."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.response.schema.json",
+      "rol": "Shape exacto del cierre exitoso. Required: correlation_id, request_id, content, model, provider, tokens, duration_ms, timestamp. Opcionales: tool_calls_executed, iterations, cost, finish_reason."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.failed.schema.json",
+      "rol": "Shape exacto del cierre con error. Required: correlation_id, request_id, error{code,message}, duration_ms, timestamp. Opcionales: provider_attempted, model_attempted."
+    },
+    {
+      "documento": "arquitectura/decisiones/_validators/llm-flow.validate.js",
+      "rol": "Compila los 4 schemas (3+common) AJV strict + cross-checks contra modulos del subsistema (publishes/subscribes con/sin schema_ref, drifts conocidos como response con error y messages con role system)."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "llm_flow_schemas_compile_ok",
+      "regla": "Los 4 schemas (3 + _common) compilan AJV strict 2020-12 con additionalProperties:false en todos los niveles obligatorios.",
+      "como_detectar": "Compilacion AJV en arranque del validator. Falla critica si no compilan.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_subsistema_sin_schema_ref",
+      "regla": "Modulo del subsistema chat/agentes que publica/consume llm.complete.* declara request_schema_ref / response_schema_ref en su module.json.",
+      "como_detectar": "Cruzar module.json publishes/subscribes con catalogo. Listar entries sin schema_ref.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_publish_response_con_error_inyectado",
+      "regla": "Codigo del subsistema publica llm.complete.response sin campo error. Si aparece error como campo de response, drift critico.",
+      "como_detectar": "regex en source: /publish.*llm\\.complete\\.response.*[,{].*error/ → flag.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_publish_response_con_success_flag",
+      "regla": "Codigo del subsistema NO publica llm.complete.response con campo success: bool. Si lo hace, drift de mezcla success/failure.",
+      "como_detectar": "regex en source: /publish.*llm\\.complete\\.response.*success\\s*:/ → flag.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_publish_llm_generic_con_conversation_id",
+      "regla": "Codigo del subsistema NO publica llm.complete.* con campo conversation_id (significaria que esta usando llm_generic donde deberia ser chat_flow).",
+      "como_detectar": "regex en source: detecta literal conversation_id dentro del payload de llm.complete.*",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_messages_con_role_system",
+      "regla": "Codigo no publica llm.complete.request con messages que incluyan role:'system'. La instruccion va en system_prompt aparte.",
+      "como_detectar": "Mas dificil de detectar mecanicamente — heuristica regex sobre el shape del payload publicado. Severidad info para revision manual.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_evento_llm_fuera_del_catalogo",
+      "regla": "Modulos NO declaran publish/subscribe a eventos con prefijo llm. fuera de {llm.complete.request, llm.complete.response, llm.complete.failed}.",
+      "como_detectar": "Cruzar module.json contra catalogo de 3 eventos canonicos. Anything extra = drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_caller_que_no_correlaciona_request_id",
+      "regla": "Cualquier modulo que publica llm.complete.request DEBE suscribirse a llm.complete.response Y a llm.complete.failed (no solo response). Sin filtro por request_id, el caller mezcla responses ajenos.",
+      "como_detectar": "Cruzar module.json: si un modulo declara publish a llm.complete.request pero NO subscribe a llm.complete.failed, es drift critico — cuando el LLM falle, el caller queda colgado sin manejar el error.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_settings_provider_specific",
+      "regla": "settings del request NO contiene campos provider-specific (top_k, presence_penalty, frequency_penalty, repetition_penalty, n, etc.). Solo los campos canonicos (model, provider, temperature, max_tokens, top_p, stop).",
+      "como_detectar": "schema strict: settings tiene additionalProperties:false. AJV rechaza extras. Validator adicional puede flagear settings con campos sospechosos en codigo source.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_messages_vacios",
+      "regla": "messages[] NO puede estar vacio (minItems:1). No tiene sentido invocar al LLM sin al menos UN mensaje del usuario.",
+      "como_detectar": "schema strict: messages.minItems=1. AJV rechaza array vacio. Validator adicional puede detectar publish con messages: [] en source.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_secreto_inyectado_en_prompt",
+      "regla": "Patrones tipicos de secretos (API keys 'sk-...', 'Bearer ...', 'AIza...', 'ghp_...', JWT tipico, contraseñas como 'password=', etc.) NO deben aparecer en variables que luego se concatenen a system_prompt o messages[].content.",
+      "como_detectar": "Validator heuristico: regex sobre source de modulos del subsistema buscando los patrones de secretos. Cross-check con concatenacion a publish llm.complete.request.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_publish_response_fuera_de_ai_gateway",
+      "regla": "Solo modules/conversacion/ai-gateway/ tiene autorizacion para publicar llm.complete.response y llm.complete.failed. Cualquier otro modulo que lo haga, drift critico.",
+      "como_detectar": "Validator: regex publish('llm.complete.response'|'llm.complete.failed') en source — si aparece fuera de modules/conversacion/ai-gateway/, drift.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_iterations_ausente_con_tools",
+      "regla": "Si llm.complete.response se publica con tool_calls_executed[] no vacio, DEBE incluir iterations >= 2. Si no, drift de auditoria — significaria que se ejecutaron tools sin loop, contradictorio.",
+      "como_detectar": "Validator de auditoria: cruzar audits modulo-completo de ai-gateway: si su shape de response no documenta iterations cuando documenta tool_calls_executed, drift.",
+      "severidad": "info"
+    }
+  ],
+
+  "salida_validador": "PASS si los 4 schemas compilan estructuralmente. PASS si --check-system no detecta drifts criticos (errors). Warnings (drift_*) listados pero no bloquean — quedan en baseline. Formato coherente con chat-flow y agent-flow validators: banner PASS/FAIL + bloque cross-system con findings agrupados por severidad y ubicacion archivo:linea.",
+
+  "convenciones_complementarias": [
+    "naming.contract: los 3 eventos cumplen <module-prefix>.<entity>.<verb>: 'llm' es prefijo (placeholder ya que ningun modulo concreto los 'posee' — son canonicos del subsistema), 'complete' entidad, request/response/failed verbos canonicos.",
+    "glossary.contract: 'llm' es termino canonico unico cross-modulo (no se usa 'gpt', 'claude' o 'modelo' como sinonimos). 'completion' se traduce a 'complete' como verbo.",
+    "events.contract: hereda de la disciplina general del bus — toda comunicacion via publish/subscribe, no acceso directo, request_id para correlation request↔response.",
+    "errors.contract: error.code de llm.complete.failed esta en el catalogo cerrado. Sin codigos inventados.",
+    "observability.contract: ai-gateway emite metricas con labels {project_id, user_id, correlation_id, model, provider} en cada llm.complete.response/failed. Sin estos labels, costes_auditables se rompe.",
+    "chat-flow.contract: complementario. chat_flow LLEVA contexto de conversacion (conversation_id, channel, channel_context). llm_generic NO. Si un caller necesita conversation_id, debe publicar chat.prompt.ready, no llm.complete.request.",
+    "agent-flow.contract: ai-agent-framework consume agent.execute.request y POR DENTRO publica llm.complete.request al ai-gateway para ejecutar el LLM con system prompt + tools del agente. Cuando recibe llm.complete.response/failed, traduce a agent.execute.response/failed.",
+    "embedding-flow (sub-contrato hermano): patron paralelo a llm-flow para generar embeddings. Mismo entry point en ai-gateway (tercer handler), mismo modelo de credentials, mismo error.code canonico. La diferencia: llm.complete.* devuelve content + tool_calls; embedding.generate.* devuelve vector + dimensions. Comparten _classifyError y _resolveCredential del ai-gateway.",
+    "multi-tenancy.contract: project_id en llm.complete.request es opcional pero recomendado — ai-gateway lo usa para resolver credencial del provider correcto por proyecto. En contextos system-wide (cron sin proyecto, refactor automatico), se omite y ai-gateway usa la credencial global del provider.",
+    "testing.contract: cada caller de llm.complete.* tiene tests aislados que mockean ai-gateway. Ejemplo: memory-conversation-summary.test.js mockea el publish('llm.complete.request') con resolucion sintetica de llm.complete.response inyectada en el mock del eventBus. NUNCA se inyecta llm.complete.response al bus real en runtime de produccion (eso es drift_publish_response_fuera_de_ai_gateway).",
+    "security.contract: API keys de los providers viven SOLO en credential-manager. ai-gateway las resuelve via credential.resolve.request. Las keys NUNCA viajan en llm.complete.request ni aparecen en logs (los logs de ai-gateway redactan Authorization headers — ver test 'Authorization header se redacta en logs' de ai-gateway-poc).",
+    "versionado.contract: cambio en shape de los schemas (campos required, enums, types) = mayor (v1.0.0 → v2.0.0). Añadir campo opcional al shape = menor (v1.0.0 → v1.1.0). Cambio en filosofia/principios sin afectar schemas = patch (v1.0.0 → v1.0.1). El profundizado de v1.0.0 → v1.1.0 de este contrato no es estrictamente menor (no hay shape cambiado) — se puede entender como minor por ampliacion semantica del 'porque'.",
+    "documentation.contract: cualquier modulo que use llm.complete.* declara en su module.json un comentario en el subscribe/publish describiendo el caso de uso. Ej: ai-agent-framework declara 'usado dentro del agentic loop del agente — system prompt y tools del agente especifico'. memory-conversation-summary declara 'genera resumen de conversacion tras N mensajes'.",
+    "frontend.contract: el frontend (canal web) NO publica llm.complete.* directamente — siempre via chat_flow (chat.message.saved → prompt-builder → chat.prompt.ready → ai-gateway). Si el frontend necesitara invocar un razonamiento del LLM sin contexto de chat (ej: 'genera 3 ideas para titulo'), seria via tool del compañero (el LLM lo decide) o via agente especialista — nunca via llm.complete.* directo desde el frontend.",
+    "bus-transport.contract: llm.complete.* viaja por el bus principal MQTT. NO se enruta por subbuses ni canales privados. La latencia tipica del bus para estos eventos es <50ms en local; el cuello de botella real es la API del provider (200-5000ms). El bus NO es el problema de performance.",
+    "resilience.contract: ai-gateway tiene retry interno con backoff exponencial para upstream errors transitorios (UPSTREAM_5XX, UPSTREAM_TIMEOUT, UPSTREAM_RATE_LIMITED). Si todos los retries fallan, publica llm.complete.failed con el codigo del ultimo intento. NO se reintenta en CREDENTIAL_NOT_FOUND ni UPSTREAM_AUTH_FAILED (errores no transitorios — fallarian igual al reintentar).",
+    "scheduling.contract: agentes que se disparan por cron (scheduling.contract) tambien usan llm.complete.* via ai-agent-framework. El correlation_id lo genera el cron job al disparar el agente y se propaga sin modificar a traves de toda la cadena causal (chat-scheduler → agent.execute.request → ai-agent-framework → llm.complete.request → ai-gateway). Sin esta propagacion, observabilidad rompe.",
+    "module-loading.contract: ai-gateway es de los primeros modulos en cargar (priority alta) — si no esta disponible, agentes y memorias quedan colgados sin LLM. Sus dependencias (credential-manager para resolver keys) cargan antes. Si ai-gateway falla en onLoad (todos los providers sin credenciales), publica un evento descriptivo y los modulos que dependen de el manejan la degradacion graceful (memory-conversation-summary y memory-rag son ejemplos: si llm.complete.failed llega con CREDENTIAL_NOT_FOUND, NO publican chat.context.enriched pero NO rompen el flujo del chat).",
+    "deployment.contract: el sub-contrato llm-flow es independiente del modo de despliegue. Funciona igual en local single-process (un proceso Node con todos los modulos), en multi-process via PM2, o en futuro split entre nodos via MQTT remoto — el shape del payload no cambia. La unica diferencia operativa es la latencia del bus."
+  ],
+
+  "transiciones_de_significado_eliminadas": [
+    {
+      "campo_polisemico_anterior": "llm.complete.response con shape {request_id, success: bool, error?: string, ...result_spread}",
+      "significados_anteriores": [
+        "Si success=true: cierre exitoso con result.content embebido en spread.",
+        "Si success=false: cierre con error como string suelto, sin code canonico.",
+        "Mezcla de exito y fallo en mismo evento — viola no_silent_failures."
+      ],
+      "resolucion_canonica": "Dos eventos: llm.complete.response (solo exito, shape estricto con content+model+provider+tokens) Y llm.complete.failed (solo error, error.code canonico). Caller hace dos subscribes filtrados por request_id."
+    }
+  ],
+
+  "trabajo_pendiente": [
+    {
+      "id": "migrar_ai_gateway_y_callers_al_shape_canonico",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "ai-gateway hoy publica llm.complete.response con shape ad-hoc {request_id, success, error?, ...result}. Migrar a shape canonico: llm.complete.response solo en exito (shape estricto con campos canonicos), llm.complete.failed nuevo evento solo en error (con error.code canonico). Migrar tambien los 3 callers conocidos.",
+      "modulos_afectados": [
+        "ai-gateway: cambiar onLlmCompleteRequest. En lugar de un publish con success/error mezclados, dos paths: success → llm.complete.response (sin success flag, con campos canonicos correlation_id, content, model, provider, tokens, cost, duration_ms, timestamp); error → llm.complete.failed (correlation_id, request_id, error{code,message}, duration_ms, timestamp).",
+        "ai-agent-framework: en _executeLLM, suscribirse a llm.complete.failed ademas de llm.complete.response. Si llega failed, propagar a agent.execute.failed (en lugar de detectar success=false en response).",
+        "memory-conversation-summary: en _requestLlmSummary, manejar llm.complete.failed. Hoy lo hace via onLlmFailed handler — verificar coherencia con shape canonico.",
+        "ai-agent-framework legacy invoke_agent: similar, suscribirse a failed."
+      ],
+      "criterio_de_cierre": "AJV strict valida que ai-gateway publica llm.complete.response sin error y llm.complete.failed con error.code canonico. Tests por handler con validacion contra schema. Drift en baseline desaparece tras migracion.",
+      "bloqueado_por": "Ninguno tecnicamente. Es trabajo de sesion dedicada porque toca 4 modulos.",
+      "fecha_anotacion": "2026-05-04"
+    },
+    {
+      "id": "decidir_si_se_soporta_streaming_en_futuro",
+      "estado": "decision_pendiente",
+      "naturaleza": "transversal_potencial",
+      "descripcion": "Hoy llm.complete.* es sincrono request/response. Si en algun momento se quiere UX 'escribiendo en tiempo real' en chat web, eso es streaming token-by-token. NO se decide aqui — se anota como decision arquitectonica abierta.",
+      "criterio_de_decision_recomendado": "Si emerge caso de uso real (chat web con UX de streaming visible), abrir sub-contrato dedicado streaming-flow.contract con eventos llm.complete.delta (token), llm.complete.done (cierre). Mantener llm.complete.request/response/failed para casos NO-streaming. Coexistencia con dos modos.",
+      "fecha_anotacion": "2026-05-04"
+    }
+  ]
+}

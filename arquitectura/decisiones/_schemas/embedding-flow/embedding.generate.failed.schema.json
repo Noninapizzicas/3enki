@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/embedding-flow/embedding.generate.failed.schema.json",
+  "title": "embedding.generate.failed",
+  "description": "Cierre con error de embedding.generate.request. Publicado por ai-gateway cuando la generacion falla (credencial ausente, upstream timeout, rate limit, etc.). El caller debe manejar el fallo (degradacion graceful: memory-rag NO publica chat.context.enriched de ese mensaje, pero el flujo del chat sigue normal).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["correlation_id", "request_id", "error", "duration_ms", "timestamp"],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "request_id": { "$ref": "_common.schema.json#/$defs/request_id" },
+    "error": { "$ref": "_common.schema.json#/$defs/error" },
+    "provider_attempted": { "$ref": "_common.schema.json#/$defs/provider" },
+    "model_attempted": { "$ref": "_common.schema.json#/$defs/model" },
+    "duration_ms": { "$ref": "_common.schema.json#/$defs/duration_ms" },
+    "timestamp": { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

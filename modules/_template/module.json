@@ -1,0 +1,92 @@
+{
+  "name": "_template",
+  "version": "1.0.0",
+  "description": "Modulo plantilla canonico. NO se carga en runtime (prefijo '_'). Sirve de referencia visual al reescribir cualquiera de los 73 modulos del repo durante la fase horizontal. Cumple los 24 contratos transversales: declaraciones de events, tools, dependencies, observability, persistence, lifecycle. Copiar entero, renombrar (quitar prefijo '_'), y rellenar con la logica del dominio.",
+  "author": "Event Core Team",
+  "language": "es",
+
+  "publishes": [
+    {
+      "event": "_template.entidad.creada",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/<dominio>/<evento>.schema.json",
+      "description": "Ejemplo: el modulo notifica que creo una entidad. Reemplazar por los eventos reales del dominio."
+    }
+  ],
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Activacion de proyecto. Cargar config persistente del proyecto (storage por proyecto)."
+    },
+    {
+      "event": "project.deactivated",
+      "handler": "onProjectDeactivated",
+      "description": "Desactivacion de proyecto. Limpiar caches en memoria si aplica."
+    },
+    {
+      "event": "db.query.response",
+      "handler": "onDbQueryResponse",
+      "description": "Si el modulo persiste, recibe respuestas de database-manager via request_id."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "_template.crear",
+      "description": "Crea una nueva entidad del dominio. Reemplazar nombre y descripcion por la real.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "Proyecto activo." },
+          "datos": { "type": "object", "description": "Datos de la entidad a crear." }
+        },
+        "required": ["project_id", "datos"]
+      },
+      "handler": "toolCrear",
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "INTERNAL_ERROR"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "_template",
+      "action": "list",
+      "handler": "handleUiList",
+      "description": "Endpoint mqttRequest para listar entidades del dominio (consumido por frontend o por otros modulos)."
+    }
+  ],
+
+  "dependencies": ["database-manager"],
+
+  "config": {
+    "enabled": true,
+    "persistence": {
+      "pattern": "json-file-per-project",
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["pendingDb", "cacheVolatil"]
+    }
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "_template.entidad.creada.total",
+        "_template.crear.errors.total"
+      ],
+      "gauges": [
+        "_template.entidades.activas"
+      ],
+      "timings": [
+        "_template.crear.duration_ms"
+      ]
+    }
+  }
+}

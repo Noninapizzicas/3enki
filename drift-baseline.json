@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-04T11:46:16.246Z",
-  "total": 4111,
+  "generated_at": "2026-05-04T11:55:27.855Z",
+  "total": 4114,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -15,17 +15,17 @@
     "llm-flow": 6,
     "tools": 267,
     "agents-config": 94,
-    "frontend": 526,
+    "frontend": 528,
     "security": 1,
     "testing": 29,
     "multi-tenancy": 270,
-    "documentation": 83,
+    "documentation": 84,
     "versionado": 1,
     "deployment": 4,
     "scheduling": 2
   },
   "by_severity": {
-    "warning": 3773,
+    "warning": 3776,
     "info": 355,
     "error": 10
   },
@@ -188,6 +188,7 @@
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/conversacion-ref/ai-agent-framework/prompts/viabilidad-receta-analyzer-system.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/conversacion-ref/prompt-engine/FORMATO.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/esp32-modules-analysis.md contiene patron estructurable — considerar absorber a contrato JSON",
+    "documentation|drift_markdown_con_shape_estructurable|arquitectura/migracion/README.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|docs/AI_AGENTS_ARCHITECTURE.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|docs/ARQUITECTURA_COMPOSICION_PROYECTOS.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|docs/CONTEXT_POS.md contiene patron estructurable — considerar absorber a contrato JSON",
@@ -2429,6 +2430,7 @@
     "frontend|drift_panel_excede_33vh|frontend/src/lib/components/comandero/VariacionesPanel.svelte:402 — max-height: 85vh excede el limite canonico de 33vh",
     "frontend|drift_panel_excede_33vh|frontend/src/lib/components/layout/Panel.svelte:272 — max-height: 90vh excede el limite canonico de 33vh",
     "frontend|drift_panel_excede_33vh|frontend/src/lib/modules/prompts/PromptsPanel.svelte:1102 — max-height: 80vh excede el limite canonico de 33vh",
+    "frontend|drift_ui_handler_sin_type_canonico|_template ui_handler 'list' sin campo type",
     "frontend|drift_ui_handler_sin_type_canonico|certificate-authority ui_handler 'ca-cert' sin campo type",
     "frontend|drift_ui_handler_sin_type_canonico|certificate-authority ui_handler 'crl' sin campo type",
     "frontend|drift_ui_handler_sin_type_canonico|certificate-authority ui_handler 'download-p12' sin campo type",
@@ -2621,6 +2623,7 @@
     "frontend|drift_ui_handler_sin_type_canonico|viabilidad ui_handler 'config' sin campo type",
     "frontend|drift_ui_handler_sin_type_canonico|viabilidad ui_handler 'escenario' sin campo type",
     "frontend|drift_ui_handler_sin_type_canonico|viabilidad ui_handler 'estudio' sin campo type",
+    "frontend|drift_ui_handler_sin_zone_canonica|_template ui_handler 'list' sin campo zone",
     "frontend|drift_ui_handler_sin_zone_canonica|certificate-authority ui_handler 'ca-cert' sin campo zone",
     "frontend|drift_ui_handler_sin_zone_canonica|certificate-authority ui_handler 'crl' sin campo zone",
     "frontend|drift_ui_handler_sin_zone_canonica|certificate-authority ui_handler 'download-p12' sin campo zone",

@@ -392,5 +392,39 @@
     "lifecycle.validate.js valida cómo nace/muere un módulo. errors.validate.js valida cómo el módulo responde cuando algo sale mal durante su vida.",
     "modulo-completo.validate.js valida la AUDITORÍA. errors.validate.js cruza patrones de respuestas-con-error contra la auditoría para detectar tools/ui_handlers/apis sin documentar errores.",
     "Los 6 validators son complementarios. Cada uno tiene su scope. Se ejecutan por separado o todos en CI."
+  ],
+
+  "trabajo_pendiente": [
+    {
+      "id": "deuda_de_canonizacion_errores_legacy",
+      "estado": "deuda_permanente_cierre_incremental",
+      "naturaleza": "horizontal_disperso",
+      "descripcion": "El validator detecta ~1867 findings de errores en codigo legacy (modulos pre-contratos). Distribucion: drift_error_sin_metric (591), drift_error_como_string_suelto (511), drift_error_sin_log (486), drift_inventar_error_code (143), drift_respuesta_no_canonica (97), drift_swallow_error_silently (35). Decision arquitectonica tomada en sesion 2026-05-04: NO migrar masivamente. La migracion big-bang tiene poco ROI — los modulos funcionan, lo que falta es observability afinada (logger+metric+code canonico), no funcionalidad. Mejor cierre incremental: cada vez que se toca un modulo por feature/bug, se aprovecha para canonizar sus errores en ese commit.",
+      "razon_no_migrar_masivamente": [
+        "1867 findings * 5 minutos por fix promedio = ~155 horas. Equivalente a 4-6 sesiones grandes dedicadas. Tiempo que vale mas en horizontales que generan capacidades nuevas.",
+        "La canonizacion no rompe nada operativo — los modulos siguen funcionando con string suelto. Es deuda de calidad de telemetria, no de correctitud.",
+        "Big-bang refactor masivo es alto-riesgo: muchos modulos pre-contratos no tienen tests; tocarlos a mano puede introducir regresiones que no se detectan hasta produccion.",
+        "Algunos drifts requieren conocer el dominio: drift_inventar_error_code (143) necesita decidir el codigo canonico apropiado del catalogo (RESOURCE_NOT_FOUND vs VALIDATION_FAILED vs INTERNAL_ERROR vs uno nuevo) — no es codemod automatico."
+      ],
+      "criterios_de_cierre_incremental": [
+        "Cuando se toca un modulo por feature o bug: aprovechar para canonizar TODOS los errores de ese modulo en el mismo commit. La regla es 'modulo tocado, modulo limpio'.",
+        "Cuando un modulo se reescribe (POC2-style migration), arrancar con disciplina canonica desde el inicio — no portar errores legacy.",
+        "Cuando se añade UN handler nuevo a un modulo existente, ese handler usa codigos canonicos. NO obliga a limpiar el resto del modulo en el mismo commit.",
+        "Cada cierre baja contadores en baseline. Cuando un modulo entero queda limpio (cero drifts de errors), eliminar sus entradas del baseline en el commit del cierre."
+      ],
+      "candidatos_a_codemod_automatico": [
+        "drift_error_sin_log (486 ocurrencias): añadir 'this.logger.error(<event_name>, { error: <var>.message })' antes del 'return { error: ... }'. Patron mecanico, mismo en todos los handlers. Escribible como AST transformer en ~50 LOC.",
+        "drift_error_sin_metric (591 ocurrencias): añadir 'this.metrics?.increment(\"<modulo>.<accion>.errors\")' tras el log. Igualmente mecanico.",
+        "drift_error_como_string_suelto (511): mas dificil — requiere envolver 'return { error: <string> }' en '{ error: { code: \"INTERNAL_ERROR\", message: <string> } }'. Riesgo: si el caller asume string puede romper. Requiere review."
+      ],
+      "candidatos_a_review_humano_no_automatico": [
+        "drift_inventar_error_code (143): el codigo canonico depende del dominio. Un 'PROJECT_NOT_FOUND' inventado puede ser RESOURCE_NOT_FOUND canonico, pero un 'CARTA_INVALID' puede ser VALIDATION_FAILED o un nuevo dominio specific. Decision por modulo.",
+        "drift_swallow_error_silently (35): catch vacios. Cada uno requiere decidir si es benigno (el error se ignora a proposito) o si hay que loggear. Review humano caso por caso.",
+        "drift_respuesta_no_canonica (97): handlers que devuelven shapes raros ({ ok: true, msg: '...' } en lugar de { status: 200, data }). Requiere migrar y verificar que callers no se rompan."
+      ],
+      "decision_para_la_proxima_sesion": "Si una sesion tiene como objetivo bajar la deuda de errors, PRIMERO escribir un codemod (AST transformer JS o regex agresivo) para drift_error_sin_log + drift_error_sin_metric — esos 1077 findings se pueden resolver en una sesion sin review humano si el codemod respeta indentacion y orden de statements. El resto (string suelto, codes inventados, swallow silent, no canonica) NO se automatiza — se cierra modulo a modulo cuando se tocan.",
+      "fecha_anotacion": "2026-05-04",
+      "criterio_para_marcar_como_cerrado_definitivo": "Cuando los findings 'errors' bajen a < 50 (umbral de tolerancia para casos legitimos: shimmies de compat, infraestructura no-handler como tests fixtures, etc.). Mientras esten por encima, la deuda sigue como permanente con cierre incremental."
+    }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T13:25:11.482Z",
+  "generated_at": "2026-05-06T13:50:41.247Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3695,
-    "loc_total": 48712,
+    "drifts_total": 3700,
+    "loc_total": 48809,
     "tools_total": 147,
     "agents_total": 30
   },
@@ -179,11 +179,11 @@
       "path": "modules/channel-manager",
       "layer": "core",
       "language": "en",
-      "version": "1.0.0",
-      "loc": 493,
-      "drifts": 29,
-      "events_publishes": 5,
-      "events_subscribes": 1,
+      "version": "2.0.0",
+      "loc": 590,
+      "drifts": 34,
+      "events_publishes": 7,
+      "events_subscribes": 3,
       "tools": 2,
       "agents": 0,
       "dependencies": [

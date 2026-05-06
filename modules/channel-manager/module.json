@@ -1,101 +1,36 @@
 {
   "name": "channel-manager",
-  "version": "1.0.0",
-  "description": "Registry de canales externos: mapea identificadores externos (chat_id, email, telefono) a proyectos y propositos internos",
-  "author": "Event-Core Team",
+  "version": "2.0.0",
+  "description": "Registry centralizado de canales externos. Mapea identificadores externos (chat_id, email, telefono) a proyectos y propositos internos. Storage SQLite via database-manager (proyecto 'system'). v2.0.0: 5 helpers POC2, handlers shape canonico, _publicarEvento con correlation_id propagado, pendingDbRequests Map con timeout/cleanup.",
+  "author": "Event Core Team",
   "language": "en",
   "main": "index.js",
   "dependencies": [
     "database-manager"
   ],
-  "provides": {
-    "events": [
-      "channel.registered",
-      "channel.updated",
-      "channel.removed",
-      "channel.resolved"
-    ],
-    "queries": [
-      "channel.resolve.request"
-    ]
-  },
   "events": {
     "publishes": [
-      {
-        "event": "channel.registered",
-        "description": "Nuevo canal vinculado a un proyecto",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/channel_registered"
-        }
-      },
-      {
-        "event": "channel.updated",
-        "description": "Canal actualizado",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/channel_updated"
-        }
-      },
-      {
-        "event": "channel.removed",
-        "description": "Canal desvinculado",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/channel_removed"
-        }
-      },
-      {
-        "event": "channel.resolved",
-        "description": "Canal resuelto exitosamente a proyecto+proposito",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/channel_resolved"
-        }
-      },
-      {
-        "event": "channel-manager.resolve.response",
-        "description": "Respuesta a channel-manager.resolve.request (patron ServiceExecutor)",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/channel_resolve_response"
-        }
-      }
+      { "event": "channel.registered", "description": "Nuevo canal vinculado a un proyecto. Payload: { channel_type, external_id, project_id, purpose, label, timestamp, correlation_id }.", "schema": { "$ref": "./schemas/events.json#/definitions/channel_registered" } },
+      { "event": "channel.updated",    "description": "Canal actualizado. Payload: { channel_type, external_id, updates, timestamp, correlation_id }.",                                              "schema": { "$ref": "./schemas/events.json#/definitions/channel_updated" } },
+      { "event": "channel.removed",    "description": "Canal desvinculado. Payload: { channel_type, external_id, project_id, timestamp, correlation_id }.",                                          "schema": { "$ref": "./schemas/events.json#/definitions/channel_removed" } },
+      { "event": "channel.resolved",   "description": "Canal resuelto exitosamente a proyecto+proposito. Payload: { channel_type, external_id, project_id, purpose, label, metadata, duration, timestamp, correlation_id }.", "schema": { "$ref": "./schemas/events.json#/definitions/channel_resolved" } },
+      { "event": "channel-manager.resolve.response", "description": "Respuesta a channel-manager.resolve.request correlacionada por request_id. found=true|false.",                                  "schema": { "$ref": "./schemas/events.json#/definitions/channel_resolve_response" } },
+      "db.query.request",
+      "db.schema.init.request"
     ],
     "subscribes": [
-      {
-        "event": "channel-manager.resolve.request",
-        "description": "Otro modulo pide resolver un identificador externo via services.call('channel-manager', 'resolve', ...)",
-        "handler": "onResolveRequest"
-      }
+      { "event": "channel-manager.resolve.request", "handler": "onResolveRequest", "description": "Otro modulo pide resolver un identificador externo. Publica channel-manager.resolve.response con request_id correlacionado." },
+      { "event": "db.query.response",       "handler": "_onDbResponse", "description": "Response de database-manager para queries (resuelve pendingDbRequests por correlation_id)." },
+      { "event": "db.schema.init.response", "handler": "_onDbResponse", "description": "Response de database-manager para schema init (resuelve pendingDbRequests por correlation_id)." }
     ]
   },
-  "handlers": [
-    {
-      "domain": "channel",
-      "action": "register",
-      "handler": "handleRegister"
-    },
-    {
-      "domain": "channel",
-      "action": "update",
-      "handler": "handleUpdate"
-    },
-    {
-      "domain": "channel",
-      "action": "remove",
-      "handler": "handleRemove"
-    },
-    {
-      "domain": "channel",
-      "action": "resolve",
-      "handler": "handleResolve"
-    },
-    {
-      "domain": "channel",
-      "action": "list",
-      "handler": "handleList"
-    },
-    {
-      "domain": "channel",
-      "action": "list-by-project",
-      "handler": "handleListByProject"
-    }
+  "ui_handlers": [
+    { "domain": "channel", "action": "register",        "handler": "handleRegister" },
+    { "domain": "channel", "action": "update",          "handler": "handleUpdate" },
+    { "domain": "channel", "action": "remove",          "handler": "handleRemove" },
+    { "domain": "channel", "action": "resolve",         "handler": "handleResolve" },
+    { "domain": "channel", "action": "list",            "handler": "handleList" },
+    { "domain": "channel", "action": "list-by-project", "handler": "handleListByProject" }
   ],
   "tools": [
     {
@@ -104,28 +39,14 @@
       "handler": "handleToolResolve",
       "parameters": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
-          "channel_type": {
-            "type": "string",
-            "enum": [
-              "telegram",
-              "gmail",
-              "whatsapp",
-              "glovo",
-              "web"
-            ],
-            "description": "Tipo de canal externo"
-          },
-          "external_id": {
-            "type": "string",
-            "description": "Identificador externo (ej: 'mibot:12345', 'cuenta@gmail.com', '+34600123456')"
-          }
+          "channel_type": { "type": "string", "enum": ["telegram", "gmail", "whatsapp", "glovo", "web"], "description": "Tipo de canal externo." },
+          "external_id":  { "type": "string", "minLength": 1, "description": "Identificador externo (ej: 'mibot:12345', 'cuenta@gmail.com', '+34600123456')." }
         },
-        "required": [
-          "channel_type",
-          "external_id"
-        ]
-      }
+        "required": ["channel_type", "external_id"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "INTERNAL_ERROR"]
     },
     {
       "name": "channel.list",
@@ -133,45 +54,50 @@
       "handler": "handleToolList",
       "parameters": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
-          "project_id": {
-            "type": "string",
-            "description": "Filtrar por proyecto (opcional)"
-          },
-          "channel_type": {
-            "type": "string",
-            "description": "Filtrar por tipo de canal (opcional)"
-          }
+          "project_id":   { "type": "string", "description": "Filtrar por proyecto (opcional)." },
+          "channel_type": { "type": "string", "description": "Filtrar por tipo de canal (opcional)." }
         },
         "required": []
-      }
+      },
+      "errores_conocidos": ["INTERNAL_ERROR"]
     }
   ],
+  "config": {
+    "db_project_id": "system",
+    "table_name": "channels",
+    "dbTimeout": 10000,
+    "persistence": {
+      "pattern": "owned-table-via-database-manager",
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["cache", "pendingDbRequests"]
+    }
+  },
   "observability": {
     "logging": {
       "level": "info",
       "structured": true,
       "correlation_id": true
     },
+    "tracing": {
+      "propaga_correlation_id": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [
-        "channel.registered.total",
-        "channel.resolved.total",
-        "channel.resolve.failed.total",
-        "channel.removed.total"
+        "channel-manager.registered",
+        "channel-manager.updated",
+        "channel-manager.removed",
+        "channel-manager.resolve.success",
+        "channel-manager.resolve.miss",
+        "channel-manager.errors"
       ],
       "gauges": [
-        "channel.count.total",
-        "channel.count.by_type"
-      ],
-      "timings": [
-        "channel.resolve.duration"
+        "channel-manager.cache_size",
+        "channel-manager.pending_db_requests"
       ]
     }
-  },
-  "config": {
-    "db_project_id": "system",
-    "table_name": "channels"
   }
 }

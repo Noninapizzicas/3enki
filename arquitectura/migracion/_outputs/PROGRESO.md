@@ -1,25 +1,25 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-06T13:25:12Z_
+_Última regeneración: 2026-05-06T13:50:42Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
-- **Migrados**: 15 / 73 (21%)
-- **Drifts cerrados**: 344 / 3695 (9%)
-- **Drifts restantes en baseline**: 3351
+- **Migrados**: 16 / 73 (22%)
+- **Drifts cerrados**: 361 / 3700 (10%)
+- **Drifts restantes en baseline**: 3339
 
 ### Progreso por capa
 
 | Capa | Done | Total | % |
 |------|------|-------|---|
-| core | 11 | 16 | 69% `██████████████░░░░░░` |
+| core | 12 | 16 | 75% `███████████████░░░░░` |
 | infra | 2 | 16 | 13% `███░░░░░░░░░░░░░░░░░` |
 | dominio | 2 | 38 | 5% `█░░░░░░░░░░░░░░░░░░░` |
 | tooling | 0 | 3 | 0% `░░░░░░░░░░░░░░░░░░░░` |
 
-## Módulos migrados (15)
+## Módulos migrados (16)
 
 | # | Capa | Slug | LOC | Drifts antes → ahora | Commit |
 |---|------|------|-----|----------------------|--------|
@@ -30,6 +30,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 5 | core | `credential-manager` | 843 | 28 → 12 (-57%) | `069f8c8` 2026-05-06 |
 | 7 | core | `gateway-manager` | 429 | 13 → 2 (-85%) | `8aa2b74` 2026-05-06 |
 | 9 | core | `conversacion__agent-observer` | 217 | 0 → 0 (-0%) | `54b7b7c` 2026-05-03 |
+| 11 | core | `channel-manager` | 590 | 34 → 17 (-50%) | _n/a_ |
 | 12 | core | `conversacion__memory-user-profile` | 192 | 0 → 0 (-0%) | `6120cbd` 2026-05-03 |
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
 | 15 | core | `conversacion__memory-conversation-summary` | 288 | 0 → 0 (-0%) | `3e988d8` 2026-05-04 |
@@ -39,26 +40,25 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 65 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
 | 67 | dominio | `pizzepos__cocina-poc` | 452 | 0 → 0 (-0%) | `5437466` 2026-05-02 |
 
-## Próximos en la cola (top 10 de 58 pendientes)
+## Próximos en la cola (top 10 de 57 pendientes)
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
 | 6 | core | `conversacion__ai-gateway` | 776 | 17 | 0 | drifts 13/17 (76%) — esperado <50% |
 | 8 | core | `plugin-manager` | 486 | 11 | 0 | drifts 6/11 (55%) — esperado <50% |
 | 10 | core | `conversacion__chat-io` | 654 | 52 | 1 | drifts 32/52 (62%) — esperado <50% |
-| 11 | core | `channel-manager` | 493 | 29 | 1 | sin tests/unit/ |
 | 14 | core | `conversacion__prompt-builder` | 346 | 12 | 2 | drifts 7/12 (58%) — esperado <50% |
 | 17 | infra | `filesystem` | 1290 | 196 | 0 | sin tests/unit/ |
 | 18 | infra | `firmware-manager` | 1094 | 126 | 0 | drifts 86/126 (68%) — esperado <50% |
 | 19 | infra | `esp32-dev` | 735 | 88 | 0 | drifts 63/88 (72%) — esperado <50% |
 | 21 | infra | `device-shadow` | 478 | 53 | 0 | sin tests/unit/ |
 | 22 | infra | `code-executor` | 618 | 52 | 0 | sin tests/unit/ |
+| 23 | infra | `firmware-builder` | 526 | 50 | 0 | sin tests/unit/ |
 
-<details><summary>Resto de pendientes (48 módulos)</summary>
+<details><summary>Resto de pendientes (47 módulos)</summary>
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
-| 23 | infra | `firmware-builder` | 526 | 50 | 0 |
 | 24 | infra | `device-registry` | 702 | 43 | 0 |
 | 25 | infra | `metricas` | 714 | 29 | 0 |
 | 26 | infra | `device-health` | 477 | 24 | 0 |

@@ -91,3 +91,6 @@ jobs:
 
       - name: Run integration tests (carta-scheduler + mqttRequest real)
         run: npm run test:integration:carta-scheduler
+
+      - name: Run unit tests (channel-manager — reescritura canonica)
+        run: npm run test:channel-manager

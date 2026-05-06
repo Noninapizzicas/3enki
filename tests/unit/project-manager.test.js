@@ -500,7 +500,54 @@ function isCanonicalError(result) {
   });
 
   // ==========================================
-  // Group 8: Helpers internos POC2
+  // Group 8: Features / blueprints (restaurado del monolito)
+  // ==========================================
+
+  await testAsync('handleUIListFeatures sin blueprints dir → array vacio (200, no falla)', async () => {
+    const mocks = makeMocks();
+    const { module: m, basePath } = await instantiate(mocks);
+    const result = await m.handleUIListFeatures({});
+    assert.strictEqual(result.status, 200);
+    assert.ok(Array.isArray(result.data.features));
+    await m.onUnload();
+    await cleanup(basePath);
+  });
+
+  await testAsync('handleUIAddFeatures sin id → 400 VALIDATION_FAILED', async () => {
+    const mocks = makeMocks();
+    const { module: m, basePath } = await instantiate(mocks);
+    const result = await m.handleUIAddFeatures({ features: ['x'] });
+    assert.strictEqual(result.status, 400);
+    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    await m.onUnload();
+    await cleanup(basePath);
+  });
+
+  await testAsync('handleUIAddFeatures con id inexistente → 404 RESOURCE_NOT_FOUND', async () => {
+    const mocks = makeMocks();
+    const { module: m, basePath } = await instantiate(mocks);
+    const result = await m.handleUIAddFeatures({ id: 'phantom', features: ['x'] });
+    assert.strictEqual(result.status, 404);
+    assert.strictEqual(result.error.code, 'RESOURCE_NOT_FOUND');
+    await m.onUnload();
+    await cleanup(basePath);
+  });
+
+  await testAsync('handleUIAddFeatures sin features array → 400 con field=features', async () => {
+    const mocks = makeMocks();
+    const { module: m, basePath } = await instantiate(mocks);
+    const created = await m.handleUICreate({ name: 'Para features' });
+    const id = created.data.project.id;
+    const result = await m.handleUIAddFeatures({ id, features: [] });
+    assert.strictEqual(result.status, 400);
+    assert.strictEqual(result.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(result.error.details.field, 'features');
+    await m.onUnload();
+    await cleanup(basePath);
+  });
+
+  // ==========================================
+  // Group 9: Helpers internos POC2
   // ==========================================
 
   await testAsync('_errorResponse produce shape canonico', async () => {

@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-06T07:02:55Z_
+_Última regeneración: 2026-05-06T07:33:19Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 12 / 73 (16%)
-- **Drifts cerrados**: 264 / 3783 (7%)
-- **Drifts restantes en baseline**: 3519
+- **Drifts cerrados**: 260 / 3696 (7%)
+- **Drifts restantes en baseline**: 3436
 
 ### Progreso por capa
 
@@ -24,11 +24,11 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | # | Capa | Slug | LOC | Drifts antes → ahora | Commit |
 |---|------|------|-----|----------------------|--------|
 | 1 | core | `conversacion__ai-agent-framework` | 611 | 136 → 37 (-73%) | `af2f52a` 2026-05-03 |
-| 3 | core | `scheduler` | 907 | 96 → 23 (-76%) | `077b2b4` 2026-05-04 |
+| 3 | core | `scheduler` | 907 | 82 → 17 (-79%) | `077b2b4` 2026-05-04 |
 | 6 | core | `credential-manager` | 843 | 28 → 12 (-57%) | `069f8c8` 2026-05-06 |
 | 9 | core | `conversacion__agent-observer` | 217 | 0 → 0 (-0%) | `54b7b7c` 2026-05-03 |
 | 12 | core | `conversacion__memory-user-profile` | 192 | 0 → 0 (-0%) | `6120cbd` 2026-05-03 |
-| 13 | core | `project-manager` | 1307 | 49 → 20 (-59%) | _n/a_ |
+| 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `66d2cb4` 2026-05-06 |
 | 15 | core | `conversacion__memory-conversation-summary` | 288 | 0 → 0 (-0%) | `3e988d8` 2026-05-04 |
 | 16 | core | `conversacion__memory-rag` | 381 | 0 → 0 (-0%) | `d131ebc` 2026-05-04 |
 | 20 | infra | `certificate-authority` | 409 | 61 → 24 (-61%) | `bc7b712` 2026-04-20 |
@@ -63,38 +63,38 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 25 | infra | `metricas` | 714 | 29 | 0 |
 | 26 | infra | `device-health` | 477 | 24 | 0 |
 | 27 | infra | `system-inspector` | 236 | 20 | 0 |
-| 29 | infra | `prompt-manager` | 1703 | 134 | 1 |
+| 29 | infra | `prompt-manager` | 1703 | 128 | 1 |
 | 30 | infra | `conversation-export` | 553 | 24 | 1 |
 | 31 | infra | `pdf-viewer` | 1097 | 101 | 2 |
-| 32 | infra | `telegram-service` | 753 | 91 | 2 |
+| 32 | infra | `telegram-service` | 753 | 68 | 2 |
 | 33 | dominio | `esp32-flasher` | 1138 | 145 | 0 |
-| 34 | dominio | `pizzepos__carta-manager` | 594 | 125 | 0 |
+| 34 | dominio | `pizzepos__carta-manager` | 594 | 111 | 0 |
 | 35 | dominio | `escandallo` | 1237 | 96 | 0 |
 | 36 | dominio | `recetas` | 741 | 89 | 0 |
 | 37 | dominio | `log-manager` | 598 | 82 | 0 |
 | 38 | dominio | `perifericos` | 739 | 79 | 0 |
-| 39 | dominio | `viabilidad` | 651 | 74 | 0 |
-| 40 | dominio | `pizzepos__carta-design` | 338 | 72 | 0 |
-| 41 | dominio | `pizzepos__pedidos` | 918 | 72 | 0 |
-| 42 | dominio | `facturas` | 573 | 67 | 0 |
-| 43 | dominio | `staff-manager` | 394 | 67 | 0 |
-| 44 | dominio | `pizzepos__cuentas` | 1224 | 65 | 0 |
-| 45 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
-| 46 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
-| 47 | dominio | `notas` | 485 | 54 | 0 |
-| 48 | dominio | `pizzepos__persistencia-comandero` | 1542 | 50 | 0 |
+| 39 | dominio | `pizzepos__carta-design` | 338 | 72 | 0 |
+| 40 | dominio | `pizzepos__pedidos` | 918 | 72 | 0 |
+| 41 | dominio | `facturas` | 573 | 67 | 0 |
+| 42 | dominio | `staff-manager` | 394 | 67 | 0 |
+| 43 | dominio | `pizzepos__cuentas` | 1224 | 65 | 0 |
+| 44 | dominio | `viabilidad` | 651 | 63 | 0 |
+| 45 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
+| 46 | dominio | `notas` | 485 | 54 | 0 |
+| 47 | dominio | `pizzepos__persistencia-comandero` | 1542 | 50 | 0 |
+| 48 | dominio | `pizzepos__carta-scheduler` | 560 | 47 | 0 |
 | 49 | dominio | `pizzepos__carta-digital` | 299 | 43 | 0 |
 | 50 | dominio | `pizzepos__impresion` | 1258 | 43 | 0 |
 | 51 | dominio | `pizzepos__carta-impresion` | 258 | 41 | 0 |
 | 52 | dominio | `calling-generator` | 812 | 40 | 0 |
-| 53 | dominio | `pizzepos__tarifas` | 309 | 40 | 0 |
-| 54 | dominio | `pizzepos__carta-marketing` | 394 | 38 | 0 |
-| 55 | dominio | `pizzepos__categorias` | 430 | 36 | 0 |
-| 56 | dominio | `pizzepos__cocina` | 1233 | 36 | 0 |
-| 57 | dominio | `pizzepos__comandero` | 809 | 36 | 0 |
-| 58 | dominio | `facturacion__asesoria` | 520 | 35 | 0 |
-| 59 | dominio | `pizzepos__menu-generator` | 338 | 34 | 0 |
-| 60 | dominio | `pizzepos__ingredientes` | 697 | 33 | 0 |
+| 53 | dominio | `pizzepos__categorias` | 430 | 36 | 0 |
+| 54 | dominio | `pizzepos__cocina` | 1233 | 36 | 0 |
+| 55 | dominio | `pizzepos__comandero` | 809 | 36 | 0 |
+| 56 | dominio | `facturacion__asesoria` | 520 | 35 | 0 |
+| 57 | dominio | `pizzepos__ingredientes` | 697 | 33 | 0 |
+| 58 | dominio | `pizzepos__menu-generator` | 338 | 32 | 0 |
+| 59 | dominio | `pizzepos__tarifas` | 309 | 31 | 0 |
+| 60 | dominio | `pizzepos__carta-marketing` | 394 | 30 | 0 |
 | 61 | dominio | `pizzepos__cobros` | 661 | 18 | 0 |
 | 62 | dominio | `dashboard` | 361 | 17 | 0 |
 | 63 | dominio | `pizzepos__variaciones` | 443 | 17 | 0 |

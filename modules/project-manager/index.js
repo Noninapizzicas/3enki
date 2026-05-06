@@ -1124,6 +1124,142 @@ class ProjectManagerModule {
     }
   }
 
+  async handleUIListFeatures(data) {
+    try {
+      const { projectId } = data || {};
+      const bpDir = path.join(process.cwd(), 'blueprints', 'project-types');
+
+      let installedFeatures = [];
+      if (projectId) {
+        const project = this._getProject(projectId);
+        if (project) installedFeatures = project.metadata?.features || [];
+      }
+
+      let files;
+      try { files = await fs.promises.readdir(bpDir); }
+      catch (_) { return { status: 200, data: { features: [], projectId: projectId || null } }; }
+
+      const features = [];
+      for (const file of files) {
+        if (!file.endsWith('.json')) continue;
+        try {
+          const content = JSON.parse(await fs.promises.readFile(path.join(bpDir, file), 'utf-8'));
+          const featureId = content.id || file.replace('.json', '');
+          let handlersAvailable = true;
+          if (content.copyHandlersFrom) {
+            const sourcePath = path.join(this.projectsBasePath, content.copyHandlersFrom, 'handlers');
+            try { await fs.promises.access(sourcePath); } catch { handlersAvailable = false; }
+          }
+          features.push({
+            id: featureId,
+            label: content.label || featureId,
+            icon: content.icon || '',
+            description: content.description || '',
+            dependencies: content.dependencies || [],
+            installed: installedFeatures.includes(featureId),
+            handlersAvailable
+          });
+        } catch (err) {
+          this.logger.warn('project-manager.blueprint.invalid', { file, error: err.message });
+        }
+      }
+      return { status: 200, data: { features, projectId: projectId || null } };
+    } catch (err) {
+      return this._handleHandlerError('project-manager.ui.list_features.failed', err, 'ui_list_features');
+    }
+  }
+
+  async handleUIAddFeatures(data) {
+    try {
+      const { id, features } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+        { kind: 'domain', field: 'id' });
+
+      const project = this._getProject(id);
+      if (!project) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Project not found',
+        { entity_type: 'project', entity_id: id });
+
+      const selectedFeatures = Array.isArray(features) ? features : [];
+      if (selectedFeatures.length === 0) return this._errorResponse(400, 'VALIDATION_FAILED',
+        'At least one feature is required', { kind: 'domain', field: 'features' });
+
+      const existingFeatures = project.metadata?.features || [];
+      const newFeatures = selectedFeatures.filter(f => !existingFeatures.includes(f));
+      if (newFeatures.length === 0) {
+        return { status: 200, data: { applied: [], skipped: selectedFeatures, reason: 'all_already_installed' } };
+      }
+
+      // Load blueprints
+      const bpDir = path.join(process.cwd(), 'blueprints', 'project-types');
+      const blueprints = new Map();
+      const loadErrors = [];
+      for (const featureId of newFeatures) {
+        try {
+          const bpPath = path.join(bpDir, `${featureId}.json`);
+          blueprints.set(featureId, JSON.parse(await fs.promises.readFile(bpPath, 'utf-8')));
+        } catch (err) {
+          loadErrors.push({ featureId, error: err.message });
+        }
+      }
+
+      // Validar dependencias
+      const missingDeps = [];
+      for (const [featureId, blueprint] of blueprints) {
+        for (const dep of (blueprint.dependencies || [])) {
+          if (!existingFeatures.includes(dep) && !newFeatures.includes(dep)) {
+            missingDeps.push({ feature: featureId, requires: dep });
+          }
+        }
+      }
+      if (missingDeps.length > 0) {
+        return this._errorResponse(400, 'VALIDATION_FAILED',
+          `Dependencias no satisfechas: ${missingDeps.map(d => `${d.feature} requiere ${d.requires}`).join(', ')}`,
+          { kind: 'domain', missingDeps });
+      }
+
+      // Aplicar blueprints
+      const correlation_id = crypto.randomUUID();
+      const basePath = project.base_path;
+      const applied = [];
+      const warnings = [];
+
+      for (const [featureId, blueprint] of blueprints) {
+        try {
+          await this._initializeFromBlueprint(basePath, featureId, blueprint);
+          applied.push(featureId);
+          this.logger.info('project-manager.feature.installed', {
+            project_id: id, feature_id: featureId, base_path: basePath, correlation_id
+          });
+          this.metrics?.increment('project-manager.feature_installed', { feature: featureId });
+        } catch (err) {
+          this.logger.error('project-manager.feature.install.failed', {
+            project_id: id, feature_id: featureId, error: err.message, correlation_id
+          });
+          this.metrics?.increment('project-manager.errors', { kind: 'feature_install', feature: featureId });
+          warnings.push({ featureId, warning: `Error: ${err.message}` });
+        }
+      }
+
+      // Update metadata.features
+      const updatedFeatures = [...new Set([...existingFeatures, ...applied])];
+      await this._updateProject(id, {
+        metadata: { ...(project.metadata || {}), features: updatedFeatures }
+      }, correlation_id);
+
+      return {
+        status: 200,
+        data: {
+          applied, projectId: id,
+          skipped: selectedFeatures.filter(f => existingFeatures.includes(f)),
+          ...(warnings.length > 0 ? { warnings } : {}),
+          ...(loadErrors.length > 0 ? { loadErrors } : {})
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('project-manager.ui.add_features.failed', err, 'ui_add_features');
+    }
+  }
+
   async handleUIGetUnassigned() {
     try {
       const allProjectIds = Array.from(this.projects.keys());
@@ -1236,6 +1372,67 @@ class ProjectManagerModule {
       });
     } catch (err) {
       this.logger.warn('project-manager.project_schema.init.failed', { project_id: projectId, error: err.message });
+    }
+  }
+
+  /**
+   * Aplica un blueprint (feature) sobre un proyecto existente.
+   * Crea directorios + merge config.json + copia handlers + escribe initialFiles
+   * con namespacing por featureId en storage/.
+   */
+  async _initializeFromBlueprint(basePath, featureId, projectDef) {
+    const dirs = projectDef.directories || [];
+    for (const dir of dirs) {
+      const namespacedDir = dir.startsWith('storage/')
+        ? dir.replace('storage/', `storage/${featureId}/`)
+        : dir;
+      await fs.promises.mkdir(path.join(basePath, namespacedDir), { recursive: true });
+    }
+
+    if (projectDef.config && Object.keys(projectDef.config).length > 0) {
+      const configDir = path.join(basePath, 'config');
+      await fs.promises.mkdir(configDir, { recursive: true });
+      const configPath = path.join(configDir, 'config.json');
+
+      let existingConfig = {};
+      try {
+        existingConfig = JSON.parse(await fs.promises.readFile(configPath, 'utf-8'));
+      } catch (_) { /* no existing config */ }
+
+      const newConfig = JSON.parse(JSON.stringify(projectDef.config).replace(/\{\{slug\}\}/g, featureId));
+      const mergedConfig = { ...existingConfig, ...newConfig };
+      await fs.promises.writeFile(configPath, JSON.stringify(mergedConfig, null, 2), 'utf-8');
+    }
+
+    if (projectDef.copyHandlersFrom) {
+      const sourcePath = path.join(this.projectsBasePath, projectDef.copyHandlersFrom, 'handlers');
+      const targetPath = path.join(basePath, 'handlers');
+      try {
+        await fs.promises.mkdir(targetPath, { recursive: true });
+        const files = await fs.promises.readdir(sourcePath);
+        for (const file of files) {
+          if (!file.endsWith('.js')) continue;
+          const srcFile = path.join(sourcePath, file);
+          const stat = await fs.promises.stat(srcFile);
+          if (stat.isFile()) await fs.promises.copyFile(srcFile, path.join(targetPath, file));
+        }
+      } catch (err) {
+        this.logger.warn('project-manager.blueprint.handlers_copy.failed', {
+          source: projectDef.copyHandlersFrom, error: err.message
+        });
+        this.metrics?.increment('project-manager.errors', { kind: 'blueprint_handlers_copy' });
+      }
+    }
+
+    if (projectDef.initialFiles) {
+      for (const [filePath, content] of Object.entries(projectDef.initialFiles)) {
+        const namespacedPath = filePath.startsWith('storage/')
+          ? filePath.replace('storage/', `storage/${featureId}/`)
+          : filePath;
+        const fullPath = path.join(basePath, namespacedPath);
+        await fs.promises.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.promises.writeFile(fullPath, JSON.stringify(content, null, 2), 'utf-8');
+      }
     }
   }
 

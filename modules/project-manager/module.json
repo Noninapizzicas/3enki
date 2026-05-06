@@ -64,7 +64,9 @@
     { "domain": "project", "action": "set-ai-config",              "handler": "handleUISetAIConfig" },
     { "domain": "project", "action": "set-last-conversation",      "handler": "handleUISetLastConversation" },
     { "domain": "project", "action": "get-default-conversation",   "handler": "handleUIGetDefaultConversation" },
-    { "domain": "project", "action": "get-unassigned",             "handler": "handleUIGetUnassigned" }
+    { "domain": "project", "action": "get-unassigned",             "handler": "handleUIGetUnassigned" },
+    { "domain": "project", "action": "list-features",              "handler": "handleUIListFeatures" },
+    { "domain": "project", "action": "add-features",               "handler": "handleUIAddFeatures" }
   ],
 
   "tools": [],
@@ -97,6 +99,7 @@
         "project-manager.deleted",
         "project-manager.activated",
         "project-manager.deactivated",
+        "project-manager.feature_installed",
         "project-manager.errors"
       ],
       "gauges": [

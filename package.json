@@ -24,6 +24,7 @@
     "test:database-manager": "node tests/unit/database-manager.test.js",
     "test:composition-manager": "node tests/unit/composition-manager.test.js",
     "test:gateway-manager": "node tests/unit/gateway-manager.test.js",
+    "test:plugin-manager": "node tests/unit/plugin-manager.test.js",
     "test:cocina-poc": "node tests/unit/cocina-poc.test.js",
     "test:chat-io": "node tests/unit/chat-io.test.js",
     "test:prompt-builder": "node tests/unit/prompt-builder.test.js",

@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T09:33:14.280Z",
+  "generated_at": "2026-05-06T09:41:54.757Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3711,
-    "loc_total": 48676,
+    "drifts_total": 3709,
+    "loc_total": 48646,
     "tools_total": 147,
     "agents_total": 30
   },
@@ -102,9 +102,9 @@
       "path": "modules/plugin-manager",
       "layer": "core",
       "language": "en",
-      "version": "2.0.0",
-      "loc": 516,
-      "drifts": 23,
+      "version": "2.1.0",
+      "loc": 486,
+      "drifts": 20,
       "events_publishes": 6,
       "events_subscribes": 2,
       "tools": 0,
@@ -717,7 +717,7 @@
       "language": "es",
       "version": "1.0.0",
       "loc": 485,
-      "drifts": 57,
+      "drifts": 58,
       "events_publishes": 3,
       "events_subscribes": 0,
       "tools": 0,

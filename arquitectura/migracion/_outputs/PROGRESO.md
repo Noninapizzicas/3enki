@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-06T09:33:14Z_
+_Última regeneración: 2026-05-06T09:41:55Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 15 / 73 (21%)
-- **Drifts cerrados**: 344 / 3711 (9%)
-- **Drifts restantes en baseline**: 3367
+- **Drifts cerrados**: 344 / 3709 (9%)
+- **Drifts restantes en baseline**: 3365
 
 ### Progreso por capa
 
@@ -28,7 +28,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 3 | core | `composition-manager` | 1028 | 49 → 14 (-71%) | `665555a` 2026-05-06 |
 | 4 | core | `database-manager` | 793 | 44 → 22 (-50%) | `edd468e` 2026-05-06 |
 | 5 | core | `credential-manager` | 843 | 28 → 12 (-57%) | `069f8c8` 2026-05-06 |
-| 8 | core | `gateway-manager` | 429 | 17 → 6 (-65%) | _n/a_ |
+| 8 | core | `gateway-manager` | 429 | 17 → 6 (-65%) | `8aa2b74` 2026-05-06 |
 | 9 | core | `conversacion__agent-observer` | 217 | 0 → 0 (-0%) | `54b7b7c` 2026-05-03 |
 | 12 | core | `conversacion__memory-user-profile` | 192 | 0 → 0 (-0%) | `6120cbd` 2026-05-03 |
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
@@ -43,7 +43,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
-| 6 | core | `plugin-manager` | 516 | 23 | 0 | sin tests/unit/ |
+| 6 | core | `plugin-manager` | 486 | 20 | 0 | drifts 15/20 (75%) — esperado <50% |
 | 7 | core | `conversacion__ai-gateway` | 710 | 19 | 0 | sin tests/unit/ |
 | 10 | core | `conversacion__chat-io` | 654 | 52 | 1 | drifts 32/52 (62%) — esperado <50% |
 | 11 | core | `channel-manager` | 493 | 29 | 1 | sin tests/unit/ |
@@ -79,7 +79,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 42 | dominio | `facturas` | 573 | 67 | 0 |
 | 43 | dominio | `staff-manager` | 394 | 67 | 0 |
 | 44 | dominio | `pizzepos__cuentas` | 1224 | 65 | 0 |
-| 45 | dominio | `notas` | 485 | 57 | 0 |
+| 45 | dominio | `notas` | 485 | 58 | 0 |
 | 46 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
 | 47 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
 | 48 | dominio | `pizzepos__persistencia-comandero` | 1542 | 50 | 0 |
@@ -144,7 +144,7 @@ Suite organizada en grupos:
 
 ## Decisiones pendientes / siguiente sesión
 
-**Próximo módulo recomendado**: `plugin-manager` (capa core, 516 LOC, 23 drifts en baseline).
+**Próximo módulo recomendado**: `plugin-manager` (capa core, 486 LOC, 20 drifts en baseline).
 
 Pasos canónicos para el siguiente:
 

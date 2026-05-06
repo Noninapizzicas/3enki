@@ -50,6 +50,9 @@ jobs:
       - name: Run unit tests (gateway-manager — reescritura canonica)
         run: npm run test:gateway-manager
 
+      - name: Run unit tests (plugin-manager — reescritura canonica)
+        run: npm run test:plugin-manager
+
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc
 

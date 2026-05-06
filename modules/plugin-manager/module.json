@@ -1,148 +1,72 @@
 {
   "name": "plugin-manager",
-  "version": "2.0.0",
-  "description": "Discovers and manages JSON-based function plugins",
-  "author": "Aichat Team",
+  "version": "2.1.0",
+  "description": "Descubre y gestiona plugins JSON con funciones ejecutables. Plugins viven en <pluginsPath>/<plugin-name>/<plugin-name>.functions.json. Expone par request/response via bus + 5 endpoints HTTP.",
+  "author": "Event Core Team",
   "language": "en",
   "main": "index.js",
-  "provides": {
-    "events": [
-      "plugin.loaded",
-      "plugin.unloaded",
-      "plugin.error",
-      "plugin.reloaded"
-    ],
-    "queries": [
-      "plugin.get.request",
-      "plugin.list.request"
-    ]
-  },
+
   "events": {
     "publishes": [
-      {
-        "event": "plugin.loaded",
-        "description": "Plugin loaded successfully",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/plugin_loaded"
-        }
-      },
-      {
-        "event": "plugin.unloaded",
-        "description": "Plugin unloaded",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/plugin_unloaded"
-        }
-      },
-      {
-        "event": "plugin.error",
-        "description": "Plugin loading error",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/plugin_error"
-        }
-      },
-      {
-        "event": "plugin.reloaded",
-        "description": "All plugins reloaded",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/plugin_reloaded"
-        }
-      },
-      {
-        "event": "plugin.get.response",
-        "description": "Response to plugin get request",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/plugin_get_response"
-        }
-      },
-      {
-        "event": "plugin.list.response",
-        "description": "Response to plugin list request",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/plugin_list_response"
-        }
-      }
+      { "event": "plugin.loaded",        "description": "Plugin cargado correctamente desde fs. Payload: { name, definition, version, description, functions, function_count, timestamp, correlation_id }.", "schema": { "$ref": "./schemas/events.json#/definitions/plugin_loaded" } },
+      { "event": "plugin.unloaded",      "description": "Plugin removido (en onUnload). Payload: { name, timestamp, correlation_id }.", "schema": { "$ref": "./schemas/events.json#/definitions/plugin_unloaded" } },
+      { "event": "plugin.error",         "description": "Error de discovery o load. Payload: { error, context: 'discovery'|'load', file?, timestamp, correlation_id }.", "schema": { "$ref": "./schemas/events.json#/definitions/plugin_error" } },
+      { "event": "plugin.reloaded",      "description": "Reload completo. Payload: { count, loaded, errors, timestamp, correlation_id }.", "schema": { "$ref": "./schemas/events.json#/definitions/plugin_reloaded" } },
+      { "event": "plugin.get.response",  "description": "Response a plugin.get.request correlacionada por request_id. Payload: { request_id, success, plugin? | error?, error_code?, timestamp, correlation_id }.", "schema": { "$ref": "./schemas/events.json#/definitions/plugin_get_response" } },
+      { "event": "plugin.list.response", "description": "Response a plugin.list.request correlacionada por request_id. Payload: { request_id, success, plugins, count, timestamp, correlation_id }.", "schema": { "$ref": "./schemas/events.json#/definitions/plugin_list_response" } }
     ],
     "subscribes": [
-      {
-        "event": "plugin.get.request",
-        "description": "Get plugin definition by name",
-        "handler": "onGetPluginRequest"
-      },
-      {
-        "event": "plugin.list.request",
-        "description": "List all loaded plugins",
-        "handler": "onListPluginsRequest"
-      }
+      { "event": "plugin.get.request",  "handler": "onGetPluginRequest",   "description": "Get plugin definition by name. Publica plugin.get.response." },
+      { "event": "plugin.list.request", "handler": "onListPluginsRequest", "description": "List all loaded plugins. Publica plugin.list.response." }
     ]
   },
+
   "apis": [
-    {
-      "method": "GET",
-      "path": "/plugins/:name",
-      "handler": "handleGetPlugin",
-      "description": "Get specific plugin definition",
-      "response_schema": {
-        "$ref": "./schemas/plugin.json#/definitions/get_response"
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/plugins",
-      "handler": "handleListPlugins",
-      "description": "List all loaded plugins",
-      "response_schema": {
-        "$ref": "./schemas/plugin.json#/definitions/list_response"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/plugins/reload",
-      "handler": "handleReloadPlugins",
-      "description": "Reload all plugins from disk (publishes plugin.reloaded)",
-      "response_schema": {
-        "$ref": "./schemas/plugin.json#/definitions/reload_response"
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check endpoint"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Module metrics"
-    }
+    { "method": "GET",  "path": "/plugins/:name",  "handler": "handleGetPlugin",     "auth_required": false, "description": "Get specific plugin definition (404 si no existe)." },
+    { "method": "GET",  "path": "/plugins",        "handler": "handleListPlugins",   "auth_required": false, "description": "List all loaded plugins con summary." },
+    { "method": "POST", "path": "/plugins/reload", "handler": "handleReloadPlugins", "auth_required": false, "description": "Reload all plugins from disk. Publica plugin.reloaded." },
+    { "method": "GET",  "path": "/health",         "handler": "handleHealthCheck",   "auth_required": false, "description": "Health check endpoint." },
+    { "method": "GET",  "path": "/metrics",        "handler": "handleGetMetrics",    "auth_required": false, "description": "Module metrics snapshot." }
   ],
+
+  "tools": [],
+  "ui_handlers": [],
+  "dependencies": [],
+
+  "config": {
+    "pluginsPath": "../../plugins",
+    "autoReload": false,
+    "watchInterval": 5000,
+    "validateSchema": true,
+    "persistence": {
+      "pattern": "filesystem-readonly",
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["plugins", "watchInterval", "internalCounters"]
+    }
+  },
+
   "observability": {
     "logging": {
       "level": "info",
       "structured": true,
       "correlation_id": true
     },
+    "tracing": {
+      "propaga_correlation_id": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [
-        "plugin.loaded.total",
-        "plugin.error.total",
-        "plugin.reload.total"
+        "plugin-manager.plugin.loaded",
+        "plugin-manager.reload.success",
+        "plugin-manager.request.success",
+        "plugin-manager.errors"
       ],
       "gauges": [
-        "plugin.count",
-        "plugin.functions.count"
-      ],
-      "timings": [
-        "plugin.discovery.duration",
-        "plugin.load.duration"
+        "plugin-manager.plugins_count",
+        "plugin-manager.functions_count"
       ]
     }
-  },
-  "config": {
-    "pluginsPath": "../../plugins",
-    "autoReload": false,
-    "watchInterval": 5000,
-    "validateSchema": true
   }
 }

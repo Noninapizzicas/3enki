@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T09:22:53.932Z",
+  "generated_at": "2026-05-06T09:33:14.280Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3737,
-    "loc_total": 48559,
+    "drifts_total": 3711,
+    "loc_total": 48676,
     "tools_total": 147,
     "agents_total": 30
   },
@@ -83,21 +83,6 @@
       "orden_migracion": 4
     },
     {
-      "slug": "gateway-manager",
-      "path": "modules/gateway-manager",
-      "layer": "core",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 312,
-      "drifts": 44,
-      "events_publishes": 5,
-      "events_subscribes": 0,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 5
-    },
-    {
       "slug": "credential-manager",
       "path": "modules/credential-manager",
       "layer": "core",
@@ -110,7 +95,7 @@
       "tools": 1,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 6
+      "orden_migracion": 5
     },
     {
       "slug": "plugin-manager",
@@ -125,7 +110,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 7
+      "orden_migracion": 6
     },
     {
       "slug": "conversacion__ai-gateway",
@@ -137,6 +122,21 @@
       "drifts": 19,
       "events_publishes": 7,
       "events_subscribes": 8,
+      "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 7
+    },
+    {
+      "slug": "gateway-manager",
+      "path": "modules/gateway-manager",
+      "layer": "core",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 429,
+      "drifts": 17,
+      "events_publishes": 5,
+      "events_subscribes": 0,
       "tools": 0,
       "agents": 0,
       "dependencies": [],
@@ -717,7 +717,7 @@
       "language": "es",
       "version": "1.0.0",
       "loc": 485,
-      "drifts": 56,
+      "drifts": 57,
       "events_publishes": 3,
       "events_subscribes": 0,
       "tools": 0,

@@ -106,3 +106,6 @@ jobs:
 
       - name: Run unit tests (firmware-manager — reescritura canonica)
         run: npm run test:firmware-manager
+
+      - name: Run unit tests (esp32-dev — reescritura canonica)
+        run: npm run test:esp32-dev

@@ -43,6 +43,7 @@
     "test:conversacion__prompt-builder": "node tests/unit/conversacion__prompt-builder.test.js",
     "test:filesystem": "node tests/unit/filesystem.test.js",
     "test:firmware-manager": "node tests/unit/firmware-manager.test.js",
+    "test:esp32-dev": "node tests/unit/esp32-dev.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

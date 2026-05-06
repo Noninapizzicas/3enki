@@ -1,7 +1,7 @@
 {
   "name": "esp32-dev",
-  "version": "1.0.0",
-  "description": "Desarrollo ESP32: templates, scaffolding de proyectos y compilación de firmware",
+  "version": "2.0.0",
+  "description": "Desarrollo ESP32: templates, scaffolding de proyectos y compilación de firmware. v2.0.0: helpers POC2, error shape canónico { code, message, details? }, tracing.propaga_correlation_id declarado.",
   "author": "Enki",
   "language": "en",
   "tier": "tier_3_core",
@@ -110,6 +110,9 @@
     "logging": {
       "level": "info",
       "structured": true
+    },
+    "tracing": {
+      "propaga_correlation_id": true
     },
     "metrics": {
       "enabled": true,

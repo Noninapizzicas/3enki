@@ -35,6 +35,9 @@ jobs:
       - name: Run unit tests (scheduler — migracion canonica)
         run: npm run test:scheduler
 
+      - name: Run unit tests (credential-manager — descomposicion canonica)
+        run: npm run test:credential-manager
+
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc
 

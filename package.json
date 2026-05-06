@@ -19,6 +19,7 @@
     "test:ai-gateway-poc": "node tests/unit/ai-gateway-poc.test.js",
     "test:carta-scheduler": "node tests/unit/carta-scheduler.test.js",
     "test:scheduler": "node tests/unit/scheduler.test.js",
+    "test:credential-manager": "node tests/unit/credential-manager.test.js",
     "test:cocina-poc": "node tests/unit/cocina-poc.test.js",
     "test:chat-io": "node tests/unit/chat-io.test.js",
     "test:prompt-builder": "node tests/unit/prompt-builder.test.js",

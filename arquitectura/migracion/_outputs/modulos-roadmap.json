@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-04T11:51:31.809Z",
+  "generated_at": "2026-05-06T06:45:04.234Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 4023,
-    "loc_total": 50737,
+    "drifts_total": 3862,
+    "loc_total": 48536,
     "tools_total": 147,
     "agents_total": 30
   },
@@ -22,21 +22,6 @@
     "tooling": "Herramientas de admin/diseno/UI helpers. Reescribir al final — sin impacto operativo critico."
   },
   "modulos": [
-    {
-      "slug": "scheduler",
-      "path": "modules/scheduler",
-      "layer": "core",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 1115,
-      "drifts": 158,
-      "events_publishes": 8,
-      "events_subscribes": 1,
-      "tools": 3,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 1
-    },
     {
       "slug": "conversacion__ai-agent-framework",
       "path": "modules/conversacion/ai-agent-framework",
@@ -50,22 +35,7 @@
       "tools": 0,
       "agents": 30,
       "dependencies": [],
-      "orden_migracion": 2
-    },
-    {
-      "slug": "credential-manager",
-      "path": "modules/credential-manager",
-      "layer": "core",
-      "language": "en",
-      "version": "2.1.0",
-      "loc": 2836,
-      "drifts": 128,
-      "events_publishes": 7,
-      "events_subscribes": 6,
-      "tools": 1,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 3
+      "orden_migracion": 1
     },
     {
       "slug": "project-manager",
@@ -80,7 +50,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 4
+      "orden_migracion": 2
     },
     {
       "slug": "database-manager",
@@ -95,7 +65,22 @@
       "tools": 4,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 5
+      "orden_migracion": 3
+    },
+    {
+      "slug": "scheduler",
+      "path": "modules/scheduler",
+      "layer": "core",
+      "language": "en",
+      "version": "1.0.0",
+      "loc": 907,
+      "drifts": 96,
+      "events_publishes": 8,
+      "events_subscribes": 1,
+      "tools": 3,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 4
     },
     {
       "slug": "composition-manager",
@@ -110,7 +95,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 6
+      "orden_migracion": 5
     },
     {
       "slug": "gateway-manager",
@@ -123,6 +108,21 @@
       "events_publishes": 5,
       "events_subscribes": 0,
       "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 6
+    },
+    {
+      "slug": "credential-manager",
+      "path": "modules/credential-manager",
+      "layer": "core",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 843,
+      "drifts": 28,
+      "events_publishes": 5,
+      "events_subscribes": 5,
+      "tools": 1,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 7
@@ -284,7 +284,7 @@
       "language": "en",
       "version": "1.0.0",
       "loc": 1290,
-      "drifts": 194,
+      "drifts": 195,
       "events_publishes": 18,
       "events_subscribes": 18,
       "tools": 13,

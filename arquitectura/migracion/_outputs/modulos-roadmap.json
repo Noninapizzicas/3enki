@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T13:50:41.247Z",
+  "generated_at": "2026-05-06T14:15:26.183Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3700,
-    "loc_total": 48809,
+    "drifts_total": 3678,
+    "loc_total": 48913,
     "tools_total": 147,
     "agents_total": 30
   },
@@ -158,23 +158,6 @@
       "orden_migracion": 9
     },
     {
-      "slug": "conversacion__chat-io",
-      "path": "modules/conversacion/chat-io",
-      "layer": "core",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 654,
-      "drifts": 52,
-      "events_publishes": 2,
-      "events_subscribes": 4,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [
-        "database-manager"
-      ],
-      "orden_migracion": 10
-    },
-    {
       "slug": "channel-manager",
       "path": "modules/channel-manager",
       "layer": "core",
@@ -185,6 +168,23 @@
       "events_publishes": 7,
       "events_subscribes": 3,
       "tools": 2,
+      "agents": 0,
+      "dependencies": [
+        "database-manager"
+      ],
+      "orden_migracion": 10
+    },
+    {
+      "slug": "conversacion__chat-io",
+      "path": "modules/conversacion/chat-io",
+      "layer": "core",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 758,
+      "drifts": 30,
+      "events_publishes": 3,
+      "events_subscribes": 4,
+      "tools": 0,
       "agents": 0,
       "dependencies": [
         "database-manager"

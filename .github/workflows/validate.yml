@@ -94,3 +94,6 @@ jobs:
 
       - name: Run unit tests (channel-manager — reescritura canonica)
         run: npm run test:channel-manager
+
+      - name: Run unit tests (conversacion/chat-io — reescritura canonica)
+        run: npm run test:conversacion__chat-io

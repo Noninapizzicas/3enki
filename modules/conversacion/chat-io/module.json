@@ -1,82 +1,111 @@
 {
   "name": "chat-io",
-  "version": "1.0.0",
-  "description": "Entrada y salida del chat. Recibe mensajes del frontend (ui/request/conversation/send), persiste conversaciones y mensajes en SQLite por proyecto, aplica FIFO de contexto, y reenvía la respuesta del LLM al frontend por MQTT (conversation/{id}/message).",
+  "version": "2.0.0",
+  "description": "Entrada y salida del chat. Recibe mensajes via ui_handlers (send/create/list/load/delete/update_settings/toggle_context/context_stats), persiste conversaciones y mensajes en SQLite por proyecto via database-manager, aplica FIFO de contexto, y reenvia la respuesta del LLM al canal de origen (MQTT conversation/{id}/message para web). v2.0.0: 5 helpers POC2, handlers shape canonico { status, data | error: { code, message, details? } }, throws con _code canonico (los codes legacy PROJECT_REQUIRED/CONVERSATION_REQUIRED/MESSAGE_ID_REQUIRED viajan en error.details.kind para disambiguacion UI).",
   "author": "Event Core Team",
   "language": "en",
+  "main": "index.js",
   "publishes": [
     {
       "event": "chat.message.saved",
       "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
-      "description": "Usuario manda mensaje al compañero, persistido en la conversacion. Trigger del razonamiento."
+      "description": "Usuario manda mensaje al companero, persistido en la conversacion. Trigger del razonamiento. Payload chat-flow v1.0.0 con correlation_id, project_id, user_id, channel, channel_context, message_id, user_message, settings, attachments, intencion."
     },
-    "chat.assistant.saved"
+    {
+      "event": "chat.assistant.saved",
+      "description": "Mensaje del assistant persistido tras consumir ai.chat.response. Payload: { project_id, conversation_id, message_id, assistant_message, metadata, timestamp, correlation_id }."
+    },
+    "db.query.request"
   ],
   "subscribes": [
     {
       "event": "ai.chat.response",
       "handler": "onAiResponse",
       "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.response.schema.json",
-      "description": "Compañero produjo respuesta exitosa. Reenviar al canal de origen segun channel_context."
+      "description": "Companero produjo respuesta exitosa. Reenviar al canal de origen segun channel_context."
     },
     {
       "event": "ai.chat.failed",
       "handler": "onAiFailed",
       "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.failed.schema.json",
-      "description": "Flujo del chat fallo (timeout LLM, credencial, etc.). Informar al usuario por su canal."
+      "description": "Flujo del chat fallo (timeout LLM, credencial, etc.). Traducir error.code a mensaje user-facing y entregar al canal."
     },
     {
       "event": "db.query.response",
-      "handler": "onDbQueryResponse"
+      "handler": "onDbQueryResponse",
+      "description": "Response de database-manager para queries (resuelve pendingDb por request_id)."
     },
     {
       "event": "project.activated",
-      "handler": "onProjectActivated"
+      "handler": "onProjectActivated",
+      "description": "Pre-inicializa schema en la DB del proyecto activado (no bloquea: best-effort)."
     }
   ],
   "ui_handlers": [
-    {
-      "domain": "conversation",
-      "action": "send",
-      "handler": "handleSend"
-    },
-    {
-      "domain": "conversation",
-      "action": "create",
-      "handler": "handleCreate"
-    },
-    {
-      "domain": "conversation",
-      "action": "list",
-      "handler": "handleList"
-    },
-    {
-      "domain": "conversation",
-      "action": "load",
-      "handler": "handleLoad"
-    },
-    {
-      "domain": "conversation",
-      "action": "delete",
-      "handler": "handleDelete"
-    },
-    {
-      "domain": "conversation",
-      "action": "update_settings",
-      "handler": "handleUpdateSettings"
-    },
-    {
-      "domain": "conversation",
-      "action": "toggle_context",
-      "handler": "handleToggleContext"
-    },
-    {
-      "domain": "conversation",
-      "action": "context_stats",
-      "handler": "handleContextStats"
-    }
+    { "domain": "conversation", "action": "send",            "handler": "handleSend" },
+    { "domain": "conversation", "action": "create",          "handler": "handleCreate" },
+    { "domain": "conversation", "action": "list",            "handler": "handleList" },
+    { "domain": "conversation", "action": "load",            "handler": "handleLoad" },
+    { "domain": "conversation", "action": "delete",          "handler": "handleDelete" },
+    { "domain": "conversation", "action": "update_settings", "handler": "handleUpdateSettings" },
+    { "domain": "conversation", "action": "toggle_context",  "handler": "handleToggleContext" },
+    { "domain": "conversation", "action": "context_stats",   "handler": "handleContextStats" }
   ],
+  "tools": [],
   "dependencies": [
     "database-manager"
-  ]
+  ],
+  "schemas": {
+    "tables": [
+      {
+        "name": "conversations",
+        "description": "Conversaciones del usuario por proyecto. Settings (context_window/temperature/max_tokens/prompt_id) inline.",
+        "indexes": ["idx_conversations_project ON (project_id, updated_at DESC)"]
+      },
+      {
+        "name": "messages",
+        "description": "Mensajes de la conversacion (role: user|assistant|system|tool). in_context controla FIFO. manually_toggled congela el toggle del usuario.",
+        "indexes": [
+          "idx_messages_conv ON (conversation_id, created_at)",
+          "idx_messages_context ON (conversation_id, in_context)"
+        ]
+      }
+    ],
+    "migrations": "Migracion suave en _migrateSchema: ALTER TABLE ADD COLUMN si la columna no existe (PRAGMA table_info). Cubre prompt_id, context_window, temperature, max_tokens, in_context, manually_toggled, tokens, cost, metadata para upgrades de v1.x → v2.0.0."
+  },
+  "config": {
+    "persistence": {
+      "pattern": "owned-tables-via-database-manager-per-project",
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["pendingDb", "knownConversations", "schemaReady"]
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "tracing": {
+      "propaga_correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "chat-io.message.sent",
+        "chat-io.message.assistant_saved",
+        "chat-io.conversation.created",
+        "chat-io.conversation.updated",
+        "chat-io.conversation.deleted",
+        "chat-io.ai_failed",
+        "chat-io.errors"
+      ],
+      "gauges": [
+        "chat-io.pending_db",
+        "chat-io.known_conversations",
+        "chat-io.schema_ready_projects"
+      ]
+    }
+  }
 }

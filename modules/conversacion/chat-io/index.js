@@ -1,19 +1,50 @@
 /**
- * chat-io — Entrada/salida del chat + persistencia
+ * chat-io v2.0.0 — Reescrito al canon (POC2 #10 del horizontal).
  *
- * IN  (frontend → backend, vía MQTT ui/request/conversation/*)
- *   send          → guarda mensaje user, publica chat.message.saved
- *   create        → crea conversation con settings (context_window/temperature/max_tokens)
- *   list / load   → consultas
- *   delete / update_settings / toggle_context / context_stats
+ * Entrada/salida del chat + persistencia.
  *
- * OUT (backend → frontend)
- *   ai.chat.response (consumido) → guarda mensaje assistant, publica chat.assistant.saved,
- *                                  empuja MQTT conversation/{id}/message
+ * IN  (frontend → backend, vía ui_handlers MQTT ui/request/conversation/*)
+ *   send / create / list / load / delete / update_settings /
+ *   toggle_context / context_stats
  *
- * Persistencia: SQLite por proyecto. Tablas conversations y messages.
- * FIFO: cada mensaje activa applyContextFIFO según settings.context_window de la conversación.
+ * OUT (backend → frontend / canal)
+ *   ai.chat.response (consumido) → guarda mensaje assistant, publica
+ *                                  chat.assistant.saved, MQTT push al canal.
+ *   ai.chat.failed   (consumido) → traduce error_code a mensaje user-facing,
+ *                                  persiste como mensaje 'system'.
+ *
+ * Persistencia: SQLite por proyecto via database-manager. Tablas
+ * conversations + messages.
+ *
+ * FIFO: cada mensaje activa _applyContextFIFO segun
+ * settings.context_window de la conversacion.
+ *
+ * Cumple los 24 contratos transversales:
+ *  - errors: handlers UI devuelven { status, data | error: { code, message,
+ *    details? } }. Codes canonicos (VALIDATION_FAILED, RESOURCE_NOT_FOUND).
+ *    Los codes legacy (PROJECT_REQUIRED, CONVERSATION_REQUIRED,
+ *    MESSAGE_ID_REQUIRED) van a error.details.kind para disambiguacion UI.
+ *  - observability: log + metric en cada error path. Prefix chat-io.*.
+ *    correlation_id propagado en TODOS los publishes.
+ *  - events: 2 publishes (chat.message.saved + chat.assistant.saved) con
+ *    schema chat-flow.contract v1.0.0.
+ *  - lifecycle: onLoad inicializa state; onUnload limpia pendingDb +
+ *    knownConversations + schemaReady sin leak.
+ *  - persistence: SQLite per-project via database-manager (proyecto del
+ *    propio user, no 'system').
+ *
+ * 5 helpers POC2 transferibles:
+ *  _errorResponse, _handleHandlerError, _classifyHandlerError,
+ *  _publicarEvento, + auxiliar _userMessageForErrorCode (mapeo error -> UX).
+ *
+ * Monolito (653 LOC) preservado en
+ * arquitectura/migracion/_legacy/conversacion__chat-io-monolito-pre-rewrite.js.bak
+ *
+ * Mapa exhaustivo (PASO 0 del rewrite) en
+ * arquitectura/migracion/notas/conversacion__chat-io-mapa.md
  */
+
+'use strict';
 
 const crypto = require('crypto');
 
@@ -49,47 +80,80 @@ CREATE INDEX IF NOT EXISTS idx_messages_context ON messages(conversation_id, in_
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUUID = (s) => typeof s === 'string' && UUID_REGEX.test(s);
-
 const defaultSettings = () => ({ context_window: 20, temperature: 0.7, max_tokens: 2000 });
+const DB_TIMEOUT_MS = 10000;
 
 class ChatIoModule {
   constructor() {
     this.name = 'chat-io';
-    this.version = '1.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.mqtt = null;
-    this.pendingDb = new Map();      // request_id → {resolve, reject, timeout}
-    this.schemaReady = new Set();    // project_id que ya tienen schema
-    this.knownConversations = new Map(); // conversation_id → project_id (cache)
+    this.version = '2.0.0';
+
+    this.logger    = null;
+    this.metrics   = null;
+    this.eventBus  = null;
+    this.mqtt      = null;
+
+    this.pendingDb           = new Map();
+    this.schemaReady         = new Set();
+    this.knownConversations  = new Map();
   }
 
+  // ==========================================
+  // Lifecycle
+  // ==========================================
+
   async onLoad(context) {
-    this.logger = context.logger;
-    this.eventBus = context.eventBus;
-    this.mqtt = context.uiHandler?.mqtt || null;
+    this.logger    = context.logger;
+    this.metrics   = context.metrics;
+    this.eventBus  = context.eventBus;
+    this.mqtt      = context.uiHandler?.mqtt || context.mqtt || null;
+
+    this.logger.info('chat-io.loading', {
+      module: this.name, version: this.version
+    });
+
     this.logger.info('chat-io.loaded');
   }
 
   async onUnload() {
-    for (const { timeout } of this.pendingDb.values()) clearTimeout(timeout);
+    this.logger.info('chat-io.unloading', {
+      pending_db: this.pendingDb.size,
+      cached_conversations: this.knownConversations.size,
+      schema_ready_projects: this.schemaReady.size
+    });
+
+    const pending = Array.from(this.pendingDb.values());
     this.pendingDb.clear();
+    for (const { timeout, reject } of pending) {
+      clearTimeout(timeout);
+      try { reject(new Error('Module unloading')); }
+      catch (_) { this.metrics?.increment('chat-io.errors', { kind: 'unload_reject' }); }
+    }
     this.knownConversations.clear();
+    this.schemaReady.clear();
   }
 
-  // ============================================================
+  // ==========================================
   // DB helper (event-driven request/response)
-  // ============================================================
+  // ==========================================
 
   async _db(project_id, query, params = [], read_only = false) {
     const request_id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingDb.delete(request_id);
+        this.metrics?.increment('chat-io.errors', { kind: 'db_timeout' });
         reject(new Error(`db timeout: ${query.slice(0, 40)}`));
-      }, 10000);
+      }, DB_TIMEOUT_MS);
       this.pendingDb.set(request_id, { resolve, reject, timeout });
-      this.eventBus.publish('db.query.request', { project_id, query, params, read_only, request_id });
+      Promise.resolve(this.eventBus.publish('db.query.request', {
+        project_id, query, params, read_only, request_id
+      })).catch(err => {
+        clearTimeout(timeout);
+        this.pendingDb.delete(request_id);
+        this.metrics?.increment('chat-io.errors', { kind: 'db_publish' });
+        reject(err);
+      });
     });
   }
 
@@ -101,7 +165,6 @@ class ChatIoModule {
     clearTimeout(pending.timeout);
     this.pendingDb.delete(request_id);
     if (error) pending.reject(new Error(error));
-    // database-manager publica las filas en `data`; aceptamos `rows` por compatibilidad
     else pending.resolve(payload.data ?? payload.rows ?? []);
   }
 
@@ -114,8 +177,6 @@ class ChatIoModule {
     this.schemaReady.add(project_id);
   }
 
-  // Migración suave: para tablas que ya existían en versiones anteriores,
-  // añade las columnas que faltan (CREATE TABLE IF NOT EXISTS no las añade).
   async _migrateSchema(project_id) {
     const migrations = [
       { table: 'conversations', column: 'prompt_id',        def: 'TEXT' },
@@ -137,7 +198,6 @@ class ChatIoModule {
           this.logger.info('chat-io.schema.migrated', { project_id, table: m.table, column: m.column });
         }
       } catch (err) {
-        // ignorar — race condition o columna creada por otro path
         this.logger.debug('chat-io.schema.migrate.skip', { project_id, table: m.table, column: m.column, error: err.message });
       }
     }
@@ -146,14 +206,15 @@ class ChatIoModule {
   onProjectActivated(event) {
     const { project_id } = event.data || event;
     if (!project_id) return;
-    this._ensureSchema(project_id).catch(err =>
-      this.logger.warn('chat-io.schema.failed', { project_id, error: err.message })
-    );
+    this._ensureSchema(project_id).catch(err => {
+      this.logger.warn('chat-io.schema.failed', { project_id, error: err.message });
+      this.metrics?.increment('chat-io.errors', { kind: 'schema_init' });
+    });
   }
 
-  // ============================================================
-  // Validación / cache de conversaciones
-  // ============================================================
+  // ==========================================
+  // Internals: validation + serialization + FIFO
+  // ==========================================
 
   async _validateConversation(project_id, conversation_id) {
     if (this.knownConversations.get(conversation_id) === project_id) return true;
@@ -166,8 +227,6 @@ class ChatIoModule {
     return true;
   }
 
-  // Convierte epoch ms (almacenado en DB) a ISO string para el frontend.
-  // El frontend usa `new Date(string)` y eso falla con números almacenados como string.
   _toIso(v) {
     if (v == null) return null;
     const n = typeof v === 'number' ? v : Number(v);
@@ -184,17 +243,12 @@ class ChatIoModule {
     };
   }
 
-  // ============================================================
-  // FIFO de contexto
-  // ============================================================
-
   async _applyContextFIFO(project_id, conversation_id, context_window) {
     const countRows = await this._db(project_id,
       'SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ? AND in_context = 1',
       [conversation_id], true
     );
     const active = countRows[0]?.n || 0;
-
     if (active < context_window) return;
 
     const oldest = await this._db(project_id,
@@ -209,299 +263,308 @@ class ChatIoModule {
     }
   }
 
-  // ============================================================
-  // IN: ui/request/conversation/send
-  // ============================================================
+  // ==========================================
+  // Validators internos (lanzan con _code canonico)
+  // ==========================================
 
-  async handleSend(data) {
-    const project_id = data.project_id;
-    const conversation_id = data.conversation_id;
-    const page_id = data.page_id || 'chat';
-    const context = data.context || {};
-    // 'prompt' del input UI = id de plantilla (chat-flow lo renombra a prompt_id para
-    // resolver la polisemia con system_prompt construido en chat.prompt.ready).
-    const prompt_id = data.prompt ?? data.prompt_id ?? null;
-    const attachments = Array.isArray(data.attachments) ? data.attachments : [];
-    const intencion = data.intencion ?? null;
-    // 'message' del input UI = texto del usuario (chat-flow lo renombra a user_message
-    // para resolver la polisemia con assistant_message del LLM).
-    const user_message = data.message ?? data.user_message;
-    // Identidad y trazabilidad canonicas (chat-flow).
-    // user_id: hoy single-user → 'default' si no viene. Cuando llegue multi-user
-    // vendra de la sesion / token / canal.
-    const user_id = data.user_id || 'default';
-    // correlation_id: si el caller lo trae (canal externo lo genero), se preserva.
-    // Si no, chat-io es el originador y lo genera.
-    const correlation_id = data.correlation_id || crypto.randomUUID();
-    // channel + channel_context: para que la respuesta pueda volver al canal correcto.
-    // Default 'web' (UI nativa). Si data trae channel/channel_context (otro canal
-    // como telegram-service llamando a handleSend), se preservan.
-    const channel = data.channel || 'web';
-    const channel_context = data.channel_context || {};
-
+  _requireProject(project_id) {
     if (!project_id || !isUUID(project_id)) {
-      throw { status: 400, code: 'PROJECT_REQUIRED', message: 'Selecciona un proyecto para chatear' };
+      throw Object.assign(new Error('project_id is required and must be a UUID'),
+        { _code: 'VALIDATION_FAILED',
+          _details: { kind: 'PROJECT_REQUIRED', field: 'project_id', user_message: 'Selecciona un proyecto para chatear' } });
     }
-    if (!conversation_id || !isUUID(conversation_id)) {
-      throw { status: 400, code: 'CONVERSATION_REQUIRED', message: 'Selecciona o crea una conversación' };
-    }
-
-    await this._ensureSchema(project_id);
-
-    if (!(await this._validateConversation(project_id, conversation_id))) {
-      throw { status: 400, code: 'CONVERSATION_REQUIRED', message: 'Conversación no existe o no pertenece al proyecto' };
-    }
-
-    // Settings de la conversación
-    const convRows = await this._db(project_id,
-      'SELECT context_window, temperature, max_tokens FROM conversations WHERE id = ?',
-      [conversation_id], true
-    );
-    const settings = convRows[0] || defaultSettings();
-
-    // INSERT mensaje user
-    const message_id = crypto.randomUUID();
-    const now = Date.now();
-    await this._db(project_id,
-      `INSERT INTO messages (id, conversation_id, role, content, created_at)
-       VALUES (?, ?, 'user', ?, ?)`,
-      [message_id, conversation_id, user_message, now]
-    );
-    await this._db(project_id,
-      'UPDATE conversations SET updated_at = ? WHERE id = ?',
-      [now, conversation_id]
-    );
-
-    // FIFO
-    await this._applyContextFIFO(project_id, conversation_id, settings.context_window);
-
-    // chat.message.saved — shape canonico chat-flow v1.0.0
-    // Schema: arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json
-    await this.eventBus.publish('chat.message.saved', {
-      correlation_id,
-      conversation_id,
-      project_id,
-      user_id,
-      channel,
-      channel_context,
-      message_id,
-      user_message,
-      timestamp: new Date().toISOString(),
-      // opcionales canonicos
-      attachments,
-      intencion,
-      settings,
-      page_id,
-      prompt_id,
-      // contexto de pagina opaco — la UI lo manda y el compañero lo usa para enriquecer prompt.
-      // Se preserva en context_addition virtual del prompt-builder.
-      page_context: context && Object.keys(context).length > 0 ? context : undefined
-    });
-
-    return { conversation_id, message_id };
   }
 
-  // ============================================================
-  // IN: ui/request/conversation/create
-  // ============================================================
+  _requireConversation(conversation_id) {
+    if (!conversation_id || !isUUID(conversation_id)) {
+      throw Object.assign(new Error('conversation_id is required and must be a UUID'),
+        { _code: 'VALIDATION_FAILED',
+          _details: { kind: 'CONVERSATION_REQUIRED', field: 'conversation_id', user_message: 'Selecciona o crea una conversacion' } });
+    }
+  }
+
+  async _requireExistingConversation(project_id, conversation_id) {
+    if (!(await this._validateConversation(project_id, conversation_id))) {
+      throw Object.assign(new Error('Conversation not found in project'),
+        { _code: 'RESOURCE_NOT_FOUND',
+          _details: { kind: 'CONVERSATION_REQUIRED', entity_type: 'conversation', entity_id: conversation_id,
+                      user_message: 'Conversacion no existe o no pertenece al proyecto' } });
+    }
+  }
+
+  // ==========================================
+  // UI handlers
+  // ==========================================
+
+  async handleSend(data) {
+    try {
+      const project_id      = data?.project_id;
+      const conversation_id = data?.conversation_id;
+      const page_id         = data?.page_id || 'chat';
+      const ctx             = data?.context || {};
+      const prompt_id       = data?.prompt ?? data?.prompt_id ?? null;
+      const attachments     = Array.isArray(data?.attachments) ? data.attachments : [];
+      const intencion       = data?.intencion ?? null;
+      const user_message    = data?.message ?? data?.user_message;
+      const user_id         = data?.user_id || 'default';
+      const correlation_id  = data?.correlation_id || crypto.randomUUID();
+      const channel         = data?.channel || 'web';
+      const channel_context = data?.channel_context || {};
+
+      this._requireProject(project_id);
+      this._requireConversation(conversation_id);
+
+      await this._ensureSchema(project_id);
+      await this._requireExistingConversation(project_id, conversation_id);
+
+      const convRows = await this._db(project_id,
+        'SELECT context_window, temperature, max_tokens FROM conversations WHERE id = ?',
+        [conversation_id], true
+      );
+      const settings = convRows[0] || defaultSettings();
+
+      const message_id = crypto.randomUUID();
+      const now = Date.now();
+      await this._db(project_id,
+        `INSERT INTO messages (id, conversation_id, role, content, created_at)
+         VALUES (?, ?, 'user', ?, ?)`,
+        [message_id, conversation_id, user_message, now]
+      );
+      await this._db(project_id,
+        'UPDATE conversations SET updated_at = ? WHERE id = ?',
+        [now, conversation_id]
+      );
+
+      await this._applyContextFIFO(project_id, conversation_id, settings.context_window);
+
+      await this._publicarEvento('chat.message.saved', {
+        correlation_id,
+        conversation_id,
+        project_id,
+        user_id,
+        channel,
+        channel_context,
+        message_id,
+        user_message,
+        attachments,
+        intencion,
+        settings,
+        page_id,
+        prompt_id,
+        page_context: ctx && Object.keys(ctx).length > 0 ? ctx : undefined
+      });
+      this.metrics?.increment('chat-io.message.sent');
+
+      return { status: 200, data: { conversation_id, message_id, correlation_id } };
+    } catch (err) {
+      return this._handleHandlerError('chat-io.ui.send.failed', err, 'ui_send');
+    }
+  }
 
   async handleCreate(data) {
-    const { project_id, title, context_window, temperature, max_tokens, prompt_id } = data;
-    if (!project_id || !isUUID(project_id)) {
-      throw { status: 400, code: 'PROJECT_REQUIRED', message: 'Selecciona un proyecto' };
-    }
-    await this._ensureSchema(project_id);
+    try {
+      const { project_id, title, context_window, temperature, max_tokens, prompt_id } = data || {};
+      this._requireProject(project_id);
+      await this._ensureSchema(project_id);
 
-    const id = crypto.randomUUID();
-    const now = Date.now();
-    const s = defaultSettings();
-    const finalTitle = title || 'Nueva conversación';
-    const finalCw = context_window || s.context_window;
-    const finalT = temperature ?? s.temperature;
-    const finalMt = max_tokens || s.max_tokens;
+      const id = crypto.randomUUID();
+      const now = Date.now();
+      const s = defaultSettings();
+      const finalTitle = title || 'Nueva conversacion';
+      const finalCw = context_window || s.context_window;
+      const finalT = temperature ?? s.temperature;
+      const finalMt = max_tokens || s.max_tokens;
 
-    await this._db(project_id,
-      `INSERT INTO conversations
-        (id, project_id, title, context_window, temperature, max_tokens, prompt_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, project_id, finalTitle, finalCw, finalT, finalMt, prompt_id || null, now, now]
-    );
+      await this._db(project_id,
+        `INSERT INTO conversations
+          (id, project_id, title, context_window, temperature, max_tokens, prompt_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, project_id, finalTitle, finalCw, finalT, finalMt, prompt_id || null, now, now]
+      );
 
-    this.knownConversations.set(id, project_id);
-    return {
-      conversation: this._serializeConversation({
+      this.knownConversations.set(id, project_id);
+      this.metrics?.increment('chat-io.conversation.created');
+
+      const conversation = this._serializeConversation({
         id, project_id, title: finalTitle,
         context_window: finalCw, temperature: finalT, max_tokens: finalMt,
         prompt_id: prompt_id || null,
         created_at: now, updated_at: now,
         message_count: 0
-      }),
-      conversation_id: id  // alias por retrocompatibilidad
-    };
-  }
+      });
 
-  // ============================================================
-  // IN: ui/request/conversation/list
-  // ============================================================
+      return { status: 201, data: { conversation, conversation_id: id } };
+    } catch (err) {
+      return this._handleHandlerError('chat-io.ui.create.failed', err, 'ui_create');
+    }
+  }
 
   async handleList(data) {
-    const { project_id, limit } = data;
-    if (!project_id || !isUUID(project_id)) {
-      throw { status: 400, code: 'PROJECT_REQUIRED' };
+    try {
+      const { project_id, limit } = data || {};
+      this._requireProject(project_id);
+      await this._ensureSchema(project_id);
+
+      const rows = await this._db(project_id,
+        `SELECT c.id, c.title, c.context_window, c.temperature, c.max_tokens, c.prompt_id,
+                c.created_at, c.updated_at,
+                (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
+         FROM conversations c
+         WHERE c.project_id = ?
+         ORDER BY c.updated_at DESC LIMIT ?`,
+        [project_id, limit || 50], true
+      );
+      return {
+        status: 200,
+        data: { conversations: rows.map(r => this._serializeConversation(r)), count: rows.length }
+      };
+    } catch (err) {
+      return this._handleHandlerError('chat-io.ui.list.failed', err, 'ui_list');
     }
-    await this._ensureSchema(project_id);
-
-    const rows = await this._db(project_id,
-      `SELECT c.id, c.title, c.context_window, c.temperature, c.max_tokens, c.prompt_id,
-              c.created_at, c.updated_at,
-              (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
-       FROM conversations c
-       WHERE c.project_id = ?
-       ORDER BY c.updated_at DESC LIMIT ?`,
-      [project_id, limit || 50], true
-    );
-    return { conversations: rows.map(r => this._serializeConversation(r)) };
   }
-
-  // ============================================================
-  // IN: ui/request/conversation/load
-  // ============================================================
 
   async handleLoad(data) {
-    const { project_id, conversation_id } = data;
-    if (!project_id || !isUUID(project_id)) throw { status: 400, code: 'PROJECT_REQUIRED' };
-    if (!conversation_id || !isUUID(conversation_id)) throw { status: 400, code: 'CONVERSATION_REQUIRED' };
-    await this._ensureSchema(project_id);
-    if (!(await this._validateConversation(project_id, conversation_id))) {
-      throw { status: 400, code: 'CONVERSATION_REQUIRED' };
-    }
-    const convRows = await this._db(project_id,
-      `SELECT c.id, c.project_id, c.title, c.context_window, c.temperature, c.max_tokens, c.prompt_id,
-              c.created_at, c.updated_at,
-              (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
-       FROM conversations c WHERE c.id = ?`,
-      [conversation_id], true
-    );
-    const rawMessages = await this._db(project_id,
-      `SELECT id, role, content, in_context, manually_toggled, tokens, cost, metadata, created_at
-       FROM messages
-       WHERE conversation_id = ?
-       ORDER BY created_at ASC`,
-      [conversation_id], true
-    );
-    const messages = rawMessages.map(m => ({ ...m, created_at: this._toIso(m.created_at) }));
-    return { conversation: this._serializeConversation(convRows[0]), messages };
-  }
+    try {
+      const { project_id, conversation_id } = data || {};
+      this._requireProject(project_id);
+      this._requireConversation(conversation_id);
+      await this._ensureSchema(project_id);
+      await this._requireExistingConversation(project_id, conversation_id);
 
-  // ============================================================
-  // IN: ui/request/conversation/delete
-  // ============================================================
+      const convRows = await this._db(project_id,
+        `SELECT c.id, c.project_id, c.title, c.context_window, c.temperature, c.max_tokens, c.prompt_id,
+                c.created_at, c.updated_at,
+                (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count
+         FROM conversations c WHERE c.id = ?`,
+        [conversation_id], true
+      );
+      const rawMessages = await this._db(project_id,
+        `SELECT id, role, content, in_context, manually_toggled, tokens, cost, metadata, created_at
+         FROM messages
+         WHERE conversation_id = ?
+         ORDER BY created_at ASC`,
+        [conversation_id], true
+      );
+      const messages = rawMessages.map(m => ({ ...m, created_at: this._toIso(m.created_at) }));
+      return {
+        status: 200,
+        data: { conversation: this._serializeConversation(convRows[0]), messages }
+      };
+    } catch (err) {
+      return this._handleHandlerError('chat-io.ui.load.failed', err, 'ui_load');
+    }
+  }
 
   async handleDelete(data) {
-    const { project_id, conversation_id } = data;
-    if (!project_id || !isUUID(project_id)) throw { status: 400, code: 'PROJECT_REQUIRED' };
-    if (!conversation_id || !isUUID(conversation_id)) throw { status: 400, code: 'CONVERSATION_REQUIRED' };
-    await this._ensureSchema(project_id);
+    try {
+      const { project_id, conversation_id } = data || {};
+      this._requireProject(project_id);
+      this._requireConversation(conversation_id);
+      await this._ensureSchema(project_id);
 
-    await this._db(project_id, 'DELETE FROM messages WHERE conversation_id = ?', [conversation_id]);
-    await this._db(project_id, 'DELETE FROM conversations WHERE id = ?', [conversation_id]);
-    this.knownConversations.delete(conversation_id);
-    return { ok: true };
+      await this._db(project_id, 'DELETE FROM messages WHERE conversation_id = ?', [conversation_id]);
+      await this._db(project_id, 'DELETE FROM conversations WHERE id = ?', [conversation_id]);
+      this.knownConversations.delete(conversation_id);
+      this.metrics?.increment('chat-io.conversation.deleted');
+
+      return { status: 200, data: { deleted: true, conversation_id } };
+    } catch (err) {
+      return this._handleHandlerError('chat-io.ui.delete.failed', err, 'ui_delete');
+    }
   }
-
-  // ============================================================
-  // IN: ui/request/conversation/update_settings
-  // ============================================================
 
   async handleUpdateSettings(data) {
-    const { project_id, conversation_id, context_window, temperature, max_tokens, prompt_id, title } = data;
-    if (!project_id || !isUUID(project_id)) throw { status: 400, code: 'PROJECT_REQUIRED' };
-    if (!conversation_id || !isUUID(conversation_id)) throw { status: 400, code: 'CONVERSATION_REQUIRED' };
-    await this._ensureSchema(project_id);
-    if (!(await this._validateConversation(project_id, conversation_id))) {
-      throw { status: 400, code: 'CONVERSATION_REQUIRED' };
+    try {
+      const { project_id, conversation_id, context_window, temperature, max_tokens, prompt_id, title } = data || {};
+      this._requireProject(project_id);
+      this._requireConversation(conversation_id);
+      await this._ensureSchema(project_id);
+      await this._requireExistingConversation(project_id, conversation_id);
+
+      const sets = [];
+      const params = [];
+      if (context_window !== undefined) { sets.push('context_window = ?'); params.push(context_window); }
+      if (temperature !== undefined)    { sets.push('temperature = ?');    params.push(temperature); }
+      if (max_tokens !== undefined)     { sets.push('max_tokens = ?');     params.push(max_tokens); }
+      if (prompt_id !== undefined)      { sets.push('prompt_id = ?');      params.push(prompt_id); }
+      if (title !== undefined)          { sets.push('title = ?');          params.push(title); }
+      if (sets.length === 0) {
+        return { status: 200, data: { updated: false, changed: 0 } };
+      }
+      sets.push('updated_at = ?');
+      params.push(Date.now(), conversation_id);
+      await this._db(project_id,
+        `UPDATE conversations SET ${sets.join(', ')} WHERE id = ?`,
+        params
+      );
+      this.metrics?.increment('chat-io.conversation.updated');
+      return { status: 200, data: { updated: true, changed: sets.length - 1, conversation_id } };
+    } catch (err) {
+      return this._handleHandlerError('chat-io.ui.update_settings.failed', err, 'ui_update_settings');
     }
-
-    const sets = [];
-    const params = [];
-    if (context_window !== undefined) { sets.push('context_window = ?'); params.push(context_window); }
-    if (temperature !== undefined)    { sets.push('temperature = ?');    params.push(temperature); }
-    if (max_tokens !== undefined)     { sets.push('max_tokens = ?');     params.push(max_tokens); }
-    if (prompt_id !== undefined)      { sets.push('prompt_id = ?');      params.push(prompt_id); }
-    if (title !== undefined)          { sets.push('title = ?');          params.push(title); }
-    if (sets.length === 0) return { ok: true, changed: 0 };
-    sets.push('updated_at = ?'); params.push(Date.now(), conversation_id);
-
-    await this._db(project_id,
-      `UPDATE conversations SET ${sets.join(', ')} WHERE id = ?`,
-      params
-    );
-    return { ok: true };
   }
-
-  // ============================================================
-  // IN: ui/request/conversation/toggle_context
-  // ============================================================
 
   async handleToggleContext(data) {
-    const { project_id, message_id, in_context } = data;
-    if (!project_id || !isUUID(project_id)) throw { status: 400, code: 'PROJECT_REQUIRED' };
-    if (!message_id) throw { status: 400, code: 'MESSAGE_ID_REQUIRED' };
-
-    await this._db(project_id,
-      'UPDATE messages SET in_context = ?, manually_toggled = 1 WHERE id = ?',
-      [in_context ? 1 : 0, message_id]
-    );
-    return { ok: true, message_id, in_context: !!in_context, manually_toggled: true };
+    try {
+      const { project_id, message_id, in_context } = data || {};
+      this._requireProject(project_id);
+      if (!message_id) {
+        throw Object.assign(new Error('message_id is required'),
+          { _code: 'VALIDATION_FAILED',
+            _details: { kind: 'MESSAGE_ID_REQUIRED', field: 'message_id' } });
+      }
+      await this._db(project_id,
+        'UPDATE messages SET in_context = ?, manually_toggled = 1 WHERE id = ?',
+        [in_context ? 1 : 0, message_id]
+      );
+      return {
+        status: 200,
+        data: { message_id, in_context: !!in_context, manually_toggled: true }
+      };
+    } catch (err) {
+      return this._handleHandlerError('chat-io.ui.toggle_context.failed', err, 'ui_toggle_context');
+    }
   }
-
-  // ============================================================
-  // IN: ui/request/conversation/context_stats
-  // ============================================================
 
   async handleContextStats(data) {
-    const { project_id, conversation_id } = data;
-    if (!project_id || !isUUID(project_id)) throw { status: 400, code: 'PROJECT_REQUIRED' };
-    if (!conversation_id || !isUUID(conversation_id)) throw { status: 400, code: 'CONVERSATION_REQUIRED' };
+    try {
+      const { project_id, conversation_id } = data || {};
+      this._requireProject(project_id);
+      this._requireConversation(conversation_id);
 
-    const stats = await this._db(project_id,
-      `SELECT
-         COUNT(*) AS total,
-         SUM(CASE WHEN in_context = 1 THEN 1 ELSE 0 END) AS active,
-         SUM(CASE WHEN manually_toggled = 1 THEN 1 ELSE 0 END) AS manually_toggled
-       FROM messages WHERE conversation_id = ?`,
-      [conversation_id], true
-    );
-    const conv = await this._db(project_id,
-      'SELECT context_window FROM conversations WHERE id = ?',
-      [conversation_id], true
-    );
-    const max = conv[0]?.context_window || 20;
-    const active = stats[0]?.active || 0;
-    return {
-      total: stats[0]?.total || 0,
-      active,
-      manually_toggled: stats[0]?.manually_toggled || 0,
-      max_context: max,
-      remaining: Math.max(0, max - active)
-    };
+      const stats = await this._db(project_id,
+        `SELECT
+           COUNT(*) AS total,
+           SUM(CASE WHEN in_context = 1 THEN 1 ELSE 0 END) AS active,
+           SUM(CASE WHEN manually_toggled = 1 THEN 1 ELSE 0 END) AS manually_toggled
+         FROM messages WHERE conversation_id = ?`,
+        [conversation_id], true
+      );
+      const conv = await this._db(project_id,
+        'SELECT context_window FROM conversations WHERE id = ?',
+        [conversation_id], true
+      );
+      const max = conv[0]?.context_window || 20;
+      const active = stats[0]?.active || 0;
+      return {
+        status: 200,
+        data: {
+          total: stats[0]?.total || 0,
+          active,
+          manually_toggled: stats[0]?.manually_toggled || 0,
+          max_context: max,
+          remaining: Math.max(0, max - active)
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('chat-io.ui.context_stats.failed', err, 'ui_context_stats');
+    }
   }
 
-  // ============================================================
-  // OUT: escucha ai.chat.response → guarda assistant + MQTT push
-  // ============================================================
+  // ==========================================
+  // OUT: ai.chat.response → assistant + MQTT push
+  // ==========================================
 
-  /**
-   * onAiResponse — handler de ai.chat.response (shape canonico chat-flow v1.0.0).
-   *
-   * Espera shape: { correlation_id, conversation_id, project_id, user_id,
-   *   channel, channel_context, message_id, message_id_assistant,
-   *   assistant_message, model, provider, tokens: { input, output, total },
-   *   { correlation_id, conversation_id, project_id, user_id, channel,
-   *     channel_context, message_id, message_id_assistant, assistant_message,
-   *     model, provider, tokens:{input,output,total}, duration_ms, timestamp,
-   *     [tool_calls_executed], [iterations], [cost], [finish_reason] }
-   */
   async onAiResponse(event) {
     const data = event.data || event;
     const {
@@ -513,7 +576,14 @@ class ChatIoModule {
       channel, channel_context, correlation_id
     } = data;
 
-    if (!project_id || !conversation_id || !assistant_message) return;
+    if (!project_id || !conversation_id || !assistant_message) {
+      this.logger.warn('chat-io.ai_response.invalid_payload', {
+        has_project: !!project_id, has_conv: !!conversation_id, has_message: !!assistant_message,
+        correlation_id
+      });
+      this.metrics?.increment('chat-io.errors', { kind: 'invalid_payload', source: 'ai_response' });
+      return;
+    }
 
     const message_id = message_id_assistant || crypto.randomUUID();
     const now = Date.now();
@@ -536,71 +606,53 @@ class ChatIoModule {
       const cw = settings?.context_window || 20;
       await this._applyContextFIFO(project_id, conversation_id, cw);
     } catch (err) {
-      this.logger.error('chat-io.save_assistant.failed', { error: err.message, correlation_id });
+      this.logger.error('chat-io.save_assistant.failed', {
+        error: err.message, correlation_id, conversation_id
+      });
+      this.metrics?.increment('chat-io.errors', { kind: 'save_assistant' });
       return;
     }
 
-    await this.eventBus.publish('chat.assistant.saved', {
+    await this._publicarEvento('chat.assistant.saved', {
       project_id, conversation_id, message_id,
-      assistant_message,
-      metadata,
-      correlation_id
-    });
+      assistant_message, metadata
+    }, { correlation_id });
+    this.metrics?.increment('chat-io.message.assistant_saved');
 
-    // Reenvio al canal segun channel_context (agnosticismo de canal)
     if (channel === 'web' || !channel) {
-      // Default web: MQTT push al frontend (shape historico que la UI consume)
-      if (this.mqtt) {
-        this.mqtt.publish(
-          `conversation/${conversation_id}/message`,
-          JSON.stringify({
-            id: message_id,
-            role: 'assistant',
-            content: assistant_message,
-            metadata,
-            timestamp: new Date(now).toISOString()
-          }),
-          { qos: 1 }
-        );
-      }
+      this._publishMqtt(conversation_id, {
+        id: message_id,
+        role: 'assistant',
+        content: assistant_message,
+        metadata,
+        timestamp: new Date(now).toISOString()
+      });
     }
-    // Otros canales (telegram, voice, etc.) los maneja su propio modulo de canal,
-    // que escucha ai.chat.response y devuelve via su API. chat-io NO conoce
-    // esos canales — agnosticismo respetado.
   }
 
-  /**
-   * onAiFailed — handler de ai.chat.failed (chat-flow v1.0.0).
-   *
-   * Se ejecuta cuando ai-gateway publica un fallo del flujo (timeout LLM,
-   * credencial, todos los providers caidos, etc.). chat-io traduce el error
-   * canonico a un mensaje legible al usuario por su canal — cierra el ciclo
-   * iniciado en chat.message.saved (garantia no_silent_failures).
-   *
-   * Espera shape: { correlation_id, conversation_id, user_id, channel,
-   *   channel_context, message_id, error: { code, message, details }, timestamp,
-   *   [project_id], [duration_ms], [provider_attempted] }
-   */
   async onAiFailed(event) {
     const data = event.data || event;
     const {
       project_id, conversation_id, message_id,
-      error, channel, channel_context, correlation_id
+      error, channel, correlation_id
     } = data;
 
-    if (!conversation_id || !error) return;
+    if (!conversation_id || !error) {
+      this.logger.warn('chat-io.ai_failed.invalid_payload', {
+        has_conv: !!conversation_id, has_error: !!error, correlation_id
+      });
+      this.metrics?.increment('chat-io.errors', { kind: 'invalid_payload', source: 'ai_failed' });
+      return;
+    }
 
-    // Mapeo error code → mensaje legible al usuario.
-    // Sin exponer detalles internos (stack, paths, secrets) — solo lo que
-    // el usuario necesita saber para entender que paso y que hacer.
     const userMessage = this._userMessageForErrorCode(error.code, error.message);
 
     this.logger.warn('chat-io.ai_failed', {
       conversation_id, correlation_id, error_code: error.code,
       provider_attempted: data.provider_attempted, duration_ms: data.duration_ms
     });
+    this.metrics?.increment('chat-io.ai_failed', { code: error.code });
 
-    // Persistir como mensaje 'system' para que la conversacion preserve el rastro
     if (project_id) {
       try {
         const fail_id = crypto.randomUUID();
@@ -608,45 +660,97 @@ class ChatIoModule {
         await this._db(project_id,
           `INSERT INTO messages (id, conversation_id, role, content, metadata, created_at)
            VALUES (?, ?, 'system', ?, ?, ?)`,
-          [fail_id, conversation_id, userMessage, JSON.stringify({ error_code: error.code, system: 'ai-failed' }), now]
+          [fail_id, conversation_id, userMessage,
+            JSON.stringify({ error_code: error.code, system: 'ai-failed' }), now]
         );
-      } catch (_) { /* best-effort */ }
+      } catch (err) {
+        this.logger.warn('chat-io.persist_failed_message.skipped', {
+          error: err.message, correlation_id
+        });
+        this.metrics?.increment('chat-io.errors', { kind: 'persist_failed_message' });
+      }
     }
 
-    // Reenviar al canal de origen (agnosticismo)
     if (channel === 'web' || !channel) {
-      if (this.mqtt) {
-        this.mqtt.publish(
-          `conversation/${conversation_id}/message`,
-          JSON.stringify({
-            id: crypto.randomUUID(),
-            role: 'system',
-            content: userMessage,
-            metadata: { error_code: error.code, system: 'ai-failed' },
-            timestamp: new Date().toISOString()
-          }),
-          { qos: 1 }
-        );
-      }
+      this._publishMqtt(conversation_id, {
+        id: crypto.randomUUID(),
+        role: 'system',
+        content: userMessage,
+        metadata: { error_code: error.code, system: 'ai-failed' },
+        timestamp: new Date().toISOString()
+      });
     }
   }
 
-  /**
-   * Traduce un error.code canonico a mensaje legible al usuario.
-   * Sin tecnicismos. Sin exponer detalles del sistema.
-   */
+  // ==========================================
+  // Helpers POC2 (transferibles) + auxiliares
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
+  }
+
+  _handleHandlerError(logEvent, err, kind) {
+    const code    = err._code || this._classifyHandlerError(err);
+    const status  = code === 'VALIDATION_FAILED'      ? 400 :
+                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
+                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
+                    code === 'CONFLICT'               ? 409 :
+                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
+                                                        500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code });
+    this.metrics?.increment('chat-io.errors', { kind, code });
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found') || msg.includes('does not exist')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('uuid')) return 'VALIDATION_FAILED';
+    if (msg.includes('already') || msg.includes('conflict')) return 'CONFLICT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
+    if (msg.includes('timeout') || msg.includes('unavailable')) return 'UPSTREAM_UNAVAILABLE';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    const enriched = { timestamp: new Date().toISOString(), ...payload };
+    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
+    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
+    await this.eventBus.publish(name, enriched);
+  }
+
+  // Auxiliar: traduce error.code canonico a mensaje legible al usuario
+  // (en su idioma, sin tecnicismos). NO expone detalles internos del sistema.
   _userMessageForErrorCode(code, raw_message) {
     const M = {
-      'UPSTREAM_TIMEOUT':         'Tardé más de la cuenta en responder. Inténtalo de nuevo en un momento.',
-      'UPSTREAM_RATE_LIMITED':    'Estoy recibiendo muchas peticiones. Inténtalo en unos minutos.',
+      'UPSTREAM_TIMEOUT':         'Tarde mas de la cuenta en responder. Intentalo de nuevo en un momento.',
+      'UPSTREAM_RATE_LIMITED':    'Estoy recibiendo muchas peticiones. Intentalo en unos minutos.',
       'UPSTREAM_AUTH_FAILED':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
-      'UPSTREAM_5XX':             'El motor del lenguaje tiene un fallo temporal. Inténtalo en un momento.',
-      'UPSTREAM_UNREACHABLE':     'No puedo conectar con el motor del lenguaje ahora mismo. Inténtalo más tarde.',
-      'UPSTREAM_INVALID_RESPONSE':'El motor del lenguaje devolvió algo que no entiendo. Inténtalo de nuevo.',
+      'UPSTREAM_5XX':             'El motor del lenguaje tiene un fallo temporal. Intentalo en un momento.',
+      'UPSTREAM_UNREACHABLE':     'No puedo conectar con el motor del lenguaje ahora mismo. Intentalo mas tarde.',
+      'UPSTREAM_INVALID_RESPONSE':'El motor del lenguaje devolvio algo que no entiendo. Intentalo de nuevo.',
       'CREDENTIAL_NOT_FOUND':     'No tengo credenciales configuradas para responder. Avisa al administrador.',
-      'INTERNAL_ERROR':           'Algo se rompió por mi parte. Inténtalo de nuevo o avisa si persiste.'
+      'INTERNAL_ERROR':           'Algo se rompio por mi parte. Intentalo de nuevo o avisa si persiste.'
     };
-    return M[code] || `No pude completar la respuesta (${code || 'error desconocido'}). Inténtalo de nuevo.`;
+    return M[code] || `No pude completar la respuesta (${code || 'error desconocido'}). Intentalo de nuevo.`;
+  }
+
+  _publishMqtt(conversation_id, payload) {
+    if (!this.mqtt) return;
+    try {
+      this.mqtt.publish(
+        `conversation/${conversation_id}/message`,
+        JSON.stringify(payload),
+        { qos: 1 }
+      );
+    } catch (err) {
+      this.logger.warn('chat-io.mqtt.publish.failed', { error: err.message, conversation_id });
+      this.metrics?.increment('chat-io.errors', { kind: 'mqtt_publish' });
+    }
   }
 }
 

@@ -61,7 +61,10 @@ function checkPublishesScope(findings) {
       const fields = p.payload?.campos_visibles || [];
 
       // Si no es cross-tenant explicito y es de dominio (no system.*, no cluster.*, no infra.*), debe llevar project_id
-      const isInfra = /^(system|cluster|broker|module|db|credential|fs|http|broker)\./.test(evName);
+      // Prefijos de infra (cross-tenant por naturaleza): system, cluster, broker, module, db,
+      // credential, fs, http, plugin (los plugins son globales — no project-scoped),
+      // gateway (gateways operan a nivel device).
+      const isInfra = /^(system|cluster|broker|module|db|credential|fs|http|plugin|gateway)\./.test(evName);
       const isCrossTenant = EVENTOS_CROSS_TENANT.has(evName) || isInfra;
       if (!isCrossTenant && !fields.includes('project_id')) {
         findings.warnings.push(`drift_publish_dominio_sin_project_id: ${slug} publica ${evName} en ${p.ubicacion || '?'} — sin project_id en campos_visibles`);

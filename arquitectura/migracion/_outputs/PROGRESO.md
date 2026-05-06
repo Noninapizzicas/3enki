@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-06T09:41:55Z_
+_Última regeneración: 2026-05-06T09:56:49Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 15 / 73 (21%)
-- **Drifts cerrados**: 344 / 3709 (9%)
-- **Drifts restantes en baseline**: 3365
+- **Drifts cerrados**: 344 / 3696 (9%)
+- **Drifts restantes en baseline**: 3352
 
 ### Progreso por capa
 
@@ -28,7 +28,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 3 | core | `composition-manager` | 1028 | 49 → 14 (-71%) | `665555a` 2026-05-06 |
 | 4 | core | `database-manager` | 793 | 44 → 22 (-50%) | `edd468e` 2026-05-06 |
 | 5 | core | `credential-manager` | 843 | 28 → 12 (-57%) | `069f8c8` 2026-05-06 |
-| 8 | core | `gateway-manager` | 429 | 17 → 6 (-65%) | `8aa2b74` 2026-05-06 |
+| 7 | core | `gateway-manager` | 429 | 13 → 2 (-85%) | `8aa2b74` 2026-05-06 |
 | 9 | core | `conversacion__agent-observer` | 217 | 0 → 0 (-0%) | `54b7b7c` 2026-05-03 |
 | 12 | core | `conversacion__memory-user-profile` | 192 | 0 → 0 (-0%) | `6120cbd` 2026-05-03 |
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
@@ -43,8 +43,8 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
-| 6 | core | `plugin-manager` | 486 | 20 | 0 | drifts 15/20 (75%) — esperado <50% |
-| 7 | core | `conversacion__ai-gateway` | 710 | 19 | 0 | sin tests/unit/ |
+| 6 | core | `conversacion__ai-gateway` | 710 | 19 | 0 | sin tests/unit/ |
+| 8 | core | `plugin-manager` | 486 | 11 | 0 | drifts 6/11 (55%) — esperado <50% |
 | 10 | core | `conversacion__chat-io` | 654 | 52 | 1 | drifts 32/52 (62%) — esperado <50% |
 | 11 | core | `channel-manager` | 493 | 29 | 1 | sin tests/unit/ |
 | 14 | core | `conversacion__prompt-builder` | 346 | 12 | 2 | drifts 7/12 (58%) — esperado <50% |
@@ -144,14 +144,14 @@ Suite organizada en grupos:
 
 ## Decisiones pendientes / siguiente sesión
 
-**Próximo módulo recomendado**: `plugin-manager` (capa core, 486 LOC, 20 drifts en baseline).
+**Próximo módulo recomendado**: `conversacion__ai-gateway` (capa core, 710 LOC, 19 drifts en baseline).
 
 Pasos canónicos para el siguiente:
 
-1. Leer auditoría completa: `arquitectura/auditoria/_outputs/modulo-completo/plugin-manager.json`
-2. Identificar drifts del módulo: `node -e "const b=require('./drift-baseline.json').signatures; console.log(b.filter(s=>s.includes('plugin-manager')))"`
+1. Leer auditoría completa: `arquitectura/auditoria/_outputs/modulo-completo/conversacion__ai-gateway.json`
+2. Identificar drifts del módulo: `node -e "const b=require('./drift-baseline.json').signatures; console.log(b.filter(s=>s.includes('ai-gateway')))"`
 3. Aplicar los 5 helpers privados canónicos + reescritura siguiendo plantilla `modules/_template/`.
-4. Tests por capas en `tests/unit/plugin-manager.test.js`.
+4. Tests por capas en `tests/unit/conversacion__ai-gateway.test.js`.
 5. Wire en `package.json` + `.github/workflows/validate.yml`.
 6. Verificar drifts del módulo bajan ≥70%.
 7. Commit + push + regenerar este PROGRESO.md.

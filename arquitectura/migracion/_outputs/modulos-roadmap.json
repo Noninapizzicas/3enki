@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T09:41:54.757Z",
+  "generated_at": "2026-05-06T09:56:47.426Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,7 +10,7 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3709,
+    "drifts_total": 3696,
     "loc_total": 48646,
     "tools_total": 147,
     "agents_total": 30
@@ -98,21 +98,6 @@
       "orden_migracion": 5
     },
     {
-      "slug": "plugin-manager",
-      "path": "modules/plugin-manager",
-      "layer": "core",
-      "language": "en",
-      "version": "2.1.0",
-      "loc": 486,
-      "drifts": 20,
-      "events_publishes": 6,
-      "events_subscribes": 2,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 6
-    },
-    {
       "slug": "conversacion__ai-gateway",
       "path": "modules/conversacion/ai-gateway",
       "layer": "core",
@@ -125,7 +110,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 7
+      "orden_migracion": 6
     },
     {
       "slug": "gateway-manager",
@@ -134,9 +119,24 @@
       "language": "en",
       "version": "2.0.0",
       "loc": 429,
-      "drifts": 17,
+      "drifts": 13,
       "events_publishes": 5,
       "events_subscribes": 0,
+      "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 7
+    },
+    {
+      "slug": "plugin-manager",
+      "path": "modules/plugin-manager",
+      "layer": "core",
+      "language": "en",
+      "version": "2.1.0",
+      "loc": 486,
+      "drifts": 11,
+      "events_publishes": 6,
+      "events_subscribes": 2,
       "tools": 0,
       "agents": 0,
       "dependencies": [],

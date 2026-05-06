@@ -100,3 +100,6 @@ jobs:
 
       - name: Run unit tests (conversacion/prompt-builder — reescritura canonica)
         run: npm run test:conversacion__prompt-builder
+
+      - name: Run unit tests (filesystem — reescritura canonica)
+        run: npm run test:filesystem

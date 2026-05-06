@@ -41,6 +41,7 @@
     "test:channel-manager": "node tests/unit/channel-manager.test.js",
     "test:conversacion__chat-io": "node tests/unit/conversacion__chat-io.test.js",
     "test:conversacion__prompt-builder": "node tests/unit/conversacion__prompt-builder.test.js",
+    "test:filesystem": "node tests/unit/filesystem.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

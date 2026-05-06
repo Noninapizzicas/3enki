@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T14:53:12.456Z",
+  "generated_at": "2026-05-06T23:33:58.830Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3663,
-    "loc_total": 48787,
+    "drifts_total": 3604,
+    "loc_total": 48777,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -296,21 +296,6 @@
       "orden_migracion": 17
     },
     {
-      "slug": "firmware-manager",
-      "path": "modules/firmware-manager",
-      "layer": "infra",
-      "language": "en",
-      "version": "2.0.0",
-      "loc": 1094,
-      "drifts": 126,
-      "events_publishes": 4,
-      "events_subscribes": 4,
-      "tools": 7,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 18
-    },
-    {
       "slug": "esp32-dev",
       "path": "modules/esp32-dev",
       "layer": "infra",
@@ -323,7 +308,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 19
+      "orden_migracion": 18
     },
     {
       "slug": "certificate-authority",
@@ -336,6 +321,21 @@
       "events_publishes": 4,
       "events_subscribes": 0,
       "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 19
+    },
+    {
+      "slug": "firmware-manager",
+      "path": "modules/firmware-manager",
+      "layer": "infra",
+      "language": "en",
+      "version": "3.0.0",
+      "loc": 1084,
+      "drifts": 67,
+      "events_publishes": 4,
+      "events_subscribes": 4,
+      "tools": 7,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 20

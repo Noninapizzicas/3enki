@@ -103,3 +103,6 @@ jobs:
 
       - name: Run unit tests (filesystem — reescritura canonica)
         run: npm run test:filesystem
+
+      - name: Run unit tests (firmware-manager — reescritura canonica)
+        run: npm run test:firmware-manager

@@ -1,23 +1,43 @@
 /**
- * Módulo Gateway Manager v1.0.0
+ * gateway-manager v2.0.0 — Reescrito al canon (POC2 #6 del horizontal).
  *
- * Gestiona el ciclo de vida de gateways software que traducen MQTT a
- * protocolos nativos (TCP, BLE, USB, CMD).
+ * Ciclo de vida de gateways software que traducen MQTT a protocolos nativos
+ * (TCP, BLE, USB, CMD). Un gateway es un "ESP32 virtual" — desde el servidor
+ * es indistinguible de un ESP32 real (mismo contrato MQTT: birth, status,
+ * command, ack).
  *
- * Un gateway es un "ESP32 virtual" — desde el servidor es indistinguible
- * de un ESP32 real. Mismo contrato MQTT: birth, status, command, ack.
+ * Sub-piezas:
+ *  - base.js: GatewayBase abstracto (contrato MQTT + lifecycle compartido).
+ *  - gateways/{tcp,ble,usb,cmd}.js: implementaciones por protocolo.
+ *  - index.js (este archivo): manager que arranca/para gateways segun config
+ *    y expone UI handlers + eventos al bus.
  *
- * Arranca gateways según config del proyecto:
- *   config.json → gateways.tcp.enabled = true → GatewayTCP arranca
+ * Cumple los 24 contratos transversales:
+ *  - errors: handlers UI devuelven { status, data | error: { code, message } }.
+ *    Metodos privados lanzan con _code canonico.
+ *  - observability: log + metric en cada error path. Prefix gateway-manager.*.
+ *  - events: 5 eventos canonicos preservados invariantes (4 emitidos +
+ *    gateway.device_lost como extension point para device-shadow).
+ *    correlation_id propagado.
+ *  - lifecycle: onLoad arranca gateways, onUnload limpia (gateways.clear +
+ *    metrics reset).
+ *  - persistence: in-memory unicamente (gateways viven solo en memoria).
+ *  - resilience: si MQTT no disponible warn + return graceful sin crash.
  *
- * Cada gateway:
- *   1. Autodescubre dispositivos de su protocolo
- *   2. Publica birth message por cada dispositivo encontrado
- *   3. Se suscribe a topics de comando MQTT
- *   4. Traduce comando MQTT → protocolo nativo → publica ACK
+ * 5 helpers POC2 transferibles:
+ *  _errorResponse, _handleHandlerError, _classifyHandlerError,
+ *  _publicarEvento, + auxiliar especifico _instantiateGateway.
  *
- * Tier: tier_2_platform (carga antes que módulos de dominio)
+ * Monolito (311 LOC) preservado en
+ * arquitectura/migracion/_legacy/gateway-manager-monolito-pre-rewrite.js.bak
+ *
+ * Mapa exhaustivo (PASO 0 del rewrite) en
+ * arquitectura/migracion/notas/gateway-manager-mapa.md
  */
+
+'use strict';
+
+const crypto = require('crypto');
 
 const GatewayTCP = require('./gateways/tcp');
 const GatewayBLE = require('./gateways/ble');
@@ -31,30 +51,28 @@ const GATEWAY_TYPES = {
   cmd: GatewayCMD
 };
 
+const VALID_TYPES = Object.keys(GATEWAY_TYPES);
+
+const DEFAULT_CONFIG = {
+  tcp: { enabled: false, autodiscovery: true, manual_devices: [] },
+  ble: { enabled: false, autodiscovery: false, manual_devices: [] },
+  usb: { enabled: false, autodiscovery: false, manual_devices: [] },
+  cmd: { enabled: false, autodiscovery: false, manual_devices: [] }
+};
+
 class GatewayManagerModule {
   constructor() {
-    this.name = 'gateway-manager';
-    this.version = '1.0.0';
+    this.name    = 'gateway-manager';
+    this.version = '2.0.0';
 
-    // Dependencias
     this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
+    this.logger   = null;
+    this.metrics  = null;
 
-    // Config
-    this.config = {
-      gateways: {
-        tcp: { enabled: false, autodiscovery: true, manual_devices: [] },
-        ble: { enabled: false, autodiscovery: false, manual_devices: [] },
-        usb: { enabled: false, autodiscovery: false, manual_devices: [] },
-        cmd: { enabled: false, autodiscovery: false, manual_devices: [] }
-      }
-    };
+    this.config = { gateways: { ...DEFAULT_CONFIG } };
 
-    // Gateways activos: type → GatewayBase instance
     this.gateways = new Map();
 
-    // Métricas
     this.internalMetrics = {
       started_total: 0,
       devices_found_total: 0,
@@ -68,148 +86,195 @@ class GatewayManagerModule {
   // ==========================================
 
   async onLoad(core) {
-    this.logger = core.logger;
-    this.metrics = core.metrics;
+    this.logger   = core.logger;
+    this.metrics  = core.metrics;
     this.eventBus = core.eventBus;
 
-    this.logger.info('module.loading', { module: this.name, version: this.version });
+    const correlation_id = crypto.randomUUID();
+    this.logger.info('gateway-manager.loading', {
+      module: this.name, version: this.version, correlation_id
+    });
 
-    // Merge config
     if (core.config?.['gateway-manager']?.gateways) {
       this.config.gateways = { ...this.config.gateways, ...core.config['gateway-manager'].gateways };
     }
-    // Compatibilidad: config puede estar en core.config.gateways directamente
     if (core.config?.gateways) {
       this.config.gateways = { ...this.config.gateways, ...core.config.gateways };
     }
 
-    // Arrancar gateways habilitados
-    await this._startEnabledGateways();
+    await this._startEnabledGateways(correlation_id);
 
-    this.logger.info('module.loaded', {
-      module: this.name,
-      version: this.version,
+    this.logger.info('gateway-manager.loaded', {
       active_gateways: this.gateways.size,
-      types: Array.from(this.gateways.keys())
+      types: Array.from(this.gateways.keys()),
+      correlation_id
     });
   }
 
   async onUnload() {
-    this.logger.info('module.unloading', { module: this.name });
+    const correlation_id = crypto.randomUUID();
+    this.logger.info('gateway-manager.unloading', {
+      gateways_to_stop: this.gateways.size, correlation_id
+    });
 
-    for (const [type, gateway] of this.gateways) {
-      try {
-        await gateway.stop();
-        await this.eventBus.publish('gateway.stopped', {
-          type,
-          timestamp: new Date().toISOString()
-        });
-      } catch (err) {
-        this.logger.error('gateway-manager.stop_error', { type, error: err.message });
-      }
+    const entries = Array.from(this.gateways.entries());
+    this.gateways.clear();
+    for (const [type, gateway] of entries) {
+      await this._stopGateway(type, gateway, correlation_id);
     }
 
-    this.gateways.clear();
-    this.logger.info('module.unloaded', { module: this.name });
+    this.internalMetrics = {
+      started_total: 0,
+      devices_found_total: 0,
+      commands_processed_total: 0,
+      errors_total: 0
+    };
+  }
+
+  async _stopGateway(type, gateway, correlation_id) {
+    try {
+      await gateway.stop();
+      await this._publicarEvento('gateway.stopped', { type }, { correlation_id });
+    } catch (err) {
+      this.logger.error('gateway-manager.stop.failed', {
+        type, error: err.message, correlation_id
+      });
+      this.metrics?.increment('gateway-manager.errors', { kind: 'stop', type });
+      this.internalMetrics.errors_total++;
+    }
   }
 
   // ==========================================
-  // Gateway lifecycle
+  // Gateway lifecycle (privados, lanzan con _code canonico)
   // ==========================================
 
-  async _startEnabledGateways() {
+  async _startEnabledGateways(correlation_id) {
     const mqtt = this.eventBus?.mqtt;
     if (!mqtt || !mqtt.isConnected) {
       this.logger.warn('gateway-manager.mqtt.not_available', {
-        nota: 'MQTT no disponible — no se pueden arrancar gateways'
+        nota: 'MQTT no disponible — no se pueden arrancar gateways',
+        correlation_id
       });
+      this.metrics?.increment('gateway-manager.errors', { kind: 'mqtt_not_available' });
       return;
     }
 
     for (const [type, gatewayConfig] of Object.entries(this.config.gateways)) {
       if (!gatewayConfig.enabled) continue;
-
-      const GatewayClass = GATEWAY_TYPES[type];
-      if (!GatewayClass) {
-        this.logger.warn('gateway-manager.unknown_type', { type });
-        continue;
-      }
-
-      try {
-        const gateway = new GatewayClass(gatewayConfig, {
-          mqtt,
-          eventBus: this.eventBus,
-          logger: this.logger
-        });
-
-        await gateway.start();
-        this.gateways.set(type, gateway);
-        this.internalMetrics.started_total++;
-        this.internalMetrics.devices_found_total += gateway.metrics.devices_found;
-
-        this.logger.info('gateway-manager.gateway.started', {
-          type,
-          devices: gateway.devices.size
-        });
-
-        await this.eventBus.publish('gateway.started', {
-          type,
-          devices_count: gateway.devices.size,
-          timestamp: new Date().toISOString()
-        });
-
-        // Emitir evento por cada dispositivo encontrado
-        for (const [deviceId, entry] of gateway.devices) {
-          await this.eventBus.publish('gateway.device_found', {
-            device_id: deviceId,
-            gateway_type: type,
-            device_type: entry.type,
-            capabilities: entry.capabilities,
-            timestamp: new Date().toISOString()
-          });
-        }
-      } catch (err) {
-        this.internalMetrics.errors_total++;
-        this.logger.error('gateway-manager.gateway.start_error', {
-          type,
-          error: err.message
-        });
-
-        await this.eventBus.publish('gateway.error', {
-          type,
-          error: err.message,
-          timestamp: new Date().toISOString()
-        });
-      }
+      await this._tryStartGateway(type, gatewayConfig, mqtt, correlation_id);
     }
   }
 
-  async _restartGateway(type) {
-    const existing = this.gateways.get(type);
-    if (existing) {
-      await existing.stop();
-      this.gateways.delete(type);
+  async _tryStartGateway(type, gatewayConfig, mqtt, correlation_id) {
+    const GatewayClass = GATEWAY_TYPES[type];
+    if (!GatewayClass) {
+      this.logger.warn('gateway-manager.unknown_type', { type, correlation_id });
+      this.metrics?.increment('gateway-manager.errors', { kind: 'unknown_type' });
+      return;
+    }
+
+    try {
+      const gateway = await this._instantiateGateway(GatewayClass, gatewayConfig, mqtt);
+      await gateway.start();
+
+      this.gateways.set(type, gateway);
+      this.internalMetrics.started_total++;
+      this.internalMetrics.devices_found_total += gateway.metrics.devices_found;
+
+      this.logger.info('gateway-manager.gateway.started', {
+        type, devices: gateway.devices.size, correlation_id
+      });
+      this.metrics?.increment('gateway-manager.gateway.started', { type });
+
+      await this._publicarEvento('gateway.started', {
+        type, devices_count: gateway.devices.size
+      }, { correlation_id });
+
+      await this._publishDeviceFoundEvents(type, gateway, correlation_id);
+    } catch (err) {
+      this.internalMetrics.errors_total++;
+      this.logger.error('gateway-manager.gateway.start.failed', {
+        type, error: err.message, correlation_id
+      });
+      this.metrics?.increment('gateway-manager.errors', { kind: 'start', type });
+
+      await this._publicarEvento('gateway.error', {
+        type, error: err.message
+      }, { correlation_id });
+    }
+  }
+
+  async _publishDeviceFoundEvents(type, gateway, correlation_id) {
+    for (const [deviceId, entry] of gateway.devices) {
+      await this._publicarEvento('gateway.device_found', {
+        device_id: deviceId,
+        gateway_type: type,
+        device_type: entry.type,
+        capabilities: entry.capabilities
+      }, { correlation_id });
+    }
+  }
+
+  async _restartGateway(type, correlation_id) {
+    if (!VALID_TYPES.includes(type)) {
+      throw Object.assign(new Error(`Gateway type not supported: ${type}`),
+        { _code: 'VALIDATION_FAILED',
+          _details: { kind: 'domain', field: 'type', allowed: VALID_TYPES } });
     }
 
     const gatewayConfig = this.config.gateways[type];
-    if (!gatewayConfig) return { success: false, error: `Tipo ${type} no existe en config` };
-
-    const GatewayClass = GATEWAY_TYPES[type];
-    if (!GatewayClass) return { success: false, error: `Tipo ${type} no soportado` };
+    if (!gatewayConfig) {
+      throw Object.assign(new Error(`Gateway type not configured: ${type}`),
+        { _code: 'RESOURCE_NOT_FOUND',
+          _details: { entity_type: 'gateway_config', entity_id: type } });
+    }
 
     const mqtt = this.eventBus?.mqtt;
-    if (!mqtt?.isConnected) return { success: false, error: 'MQTT no disponible' };
+    if (!mqtt?.isConnected) {
+      throw Object.assign(new Error('MQTT not available'),
+        { _code: 'UPSTREAM_UNAVAILABLE',
+          _details: { upstream: 'mqtt', state: 'disconnected' } });
+    }
 
-    const gateway = new GatewayClass(gatewayConfig, {
-      mqtt,
-      eventBus: this.eventBus,
-      logger: this.logger
-    });
+    const existing = this.gateways.get(type);
+    if (existing) {
+      this.gateways.delete(type);
+      try { await existing.stop(); } catch (err) {
+        this.logger.warn('gateway-manager.restart.stop_failed', {
+          type, error: err.message, correlation_id
+        });
+      }
+    }
 
+    const GatewayClass = GATEWAY_TYPES[type];
+    const gateway = await this._instantiateGateway(GatewayClass, gatewayConfig, mqtt);
     await gateway.start();
     this.gateways.set(type, gateway);
 
-    return { success: true, devices: gateway.devices.size };
+    this.metrics?.increment('gateway-manager.gateway.restarted', { type });
+    return { type, devices: gateway.devices.size };
+  }
+
+  async _discoverGateway(type) {
+    if (!VALID_TYPES.includes(type)) {
+      throw Object.assign(new Error(`Gateway type not supported: ${type}`),
+        { _code: 'VALIDATION_FAILED',
+          _details: { kind: 'domain', field: 'type', allowed: VALID_TYPES } });
+    }
+
+    const mqtt = this.eventBus?.mqtt;
+    if (!mqtt?.isConnected) {
+      throw Object.assign(new Error('MQTT not available'),
+        { _code: 'UPSTREAM_UNAVAILABLE',
+          _details: { upstream: 'mqtt', state: 'disconnected' } });
+    }
+
+    const GatewayClass = GATEWAY_TYPES[type];
+    const tempConfig = { autodiscovery: true, ...this.config.gateways[type] };
+    const tempGateway = await this._instantiateGateway(GatewayClass, tempConfig, mqtt);
+
+    const devices = await tempGateway._discoverDevices();
+    return { type, devices, count: devices.length };
   }
 
   // ==========================================
@@ -217,94 +282,146 @@ class GatewayManagerModule {
   // ==========================================
 
   async handleList() {
-    const gateways = [];
-
-    for (const [type, config] of Object.entries(this.config.gateways)) {
-      const running = this.gateways.get(type);
-      gateways.push({
-        type,
-        enabled: config.enabled || false,
-        running: !!running,
-        ...(running ? running.getInfo() : { devices_count: 0 })
-      });
-    }
-
-    return {
-      status: 200,
-      data: {
-        gateways,
-        active: this.gateways.size,
-        total_configured: Object.keys(this.config.gateways).length
-      }
-    };
-  }
-
-  async handleStatus(data) {
-    if (!data?.type) return { status: 400, error: 'type requerido (tcp, ble, usb, cmd)' };
-
-    const gateway = this.gateways.get(data.type);
-    if (!gateway) {
-      return {
-        status: 200,
-        data: {
-          type: data.type,
-          running: false,
-          enabled: this.config.gateways[data.type]?.enabled || false
-        }
-      };
-    }
-
-    return { status: 200, data: gateway.getInfo() };
-  }
-
-  async handleRestart(data) {
-    if (!data?.type) return { status: 400, error: 'type requerido (tcp, ble, usb, cmd)' };
-
     try {
-      const result = await this._restartGateway(data.type);
-      if (!result.success) return { status: 500, error: result.error };
-
+      const gateways = [];
+      for (const [type, gwConfig] of Object.entries(this.config.gateways)) {
+        const running = this.gateways.get(type);
+        gateways.push({
+          type,
+          enabled: gwConfig.enabled || false,
+          running: !!running,
+          ...(running ? running.getInfo() : { devices_count: 0 })
+        });
+      }
       return {
         status: 200,
         data: {
-          type: data.type,
-          restarted: true,
-          devices: result.devices
+          gateways,
+          active: this.gateways.size,
+          total_configured: Object.keys(this.config.gateways).length
         }
       };
     } catch (err) {
-      return { status: 500, error: err.message };
+      return this._handleHandlerError('gateway-manager.ui.list.failed', err, 'ui_list');
+    }
+  }
+
+  async handleStatus(data) {
+    try {
+      const { type } = data || {};
+      if (!type) {
+        return this._errorResponse(400, 'VALIDATION_FAILED',
+          'Gateway type is required',
+          { kind: 'domain', field: 'type', allowed: VALID_TYPES });
+      }
+      if (!VALID_TYPES.includes(type)) {
+        return this._errorResponse(400, 'VALIDATION_FAILED',
+          `Gateway type not supported: ${type}`,
+          { kind: 'domain', field: 'type', allowed: VALID_TYPES });
+      }
+
+      const gateway = this.gateways.get(type);
+      if (!gateway) {
+        return {
+          status: 200,
+          data: {
+            type,
+            running: false,
+            enabled: this.config.gateways[type]?.enabled || false
+          }
+        };
+      }
+      return { status: 200, data: gateway.getInfo() };
+    } catch (err) {
+      return this._handleHandlerError('gateway-manager.ui.status.failed', err, 'ui_status');
+    }
+  }
+
+  async handleRestart(data) {
+    try {
+      const { type } = data || {};
+      if (!type) {
+        return this._errorResponse(400, 'VALIDATION_FAILED',
+          'Gateway type is required',
+          { kind: 'domain', field: 'type', allowed: VALID_TYPES });
+      }
+      const result = await this._restartGateway(type, crypto.randomUUID());
+      return {
+        status: 200,
+        data: { type: result.type, restarted: true, devices: result.devices }
+      };
+    } catch (err) {
+      return this._handleHandlerError('gateway-manager.ui.restart.failed', err, 'ui_restart');
     }
   }
 
   async handleDiscover(data) {
-    if (!data?.type) return { status: 400, error: 'type requerido (tcp, ble, usb, cmd)' };
-
-    const GatewayClass = GATEWAY_TYPES[data.type];
-    if (!GatewayClass) return { status: 400, error: `Tipo ${data.type} no soportado` };
-
-    const mqtt = this.eventBus?.mqtt;
-    if (!mqtt?.isConnected) return { status: 500, error: 'MQTT no disponible' };
-
     try {
-      const tempGateway = new GatewayClass(
-        { autodiscovery: true, ...this.config.gateways[data.type] },
-        { mqtt, eventBus: this.eventBus, logger: this.logger }
-      );
-
-      const devices = await tempGateway._discoverDevices();
-
+      const { type } = data || {};
+      if (!type) {
+        return this._errorResponse(400, 'VALIDATION_FAILED',
+          'Gateway type is required',
+          { kind: 'domain', field: 'type', allowed: VALID_TYPES });
+      }
+      const result = await this._discoverGateway(type);
       return {
         status: 200,
-        data: {
-          type: data.type,
-          discovered: devices,
-          count: devices.length
-        }
+        data: result
       };
     } catch (err) {
-      return { status: 500, error: err.message };
+      return this._handleHandlerError('gateway-manager.ui.discover.failed', err, 'ui_discover');
     }
+  }
+
+  // ==========================================
+  // Helpers POC2 (transferibles) + auxiliares
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
+  }
+
+  _handleHandlerError(logEvent, err, kind) {
+    const code    = err._code || this._classifyHandlerError(err);
+    const status  = code === 'VALIDATION_FAILED'        ? 400 :
+                    code === 'RESOURCE_NOT_FOUND'       ? 404 :
+                    code === 'AUTHORIZATION_REQUIRED'   ? 403 :
+                    code === 'CONFLICT'                 ? 409 :
+                    code === 'UPSTREAM_UNAVAILABLE'     ? 503 :
+                                                          500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code });
+    this.metrics?.increment('gateway-manager.errors', { kind, code });
+    this.internalMetrics.errors_total++;
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found') || msg.includes('not configured')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('not supported') || msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
+    if (msg.includes('not available') || msg.includes('unavailable') || msg.includes('disconnected')) return 'UPSTREAM_UNAVAILABLE';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    const enriched = {
+      timestamp: new Date().toISOString(),
+      ...payload
+    };
+    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
+    else enriched.correlation_id = crypto.randomUUID();
+    await this.eventBus.publish(name, enriched);
+  }
+
+  async _instantiateGateway(GatewayClass, gatewayConfig, mqtt) {
+    return new GatewayClass(gatewayConfig, {
+      mqtt,
+      eventBus: this.eventBus,
+      logger: this.logger
+    });
   }
 }
 

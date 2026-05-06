@@ -1,7 +1,7 @@
 {
   "name": "ai-gateway",
-  "version": "1.0.0",
-  "description": "Ejecutor del LLM. Dos entry points: chat.prompt.ready (flujo de chat) y llm.complete.request (flujo genérico, usado por agentes). Internamente comparten _executeLLM (agentic loop con tools, providers con fallback, credentials event-driven).",
+  "version": "2.0.0",
+  "description": "Ejecutor del LLM. Tres entry points (chat / generic / embedding) sobre el mismo agentic loop con providers fallback + tools + credentials event-driven. v2.0.0: split llm.complete.response/failed (par success/failure), helpers POC2 transferibles, _publicarEvento canonico (correlation_id propagado), _classifyExecutionError auxiliar del dominio.",
   "author": "Event Core Team",
   "language": "en",
   "publishes": [
@@ -15,7 +15,16 @@
       "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.failed.schema.json",
       "description": "Cierre canonico en error (timeout LLM, credencial no resuelta, todos los providers caidos). Sin esto los flujos quedan colgados — viola garantia no_silent_failures."
     },
-    "llm.complete.response",
+    {
+      "event": "llm.complete.response",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.response.schema.json",
+      "description": "Cierre canonico de llm.complete.request en exito. Payload sin success flag — par separado con llm.complete.failed."
+    },
+    {
+      "event": "llm.complete.failed",
+      "response_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.failed.schema.json",
+      "description": "Cierre canonico de llm.complete.request en error. Payload con error: { code, message, details? } canonico."
+    },
     {
       "event": "embedding.generate.response",
       "response_schema_ref": "arquitectura/decisiones/_schemas/embedding-flow/embedding.generate.response.schema.json",
@@ -160,6 +169,33 @@
       "restart_resilient": false,
       "concurrency":       "single-writer",
       "lost_on_restart":   ["providers", "credentialCache", "pendingCredentials", "pendingFsReads", "pagePrefixes"]
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "tracing": {
+      "propaga_correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "ai-gateway.chat.completed",
+        "ai-gateway.chat.failed",
+        "ai-gateway.llm.completed",
+        "ai-gateway.llm.failed",
+        "ai-gateway.embedding.completed",
+        "ai-gateway.embedding.failed",
+        "ai-gateway.errors"
+      ],
+      "gauges": [
+        "ai-gateway.providers_loaded",
+        "ai-gateway.pending_credentials",
+        "ai-gateway.pending_fs_reads"
+      ]
     }
   }
 }

@@ -19,6 +19,42 @@ Y fuera de `arquitectura/migracion/`:
 
 Pasos canónicos para cada uno de los 73:
 
+### Paso 0 (CRÍTICO) — Mapa exhaustivo del módulo monolítico ANTES de codear
+
+**Aprendido en project-manager (POC2 #3)**: si arrancas a reescribir guiándote por memoria/intuición, descubres funciones del monolito a posteriori (caso real: 3 funciones de features/blueprints olvidadas inicialmente). Ese descubrimiento tardío significa que la "reescritura desde cero" fue parcial.
+
+Antes de tocar una sola línea de código, generar el mapa completo del módulo monolítico:
+
+```bash
+# Lista de TODOS los métodos públicos + privados:
+grep -oE "async [a-zA-Z_]+\(" arquitectura/migracion/_legacy/<modulo>-monolito-pre-rewrite.js.bak | sort -u
+grep -oE "^  [a-zA-Z_]+\([^)]*\) {" modules/<modulo>/index.js | sort -u  # síncronos
+
+# Eventos publicados/consumidos en module.json:
+jq '.events.publishes, .events.subscribes' modules/<modulo>/module.json
+
+# Estado interno (Maps, Sets, timers en constructor):
+sed -n '/constructor\(\)/,/^  }/p' modules/<modulo>/index.js
+```
+
+Construir un **inventario de responsabilidades** (texto en `arquitectura/migracion/notas/<modulo>-mapa.md` cuando el módulo sea complejo):
+
+- **Lifecycle**: qué hace `onLoad`, `onUnload`. ¿Re-emite eventos al arrancar? ¿Crea timers/intervalos? ¿Carga datos de disco?
+- **Bootstrap / setup**: ¿Crea recursos automáticos al arrancar? (Sistema, Mi Proyecto, schema DB, archivos de configuración).
+- **CRUD del dominio**: cada método que crea/lee/actualiza/elimina. Listar uno por uno.
+- **Handlers HTTP**: cada uno con su path + responsabilidad.
+- **Handlers UI** (mqttRequest cross-módulo): cada uno con su domain.action + responsabilidad.
+- **Handlers de eventos del bus**: cada subscribe + qué hace al recibirlo.
+- **Tools del LLM**: cada `tool.name` + handler.
+- **Side effects al cambiar estado**: ¿publica `<modulo>.state` tras cada mutación? ¿persiste? ¿notifica a otros módulos?
+- **Cleanup**: timers, subscripciones, pendings que se limpian en `onUnload`.
+
+**Validación del mapa**: una vez completado, verificar contra el código del monolito que NADA queda fuera. Solo después arrancar el rewrite.
+
+### Pasos del flujo (después del mapa)
+
+
+
 1. **Leer su entrada en el roadmap**: `node -e "console.log(JSON.parse(require('fs').readFileSync('arquitectura/migracion/_outputs/modulos-roadmap.json')).modulos.find(m => m.slug === 'X'))"`. Saca capa, drifts, dependencies, LOC.
 
 2. **Leer su auditoría completa**: `arquitectura/auditoria/_outputs/modulo-completo/<slug>.json`. Si no existe, generarla primero.

@@ -1,0 +1,589 @@
+/**
+ * Tests unitarios — filesystem v2.0.0 (POC2 #12 reescritura).
+ *
+ * Foco:
+ *  - Lifecycle (onLoad ensures basePath; onUnload limpia state).
+ *  - Validacion canonica de UI/tool handlers → { status, error: { code, message, details } }.
+ *  - CRUD: write/read/delete/mkdir/move/copy/append/info/list/stats/search/cleanup.
+ *  - Path security: 404/403 con codes canonicos (RESOURCE_NOT_FOUND / AUTHORIZATION_REQUIRED).
+ *  - Bus handlers fs.*.request → fs.*.response correlacionados por request_id + correlation_id.
+ *  - Spanish handlers archivo.*.solicitado.
+ *  - Project lifecycle (onProjectActivated cambia working directory).
+ *  - Eventos publicados (fs.file.created/updated/deleted, fs.directory.created, fs.workdir.changed).
+ *  - Helpers POC2.
+ *  - Aislamiento: basePath en os.tmpdir, sin tocar el repo real.
+ *
+ * Ejecutar: node tests/unit/filesystem.test.js
+ */
+
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs').promises;
+const fsSync = require('fs');
+const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
+
+const FilesystemModule = require('../../modules/filesystem/index.js');
+
+// --------------------------------------------------
+// Mock infra + tmpdir helpers
+// --------------------------------------------------
+
+function makeMocks() {
+  const logs = [];
+  const published = [];
+  const metricsCalls = [];
+
+  const logger = {
+    debug: (e, p) => logs.push(['debug', e, p]),
+    info:  (e, p) => logs.push(['info',  e, p]),
+    warn:  (e, p) => logs.push(['warn',  e, p]),
+    error: (e, p) => logs.push(['error', e, p])
+  };
+
+  const metrics = {
+    increment: (n, l) => metricsCalls.push(['increment', n, l]),
+    gauge:     (n, v, l) => metricsCalls.push(['gauge', n, v, l]),
+    timing:    (n, ms, l) => metricsCalls.push(['timing', n, ms, l])
+  };
+
+  const eventBus = {
+    publish: async (event, payload) => { published.push([event, payload]); }
+  };
+
+  return { logs, published, metricsCalls, logger, metrics, eventBus };
+}
+
+function makeTmpDir() {
+  const tmpDir = path.join(os.tmpdir(), `fs-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  fsSync.mkdirSync(tmpDir, { recursive: true });
+  return tmpDir;
+}
+
+async function instantiate(mocks, opts = {}) {
+  const tmpDir = opts.basePath || makeTmpDir();
+  const m = new FilesystemModule();
+  m.basePath = tmpDir; // override antes de onLoad
+  await m.onLoad({
+    logger: mocks.logger,
+    metrics: mocks.metrics,
+    eventBus: mocks.eventBus,
+    moduleConfig: {}
+  });
+  return { module: m, tmpDir };
+}
+
+async function cleanup(p) {
+  try { await fs.rm(p, { recursive: true, force: true }); } catch {}
+}
+
+async function testAsync(description, fn) {
+  try { await fn(); console.log(`✓ ${description}`); }
+  catch (error) { console.error(`✗ ${description}`); console.error(`  ${error.message}`); if (process.env.STACK) console.error(error.stack); process.exit(1); }
+}
+
+function isCanonicalError(result) {
+  return result && typeof result.status === 'number'
+    && result.error && typeof result.error === 'object'
+    && typeof result.error.code === 'string'
+    && typeof result.error.message === 'string'
+    && !('data' in result);
+}
+
+function isCanonicalSuccess(result) {
+  return result && typeof result.status === 'number'
+    && result.data && typeof result.data === 'object'
+    && !('error' in result);
+}
+
+function publishedOf(mocks, name) {
+  return mocks.published.filter(p => p[0] === name).map(p => p[1]);
+}
+
+// ==================================================
+//                                                Tests
+// ==================================================
+
+(async () => {
+  console.log('filesystem — reescritura canonica v2.0.0 (POC2 #12)\n');
+
+  // ==========================================
+  // Group 1: Lifecycle
+  // ==========================================
+
+  await testAsync('onLoad inicializa state limpio + ensure basePath', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    assert.strictEqual(m.activeProjectId, null);
+    assert.strictEqual(m.activeProjectPath, null);
+    assert.strictEqual(m.workingDirectory, null);
+    assert.strictEqual(m.systemMode, false);
+    assert.ok(fsSync.existsSync(tmpDir));
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('onUnload limpia state del proyecto activo', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    m.activeProjectId = 'p1';
+    m.activeProjectPath = '/x';
+    m.workingDirectory = '/x';
+    m.systemMode = true;
+    await m.onUnload();
+    assert.strictEqual(m.activeProjectId, null);
+    assert.strictEqual(m.activeProjectPath, null);
+    assert.strictEqual(m.workingDirectory, null);
+    assert.strictEqual(m.systemMode, false);
+    await cleanup(tmpDir);
+  });
+
+  // ==========================================
+  // Group 2: Validacion canonica de handlers
+  // ==========================================
+
+  await testAsync('handleRead sin path → 400 VALIDATION_FAILED', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleRead({});
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleWrite sin content → 400 VALIDATION_FAILED + field=content', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleWrite({ path: '/x.txt' });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.details.field, 'content');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleDelete root path → 403 AUTHORIZATION_REQUIRED', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleDelete({ path: '/' });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 403);
+    assert.strictEqual(r.error.code, 'AUTHORIZATION_REQUIRED');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleRead path inexistente → 404 RESOURCE_NOT_FOUND canonico', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleRead({ path: '/no-existe.txt' });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
+    assert.strictEqual(r.error.details.entity_type, 'file');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleSearch sin query → 400 VALIDATION_FAILED', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleSearch({});
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 400);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  // ==========================================
+  // Group 3: CRUD operations
+  // ==========================================
+
+  await testAsync('handleWrite + handleRead round-trip', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+
+    const w = await m.handleWrite({ path: '/hola.txt', content: 'mundo' });
+    assert.ok(isCanonicalSuccess(w));
+    assert.strictEqual(w.status, 201);
+    assert.strictEqual(w.data.created, true);
+
+    const r = await m.handleRead({ path: '/hola.txt' });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.content, 'mundo');
+    assert.strictEqual(r.data.encoding, 'utf-8');
+    assert.strictEqual(r.data.type, 'text');
+
+    const created = publishedOf(mocks, 'fs.file.created');
+    assert.strictEqual(created.length, 1);
+    assert.ok(created[0].correlation_id);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleWrite a archivo existente → 200 + fs.file.updated', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/hola.txt', content: 'v1' });
+    mocks.published.length = 0;
+
+    const r = await m.handleWrite({ path: '/hola.txt', content: 'v2' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.created, false);
+    const updated = publishedOf(mocks, 'fs.file.updated');
+    assert.strictEqual(updated.length, 1);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleMkdir crea directorio + fs.directory.created', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleMkdir({ path: '/sub/nested' });
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(r.data.created, true);
+    const created = publishedOf(mocks, 'fs.directory.created');
+    assert.strictEqual(created.length, 1);
+    assert.ok(fsSync.existsSync(path.join(tmpDir, 'sub/nested')));
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleDelete file + fs.file.deleted', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/borrar.txt', content: 'x' });
+    mocks.published.length = 0;
+
+    const r = await m.handleDelete({ path: '/borrar.txt' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.deleted, true);
+    assert.strictEqual(r.data.type, 'file');
+    const ev = publishedOf(mocks, 'fs.file.deleted');
+    assert.strictEqual(ev.length, 1);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleDelete inexistente → 404 RESOURCE_NOT_FOUND', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleDelete({ path: '/no-existe' });
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleMove + handleCopy round-trip', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/a.txt', content: 'foo' });
+
+    const cp = await m.handleCopy({ from: '/a.txt', to: '/b.txt' });
+    assert.strictEqual(cp.status, 200);
+    assert.strictEqual(cp.data.copied, true);
+
+    const mv = await m.handleMove({ from: '/b.txt', to: '/c.txt' });
+    assert.strictEqual(mv.status, 200);
+    assert.strictEqual(mv.data.moved, true);
+
+    const r = await m.handleRead({ path: '/c.txt' });
+    assert.strictEqual(r.data.content, 'foo');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleAppend anyade contenido al final', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/log.txt', content: 'line1\n' });
+
+    const r = await m.handleAppend({ path: '/log.txt', content: 'line2\n' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.appended, true);
+
+    const read = await m.handleRead({ path: '/log.txt' });
+    assert.strictEqual(read.data.content, 'line1\nline2\n');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleList devuelve files[] ordenados (directorios primero)', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/file-z.txt', content: 'z' });
+    await m.handleMkdir({ path: '/dir-a' });
+    await m.handleWrite({ path: '/file-a.txt', content: 'a' });
+
+    const r = await m.handleList({ path: '/' });
+    assert.strictEqual(r.status, 200);
+    assert.ok(r.data.files.length >= 3);
+    assert.strictEqual(r.data.files[0].type, 'directory');
+    assert.strictEqual(r.data.files[0].name, 'dir-a');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleInfo devuelve metadata del archivo', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/x.txt', content: 'abc' });
+
+    const r = await m.handleInfo({ path: '/x.txt' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.type, 'file');
+    assert.strictEqual(r.data.size, 3);
+    assert.ok(r.data.modified);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  // ==========================================
+  // Group 4: Path security
+  // ==========================================
+
+  await testAsync('validatePath rechaza path traversal con AUTHORIZATION_REQUIRED', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    let caught = null;
+    try { m.validatePath('../../../etc/passwd'); } catch (e) { caught = e; }
+    assert.ok(caught);
+    assert.strictEqual(caught._code, 'AUTHORIZATION_REQUIRED');
+    assert.strictEqual(caught._details.kind, 'path_traversal');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleRead con path traversal → 403 AUTHORIZATION_REQUIRED canonico', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleRead({ path: '../../etc/passwd' });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 403);
+    assert.strictEqual(r.error.code, 'AUTHORIZATION_REQUIRED');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  // ==========================================
+  // Group 5: Bus handlers (request → response)
+  // ==========================================
+
+  await testAsync('onWriteRequest publica fs.write.response success + correlation_id propagado', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    mocks.published.length = 0;
+
+    await m.onWriteRequest({
+      data: { request_id: 'r1', correlation_id: 'cid-abc',
+              path: '/bus.txt', content: 'foo' }
+    });
+    const resp = publishedOf(mocks, 'fs.write.response')[0];
+    assert.ok(resp);
+    assert.strictEqual(resp.request_id, 'r1');
+    assert.strictEqual(resp.correlation_id, 'cid-abc');
+    assert.strictEqual(resp.created, true);
+    assert.ok(!resp.error);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('onReadRequest a inexistente publica fs.read.response con error canonico', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    mocks.published.length = 0;
+
+    await m.onReadRequest({ data: { request_id: 'r2', path: '/no-existe.txt' } });
+    const resp = publishedOf(mocks, 'fs.read.response')[0];
+    assert.ok(resp);
+    assert.strictEqual(resp.request_id, 'r2');
+    assert.ok(resp.error);
+    assert.strictEqual(resp.error.code, 'RESOURCE_NOT_FOUND');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('onExistsRequest path inexistente → exists:false (no error)', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    mocks.published.length = 0;
+
+    await m.onExistsRequest({ data: { request_id: 'r3', path: '/no-existe' } });
+    const resp = publishedOf(mocks, 'fs.exists.response')[0];
+    assert.strictEqual(resp.exists, false);
+    assert.strictEqual(resp.path, '/no-existe');
+    assert.ok(!resp.error);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('onExistsRequest path existente → exists:true + type', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/x.txt', content: 'x' });
+    mocks.published.length = 0;
+
+    await m.onExistsRequest({ data: { request_id: 'r4', path: '/x.txt' } });
+    const resp = publishedOf(mocks, 'fs.exists.response')[0];
+    assert.strictEqual(resp.exists, true);
+    assert.strictEqual(resp.type, 'file');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('onArchivoListarSolicitado publica archivo.listado', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/a.txt', content: 'a' });
+    mocks.published.length = 0;
+
+    await m.onArchivoListarSolicitado({
+      data: { request_id: 'r5', project_id: 'p1', path: '/' }
+    });
+    const resp = publishedOf(mocks, 'archivo.listado')[0];
+    assert.ok(resp);
+    assert.strictEqual(resp.request_id, 'r5');
+    assert.strictEqual(resp.project_id, 'p1');
+    assert.ok(Array.isArray(resp.files));
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('onArchivoLeerSolicitado a inexistente publica archivo.leer.fallido', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    mocks.published.length = 0;
+
+    await m.onArchivoLeerSolicitado({
+      data: { request_id: 'r6', project_id: 'p1', path: '/no-existe.txt' }
+    });
+    const resp = publishedOf(mocks, 'archivo.leer.fallido')[0];
+    assert.ok(resp);
+    assert.ok(resp.error);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  // ==========================================
+  // Group 6: Project lifecycle + workdir
+  // ==========================================
+
+  await testAsync('onProjectActivated cambia working directory al storage del proyecto', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+
+    const projDir = path.join(tmpDir, 'projects', 'p1');
+    fsSync.mkdirSync(projDir, { recursive: true });
+    await m.onProjectActivated({
+      data: { project_id: 'p1', base_path: projDir, name: 'P1' }
+    });
+    assert.strictEqual(m.activeProjectId, 'p1');
+    assert.strictEqual(m.activeProjectPath, path.join(projDir, 'storage'));
+    assert.strictEqual(m.workingDirectory, path.join(projDir, 'storage'));
+    assert.strictEqual(m.systemMode, false);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('onProjectActivated con metadata.is_system=true → systemMode + cwd', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+
+    await m.onProjectActivated({
+      data: { project_id: 'sys', name: 'Sistema', metadata: { is_system: true } }
+    });
+    assert.strictEqual(m.systemMode, true);
+    assert.strictEqual(m.activeProjectPath, process.cwd());
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleSetWorkDir cambia working directory + publica fs.workdir.changed', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleMkdir({ path: '/work' });
+    mocks.published.length = 0;
+
+    const r = await m.handleSetWorkDir({ path: '/work' });
+    assert.strictEqual(r.status, 200);
+    assert.ok(r.data.working_directory);
+    const ev = publishedOf(mocks, 'fs.workdir.changed');
+    assert.strictEqual(ev.length, 1);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleGetWorkDir devuelve info del workdir + project context', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r = await m.handleGetWorkDir();
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.is_project_context, false);
+    assert.ok(r.data.working_directory);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  // ==========================================
+  // Group 7: Helpers POC2 internos
+  // ==========================================
+
+  await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('_classifyHandlerError mapea ENOENT/EACCES/EEXIST/messages a codigos canonicos', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'ENOENT' })), 'RESOURCE_NOT_FOUND');
+    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EACCES' })), 'AUTHORIZATION_REQUIRED');
+    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EEXIST' })), 'CONFLICT');
+    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EISDIR' })), 'VALIDATION_FAILED');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('_publicarEvento hereda correlation_id si se pasa, genera uno nuevo si no', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    mocks.published.length = 0;
+    await m._publicarEvento('test.event', { foo: 1 }, { correlation_id: 'cid-inherit' });
+    await m._publicarEvento('test.event', { bar: 2 });
+    const evs = publishedOf(mocks, 'test.event');
+    assert.strictEqual(evs.length, 2);
+    assert.strictEqual(evs[0].correlation_id, 'cid-inherit');
+    assert.notStrictEqual(evs[1].correlation_id, 'cid-inherit');
+    assert.ok(evs[0].timestamp && evs[1].timestamp);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('_handleHandlerError mapea status segun code y registra metric', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const err = Object.assign(new Error('not found'), { _code: 'RESOURCE_NOT_FOUND' });
+    const r = m._handleHandlerError('test.failed', err, 'kind');
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
+    const errMetric = mocks.metricsCalls.find(c => c[1] === 'filesystem.errors');
+    assert.ok(errMetric);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  console.log('\nTodos los tests pasaron.');
+})();

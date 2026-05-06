@@ -1,78 +1,127 @@
 /**
- * Composition Manager Module
+ * composition-manager v2.0.0 — Reescrito al canon (POC2 #5 del horizontal).
  *
- * Generic entity composition service: systems, links, and dependencies.
- * Works with entity IDs — does not know about projects, prompts, or any specific domain.
- * Any module can use it via events (composition.request/composition.response)
- * or the UI can call it directly via ui_handlers.
+ * Servicio genérico de composición de entidades. Trabaja con entity_id
+ * abstracto — NO conoce de proyectos, prompts ni dominios específicos.
+ * Cualquier módulo puede usarlo via composition.request/response o via
+ * UI handlers directos.
  *
- * Tables owned: systems, system_members, project_links, project_dependencies
+ * Tres sub-áreas dentro del mismo dominio:
+ *  - Systems: contenedores lógicos que agrupan entidades.
+ *  - Links: relaciones direccionales entre entidades.
+ *  - Dependencies: dependencias funcionales (data, code, api, context).
+ *
+ * Tablas owned: systems, system_members, project_links, project_dependencies.
+ *
+ * Cumple los 24 contratos transversales:
+ *  - errors: handlers UI devuelven { status, data | error: { code, message } }.
+ *    Métodos privados lanzan con _code canónico.
+ *  - observability: log + metric en cada error path. Prefix 'composition-manager.*'.
+ *  - events: 10 eventos canónicos preservados invariantes. correlation_id
+ *    propagado.
+ *  - lifecycle: onLoad inicializa schema, onUnload limpia pendingDb.
+ *  - persistence: DB access via db.query.request a database-manager.
+ *  - resilience: timeout configurable + cleanup en onUnload.
+ *  - tools: este módulo no expone tools del LLM (operación cross-módulo
+ *    via bus, no via LLM).
+ *
+ * 5 helpers POC2 transferibles:
+ *  _errorResponse, _handleHandlerError, _classifyHandlerError,
+ *  _publicarEvento, + auxiliar específico _queryDb.
+ *
+ * Monolito (709 LOC) preservado en
+ * arquitectura/migracion/_legacy/composition-manager-monolito-pre-rewrite.js.bak
+ *
+ * Mapa exhaustivo (PASO 0 del rewrite) en
+ * arquitectura/migracion/notas/composition-manager-mapa.md
  */
+
+'use strict';
 
 const crypto = require('crypto');
 
+const DEFAULT_DB_TIMEOUT_MS = 10000;
+
+const VALID_LINK_TYPES = ['inspired_by', 'related_to', 'evolved_from'];
+const VALID_DEP_TYPES = ['data', 'code', 'api', 'context'];
+
 class CompositionManagerModule {
   constructor() {
-    this.name = 'composition-manager';
-    this.version = '1.0.0';
+    this.name    = 'composition-manager';
+    this.version = '2.0.0';
 
-    this.logger = null;
-    this.eventBus = null;
+    this.logger    = null;
+    this.metrics   = null;
+    this.eventBus  = null;
     this.uiHandler = null;
-    this.config = null;
+    this.config    = null;
 
     this.pendingDbRequests = new Map();
   }
 
+  // ==========================================
+  // Lifecycle
+  // ==========================================
+
   async onLoad(core) {
-    this.logger = core.logger;
-    this.eventBus = core.eventBus;
+    this.logger    = core.logger;
+    this.metrics   = core.metrics;
+    this.eventBus  = core.eventBus;
     this.uiHandler = core.uiHandler;
+    this.config    = core.moduleConfig || {};
 
-    // Load config from loader-injected moduleConfig
-    this.config = core.moduleConfig || {};
+    this.logger.info('composition-manager.loading', {
+      module: this.name, version: this.version
+    });
 
-    this.logger.info('composition-manager.loading');
-
-    await this.initializeSchema();
+    await this._initializeSchema();
 
     this.logger.info('composition-manager.loaded');
   }
 
   async onUnload() {
-    for (const [id, pending] of this.pendingDbRequests.entries()) {
-      clearTimeout(pending.timeout);
-      pending.reject(new Error('Module unloading'));
-    }
+    this.logger.info('composition-manager.unloading', {
+      pending_db_requests: this.pendingDbRequests.size
+    });
+    const pending = Array.from(this.pendingDbRequests.values());
     this.pendingDbRequests.clear();
+    for (const { timeout, reject } of pending) {
+      clearTimeout(timeout);
+      try {
+        reject(new Error('Module unloading'));
+      } catch (rejectErr) {
+        this.metrics?.increment('composition-manager.errors', { kind: 'unload_reject' });
+      }
+    }
   }
 
-  // ==================== Database Access ====================
+  // ==========================================
+  // DB access (via database-manager)
+  // ==========================================
 
-  async queryDatabase(query, params = [], readOnly = true, correlationId) {
-    const requestId = crypto.randomUUID();
+  async _queryDb(query, params = [], readOnly = true, correlation_id) {
+    const request_id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        this.pendingDbRequests.delete(requestId);
+        this.pendingDbRequests.delete(request_id);
+        this.metrics?.increment('composition-manager.errors', { kind: 'db_timeout' });
         reject(new Error(`DB timeout: ${query.substring(0, 80)}`));
-      }, this.config.dbTimeout || 10000);
+      }, this.config.dbTimeout || DEFAULT_DB_TIMEOUT_MS);
 
-      this.pendingDbRequests.set(requestId, { resolve, reject, timeout });
-
+      this.pendingDbRequests.set(request_id, { resolve, reject, timeout });
       this.eventBus.publish('db.query.request', {
-        request_id: requestId,
-        query, params, read_only: readOnly,
-        project_id: 'system',
-        correlation_id: correlationId
+        request_id, query, params, read_only: readOnly,
+        project_id: 'system', correlation_id
       }).catch(err => {
         clearTimeout(timeout);
-        this.pendingDbRequests.delete(requestId);
+        this.pendingDbRequests.delete(request_id);
+        this.metrics?.increment('composition-manager.errors', { kind: 'db_publish' });
         reject(err);
       });
     });
   }
 
-  async onDbQueryResponse(event) {
+  onDbQueryResponse(event) {
     const { request_id, success, data, error } = event.data || event;
     const pending = this.pendingDbRequests.get(request_id);
     if (!pending) return;
@@ -82,54 +131,52 @@ class CompositionManagerModule {
     else pending.reject(new Error(error || 'Database query failed'));
   }
 
-  // ==================== Schema ====================
+  // ==========================================
+  // Schema init (idempotente)
+  // ==========================================
 
-  async initializeSchema() {
-    const cid = crypto.randomUUID();
+  async _initializeSchema() {
+    const correlation_id = crypto.randomUUID();
+    this.logger.info('composition-manager.schema.initializing', { correlation_id });
 
-    await this.queryDatabase(`
-      CREATE TABLE IF NOT EXISTS systems (
+    const tables = [
+      `CREATE TABLE IF NOT EXISTS systems (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         metadata TEXT
-      )
-    `, [], false, cid);
-
-    await this.queryDatabase(`
-      CREATE TABLE IF NOT EXISTS system_members (
+      )`,
+      `CREATE TABLE IF NOT EXISTS system_members (
         system_id TEXT NOT NULL,
         entity_id TEXT NOT NULL,
         role TEXT,
         joined_at TEXT NOT NULL,
         PRIMARY KEY (system_id, entity_id),
         FOREIGN KEY (system_id) REFERENCES systems(id) ON DELETE CASCADE
-      )
-    `, [], false, cid);
-
-    await this.queryDatabase(`
-      CREATE TABLE IF NOT EXISTS project_links (
+      )`,
+      `CREATE TABLE IF NOT EXISTS project_links (
         id TEXT PRIMARY KEY,
         source_project_id TEXT NOT NULL,
         target_project_id TEXT NOT NULL,
         link_type TEXT NOT NULL,
         reason TEXT,
         created_at TEXT NOT NULL
-      )
-    `, [], false, cid);
-
-    await this.queryDatabase(`
-      CREATE TABLE IF NOT EXISTS project_dependencies (
+      )`,
+      `CREATE TABLE IF NOT EXISTS project_dependencies (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
         depends_on_project_id TEXT NOT NULL,
         dependency_type TEXT,
         description TEXT,
         created_at TEXT NOT NULL
-      )
-    `, [], false, cid);
+      )`
+    ];
+
+    for (const sql of tables) {
+      await this._queryDb(sql, [], false, correlation_id);
+    }
 
     const indexes = [
       'CREATE INDEX IF NOT EXISTS idx_sm_system ON system_members(system_id)',
@@ -139,238 +186,317 @@ class CompositionManagerModule {
       'CREATE INDEX IF NOT EXISTS idx_deps_project ON project_dependencies(project_id)',
       'CREATE INDEX IF NOT EXISTS idx_deps_depends ON project_dependencies(depends_on_project_id)'
     ];
-    for (const sql of indexes) {
-      try { await this.queryDatabase(sql, [], false, cid); } catch (_) {}
-    }
-
-    this.logger.info('composition-manager.schema.initialized');
+    const skipped = await this._applyIndexes(indexes, correlation_id);
+    this.logger.info('composition-manager.schema.initialized', {
+      correlation_id, indexes_skipped: skipped
+    });
   }
 
-  // ==================== Systems ====================
+  async _applyIndexes(indexes, correlation_id) {
+    let skipped = 0;
+    for (const sql of indexes) {
+      try { await this._queryDb(sql, [], false, correlation_id); }
+      catch (_) { skipped++; }
+    }
+    return skipped;
+  }
 
-  async createSystem(name, description, metadata = {}, correlationId) {
-    if (!name || name.trim().length === 0) throw new Error('System name is required');
+  // ==========================================
+  // Systems (privados, lanzan errores con _code canonico)
+  // ==========================================
+
+  async _createSystem(name, description, metadata = {}, correlation_id) {
+    if (!name || name.trim().length === 0) {
+      throw Object.assign(new Error('System name is required'),
+        { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'name' } });
+    }
 
     const systemId = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    await this.queryDatabase(`
+    await this._queryDb(`
       INSERT INTO systems (id, name, description, created_at, updated_at, metadata)
       VALUES (?, ?, ?, ?, ?, ?)
-    `, [systemId, name.trim(), description || null, now, now, JSON.stringify(metadata)], false, correlationId);
+    `, [systemId, name.trim(), description || null, now, now, JSON.stringify(metadata)],
+       false, correlation_id);
 
-    await this.eventBus.publish('system.created', {
-      system_id: systemId, name: name.trim(), description, created_at: now
-    });
+    await this._publicarEvento('system.created', {
+      system_id: systemId,
+      name: name.trim(),
+      description: description || null,
+      created_at: now
+    }, { correlation_id });
+    this.metrics?.increment('composition-manager.system.created');
 
-    return { id: systemId, name: name.trim(), description: description || '', metadata, createdAt: now, updatedAt: now, projects: [] };
+    return {
+      id: systemId,
+      name: name.trim(),
+      description: description || '',
+      metadata,
+      createdAt: now,
+      updatedAt: now,
+      members: [],
+      projects: []
+    };
   }
 
-  async getSystem(systemId, correlationId) {
-    const systems = await this.queryDatabase(
-      'SELECT * FROM systems WHERE id = ?', [systemId], true, correlationId
+  async _getSystem(systemId, correlation_id) {
+    const systems = await this._queryDb(
+      'SELECT * FROM systems WHERE id = ?', [systemId], true, correlation_id
     );
     if (systems.length === 0) return null;
 
     const system = systems[0];
-    const members = await this.queryDatabase(
+    const members = await this._queryDb(
       'SELECT entity_id, role, joined_at FROM system_members WHERE system_id = ? ORDER BY role, joined_at',
-      [systemId], true, correlationId
+      [systemId], true, correlation_id
     );
 
     return {
       id: system.id,
       name: system.name,
       description: system.description || '',
-      metadata: system.metadata ? JSON.parse(system.metadata) : {},
+      metadata: system.metadata ? this._safeParse(system.metadata) : {},
       createdAt: system.created_at,
       updatedAt: system.updated_at,
-      members: members.map(m => ({ entityId: m.entity_id, role: m.role, joinedAt: m.joined_at })),
-      // Backward-compat: 'projects' alias used by project-manager & context-manager
+      members: members.map(m => ({
+        entityId: m.entity_id, role: m.role, joinedAt: m.joined_at
+      })),
+      // Backward-compat: project-manager y context-manager esperan 'projects'
       projects: members.map(m => ({ id: m.entity_id, role: m.role }))
     };
   }
 
-  async listSystems(correlationId) {
-    const systems = await this.queryDatabase(`
+  async _listSystems(correlation_id) {
+    const systems = await this._queryDb(`
       SELECT s.*, COUNT(sm.entity_id) as member_count
       FROM systems s LEFT JOIN system_members sm ON sm.system_id = s.id
       GROUP BY s.id ORDER BY s.name
-    `, [], true, correlationId);
+    `, [], true, correlation_id);
 
     return systems.map(s => ({
       id: s.id,
       name: s.name,
       description: s.description || '',
-      metadata: s.metadata ? JSON.parse(s.metadata) : {},
+      metadata: s.metadata ? this._safeParse(s.metadata) : {},
       createdAt: s.created_at,
       updatedAt: s.updated_at,
       projectCount: s.member_count || 0
     }));
   }
 
-  async updateSystem(systemId, updates, correlationId) {
-    const system = await this.getSystem(systemId, correlationId);
-    if (!system) throw new Error(`System not found: ${systemId}`);
+  async _updateSystem(systemId, updates, correlation_id) {
+    const system = await this._getSystem(systemId, correlation_id);
+    if (!system) {
+      throw Object.assign(new Error(`System not found: ${systemId}`),
+        { _code: 'RESOURCE_NOT_FOUND', _details: { entity_type: 'system', entity_id: systemId } });
+    }
 
     const now = new Date().toISOString();
     const parts = ['updated_at = ?'];
     const params = [now];
 
-    if (updates.name !== undefined) { parts.push('name = ?'); params.push(updates.name.trim()); }
+    if (updates.name !== undefined)        { parts.push('name = ?');        params.push(updates.name.trim()); }
     if (updates.description !== undefined) { parts.push('description = ?'); params.push(updates.description); }
-    if (updates.metadata !== undefined) { parts.push('metadata = ?'); params.push(JSON.stringify(updates.metadata)); }
+    if (updates.metadata !== undefined)    { parts.push('metadata = ?');    params.push(JSON.stringify(updates.metadata)); }
 
     params.push(systemId);
-    await this.queryDatabase(`UPDATE systems SET ${parts.join(', ')} WHERE id = ?`, params, false, correlationId);
+    await this._queryDb(`UPDATE systems SET ${parts.join(', ')} WHERE id = ?`,
+      params, false, correlation_id);
 
-    await this.eventBus.publish('system.updated', {
-      system_id: systemId, updated_fields: Object.keys(updates), updated_at: now
-    });
+    await this._publicarEvento('system.updated', {
+      system_id: systemId,
+      updated_fields: Object.keys(updates),
+      updated_at: now
+    }, { correlation_id });
+    this.metrics?.increment('composition-manager.system.updated');
 
-    return await this.getSystem(systemId, correlationId);
+    return await this._getSystem(systemId, correlation_id);
   }
 
-  async deleteSystem(systemId, correlationId) {
-    const system = await this.getSystem(systemId, correlationId);
-    if (!system) throw new Error(`System not found: ${systemId}`);
+  async _deleteSystem(systemId, correlation_id) {
+    const system = await this._getSystem(systemId, correlation_id);
+    if (!system) {
+      throw Object.assign(new Error(`System not found: ${systemId}`),
+        { _code: 'RESOURCE_NOT_FOUND', _details: { entity_type: 'system', entity_id: systemId } });
+    }
 
-    await this.queryDatabase('DELETE FROM system_members WHERE system_id = ?', [systemId], false, correlationId);
-    await this.queryDatabase('DELETE FROM systems WHERE id = ?', [systemId], false, correlationId);
+    await this._queryDb('DELETE FROM system_members WHERE system_id = ?',
+      [systemId], false, correlation_id);
+    await this._queryDb('DELETE FROM systems WHERE id = ?',
+      [systemId], false, correlation_id);
 
-    await this.eventBus.publish('system.deleted', {
-      system_id: systemId, name: system.name,
+    await this._publicarEvento('system.deleted', {
+      system_id: systemId,
+      name: system.name,
       affected_members: system.members.length,
       deleted_at: new Date().toISOString()
-    });
+    }, { correlation_id });
+    this.metrics?.increment('composition-manager.system.deleted');
 
-    return { success: true, systemId, affectedProjects: system.members.length };
+    return { systemId, affectedProjects: system.members.length };
   }
 
-  async addEntityToSystem(systemId, entityId, role, correlationId) {
-    const system = await this.getSystem(systemId, correlationId);
-    if (!system) throw new Error(`System not found: ${systemId}`);
-
-    // Check if entity already in a system
-    const existing = await this.queryDatabase(
-      'SELECT system_id FROM system_members WHERE entity_id = ?',
-      [entityId], true, correlationId
-    );
-    if (existing.length > 0 && existing[0].system_id !== systemId) {
-      throw new Error('Entity is already in another system');
+  async _addEntityToSystem(systemId, entityId, role, correlation_id) {
+    const system = await this._getSystem(systemId, correlation_id);
+    if (!system) {
+      throw Object.assign(new Error(`System not found: ${systemId}`),
+        { _code: 'RESOURCE_NOT_FOUND', _details: { entity_type: 'system', entity_id: systemId } });
     }
-    if (existing.length > 0 && existing[0].system_id === systemId) {
-      return { entityId, systemId, systemName: system.name, role };
+
+    const existing = await this._queryDb(
+      'SELECT system_id FROM system_members WHERE entity_id = ?',
+      [entityId], true, correlation_id
+    );
+
+    if (existing.length > 0) {
+      if (existing[0].system_id === systemId) {
+        return { entityId, systemId, systemName: system.name, role };
+      }
+      throw Object.assign(new Error('Entity is already in another system'),
+        { _code: 'CONFLICT', _details: {
+          kind: 'state', state: 'already_assigned',
+          current_system: existing[0].system_id
+        } });
     }
 
     const now = new Date().toISOString();
-    await this.queryDatabase(
+    await this._queryDb(
       'INSERT INTO system_members (system_id, entity_id, role, joined_at) VALUES (?, ?, ?, ?)',
-      [systemId, entityId, role || null, now], false, correlationId
+      [systemId, entityId, role || null, now], false, correlation_id
     );
 
-    await this.eventBus.publish('entity.joined_system', {
-      entity_id: entityId, system_id: systemId,
-      system_name: system.name, role, joined_at: now
-    });
+    await this._publicarEvento('entity.joined_system', {
+      entity_id: entityId,
+      system_id: systemId,
+      system_name: system.name,
+      role: role || null,
+      joined_at: now
+    }, { correlation_id });
+    this.metrics?.increment('composition-manager.entity.joined');
 
     return { entityId, systemId, systemName: system.name, role };
   }
 
-  async removeEntityFromSystem(entityId, correlationId) {
-    const membership = await this.queryDatabase(
+  async _removeEntityFromSystem(entityId, correlation_id) {
+    const membership = await this._queryDb(
       'SELECT system_id, role FROM system_members WHERE entity_id = ?',
-      [entityId], true, correlationId
+      [entityId], true, correlation_id
     );
-    if (membership.length === 0) throw new Error('Entity is not in any system');
+    if (membership.length === 0) {
+      throw Object.assign(new Error('Entity is not in any system'),
+        { _code: 'RESOURCE_NOT_FOUND', _details: { entity_type: 'membership', entity_id: entityId } });
+    }
 
     const { system_id: systemId, role } = membership[0];
-    await this.queryDatabase(
+    await this._queryDb(
       'DELETE FROM system_members WHERE entity_id = ?',
-      [entityId], false, correlationId
+      [entityId], false, correlation_id
     );
 
-    await this.eventBus.publish('entity.left_system', {
-      entity_id: entityId, system_id: systemId,
-      previous_role: role, left_at: new Date().toISOString()
-    });
+    await this._publicarEvento('entity.left_system', {
+      entity_id: entityId,
+      system_id: systemId,
+      previous_role: role,
+      left_at: new Date().toISOString()
+    }, { correlation_id });
+    this.metrics?.increment('composition-manager.entity.left');
 
     return { entityId, previousSystemId: systemId, previousRole: role };
   }
 
-  async getEntitySystem(entityId, correlationId) {
-    const membership = await this.queryDatabase(
+  async _getEntitySystem(entityId, correlation_id) {
+    const membership = await this._queryDb(
       'SELECT system_id, role FROM system_members WHERE entity_id = ?',
-      [entityId], true, correlationId
+      [entityId], true, correlation_id
     );
     if (membership.length === 0) return null;
 
-    const system = await this.getSystem(membership[0].system_id, correlationId);
+    const system = await this._getSystem(membership[0].system_id, correlation_id);
     return system ? { ...system, entityRole: membership[0].role } : null;
   }
 
-  async getUnassignedEntities(entityIds, correlationId) {
+  async _getUnassignedEntities(entityIds, correlation_id) {
     if (!entityIds || entityIds.length === 0) return [];
     const placeholders = entityIds.map(() => '?').join(',');
-    const assigned = await this.queryDatabase(
+    const assigned = await this._queryDb(
       `SELECT entity_id FROM system_members WHERE entity_id IN (${placeholders})`,
-      entityIds, true, correlationId
+      entityIds, true, correlation_id
     );
     const assignedSet = new Set(assigned.map(r => r.entity_id));
     return entityIds.filter(id => !assignedSet.has(id));
   }
 
-  // ==================== Links ====================
+  // ==========================================
+  // Links
+  // ==========================================
 
-  async linkEntities(sourceId, targetId, linkType, reason, correlationId) {
-    if (sourceId === targetId) throw new Error('Cannot link an entity to itself');
+  async _linkEntities(sourceId, targetId, linkType, reason, correlation_id) {
+    if (sourceId === targetId) {
+      throw Object.assign(new Error('Cannot link an entity to itself'),
+        { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'targetId' } });
+    }
 
-    const existing = await this.queryDatabase(
-      `SELECT id FROM project_links WHERE source_project_id = ? AND target_project_id = ? AND link_type = ?`,
-      [sourceId, targetId, linkType], true, correlationId
+    const existing = await this._queryDb(
+      `SELECT id FROM project_links
+       WHERE source_project_id = ? AND target_project_id = ? AND link_type = ?`,
+      [sourceId, targetId, linkType], true, correlation_id
     );
-    if (existing.length > 0) throw new Error(`Link already exists with type '${linkType}'`);
+    if (existing.length > 0) {
+      throw Object.assign(new Error(`Link already exists with type '${linkType}'`),
+        { _code: 'CONFLICT', _details: { existing_link_id: existing[0].id } });
+    }
 
     const linkId = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    await this.queryDatabase(`
+    await this._queryDb(`
       INSERT INTO project_links (id, source_project_id, target_project_id, link_type, reason, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `, [linkId, sourceId, targetId, linkType, reason || null, now], false, correlationId);
+    `, [linkId, sourceId, targetId, linkType, reason || null, now], false, correlation_id);
 
-    await this.eventBus.publish('entity.linked', {
-      link_id: linkId, source_id: sourceId, target_id: targetId,
-      link_type: linkType, reason, created_at: now
-    });
+    await this._publicarEvento('entity.linked', {
+      link_id: linkId,
+      source_id: sourceId,
+      target_id: targetId,
+      link_type: linkType,
+      reason: reason || null,
+      created_at: now
+    }, { correlation_id });
+    this.metrics?.increment('composition-manager.link.created', { type: linkType });
 
-    return { id: linkId, sourceId, targetId, linkType, reason, createdAt: now };
+    return { id: linkId, sourceId, targetId, linkType, reason: reason || null, createdAt: now };
   }
 
-  async unlinkEntities(linkId, correlationId) {
-    const links = await this.queryDatabase(
-      'SELECT * FROM project_links WHERE id = ?', [linkId], true, correlationId
+  async _unlinkEntities(linkId, correlation_id) {
+    const links = await this._queryDb(
+      'SELECT * FROM project_links WHERE id = ?', [linkId], true, correlation_id
     );
-    if (links.length === 0) throw new Error(`Link not found: ${linkId}`);
+    if (links.length === 0) {
+      throw Object.assign(new Error(`Link not found: ${linkId}`),
+        { _code: 'RESOURCE_NOT_FOUND', _details: { entity_type: 'link', entity_id: linkId } });
+    }
 
-    await this.queryDatabase('DELETE FROM project_links WHERE id = ?', [linkId], false, correlationId);
+    await this._queryDb('DELETE FROM project_links WHERE id = ?',
+      [linkId], false, correlation_id);
 
-    await this.eventBus.publish('entity.unlinked', {
+    await this._publicarEvento('entity.unlinked', {
       link_id: linkId,
       source_id: links[0].source_project_id,
       target_id: links[0].target_project_id,
       unlinked_at: new Date().toISOString()
-    });
+    }, { correlation_id });
+    this.metrics?.increment('composition-manager.link.deleted');
 
-    return { success: true, linkId };
+    return { linkId };
   }
 
-  async getEntityLinks(entityId, correlationId) {
-    const links = await this.queryDatabase(`
+  async _getEntityLinks(entityId, correlation_id) {
+    const links = await this._queryDb(`
       SELECT * FROM project_links
       WHERE source_project_id = ? OR target_project_id = ?
       ORDER BY created_at DESC
-    `, [entityId, entityId], true, correlationId);
+    `, [entityId, entityId], true, correlation_id);
 
     return links.map(l => ({
       id: l.id,
@@ -383,8 +509,8 @@ class CompositionManagerModule {
     }));
   }
 
-  async getRelatedEntities(entityId, correlationId) {
-    const links = await this.getEntityLinks(entityId, correlationId);
+  async _getRelatedEntities(entityId, correlation_id) {
+    const links = await this._getEntityLinks(entityId, correlation_id);
     const relatedIds = new Set();
     for (const l of links) {
       if (l.sourceId !== entityId) relatedIds.add(l.sourceId);
@@ -399,7 +525,8 @@ class CompositionManagerModule {
       related.push({
         id: relatedId,
         links: connectingLinks.map(l => ({
-          linkType: l.linkType, reason: l.reason,
+          linkType: l.linkType,
+          reason: l.reason,
           direction: l.sourceId === entityId ? 'outgoing' : 'incoming'
         }))
       });
@@ -407,56 +534,81 @@ class CompositionManagerModule {
     return related;
   }
 
-  // ==================== Dependencies ====================
+  // ==========================================
+  // Dependencies
+  // ==========================================
 
-  async addDependency(entityId, dependsOnId, dependencyType, description, correlationId) {
-    if (entityId === dependsOnId) throw new Error('An entity cannot depend on itself');
+  async _addDependency(entityId, dependsOnId, dependencyType, description, correlation_id) {
+    if (entityId === dependsOnId) {
+      throw Object.assign(new Error('An entity cannot depend on itself'),
+        { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'dependsOnId' } });
+    }
 
-    const existing = await this.queryDatabase(
-      `SELECT id FROM project_dependencies WHERE project_id = ? AND depends_on_project_id = ?`,
-      [entityId, dependsOnId], true, correlationId
+    const existing = await this._queryDb(
+      `SELECT id FROM project_dependencies
+       WHERE project_id = ? AND depends_on_project_id = ?`,
+      [entityId, dependsOnId], true, correlation_id
     );
-    if (existing.length > 0) throw new Error('Dependency already exists');
+    if (existing.length > 0) {
+      throw Object.assign(new Error('Dependency already exists'),
+        { _code: 'CONFLICT', _details: { existing_dependency_id: existing[0].id } });
+    }
 
     const depId = crypto.randomUUID();
     const now = new Date().toISOString();
+    const depType = dependencyType || 'data';
 
-    await this.queryDatabase(`
+    await this._queryDb(`
       INSERT INTO project_dependencies (id, project_id, depends_on_project_id, dependency_type, description, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `, [depId, entityId, dependsOnId, dependencyType || 'data', description || null, now], false, correlationId);
+    `, [depId, entityId, dependsOnId, depType, description || null, now], false, correlation_id);
 
-    await this.eventBus.publish('entity.dependency.added', {
-      dependency_id: depId, entity_id: entityId,
-      depends_on_id: dependsOnId, dependency_type: dependencyType,
-      description, created_at: now
-    });
+    await this._publicarEvento('entity.dependency.added', {
+      dependency_id: depId,
+      entity_id: entityId,
+      depends_on_id: dependsOnId,
+      dependency_type: depType,
+      description: description || null,
+      created_at: now
+    }, { correlation_id });
+    this.metrics?.increment('composition-manager.dependency.added', { type: depType });
 
-    return { id: depId, entityId, dependsOnId, dependencyType: dependencyType || 'data', description, createdAt: now };
+    return {
+      id: depId, entityId, dependsOnId,
+      dependencyType: depType, description: description || null,
+      createdAt: now
+    };
   }
 
-  async removeDependency(dependencyId, correlationId) {
-    const deps = await this.queryDatabase(
-      'SELECT * FROM project_dependencies WHERE id = ?', [dependencyId], true, correlationId
+  async _removeDependency(dependencyId, correlation_id) {
+    const deps = await this._queryDb(
+      'SELECT * FROM project_dependencies WHERE id = ?',
+      [dependencyId], true, correlation_id
     );
-    if (deps.length === 0) throw new Error(`Dependency not found: ${dependencyId}`);
+    if (deps.length === 0) {
+      throw Object.assign(new Error(`Dependency not found: ${dependencyId}`),
+        { _code: 'RESOURCE_NOT_FOUND', _details: { entity_type: 'dependency', entity_id: dependencyId } });
+    }
 
-    await this.queryDatabase('DELETE FROM project_dependencies WHERE id = ?', [dependencyId], false, correlationId);
+    await this._queryDb('DELETE FROM project_dependencies WHERE id = ?',
+      [dependencyId], false, correlation_id);
 
-    await this.eventBus.publish('entity.dependency.removed', {
+    await this._publicarEvento('entity.dependency.removed', {
       dependency_id: dependencyId,
       entity_id: deps[0].project_id,
       depends_on_id: deps[0].depends_on_project_id,
       removed_at: new Date().toISOString()
-    });
+    }, { correlation_id });
+    this.metrics?.increment('composition-manager.dependency.removed');
 
-    return { success: true, dependencyId };
+    return { dependencyId };
   }
 
-  async getDependencies(entityId, correlationId) {
-    const deps = await this.queryDatabase(`
-      SELECT * FROM project_dependencies WHERE project_id = ? ORDER BY created_at DESC
-    `, [entityId], true, correlationId);
+  async _getDependencies(entityId, correlation_id) {
+    const deps = await this._queryDb(
+      'SELECT * FROM project_dependencies WHERE project_id = ? ORDER BY created_at DESC',
+      [entityId], true, correlation_id
+    );
 
     return deps.map(d => ({
       id: d.id,
@@ -468,10 +620,11 @@ class CompositionManagerModule {
     }));
   }
 
-  async getDependents(entityId, correlationId) {
-    const deps = await this.queryDatabase(`
-      SELECT * FROM project_dependencies WHERE depends_on_project_id = ? ORDER BY created_at DESC
-    `, [entityId], true, correlationId);
+  async _getDependents(entityId, correlation_id) {
+    const deps = await this._queryDb(
+      'SELECT * FROM project_dependencies WHERE depends_on_project_id = ? ORDER BY created_at DESC',
+      [entityId], true, correlation_id
+    );
 
     return deps.map(d => ({
       id: d.id,
@@ -482,8 +635,8 @@ class CompositionManagerModule {
     }));
   }
 
-  async hasDependents(entityId, correlationId) {
-    const dependents = await this.getDependents(entityId, correlationId);
+  async _hasDependents(entityId, correlation_id) {
+    const dependents = await this._getDependents(entityId, correlation_id);
     return {
       hasDependents: dependents.length > 0,
       count: dependents.length,
@@ -491,13 +644,21 @@ class CompositionManagerModule {
     };
   }
 
-  // ==================== Event Handler: composition.request ====================
+  // ==========================================
+  // Bus handler genérico (composition.request → 18 actions)
+  // ==========================================
 
   async onCompositionRequest(event) {
     const eventData = event.data || event;
     const { request_id, action, correlation_id, ...data } = eventData;
 
-    if (!request_id || !action) return;
+    if (!request_id || !action) {
+      this.logger.warn('composition-manager.request.invalid_payload', {
+        has_request_id: !!request_id, has_action: !!action
+      });
+      this.metrics?.increment('composition-manager.errors', { kind: 'invalid_payload' });
+      return;
+    }
 
     const cid = correlation_id || crypto.randomUUID();
 
@@ -505,204 +666,361 @@ class CompositionManagerModule {
       let result;
       switch (action) {
         case 'system.create':
-          result = await this.createSystem(data.name, data.description, data.metadata, cid);
+          result = await this._createSystem(data.name, data.description, data.metadata, cid);
           break;
         case 'system.get':
-          result = await this.getSystem(data.system_id, cid);
+          result = await this._getSystem(data.system_id, cid);
           break;
         case 'system.list':
-          result = await this.listSystems(cid);
+          result = await this._listSystems(cid);
           break;
         case 'system.update':
-          result = await this.updateSystem(data.system_id, data.updates, cid);
+          result = await this._updateSystem(data.system_id, data.updates, cid);
           break;
         case 'system.delete':
-          result = await this.deleteSystem(data.system_id, cid);
+          result = await this._deleteSystem(data.system_id, cid);
           break;
         case 'entity.join':
-          result = await this.addEntityToSystem(data.system_id, data.entity_id, data.role, cid);
+          result = await this._addEntityToSystem(data.system_id, data.entity_id, data.role, cid);
           break;
         case 'entity.leave':
-          result = await this.removeEntityFromSystem(data.entity_id, cid);
+          result = await this._removeEntityFromSystem(data.entity_id, cid);
           break;
         case 'entity.system':
-          result = await this.getEntitySystem(data.entity_id, cid);
+          result = await this._getEntitySystem(data.entity_id, cid);
           break;
         case 'entity.unassigned':
-          result = await this.getUnassignedEntities(data.entity_ids, cid);
+          result = await this._getUnassignedEntities(data.entity_ids, cid);
           break;
         case 'link':
-          result = await this.linkEntities(data.source_id, data.target_id, data.link_type, data.reason, cid);
+          result = await this._linkEntities(data.source_id, data.target_id, data.link_type, data.reason, cid);
           break;
         case 'unlink':
-          result = await this.unlinkEntities(data.link_id, cid);
+          result = await this._unlinkEntities(data.link_id, cid);
           break;
         case 'links.get':
-          result = await this.getEntityLinks(data.entity_id, cid);
+          result = await this._getEntityLinks(data.entity_id, cid);
           break;
         case 'related.get':
-          result = await this.getRelatedEntities(data.entity_id, cid);
+          result = await this._getRelatedEntities(data.entity_id, cid);
           break;
         case 'dep.add':
-          result = await this.addDependency(data.entity_id, data.depends_on_id, data.dependency_type, data.description, cid);
+          result = await this._addDependency(data.entity_id, data.depends_on_id,
+            data.dependency_type, data.description, cid);
           break;
         case 'dep.remove':
-          result = await this.removeDependency(data.dependency_id, cid);
+          result = await this._removeDependency(data.dependency_id, cid);
           break;
         case 'deps.get':
-          result = await this.getDependencies(data.entity_id, cid);
+          result = await this._getDependencies(data.entity_id, cid);
           break;
         case 'dependents.get':
-          result = await this.getDependents(data.entity_id, cid);
+          result = await this._getDependents(data.entity_id, cid);
           break;
         case 'dependents.has':
-          result = await this.hasDependents(data.entity_id, cid);
+          result = await this._hasDependents(data.entity_id, cid);
           break;
         default:
-          throw new Error(`Unknown composition action: ${action}`);
+          throw Object.assign(new Error(`Unknown composition action: ${action}`),
+            { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'action' } });
       }
 
       await this.eventBus.publish('composition.response', {
-        request_id, success: true, data: result, correlation_id: cid
+        request_id, success: true, data: result,
+        correlation_id: cid,
+        timestamp: new Date().toISOString()
       });
-    } catch (error) {
-      this.logger.warn('composition-manager.request.failed', { action, error: error.message });
+      this.metrics?.increment('composition-manager.request.success', { action });
+    } catch (err) {
+      const code = err._code || this._classifyHandlerError(err);
+      this.logger.warn('composition-manager.request.failed', {
+        action, error: err.message, code, correlation_id: cid
+      });
+      this.metrics?.increment('composition-manager.errors', { kind: 'request', action, code });
       await this.eventBus.publish('composition.response', {
-        request_id, success: false, error: error.message, correlation_id: cid
+        request_id, success: false,
+        error: err.message,
+        error_code: code,
+        ...(err._details ? { error_details: err._details } : {}),
+        correlation_id: cid,
+        timestamp: new Date().toISOString()
       });
     }
   }
 
-  // ==================== UI Handlers: Systems ====================
+  // ==========================================
+  // UI Handlers — Systems
+  // ==========================================
 
   async handleUISystemCreate(data) {
-    const { name, description, metadata } = data;
-    if (!name || name.trim().length === 0) throw { status: 400, code: 'VALIDATION_ERROR', message: 'System name is required' };
-    return { created: true, system: await this.createSystem(name, description, metadata, crypto.randomUUID()) };
+    try {
+      const { name, description, metadata } = data || {};
+      const system = await this._createSystem(name, description, metadata, crypto.randomUUID());
+      return { status: 201, data: { created: true, system } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.system_create.failed', err, 'ui_system_create');
+    }
   }
 
   async handleUISystemList() {
-    const systems = await this.listSystems(crypto.randomUUID());
-    return { systems, count: systems.length };
+    try {
+      const systems = await this._listSystems(crypto.randomUUID());
+      return { status: 200, data: { systems, count: systems.length } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.system_list.failed', err, 'ui_system_list');
+    }
   }
 
   async handleUISystemGet(data) {
-    const { id } = data;
-    if (!id) throw { status: 400, code: 'VALIDATION_ERROR', message: 'System ID is required' };
-    const system = await this.getSystem(id, crypto.randomUUID());
-    if (!system) throw { status: 404, code: 'NOT_FOUND', message: 'System not found' };
-    return { system };
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'System ID is required',
+        { kind: 'domain', field: 'id' });
+      const system = await this._getSystem(id, crypto.randomUUID());
+      if (!system) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'System not found',
+        { entity_type: 'system', entity_id: id });
+      return { status: 200, data: { system } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.system_get.failed', err, 'ui_system_get');
+    }
   }
 
   async handleUISystemUpdate(data) {
-    const { id, name, description, metadata } = data;
-    if (!id) throw { status: 400, code: 'VALIDATION_ERROR', message: 'System ID is required' };
-    const updates = {};
-    if (name !== undefined) updates.name = name;
-    if (description !== undefined) updates.description = description;
-    if (metadata !== undefined) updates.metadata = metadata;
-    return { updated: true, system: await this.updateSystem(id, updates, crypto.randomUUID()) };
+    try {
+      const { id, name, description, metadata } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'System ID is required',
+        { kind: 'domain', field: 'id' });
+
+      const updates = {};
+      if (name !== undefined) updates.name = name;
+      if (description !== undefined) updates.description = description;
+      if (metadata !== undefined) updates.metadata = metadata;
+
+      const system = await this._updateSystem(id, updates, crypto.randomUUID());
+      return { status: 200, data: { updated: true, system } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.system_update.failed', err, 'ui_system_update');
+    }
   }
 
   async handleUISystemDelete(data) {
-    const { id } = data;
-    if (!id) throw { status: 400, code: 'VALIDATION_ERROR', message: 'System ID is required' };
-    return { deleted: true, ...await this.deleteSystem(id, crypto.randomUUID()) };
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'System ID is required',
+        { kind: 'domain', field: 'id' });
+      const result = await this._deleteSystem(id, crypto.randomUUID());
+      return { status: 200, data: { deleted: true, ...result } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.system_delete.failed', err, 'ui_system_delete');
+    }
   }
 
   async handleUISystemAddEntity(data) {
-    const { systemId, projectId, role } = data;
-    if (!systemId) throw { status: 400, code: 'VALIDATION_ERROR', message: 'System ID is required' };
-    if (!projectId) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
-    const result = await this.addEntityToSystem(systemId, projectId, role, crypto.randomUUID());
-    return { added: true, ...result };
+    try {
+      const { systemId, projectId, role } = data || {};
+      if (!systemId) return this._errorResponse(400, 'VALIDATION_FAILED', 'System ID is required',
+        { kind: 'domain', field: 'systemId' });
+      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+        { kind: 'domain', field: 'projectId' });
+      const result = await this._addEntityToSystem(systemId, projectId, role, crypto.randomUUID());
+      return { status: 200, data: { added: true, ...result } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.system_add_entity.failed', err, 'ui_system_add_entity');
+    }
   }
 
   async handleUISystemRemoveEntity(data) {
-    const { projectId } = data;
-    if (!projectId) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Project ID is required' };
-    return { removed: true, ...await this.removeEntityFromSystem(projectId, crypto.randomUUID()) };
+    try {
+      const { projectId } = data || {};
+      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Project ID is required',
+        { kind: 'domain', field: 'projectId' });
+      const result = await this._removeEntityFromSystem(projectId, crypto.randomUUID());
+      return { status: 200, data: { removed: true, ...result } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.system_remove_entity.failed', err, 'ui_system_remove_entity');
+    }
   }
 
   async handleUISystemGetUnassigned(data) {
-    const { entityIds } = data;
-    const unassigned = await this.getUnassignedEntities(entityIds || [], crypto.randomUUID());
-    return { entityIds: unassigned, count: unassigned.length };
+    try {
+      const { entityIds } = data || {};
+      const unassigned = await this._getUnassignedEntities(entityIds || [], crypto.randomUUID());
+      return { status: 200, data: { entityIds: unassigned, count: unassigned.length } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.system_unassigned.failed', err, 'ui_system_unassigned');
+    }
   }
 
-  // ==================== UI Handlers: Links ====================
+  // ==========================================
+  // UI Handlers — Links
+  // ==========================================
 
   async handleUILink(data) {
-    const { sourceId, targetId, linkType, reason } = data;
-    if (!sourceId) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Source ID is required' };
-    if (!targetId) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Target ID is required' };
-    if (!linkType) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Link type is required' };
-
-    const validTypes = ['inspired_by', 'related_to', 'evolved_from'];
-    if (!validTypes.includes(linkType)) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: `Invalid link type. Must be one of: ${validTypes.join(', ')}` };
+    try {
+      const { sourceId, targetId, linkType, reason } = data || {};
+      if (!sourceId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Source ID is required',
+        { kind: 'domain', field: 'sourceId' });
+      if (!targetId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Target ID is required',
+        { kind: 'domain', field: 'targetId' });
+      if (!linkType) return this._errorResponse(400, 'VALIDATION_FAILED', 'Link type is required',
+        { kind: 'domain', field: 'linkType' });
+      if (!VALID_LINK_TYPES.includes(linkType)) {
+        return this._errorResponse(400, 'VALIDATION_FAILED',
+          `Invalid link type. Must be one of: ${VALID_LINK_TYPES.join(', ')}`,
+          { kind: 'domain', field: 'linkType', allowed: VALID_LINK_TYPES });
+      }
+      const link = await this._linkEntities(sourceId, targetId, linkType, reason, crypto.randomUUID());
+      return { status: 201, data: { linked: true, link } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.link.failed', err, 'ui_link');
     }
-
-    const link = await this.linkEntities(sourceId, targetId, linkType, reason, crypto.randomUUID());
-    return { linked: true, link };
   }
 
   async handleUIUnlink(data) {
-    const { linkId } = data;
-    if (!linkId) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Link ID is required' };
-    await this.unlinkEntities(linkId, crypto.randomUUID());
-    return { unlinked: true, linkId };
+    try {
+      const { linkId } = data || {};
+      if (!linkId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Link ID is required',
+        { kind: 'domain', field: 'linkId' });
+      await this._unlinkEntities(linkId, crypto.randomUUID());
+      return { status: 200, data: { unlinked: true, linkId } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.unlink.failed', err, 'ui_unlink');
+    }
   }
 
   async handleUIGetLinks(data) {
-    const { id } = data;
-    if (!id) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Entity ID is required' };
-    const links = await this.getEntityLinks(id, crypto.randomUUID());
-    return { projectId: id, links, count: links.length };
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Entity ID is required',
+        { kind: 'domain', field: 'id' });
+      const links = await this._getEntityLinks(id, crypto.randomUUID());
+      return { status: 200, data: { projectId: id, links, count: links.length } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.get_links.failed', err, 'ui_get_links');
+    }
   }
 
   async handleUIGetRelated(data) {
-    const { id } = data;
-    if (!id) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Entity ID is required' };
-    const relatedEntities = await this.getRelatedEntities(id, crypto.randomUUID());
-    return { projectId: id, relatedProjects: relatedEntities, count: relatedEntities.length };
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Entity ID is required',
+        { kind: 'domain', field: 'id' });
+      const relatedEntities = await this._getRelatedEntities(id, crypto.randomUUID());
+      return {
+        status: 200,
+        data: { projectId: id, relatedProjects: relatedEntities, count: relatedEntities.length }
+      };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.get_related.failed', err, 'ui_get_related');
+    }
   }
 
-  // ==================== UI Handlers: Dependencies ====================
+  // ==========================================
+  // UI Handlers — Dependencies
+  // ==========================================
 
   async handleUIAddDependency(data) {
-    const { projectId, dependsOnProjectId, dependencyType, description } = data;
-    if (!projectId) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Entity ID is required' };
-    if (!dependsOnProjectId) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Depends-on entity ID is required' };
-
-    const validTypes = ['data', 'code', 'api', 'context'];
-    if (dependencyType && !validTypes.includes(dependencyType)) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: `Invalid dependency type. Must be one of: ${validTypes.join(', ')}` };
+    try {
+      const { projectId, dependsOnProjectId, dependencyType, description } = data || {};
+      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'Entity ID is required',
+        { kind: 'domain', field: 'projectId' });
+      if (!dependsOnProjectId) return this._errorResponse(400, 'VALIDATION_FAILED',
+        'Depends-on entity ID is required',
+        { kind: 'domain', field: 'dependsOnProjectId' });
+      if (dependencyType && !VALID_DEP_TYPES.includes(dependencyType)) {
+        return this._errorResponse(400, 'VALIDATION_FAILED',
+          `Invalid dependency type. Must be one of: ${VALID_DEP_TYPES.join(', ')}`,
+          { kind: 'domain', field: 'dependencyType', allowed: VALID_DEP_TYPES });
+      }
+      const dependency = await this._addDependency(projectId, dependsOnProjectId,
+        dependencyType, description, crypto.randomUUID());
+      return { status: 201, data: { added: true, dependency } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.add_dependency.failed', err, 'ui_add_dependency');
     }
-
-    const dependency = await this.addDependency(projectId, dependsOnProjectId, dependencyType, description, crypto.randomUUID());
-    return { added: true, dependency };
   }
 
   async handleUIRemoveDependency(data) {
-    const { dependencyId } = data;
-    if (!dependencyId) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Dependency ID is required' };
-    await this.removeDependency(dependencyId, crypto.randomUUID());
-    return { removed: true, dependencyId };
+    try {
+      const { dependencyId } = data || {};
+      if (!dependencyId) return this._errorResponse(400, 'VALIDATION_FAILED',
+        'Dependency ID is required',
+        { kind: 'domain', field: 'dependencyId' });
+      await this._removeDependency(dependencyId, crypto.randomUUID());
+      return { status: 200, data: { removed: true, dependencyId } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.remove_dependency.failed', err, 'ui_remove_dependency');
+    }
   }
 
   async handleUIGetDependencies(data) {
-    const { id } = data;
-    if (!id) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Entity ID is required' };
-    const dependencies = await this.getDependencies(id, crypto.randomUUID());
-    return { projectId: id, dependencies, count: dependencies.length };
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Entity ID is required',
+        { kind: 'domain', field: 'id' });
+      const dependencies = await this._getDependencies(id, crypto.randomUUID());
+      return { status: 200, data: { projectId: id, dependencies, count: dependencies.length } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.get_dependencies.failed', err, 'ui_get_dependencies');
+    }
   }
 
   async handleUIGetDependents(data) {
-    const { id } = data;
-    if (!id) throw { status: 400, code: 'VALIDATION_ERROR', message: 'Entity ID is required' };
-    const dependents = await this.getDependents(id, crypto.randomUUID());
-    return { projectId: id, dependents, count: dependents.length };
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'Entity ID is required',
+        { kind: 'domain', field: 'id' });
+      const dependents = await this._getDependents(id, crypto.randomUUID());
+      return { status: 200, data: { projectId: id, dependents, count: dependents.length } };
+    } catch (err) {
+      return this._handleHandlerError('composition-manager.ui.get_dependents.failed', err, 'ui_get_dependents');
+    }
+  }
+
+  // ==========================================
+  // Helpers POC2 (transferibles) + auxiliares
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
+  }
+
+  _handleHandlerError(logEvent, err, kind) {
+    const code = err._code || this._classifyHandlerError(err);
+    const status = code === 'VALIDATION_FAILED' ? 400 :
+                   code === 'RESOURCE_NOT_FOUND' ? 404 :
+                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
+                   code === 'CONFLICT' ? 409 : 500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code });
+    this.metrics?.increment('composition-manager.errors', { kind, code });
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('cannot link') || msg.includes('cannot depend')) return 'VALIDATION_FAILED';
+    if (msg.includes('already') || msg.includes('another system')) return 'CONFLICT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    const enriched = {
+      timestamp: new Date().toISOString(),
+      ...payload
+    };
+    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
+    else enriched.correlation_id = crypto.randomUUID();
+    await this.eventBus.publish(name, enriched);
+  }
+
+  _safeParse(val) {
+    if (typeof val === 'object') return val;
+    try { return JSON.parse(val); } catch { return {}; }
   }
 }
 

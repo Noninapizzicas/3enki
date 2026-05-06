@@ -1,28 +1,62 @@
 /**
- * Plugin Manager Module
- * Discovers and manages JSON-based function plugins
+ * plugin-manager v2.1.0 — Reescrito al canon (POC2 #7 del horizontal).
  *
- * Follows event-driven architecture
+ * Descubre y gestiona plugins JSON con funciones ejecutables que viven en
+ *   <pluginsPath>/<plugin-name>/<plugin-name>.functions.json
+ *
+ * Sub-areas (mismo dominio):
+ *  - Discovery: escanear directorio + cargar definiciones.
+ *  - Storage in-memory: Map<name, definition>.
+ *  - Bus: par request/response correlacionados por request_id.
+ *  - HTTP API: 5 endpoints (GET/LIST/RELOAD/health/metrics).
+ *  - Auto-reload opcional via setInterval.
+ *
+ * Cumple los 24 contratos transversales:
+ *  - errors: HTTP handlers devuelven { status, data | error: { code, message, details? } }.
+ *    Metodos privados lanzan con _code canonico.
+ *  - observability: log + metric en cada error path. Prefix plugin-manager.*.
+ *    correlation_id propagado en todos los responses.
+ *  - events: 6 eventos canonicos preservados invariantes.
+ *  - lifecycle: onLoad inicializa schema-fs + watcher; onUnload limpia.
+ *  - persistence: filesystem read-only de plugins/ (no DB propia).
+ *  - resilience: errores de discovery/load no detienen el proceso.
+ *
+ * 5 helpers POC2 transferibles:
+ *  _errorResponse, _handleHandlerError, _classifyHandlerError,
+ *  _publicarEvento, + auxiliar _readPluginFile.
+ *
+ * Monolito (515 LOC) preservado en
+ * arquitectura/migracion/_legacy/plugin-manager-monolito-pre-rewrite.js.bak
+ *
+ * Mapa exhaustivo (PASO 0 del rewrite) en
+ * arquitectura/migracion/notas/plugin-manager-mapa.md
  */
 
-const fs = require('fs');
-const path = require('path');
+'use strict';
+
+const fs     = require('fs');
+const path   = require('path');
+const crypto = require('crypto');
 
 class PluginManagerModule {
   constructor() {
-    this.name = 'plugin-manager';
-    this.version = '2.0.0';
+    this.name    = 'plugin-manager';
+    this.version = '2.1.0';
 
-    // State
-    this.plugins = new Map(); // name -> definition
-    this.pluginsPath = null;
+    this.plugins       = new Map();
+    this.pluginsPath   = null;
     this.watchInterval = null;
 
-    // Dependencies (injected)
-    this.logger = null;
-    this.metrics = null;
+    this.logger   = null;
+    this.metrics  = null;
     this.eventBus = null;
-    this.config = null;
+    this.config   = null;
+
+    this.internalCounters = {
+      loaded_total: 0,
+      error_total: 0,
+      reload_total: 0
+    };
   }
 
   // ==========================================
@@ -30,276 +64,206 @@ class PluginManagerModule {
   // ==========================================
 
   async onLoad(core) {
-    this.logger = core.logger;
-    this.metrics = core.metrics;
+    this.logger   = core.logger;
+    this.metrics  = core.metrics;
     this.eventBus = core.eventBus;
-    this.config = core.moduleConfig || {};
+    this.config   = core.moduleConfig || {};
 
-    this.logger.info('module.loading', {
-      module: this.name,
-      version: this.version
+    const correlation_id = crypto.randomUUID();
+    this.logger.info('plugin-manager.loading', {
+      module: this.name, version: this.version, correlation_id
     });
 
-    // Configure plugins path
     this.pluginsPath = path.resolve(
       __dirname,
       this.config.pluginsPath || '../../plugins'
     );
 
-    // Ensure plugins directory exists
-    this.ensurePluginsDirectory();
+    this._ensurePluginsDirectory();
 
-    // Event subscriptions are auto-wired by the loader from module.json
+    await this._discoverPlugins(correlation_id);
 
-    // Discover and load plugins
-    await this.discoverPlugins();
+    if (this.config.autoReload) this._startWatching();
 
-    // Setup auto-reload if enabled
-    if (this.config.autoReload) {
-      this.startWatching();
-    }
-
-    // Update metrics
-    this.updateMetrics();
-
-    this.logger.info('module.loaded', {
-      module: this.name,
-      version: this.version,
+    this.logger.info('plugin-manager.loaded', {
       plugins_path: this.pluginsPath,
       plugins_count: this.plugins.size,
-      auto_reload: !!this.config.autoReload
+      auto_reload: !!this.config.autoReload,
+      correlation_id
     });
   }
 
   async onUnload() {
-    this.logger.info('module.unloading', { module: this.name });
+    const correlation_id = crypto.randomUUID();
+    this.logger.info('plugin-manager.unloading', {
+      plugins_count: this.plugins.size, correlation_id
+    });
 
-    // Stop watching
     if (this.watchInterval) {
       clearInterval(this.watchInterval);
       this.watchInterval = null;
     }
 
-    // Publish unload events for all plugins
-    for (const [name] of this.plugins.entries()) {
-      await this.eventBus.publish('plugin.unloaded', {
-        name,
-        unloaded_at: new Date().toISOString()
-      });
+    const names = Array.from(this.plugins.keys());
+    this.plugins.clear();
+    for (const name of names) {
+      await this._publicarEvento('plugin.unloaded', { name }, { correlation_id });
     }
 
-    this.plugins.clear();
-
-    this.logger.info('module.unloaded', { module: this.name });
+    this.internalCounters = { loaded_total: 0, error_total: 0, reload_total: 0 };
   }
 
   // ==========================================
-  // Initialization Helpers
+  // Init helpers (privados)
   // ==========================================
 
-  ensurePluginsDirectory() {
+  _ensurePluginsDirectory() {
     if (!fs.existsSync(this.pluginsPath)) {
       fs.mkdirSync(this.pluginsPath, { recursive: true });
-      this.logger.info('plugins.directory.created', {
-        path: this.pluginsPath
-      });
+      this.logger.info('plugin-manager.directory.created', { path: this.pluginsPath });
     }
   }
 
-  startWatching() {
+  _startWatching() {
     const interval = this.config.watchInterval || 5000;
-
-    this.logger.info('plugins.watch.started', { interval });
-
+    this.logger.info('plugin-manager.watch.started', { interval });
     this.watchInterval = setInterval(() => {
-      this.discoverPlugins();
+      this._discoverPlugins(crypto.randomUUID()).catch(err => {
+        this.logger.error('plugin-manager.watch.discovery_failed', { error: err.message });
+        this.metrics?.increment('plugin-manager.errors', { kind: 'watch_discovery' });
+      });
     }, interval);
   }
 
-  updateMetrics() {
-    // REMOVED: this.metrics.gauge('plugin.count', this.plugins.size);
-
-    let totalFunctions = 0;
-    for (const plugin of this.plugins.values()) {
-      totalFunctions += Object.keys(plugin.functions || {}).length;
-    }
-    // REMOVED: this.metrics.gauge('plugin.functions.count', totalFunctions);
-  }
-
   // ==========================================
-  // Event Handlers (wired by loader from module.json)
+  // Bus handlers
   // ==========================================
 
   async onGetPluginRequest(event) {
-    const { name, request_id, correlation_id } = event.payload || event;
+    const eventData = event.payload || event.data || event;
+    const { name, request_id, correlation_id } = eventData;
+    const cid = correlation_id || crypto.randomUUID();
 
-    this.logger.info('plugin.get.request.received', {
-      name,
-      request_id,
-      correlation_id
-    });
+    if (!request_id) {
+      this.logger.warn('plugin-manager.get.invalid_payload', { has_name: !!name });
+      this.metrics?.increment('plugin-manager.errors', { kind: 'invalid_payload', source: 'get' });
+      return;
+    }
 
     const plugin = this.plugins.get(name);
-
     if (plugin) {
-      await this.eventBus.publish('plugin.get.response', {
-        request_id,
-        success: true,
-        plugin
-      }, { correlationId: correlation_id });
+      await this._publicarEvento('plugin.get.response', {
+        request_id, success: true, plugin
+      }, { correlation_id: cid });
+      this.metrics?.increment('plugin-manager.request.success', { action: 'get' });
     } else {
-      await this.eventBus.publish('plugin.get.response', {
-        request_id,
-        success: false,
-        error: `Plugin '${name}' not found`
-      }, { correlationId: correlation_id });
+      await this._publicarEvento('plugin.get.response', {
+        request_id, success: false,
+        error: `Plugin '${name}' not found`,
+        error_code: 'RESOURCE_NOT_FOUND'
+      }, { correlation_id: cid });
+      this.metrics?.increment('plugin-manager.errors', { kind: 'request', action: 'get', code: 'RESOURCE_NOT_FOUND' });
     }
   }
 
   async onListPluginsRequest(event) {
-    const { request_id, correlation_id } = event.payload || event;
+    const eventData = event.payload || event.data || event;
+    const { request_id, correlation_id } = eventData;
+    const cid = correlation_id || crypto.randomUUID();
 
-    this.logger.info('plugin.list.request.received', {
-      request_id,
-      correlation_id
-    });
+    if (!request_id) {
+      this.logger.warn('plugin-manager.list.invalid_payload');
+      this.metrics?.increment('plugin-manager.errors', { kind: 'invalid_payload', source: 'list' });
+      return;
+    }
 
-    const pluginsList = this.getPluginsSummary();
-
-    await this.eventBus.publish('plugin.list.response', {
-      request_id,
-      success: true,
-      plugins: pluginsList,
-      count: pluginsList.length
-    }, { correlationId: correlation_id });
+    const pluginsList = this._getPluginsSummary();
+    await this._publicarEvento('plugin.list.response', {
+      request_id, success: true,
+      plugins: pluginsList, count: pluginsList.length
+    }, { correlation_id: cid });
+    this.metrics?.increment('plugin-manager.request.success', { action: 'list' });
   }
 
   // ==========================================
-  // HTTP API Handlers
+  // HTTP API handlers (shape canonico)
   // ==========================================
 
   async handleGetPlugin(req, context) {
-    const { name } = context.params;
-
-    this.logger.info('plugin.get.start', {
-      name,
-      correlation_id: context.correlationId
-    });
-
-    const plugin = this.plugins.get(name);
-
-    if (!plugin) {
-      this.logger.warn('plugin.get.not_found', {
-        name,
-        correlation_id: context.correlationId
-      });
-
-      return {
-        status: 404,
-        data: {
-          success: false,
-          error: `Plugin '${name}' not found`
-        }
-      };
-    }
-
-    this.logger.info('plugin.retrieved', {
-      name,
-      correlation_id: context.correlationId
-    });
-
-    return {
-      status: 200,
-      data: {
-        success: true,
-        plugin
+    try {
+      const { name } = context.params || {};
+      if (!name) {
+        return this._errorResponse(400, 'VALIDATION_FAILED',
+          'Plugin name is required',
+          { kind: 'domain', field: 'name' });
       }
-    };
+      const plugin = this.plugins.get(name);
+      if (!plugin) {
+        this.logger.warn('plugin-manager.http.get.not_found', {
+          name, correlation_id: context.correlationId
+        });
+        this.metrics?.increment('plugin-manager.errors', {
+          kind: 'http_get', code: 'RESOURCE_NOT_FOUND'
+        });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND',
+          `Plugin '${name}' not found`,
+          { entity_type: 'plugin', entity_id: name });
+      }
+      return { status: 200, data: { plugin } };
+    } catch (err) {
+      return this._handleHandlerError('plugin-manager.http.get.failed', err, 'http_get');
+    }
   }
 
   async handleListPlugins(req, context) {
-    this.logger.info('plugins.list.start', {
-      correlation_id: context.correlationId
-    });
-
-    const pluginsList = this.getPluginsSummary();
-
-    let totalFunctions = 0;
-    for (const p of pluginsList) {
-      totalFunctions += p.function_count;
+    try {
+      const pluginsList = this._getPluginsSummary();
+      const totalFunctions = pluginsList.reduce((acc, p) => acc + p.function_count, 0);
+      this.logger.info('plugin-manager.http.list.completed', {
+        count: pluginsList.length, total_functions: totalFunctions,
+        correlation_id: context?.correlationId
+      });
+      return {
+        status: 200,
+        data: {
+          plugins: pluginsList,
+          count: pluginsList.length,
+          total_functions: totalFunctions
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('plugin-manager.http.list.failed', err, 'http_list');
     }
-
-    this.logger.info('plugins.listed', {
-      count: pluginsList.length,
-      total_functions: totalFunctions,
-      correlation_id: context.correlationId
-    });
-
-    return {
-      status: 200,
-      data: {
-        success: true,
-        plugins: pluginsList,
-        count: pluginsList.length,
-        total_functions: totalFunctions
-      }
-    };
   }
 
   async handleReloadPlugins(req, context) {
-    this.logger.info('plugins.reload.start', {
-      correlation_id: context.correlationId
-    });
-
+    const correlation_id = context?.correlationId || crypto.randomUUID();
     try {
-      const result = await this.reloadPlugins(context.correlationId);
+      const result = await this._reloadPlugins(correlation_id);
+      this.internalCounters.reload_total++;
+      this.metrics?.increment('plugin-manager.reload.success');
 
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('plugin.reload.total');
-    // → Counter extracted from events
-
-      // Publish event
-      await this.eventBus.publish('plugin.reloaded', {
+      await this._publicarEvento('plugin.reloaded', {
         count: result.count,
         loaded: result.loaded,
-        errors: result.errors,
-        reloaded_at: new Date().toISOString()
-      }, { correlationId: context.correlationId });
-
-      this.logger.info('plugins.reloaded', {
-        count: result.count,
-        loaded: result.loaded,
-        errors: result.errors,
-        correlation_id: context.correlationId
-      });
+        errors: result.errors
+      }, { correlation_id });
 
       return {
         status: 200,
         data: {
-          success: true,
-          message: 'Plugins reloaded successfully',
+          message: 'Plugins reloaded',
           count: result.count,
           loaded: result.loaded,
           errors: result.errors
         }
       };
-    } catch (error) {
-      this.logger.error('plugins.reload.error', {
-        error: error.message,
-        correlation_id: context.correlationId
-      });
-
-      return {
-        status: 500,
-        data: {
-          success: false,
-          error: 'Failed to reload plugins',
-          message: error.message
-        }
-      };
+    } catch (err) {
+      return this._handleHandlerError('plugin-manager.http.reload.failed', err, 'http_reload');
     }
   }
 
-  async handleHealthCheck(req, context) {
+  async handleHealthCheck() {
     return {
       status: 200,
       data: {
@@ -307,208 +271,214 @@ class PluginManagerModule {
         module: this.name,
         version: this.version,
         uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
         plugins_count: this.plugins.size,
         plugins_path: this.pluginsPath,
-        auto_reload: !!this.config.autoReload
+        auto_reload: !!this.config.autoReload,
+        timestamp: new Date().toISOString()
       }
     };
   }
 
-  async handleGetMetrics(req, context) {
+  async handleGetMetrics() {
     let totalFunctions = 0;
     for (const plugin of this.plugins.values()) {
       totalFunctions += Object.keys(plugin.functions || {}).length;
     }
-
     return {
       status: 200,
       data: {
         counters: {
-          'plugin.loaded.total': this.metrics.getCounter('plugin.loaded.total') || 0,
-          'plugin.error.total': this.metrics.getCounter('plugin.error.total') || 0,
-          'plugin.reload.total': this.metrics.getCounter('plugin.reload.total') || 0
+          'plugin-manager.loaded.total': this.internalCounters.loaded_total,
+          'plugin-manager.error.total': this.internalCounters.error_total,
+          'plugin-manager.reload.total': this.internalCounters.reload_total
         },
         gauges: {
-          'plugin.count': this.plugins.size,
-          'plugin.functions.count': totalFunctions
+          'plugin-manager.count': this.plugins.size,
+          'plugin-manager.functions.count': totalFunctions
         }
       }
     };
   }
 
   // ==========================================
-  // Core Logic
+  // Core logic (privados)
   // ==========================================
 
-  async discoverPlugins() {
+  async _discoverPlugins(correlation_id) {
     const startTime = Date.now();
-
-    this.logger.info('plugins.discovery.start', {
-      path: this.pluginsPath
+    this.logger.info('plugin-manager.discovery.start', {
+      path: this.pluginsPath, correlation_id
     });
 
-    try {
-      if (!fs.existsSync(this.pluginsPath)) {
-        this.logger.warn('plugins.directory.missing', {
-          path: this.pluginsPath
-        });
-        return { count: 0, loaded: 0, errors: 0 };
-      }
-
-      const pluginDirs = fs.readdirSync(this.pluginsPath, { withFileTypes: true })
-        .filter(dirent => dirent.isDirectory())
-        .map(dirent => dirent.name);
-
-      let loadedCount = 0;
-      let errorCount = 0;
-
-      for (const dirName of pluginDirs) {
-        const pluginDirPath = path.join(this.pluginsPath, dirName);
-        const files = fs.readdirSync(pluginDirPath);
-        const definitionFile = files.find(f => f.endsWith('.functions.json'));
-
-        if (definitionFile) {
-          const filePath = path.join(pluginDirPath, definitionFile);
-          const success = await this.loadPluginFromFile(filePath);
-
-          if (success) {
-            loadedCount++;
-          } else {
-            errorCount++;
-          }
-        }
-      }
-
-      const duration = Date.now() - startTime;
-
-      this.logger.info('plugins.discovery.completed', {
-        total: this.plugins.size,
-        loaded: loadedCount,
-        errors: errorCount,
-        duration
+    if (!fs.existsSync(this.pluginsPath)) {
+      this.logger.warn('plugin-manager.directory.missing', {
+        path: this.pluginsPath, correlation_id
       });
-
-      // REMOVED: this.metrics.timing('plugin.discovery.duration', duration);
-      this.updateMetrics();
-
-      return {
-        count: this.plugins.size,
-        loaded: loadedCount,
-        errors: errorCount
-      };
-    } catch (error) {
-      this.logger.error('plugins.discovery.error', {
-        error: error.message,
-        path: this.pluginsPath
-      });
-
-      await this.eventBus.publish('plugin.error', {
-        error: error.message,
-        context: 'discovery'
-      });
-
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('plugin.error.total');
-    // → Counter extracted from events
-
-      throw error;
+      this.metrics?.increment('plugin-manager.errors', { kind: 'directory_missing' });
+      return { count: 0, loaded: 0, errors: 0 };
     }
+
+    let loaded = 0;
+    let errors = 0;
+    try {
+      const entries = fs.readdirSync(this.pluginsPath, { withFileTypes: true });
+      for (const dirent of entries) {
+        if (!dirent.isDirectory()) continue;
+        const dirPath = path.join(this.pluginsPath, dirent.name);
+        const files = fs.readdirSync(dirPath);
+        const definitionFile = files.find(f => f.endsWith('.functions.json'));
+        if (!definitionFile) continue;
+
+        const filePath = path.join(dirPath, definitionFile);
+        const ok = await this._loadPluginFromFile(filePath, correlation_id);
+        if (ok) loaded++;
+        else errors++;
+      }
+    } catch (err) {
+      this.logger.error('plugin-manager.discovery.failed', {
+        error: err.message, path: this.pluginsPath, correlation_id
+      });
+      this.metrics?.increment('plugin-manager.errors', { kind: 'discovery' });
+      this.internalCounters.error_total++;
+
+      await this._publicarEvento('plugin.error', {
+        error: err.message, context: 'discovery'
+      }, { correlation_id });
+
+      throw err;
+    }
+
+    const duration = Date.now() - startTime;
+    this.logger.info('plugin-manager.discovery.completed', {
+      total: this.plugins.size, loaded, errors, duration, correlation_id
+    });
+
+    return { count: this.plugins.size, loaded, errors };
   }
 
-  async loadPluginFromFile(filePath) {
+  async _loadPluginFromFile(filePath, correlation_id) {
     const startTime = Date.now();
-
     try {
-      const fileContent = fs.readFileSync(filePath, 'utf-8');
-      const pluginDef = JSON.parse(fileContent);
+      const pluginDef = this._readPluginFile(filePath);
 
-      // Validate structure
       if (!pluginDef.metadata || !pluginDef.metadata.name || !pluginDef.functions) {
-        this.logger.error('plugin.load.invalid_structure', {
-          file: filePath
+        const reason = 'Invalid structure: missing metadata, name, or functions';
+        this.logger.error('plugin-manager.load.invalid_structure', {
+          file: filePath, reason, correlation_id
         });
-
-        await this.eventBus.publish('plugin.error', {
-          file: filePath,
-          error: 'Invalid structure: missing metadata, name, or functions',
-          context: 'load'
-        });
-
-        // REMOVED (migrate-to-event-metrics): this.metrics.increment('plugin.error.total');
-    // → Counter extracted from events
+        this.internalCounters.error_total++;
+        this.metrics?.increment('plugin-manager.errors', { kind: 'invalid_structure' });
+        await this._publicarEvento('plugin.error', {
+          file: filePath, error: reason, context: 'load'
+        }, { correlation_id });
         return false;
       }
 
       const pluginName = pluginDef.metadata.name;
-
-      // Skip if already loaded
       if (this.plugins.has(pluginName)) {
-        this.logger.debug('plugin.already_loaded', { name: pluginName });
+        this.logger.debug('plugin-manager.already_loaded', { name: pluginName, correlation_id });
         return true;
       }
 
-      // Store plugin
       this.plugins.set(pluginName, pluginDef);
+      this.internalCounters.loaded_total++;
 
-      const duration = Date.now() - startTime;
       const functionNames = Object.keys(pluginDef.functions);
+      const duration = Date.now() - startTime;
 
-      this.logger.info('plugin.loaded', {
+      this.logger.info('plugin-manager.loaded.plugin', {
         name: pluginName,
         version: pluginDef.metadata.version || '1.0.0',
         function_count: functionNames.length,
-        file: filePath,
-        duration
+        duration, correlation_id
       });
+      this.metrics?.increment('plugin-manager.plugin.loaded');
 
-      // Publish event
-      await this.eventBus.publish('plugin.loaded', {
+      await this._publicarEvento('plugin.loaded', {
         name: pluginName,
         definition: pluginDef,
         version: pluginDef.metadata.version || '1.0.0',
         description: pluginDef.metadata.description || '',
         functions: functionNames,
-        function_count: functionNames.length,
-        loaded_at: new Date().toISOString()
-      });
-
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('plugin.loaded.total');
-    // → Counter extracted from events
-      // REMOVED: this.metrics.timing('plugin.load.duration', duration);
+        function_count: functionNames.length
+      }, { correlation_id });
 
       return true;
-    } catch (error) {
-      this.logger.error('plugin.load.error', {
-        file: filePath,
-        error: error.message
+    } catch (err) {
+      this.logger.error('plugin-manager.load.failed', {
+        file: filePath, error: err.message, correlation_id
       });
-
-      await this.eventBus.publish('plugin.error', {
-        file: filePath,
-        error: error.message,
-        context: 'load'
-      });
-
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('plugin.error.total');
-    // → Counter extracted from events
+      this.internalCounters.error_total++;
+      this.metrics?.increment('plugin-manager.errors', { kind: 'load_failed' });
+      await this._publicarEvento('plugin.error', {
+        file: filePath, error: err.message, context: 'load'
+      }, { correlation_id });
       return false;
     }
   }
 
-  async reloadPlugins(correlationId) {
-    this.logger.info('plugins.reload.clearing');
+  async _reloadPlugins(correlation_id) {
+    this.logger.info('plugin-manager.reload.clearing', { correlation_id });
     this.plugins.clear();
-    return await this.discoverPlugins();
+    return await this._discoverPlugins(correlation_id);
   }
 
-  getPluginsSummary() {
+  _getPluginsSummary() {
     return Array.from(this.plugins.entries()).map(([name, def]) => ({
       name,
-      version: def.metadata.version || '1.0.0',
-      description: def.metadata.description || '',
-      functions: Object.keys(def.functions),
-      function_count: Object.keys(def.functions).length
+      version: def.metadata?.version || '1.0.0',
+      description: def.metadata?.description || '',
+      functions: Object.keys(def.functions || {}),
+      function_count: Object.keys(def.functions || {}).length
     }));
+  }
+
+  // ==========================================
+  // Helpers POC2 (transferibles) + auxiliares
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
+  }
+
+  _handleHandlerError(logEvent, err, kind) {
+    const code    = err._code || this._classifyHandlerError(err);
+    const status  = code === 'VALIDATION_FAILED'      ? 400 :
+                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
+                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
+                    code === 'CONFLICT'               ? 409 :
+                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
+                                                        500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code });
+    this.metrics?.increment('plugin-manager.errors', { kind, code });
+    this.internalCounters.error_total++;
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
+    if (msg.includes('already')) return 'CONFLICT';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    const enriched = {
+      timestamp: new Date().toISOString(),
+      ...payload
+    };
+    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
+    else enriched.correlation_id = crypto.randomUUID();
+    await this.eventBus.publish(name, enriched);
+  }
+
+  _readPluginFile(filePath) {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return JSON.parse(content);
   }
 }
 

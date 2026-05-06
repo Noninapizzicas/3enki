@@ -1,157 +1,71 @@
 {
   "name": "composition-manager",
-  "version": "1.0.0",
-  "description": "Generic entity composition: systems, links, and dependencies. Reusable by any module via events.",
-  "author": "Aichat Team",
+  "version": "2.0.0",
+  "description": "Servicio generico de composicion de entidades. Trabaja con entity_id abstracto sobre tres sub-areas del mismo dominio: systems (contenedores logicos con miembros y rol), links (relaciones direccionales tipadas) y dependencies (dependencias funcionales). Reusable por cualquier modulo via composition.request/response o via UI handlers directos.",
+  "author": "Event Core Team",
   "language": "en",
   "main": "index.js",
-  "provides": {
-    "events": [
-      "composition.response",
-      "system.created",
-      "system.updated",
-      "system.deleted",
-      "entity.joined_system",
-      "entity.left_system",
-      "entity.linked",
-      "entity.unlinked",
-      "entity.dependency.added",
-      "entity.dependency.removed"
-    ]
-  },
+
   "events": {
     "publishes": [
-      {
-        "event": "composition.response",
-        "description": "Response to composition.request (request/response pattern)"
-      },
-      {
-        "event": "system.created",
-        "description": "System (logical container) created"
-      },
-      {
-        "event": "system.updated",
-        "description": "System updated"
-      },
-      {
-        "event": "system.deleted",
-        "description": "System deleted"
-      },
-      {
-        "event": "entity.joined_system",
-        "description": "Entity assigned to a system"
-      },
-      {
-        "event": "entity.left_system",
-        "description": "Entity removed from a system"
-      },
-      {
-        "event": "entity.linked",
-        "description": "Two entities linked"
-      },
-      {
-        "event": "entity.unlinked",
-        "description": "Entity link removed"
-      },
-      {
-        "event": "entity.dependency.added",
-        "description": "Dependency added between entities"
-      },
-      {
-        "event": "entity.dependency.removed",
-        "description": "Dependency removed"
-      }
+      { "event": "composition.response",         "description": "Response a composition.request correlacionada por request_id." },
+      { "event": "system.created",               "description": "System (contenedor logico) creado." },
+      { "event": "system.updated",               "description": "System actualizado (campos en updated_fields)." },
+      { "event": "system.deleted",               "description": "System eliminado (cascade en members)." },
+      { "event": "entity.joined_system",         "description": "Entidad asignada a un system con rol." },
+      { "event": "entity.left_system",           "description": "Entidad removida de su system." },
+      { "event": "entity.linked",                "description": "Dos entidades enlazadas con tipo (inspired_by | related_to | evolved_from)." },
+      { "event": "entity.unlinked",              "description": "Link entre entidades eliminado." },
+      { "event": "entity.dependency.added",      "description": "Dependencia funcional anyadida (data | code | api | context)." },
+      { "event": "entity.dependency.removed",    "description": "Dependencia funcional eliminada." }
     ],
     "subscribes": [
       {
         "event": "composition.request",
-        "description": "Request/response entry point for other modules",
-        "handler": "onCompositionRequest"
+        "handler": "onCompositionRequest",
+        "description": "Entry point request/response. Rutea 18 actions: system.{create,get,list,update,delete}, entity.{join,leave,system,unassigned}, link/unlink, links.get, related.get, dep.{add,remove}, deps.get, dependents.{get,has}. Publica composition.response."
       },
       {
         "event": "db.query.response",
-        "description": "Database query responses",
-        "handler": "onDbQueryResponse"
+        "handler": "onDbQueryResponse",
+        "description": "Responses de database-manager correlacionadas por request_id (resuelve pendingDbRequests)."
       }
     ]
   },
+
   "ui_handlers": [
-    {
-      "domain": "system",
-      "action": "create",
-      "handler": "handleUISystemCreate"
-    },
-    {
-      "domain": "system",
-      "action": "list",
-      "handler": "handleUISystemList"
-    },
-    {
-      "domain": "system",
-      "action": "get",
-      "handler": "handleUISystemGet"
-    },
-    {
-      "domain": "system",
-      "action": "update",
-      "handler": "handleUISystemUpdate"
-    },
-    {
-      "domain": "system",
-      "action": "delete",
-      "handler": "handleUISystemDelete"
-    },
-    {
-      "domain": "system",
-      "action": "addProject",
-      "handler": "handleUISystemAddEntity"
-    },
-    {
-      "domain": "system",
-      "action": "removeProject",
-      "handler": "handleUISystemRemoveEntity"
-    },
-    {
-      "domain": "project",
-      "action": "link",
-      "handler": "handleUILink"
-    },
-    {
-      "domain": "project",
-      "action": "unlink",
-      "handler": "handleUIUnlink"
-    },
-    {
-      "domain": "project",
-      "action": "getLinks",
-      "handler": "handleUIGetLinks"
-    },
-    {
-      "domain": "project",
-      "action": "getRelated",
-      "handler": "handleUIGetRelated"
-    },
-    {
-      "domain": "project",
-      "action": "addDependency",
-      "handler": "handleUIAddDependency"
-    },
-    {
-      "domain": "project",
-      "action": "removeDependency",
-      "handler": "handleUIRemoveDependency"
-    },
-    {
-      "domain": "project",
-      "action": "getDependencies",
-      "handler": "handleUIGetDependencies"
-    },
-    {
-      "domain": "project",
-      "action": "getDependents",
-      "handler": "handleUIGetDependents"
-    }
+    { "domain": "system",  "action": "create",          "handler": "handleUISystemCreate" },
+    { "domain": "system",  "action": "list",            "handler": "handleUISystemList" },
+    { "domain": "system",  "action": "get",             "handler": "handleUISystemGet" },
+    { "domain": "system",  "action": "update",          "handler": "handleUISystemUpdate" },
+    { "domain": "system",  "action": "delete",          "handler": "handleUISystemDelete" },
+    { "domain": "system",  "action": "addProject",      "handler": "handleUISystemAddEntity" },
+    { "domain": "system",  "action": "removeProject",   "handler": "handleUISystemRemoveEntity" },
+    { "domain": "system",  "action": "getUnassigned",   "handler": "handleUISystemGetUnassigned" },
+    { "domain": "project", "action": "link",            "handler": "handleUILink" },
+    { "domain": "project", "action": "unlink",          "handler": "handleUIUnlink" },
+    { "domain": "project", "action": "getLinks",        "handler": "handleUIGetLinks" },
+    { "domain": "project", "action": "getRelated",      "handler": "handleUIGetRelated" },
+    { "domain": "project", "action": "addDependency",   "handler": "handleUIAddDependency" },
+    { "domain": "project", "action": "removeDependency","handler": "handleUIRemoveDependency" },
+    { "domain": "project", "action": "getDependencies", "handler": "handleUIGetDependencies" },
+    { "domain": "project", "action": "getDependents",   "handler": "handleUIGetDependents" }
   ],
+
+  "tools": [],
+
+  "dependencies": [],
+
+  "config": {
+    "dbTimeout": 10000,
+    "persistence": {
+      "pattern": "owned-tables-via-database-manager",
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["pendingDbRequests"]
+    }
+  },
+
   "observability": {
     "logging": {
       "level": "info",
@@ -161,19 +75,21 @@
     "metrics": {
       "enabled": true,
       "counters": [
-        "composition.system.created.total",
-        "composition.link.created.total",
-        "composition.dependency.created.total"
+        "composition-manager.system.created",
+        "composition-manager.system.updated",
+        "composition-manager.system.deleted",
+        "composition-manager.entity.joined",
+        "composition-manager.entity.left",
+        "composition-manager.link.created",
+        "composition-manager.link.deleted",
+        "composition-manager.dependency.added",
+        "composition-manager.dependency.removed",
+        "composition-manager.request.success",
+        "composition-manager.errors"
+      ],
+      "gauges": [
+        "composition-manager.pending_db_requests"
       ]
-    }
-  },
-  "config": {
-    "dbTimeout": 10000,
-    "persistence": {
-      "pattern":           "in-memory",
-      "restart_resilient": false,
-      "concurrency":       "single-writer",
-      "lost_on_restart":   ["pendingDbRequests"]
     }
   }
 }

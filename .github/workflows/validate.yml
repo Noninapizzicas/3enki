@@ -35,6 +35,27 @@ jobs:
       - name: Run unit tests (scheduler — migracion canonica)
         run: npm run test:scheduler
 
+      - name: Run unit tests (credential-manager — descomposicion canonica)
+        run: npm run test:credential-manager
+
+      - name: Run unit tests (project-manager — reescritura canonica)
+        run: npm run test:project-manager
+
+      - name: Run unit tests (database-manager — reescritura canonica)
+        run: npm run test:database-manager
+
+      - name: Run unit tests (composition-manager — reescritura canonica)
+        run: npm run test:composition-manager
+
+      - name: Run unit tests (gateway-manager — reescritura canonica)
+        run: npm run test:gateway-manager
+
+      - name: Run unit tests (plugin-manager — reescritura canonica)
+        run: npm run test:plugin-manager
+
+      - name: Run unit tests (conversacion/ai-gateway — reescritura canonica)
+        run: npm run test:conversacion__ai-gateway
+
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc
 
@@ -70,3 +91,15 @@ jobs:
 
       - name: Run integration tests (carta-scheduler + mqttRequest real)
         run: npm run test:integration:carta-scheduler
+
+      - name: Run unit tests (channel-manager — reescritura canonica)
+        run: npm run test:channel-manager
+
+      - name: Run unit tests (conversacion/chat-io — reescritura canonica)
+        run: npm run test:conversacion__chat-io
+
+      - name: Run unit tests (conversacion/prompt-builder — reescritura canonica)
+        run: npm run test:conversacion__prompt-builder
+
+      - name: Run unit tests (filesystem — reescritura canonica)
+        run: npm run test:filesystem

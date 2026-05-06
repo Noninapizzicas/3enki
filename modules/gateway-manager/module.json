@@ -1,105 +1,64 @@
 {
   "name": "gateway-manager",
-  "version": "1.0.0",
-  "description": "Ciclo de vida de gateways software que traducen MQTT a protocolos nativos (TCP, BLE, USB, CMD)",
-  "author": "Enki",
+  "version": "2.0.0",
+  "description": "Ciclo de vida de gateways software que traducen MQTT a protocolos nativos (TCP, BLE, USB, CMD). Un gateway es un 'ESP32 virtual' indistinguible de un ESP32 real (mismo contrato MQTT: birth, status, command, ack).",
+  "author": "Event Core Team",
   "language": "en",
   "tier": "tier_2_platform",
-  "provides": {
-    "events": [
-      "gateway.started",
-      "gateway.stopped",
-      "gateway.device_found",
-      "gateway.device_lost",
-      "gateway.error"
-    ]
-  },
+  "main": "index.js",
+
   "events": {
-    "subscribes": [],
     "publishes": [
-      {
-        "event": "gateway.started",
-        "description": "Gateway arrancado y operativo"
-      },
-      {
-        "event": "gateway.stopped",
-        "description": "Gateway detenido"
-      },
-      {
-        "event": "gateway.device_found",
-        "description": "Dispositivo descubierto por un gateway"
-      },
-      {
-        "event": "gateway.device_lost",
-        "description": "Dispositivo perdido por un gateway"
-      },
-      {
-        "event": "gateway.error",
-        "description": "Error en un gateway"
-      }
-    ]
+      { "event": "gateway.started",      "description": "Gateway arrancado y operativo. Payload: { type, devices_count, timestamp, correlation_id }." },
+      { "event": "gateway.stopped",      "description": "Gateway detenido en onUnload o restart. Payload: { type, timestamp, correlation_id }." },
+      { "event": "gateway.device_found", "description": "Dispositivo descubierto por un gateway tras start. Payload: { device_id, gateway_type, device_type, capabilities, timestamp, correlation_id }." },
+      { "event": "gateway.device_lost",  "description": "Punto de extension: device-shadow u otros consumidores futuros pueden emitir este evento cuando un device deja de responder. gateway-manager NO lo emite directamente — lo declara para que la cadena MQTT-shadow lo pueda usar canonicamente." },
+      { "event": "gateway.error",        "description": "Error al arrancar/restartear un gateway. Payload: { type, error, timestamp, correlation_id }." }
+    ],
+    "subscribes": []
   },
+
   "ui_handlers": [
-    {
-      "domain": "gateways",
-      "action": "list",
-      "handler": "handleList"
-    },
-    {
-      "domain": "gateways",
-      "action": "status",
-      "handler": "handleStatus"
-    },
-    {
-      "domain": "gateways",
-      "action": "restart",
-      "handler": "handleRestart"
-    },
-    {
-      "domain": "gateways",
-      "action": "discover",
-      "handler": "handleDiscover"
-    }
+    { "domain": "gateways", "action": "list",     "handler": "handleList" },
+    { "domain": "gateways", "action": "status",   "handler": "handleStatus" },
+    { "domain": "gateways", "action": "restart",  "handler": "handleRestart" },
+    { "domain": "gateways", "action": "discover", "handler": "handleDiscover" }
   ],
+
+  "tools": [],
+
+  "dependencies": [],
+
   "config": {
     "gateways": {
-      "tcp": {
-        "enabled": false,
-        "autodiscovery": true,
-        "manual_devices": []
-      },
-      "ble": {
-        "enabled": false,
-        "manual_devices": []
-      },
-      "usb": {
-        "enabled": false,
-        "manual_devices": []
-      },
-      "cmd": {
-        "enabled": false,
-        "manual_devices": []
-      }
+      "tcp": { "enabled": false, "autodiscovery": true,  "manual_devices": [] },
+      "ble": { "enabled": false, "autodiscovery": false, "manual_devices": [] },
+      "usb": { "enabled": false, "autodiscovery": false, "manual_devices": [] },
+      "cmd": { "enabled": false, "autodiscovery": false, "manual_devices": [] }
     },
     "persistence": {
-      "pattern":           "in-memory",
+      "pattern": "in-memory",
       "restart_resilient": false,
-      "concurrency":       "single-writer",
-      "lost_on_restart":   ["gateways", "internalMetrics"]
+      "concurrency": "single-writer",
+      "lost_on_restart": ["gateways", "internalMetrics"]
     }
   },
+
   "observability": {
     "logging": {
       "level": "info",
-      "structured": true
+      "structured": true,
+      "correlation_id": true
     },
     "metrics": {
       "enabled": true,
       "counters": [
-        "gateway.started.total",
-        "gateway.devices_found.total",
-        "gateway.commands_processed.total",
-        "gateway.errors.total"
+        "gateway-manager.gateway.started",
+        "gateway-manager.gateway.restarted",
+        "gateway-manager.errors"
+      ],
+      "gauges": [
+        "gateway-manager.active_gateways"
       ]
     }
   }

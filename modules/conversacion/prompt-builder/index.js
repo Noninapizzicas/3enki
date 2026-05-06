@@ -1,5 +1,5 @@
 /**
- * prompt-builder
+ * prompt-builder v2.0.0 — Reescrito al canon (POC2 #11 del horizontal).
  *
  * Al arrancar:
  *   - escanea modules/ y carga base.prompt.json + prompt.json + context.json de cada módulo
@@ -9,9 +9,33 @@
  * En cada chat.message.saved:
  *   - resuelve el prompt: si payload.prompt es UUID → cache de usuario; si null → prompt.json del módulo
  *   - construye el system prompt: base + context.json + prompt + CONTEXTO ACTIVO
+ *   - acumula enriquecimientos de memorias modulares (chat.context.enriched) por message_id + priority
  *   - carga historial de la DB (los messages activos in_context=1, ordenados, hasta context_window)
- *   - publica chat.prompt.ready con los 9 campos (prompt = string final concatenado, + messages)
+ *   - publica chat.prompt.ready con shape canonico chat-flow v1.0.0
+ *
+ * Cumple los 24 contratos transversales:
+ *  - errors: bus handlers fail-soft (warn + return). Si futuro UI handler
+ *    se anyade, devuelve { status, data | error: { code, message, details? } }.
+ *  - observability: log + metric en cada error path. Prefix prompt-builder.*.
+ *    correlation_id propagado en chat.prompt.ready.
+ *  - events: chat.prompt.ready (chat-flow v1.0.0) + prompt.list.request
+ *    (par request/response correlacionado con prompt-manager).
+ *  - lifecycle: onLoad inicializa state desde FS; onUnload limpia pendingDb
+ *    + _pendingEnrichments sin leak.
+ *  - persistence: in-memory (caches reconstruibles desde FS + bus).
+ *
+ * 5 helpers POC2 transferibles:
+ *  _errorResponse, _handleHandlerError, _classifyHandlerError,
+ *  _publicarEvento, + auxiliar _resolveModule (slug → moduleName).
+ *
+ * Monolito (345 LOC) preservado en
+ * arquitectura/migracion/_legacy/conversacion__prompt-builder-monolito-pre-rewrite.js.bak
+ *
+ * Mapa exhaustivo (PASO 0 del rewrite) en
+ * arquitectura/migracion/notas/conversacion__prompt-builder-mapa.md
  */
+
+'use strict';
 
 const fs = require('fs');
 const path = require('path');
@@ -20,9 +44,10 @@ const crypto = require('crypto');
 class PromptBuilderModule {
   constructor() {
     this.name = 'prompt-builder';
-    this.version = '1.0.0';
-    this.logger = null;
-    this.eventBus = null;
+    this.version = '2.0.0';
+    this.logger    = null;
+    this.metrics   = null;
+    this.eventBus  = null;
 
     this._modulesDir = null;
     this._base = null;                  // base.prompt.json
@@ -31,12 +56,19 @@ class PromptBuilderModule {
     this._userPrompts = new Map();      // prompt_id → { id, name, content, ... }
 
     this.pendingDb = new Map();
+    this._pendingEnrichments = new Map();
+    this._listRequestId = null;
   }
 
   async onLoad(context) {
-    this.logger = context.logger;
-    this.eventBus = context.eventBus;
+    this.logger    = context.logger;
+    this.metrics   = context.metrics;
+    this.eventBus  = context.eventBus;
     this._modulesDir = context.moduleConfig?.modulesDir || path.join(__dirname, '../..');
+
+    this.logger.info('prompt-builder.loading', {
+      module: this.name, version: this.version
+    });
 
     this._loadBase();
     this._scanModules(this._modulesDir, '');
@@ -50,8 +82,23 @@ class PromptBuilderModule {
   }
 
   async onUnload() {
-    for (const { timeout } of this.pendingDb.values()) clearTimeout(timeout);
+    this.logger.info('prompt-builder.unloading', {
+      pending_db: this.pendingDb.size,
+      pending_enrichments: this._pendingEnrichments.size
+    });
+
+    const pending = Array.from(this.pendingDb.values());
     this.pendingDb.clear();
+    for (const { timeout, reject } of pending) {
+      clearTimeout(timeout);
+      try { reject(new Error('Module unloading')); }
+      catch (_) { this.metrics?.increment('prompt-builder.errors', { kind: 'unload_reject' }); }
+    }
+
+    this._pendingEnrichments.clear();
+    this._modulePrompts.clear();
+    this._moduleContexts.clear();
+    this._userPrompts.clear();
   }
 
   // ============================================================
@@ -64,6 +111,7 @@ class PromptBuilderModule {
       this._base = JSON.parse(fs.readFileSync(p, 'utf8'));
     } catch (err) {
       this.logger.warn('prompt-builder.base.missing', { error: err.message });
+      this.metrics?.increment('prompt-builder.errors', { kind: 'base_missing' });
     }
   }
 
@@ -114,16 +162,21 @@ class PromptBuilderModule {
   _requestUserPrompts() {
     const request_id = crypto.randomUUID();
     this._listRequestId = request_id;
-    this.eventBus.publish('prompt.list.request', { request_id }).catch(err =>
-      this.logger.warn('prompt-builder.list.failed', { error: err.message })
-    );
+    Promise.resolve(this.eventBus.publish('prompt.list.request', { request_id }))
+      .catch(err => {
+        this.logger.warn('prompt-builder.list.failed', { error: err.message });
+        this.metrics?.increment('prompt-builder.errors', { kind: 'list_publish' });
+      });
   }
 
   onPromptListResponse(event) {
     const { request_id, success, data } = event.data || event;
     if (request_id !== this._listRequestId) return;
     this._listRequestId = null;
-    if (!success || !data?.prompts) return;
+    if (!success || !data?.prompts) {
+      this.metrics?.increment('prompt-builder.errors', { kind: 'list_response_invalid' });
+      return;
+    }
     for (const p of data.prompts) {
       if (p.id) this._userPrompts.set(p.id, p);
     }
@@ -150,21 +203,31 @@ class PromptBuilderModule {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingDb.delete(request_id);
+        this.metrics?.increment('prompt-builder.errors', { kind: 'db_timeout' });
         reject(new Error('db timeout'));
       }, 8000);
       this.pendingDb.set(request_id, { resolve, reject, timeout });
-      this.eventBus.publish('db.query.request', { project_id, query, params, read_only: true, request_id });
+      Promise.resolve(this.eventBus.publish('db.query.request', {
+        project_id, query, params, read_only: true, request_id
+      })).catch(err => {
+        clearTimeout(timeout);
+        this.pendingDb.delete(request_id);
+        this.metrics?.increment('prompt-builder.errors', { kind: 'db_publish' });
+        reject(err);
+      });
     });
   }
 
   onDbQueryResponse(event) {
-    const { request_id, rows, error } = event.data || event;
+    const payload = event.data || event;
+    const { request_id, error } = payload;
     const pending = this.pendingDb.get(request_id);
     if (!pending) return;
     clearTimeout(pending.timeout);
     this.pendingDb.delete(request_id);
     if (error) pending.reject(new Error(error));
-    else pending.resolve(rows || []);
+    // database-manager publica las filas en `data`; aceptamos `rows` por compatibilidad
+    else pending.resolve(payload.data ?? payload.rows ?? []);
   }
 
   // ============================================================
@@ -214,20 +277,6 @@ class PromptBuilderModule {
   // Pipeline: chat.message.saved → chat.prompt.ready
   // ============================================================
 
-  /**
-   * onMessageSaved — handler de chat.message.saved (chat-flow v1.0.0).
-   *
-   * Espera shape canonico:
-   *   { correlation_id, conversation_id, project_id, user_id, channel,
-   *     channel_context, message_id, user_message, timestamp,
-   *     attachments?, intencion?, settings?, page_id?, prompt_id?,
-   *     page_context? }
-   *
-   * Construye el system prompt completo agregando:
-   *   1. base.prompt.json + module prompt + user prompt (cache interna)
-   *   2. context aportado por chat.context.enriched (memorias modulares)
-   *   3. Publica chat.prompt.ready con shape canonico para ai-gateway.
-   */
   async onMessageSaved(event) {
     const data = event.data || event;
     const {
@@ -235,7 +284,14 @@ class PromptBuilderModule {
       project_id, page_id, conversation_id, message_id, attachments, intencion, settings
     } = data;
 
-    if (!project_id || !conversation_id || !user_message) return;
+    if (!project_id || !conversation_id || !user_message) {
+      this.logger.warn('prompt-builder.message_saved.invalid_payload', {
+        has_project: !!project_id, has_conv: !!conversation_id, has_message: !!user_message,
+        correlation_id
+      });
+      this.metrics?.increment('prompt-builder.errors', { kind: 'invalid_payload', source: 'message_saved' });
+      return;
+    }
 
     const moduleName = this._resolveModule(page_id);
     const promptObj = this._resolvePromptContent(prompt_id ?? null, moduleName);
@@ -247,7 +303,7 @@ class PromptBuilderModule {
     // Agregar contexto aportado por memorias modulares (chat.context.enriched).
     // Las enriquecidas se acumulan en _pendingEnrichments por message_id desde
     // onContextEnriched. Aqui las recogemos y agregamos al system prompt por priority.
-    if (this._pendingEnrichments && message_id) {
+    if (message_id && this._pendingEnrichments.has(message_id)) {
       const list = this._pendingEnrichments.get(message_id) || [];
       const now = Date.now();
       const valid = list
@@ -256,8 +312,8 @@ class PromptBuilderModule {
       if (valid.length > 0) {
         const additions = valid.map(e => `[${e.source}]\n${e.context_addition}`).join('\n\n');
         systemPrompt = `${systemPrompt}\n\n--- contexto adicional aportado por memorias ---\n${additions}`;
-        this._pendingEnrichments.delete(message_id);
       }
+      this._pendingEnrichments.delete(message_id);
     }
 
     // Historial: ultimos N mensajes activos (excluyendo el que acabamos de guardar)
@@ -273,13 +329,12 @@ class PromptBuilderModule {
       history = rows.reverse().map(r => ({ role: r.role, content: r.content }));
     } catch (err) {
       this.logger.warn('prompt-builder.history.failed', { error: err.message, correlation_id });
+      this.metrics?.increment('prompt-builder.errors', { kind: 'history_load' });
     }
 
     const messages = [...history, { role: 'user', content: user_message }];
 
-    // chat.prompt.ready — shape canonico chat-flow v1.0.0
-    await this.eventBus.publish('chat.prompt.ready', {
-      correlation_id,
+    await this._publicarEvento('chat.prompt.ready', {
       conversation_id,
       project_id,
       user_id: user_id || 'default',
@@ -288,36 +343,30 @@ class PromptBuilderModule {
       message_id,
       system_prompt: systemPrompt,
       messages,
-      timestamp: new Date().toISOString(),
       // opcionales canonicos
       settings,
       intencion: intencion ?? undefined,
       attachments: attachments && attachments.length > 0 ? attachments : undefined
-    });
+    }, { correlation_id });
+    this.metrics?.increment('prompt-builder.prompt.ready');
   }
 
   /**
-   * onContextEnriched — handler de chat.context.enriched (chat-flow v1.0.0, NUEVO).
+   * onContextEnriched — handler de chat.context.enriched (chat-flow v1.0.0).
    *
    * Una memoria modular (memory-rag, memory-user-profile, memory-long-term, etc.)
    * publica este evento aportando contexto adicional para una conversation_id +
    * message_id concreta. prompt-builder agrega multiples enriquecimientos por
    * priority cuando construye el system prompt en onMessageSaved.
-   *
-   * Race condition: la memoria puede publicar chat.context.enriched ANTES o
-   * DESPUES de que llegue chat.message.saved. Se acumulan en _pendingEnrichments
-   * por message_id; cuando onMessageSaved se ejecuta para ese message_id, lee
-   * los acumulados y los limpia.
-   *
-   * Politica simple: se acepta enrichment hasta 30s tras message_id; pasado
-   * ese tiempo, se descarta (la respuesta ya fue construida o nunca llego).
    */
   async onContextEnriched(event) {
     const data = event.data || event;
     const { conversation_id, message_id, source, context_addition, priority } = data;
-    if (!message_id || !source || !context_addition) return;
+    if (!message_id || !source || !context_addition) {
+      this.metrics?.increment('prompt-builder.errors', { kind: 'invalid_payload', source: 'context_enriched' });
+      return;
+    }
 
-    if (!this._pendingEnrichments) this._pendingEnrichments = new Map();
     const list = this._pendingEnrichments.get(message_id) || [];
     list.push({
       source,
@@ -340,6 +389,46 @@ class PromptBuilderModule {
       }
     }
   }
+
+  // ==========================================
+  // Helpers POC2 (transferibles) + auxiliares
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
+  }
+
+  _handleHandlerError(logEvent, err, kind) {
+    const code    = err._code || this._classifyHandlerError(err);
+    const status  = code === 'VALIDATION_FAILED'      ? 400 :
+                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
+                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
+                    code === 'CONFLICT'               ? 409 :
+                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
+                                                        500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code });
+    this.metrics?.increment('prompt-builder.errors', { kind, code });
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
+    if (msg.includes('timeout') || msg.includes('unavailable')) return 'UPSTREAM_UNAVAILABLE';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    const enriched = { timestamp: new Date().toISOString(), ...payload };
+    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
+    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
+    await this.eventBus.publish(name, enriched);
+  }
 }
 
 module.exports = PromptBuilderModule;
+

@@ -43,6 +43,7 @@ const VALIDATORS = [
   { id: 'llm-flow',      file: 'arquitectura/decisiones/_validators/llm-flow.validate.js' },
   { id: 'tools',         file: 'arquitectura/decisiones/_validators/tools.validate.js' },
   { id: 'agents-config', file: 'arquitectura/decisiones/_validators/agents-config.validate.js' },
+  { id: 'module-rewrite', file: 'arquitectura/decisiones/_validators/module-rewrite.validate.js' },
   { id: 'frontend',      file: 'arquitectura/decisiones/_validators/frontend.validate.js' },
   { id: 'security',      file: 'arquitectura/decisiones/_validators/security.validate.js' },
   { id: 'testing',       file: 'arquitectura/decisiones/_validators/testing.validate.js' },

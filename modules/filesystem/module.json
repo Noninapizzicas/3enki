@@ -1,323 +1,201 @@
 {
   "name": "filesystem",
-  "version": "1.0.0",
-  "description": "Core filesystem operations for the entire system",
-  "author": "Aichat Team",
+  "version": "2.0.0",
+  "description": "Operaciones de filesystem para todo el sistema. Acceso scopeado por proyecto activo (storage/ subdir) + system mode (Sistema project = root). 14 ui_handlers + 14 tools del LLM + 14 bus handlers fs.*.request/response + 3 spanish handlers. v2.0.0: 5 helpers POC2, todos los handlers shape canonico { status, data | error: { code, message, details? } }, _publicarEvento canonical correlation_id + timestamp.",
+  "author": "Event Core Team",
   "language": "en",
   "main": "index.js",
-  "handlers": [
-    {
-      "domain": "fs",
-      "action": "list",
-      "method": "handleList"
-    },
-    {
-      "domain": "fs",
-      "action": "read",
-      "method": "handleRead"
-    },
-    {
-      "domain": "fs",
-      "action": "write",
-      "method": "handleWrite"
-    },
-    {
-      "domain": "fs",
-      "action": "delete",
-      "method": "handleDelete"
-    },
-    {
-      "domain": "fs",
-      "action": "mkdir",
-      "method": "handleMkdir"
-    },
-    {
-      "domain": "fs",
-      "action": "move",
-      "method": "handleMove"
-    },
-    {
-      "domain": "fs",
-      "action": "copy",
-      "method": "handleCopy"
-    },
-    {
-      "domain": "fs",
-      "action": "search",
-      "method": "handleSearch"
-    },
-    {
-      "domain": "fs",
-      "action": "info",
-      "method": "handleInfo"
-    },
-    {
-      "domain": "fs",
-      "action": "cleanup",
-      "method": "handleCleanup"
-    },
-    {
-      "domain": "fs",
-      "action": "stats",
-      "method": "handleStats"
-    },
-    {
-      "domain": "fs",
-      "action": "setWorkDir",
-      "method": "handleSetWorkDir"
-    },
-    {
-      "domain": "fs",
-      "action": "getWorkDir",
-      "method": "handleGetWorkDir"
-    }
+
+  "ui_handlers": [
+    { "domain": "fs", "action": "list",       "handler": "handleList" },
+    { "domain": "fs", "action": "read",       "handler": "handleRead" },
+    { "domain": "fs", "action": "write",      "handler": "handleWrite" },
+    { "domain": "fs", "action": "delete",     "handler": "handleDelete" },
+    { "domain": "fs", "action": "mkdir",      "handler": "handleMkdir" },
+    { "domain": "fs", "action": "move",       "handler": "handleMove" },
+    { "domain": "fs", "action": "copy",       "handler": "handleCopy" },
+    { "domain": "fs", "action": "search",     "handler": "handleSearch" },
+    { "domain": "fs", "action": "info",       "handler": "handleInfo" },
+    { "domain": "fs", "action": "append",     "handler": "handleAppend" },
+    { "domain": "fs", "action": "cleanup",    "handler": "handleCleanup" },
+    { "domain": "fs", "action": "stats",      "handler": "handleStats" },
+    { "domain": "fs", "action": "setWorkDir", "handler": "handleSetWorkDir" },
+    { "domain": "fs", "action": "getWorkDir", "handler": "handleGetWorkDir" }
   ],
+
   "tools": [
     {
       "name": "fs.list",
-      "description": "Lista archivos y carpetas de un directorio",
+      "description": "Lista archivos y carpetas de un directorio.",
       "handler": "handleList",
       "parameters": {
         "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Ruta del directorio",
-            "default": "/"
-          }
-        }
-      }
+        "properties": { "path": { "type": "string", "description": "Ruta del directorio", "default": "/" } }
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.read",
-      "description": "Lee el contenido de un archivo",
+      "description": "Lee el contenido de un archivo.",
       "handler": "handleRead",
       "parameters": {
         "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Ruta del archivo"
-          }
-        },
-        "required": [
-          "path"
-        ]
-      }
+        "properties": { "path": { "type": "string", "description": "Ruta del archivo" } },
+        "required": ["path"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.write",
-      "description": "Escribe contenido a un archivo (crea si no existe)",
+      "description": "Escribe contenido a un archivo (crea si no existe).",
       "handler": "handleWrite",
       "parameters": {
         "type": "object",
         "properties": {
-          "path": {
-            "type": "string",
-            "description": "Ruta del archivo"
-          },
-          "content": {
-            "type": "string",
-            "description": "Contenido a escribir"
-          }
+          "path":    { "type": "string", "description": "Ruta del archivo" },
+          "content": { "type": "string", "description": "Contenido a escribir" }
         },
-        "required": [
-          "path",
-          "content"
-        ]
-      }
+        "required": ["path", "content"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.delete",
-      "description": "Elimina un archivo o carpeta",
+      "description": "Elimina un archivo o carpeta.",
       "handler": "handleDelete",
       "confirmation": true,
       "parameters": {
         "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Ruta a eliminar"
-          }
-        },
-        "required": [
-          "path"
-        ]
-      }
+        "properties": { "path": { "type": "string", "description": "Ruta a eliminar" } },
+        "required": ["path"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.mkdir",
-      "description": "Crea un directorio",
+      "description": "Crea un directorio.",
       "handler": "handleMkdir",
       "parameters": {
         "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Ruta del directorio a crear"
-          }
-        },
-        "required": [
-          "path"
-        ]
-      }
+        "properties": { "path": { "type": "string", "description": "Ruta del directorio a crear" } },
+        "required": ["path"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.move",
-      "description": "Mueve un archivo o carpeta",
+      "description": "Mueve un archivo o carpeta.",
       "handler": "handleMove",
       "confirmation": true,
       "parameters": {
         "type": "object",
         "properties": {
-          "from": {
-            "type": "string",
-            "description": "Ruta origen"
-          },
-          "to": {
-            "type": "string",
-            "description": "Ruta destino"
-          }
+          "from": { "type": "string", "description": "Ruta origen" },
+          "to":   { "type": "string", "description": "Ruta destino" }
         },
-        "required": [
-          "from",
-          "to"
-        ]
-      }
+        "required": ["from", "to"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.copy",
-      "description": "Copia un archivo",
+      "description": "Copia un archivo.",
       "handler": "handleCopy",
       "parameters": {
         "type": "object",
         "properties": {
-          "from": {
-            "type": "string",
-            "description": "Ruta origen"
-          },
-          "to": {
-            "type": "string",
-            "description": "Ruta destino"
-          }
+          "from": { "type": "string", "description": "Ruta origen" },
+          "to":   { "type": "string", "description": "Ruta destino" }
         },
-        "required": [
-          "from",
-          "to"
-        ]
-      }
+        "required": ["from", "to"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.search",
-      "description": "Busca archivos por nombre o contenido",
+      "description": "Busca archivos por nombre o contenido.",
       "handler": "handleSearch",
       "parameters": {
         "type": "object",
         "properties": {
-          "query": {
-            "type": "string",
-            "description": "Texto a buscar"
-          },
-          "path": {
-            "type": "string",
-            "description": "Directorio base",
-            "default": "/"
-          },
-          "content": {
-            "type": "boolean",
-            "description": "Buscar en contenido",
-            "default": false
-          }
+          "query":   { "type": "string", "description": "Texto a buscar" },
+          "path":    { "type": "string", "description": "Directorio base", "default": "/" },
+          "content": { "type": "boolean", "description": "Buscar en contenido", "default": false }
         },
-        "required": [
-          "query"
-        ]
-      }
+        "required": ["query"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.info",
-      "description": "Obtiene informacion de un archivo o carpeta",
+      "description": "Obtiene informacion de un archivo o carpeta.",
       "handler": "handleInfo",
       "parameters": {
         "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Ruta del archivo o carpeta"
-          }
-        },
-        "required": [
-          "path"
-        ]
-      }
+        "properties": { "path": { "type": "string", "description": "Ruta del archivo o carpeta" } },
+        "required": ["path"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.cleanup",
-      "description": "Limpia archivos temporales del directorio temp que tengan más de N horas",
+      "description": "Limpia archivos temporales que tengan mas de N horas.",
       "handler": "handleCleanup",
       "parameters": {
         "type": "object",
         "properties": {
-          "path": {
-            "type": "string",
-            "description": "Ruta del directorio a limpiar",
-            "default": "/temp"
-          },
-          "max_age_hours": {
-            "type": "number",
-            "description": "Edad máxima en horas (archivos más viejos se eliminan)",
-            "default": 24
-          },
-          "dry_run": {
-            "type": "boolean",
-            "description": "Si es true, solo muestra qué se eliminaría sin eliminar",
-            "default": false
-          }
+          "path":          { "type": "string",  "description": "Ruta del directorio a limpiar", "default": "/temp" },
+          "max_age_hours": { "type": "number",  "description": "Edad maxima en horas",          "default": 24 },
+          "dry_run":       { "type": "boolean", "description": "Solo muestra que se eliminaria sin eliminar", "default": false }
         }
-      }
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.stats",
-      "description": "Obtiene estadísticas de uso del storage (tamaño total, conteo de archivos)",
+      "description": "Estadisticas de uso del storage (tamano total, conteo por extension, top largest files).",
       "handler": "handleStats",
       "parameters": {
         "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Ruta base para las estadísticas",
-            "default": "/"
-          }
-        }
-      }
+        "properties": { "path": { "type": "string", "description": "Ruta base", "default": "/" } }
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.setWorkDir",
-      "description": "Cambia el directorio de trabajo actual. Las rutas relativas se resolverán desde este directorio.",
+      "description": "Cambia el directorio de trabajo actual. Las rutas relativas se resuelven desde aqui.",
       "handler": "handleSetWorkDir",
       "parameters": {
         "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Nueva ruta de trabajo (absoluta o relativa)"
-          }
-        },
-        "required": [
-          "path"
-        ]
-      }
+        "properties": { "path": { "type": "string", "description": "Nueva ruta de trabajo" } },
+        "required": ["path"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     },
     {
       "name": "fs.getWorkDir",
-      "description": "Obtiene información del directorio de trabajo actual y contexto del proyecto activo",
+      "description": "Devuelve el directorio de trabajo actual y contexto del proyecto activo.",
       "handler": "handleGetWorkDir",
+      "parameters": { "type": "object", "properties": {} },
+      "errores_conocidos": ["INTERNAL_ERROR"]
+    },
+    {
+      "name": "fs.append",
+      "description": "Anyade contenido al final de un archivo (lo crea si no existe).",
+      "handler": "handleAppend",
       "parameters": {
         "type": "object",
-        "properties": {}
-      }
+        "properties": {
+          "path":     { "type": "string", "description": "Ruta del archivo" },
+          "content":  { "type": "string", "description": "Contenido a anyadir" },
+          "encoding": { "type": "string", "description": "Encoding (utf-8 default)", "default": "utf-8" }
+        },
+        "required": ["path", "content"]
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
     }
   ],
+
   "events": {
     "publishes": [
       "fs.file.created",
@@ -337,99 +215,70 @@
       "fs.info.response",
       "fs.append.response",
       "fs.search.response",
-      "fs.stats.response"
+      "fs.stats.response",
+      "archivo.listado",
+      "archivo.leido",
+      "archivo.borrado",
+      "archivo.listar.fallido",
+      "archivo.leer.fallido",
+      "archivo.borrar.fallido"
     ],
     "subscribes": [
-      {
-        "event": "project.activated",
-        "handler": "onProjectActivated"
-      },
-      {
-        "event": "project.deactivated",
-        "handler": "onProjectDeactivated"
-      },
-      {
-        "event": "archivo.listar.solicitado",
-        "handler": "onArchivoListarSolicitado"
-      },
-      {
-        "event": "archivo.leer.solicitado",
-        "handler": "onArchivoLeerSolicitado"
-      },
-      {
-        "event": "archivo.borrar.solicitado",
-        "handler": "onArchivoBorrarSolicitado"
-      },
-      {
-        "event": "fs.read.request",
-        "handler": "onReadRequest"
-      },
-      {
-        "event": "fs.write.request",
-        "handler": "onWriteRequest"
-      },
-      {
-        "event": "fs.copy.request",
-        "handler": "onCopyRequest"
-      },
-      {
-        "event": "fs.delete.request",
-        "handler": "onDeleteRequest"
-      },
-      {
-        "event": "fs.list.request",
-        "handler": "onListRequest"
-      },
-      {
-        "event": "fs.mkdir.request",
-        "handler": "onMkdirRequest"
-      },
-      {
-        "event": "fs.move.request",
-        "handler": "onMoveRequest"
-      },
-      {
-        "event": "fs.rename.request",
-        "handler": "onMoveRequest"
-      },
-      {
-        "event": "fs.exists.request",
-        "handler": "onExistsRequest"
-      },
-      {
-        "event": "fs.info.request",
-        "handler": "onInfoRequest"
-      },
-      {
-        "event": "fs.append.request",
-        "handler": "onAppendRequest"
-      },
-      {
-        "event": "fs.search.request",
-        "handler": "onSearchRequest"
-      },
-      {
-        "event": "fs.stats.request",
-        "handler": "onStatsRequest"
-      }
+      { "event": "project.activated",          "handler": "onProjectActivated" },
+      { "event": "project.deactivated",        "handler": "onProjectDeactivated" },
+      { "event": "archivo.listar.solicitado",  "handler": "onArchivoListarSolicitado" },
+      { "event": "archivo.leer.solicitado",    "handler": "onArchivoLeerSolicitado" },
+      { "event": "archivo.borrar.solicitado",  "handler": "onArchivoBorrarSolicitado" },
+      { "event": "fs.read.request",            "handler": "onReadRequest" },
+      { "event": "fs.write.request",           "handler": "onWriteRequest" },
+      { "event": "fs.copy.request",            "handler": "onCopyRequest" },
+      { "event": "fs.delete.request",          "handler": "onDeleteRequest" },
+      { "event": "fs.list.request",            "handler": "onListRequest" },
+      { "event": "fs.mkdir.request",           "handler": "onMkdirRequest" },
+      { "event": "fs.move.request",            "handler": "onMoveRequest" },
+      { "event": "fs.rename.request",          "handler": "onMoveRequest" },
+      { "event": "fs.exists.request",          "handler": "onExistsRequest" },
+      { "event": "fs.info.request",            "handler": "onInfoRequest" },
+      { "event": "fs.append.request",          "handler": "onAppendRequest" },
+      { "event": "fs.search.request",          "handler": "onSearchRequest" },
+      { "event": "fs.stats.request",           "handler": "onStatsRequest" }
     ]
   },
-  "ui": {
-    "zone": "work-bar",
-    "icon": "📁"
+
+  "ui": { "zone": "work-bar", "icon": "📁" },
+
+  "config": {
+    "persistence": {
+      "pattern": "filesystem-real-per-project",
+      "restart_resilient": true,
+      "concurrency": "single-writer-per-path",
+      "lost_on_restart": ["activeProjectId", "activeProjectPath", "workingDirectory", "systemMode"]
+    }
   },
+
   "observability": {
     "logging": {
       "level": "info",
-      "structured": true
+      "structured": true,
+      "correlation_id": true
+    },
+    "tracing": {
+      "propaga_correlation_id": true
     },
     "metrics": {
       "enabled": true,
       "counters": [
-        "fs.read.total",
-        "fs.write.total",
-        "fs.delete.total",
-        "fs.error.total"
+        "filesystem.list.success",
+        "filesystem.read.success",
+        "filesystem.write.success",
+        "filesystem.delete.success",
+        "filesystem.mkdir.success",
+        "filesystem.move.success",
+        "filesystem.copy.success",
+        "filesystem.search.success",
+        "filesystem.append.success",
+        "filesystem.cleanup.success",
+        "filesystem.errors"
       ]
     }
   }

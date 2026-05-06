@@ -28,7 +28,7 @@ const ClaudeCliProvider = require('./providers/claude-cli-provider');
 class AiGatewayModule {
   constructor() {
     this.name = 'ai-gateway';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
     this.logger = null;
     this.eventBus = null;
     this.config = null;
@@ -584,26 +584,41 @@ class AiGatewayModule {
   async onLlmCompleteRequest(event) {
     const data = event.data || event;
     const {
-      request_id, system, messages, tools, settings,
+      request_id, correlation_id, system, messages, tools, settings,
       attachments, project_id, conversation_id, page_id, provider: providerName
     } = data;
 
-    let result, error = null;
+    if (!request_id) {
+      this.logger.warn('ai-gateway.llm.invalid_payload', { has_request_id: false });
+      return;
+    }
+
+    const cid = correlation_id || crypto.randomUUID();
+    const started = Date.now();
+
     try {
-      result = await this._executeLLM({
+      const result = await this._executeLLM({
         system, messages, tools, settings, attachments,
         project_id, conversation_id, page_id, providerName
       });
-    } catch (err) {
-      error = err.message;
-      this.logger.error('ai-gateway.llm.failed', { error, request_id });
-    }
 
-    await this.eventBus.publish('llm.complete.response', {
-      request_id,
-      success: !error,
-      ...(error ? { error } : { ...result })
-    });
+      await this._publicarEvento('llm.complete.response', {
+        request_id,
+        ...result,
+        duration_ms: Date.now() - started
+      }, { correlation_id: cid });
+    } catch (err) {
+      const error = this._classifyExecutionError(err);
+      this.logger.error('ai-gateway.llm.failed', {
+        error: error.message, code: error.code, request_id, correlation_id: cid
+      });
+
+      await this._publicarEvento('llm.complete.failed', {
+        request_id,
+        error,
+        duration_ms: Date.now() - started
+      }, { correlation_id: cid });
+    }
   }
 
   // ============================================================
@@ -703,6 +718,57 @@ class AiGatewayModule {
       if (await e.provider.isAvailable({ projectId })) return { name: e.name, provider: e.provider };
     }
     throw new Error('No hay providers de embeddings disponibles. Verifica las API keys (gemini, openai).');
+  }
+
+  // ============================================================
+  // Helpers POC2 (transferibles) + auxiliares del dominio
+  // ============================================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
+  }
+
+  _handleHandlerError(logEvent, err, kind) {
+    const code    = err._code || this._classifyHandlerError(err);
+    const status  = code === 'VALIDATION_FAILED'      ? 400 :
+                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
+                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
+                    code === 'CONFLICT'               ? 409 :
+                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
+                                                        500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code });
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
+    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
+    if (msg.includes('unavailable') || msg.includes('not available')) return 'UPSTREAM_UNAVAILABLE';
+    return 'INTERNAL_ERROR';
+  }
+
+  // Helper auxiliar especifico del dominio LLM:
+  // mapea errores de providers/HTTP/CLI a codigos canonicos del agentic loop.
+  // Renombrado de _classifyError para alinear con el contrato POC2
+  // (HELPERS_AUXILIARES). Preserva los codes existentes consumidos por chat
+  // y embedding paths.
+  _classifyExecutionError(err) {
+    return this._classifyError(err);
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    const enriched = {
+      timestamp: new Date().toISOString(),
+      ...payload
+    };
+    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
+    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
+    await this.eventBus.publish(name, enriched);
   }
 }
 

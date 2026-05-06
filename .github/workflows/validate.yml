@@ -38,6 +38,9 @@ jobs:
       - name: Run unit tests (credential-manager — descomposicion canonica)
         run: npm run test:credential-manager
 
+      - name: Run unit tests (project-manager — reescritura canonica)
+        run: npm run test:project-manager
+
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc
 

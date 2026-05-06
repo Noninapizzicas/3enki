@@ -1,298 +1,88 @@
 {
   "name": "project-manager",
-  "version": "3.0.0",
-  "description": "Project lifecycle management: CRUD, session, features/blueprints, directories. Consumes composition-manager and context-manager via events.",
-  "author": "Aichat Team",
+  "version": "4.0.0",
+  "description": "Project lifecycle management canónico: CRUD + activate/deactivate + session + AI config + bootstrap (Sistema + Mi Proyecto) + resolución 'una vía fija' de default conversation. Consume composition-manager y database-manager via events.",
+  "author": "Event Core Team",
   "language": "en",
   "main": "index.js",
-  "provides": {
-    "events": [
-      "project.created",
-      "project.updated",
-      "project.deleted",
-      "project.activated",
-      "project.deactivated"
-    ],
-    "queries": [
-      "project.get.request",
-      "project.list.request",
-      "project.active.request"
-    ]
-  },
+
   "events": {
     "publishes": [
-      {
-        "event": "project.created",
-        "description": "Project created successfully",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/project_created"
-        }
-      },
-      {
-        "event": "project.updated",
-        "description": "Project metadata updated",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/project_updated"
-        }
-      },
-      {
-        "event": "project.deleted",
-        "description": "Project deleted",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/project_deleted"
-        }
-      },
-      {
-        "event": "project.activated",
-        "description": "Project activated (set as current)",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/project_activated"
-        }
-      },
-      {
-        "event": "project.deactivated",
-        "description": "Project deactivated",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/project_deactivated"
-        }
-      },
-      {
-        "event": "project.get.response",
-        "description": "Response with project details",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/project_get_response"
-        }
-      },
-      {
-        "event": "project.list.response",
-        "description": "Response with projects list",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/project_list_response"
-        }
-      },
-      {
-        "event": "project.active.response",
-        "description": "Response with active project ID",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/project_active_response"
-        }
-      },
-      {
-        "event": "project/state",
-        "description": "UI state: list of projects with active project"
-      }
+      { "event": "project.created",     "description": "Proyecto creado. Payload: { project_id, name, description, parent_project_id, created_at, correlation_id, timestamp }." },
+      { "event": "project.updated",     "description": "Proyecto actualizado. Payload incluye updated_fields." },
+      { "event": "project.deleted",     "description": "Proyecto eliminado." },
+      { "event": "project.activated",   "description": "Proyecto activado. Re-emitido al arrancar para todos los proyectos con is_active=1." },
+      { "event": "project.deactivated", "description": "Proyecto desactivado." },
+      { "event": "project.state",       "description": "Snapshot del estado completo (todos los proyectos + activeProjectIds). Publicado tras CRUD." },
+      "project.get.response",
+      "project.list.response",
+      "project.active.response",
+      "db.query.request",
+      "db.schema.init.request",
+      "composition.request"
     ],
     "subscribes": [
-      {
-        "event": "project.get.request",
-        "description": "Get project details by ID",
-        "handler": "onGetProjectRequest"
-      },
-      {
-        "event": "project.list.request",
-        "description": "List all projects",
-        "handler": "onListProjectsRequest"
-      },
-      {
-        "event": "project.active.request",
-        "description": "Get active project ID",
-        "handler": "onGetActiveProjectRequest"
-      },
-      {
-        "event": "db.query.response",
-        "description": "Database query responses",
-        "handler": "onDbQueryResponse"
-      },
-      {
-        "event": "composition.response",
-        "description": "Responses from composition-manager",
-        "handler": "onCompositionResponse"
-      },
-      {
-        "event": "project/state/request",
-        "description": "UI requests project state",
-        "handler": "onProjectStateRequest"
-      },
-      {
-        "event": "project/create",
-        "description": "UI creates project via MQTT",
-        "handler": "onProjectCreate"
-      },
-      {
-        "event": "project/update",
-        "description": "UI updates project via MQTT",
-        "handler": "onProjectUpdate"
-      },
-      {
-        "event": "project/delete",
-        "description": "UI deletes project via MQTT",
-        "handler": "onProjectDelete"
-      },
-      {
-        "event": "project/activate",
-        "description": "UI activates project via MQTT",
-        "handler": "onProjectActivate"
-      }
+      { "event": "project.create",            "handler": "onProjectCreate" },
+      { "event": "project.update",            "handler": "onProjectUpdate" },
+      { "event": "project.delete",            "handler": "onProjectDelete" },
+      { "event": "project.activate",          "handler": "onProjectActivate" },
+      { "event": "project.state.request",     "handler": "onProjectStateRequest" },
+      { "event": "project.get.request",       "handler": "onGetProjectRequest" },
+      { "event": "project.list.request",      "handler": "onListProjectsRequest" },
+      { "event": "project.active.request",    "handler": "onGetActiveProjectRequest" },
+      { "event": "db.query.response",         "handler": "onDbQueryResponse" },
+      { "event": "composition.response",      "handler": "onCompositionResponse" }
     ]
   },
-  "ui_handlers": [
-    {
-      "domain": "project",
-      "action": "list",
-      "handler": "handleUIList"
-    },
-    {
-      "domain": "project",
-      "action": "get",
-      "handler": "handleUIGet"
-    },
-    {
-      "domain": "project",
-      "action": "create",
-      "handler": "handleUICreate"
-    },
-    {
-      "domain": "project",
-      "action": "update",
-      "handler": "handleUIUpdate"
-    },
-    {
-      "domain": "project",
-      "action": "delete",
-      "handler": "handleUIDelete"
-    },
-    {
-      "domain": "project",
-      "action": "activate",
-      "handler": "handleUIActivate"
-    },
-    {
-      "domain": "project",
-      "action": "deactivate",
-      "handler": "handleUIDeactivate"
-    },
-    {
-      "domain": "system",
-      "action": "getUnassigned",
-      "handler": "handleUIGetUnassigned"
-    },
-    {
-      "domain": "project",
-      "action": "add-features",
-      "handler": "handleUIAddFeatures"
-    },
-    {
-      "domain": "project",
-      "action": "list-features",
-      "handler": "handleUIListFeatures"
-    },
-    {
-      "domain": "project",
-      "action": "saveSession",
-      "handler": "handleUISaveSession"
-    },
-    {
-      "domain": "project",
-      "action": "restoreSession",
-      "handler": "handleUIRestoreSession"
-    },
-    {
-      "domain": "project",
-      "action": "get-default-conversation",
-      "handler": "handleUIGetDefaultConversation",
-      "description": "Modelo 'una via fija' (agent-flow v1.3.0): devuelve conversation_id canonica del proyecto. Si no existe, la crea via mqttRequest a chat-io. Llamado por ai-agent-framework cuando llega agent.execute.request con project_id pero sin conversation_id."
-    },
-    {
-      "domain": "project",
-      "action": "setAIConfig",
-      "handler": "handleUISetAIConfig"
-    },
-    {
-      "domain": "project",
-      "action": "setLastConversation",
-      "handler": "handleUISetLastConversation"
-    }
-  ],
+
   "apis": [
-    {
-      "method": "POST",
-      "path": "/projects",
-      "handler": "handleCreateProject",
-      "description": "Create new project"
-    },
-    {
-      "method": "GET",
-      "path": "/projects",
-      "handler": "handleListProjects",
-      "description": "List all projects"
-    },
-    {
-      "method": "GET",
-      "path": "/projects/:id",
-      "handler": "handleGetProject",
-      "description": "Get project details"
-    },
-    {
-      "method": "PUT",
-      "path": "/projects/:id",
-      "handler": "handleUpdateProject",
-      "description": "Update project metadata"
-    },
-    {
-      "method": "DELETE",
-      "path": "/projects/:id",
-      "handler": "handleDeleteProject",
-      "description": "Delete project"
-    },
-    {
-      "method": "POST",
-      "path": "/projects/:id/activate",
-      "handler": "handleActivateProject",
-      "description": "Activate project"
-    },
-    {
-      "method": "GET",
-      "path": "/projects/active",
-      "handler": "handleGetActiveProject",
-      "description": "Get currently active project"
-    },
-    {
-      "method": "POST",
-      "path": "/projects/:id/session",
-      "handler": "handleSaveSession",
-      "description": "Save project session state"
-    },
-    {
-      "method": "GET",
-      "path": "/projects/:id/session",
-      "handler": "handleRestoreSession",
-      "description": "Restore project session state"
-    },
-    {
-      "method": "PUT",
-      "path": "/projects/:id/ai-config",
-      "handler": "handleSetAIConfig",
-      "description": "Set AI configuration override"
-    },
-    {
-      "method": "PUT",
-      "path": "/projects/:id/last-conversation",
-      "handler": "handleSetLastConversation",
-      "description": "Update last active conversation ID"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check endpoint"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Module metrics"
-    }
+    { "method": "POST",   "path": "/projects",                          "handler": "handleCreateProject",       "description": "Crear proyecto." },
+    { "method": "GET",    "path": "/projects",                          "handler": "handleListProjects",        "description": "Listar todos los proyectos." },
+    { "method": "GET",    "path": "/projects/:id",                      "handler": "handleGetProject",          "description": "Obtener proyecto por id o slug." },
+    { "method": "PUT",    "path": "/projects/:id",                      "handler": "handleUpdateProject",       "description": "Actualizar proyecto." },
+    { "method": "DELETE", "path": "/projects/:id",                      "handler": "handleDeleteProject",       "description": "Eliminar proyecto." },
+    { "method": "POST",   "path": "/projects/:id/activate",             "handler": "handleActivateProject",     "description": "Activar proyecto." },
+    { "method": "GET",    "path": "/projects/active",                   "handler": "handleGetActiveProject",    "description": "Obtener proyectos activos." },
+    { "method": "POST",   "path": "/projects/:id/session",              "handler": "handleSaveSession",         "description": "Guardar session_state del proyecto." },
+    { "method": "GET",    "path": "/projects/:id/session",              "handler": "handleRestoreSession",      "description": "Restaurar session_state del proyecto." },
+    { "method": "POST",   "path": "/projects/:id/ai-config",            "handler": "handleSetAIConfig",         "description": "Set provider/model/prompt_id por proyecto." },
+    { "method": "POST",   "path": "/projects/:id/last-conversation",    "handler": "handleSetLastConversation", "description": "Set last_conversation_id del proyecto." },
+    { "method": "GET",    "path": "/health",                            "handler": "handleHealthCheck",         "description": "Health check." },
+    { "method": "GET",    "path": "/metrics",                           "handler": "handleGetMetrics",          "description": "Metricas." }
   ],
+
+  "ui_handlers": [
+    { "domain": "project", "action": "list",                       "handler": "handleUIList" },
+    { "domain": "project", "action": "get",                        "handler": "handleUIGet" },
+    { "domain": "project", "action": "create",                     "handler": "handleUICreate" },
+    { "domain": "project", "action": "update",                     "handler": "handleUIUpdate" },
+    { "domain": "project", "action": "delete",                     "handler": "handleUIDelete" },
+    { "domain": "project", "action": "activate",                   "handler": "handleUIActivate" },
+    { "domain": "project", "action": "deactivate",                 "handler": "handleUIDeactivate" },
+    { "domain": "project", "action": "save-session",               "handler": "handleUISaveSession" },
+    { "domain": "project", "action": "restore-session",            "handler": "handleUIRestoreSession" },
+    { "domain": "project", "action": "set-ai-config",              "handler": "handleUISetAIConfig" },
+    { "domain": "project", "action": "set-last-conversation",      "handler": "handleUISetLastConversation" },
+    { "domain": "project", "action": "get-default-conversation",   "handler": "handleUIGetDefaultConversation" },
+    { "domain": "project", "action": "get-unassigned",             "handler": "handleUIGetUnassigned" }
+  ],
+
+  "tools": [],
+
+  "dependencies": ["database-manager", "composition-manager"],
+
+  "config": {
+    "dbTimeout": 10000,
+    "compositionTimeout": 10000,
+    "defaultSchema": null,
+    "persistence": {
+      "pattern": "delegated-via-database-manager",
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["pendingDbRequests", "pendingCompositionRequests", "pendingDefaultConversations"]
+    }
+  },
+
   "observability": {
     "logging": {
       "level": "info",
@@ -302,22 +92,17 @@
     "metrics": {
       "enabled": true,
       "counters": [
-        "project.created.total",
-        "project.updated.total",
-        "project.deleted.total",
-        "project.activated.total"
+        "project-manager.created",
+        "project-manager.updated",
+        "project-manager.deleted",
+        "project-manager.activated",
+        "project-manager.deactivated",
+        "project-manager.errors"
       ],
       "gauges": [
-        "project.active.count",
-        "project.total.count"
+        "project-manager.projects.total",
+        "project-manager.projects.active"
       ]
     }
-  },
-  "config": {
-    "dbTimeout": 10000,
-    "compositionTimeout": 10000,
-    "maxProjects": 1000,
-    "defaultSchema": "",
-    "projectsBasePath": "./data/projects"
   }
 }

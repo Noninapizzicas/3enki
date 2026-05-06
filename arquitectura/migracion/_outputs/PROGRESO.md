@@ -1,33 +1,34 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-06T06:45:04Z_
+_Última regeneración: 2026-05-06T07:02:55Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
-- **Migrados**: 11 / 73 (15%)
-- **Drifts cerrados**: 235 / 3862 (6%)
-- **Drifts restantes en baseline**: 3627
+- **Migrados**: 12 / 73 (16%)
+- **Drifts cerrados**: 264 / 3783 (7%)
+- **Drifts restantes en baseline**: 3519
 
 ### Progreso por capa
 
 | Capa | Done | Total | % |
 |------|------|-------|---|
-| core | 7 | 16 | 44% `█████████░░░░░░░░░░░` |
+| core | 8 | 16 | 50% `██████████░░░░░░░░░░` |
 | infra | 2 | 16 | 13% `███░░░░░░░░░░░░░░░░░` |
 | dominio | 2 | 38 | 5% `█░░░░░░░░░░░░░░░░░░░` |
 | tooling | 0 | 3 | 0% `░░░░░░░░░░░░░░░░░░░░` |
 
-## Módulos migrados (11)
+## Módulos migrados (12)
 
 | # | Capa | Slug | LOC | Drifts antes → ahora | Commit |
 |---|------|------|-----|----------------------|--------|
 | 1 | core | `conversacion__ai-agent-framework` | 611 | 136 → 37 (-73%) | `af2f52a` 2026-05-03 |
-| 4 | core | `scheduler` | 907 | 96 → 23 (-76%) | `077b2b4` 2026-05-04 |
-| 7 | core | `credential-manager` | 843 | 28 → 12 (-57%) | _n/a_ |
-| 10 | core | `conversacion__agent-observer` | 217 | 0 → 0 (-0%) | `54b7b7c` 2026-05-03 |
-| 13 | core | `conversacion__memory-user-profile` | 192 | 0 → 0 (-0%) | `6120cbd` 2026-05-03 |
+| 3 | core | `scheduler` | 907 | 96 → 23 (-76%) | `077b2b4` 2026-05-04 |
+| 6 | core | `credential-manager` | 843 | 28 → 12 (-57%) | `069f8c8` 2026-05-06 |
+| 9 | core | `conversacion__agent-observer` | 217 | 0 → 0 (-0%) | `54b7b7c` 2026-05-03 |
+| 12 | core | `conversacion__memory-user-profile` | 192 | 0 → 0 (-0%) | `6120cbd` 2026-05-03 |
+| 13 | core | `project-manager` | 1307 | 49 → 20 (-59%) | _n/a_ |
 | 15 | core | `conversacion__memory-conversation-summary` | 288 | 0 → 0 (-0%) | `3e988d8` 2026-05-04 |
 | 16 | core | `conversacion__memory-rag` | 381 | 0 → 0 (-0%) | `d131ebc` 2026-05-04 |
 | 20 | infra | `certificate-authority` | 409 | 61 → 24 (-61%) | `bc7b712` 2026-04-20 |
@@ -35,26 +36,25 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 65 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
 | 67 | dominio | `pizzepos__cocina-poc` | 452 | 0 → 0 (-0%) | `5437466` 2026-05-02 |
 
-## Próximos en la cola (top 10 de 62 pendientes)
+## Próximos en la cola (top 10 de 61 pendientes)
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
-| 2 | core | `project-manager` | 1270 | 128 | 0 | sin tests/unit/ |
-| 3 | core | `database-manager` | 1322 | 105 | 0 | sin tests/unit/ |
-| 5 | core | `composition-manager` | 710 | 71 | 0 | sin tests/unit/ |
-| 6 | core | `gateway-manager` | 312 | 44 | 0 | sin tests/unit/ |
-| 8 | core | `plugin-manager` | 516 | 23 | 0 | sin tests/unit/ |
-| 9 | core | `conversacion__ai-gateway` | 710 | 19 | 0 | sin tests/unit/ |
-| 11 | core | `conversacion__chat-io` | 654 | 52 | 1 | drifts 32/52 (62%) — esperado <50% |
-| 12 | core | `channel-manager` | 493 | 29 | 1 | sin tests/unit/ |
+| 2 | core | `database-manager` | 1322 | 105 | 0 | sin tests/unit/ |
+| 4 | core | `composition-manager` | 710 | 71 | 0 | sin tests/unit/ |
+| 5 | core | `gateway-manager` | 312 | 44 | 0 | sin tests/unit/ |
+| 7 | core | `plugin-manager` | 516 | 23 | 0 | sin tests/unit/ |
+| 8 | core | `conversacion__ai-gateway` | 710 | 19 | 0 | sin tests/unit/ |
+| 10 | core | `conversacion__chat-io` | 654 | 52 | 1 | drifts 32/52 (62%) — esperado <50% |
+| 11 | core | `channel-manager` | 493 | 29 | 1 | sin tests/unit/ |
 | 14 | core | `conversacion__prompt-builder` | 346 | 12 | 2 | drifts 7/12 (58%) — esperado <50% |
 | 17 | infra | `filesystem` | 1290 | 195 | 0 | sin tests/unit/ |
+| 18 | infra | `firmware-manager` | 1094 | 120 | 0 | drifts 86/120 (72%) — esperado <50% |
 
-<details><summary>Resto de pendientes (52 módulos)</summary>
+<details><summary>Resto de pendientes (51 módulos)</summary>
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
-| 18 | infra | `firmware-manager` | 1094 | 120 | 0 |
 | 19 | infra | `esp32-dev` | 735 | 82 | 0 |
 | 21 | infra | `device-shadow` | 478 | 53 | 0 |
 | 22 | infra | `code-executor` | 618 | 52 | 0 |
@@ -144,14 +144,14 @@ Suite organizada en grupos:
 
 ## Decisiones pendientes / siguiente sesión
 
-**Próximo módulo recomendado**: `project-manager` (capa core, 1270 LOC, 128 drifts en baseline).
+**Próximo módulo recomendado**: `database-manager` (capa core, 1322 LOC, 105 drifts en baseline).
 
 Pasos canónicos para el siguiente:
 
-1. Leer auditoría completa: `arquitectura/auditoria/_outputs/modulo-completo/project-manager.json`
-2. Identificar drifts del módulo: `node -e "const b=require('./drift-baseline.json').signatures; console.log(b.filter(s=>s.includes('project-manager')))"`
+1. Leer auditoría completa: `arquitectura/auditoria/_outputs/modulo-completo/database-manager.json`
+2. Identificar drifts del módulo: `node -e "const b=require('./drift-baseline.json').signatures; console.log(b.filter(s=>s.includes('database-manager')))"`
 3. Aplicar los 5 helpers privados canónicos + reescritura siguiendo plantilla `modules/_template/`.
-4. Tests por capas en `tests/unit/project-manager.test.js`.
+4. Tests por capas en `tests/unit/database-manager.test.js`.
 5. Wire en `package.json` + `.github/workflows/validate.yml`.
 6. Verificar drifts del módulo bajan ≥70%.
 7. Commit + push + regenerar este PROGRESO.md.

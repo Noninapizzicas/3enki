@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T06:45:04.234Z",
+  "generated_at": "2026-05-06T07:02:53.806Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3862,
-    "loc_total": 48536,
+    "drifts_total": 3783,
+    "loc_total": 48573,
     "tools_total": 147,
     "agents_total": 30
   },
@@ -38,21 +38,6 @@
       "orden_migracion": 1
     },
     {
-      "slug": "project-manager",
-      "path": "modules/project-manager",
-      "layer": "core",
-      "language": "en",
-      "version": "3.0.0",
-      "loc": 1270,
-      "drifts": 128,
-      "events_publishes": 9,
-      "events_subscribes": 10,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 2
-    },
-    {
       "slug": "database-manager",
       "path": "modules/database-manager",
       "layer": "core",
@@ -65,7 +50,7 @@
       "tools": 4,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 3
+      "orden_migracion": 2
     },
     {
       "slug": "scheduler",
@@ -80,7 +65,7 @@
       "tools": 3,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 4
+      "orden_migracion": 3
     },
     {
       "slug": "composition-manager",
@@ -95,7 +80,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 5
+      "orden_migracion": 4
     },
     {
       "slug": "gateway-manager",
@@ -110,7 +95,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 6
+      "orden_migracion": 5
     },
     {
       "slug": "credential-manager",
@@ -125,7 +110,7 @@
       "tools": 1,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 7
+      "orden_migracion": 6
     },
     {
       "slug": "plugin-manager",
@@ -140,7 +125,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 8
+      "orden_migracion": 7
     },
     {
       "slug": "conversacion__ai-gateway",
@@ -155,7 +140,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 9
+      "orden_migracion": 8
     },
     {
       "slug": "conversacion__agent-observer",
@@ -170,7 +155,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 10
+      "orden_migracion": 9
     },
     {
       "slug": "conversacion__chat-io",
@@ -187,7 +172,7 @@
       "dependencies": [
         "database-manager"
       ],
-      "orden_migracion": 11
+      "orden_migracion": 10
     },
     {
       "slug": "channel-manager",
@@ -204,7 +189,7 @@
       "dependencies": [
         "database-manager"
       ],
-      "orden_migracion": 12
+      "orden_migracion": 11
     },
     {
       "slug": "conversacion__memory-user-profile",
@@ -220,6 +205,24 @@
       "agents": 0,
       "dependencies": [
         "database-manager"
+      ],
+      "orden_migracion": 12
+    },
+    {
+      "slug": "project-manager",
+      "path": "modules/project-manager",
+      "layer": "core",
+      "language": "en",
+      "version": "4.0.0",
+      "loc": 1307,
+      "drifts": 49,
+      "events_publishes": 12,
+      "events_subscribes": 10,
+      "tools": 0,
+      "agents": 0,
+      "dependencies": [
+        "database-manager",
+        "composition-manager"
       ],
       "orden_migracion": 13
     },

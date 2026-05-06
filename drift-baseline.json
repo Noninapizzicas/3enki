@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-06T14:15:20.889Z",
-  "total": 3762,
+  "generated_at": "2026-05-06T14:34:19.211Z",
+  "total": 3763,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -15,7 +15,7 @@
     "llm-flow": 3,
     "tools": 275,
     "agents-config": 94,
-    "module-rewrite": 31,
+    "module-rewrite": 32,
     "frontend": 522,
     "security": 1,
     "testing": 30,
@@ -27,7 +27,7 @@
   },
   "by_severity": {
     "warning": 3427,
-    "info": 352,
+    "info": 353,
     "error": 10
   },
   "signatures": [
@@ -2729,6 +2729,7 @@
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|channel-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|composition-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|conversacion__chat-io — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
+    "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|conversacion__prompt-builder — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|esp32-dev — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|esp32-flasher — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|firmware-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
@@ -3125,7 +3126,7 @@
     "observability|drift_log_spam_en_bucle|channel-manager modules/channel-manager/index.js:203 — bucle con this.logger en línea 207",
     "observability|drift_log_spam_en_bucle|code-executor modules/code-executor/index.js:48 — bucle con this.logger en línea 51",
     "observability|drift_log_spam_en_bucle|conversacion/ai-agent-framework modules/conversacion/ai-agent-framework/index.js:153 — bucle con this.logger en línea 157",
-    "observability|drift_log_spam_en_bucle|conversacion/prompt-builder modules/conversacion/prompt-builder/index.js:127 — bucle con this.logger en línea 130",
+    "observability|drift_log_spam_en_bucle|conversacion/prompt-builder modules/conversacion/prompt-builder/index.js:180 — bucle con this.logger en línea 183",
     "observability|drift_log_spam_en_bucle|conversation-export modules/conversation-export/index.js:126 — bucle con this.logger en línea 129",
     "observability|drift_log_spam_en_bucle|database-manager modules/database-manager/index.js:87 — bucle con this.logger en línea 91",
     "observability|drift_log_spam_en_bucle|device-registry modules/device-registry/index.js:603 — bucle con this.logger en línea 608",

@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-06T14:15:27Z_
+_Última regeneración: 2026-05-06T14:34:27Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 17 / 73 (23%)
-- **Drifts cerrados**: 381 / 3678 (10%)
-- **Drifts restantes en baseline**: 3297
+- **Drifts cerrados**: 381 / 3679 (10%)
+- **Drifts restantes en baseline**: 3298
 
 ### Progreso por capa
 
@@ -31,7 +31,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 7 | core | `gateway-manager` | 429 | 13 → 2 (-85%) | `8aa2b74` 2026-05-06 |
 | 9 | core | `conversacion__agent-observer` | 217 | 0 → 0 (-0%) | `54b7b7c` 2026-05-03 |
 | 10 | core | `channel-manager` | 590 | 34 → 17 (-50%) | `e7b3570` 2026-05-06 |
-| 11 | core | `conversacion__chat-io` | 758 | 30 → 10 (-67%) | _n/a_ |
+| 11 | core | `conversacion__chat-io` | 758 | 30 → 10 (-67%) | `562b8a2` 2026-05-06 |
 | 12 | core | `conversacion__memory-user-profile` | 192 | 0 → 0 (-0%) | `6120cbd` 2026-05-03 |
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
 | 15 | core | `conversacion__memory-conversation-summary` | 288 | 0 → 0 (-0%) | `3e988d8` 2026-05-04 |
@@ -47,7 +47,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 |---|------|------|-----|--------|------|------------------|
 | 6 | core | `conversacion__ai-gateway` | 776 | 17 | 0 | drifts 13/17 (76%) — esperado <50% |
 | 8 | core | `plugin-manager` | 486 | 11 | 0 | drifts 6/11 (55%) — esperado <50% |
-| 14 | core | `conversacion__prompt-builder` | 346 | 12 | 2 | drifts 7/12 (58%) — esperado <50% |
+| 14 | core | `conversacion__prompt-builder` | 435 | 13 | 2 | drifts 7/13 (54%) — esperado <50% |
 | 17 | infra | `filesystem` | 1290 | 196 | 0 | sin tests/unit/ |
 | 18 | infra | `firmware-manager` | 1094 | 126 | 0 | drifts 86/126 (68%) — esperado <50% |
 | 19 | infra | `esp32-dev` | 735 | 88 | 0 | drifts 63/88 (72%) — esperado <50% |

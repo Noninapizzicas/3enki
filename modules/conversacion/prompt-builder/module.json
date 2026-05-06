@@ -1,16 +1,18 @@
 {
   "name": "prompt-builder",
-  "version": "1.0.0",
-  "description": "Construye el system prompt al recibir chat.message.saved. Mantiene en cache los prompt.json y context.json de los módulos (FS) y los prompts del usuario (prompt-manager). Emite chat.prompt.ready con los 9 campos.",
+  "version": "2.0.0",
+  "description": "Construye el system prompt al recibir chat.message.saved. Mantiene en cache los prompt.json y context.json de los modulos (FS) y los prompts del usuario (prompt-manager). Acumula enriquecimientos de memorias modulares (chat.context.enriched) y los agrega por priority. Publica chat.prompt.ready (chat-flow v1.0.0). v2.0.0: 5 helpers POC2, _publicarEvento canoniza correlation_id + timestamp, observability completa con prefix prompt-builder.*.",
   "author": "Event Core Team",
   "language": "en",
+  "main": "index.js",
   "publishes": [
     {
       "event": "chat.prompt.ready",
       "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.prompt.ready.schema.json",
       "description": "System prompt completo construido (incluye contexto base + memorias agregadas via chat.context.enriched). Listo para invocar al LLM."
     },
-    "prompt.list.request"
+    "prompt.list.request",
+    "db.query.request"
   ],
   "subscribes": [
     {
@@ -23,39 +25,70 @@
       "event": "chat.context.enriched",
       "handler": "onContextEnriched",
       "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
-      "description": "NUEVO: una memoria modular aporta contexto adicional al system prompt. prompt-builder agrega por priority. Hoy ningun modulo lo emite — habilita memorias futuras."
+      "description": "Una memoria modular aporta contexto adicional al system prompt. prompt-builder agrega por priority. Punto de extension para memorias futuras."
     },
     {
       "event": "prompt.list.response",
-      "handler": "onPromptListResponse"
+      "handler": "onPromptListResponse",
+      "description": "Respuesta de prompt-manager con la libreria de prompts del usuario al arranque. Cache se hidrata aqui."
     },
     {
       "event": "prompt.created",
-      "handler": "onPromptUpserted"
+      "handler": "onPromptUpserted",
+      "description": "prompt-manager publico un prompt nuevo. Cache se actualiza."
     },
     {
       "event": "prompt.updated",
-      "handler": "onPromptUpserted"
+      "handler": "onPromptUpserted",
+      "description": "prompt-manager actualizo un prompt. Cache se actualiza."
     },
     {
       "event": "prompt.deleted",
-      "handler": "onPromptDeleted"
+      "handler": "onPromptDeleted",
+      "description": "prompt-manager elimino un prompt. Cache lo invalida."
     },
     {
       "event": "db.query.response",
-      "handler": "onDbQueryResponse"
+      "handler": "onDbQueryResponse",
+      "description": "Response de database-manager para queries (resuelve pendingDb por request_id)."
     }
   ],
+  "ui_handlers": [],
+  "tools": [],
   "dependencies": [
     "database-manager",
     "prompt-manager"
   ],
   "config": {
     "persistence": {
-      "pattern":           "in-memory",
+      "pattern": "in-memory",
       "restart_resilient": false,
-      "concurrency":       "single-writer",
-      "lost_on_restart":   ["_modulePrompts", "_moduleContexts", "_userPrompts", "pendingDb"]
+      "concurrency": "single-writer",
+      "lost_on_restart": ["_modulePrompts", "_moduleContexts", "_userPrompts", "pendingDb", "_pendingEnrichments"]
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "tracing": {
+      "propaga_correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "prompt-builder.prompt.ready",
+        "prompt-builder.errors"
+      ],
+      "gauges": [
+        "prompt-builder.module_prompts",
+        "prompt-builder.module_contexts",
+        "prompt-builder.user_prompts",
+        "prompt-builder.pending_db",
+        "prompt-builder.pending_enrichments"
+      ]
     }
   }
 }

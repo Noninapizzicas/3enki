@@ -97,3 +97,6 @@ jobs:
 
       - name: Run unit tests (conversacion/chat-io — reescritura canonica)
         run: npm run test:conversacion__chat-io
+
+      - name: Run unit tests (conversacion/prompt-builder — reescritura canonica)
+        run: npm run test:conversacion__prompt-builder

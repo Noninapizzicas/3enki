@@ -41,6 +41,9 @@ jobs:
       - name: Run unit tests (project-manager — reescritura canonica)
         run: npm run test:project-manager
 
+      - name: Run unit tests (database-manager — reescritura canonica)
+        run: npm run test:database-manager
+
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc
 

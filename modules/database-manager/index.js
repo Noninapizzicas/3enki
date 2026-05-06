@@ -1,35 +1,63 @@
 /**
- * Database Manager Module
- * SQLite database management using sqlite3 native
+ * database-manager v3.0.0 — Reescrito al canon (POC2 #4 del horizontal).
  *
- * Follows event-driven architecture - NO HTTP internal calls
+ * Acceso a SQLite por proyecto. Una DB por proyecto en
+ * <basePath>/db/<slug>.sqlite (estructura nueva) o data/projects/<id>/db.sqlite
+ * (legacy para system + _prompts).
+ *
+ * Responsabilidades acotadas (NO descomponer — un solo dominio):
+ *  - Apertura/cache de conexiones SQLite por projectId.
+ *  - Resolución de path con cascada: system → cache → query system DB → fallback legacy.
+ *  - Ejecución de queries (read-only o write) con response correlacionada por request_id.
+ *  - Inicialización de schemas (idempotente, ignora 'already exists').
+ *  - Persist de alto nivel (insert/update/delete sin SQL crudo).
+ *  - Tools del LLM: query (SELECT only), tables, schema, execute (DML/DDL).
+ *
+ * Cumple los 24 contratos transversales:
+ *  - errors: handlers devuelven { status, data | error: { code, message, details? } }.
+ *  - observability: métricas con prefijo 'database-manager.*' + log + metric en cada path.
+ *  - events: 8 eventos canónicos preservados invariantes (db.created/deleted/...).
+ *  - lifecycle: onLoad inicializa, onUnload cierra TODAS las conexiones.
+ *  - persistence: SQLite native escribe directo. saveDatabase es no-op preservado por API symmetry.
+ *  - tools: 4 tools con shape canónico { status, data | error } + errores_conocidos declarados.
+ *
+ * 5 helpers POC2 transferibles + auxiliar específico:
+ *  _errorResponse, _handleHandlerError, _classifyHandlerError, _publicarEvento,
+ *  + auxiliar: _slugify (resolución de paths).
+ *
+ * Monolito (1321 LOC) preservado en
+ * arquitectura/migracion/_legacy/database-manager-monolito-pre-rewrite.js.bak
+ *
+ * Mapa exhaustivo (PASO 0 del rewrite) en
+ * arquitectura/migracion/notas/database-manager-mapa.md
  */
 
-const fs = require('fs').promises;
-const fsSync = require('fs');
-const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
+'use strict';
 
-const { EVENTS, FIELDS, HELPERS, CONFIG, ERRORS } = require('../../core/constants');
+const fs       = require('fs').promises;
+const fsSync   = require('fs');
+const path     = require('path');
+const crypto   = require('crypto');
+const sqlite3  = require('sqlite3').verbose();
+
+const { EVENTS } = require('../../core/constants');
+
+const SYSTEM_PROJECTS = new Set(['system', '_prompts']);
 
 class DatabaseManagerModule {
   constructor() {
-    this.name = 'database-manager';
-    this.version = '2.0.0';
+    this.name    = 'database-manager';
+    this.version = '3.0.0';
 
-    // State
-    this.databases = new Map(); // projectId -> db instance
-    this.projectPaths = new Map(); // projectId -> { basePath, slug } cache
+    this.logger    = null;
+    this.metrics   = null;
+    this.eventBus  = null;
+    this.config    = null;
+
+    // State runtime (NO persistido en archivos declarativos)
+    this.databases    = new Map();  // projectId -> sqlite3.Database
+    this.projectPaths = new Map();  // projectId -> { basePath, slug }
     this.projectsPath = null;
-
-    // Special projects that use legacy path structure
-    this.systemProjects = new Set(['system', '_prompts']);
-
-    // Dependencies (injected)
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
-    this.config = null;
   }
 
   // ==========================================
@@ -37,63 +65,49 @@ class DatabaseManagerModule {
   // ==========================================
 
   async onLoad(core) {
-    this.logger = core.logger;
-    this.metrics = core.metrics;
-    this.eventBus = core.eventBus;
-    this.activity = core.activity?.forModule('database-manager');
+    this.logger    = core.logger;
+    this.metrics   = core.metrics;
+    this.eventBus  = core.eventBus;
+    this.config    = core.moduleConfig || {};
 
-    this.activity?.action('module.loading', {});
-
-    // Load config from loader-injected moduleConfig
-    this.config = core.moduleConfig || {};
-
-    this.logger.info('module.loading', {
-      module: this.name,
-      version: this.version,
-      configLoaded: !!this.config.projectsPath
+    this.logger.info('database-manager.loading', {
+      module: this.name, version: this.version
     });
 
-    // Configure projects path
-    this.projectsPath = path.resolve(
-      this.config.projectsPath || './data/projects'
-    );
+    this.projectsPath = path.resolve(this.config.projectsPath || './data/projects');
+    await this._ensureProjectsDirectory();
 
-    // Create projects directory
-    await this.ensureProjectsDirectory();
-
-    // Event subscriptions are auto-wired by the loader from module.json
-
-    // Update metrics
-    // REMOVED (migrate-to-event-metrics): this.metrics.gauge('db.loaded.count', this.databases.size);
-    // → Emit db.loaded event with `count: this.databases.size`
-    // REMOVED (migrate-to-event-metrics): this.metrics.gauge('db.projects.count', await this.countProjects()
-    // → Add `projects_count` to db events);
-
-    this.logger.info('module.loaded', {
-      module: this.name,
-      version: this.version,
+    this.logger.info('database-manager.loaded', {
       projects_path: this.projectsPath
     });
   }
 
   async onUnload() {
-    this.logger.info('module.unloading', { module: this.name });
-
-    // Close all database connections
+    this.logger.info('database-manager.unloading');
     for (const [projectId, db] of this.databases.entries()) {
-      await new Promise(resolve => db.close(err => {
-        if (err) this.logger.error('db.close.error', { project_id: projectId, error: err.message });
-        resolve();
-      }));
+      try {
+        await new Promise(resolve => db.close(err => {
+          if (err) {
+            this.logger.error('database-manager.db.close.failed', {
+              project_id: projectId, error: err.message
+            });
+            this.metrics?.increment('database-manager.errors', { kind: 'close' });
+          }
+          resolve();
+        }));
+      } catch (err) {
+        this.logger.error('database-manager.db.close.unexpected', {
+          project_id: projectId, error: err.message
+        });
+      }
     }
-
     this.databases.clear();
-
-    this.logger.info('module.unloaded', { module: this.name });
+    this.projectPaths.clear();
+    this.logger.info('database-manager.unloaded');
   }
 
   // ==========================================
-  // Initialization Helpers
+  // Helpers internos privados (Promise-wrappers de sqlite3)
   // ==========================================
 
   _all(db, query, params = []) {
@@ -104,7 +118,7 @@ class DatabaseManagerModule {
 
   _run(db, query, params = []) {
     return new Promise((resolve, reject) => {
-      db.run(query, params, function(err) {
+      db.run(query, params, function (err) {
         err ? reject(err) : resolve({ changes: this.changes, lastID: this.lastID });
       });
     });
@@ -116,878 +130,418 @@ class DatabaseManagerModule {
     });
   }
 
-  async ensureProjectsDirectory() {
+  async _ensureProjectsDirectory() {
     if (!fsSync.existsSync(this.projectsPath)) {
       await fs.mkdir(this.projectsPath, { recursive: true });
-      this.logger.info('projects.directory.created', {
+      this.logger.info('database-manager.projects_directory.created', {
         path: this.projectsPath
       });
     }
   }
 
-  async countProjects() {
-    try {
-      if (!fsSync.existsSync(this.projectsPath)) return 0;
-      const entries = await fs.readdir(this.projectsPath, { withFileTypes: true });
-      return entries.filter(e => e.isDirectory()).length;
-    } catch {
-      return 0;
-    }
-  }
-
   // ==========================================
-  // Event Handlers (wired by loader from module.json)
+  // Event handlers (subscribes del bus)
   // ==========================================
 
   async onQueryRequest(event) {
-    // Debug: log raw event structure
-    this.logger.info('query.request.raw', {
-      event_keys: Object.keys(event || {}),
-      has_data: !!event?.data,
-      data_keys: event?.data ? Object.keys(event.data) : []
-    });
-
-    const {
-      project_id,
-      query,
-      params = [],
-      read_only = false,
-      request_id,
-      correlation_id
-    } = event.data || event;
-
-    const endTimer = this.activity?.timer('query');
-    this.activity?.action('query.received', {
-      project_id,
-      query_preview: query ? query.substring(0, 50) : null,
-      read_only,
-      request_id
-    });
-
-    this.logger.info('query.request.received', {
-      project_id,
-      query: query ? query.substring(0, 100) : '(no query)',
-      read_only,
-      request_id,
-      correlation_id
-    });
-
+    const data = event.data || event;
+    const { project_id, query, params = [], read_only = false, request_id, correlation_id } = data;
     const startTime = Date.now();
 
+    if (!project_id || !query) {
+      this.logger.warn('database-manager.query.invalid_payload', {
+        has_project: !!project_id, has_query: !!query, request_id
+      });
+      this.metrics?.increment('database-manager.errors', { kind: 'query_invalid' });
+      await this._publishQueryResponse(project_id, request_id, false, null,
+        'project_id and query are required', correlation_id);
+      return;
+    }
+
     try {
-      const db = await this.getDatabase(project_id);
-
+      const db = await this._getDatabase(project_id);
       const results = await this._all(db, query, params);
-
       if (!read_only && this.config.autoSave !== false) {
-        await this.saveDatabase(project_id);
+        await this._saveDatabase(project_id);
       }
-
       const duration = Date.now() - startTime;
 
-      endTimer?.({ success: true, project_id, result_count: results.length });
-      this.activity?.action('query.success', {
-        project_id,
-        request_id,
-        result_count: results.length,
-        duration,
-        read_only
+      this.metrics?.increment('database-manager.query.success', { read_only: read_only ? 'true' : 'false' });
+      this.metrics?.timing('database-manager.query.duration', duration);
+      this.logger.info('database-manager.query.success', {
+        project_id, result_count: results.length, duration, request_id, correlation_id
       });
 
-      this.logger.info('query.request.success', {
-        project_id,
-        result_count: results.length,
-        duration,
-        correlation_id
+      await this._publishQueryResponse(project_id, request_id, true, results, null, correlation_id);
+      // Background: emitir db.query.executed con métricas
+      this._publishQueryExecuted(project_id, results.length, read_only, duration, correlation_id).catch(() => {});
+    } catch (err) {
+      const errorMsg = err?.message || String(err);
+      this.logger.error('database-manager.query.failed', {
+        project_id, error: errorMsg, request_id, correlation_id
       });
-
-      // REMOVED (migrate-to-event-metrics): // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.query.total');
-    // → Counter extracted from events
-    // → Counter from db.query.completed events
-      // REMOVED: this.metrics.timing('db.query.duration', duration);
-
-      // Publish response event
-      await this.publishQueryResponse(
-        project_id,
-        request_id,
-        true,
-        results,
-        null,
-        correlation_id
-      );
-    } catch (error) {
-      const errorMsg = error?.message || String(error) || 'Unknown database error';
-
-      endTimer?.({ success: false, project_id, error: errorMsg });
-      this.activity?.error('query', new Error(errorMsg), { project_id, request_id });
-
-      this.logger.error('query.request.error', {
-        project_id,
-        error: errorMsg,
-        correlation_id
-      });
-
-      // REMOVED (migrate-to-event-metrics): // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.query.errors');
-    // → Counter extracted from events
-    // → Use error field in db.query.completed
-
-      await this.publishQueryResponse(
-        project_id,
-        request_id,
-        false,
-        null,
-        errorMsg,
-        correlation_id
-      );
+      this.metrics?.increment('database-manager.errors', { kind: 'query' });
+      await this._publishQueryResponse(project_id, request_id, false, null, errorMsg, correlation_id);
     }
   }
 
   async onPersistRequest(event) {
-    const { project_id, table, operation, data, where, request_id } = event.data || event;
+    const data = event.data || event;
+    const { project_id, table, operation, data: rowData, where, request_id, correlation_id } = data;
 
-    if (!project_id || !table || !operation || !data) {
+    if (!project_id || !table || !operation || !rowData) {
+      this.logger.warn('database-manager.persist.invalid_payload', {
+        request_id, missing: { project_id: !project_id, table: !table, operation: !operation, data: !rowData }
+      });
+      this.metrics?.increment('database-manager.errors', { kind: 'persist_invalid' });
       await this.eventBus.publish('db.persist.response', {
-        request_id, success: false, error: 'missing required fields'
+        request_id, success: false, error: 'missing required fields',
+        timestamp: new Date().toISOString(),
+        ...(correlation_id ? { correlation_id } : {})
       });
       return;
     }
 
     try {
-      const db = await this.getDatabase(project_id);
-      let query, params;
+      const db = await this._getDatabase(project_id);
+      let query, sqlParams;
 
       if (operation === 'insert') {
-        const cols = Object.keys(data);
+        const cols = Object.keys(rowData);
         const placeholders = cols.map(() => '?').join(', ');
         query = `INSERT OR REPLACE INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`;
-        params = Object.values(data);
+        sqlParams = Object.values(rowData);
       } else if (operation === 'update') {
-        const sets = Object.keys(data).map(k => `${k} = ?`).join(', ');
+        const sets = Object.keys(rowData).map(k => `${k} = ?`).join(', ');
         const wheres = Object.keys(where || {}).map(k => `${k} = ?`).join(' AND ');
         query = `UPDATE ${table} SET ${sets}${wheres ? ` WHERE ${wheres}` : ''}`;
-        params = [...Object.values(data), ...Object.values(where || {})];
+        sqlParams = [...Object.values(rowData), ...Object.values(where || {})];
       } else if (operation === 'delete') {
         const wheres = Object.keys(where || {}).map(k => `${k} = ?`).join(' AND ');
         query = `DELETE FROM ${table}${wheres ? ` WHERE ${wheres}` : ''}`;
-        params = Object.values(where || {});
+        sqlParams = Object.values(where || {});
       } else {
-        throw new Error(`unknown operation: ${operation}`);
+        throw Object.assign(new Error(`unknown operation: ${operation}`),
+          { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'operation' } });
       }
 
-      await this._run(db, query, params);
+      await this._run(db, query, sqlParams);
+      if (this.config.autoSave !== false) await this._saveDatabase(project_id);
 
-      if (this.config.autoSave !== false) await this._saveDatabase(project_id, db);
-
-      await this.eventBus.publish('db.persist.response', { request_id, success: true, table, operation });
+      this.metrics?.increment('database-manager.persist.success', { operation });
+      await this.eventBus.publish('db.persist.response', {
+        request_id, success: true, table, operation,
+        timestamp: new Date().toISOString(),
+        ...(correlation_id ? { correlation_id } : {})
+      });
     } catch (err) {
-      this.logger.error('db.persist.failed', { project_id, table, operation, error: err.message });
-      await this.eventBus.publish('db.persist.response', { request_id, success: false, error: err.message });
+      this.logger.error('database-manager.persist.failed', {
+        project_id, table, operation, error: err.message, request_id, correlation_id
+      });
+      this.metrics?.increment('database-manager.errors', { kind: 'persist' });
+      await this.eventBus.publish('db.persist.response', {
+        request_id, success: false, error: err.message,
+        timestamp: new Date().toISOString(),
+        ...(correlation_id ? { correlation_id } : {})
+      });
     }
   }
 
   async onSchemaInitRequest(event) {
-    // Debug: log raw event structure
-    this.logger.info('schema.init.request.raw', {
-      event_keys: Object.keys(event || {}),
-      has_data: !!event?.data,
-      data_keys: event?.data ? Object.keys(event.data) : []
-    });
+    const data = event.data || event;
+    const { project_id, schema, request_id, correlation_id } = data;
 
-    const {
-      project_id,
-      schema,
-      request_id,
-      correlation_id
-    } = event.data || event;
-
-    this.logger.info('schema.init.request.received', {
-      project_id,
-      request_id,
-      correlation_id,
-      has_schema: !!schema,
-      schema_length: schema ? schema.length : 0
-    });
-
-    // Validate schema before attempting to execute
     if (!schema || typeof schema !== 'string' || schema.trim().length === 0) {
-      const errorMsg = 'Schema is required and must be a non-empty string';
-      this.logger.error('schema.init.request.invalid', {
-        project_id,
-        error: errorMsg,
-        schema_type: typeof schema,
-        correlation_id
+      this.logger.warn('database-manager.schema_init.invalid_payload', {
+        project_id, request_id, schema_type: typeof schema
       });
-
-      await this.publishSchemaInitResponse(
-        project_id,
-        request_id,
-        false,
-        errorMsg,
-        correlation_id
-      );
+      this.metrics?.increment('database-manager.errors', { kind: 'schema_invalid' });
+      await this._publishSchemaInitResponse(project_id, request_id, false,
+        'Schema is required and must be a non-empty string', correlation_id);
       return;
     }
 
     try {
-      const db = await this.getDatabase(project_id);
-      // Ejecutar statements uno a uno para ignorar los que ya existen
+      const db = await this._getDatabase(project_id);
       const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
       for (const stmt of statements) {
         await this._exec(db, stmt + ';').catch(err => {
-          // Ignorar errores de tabla/índice ya existente
-          if (!err.message.includes('already exists') && !err.message.includes('more than one primary key')) {
+          // Ignorar errores de tabla/índice ya existente (idempotencia)
+          if (!err.message.includes('already exists') &&
+              !err.message.includes('more than one primary key')) {
             throw err;
           }
         });
       }
-      await this.saveDatabase(project_id);
+      await this._saveDatabase(project_id);
 
-      this.logger.info('schema.init.request.success', {
-        project_id,
-        correlation_id
+      this.metrics?.increment('database-manager.schema_init.success');
+      this.logger.info('database-manager.schema_init.success', {
+        project_id, request_id, correlation_id, statements: statements.length
       });
 
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.schema.init.total');
-    // → Counter extracted from events
-
-      // Publish response event
-      await this.publishSchemaInitResponse(
-        project_id,
-        request_id,
-        true,
-        null,
-        correlation_id
-      );
-
-      // Publish schema initialized event
-      await this.eventBus.publish(EVENTS.DB.SCHEMA_INITIALIZED, {
+      await this._publishSchemaInitResponse(project_id, request_id, true, null, correlation_id);
+      await this._publicarEvento(EVENTS.DB.SCHEMA_INITIALIZED, {
         project_id,
         initialized_at: new Date().toISOString()
-      }, { correlationId: correlation_id });
-    } catch (error) {
-      const errorMsg = error?.message || String(error) || 'Unknown database error';
-      this.logger.error('schema.init.request.error', {
-        project_id,
-        error: errorMsg,
-        correlation_id
+      }, { correlation_id });
+    } catch (err) {
+      const errorMsg = err.message;
+      this.logger.error('database-manager.schema_init.failed', {
+        project_id, error: errorMsg, request_id, correlation_id
       });
-
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.schema.init.errors');
-    // → Counter extracted from events
-
-      await this.publishSchemaInitResponse(
-        project_id,
-        request_id,
-        false,
-        errorMsg,
-        correlation_id
-      );
+      this.metrics?.increment('database-manager.errors', { kind: 'schema_init' });
+      await this._publishSchemaInitResponse(project_id, request_id, false, errorMsg, correlation_id);
     }
   }
 
   // ==========================================
-  // HTTP API Handlers
+  // HTTP API handlers
   // ==========================================
 
-  async handleListDatabases(req, context) {
-    this.logger.info('databases.list.start', {
-      correlation_id: context.correlationId
-    });
-
+  async handleListDatabases() {
     try {
       const databases = [];
-
       if (fsSync.existsSync(this.projectsPath)) {
-        const entries = await fs.readdir(this.projectsPath, {
-          withFileTypes: true
-        });
-
+        const entries = await fs.readdir(this.projectsPath, { withFileTypes: true });
         for (const entry of entries) {
-          if (entry.isDirectory()) {
-            const dirName = entry.name;
+          if (!entry.isDirectory()) continue;
+          const dirName = entry.name;
+          const legacyPath = path.join(this.projectsPath, dirName, 'db.sqlite');
+          const newPath    = path.join(this.projectsPath, dirName, 'db', `${dirName}.sqlite`);
+          let dbPath = null;
+          if (fsSync.existsSync(newPath))      dbPath = newPath;
+          else if (fsSync.existsSync(legacyPath)) dbPath = legacyPath;
 
-            // Check both legacy and new structure
-            const legacyPath = path.join(this.projectsPath, dirName, 'db.sqlite');
-            const newPath = path.join(this.projectsPath, dirName, 'db', `${dirName}.sqlite`);
-
-            let dbPath = null;
-            if (fsSync.existsSync(newPath)) {
-              dbPath = newPath;
-            } else if (fsSync.existsSync(legacyPath)) {
-              dbPath = legacyPath;
-            }
-
-            const dbInfo = {
-              project_id: dirName,
-              loaded: this.databases.has(dirName),
-              exists: !!dbPath
-            };
-
-            if (dbPath) {
-              const stats = await fs.stat(dbPath);
-              dbInfo.size = stats.size;
-              dbInfo.last_modified = stats.mtime.toISOString();
-              dbInfo.path = dbPath;
-            }
-
-            databases.push(dbInfo);
+          const dbInfo = {
+            project_id: dirName,
+            loaded: this.databases.has(dirName),
+            exists: !!dbPath
+          };
+          if (dbPath) {
+            const stats = await fs.stat(dbPath);
+            dbInfo.size = stats.size;
+            dbInfo.last_modified = stats.mtime.toISOString();
+            dbInfo.path = dbPath;
           }
+          databases.push(dbInfo);
         }
       }
-
-      this.logger.info('databases.listed', {
-        count: databases.length,
-        correlation_id: context.correlationId
-      });
-
-      // REMOVED (migrate-to-event-metrics): this.metrics.gauge('db.projects.count', databases.length);
-    // → Add `projects_count` to db events
-
       return {
         status: 200,
-        data: {
-          success: true,
-          databases,
-          total: databases.length,
-          projects_path: this.projectsPath
-        }
+        data: { databases, total: databases.length, projects_path: this.projectsPath }
       };
-    } catch (error) {
-      const errorMsg = error?.message || String(error) || 'Unknown database error';
-      this.logger.error('databases.list.error', {
-        error: errorMsg,
-        correlation_id: context.correlationId
-      });
-
-      return {
-        status: 500,
-        data: {
-          success: false,
-          error: 'Failed to list databases',
-          message: errorMsg
-        }
-      };
+    } catch (err) {
+      return this._handleHandlerError('database-manager.http.list.failed', err, 'http_list');
     }
   }
 
   async handleExecuteQuery(req, context) {
     const startTime = Date.now();
     const { projectId } = context.params;
-    const { query, params = [], read_only = false } = context.body;
+    const { query, params = [], read_only = false } = context.body || {};
 
-    this.logger.info('query.execute.start', {
-      project_id: projectId,
-      query: query.substring(0, 100),
-      read_only,
-      correlation_id: context.correlationId
-    });
+    if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+      { kind: 'domain', field: 'projectId' });
+    if (!query) return this._errorResponse(400, 'VALIDATION_FAILED', 'query is required',
+      { kind: 'domain', field: 'query' });
 
     try {
-      const db = await this.getDatabase(projectId);
-
+      const db = await this._getDatabase(projectId);
       const results = await this._all(db, query, params);
-
-      if (!read_only && this.config.autoSave !== false) {
-        await this.saveDatabase(projectId);
-      }
-
+      if (!read_only && this.config.autoSave !== false) await this._saveDatabase(projectId);
       const duration = Date.now() - startTime;
 
-      // Metrics
-      // REMOVED (migrate-to-event-metrics): // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.query.total');
-    // → Counter extracted from events
-    // → Counter from db.query.completed events
-      // REMOVED: this.metrics.timing('db.query.duration', duration);
+      this.metrics?.increment('database-manager.http.execute_query.success');
+      this.metrics?.timing('database-manager.query.duration', duration);
+      await this._publishQueryExecuted(projectId, results.length, read_only, duration, context?.correlationId);
 
-      // Publish event
-      await this.publishQueryExecuted(projectId, results.length, read_only, duration, context.correlationId);
-
-      this.logger.info('query.executed', {
-        project_id: projectId,
-        result_count: results.length,
-        duration,
-        correlation_id: context.correlationId
-      });
-
-      return {
-        status: 200,
-        data: {
-          success: true,
-          project_id: projectId,
-          results,
-          count: results.length,
-          duration
-        }
-      };
-    } catch (error) {
-      // REMOVED (migrate-to-event-metrics): // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.query.errors');
-    // → Counter extracted from events
-    // → Use error field in db.query.completed
-
-      const errorMsg = error?.message || String(error) || 'Unknown database error';
-      this.logger.error('query.execute.error', {
-        project_id: projectId,
-        error: errorMsg,
-        correlation_id: context.correlationId
-      });
-
-      return {
-        status: 500,
-        data: {
-          success: false,
-          project_id: projectId,
-          error: 'Query execution failed',
-          message: errorMsg
-        }
-      };
+      return { status: 200, data: { project_id: projectId, results, count: results.length, duration } };
+    } catch (err) {
+      return this._handleHandlerError('database-manager.http.execute_query.failed', err, 'http_execute_query');
     }
   }
 
   async handleGetSchema(req, context) {
     const { projectId } = context.params;
-
-    this.logger.info('schema.get.start', {
-      project_id: projectId,
-      correlation_id: context.correlationId
-    });
+    if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+      { kind: 'domain', field: 'projectId' });
 
     try {
-      const db = await this.getDatabase(projectId);
-
+      const db = await this._getDatabase(projectId);
       const tables = await this._all(db,
-        "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-      );
-
-      this.logger.info('schema.retrieved', {
-        project_id: projectId,
-        table_count: tables.length,
-        correlation_id: context.correlationId
-      });
-
+        "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
       return {
         status: 200,
-        data: {
-          success: true,
-          project_id: projectId,
-          tables,
-          table_count: tables.length
-        }
+        data: { project_id: projectId, tables, table_count: tables.length }
       };
-    } catch (error) {
-      const errorMsg = error?.message || String(error) || 'Unknown database error';
-      this.logger.error('schema.get.error', {
-        project_id: projectId,
-        error: errorMsg,
-        correlation_id: context.correlationId
-      });
-
-      return {
-        status: 500,
-        data: {
-          success: false,
-          project_id: projectId,
-          error: 'Failed to retrieve schema',
-          message: errorMsg
-        }
-      };
+    } catch (err) {
+      return this._handleHandlerError('database-manager.http.get_schema.failed', err, 'http_get_schema');
     }
   }
 
   async handleInitSchema(req, context) {
     const { projectId } = context.params;
-    const { schema } = context.body;
-
-    this.logger.info('schema.init.start', {
-      project_id: projectId,
-      correlation_id: context.correlationId
-    });
+    const { schema } = context.body || {};
+    if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+      { kind: 'domain', field: 'projectId' });
+    if (!schema) return this._errorResponse(400, 'VALIDATION_FAILED', 'schema is required',
+      { kind: 'domain', field: 'schema' });
 
     try {
-      const db = await this.getDatabase(projectId);
+      const db = await this._getDatabase(projectId);
       await this._exec(db, schema);
-      await this.saveDatabase(projectId);
+      await this._saveDatabase(projectId);
 
-      // Metrics
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.schema.init.total');
-    // → Counter extracted from events
-
-      // Publish event
-      await this.eventBus.publish('db.schema.initialized', {
+      this.metrics?.increment('database-manager.http.init_schema.success');
+      await this._publicarEvento('db.schema.initialized', {
         project_id: projectId,
         initialized_at: new Date().toISOString()
-      }, { correlationId: context.correlationId });
+      }, { correlation_id: context?.correlationId });
 
-      this.logger.info('schema.initialized', {
-        project_id: projectId,
-        correlation_id: context.correlationId
-      });
-
-      return {
-        status: 200,
-        data: {
-          success: true,
-          project_id: projectId,
-          message: 'Schema initialized successfully'
-        }
-      };
-    } catch (error) {
-      // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.schema.init.errors');
-    // → Counter extracted from events
-
-      const errorMsg = error?.message || String(error) || 'Unknown database error';
-      this.logger.error('schema.init.error', {
-        project_id: projectId,
-        error: errorMsg,
-        correlation_id: context.correlationId
-      });
-
-      return {
-        status: 500,
-        data: {
-          success: false,
-          project_id: projectId,
-          error: 'Schema initialization failed',
-          message: errorMsg
-        }
-      };
+      return { status: 200, data: { project_id: projectId, message: 'Schema initialized successfully' } };
+    } catch (err) {
+      return this._handleHandlerError('database-manager.http.init_schema.failed', err, 'http_init_schema');
     }
   }
 
   async handleDeleteDatabase(req, context) {
     const { projectId } = context.params;
-
-    this.logger.info('db.delete.start', {
-      project_id: projectId,
-      correlation_id: context.correlationId
-    });
+    if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+      { kind: 'domain', field: 'projectId' });
 
     try {
-      // Close connection if open
       if (this.databases.has(projectId)) {
         const db = this.databases.get(projectId);
-        db.close();
+        try { db.close(); } catch (_) {}
         this.databases.delete(projectId);
       }
-
-      // Clear path cache
       this.projectPaths.delete(projectId);
 
-      const { dbPath } = await this.resolveDatabasePath(projectId);
+      const { dbPath } = await this._resolveDatabasePath(projectId);
 
-      if (fsSync.existsSync(dbPath)) {
-        await fs.unlink(dbPath);
-
-        // Metrics
-        // REMOVED (migrate-to-event-metrics): this.metrics.increment('db.deleted.total');
-    // → Counter extracted from events
-        // REMOVED (migrate-to-event-metrics): this.metrics.gauge('db.loaded.count', this.databases.size);
-    // → Emit db.loaded event with `count: this.databases.size`
-
-        // Publish event
-        await this.eventBus.publish('db.deleted', {
-          project_id: projectId,
-          deleted_at: new Date().toISOString()
-        }, { correlationId: context.correlationId });
-
-        this.logger.info('db.deleted', {
-          project_id: projectId,
-          correlation_id: context.correlationId
-        });
-
-        return {
-          status: 200,
-          data: {
-            success: true,
-            project_id: projectId,
-            message: 'Database deleted successfully'
-          }
-        };
-      } else {
-        return {
-          status: 404,
-          data: {
-            success: false,
-            project_id: projectId,
-            error: 'Database not found'
-          }
-        };
+      if (!fsSync.existsSync(dbPath)) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Database not found',
+          { entity_type: 'database', entity_id: projectId });
       }
-    } catch (error) {
-      const errorMsg = error?.message || String(error) || 'Unknown database error';
-      this.logger.error('db.delete.error', {
-        project_id: projectId,
-        error: errorMsg,
-        correlation_id: context.correlationId
-      });
 
-      return {
-        status: 500,
-        data: {
-          success: false,
-          project_id: projectId,
-          error: 'Failed to delete database',
-          message: errorMsg
-        }
-      };
+      await fs.unlink(dbPath);
+      this.metrics?.increment('database-manager.http.delete.success');
+
+      await this._publicarEvento('db.deleted', {
+        project_id: projectId,
+        deleted_at: new Date().toISOString()
+      }, { correlation_id: context?.correlationId });
+
+      return { status: 200, data: { project_id: projectId, message: 'Database deleted successfully' } };
+    } catch (err) {
+      return this._handleHandlerError('database-manager.http.delete.failed', err, 'http_delete');
     }
   }
 
   async handleListTables(req, context) {
     const { projectId } = context.params;
-
-    this.logger.info('tables.list.start', {
-      project_id: projectId,
-      correlation_id: context.correlationId
-    });
+    if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+      { kind: 'domain', field: 'projectId' });
 
     try {
-      const db = await this.getDatabase(projectId);
-
+      const db = await this._getDatabase(projectId);
       const rows = await this._all(db,
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-      );
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
       const tables = rows.map(row => row.name);
-
-      this.logger.info('tables.listed', {
-        project_id: projectId,
-        count: tables.length,
-        correlation_id: context.correlationId
-      });
-
-      return {
-        status: 200,
-        data: {
-          success: true,
-          project_id: projectId,
-          tables,
-          count: tables.length
-        }
-      };
-    } catch (error) {
-      const errorMsg = error?.message || String(error) || 'Unknown database error';
-      this.logger.error('tables.list.error', {
-        project_id: projectId,
-        error: errorMsg,
-        correlation_id: context.correlationId
-      });
-
-      return {
-        status: 500,
-        data: {
-          success: false,
-          project_id: projectId,
-          error: 'Failed to list tables',
-          message: errorMsg
-        }
-      };
+      return { status: 200, data: { project_id: projectId, tables, count: tables.length } };
+    } catch (err) {
+      return this._handleHandlerError('database-manager.http.list_tables.failed', err, 'http_list_tables');
     }
   }
 
-  async handleHealthCheck(req, context) {
+  async handleHealthCheck() {
     return {
       status: 200,
       data: {
-        status: 'healthy',
         module: this.name,
         version: this.version,
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
         loaded_databases: this.databases.size,
         projects_path: this.projectsPath
       }
     };
   }
 
-  async handleGetMetrics(req, context) {
+  async handleGetMetrics() {
     return {
       status: 200,
       data: {
-        counters: {
-          'db.created.total': this.metrics.getCounter('db.created.total') || 0,
-          'db.deleted.total': this.metrics.getCounter('db.deleted.total') || 0,
-          'db.query.total': this.metrics.getCounter('db.query.total') || 0,
-          'db.query.errors': this.metrics.getCounter('db.query.errors') || 0,
-          'db.schema.init.total': this.metrics.getCounter('db.schema.init.total') || 0,
-          'db.schema.init.errors': this.metrics.getCounter('db.schema.init.errors') || 0
-        },
-        gauges: {
-          'db.loaded.count': this.databases.size,
-          'db.projects.count': await this.countProjects()
+        module: this.name,
+        metrics: {
+          loaded_databases: this.databases.size,
+          cached_paths: this.projectPaths.size
         }
       }
     };
   }
 
   // ==========================================
-  // AI Tool Handlers
+  // Tools del LLM (shape canónico)
   // ==========================================
 
-  /**
-   * db.query - Execute read-only SELECT query
-   * Only allows SELECT statements for safety
-   */
   async handleToolQuery(args) {
-    const { projectId, query, params = [] } = args || {};
-
-    // Validate required parameters
-    if (!projectId) {
-      return {
-        status: 400,
-        data: { error: 'projectId is required' }
-      };
-    }
-
-    if (!query) {
-      return {
-        status: 400,
-        data: { error: 'query is required' }
-      };
-    }
-
-    // Security: Only allow SELECT statements
-    const normalizedQuery = query.trim().toUpperCase();
-    if (!normalizedQuery.startsWith('SELECT')) {
-      return {
-        status: 403,
-        data: {
-          error: 'Only SELECT queries allowed',
-          hint: 'Use db.execute for INSERT, UPDATE, DELETE operations'
-        }
-      };
-    }
-
-    const startTime = Date.now();
-
-    this.logger.info('tool.query.start', {
-      project_id: projectId,
-      query_preview: query.substring(0, 100)
-    });
-
     try {
-      const db = await this.getDatabase(projectId);
+      const { projectId, query, params = [] } = args || {};
+      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+        { kind: 'domain', field: 'projectId' });
+      if (!query) return this._errorResponse(400, 'VALIDATION_FAILED', 'query is required',
+        { kind: 'domain', field: 'query' });
 
+      const normalizedQuery = query.trim().toUpperCase();
+      if (!normalizedQuery.startsWith('SELECT')) {
+        return this._errorResponse(403, 'AUTHORIZATION_REQUIRED',
+          'Only SELECT queries allowed via db.query — use db.execute for INSERT/UPDATE/DELETE',
+          { kind: 'security', allowed: 'SELECT' });
+      }
+
+      const startTime = Date.now();
+      const db = await this._getDatabase(projectId);
       const results = await this._all(db, query, params);
-
       const duration = Date.now() - startTime;
 
-      this.logger.info('tool.query.success', {
-        project_id: projectId,
-        result_count: results.length,
-        duration
-      });
+      this.metrics?.increment('database-manager.tool.query.success');
+      this.metrics?.timing('database-manager.query.duration', duration);
 
       return {
         status: 200,
-        data: {
-          success: true,
-          projectId,
-          results,
-          count: results.length,
-          duration
-        }
+        data: { projectId, results, count: results.length, duration }
       };
-    } catch (error) {
-      const errorMsg = error?.message || String(error);
-      this.logger.error('tool.query.error', {
-        project_id: projectId,
-        error: errorMsg
-      });
-
-      return {
-        status: 500,
-        data: {
-          success: false,
-          projectId,
-          error: errorMsg
-        }
-      };
+    } catch (err) {
+      return this._handleHandlerError('database-manager.tool.query.failed', err, 'tool_query');
     }
   }
 
-  /**
-   * db.tables - List all tables in project database
-   */
   async handleToolTables(args) {
-    const { projectId } = args || {};
-
-    if (!projectId) {
-      return {
-        status: 400,
-        data: { error: 'projectId is required' }
-      };
-    }
-
-    this.logger.info('tool.tables.start', { project_id: projectId });
-
     try {
-      const db = await this.getDatabase(projectId);
+      const { projectId } = args || {};
+      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+        { kind: 'domain', field: 'projectId' });
 
+      const db = await this._getDatabase(projectId);
       const rows = await this._all(db,
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-      );
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
       const tables = rows.map(row => row.name);
-
-      this.logger.info('tool.tables.success', {
-        project_id: projectId,
-        count: tables.length
-      });
-
-      return {
-        status: 200,
-        data: {
-          success: true,
-          projectId,
-          tables,
-          count: tables.length
-        }
-      };
-    } catch (error) {
-      const errorMsg = error?.message || String(error);
-      this.logger.error('tool.tables.error', {
-        project_id: projectId,
-        error: errorMsg
-      });
-
-      return {
-        status: 500,
-        data: {
-          success: false,
-          projectId,
-          error: errorMsg
-        }
-      };
+      this.metrics?.increment('database-manager.tool.tables.success');
+      return { status: 200, data: { projectId, tables, count: tables.length } };
+    } catch (err) {
+      return this._handleHandlerError('database-manager.tool.tables.failed', err, 'tool_tables');
     }
   }
 
-  /**
-   * db.schema - Get schema for a specific table
-   */
   async handleToolSchema(args) {
-    const { projectId, tableName } = args || {};
-
-    if (!projectId) {
-      return {
-        status: 400,
-        data: { error: 'projectId is required' }
-      };
-    }
-
-    if (!tableName) {
-      return {
-        status: 400,
-        data: { error: 'tableName is required' }
-      };
-    }
-
-    this.logger.info('tool.schema.start', {
-      project_id: projectId,
-      table_name: tableName
-    });
-
     try {
-      const db = await this.getDatabase(projectId);
+      const { projectId, tableName } = args || {};
+      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+        { kind: 'domain', field: 'projectId' });
+      if (!tableName) return this._errorResponse(400, 'VALIDATION_FAILED', 'tableName is required',
+        { kind: 'domain', field: 'tableName' });
 
-      // Get table info (columns)
+      const db = await this._getDatabase(projectId);
       const columnRows = await this._all(db, `PRAGMA table_info("${tableName}")`);
       const columns = columnRows.map(row => ({
         name: row.name,
@@ -998,194 +552,79 @@ class DatabaseManagerModule {
       }));
 
       if (columns.length === 0) {
-        return {
-          status: 404,
-          data: {
-            success: false,
-            projectId,
-            tableName,
-            error: `Table '${tableName}' not found`
-          }
-        };
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Table '${tableName}' not found`,
+          { entity_type: 'table', entity_id: tableName });
       }
 
-      // Get foreign keys
       const fkRows = await this._all(db, `PRAGMA foreign_key_list("${tableName}")`);
       const foreignKeys = fkRows.map(row => ({
-        column: row.from,
-        references_table: row.table,
-        references_column: row.to,
-        on_update: row.on_update,
-        on_delete: row.on_delete
+        column: row.from, references_table: row.table,
+        references_column: row.to, on_update: row.on_update, on_delete: row.on_delete
       }));
 
-      // Get indexes
       const idxRows = await this._all(db, `PRAGMA index_list("${tableName}")`);
-      const indexes = idxRows.map(row => ({
-        name: row.name,
-        unique: row.unique === 1
-      }));
+      const indexes = idxRows.map(row => ({ name: row.name, unique: row.unique === 1 }));
 
-      // Get CREATE TABLE statement
       const sqlRows = await this._all(db,
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
-        [tableName]
-      );
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", [tableName]);
       const createStatement = sqlRows.length > 0 ? sqlRows[0].sql : null;
 
-      this.logger.info('tool.schema.success', {
-        project_id: projectId,
-        table_name: tableName,
-        column_count: columns.length
-      });
-
+      this.metrics?.increment('database-manager.tool.schema.success');
       return {
         status: 200,
-        data: {
-          success: true,
-          projectId,
-          tableName,
-          columns,
-          foreignKeys,
-          indexes,
-          createStatement
-        }
+        data: { projectId, tableName, columns, foreignKeys, indexes, createStatement }
       };
-    } catch (error) {
-      const errorMsg = error?.message || String(error);
-      this.logger.error('tool.schema.error', {
-        project_id: projectId,
-        table_name: tableName,
-        error: errorMsg
-      });
-
-      return {
-        status: 500,
-        data: {
-          success: false,
-          projectId,
-          tableName,
-          error: errorMsg
-        }
-      };
+    } catch (err) {
+      return this._handleHandlerError('database-manager.tool.schema.failed', err, 'tool_schema');
     }
   }
 
-  /**
-   * db.execute - Execute modifying query (INSERT, UPDATE, DELETE, etc.)
-   * Requires user confirmation (requires_confirmation: true in module.json)
-   */
   async handleToolExecute(args) {
-    const { projectId, query, params = [] } = args || {};
-
-    if (!projectId) {
-      return {
-        status: 400,
-        data: { error: 'projectId is required' }
-      };
-    }
-
-    if (!query) {
-      return {
-        status: 400,
-        data: { error: 'query is required' }
-      };
-    }
-
-    // Security: Block SELECT (should use db.query instead)
-    const normalizedQuery = query.trim().toUpperCase();
-    if (normalizedQuery.startsWith('SELECT')) {
-      return {
-        status: 400,
-        data: {
-          error: 'Use db.query for SELECT statements',
-          hint: 'db.execute is for INSERT, UPDATE, DELETE, CREATE, ALTER, DROP'
-        }
-      };
-    }
-
-    const startTime = Date.now();
-
-    this.logger.info('tool.execute.start', {
-      project_id: projectId,
-      query_preview: query.substring(0, 100)
-    });
-
     try {
-      const db = await this.getDatabase(projectId);
+      const { projectId, query, params = [] } = args || {};
+      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+        { kind: 'domain', field: 'projectId' });
+      if (!query) return this._errorResponse(400, 'VALIDATION_FAILED', 'query is required',
+        { kind: 'domain', field: 'query' });
 
-      // For modifying queries, use _run() to get changes count
-      const runResult = await this._run(db, query, params);
-      const affectedRows = runResult.changes;
-
-      // Get last insert rowid for INSERT statements
-      const lastInsertId = normalizedQuery.startsWith('INSERT') ? runResult.lastID : null;
-
-      // Auto-save
-      if (this.config.autoSave !== false) {
-        await this.saveDatabase(projectId);
+      const normalizedQuery = query.trim().toUpperCase();
+      if (normalizedQuery.startsWith('SELECT')) {
+        return this._errorResponse(400, 'VALIDATION_FAILED',
+          'Use db.query for SELECT statements — db.execute is for INSERT/UPDATE/DELETE/CREATE/ALTER/DROP',
+          { kind: 'domain', allowed: 'NOT SELECT' });
       }
 
+      const startTime = Date.now();
+      const db = await this._getDatabase(projectId);
+      const runResult = await this._run(db, query, params);
+      const affectedRows = runResult.changes;
+      const lastInsertId = normalizedQuery.startsWith('INSERT') ? runResult.lastID : null;
+      if (this.config.autoSave !== false) await this._saveDatabase(projectId);
       const duration = Date.now() - startTime;
 
-      // Publish event
-      await this.publishQueryExecuted(projectId, affectedRows, false, duration, null);
-
-      this.logger.info('tool.execute.success', {
-        project_id: projectId,
-        affected_rows: affectedRows,
-        duration
-      });
+      this.metrics?.increment('database-manager.tool.execute.success');
+      this.metrics?.timing('database-manager.query.duration', duration);
+      await this._publishQueryExecuted(projectId, affectedRows, false, duration, null);
 
       return {
         status: 200,
-        data: {
-          success: true,
-          projectId,
-          affectedRows,
-          lastInsertId,
-          duration
-        }
+        data: { projectId, affectedRows, lastInsertId, duration }
       };
-    } catch (error) {
-      const errorMsg = error?.message || String(error);
-      this.logger.error('tool.execute.error', {
-        project_id: projectId,
-        error: errorMsg
-      });
-
-      return {
-        status: 500,
-        data: {
-          success: false,
-          projectId,
-          error: errorMsg
-        }
-      };
+    } catch (err) {
+      return this._handleHandlerError('database-manager.tool.execute.failed', err, 'tool_execute');
     }
   }
 
   // ==========================================
-  // Database Operations
+  // Resolución de paths + apertura SQLite
   // ==========================================
 
-  /**
-   * Resolve database path for a project
-   * - System projects: /projects/{name}/db.sqlite (legacy)
-   * - User projects: /projects/{slug}/db/{slug}.sqlite (new structure)
-   */
-  async resolveDatabasePath(projectId) {
-    // System projects use legacy structure
-    if (this.systemProjects.has(projectId)) {
+  async _resolveDatabasePath(projectId) {
+    if (SYSTEM_PROJECTS.has(projectId)) {
       const projectDir = path.join(this.projectsPath, projectId);
-      return {
-        projectDir,
-        dbPath: path.join(projectDir, 'db.sqlite'),
-        isSystem: true
-      };
+      return { projectDir, dbPath: path.join(projectDir, 'db.sqlite'), isSystem: true };
     }
 
-    // Check cache first
     if (this.projectPaths.has(projectId)) {
       const cached = this.projectPaths.get(projectId);
       return {
@@ -1195,126 +634,158 @@ class DatabaseManagerModule {
       };
     }
 
-    // Query system database for project info
     try {
-      const systemDb = await this.getDatabase('system');
-      const result = await this._all(systemDb, `SELECT base_path, name FROM projects WHERE id = ?`, [projectId]);
-
-      if (result.length > 0) {
+      const systemDb = await this._getDatabase('system');
+      const result = await this._all(systemDb,
+        'SELECT base_path, name FROM projects WHERE id = ?', [projectId]);
+      if (result.length > 0 && result[0].base_path) {
         const { base_path: basePath, name } = result[0];
-
-        if (basePath) {
-          // Create slug from name for db filename
-          const slug = name.toLowerCase()
-            .replace(/[áàäâã]/g, 'a')
-            .replace(/[éèëê]/g, 'e')
-            .replace(/[íìïî]/g, 'i')
-            .replace(/[óòöôõ]/g, 'o')
-            .replace(/[úùüû]/g, 'u')
-            .replace(/ñ/g, 'n')
-            .replace(/[^a-z0-9\s-]/g, '')
-            .replace(/[\s_]+/g, '-')
-            .replace(/-+/g, '-')
-            .replace(/^-|-$/g, '') || projectId.slice(0, 8);
-
-          // Cache the result
-          this.projectPaths.set(projectId, { basePath, slug });
-
-          return {
-            projectDir: basePath,
-            dbPath: path.join(basePath, 'db', `${slug}.sqlite`),
-            isSystem: false
-          };
-        }
+        const slug = this._slugify(name) || projectId.slice(0, 8);
+        this.projectPaths.set(projectId, { basePath, slug });
+        return {
+          projectDir: basePath,
+          dbPath: path.join(basePath, 'db', `${slug}.sqlite`),
+          isSystem: false
+        };
       }
     } catch (err) {
-      // System DB might not have the project yet, fall back to legacy
-      this.logger.debug('db.resolve.fallback', { project_id: projectId, error: err.message });
+      this.logger.debug('database-manager.resolve.fallback', {
+        project_id: projectId, error: err.message
+      });
     }
 
-    // Fallback to legacy structure for unknown projects
+    // Fallback legacy
     const projectDir = path.join(this.projectsPath, projectId);
-    return {
-      projectDir,
-      dbPath: path.join(projectDir, 'db.sqlite'),
-      isSystem: true
-    };
+    return { projectDir, dbPath: path.join(projectDir, 'db.sqlite'), isSystem: true };
   }
 
-  async getDatabase(projectId) {
-    if (this.databases.has(projectId)) {
-      return this.databases.get(projectId);
-    }
+  async _getDatabase(projectId) {
+    if (this.databases.has(projectId)) return this.databases.get(projectId);
 
-    const { projectDir, dbPath, isSystem } = await this.resolveDatabasePath(projectId);
+    const { dbPath, isSystem } = await this._resolveDatabasePath(projectId);
     const dbDir = path.dirname(dbPath);
-
-    this.logger.info('db.loading', { project_id: projectId, db_path: dbPath, is_system: isSystem });
-
-    if (!fsSync.existsSync(dbDir)) {
-      await fs.mkdir(dbDir, { recursive: true });
-    }
-
+    if (!fsSync.existsSync(dbDir)) await fs.mkdir(dbDir, { recursive: true });
     const isNew = !fsSync.existsSync(dbPath);
 
     return new Promise((resolve, reject) => {
       const db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
-          this.logger.error('db.load.error', { project_id: projectId, error: err.message });
+          this.logger.error('database-manager.db.open.failed', {
+            project_id: projectId, db_path: dbPath, error: err.message
+          });
+          this.metrics?.increment('database-manager.errors', { kind: 'open' });
           return reject(err);
         }
         this.databases.set(projectId, db);
         if (isNew) {
-          this.eventBus.publish('db.created', {
+          this._publicarEvento('db.created', {
             project_id: projectId,
             created_at: new Date().toISOString()
           }).catch(() => {});
-          this.logger.info('db.created.new', { project_id: projectId, db_path: dbPath });
+          this.metrics?.increment('database-manager.created');
+          this.logger.info('database-manager.created.new', { project_id: projectId, db_path: dbPath, is_system: isSystem });
         } else {
-          this.logger.info('db.loaded.existing', { project_id: projectId });
+          this.logger.debug('database-manager.loaded.existing', { project_id: projectId });
         }
         resolve(db);
       });
     });
   }
 
-  async saveDatabase(projectId) {
-    // sqlite3 escribe directamente a disco — no se necesita export manual
+  async _saveDatabase(_projectId) {
+    // sqlite3 nativo escribe directo a disco — preservado por API symmetry
     return true;
   }
 
   // ==========================================
-  // Event Publishers
+  // Event publishers privados
   // ==========================================
 
-  async publishQueryExecuted(projectId, resultCount, readOnly, duration, correlationId) {
-    await this.eventBus.publish('db.query.executed', {
+  async _publishQueryResponse(projectId, requestId, success, data, error, correlationId) {
+    const payload = {
+      request_id: requestId,
+      project_id: projectId,
+      success,
+      timestamp: new Date().toISOString()
+    };
+    if (success) payload.data = data || [];
+    else payload.error = error || 'Unknown error';
+    if (correlationId) payload.correlation_id = correlationId;
+    await this.eventBus.publish('db.query.response', payload);
+  }
+
+  async _publishSchemaInitResponse(projectId, requestId, success, error, correlationId) {
+    const payload = {
+      request_id: requestId,
+      project_id: projectId,
+      success,
+      timestamp: new Date().toISOString()
+    };
+    if (!success && error) payload.error = error;
+    if (correlationId) payload.correlation_id = correlationId;
+    await this.eventBus.publish('db.schema.init.response', payload);
+  }
+
+  async _publishQueryExecuted(projectId, resultCount, readOnly, duration, correlationId) {
+    const payload = {
       project_id: projectId,
       result_count: resultCount,
       read_only: readOnly,
-      duration
-    }, { correlationId });
+      duration,
+      executed_at: new Date().toISOString()
+    };
+    if (correlationId) payload.correlation_id = correlationId;
+    await this.eventBus.publish('db.query.executed', payload);
   }
 
-  async publishQueryResponse(projectId, requestId, success, data, error, correlationId) {
-    await this.eventBus.publish(EVENTS.DB.QUERY_RESPONSE, {
-      project_id: projectId,
-      request_id: requestId,
-      correlation_id: correlationId || null,
-      success,
-      data: data || [],
-      error: error || null
-    }, { correlationId });
+  // ==========================================
+  // Helpers POC2 (transferibles)
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
   }
 
-  async publishSchemaInitResponse(projectId, requestId, success, error, correlationId) {
-    await this.eventBus.publish(EVENTS.DB.SCHEMA_INIT_RESPONSE, {
-      project_id: projectId,
-      request_id: requestId,
-      correlation_id: correlationId || null,
-      success,
-      error: error || null
-    }, { correlationId });
+  _handleHandlerError(logEvent, err, kind) {
+    const code = err._code || this._classifyHandlerError(err);
+    const status = code === 'VALIDATION_FAILED' ? 400 :
+                   code === 'RESOURCE_NOT_FOUND' ? 404 :
+                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
+                   code === 'CONFLICT' ? 409 : 500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code });
+    this.metrics?.increment('database-manager.errors', { kind, code });
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found') || msg.includes('no such table')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('syntax error')) return 'VALIDATION_FAILED';
+    if (msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('not allowed')) return 'AUTHORIZATION_REQUIRED';
+    if (msg.includes('unique') || msg.includes('constraint') || msg.includes('already exists')) return 'CONFLICT';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    const enriched = {
+      timestamp: new Date().toISOString(),
+      ...payload
+    };
+    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
+    else enriched.correlation_id = crypto.randomUUID();
+    await this.eventBus.publish(name, enriched);
+  }
+
+  _slugify(name) {
+    return String(name || '').toLowerCase().trim()
+      .replace(/[áàäâã]/g, 'a').replace(/[éèëê]/g, 'e')
+      .replace(/[íìïî]/g, 'i').replace(/[óòöôõ]/g, 'o')
+      .replace(/[úùüû]/g, 'u').replace(/ñ/g, 'n')
+      .replace(/[^a-z0-9\s-]/g, '').replace(/[\s_]+/g, '-')
+      .replace(/-+/g, '-').replace(/^-|-$/g, '');
   }
 }
 

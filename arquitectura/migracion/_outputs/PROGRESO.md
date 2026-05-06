@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-06T09:56:49Z_
+_Última regeneración: 2026-05-06T13:25:12Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 15 / 73 (21%)
-- **Drifts cerrados**: 344 / 3696 (9%)
-- **Drifts restantes en baseline**: 3352
+- **Drifts cerrados**: 344 / 3695 (9%)
+- **Drifts restantes en baseline**: 3351
 
 ### Progreso por capa
 
@@ -43,7 +43,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
-| 6 | core | `conversacion__ai-gateway` | 710 | 19 | 0 | sin tests/unit/ |
+| 6 | core | `conversacion__ai-gateway` | 776 | 17 | 0 | drifts 13/17 (76%) — esperado <50% |
 | 8 | core | `plugin-manager` | 486 | 11 | 0 | drifts 6/11 (55%) — esperado <50% |
 | 10 | core | `conversacion__chat-io` | 654 | 52 | 1 | drifts 32/52 (62%) — esperado <50% |
 | 11 | core | `channel-manager` | 493 | 29 | 1 | sin tests/unit/ |
@@ -79,7 +79,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 42 | dominio | `facturas` | 573 | 67 | 0 |
 | 43 | dominio | `staff-manager` | 394 | 67 | 0 |
 | 44 | dominio | `pizzepos__cuentas` | 1224 | 65 | 0 |
-| 45 | dominio | `notas` | 485 | 58 | 0 |
+| 45 | dominio | `notas` | 485 | 59 | 0 |
 | 46 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
 | 47 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
 | 48 | dominio | `pizzepos__persistencia-comandero` | 1542 | 50 | 0 |
@@ -144,7 +144,7 @@ Suite organizada en grupos:
 
 ## Decisiones pendientes / siguiente sesión
 
-**Próximo módulo recomendado**: `conversacion__ai-gateway` (capa core, 710 LOC, 19 drifts en baseline).
+**Próximo módulo recomendado**: `conversacion__ai-gateway` (capa core, 776 LOC, 17 drifts en baseline).
 
 Pasos canónicos para el siguiente:
 

@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T09:56:47.426Z",
+  "generated_at": "2026-05-06T13:25:11.482Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3696,
-    "loc_total": 48646,
+    "drifts_total": 3695,
+    "loc_total": 48712,
     "tools_total": 147,
     "agents_total": 30
   },
@@ -102,10 +102,10 @@
       "path": "modules/conversacion/ai-gateway",
       "layer": "core",
       "language": "en",
-      "version": "1.0.0",
-      "loc": 710,
-      "drifts": 19,
-      "events_publishes": 7,
+      "version": "2.0.0",
+      "loc": 776,
+      "drifts": 17,
+      "events_publishes": 8,
       "events_subscribes": 8,
       "tools": 0,
       "agents": 0,
@@ -717,7 +717,7 @@
       "language": "es",
       "version": "1.0.0",
       "loc": 485,
-      "drifts": 58,
+      "drifts": 59,
       "events_publishes": 3,
       "events_subscribes": 0,
       "tools": 0,

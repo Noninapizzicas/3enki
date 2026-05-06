@@ -53,6 +53,9 @@ jobs:
       - name: Run unit tests (plugin-manager — reescritura canonica)
         run: npm run test:plugin-manager
 
+      - name: Run unit tests (conversacion/ai-gateway — reescritura canonica)
+        run: npm run test:conversacion__ai-gateway
+
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc
 

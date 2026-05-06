@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-06T09:56:28.122Z",
-  "total": 3781,
+  "generated_at": "2026-05-06T13:25:02.167Z",
+  "total": 3779,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -12,7 +12,7 @@
     "http": 164,
     "chat-flow": 3,
     "agent-flow": 8,
-    "llm-flow": 6,
+    "llm-flow": 3,
     "tools": 272,
     "agents-config": 94,
     "module-rewrite": 29,
@@ -20,13 +20,13 @@
     "security": 1,
     "testing": 30,
     "multi-tenancy": 257,
-    "documentation": 89,
+    "documentation": 90,
     "versionado": 1,
     "deployment": 4,
     "scheduling": 2
   },
   "by_severity": {
-    "warning": 3448,
+    "warning": 3446,
     "info": 350,
     "error": 10
   },
@@ -192,6 +192,7 @@
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/migracion/README.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/migracion/_outputs/PROGRESO.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/migracion/notas/composition-manager-mapa.md contiene patron estructurable — considerar absorber a contrato JSON",
+    "documentation|drift_markdown_con_shape_estructurable|arquitectura/migracion/notas/conversacion__ai-gateway-mapa.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/migracion/notas/database-manager-mapa.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/migracion/notas/gateway-manager-mapa.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|arquitectura/migracion/notas/plugin-manager-mapa.md contiene patron estructurable — considerar absorber a contrato JSON",
@@ -2732,9 +2733,6 @@
     "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-agent-framework consume \"llm.complete.response\" sin request_schema_ref/schema_ref en module.json",
     "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-agent-framework publica \"llm.complete.request\" sin response_schema_ref/schema_ref en module.json",
     "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-gateway consume \"llm.complete.request\" sin request_schema_ref/schema_ref en module.json",
-    "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-gateway publica \"llm.complete.response\" sin response_schema_ref/schema_ref en module.json",
-    "llm-flow|drift_publish_response_con_error_inyectado|conversacion__ai-gateway modules/conversacion/ai-gateway/index.js:602 — publish \"llm.complete.response\" con campo 'error' (drift legacy, separar a llm.complete.failed)",
-    "llm-flow|drift_publish_response_con_success_flag|conversacion__ai-gateway modules/conversacion/ai-gateway/index.js:602 — publish \"llm.complete.response\" con flag 'success:' (drift legacy, separar response/failed)",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|certificate-authority — faltan secciones obligatorias: config.persistence",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|esp32-dev — faltan secciones obligatorias: config.persistence",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|esp32-flasher — faltan secciones obligatorias: config.persistence",

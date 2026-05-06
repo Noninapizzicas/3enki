@@ -1,6 +1,6 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-06T23:51:41Z_
+_Última regeneración: 2026-05-06T23:51:55Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 

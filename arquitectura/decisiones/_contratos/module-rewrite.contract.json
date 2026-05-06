@@ -19,8 +19,13 @@
     ],
     "obligatorios_si_existen": [
       "arquitectura/migracion/_legacy/<modulo>-monolito-pre-rewrite.js.bak (legacy preservado tras migración)",
+      "arquitectura/migracion/notas/<modulo>-mapa.md (PASO 0 — generado por scaffold-rewrite.js, completado con decisiones de dominio)",
       "arquitectura/migracion/notas/<modulo>-descomposicion.md (si la migración descompone en N módulos)",
       "tests/unit/<modulo>.test.js (cobertura por capas POC2)"
+    ],
+    "scripts_de_automatizacion": [
+      "arquitectura/migracion/scripts/scaffold-rewrite.js — apertura del rewrite: archiva monolito, genera mapa.md skeleton, genera tests/<slug>.test.js skeleton (Group 1 + Group 7), wirea package.json y workflow.yml. Reduce ~40% del trabajo mecanico.",
+      "arquitectura/migracion/scripts/finish-rewrite.js — cierre del rewrite: tests verde, baseline regenerado, validate:ci PASS, inventario+PROGRESO regenerados, commit con mensaje templateado leido del mapa. Flag --commit opcional. NO hace push."
     ],
     "opcionales_para_contexto": [
       "modules/_template/index.js (plantilla canónica de referencia)",

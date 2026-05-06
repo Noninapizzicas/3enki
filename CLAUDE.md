@@ -192,6 +192,36 @@ Cuando hay drift estructural en un subsistema (varios módulos hablan shapes inc
 
 Después de los pasos 1-3 main puede mergear sin migración (validator solo añade warnings al baseline). Después del 4-5 el subsistema acepta ambos shapes. Después del 6 solo canónico — futuros publish con shape antiguo fallarán contra schema en lugar de pasar con warn.
 
+## Migración POC2 con scripts (horizontal módulo a módulo)
+
+Cada uno de los 73 módulos del horizontal se migra al canon usando dos scripts (no se hace todo a mano):
+
+```
+node arquitectura/migracion/scripts/scaffold-rewrite.js <slug>
+# → archiva monolito en _legacy/, genera notas/<slug>-mapa.md pre-rellenado
+#   (identidad, eventos del audit, drift breakdown, secciones <TODO>),
+#   genera tests/unit/<slug>.test.js skeleton (Group 1 Lifecycle + Group 7
+#   Helpers POC2 listos), wirea package.json y workflow.yml.
+
+# (Claude completa: rewrite/patch del index.js, bump module.json, tests
+#  Groups 2-6 con domain logic, cierra TODOs del mapa con decisiones de
+#  dominio. PASO 0 obligatorio antes de tocar código.)
+
+node arquitectura/migracion/scripts/finish-rewrite.js <slug> --commit
+# → tests verde, baseline regenerado, validate:ci PASS, inventario+PROGRESO,
+#   commit con mensaje templateado leído del mapa. NO hace push.
+```
+
+**Reglas de eficiencia (críticas para no quemar tokens)**:
+
+- **Modelo**: Sonnet 4.6 para migraciones rutinarias (pattern-matching repetitivo). Reservar Opus 4.7 solo para módulos que requieren descomposición o decisiones arquitectónicas no obvias. Ahorro estimado: 3-4× en tokens.
+- **`/clear` entre módulos**: el scaffold/finish trabajan sobre disco, no sobre el contexto del LLM. Resetear contexto entre módulos no pierde nada y reduce ~50% de tokens en el siguiente.
+- **`Edit` quirúrgico vs `Write` total**: si el módulo ya está 70%+ canónico, los 4 cambios reales (añadir helpers POC2 + limpiar onUnload + métricas en error paths + tracing en module.json) caben en 4-5 `Edit` calls. Reescribir el archivo entero con `Write` envía 3000+ tokens innecesarios. Ahorro: 5-10× en ese módulo.
+- **Si `finish-rewrite` falla en step `[4/8] validate:ci`**: el frontend validator tiene non-determinismo conocido. Reintentar el script directamente — 1 reintento suele estabilizarlo. No hace falta debuggear.
+
+Detalle del workflow + reglas de cierre en `arquitectura/migracion/README.md`.
+Patrón canónico formalizado en `arquitectura/decisiones/_contratos/module-rewrite.contract.json`.
+
 ## Garantías obligatorias en payloads
 
 Estas reglas las enforce el conjunto de validators + schemas. Si las rompes en un publish nuevo, CI te corta.

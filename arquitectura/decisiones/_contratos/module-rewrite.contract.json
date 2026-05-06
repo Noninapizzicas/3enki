@@ -1,0 +1,400 @@
+{
+  "_doc": "Contrato transversal puro que formaliza el PATRÓN POC2 de reescritura canónica de módulos. Cuando un módulo del repo se migra al canon de los 24 contratos transversales, sigue las reglas, principios y prohibiciones definidos aquí. El contrato emerge de los 3 primeros POC2 ejecutados con éxito (scheduler #1, credential-manager #2, project-manager #3) y captura las lecciones operativas en forma validable mecánicamente. Aplicable a cualquiera de los 73 módulos del repo durante la fase horizontal del refactor.\n\nLA REGLA QUE NO SE ROMPE: una reescritura canónica es un MÓDULO NUEVO nacido cumpliendo los 24 contratos transversales — NO un parche al monolito existente. Si la migración deja drifts del monolito, no es reescritura — es refactor parcial.",
+  "id": "module-rewrite",
+  "version": "1.0.0",
+  "creada": "2026-05-04",
+  "supersedes_nota": "Primera versión. Captura el patrón POC2 demostrado en 3 módulos del horizontal (scheduler, credential-manager, project-manager). Lecciones aprendidas: (1) los 5 helpers privados son transferibles (no reinventar por módulo), (2) el PASO 0 de mapeo exhaustivo es CRÍTICO (sin él, descubres funciones del monolito a posteriori — caso real: 3 funciones de blueprints olvidadas en project-manager v4.0.0 inicial, restauradas en commit retroactivo 5e8e676), (3) cuando un módulo mezcla 5+ responsabilidades mejor descomponer en N módulos (caso credential-manager: 2835 LOC monolito → core 842 LOC + 3 módulos pendientes documentados en notas/), (4) eventos canónicos del bus se preservan invariantes (los consumers NO se enteran de la reescritura), (5) drift count del módulo cae ≥70% en una migración real (≤50% para considerar 'migrado' en panel de progreso debido a falsos positivos legítimos del validator). Habilita auditoria mecánica del progreso y bloquea regresiones — un commit que reintroduzca patrones legacy en un módulo migrado falla en CI.",
+
+  "objetivo": "Producir UN JSON output (_outputs/module-rewrite.json) que define: el shape canónico de un módulo migrado (estructura de index.js, module.json, tests), los 5 helpers privados transferibles obligatorios, el flujo operativo de migración (paso 0 mapeo + 9 pasos canónicos), los criterios de cierre (drift count ≤30% original, tests verdes, validate:ci PASS), los anti-patrones prohibidos (returns con error string, codes inventados, monolito sin archivar, tests sin aislamiento). Validable mecánicamente cruzando contra los módulos migrados (lista detectada por scripts/progreso.js): cada módulo en la tabla de migrados pasa los cross-checks; cada uno pendiente queda exento.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/module-rewrite.contract.json (este archivo)",
+      "arquitectura/decisiones/_outputs/errors.json (catalogo de error codes canónicos)",
+      "arquitectura/decisiones/_contratos/errors.contract.json (validar mapeo en handlers)",
+      "arquitectura/decisiones/_contratos/observability.contract.json (validar metrics + logs)",
+      "arquitectura/decisiones/_contratos/events.contract.json (validar publishes con correlation_id)",
+      "arquitectura/migracion/_outputs/modulos-roadmap.json (lista de los 73 módulos a migrar con orden)",
+      "arquitectura/migracion/_outputs/PROGRESO.md (panel con módulos migrados detectados)"
+    ],
+    "obligatorios_si_existen": [
+      "arquitectura/migracion/_legacy/<modulo>-monolito-pre-rewrite.js.bak (legacy preservado tras migración)",
+      "arquitectura/migracion/notas/<modulo>-descomposicion.md (si la migración descompone en N módulos)",
+      "tests/unit/<modulo>.test.js (cobertura por capas POC2)"
+    ],
+    "opcionales_para_contexto": [
+      "modules/_template/index.js (plantilla canónica de referencia)",
+      "tests/_template/_template.test.js (plantilla de tests)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "REESCRITURA NO ES REFACTOR. Refactorizar es cambiar el código manteniendo comportamiento. Reescribir es construir el módulo de nuevo cumpliendo los 24 contratos desde el primer commit. Si el resultado tiene drifts del monolito, no fue reescritura — fue refactor parcial guiado por intuición.",
+
+    "PASO 0 ANTES DE CODEAR. Mapa exhaustivo del monolito: TODOS los métodos públicos + privados, TODOS los eventos publicados + consumidos, TODOS los handlers HTTP/UI/bus, TODOS los lifecycle hooks (re-emisiones, timers, side effects al arrancar), TODO el estado interno. Sin mapa, se descubren funciones a posteriori — caso real documentado en project-manager v4.0.0 inicial (3 funciones de blueprints omitidas, restauradas retroactivamente).",
+
+    "5 HELPERS POC2 SON UNIVERSALES. Cada módulo migrado implementa _errorResponse, _handleHandlerError, _classifyHandlerError, _publicarEvento, y al menos uno auxiliar específico del dominio (_fetchWithTimeout para módulos HTTP, _slugify para módulos con identidad textual, etc.). Estos 5 helpers no se reinventan por módulo — se copian y adaptan.",
+
+    "EVENTOS CANÓNICOS DEL BUS SE PRESERVAN. Una reescritura NO cambia el shape de los eventos publicados/consumidos — los consumers (otros módulos del bus) NO deben enterarse de la reescritura. Si la reescritura rompe la API del bus, viola la promesa de modularidad infinita del companero-viaje.",
+
+    "MONOLITO SE ARCHIVA, NO SE ELIMINA. arquitectura/migracion/_legacy/<modulo>-monolito-pre-rewrite.js.bak es la copia íntegra del index.js anterior. Sirve de (a) referencia durante la reescritura para ver qué hace cada función original, (b) backup de emergencia si la reescritura rompe algo crítico, (c) auditoría posterior comparativa monolito vs rewrite para detectar funciones olvidadas.",
+
+    "DRIFT COUNT EN BASELINE BAJA ≥70%. Una migración canónica reduce drásticamente los warnings del validator porque elimina los 5 patrones más comunes: error como string, error code inventado, error sin metric, error sin log, fetch sin timeout. Si la migración no baja al menos 70%, no fue reescritura completa — fue parche.",
+
+    "TESTS POR CAPAS NO POR MÉTODO. La estructura canónica de tests es 5-9 grupos: Lifecycle, Validación canónica (cada error path), Success paths (success + publish), Tools (shape canónico), Helpers internos (cada helper aislado). Cada grupo tiene 2-5 tests. Los tests por método individual ofuscan el cuadro general.",
+
+    "AISLAMIENTO DE TESTS OBLIGATORIO. Si el módulo persiste a archivo, los tests usan tmpdir único por instancia (ej. /tmp/<modulo>-test-XXXX.json). Si usa DB, mock in-memory. NUNCA contaminar el filesystem real del repo durante tests. Detectable: tests que escriben a data/ o ./<algo>.json fallan al correr en paralelo o repetidamente.",
+
+    "DESCOMPONER SI EL MÓDULO MEZCLA 5+ RESPONSABILIDADES. Caso real: credential-manager monolito (2835 LOC) mezclaba CRUD + resolución cascada + 7 testProviders + OAuth flow + Glovo configs + Telegram notifs configs. Reescribir entero perpetuaba el acoplamiento. La descomposición en core (CRUD + resolve, 842 LOC) + 3 módulos pendientes documentados (credential-tester, credential-oauth, credential-vendor-*) cumple la regla de Granularidad de CLAUDE.md: 'un módulo = una responsabilidad acotada'.",
+
+    "VERSION BUMP MAYOR EN CADA REESCRITURA. La reescritura cambia internals + estilo de error handling + telemetría. Aunque los eventos del bus se preservan, el módulo es esencialmente nuevo. semver mayor (3.0.0 → 4.0.0) refleja el cambio.",
+
+    "FALSOS POSITIVOS DEL VALIDATOR SE DOCUMENTAN, NO SE 'ARREGLAN'. Algunos drifts que el validator reporta son legítimos en el dominio: events <modulo>.<entity>.response (RPC sobre pub/sub canónico), publish_dominio_sin_project_id en eventos que YA son sobre proyecto, validators que recetan { ok: ... } como helpers internos. Ajustar el módulo para 'cerrar el drift' degrada el código real. Documentar en commit y aceptar el drift residual.",
+
+    "PROGRESO.MD ES VERDAD OPERATIVA. Tras cada migración: ejecutar inventario.js + progreso.js + commit. El panel humano-legible siempre refleja el estado actual: cuántos migrados, qué drifts cerrados, próximo módulo recomendado. Si una sesión olvida regenerar el panel, la próxima sesión empieza con datos obsoletos.",
+
+    "COMMIT CON MÉTRICAS ANTES/DESPUÉS. El commit message lleva (a) LOC antes vs después, (b) drifts en baseline antes vs después, (c) tests añadidos, (d) version bump, (e) lista de funciones críticas restauradas si aplica. Sirve de prueba documental de que la migración cumple los criterios de cierre.",
+
+    "SI EL MÓDULO NO TIENE TESTS PREVIOS, NO HAY REGRESIÓN QUE PROTEGER. La reescritura puede ser audaz: cambiar nombres internos, eliminar duplicación, simplificar API privada. Lo único invariante es la API pública del bus."
+  ],
+
+  "principios": [
+    {
+      "id": "paso_0_mapeo_exhaustivo_obligatorio",
+      "regla": "Antes de tocar codigo del rewrite, generar inventario completo del monolito: lista de todos los metodos (grep -oE 'async [a-zA-Z_]+\\(' legacy.js | sort -u), eventos publishes/subscribes, handlers UI/HTTP, side effects de lifecycle. Para modulos complejos (>500 LOC), generar arquitectura/migracion/notas/<modulo>-mapa.md.",
+      "razon": "Sin mapa, la reescritura se guia por memoria del primer pase de lectura. Funciones secundarias (features, blueprints, edge cases) se omiten silenciosamente. Auditoria a posteriori detecta el gap pero ya es tarde — codigo escrito, tests escritos, sin esa funcionalidad."
+    },
+    {
+      "id": "monolito_archivado_no_eliminado",
+      "regla": "Antes de sobreescribir modules/<modulo>/index.js, copiar a arquitectura/migracion/_legacy/<modulo>-monolito-pre-rewrite.js.bak. Esa copia se commit en el mismo commit que el rewrite.",
+      "razon": "El monolito tiene contexto historico que el rewrite descarta (decisiones del equipo original, casos especiales del dominio, comentarios). Preservarlo permite (a) auditoria comparativa, (b) restore de emergencia, (c) referencia para sesiones siguientes de descomposicion."
+    },
+    {
+      "id": "5_helpers_poc2_obligatorios",
+      "regla": "El rewrite implementa 5 helpers privados con nombres exactos: _errorResponse(status, code, message, details?), _handleHandlerError(logEvent, err, kind), _classifyHandlerError(err), _publicarEvento(name, payload, sourcePayload?), y al menos un helper auxiliar especifico del dominio (_fetchWithTimeout, _slugify, _maskApiKey, etc.). Detectable por regex en index.js.",
+      "razon": "Los 5 helpers cierran los 5 patrones mas comunes de drift: error string, code inventado, error sin metric, error sin log, fetch sin timeout/telemetria. Reescritura sin estos helpers no logra el ≥70% de drift reduction."
+    },
+    {
+      "id": "error_code_del_catalogo_canonico",
+      "regla": "Cada return de error en handlers del rewrite usa codigo del catalogo errors.contract.json (RESOURCE_NOT_FOUND, VALIDATION_FAILED, AUTHORIZATION_REQUIRED, CONFLICT, INTERNAL_ERROR, UPSTREAM_*, etc.). Detectable: codigos en source que NO esten en el catalogo son drift critico.",
+      "razon": "Codes inventados rompen el mapeo cross-modulo de errors. El consumer (frontend, otros modulos) tiene que conocer cada code particular del modulo en lugar de una sola tabla canonica."
+    },
+    {
+      "id": "eventos_canonicos_preservados",
+      "regla": "El rewrite NO cambia el shape de los eventos publicados/consumidos del modulo. publishes y subscribes en module.json antes y despues de la reescritura coinciden (modulo eventos nuevos canonicos como project.state que el monolito no tenia).",
+      "razon": "Eventos del bus son contrato cross-modulo. Cambiarlos rompe consumers que el modulo no controla. La promesa de event-core: añadir/reescribir un modulo no rompe los demas."
+    },
+    {
+      "id": "tests_por_capas_no_por_metodo",
+      "regla": "tests/unit/<modulo>.test.js organizado en grupos: Group 1 Lifecycle (2-3 tests), Group 2 Validacion canonica (3-5 tests), Group 3 Success paths (3-5 tests), Group 4 Edge cases / domain especifico, Group N Helpers internos. Cada grupo tiene >=2 tests.",
+      "razon": "Estructura predictible facilita: (a) lectura del estado de cobertura del modulo en 30s, (b) detectar gaps (grupo vacio), (c) extender tests al añadir funcionalidad sin reorganizar."
+    },
+    {
+      "id": "tests_aislamiento_obligatorio",
+      "regla": "Tests que persisten a archivo usan tmpdir + nombre unico (path.join(os.tmpdir(), `<modulo>-test-${Date.now()}-${random()}.ext`)). Tests con DB usan mock in-memory (Map) o sqlite :memory:. NUNCA escribir a data/, ./<algo>.json, o cualquier path del repo durante test runs.",
+      "razon": "Tests que contaminan disco real fallan al correr en paralelo, dejan estado entre runs, y rompen la idempotencia. CI corre los tests N veces — sin aislamiento, falsos negativos."
+    },
+    {
+      "id": "drift_count_baja_70_porciento",
+      "regla": "Tras la migracion, el drift count del modulo en drift-baseline.json baja al 30% o menos del valor previo. Falsos positivos del validator se documentan en el commit message como drifts residuales legitimos.",
+      "razon": "Es el indicador objetivo de que la reescritura cumplio canon. Si solo cierra el 30-50% es refactor parcial. Falsos positivos (validators que detectan patrones canonicos como drift) se aceptan en commit explicito."
+    },
+    {
+      "id": "module_json_completo_canonico",
+      "regla": "module.json del rewrite declara TODA la superficie del modulo: events.publishes (con descripciones), events.subscribes (con handlers), apis (HTTP), ui_handlers (mqttRequest cross-modulo), tools (cumpliendo tools.contract), dependencies (modulos requeridos), config (con persistence pattern), observability (metrics counters/gauges/timings).",
+      "razon": "module.json es el AUDIT de superficie. Si esta incompleto, el validator de events/observability/persistence detecta drifts. Y la auditoria automatica modulo-completo no captura toda la realidad."
+    },
+    {
+      "id": "version_bump_mayor",
+      "regla": "El rewrite cambia version semver mayor: vX.Y.Z → v(X+1).0.0. Refleja que es un modulo esencialmente nuevo aunque los eventos del bus se preserven.",
+      "razon": "Semver indica al ecosistema que el modulo cambio internamente de forma significativa. Aunque API del bus es invariante, codigo del modulo (helpers, persistencia, telemetria) es nuevo."
+    },
+    {
+      "id": "commit_con_metricas_antes_despues",
+      "regla": "Commit message del rewrite incluye tabla con: LOC (antes/despues), Drifts en baseline (antes/despues con %), Tests añadidos, Version bump. Util para validar a posteriori que la migracion cumplio criterios de cierre.",
+      "razon": "Sin metricas en commit, el progreso es invisible y dificulta auditoria. Con metricas, cualquier persona ve en 10 segundos que la migracion funciono."
+    },
+    {
+      "id": "regenerar_progreso_md_tras_commit",
+      "regla": "Tras commit del rewrite: ejecutar `node arquitectura/migracion/scripts/inventario.js && node arquitectura/migracion/scripts/progreso.js` y commit del PROGRESO.md actualizado.",
+      "razon": "Panel desactualizado da datos obsoletos a la siguiente sesion. La siguiente migracion debe arrancar con datos frescos: cuantos restan, cual es el siguiente, drifts globales actuales."
+    },
+    {
+      "id": "descomponer_si_5_responsabilidades",
+      "regla": "Si el modulo monolitico tiene 5+ responsabilidades distintas (ej: CRUD + tests externos + OAuth + multi-vendor configs + lifecycle del dominio), descomponer en N modulos en lugar de reescribir entero. Documentar plan multi-sesion en arquitectura/migracion/notas/<modulo>-descomposicion.md.",
+      "razon": "Disciplina del repo (CLAUDE.md, seccion Granularidad): un modulo = una responsabilidad acotada. Reescribir entero perpetua el acoplamiento. Descomponer permite que cada nuevo modulo nazca canonico desde el dia 1."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "reescritura_no_refactor_in_place",
+      "decision": "Cuando un modulo tiene 50+ drifts en baseline, la disciplina es REESCRIBIR ENTERO al canon, no aplicar parches al monolito existente. Los parches dejan acoplamiento; la reescritura libera.",
+      "razon": "Refactor in-place mantiene la estructura del codigo legacy y sus suposiciones. Reescritura desde cero permite (a) cumplir 24 contratos coherentemente, (b) eliminar duplicacion HTTP↔UI, (c) introducir helpers POC2 sin retorcer codigo previo."
+    },
+    {
+      "id": "5_helpers_canonicos_universales",
+      "decision": "Los 5 helpers POC2 (_errorResponse, _handleHandlerError, _classifyHandlerError, _publicarEvento + uno auxiliar) son NOMBRES EXACTOS reutilizados literalmente en cada modulo. NO se renombran por preferencia.",
+      "razon": "Auditoria y debugging cross-modulo se simplifica: ver _errorResponse en cualquier modulo significa lo mismo en todos. Renombrar a _buildError o _makeErrorResp por gusto rompe la consistencia."
+    },
+    {
+      "id": "monolito_en_directorio_central_no_modulo",
+      "decision": "El monolito archivado va en arquitectura/migracion/_legacy/, NO en modules/<modulo>/_legacy/. Asi NO contamina las heuristicas de validators (que escanean modules/<X>/* y contarian drifts del legacy como del modulo migrado).",
+      "razon": "Caso real: credential-manager v2.0.0 inicial dejo monolito en modules/credential-manager/_legacy/. El validador heuristico contaba 16 drifts en lugar de 4 porque el path 'modules/credential-manager/' matcheaba ambos. Mover a arquitectura/migracion/_legacy/ separa los dominios."
+    },
+    {
+      "id": "tests_threshold_50_porciento_no_30",
+      "decision": "El script progreso.js usa threshold <50% (no <30%) para considerar un modulo migrado. Razon: validators reportan ~10-20 falsos positivos legitimos por modulo (validators con {ok:true} internos, patrones canonicos request/response, etc.).",
+      "razon": "Threshold 30% rechaza migraciones reales por falsos positivos. 50% es realista — drifts genuinos bajan ≥70%, los residuales (10-30% de baseline original) son legitimos."
+    },
+    {
+      "id": "descomposicion_documentada_pre_implementacion",
+      "decision": "Cuando un modulo se descompone, ANTES de tocar codigo crear arquitectura/migracion/notas/<modulo>-descomposicion.md con: motivacion, plan multi-sesion (N modulos nuevos), eventos canonicos preservados, lo que NO se descompone (queda en core), criterio de cierre por sesion. Sin esa nota, la descomposicion se vuelve ad-hoc.",
+      "razon": "Caso real: credential-manager descompuso en core + 3 modulos pendientes. La nota documenta para sesiones futuras (a) que migrar primero, (b) que metodos pertenecen a cada modulo nuevo, (c) que se rompio temporalmente y como restaurar si emerge urgencia."
+    },
+    {
+      "id": "preservacion_eventos_bus_invariante",
+      "decision": "Los eventos canonicos publicados/consumidos por el modulo NO cambian de shape en la reescritura. Si una mejora estructural requiere cambiar shape, se hace via sub-contrato derivado (chat-flow, agent-flow, llm-flow) — no como side effect de la reescritura.",
+      "razon": "Modularidad infinita exige que añadir/reescribir un modulo no rompa los demas. Cambiar shape de eventos via reescritura silenciosa rompe consumers — viola la promesa central de event-core."
+    },
+    {
+      "id": "version_bump_mayor_aunque_api_bus_invariante",
+      "decision": "El rewrite cambia semver mayor (X+1.0.0) AUNQUE los eventos del bus se preserven. Refleja cambio significativo en internals.",
+      "razon": "Semver del modulo no es solo del shape de eventos — incluye contratos internos (helpers, error handling, telemetria) que SI cambian. Bump major al rewrite es honesto."
+    },
+    {
+      "id": "tests_mocks_no_envFile_real",
+      "decision": "Tests usan eventBus mock + dbStore Map + tmpdir filesystem. NUNCA envFile real del repo, NUNCA dbFile real. Aunque sea mas lento configurar mocks, garantiza idempotencia + paralelismo.",
+      "razon": "Tests con archivos reales del repo dejan estado entre runs (false positives), fallan en paralelo, y bloquean CI. Mocks aislan completamente."
+    },
+    {
+      "id": "primera_migracion_define_patron_para_resto",
+      "decision": "El primer modulo migrado de cada categoria (core, infra, dominio, tooling) define el patron exacto para los siguientes de su categoria. Subsecuentes migraciones replican estructura de tests, helpers especificos, organizacion de archivos.",
+      "razon": "Caso real: scheduler v1.0.0 establecio el patron core. credential-manager y project-manager replicaron sin reinventar nada. Los siguientes 13 core copian el patron — productividad alta."
+    },
+    {
+      "id": "drift_residual_documentado_en_commit",
+      "decision": "El commit message del rewrite enumera explicitamente los drifts residuales del validator (los que quedan tras la migracion) y argumenta por que son falsos positivos legitimos. Asi futuras sesiones no intentan 'arreglar' algo que es correcto.",
+      "razon": "Sin documentacion del residual, una sesion futura ve drifts en project-manager y los toma como pendiente. Commit explicito frena ese intento."
+    },
+    {
+      "id": "criterio_de_cierre_estricto",
+      "decision": "Un modulo se considera migrado cuando: (a) drifts ≤30% original, (b) tests verdes, (c) validate:ci PASS, (d) module.json al ancho canonico, (e) commit con metricas, (f) PROGRESO.md regenerado. Sin los 6, no esta migrado. Migracion 'a medias' no existe.",
+      "razon": "Definicion clara de 'done' evita falsos cierres. Si el panel marca migrado pero los tests fallan, la disciplina se erosiona."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "reescribir_sin_paso_0_mapeo",
+      "regla": "NO empezar a escribir codigo del rewrite sin haber generado el mapa exhaustivo del monolito (lista de metodos, eventos, lifecycle, side effects). Para modulos >500 LOC, el mapa va en arquitectura/migracion/notas/<modulo>-mapa.md.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Auditoria del PR: si la reescritura introduce el modulo nuevo en el mismo commit que su nota de mapeo, OK. Si no hay nota y el modulo es complejo, drift de proceso. Validador heuristico: rewrite >500 LOC sin nota mapeo = warning.",
+      "alternativa_correcta": "Antes de Write del index.js nuevo, ejecutar grep -oE 'async [a-zA-Z_]+\\(' arquitectura/migracion/_legacy/<modulo>-monolito-pre-rewrite.js.bak | sort -u y construir nota mapeo."
+    },
+    {
+      "id": "eliminar_monolito_sin_archivar",
+      "regla": "NUNCA sobreescribir modules/<modulo>/index.js sin antes copiar a arquitectura/migracion/_legacy/<modulo>-monolito-pre-rewrite.js.bak.",
+      "viola_garantias": ["observabilidad_end_to_end", "no_silent_failures"],
+      "como_detectar": "Validador: para cada modulo en la tabla de migrados de PROGRESO.md, verificar existencia de _legacy/<modulo>-monolito-pre-rewrite.js.bak. Si falta, drift critico.",
+      "alternativa_correcta": "cp modules/<modulo>/index.js arquitectura/migracion/_legacy/<modulo>-monolito-pre-rewrite.js.bak ANTES del Write nuevo."
+    },
+    {
+      "id": "returns_con_error_string",
+      "regla": "NO devolver { status: X, error: 'mensaje' }. SIEMPRE { status: X, error: { code, message, details? } }.",
+      "viola_garantias": ["no_silent_failures"],
+      "como_detectar": "Validator de errors.contract ya cubre. Cross-check: regex en source del rewrite buscando 'error: \\'<mensaje>\\''. Drift si aparece.",
+      "alternativa_correcta": "return this._errorResponse(400, 'VALIDATION_FAILED', 'mensaje', { kind: 'domain', field: 'X' })."
+    },
+    {
+      "id": "codes_inventados_fuera_catalogo",
+      "regla": "error.code en cualquier handler del rewrite es del catalogo errors.contract.json. NO 'PROJECT_NAME_EXISTS', 'INVALID_LEVEL', 'PARENT_NOT_FOUND', etc. (codes especificos al dominio del monolito).",
+      "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm"],
+      "como_detectar": "Cross-check: cargar errors.json codes_*, regex en source para 'code:' literal o 'code = '. Codes fuera de la lista = drift.",
+      "alternativa_correcta": "Mapear semanticamente: 'PROJECT_NAME_EXISTS' → CONFLICT, 'INVALID_LEVEL' → VALIDATION_FAILED, 'PARENT_NOT_FOUND' → RESOURCE_NOT_FOUND. El _details lleva la info especifica."
+    },
+    {
+      "id": "catch_sin_metric_y_log",
+      "regla": "Cada catch (err) en handlers del rewrite emite this.logger.error(...) Y this.metrics?.increment('<modulo>.errors', { kind, code }). Sin metric el coste/triaje en produccion es ciego.",
+      "viola_garantias": ["observabilidad_end_to_end", "costes_auditables"],
+      "como_detectar": "Validator de observability ya cubre. Cross-check especifico al rewrite: regex 'catch.*\\{[^}]*logger\\.error' debe acompañarse de 'metrics.*increment' en la misma funcion.",
+      "alternativa_correcta": "Usar el helper _handleHandlerError(logEvent, err, kind) que ya hace ambos."
+    },
+    {
+      "id": "tests_que_contaminan_disco_real",
+      "regla": "Tests escriben SOLO a tmpdir, NUNCA a data/, /home/, ./<algo>.json del repo. Detectable: tests que crean archivos sin cleanup en afterEach o que persisten entre runs.",
+      "viola_garantias": ["aislamiento_entre_usuarios_y_proyectos"],
+      "como_detectar": "Heuristica: tests que llaman fs.writeFile sin tmpdir prefix. Tests que requieren reset manual entre runs.",
+      "alternativa_correcta": "const tmpFile = path.join(os.tmpdir(), `<modulo>-test-${Date.now()}.ext`); afterEach: fs.unlinkSync(tmpFile)."
+    },
+    {
+      "id": "rewrite_sin_tests_por_capas",
+      "regla": "tests/unit/<modulo>.test.js organizado SIEMPRE en grupos identificados por banner '// Group N: <Capa>'. NO tests planos sin organizacion.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validador: leer tests/unit/<modulo>.test.js, contar 'Group N:' banners. <3 grupos = drift.",
+      "alternativa_correcta": "Mínimo 3 grupos: Lifecycle, Validacion, Success. Recomendado 5-9."
+    },
+    {
+      "id": "module_json_incompleto",
+      "regla": "module.json del rewrite declara TODAS las secciones canonicas: events.publishes Y events.subscribes (con descripciones), apis (si HTTP), ui_handlers (si mqttRequest), tools (si LLM), dependencies, config.persistence, observability.metrics. Si una seccion no aplica, declarar [] explicito.",
+      "viola_garantias": ["extensibilidad_sin_reescritura"],
+      "como_detectar": "AJV validation contra schema canonico de module.json (cuando exista). Mientras: heuristica — validators de events/observability/persistence detectan ausencias.",
+      "alternativa_correcta": "Copiar plantilla de modules/_template/module.json y rellenar."
+    },
+    {
+      "id": "commit_sin_metricas_antes_despues",
+      "regla": "Commit message del rewrite incluye SIEMPRE tabla con LOC + Drifts + Tests antes/despues. Sin esto, no se puede auditar el cumplimiento del criterio ≥70%.",
+      "viola_garantias": ["observabilidad_end_to_end"],
+      "como_detectar": "Validador de PR: regex en commit messages buscando 'Drifts.*\\d+.*->.*\\d+'. Si falta en commit que toca modules/<X>/index.js mas de 200 LOC, drift de proceso.",
+      "alternativa_correcta": "Plantilla de commit message: 'Resultado:\\n- LOC: X -> Y (-Z%)\\n- Drifts en baseline: A -> B (-C%)\\n- Tests: 0 -> N verdes'."
+    },
+    {
+      "id": "rewrite_sin_paso_de_descomposicion_evaluado",
+      "regla": "Antes de reescribir un modulo >1500 LOC, evaluar EXPLICITAMENTE si descomponer en N modulos. Si no se descompone, justificar en commit. Caso opuesto: si el modulo tiene 5+ responsabilidades distintas y NO se descompone, drift de proceso.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Auditoria del rewrite: leer responsabilidades del index.js. Si hay 5+ dominios distintos en el archivo nuevo, drift.",
+      "alternativa_correcta": "Crear notas/<modulo>-descomposicion.md con plan multi-sesion. Reescribir core en sesion 1, subdominios en siguientes."
+    }
+  ],
+
+  "output_shape_resumen": "_outputs/module-rewrite.json contiene: { id: 'module-rewrite', version, total_modulos_repo: N, modulos_migrados: M (lista), modulos_pendientes: P (lista), drift_total_global: { antes_horizontal, ahora, porcentaje_cerrado }, criterio_cierre_estricto: [6 items], helpers_poc2_obligatorios: [5 items], paso_0_aplicado: [...modulos con notas/<modulo>-mapa.md], descomposiciones_documentadas: [...modulos con notas/<modulo>-descomposicion.md] }. Snapshot del estado del horizontal de migracion.",
+
+  "reglas_de_extraccion": [
+    "El validator scaneando modules/* detecta los modulos del repo (los 73 segun roadmap).",
+    "Para cada modulo migrado (segun PROGRESO.md tabla de migrados), verificar: existencia de _legacy/<modulo>-monolito-pre-rewrite.js.bak, presencia de 5 helpers POC2 (regex), tests/unit/<modulo>.test.js con grupos (regex 'Group N:'), module.json con secciones obligatorias.",
+    "Para modulos pendientes: solo verificar que existan en el roadmap.",
+    "El output _outputs/module-rewrite.json es snapshot de cumplimiento por modulo migrado, agregado global, y deuda pendiente."
+  ],
+
+  "derivaciones": [
+    {
+      "documento": "arquitectura/decisiones/_validators/module-rewrite.validate.js",
+      "rol": "Compila el contrato + cross-checks: 5 helpers presentes, tests por capas, monolito archivado, drift count en baseline ≤30% del valor antes-de-migracion (si historial disponible), module.json al ancho canonico."
+    },
+    {
+      "documento": "arquitectura/migracion/README.md",
+      "rol": "Documentacion operativa del flujo PASO 0 + 9 pasos canonicos + criterios de cierre. Ya redactado, este contrato lo formaliza como JSON validable."
+    },
+    {
+      "documento": "arquitectura/migracion/_outputs/PROGRESO.md",
+      "rol": "Panel humano-legible regenerable. Refleja el estado del horizontal de migracion segun los criterios definidos aqui."
+    },
+    {
+      "documento": "modules/_template/index.js + module.json + tests/_template/_template.test.js",
+      "rol": "Plantilla canonica de referencia. Cumple por construccion las reglas de este contrato."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "module_rewrite_contrato_existe",
+      "regla": "El contrato module-rewrite.contract.json existe y es JSON valido.",
+      "como_detectar": "fs.existsSync + JSON.parse. Falla critica si no.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_migrado_sin_legacy_archivado",
+      "regla": "Para cada modulo en la tabla de migrados de PROGRESO.md (criterio: tests/unit/<modulo>.test.js existe), debe existir arquitectura/migracion/_legacy/<modulo>-monolito-pre-rewrite.js.bak.",
+      "como_detectar": "Cruzar lista de migrados con archivos en _legacy/. Falta = drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_migrado_sin_5_helpers_poc2",
+      "regla": "El index.js del modulo migrado contiene los 5 helpers privados (regex: _errorResponse, _handleHandlerError, _classifyHandlerError, _publicarEvento + uno auxiliar como _fetchWithTimeout, _slugify, _maskApiKey, etc.).",
+      "como_detectar": "Para cada modulo migrado: regex 4 patterns. Faltan = drift por helper ausente.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_migrado_tests_sin_capas",
+      "regla": "tests/unit/<modulo>.test.js contiene >=3 banners 'Group N:' o equivalente (organizacion en capas).",
+      "como_detectar": "grep -c 'Group [0-9]\\+:' tests/unit/<modulo>.test.js. Resultado <3 = drift.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_modulo_migrado_module_json_incompleto",
+      "regla": "module.json del migrado declara: events.publishes (con descriptions), events.subscribes (con handler), config.persistence, observability.metrics. Si alguna ausente o vacia sin justificacion, drift.",
+      "como_detectar": "JSON parse + check de claves obligatorias. Detectar tambien arrays vacios (acceptable solo si declarado vacio explicito).",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_migrado_codes_fuera_catalogo",
+      "regla": "Cada error code usado en index.js esta en el catalogo errors.contract.json. NO codes inventados.",
+      "como_detectar": "regex 'code: \\'?[A-Z_]+\\'?' en source. Cruzar con codes_* de errors.json. Codes huerfanos = drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_migrado_returns_con_error_string",
+      "regla": "NO returns con shape { status, error: 'string suelto' }. Solo { status, error: { code, message } }.",
+      "como_detectar": "regex 'return.*\\{[^}]*error:\\s*[\\'\"][^{]' en source del rewrite. Cualquier match = drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_migrado_tests_persistencia_sin_aislamiento",
+      "regla": "Tests que persisten archivos usan tmpdir + nombre unico. NO escriben a paths del repo.",
+      "como_detectar": "regex 'fs\\.writeFile' o 'fs\\.writeFileSync' en tests SIN prefix os.tmpdir() o path.join(__dirname, 'fixtures'). Si aparece, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_descomposicion_sin_nota",
+      "regla": "Si modules/<modulo>/index.js v >=2.0.0 con descomposicion (LOC reduccion >50% vs monolito en _legacy/), debe existir arquitectura/migracion/notas/<modulo>-descomposicion.md.",
+      "como_detectar": "Cruzar version del module.json con LOC del legacy vs rewrite. Reduccion >50% sin nota = drift.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_modulo_migrado_sin_version_bump_mayor",
+      "regla": "Tras migracion, module.json.version debe haber incrementado mayor (X.Y.Z → (X+1).0.0). Comparable con git history del version field.",
+      "como_detectar": "git log -p modules/<modulo>/module.json | grep version. Sin bump major en commit del rewrite = drift.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_horizontal_progreso_md_obsoleto",
+      "regla": "PROGRESO.md regenerado tras cada commit de migracion. Detectable: fecha en PROGRESO.md mas reciente que el ultimo commit que toca tests/unit/<modulo>.test.js de un modulo migrado.",
+      "como_detectar": "Comparar mtime de PROGRESO.md vs git log de tests/unit/. Si PROGRESO mas viejo = drift de proceso.",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_modulo_migrado_sin_eventos_canonicos_preservados",
+      "regla": "events.publishes y events.subscribes en el module.json del migrado contienen TODOS los eventos del monolito (no se eliminaron eventos canonicos en la migracion). Cross-check: parsear ambos manifests.",
+      "como_detectar": "Parsear arquitectura/migracion/_legacy/<modulo>-*.bak (o git history del module.json) y comparar shape de events vs el rewrite. Eventos faltantes en el rewrite = drift critico.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_migrado_drift_count_no_baja",
+      "regla": "Tras la migracion, el drift count del modulo en drift-baseline.json esta al 30% o menos del valor previo a la migracion (snapshot del baseline pre-migracion).",
+      "como_detectar": "Cruzar baseline actual vs snapshot pre-migracion (git history de drift-baseline.json o commit message). Ratio >50% = drift critico — la migracion no logro reduccion.",
+      "severidad": "warning"
+    }
+  ],
+
+  "salida_validador": "PASS si el contrato existe y es JSON valido. Cross-system errors bloquean: monolito sin archivar (riesgo de perdida historica), eventos canonicos eliminados en migracion (rompe consumers). Warnings (drift_*) listados pero no bloquean — quedan en baseline. Info son heuristicas de proceso (commit sin metricas, descomposicion sin nota, etc.). Formato coherente con tools/agents-config/llm-flow validators.",
+
+  "convenciones_complementarias": [
+    "naming.contract: nombres de los 5 helpers POC2 son fijos (no se renombran a gusto). Mantener consistencia cross-modulo permite auditoria mecanica.",
+    "glossary.contract: terminologia de la migracion canonica (rewrite, descomposicion, monolito, legacy, paso 0, helpers POC2) es la unica forma valida. Sinonimos prohibidos.",
+    "events.contract: eventos del bus se preservan invariantes en cada migracion. Si el rewrite cambia shape, viola event-core.",
+    "errors.contract: codigos canonicos del catalogo. No inventar codes especificos del modulo.",
+    "lifecycle.contract: rewrite respeta onLoad/onUnload patterns. Re-emisiones tras restart si el modulo lo hacia.",
+    "observability.contract: metric.increment + log estructurado en cada error path. correlation_id propagado.",
+    "persistence.contract: si el modulo persiste, declarar pattern + atomic write si aplica. Mocks en tests.",
+    "http.contract: si el rewrite hace fetch a upstream, _fetchWithTimeout helper con AbortController + telemetria.",
+    "chat-flow.contract: rewrites de modulos del subsistema chat respetan los 5 eventos chat_flow + correlation_id + project_id obligatorios.",
+    "agent-flow.contract: rewrites de modulos del subsistema agentes respetan los 4 eventos agent_flow.",
+    "llm-flow.contract: rewrites que invocan al LLM via llm.complete.request siguen el shape canonico request/response/failed.",
+    "embedding-flow: igual para modulos que generan embeddings.",
+    "tools.contract: tools declaradas en module.json del rewrite cumplen tool.declaration.schema (name kebab-case prefijado, parameters JSON Schema, handler async, errores_conocidos canonicos).",
+    "agents-config.contract: si el modulo carga agentes (caso ai-agent-framework), agents/<n>.json cumple agent.config.schema.",
+    "frontend.contract: rewrites del frontend respetan el frame canonico. UI handlers con mqttRequest cross-modulo.",
+    "security.contract: API keys NUNCA en logs ni en payload de eventos. credential-manager las gestiona.",
+    "testing.contract: tests por capas, mocks aislados, AJV strict para schemas, cobertura >=80%.",
+    "multi-tenancy.contract: rewrites propagan project_id correctamente en publishes y aislan datos por proyecto.",
+    "documentation.contract: NO se permiten archivos README.md por modulo, salvo justificacion. Toda documentacion va en module.json + commits descriptivos.",
+    "versionado.contract: bump mayor del modulo en cada rewrite. Bump menor para añadir features post-rewrite. Patch para typos.",
+    "deployment.contract: rewrites no introducen nuevas dependencias de despliegue. Los modulos deployan juntos (no parcialmente).",
+    "module-loading.contract: orden de carga preservado. Si el rewrite cambia dependencies, declarar en module.json y validar que no rompe el orden.",
+    "bus-transport.contract: eventos del rewrite viajan por el bus principal MQTT. NO subbuses ni canales privados.",
+    "scheduling.contract: si el modulo es invocado por cron, correlation_id se genera en el cron job y se propaga.",
+    "resilience.contract: timeouts + retry policy declarados. AbortController en fetch externos.",
+    "companero-viaje.contract: rewrites de modulos del subsistema chat/agentes respetan las 4 capacidades (memoria sostenida, especializacion por contexto, acceso al sistema, modularidad infinita)."
+  ]
+}

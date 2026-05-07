@@ -1,125 +1,122 @@
 /**
- * Módulo Cuentas v2.3
- * Gestión de cuentas 100% Event-Driven
- * Ciclo de vida completo: pendiente → con_pedido → en_preparacion → listo → entregado → para_cobrar → cobrado
- * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ * pizzepos/cuentas v3.0.0 — Gestion del lifecycle de cuentas POS (POC2 rewrite).
+ *
+ * 100% Event-Driven. Maquina de estados de 7 estados + re-entradas validas.
+ *
+ * State machine:
+ *   pendiente ─→ con_pedido (primer item) ─→ en_preparacion (enviar cocina)
+ *                                              ├─→ listo (todos pedidos OK)
+ *                                              │     ├─→ entregado | para_cobrar
+ *                                              │     │      └─→ cobrado
+ *                                              └─re-entrada (mas pedidos)
+ *
+ * Eventos del bus:
+ *   subscribes (8): comandero.{item_agregado, item_eliminado, item_actualizado, enviar_cocina},
+ *                   cocina.pedido_listo, cobro.iniciado, cobro.procesado, cuenta.cerrada.
+ *   publishes  (5): cuenta.{creada, actualizada, estado_cambiado, eliminada} + comandero.enviar_cocina
+ *                   (este ultimo desde _inyectarPedidoInicial para integraciones delivery).
+ *
+ * 9 ui_handlers (auto-wired desde module.json.ui_handlers).
  */
 
+'use strict';
+
+const path   = require('path');
+const fs     = require('fs').promises;
 const crypto = require('crypto');
-const fs = require('fs').promises;
-const path = require('path');
 
-// Transiciones válidas de estado.
-// pendiente es re-alcanzable desde con_pedido cuando los items vuelven a 0
-// (comandero.item_eliminado → items=0). Es una regresion legitima, no un atajo.
+const DEFAULT_PROJECT_ID  = 'default';
+const ALERTA_PENDIENTE_MS = 30 * 60 * 1000;
+const POST_COBRADO_MS     = 5 * 60 * 1000;
+const TURNO_DEBOUNCE_MS   = 1000;
+const METRICS_INTERVAL_MS = 10000;
+
+// Re-entradas legitimas: con_pedido → con_pedido (mas items),
+// con_pedido → pendiente (items=0), en_preparacion → en_preparacion (mas pedidos),
+// listo → en_preparacion (cliente pide mas).
 const TRANSICIONES_VALIDAS = {
-  pendiente: ['con_pedido'],
-  con_pedido: ['en_preparacion', 'con_pedido', 'pendiente', 'cobrado'], // cobrado: pago rápido sin enviar cocina
-  en_preparacion: ['listo', 'en_preparacion', 'entregado', 'cobrado'],  // entregado: delivery entrega desde horno; cobrado: pago mientras cocina prepara
-  listo: ['entregado', 'para_cobrar', 'en_preparacion', 'cobrado'],
-  entregado: ['para_cobrar', 'en_preparacion', 'cobrado'],
-  para_cobrar: ['cobrado'],
-  cobrado: []
+  pendiente:      ['con_pedido'],
+  con_pedido:     ['en_preparacion', 'con_pedido', 'pendiente', 'cobrado'],
+  en_preparacion: ['listo', 'en_preparacion', 'entregado', 'cobrado'],
+  listo:          ['entregado', 'para_cobrar', 'en_preparacion', 'cobrado'],
+  entregado:      ['para_cobrar', 'en_preparacion', 'cobrado'],
+  para_cobrar:    ['cobrado'],
+  cobrado:        []
 };
-
-// Tiempo (ms) antes de activar alerta en estado pendiente
-const ALERTA_PENDIENTE_MS = 30 * 60 * 1000; // 30 minutos
 
 class CuentasModule {
   constructor() {
-    this.name = 'cuentas';
-    this.version = '2.3.0';
+    this.name    = 'cuentas';
+    this.version = '3.0.0';
 
-    // Estado en memoria
-    this.cuentas = new Map(); // cuenta_id -> cuenta
+    this.cuentas           = new Map();
+    this._pendingTimeouts  = new Map();
+    this._alertaTimers     = new Map();
+    this._pedidosEnCocina  = new Map();
 
-    // Contador único global de turnos 001→999→001 (persistido en disco).
-    // El turno es la identidad humana de la cuenta: orden de llegada al sistema,
-    // independiente del canal. Se asigna una sola vez al crear y nunca cambia.
-    this._turno = 0;
-    this._turnoFile = null; // se asigna en onLoad con path del proyecto
+    this._turno         = 0;
+    this._turnoFile     = null;
     this._turnoSaveTimer = null;
 
-    // Timers activos (para cleanup en onUnload)
     this._metricsInterval = null;
-    this._pendingTimeouts = new Map(); // cuenta_id -> timeout (auto-eliminación post-cobrado)
-    this._alertaTimers = new Map(); // cuenta_id -> timeout
 
-    // Tracking de pedidos activos en cocina por cuenta
-    // cuenta_id -> Set(pedido_id) — solo transiciona a 'listo' cuando el Set queda vacío
-    this._pedidosEnCocina = new Map();
-
-    // Dependencias (inyectadas en onLoad)
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
-    this.uiHandler = null;
+    this.logger    = null;
+    this.metrics   = null;
+    this.eventBus  = null;
   }
+
+  static SIMBOLOS = {
+    mesa: 'M', local: 'M',
+    llevar: 'L',
+    telefono: 'T',
+    whatsapp: 'W',
+    glovo: 'G',
+    delivery: 'D',
+    llevadoo: 'V'
+  };
 
   // ==========================================
   // Lifecycle
   // ==========================================
 
   async onLoad(core) {
-    this.logger = core.logger;
-    this.metrics = core.metrics;
-    this.eventBus = core.eventBus;
-    this.uiHandler = core.uiHandler;
+    this.logger    = core.logger;
+    this.metrics   = core.metrics;
+    this.eventBus  = core.eventBus;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Event subscriptions are auto-wired from module.json by the loader.
-    // Do NOT subscribe manually here to avoid duplicate handlers.
-    this.registerUIHandlers();
-    this.startMetricsReporting();
-
-    // Cargar contador global de turnos de disco
     this._turnoFile = path.join('.', 'data', 'current', 'contador_global.json');
     await this._loadTurno();
+    await this._restaurarDesdeArchivo();
 
-    // Restaurar cuentas activas desde persistencia (sobrevive reinicio servidor)
-    await this.restaurarDesdeArchivo();
+    this._metricsInterval = setInterval(() => this._reportMetrics(), METRICS_INTERVAL_MS);
 
-    this.logger.info('module.loaded', { module: this.name, version: this.version });
+    this.logger.info('module.loaded', {
+      module:           this.name,
+      version:          this.version,
+      cuentas_restored: this.cuentas.size,
+      turno_actual:     this._turno
+    });
   }
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    // Limpiar interval de métricas
-    if (this._metricsInterval) {
-      clearInterval(this._metricsInterval);
-      this._metricsInterval = null;
-    }
+    if (this._metricsInterval) { clearInterval(this._metricsInterval); this._metricsInterval = null; }
 
-    // Limpiar timeouts pendientes (cuentas cobradas esperando eliminación)
-    for (const timeout of this._pendingTimeouts.values()) {
-      clearTimeout(timeout);
-    }
+    for (const t of this._pendingTimeouts.values()) clearTimeout(t);
     this._pendingTimeouts.clear();
 
-    // Limpiar timers de alerta
-    for (const timeout of this._alertaTimers.values()) {
-      clearTimeout(timeout);
-    }
+    for (const t of this._alertaTimers.values()) clearTimeout(t);
     this._alertaTimers.clear();
 
-    // Flush final del contador de turnos (cancela debounce y guarda ya)
     if (this._turnoSaveTimer) {
       clearTimeout(this._turnoSaveTimer);
       this._turnoSaveTimer = null;
-      try { await this._saveTurno(); } catch (_) { /* ignore */ }
+      try { await this._saveTurno(); } catch (_) { /* flush best-effort */ }
     }
 
-    // Desregistrar UI handlers
-    if (this.uiHandler) {
-      const actions = ['list', 'get', 'create', 'delete', 'marcar_entregado', 'rename', 'stats', 'health', 'metrics'];
-      for (const action of actions) {
-        this.uiHandler.unregister('cuenta', action);
-      }
-    }
-
-    // Limpiar estado
     this.cuentas.clear();
     this._pedidosEnCocina.clear();
 
@@ -127,86 +124,49 @@ class CuentasModule {
   }
 
   // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('cuentas.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    this.uiHandler.register('cuenta', 'list', this.handleListCuentas.bind(this));
-    this.uiHandler.register('cuenta', 'get', this.handleGetCuenta.bind(this));
-    this.uiHandler.register('cuenta', 'create', this.handleCreateCuenta.bind(this));
-    this.uiHandler.register('cuenta', 'delete', this.handleDeleteCuenta.bind(this));
-    this.uiHandler.register('cuenta', 'marcar_entregado', this.handleMarcarEntregado.bind(this));
-    this.uiHandler.register('cuenta', 'rename', this.handleRenameCuenta.bind(this));
-    this.uiHandler.register('cuenta', 'stats', this.handleGetStats.bind(this));
-    this.uiHandler.register('cuenta', 'health', this.handleHealthCheck.bind(this));
-    this.uiHandler.register('cuenta', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.logger.info('cuentas.ui_handlers.registered', {
-      handlers: ['list', 'get', 'create', 'delete', 'marcar_entregado', 'rename', 'stats', 'health', 'metrics']
-    });
-  }
-
-  // ==========================================
   // State Machine
   // ==========================================
 
-  /**
-   * Transiciona el estado de una cuenta si la transición es válida.
-   * Publica cuenta.estado_cambiado y cuenta.actualizada.
-   * Retorna true si la transición se ejecutó.
-   */
-  async transicionarEstado(cuenta_id, estado_nuevo) {
+  async _transicionarEstado(cuenta_id, estado_nuevo, sourcePayload = null) {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return false;
 
     const estado_anterior = cuenta.estado;
 
-    // No hacer nada si ya está en ese estado (excepto re-entradas válidas)
+    // No-op si ya esta en ese estado y la re-entrada NO es valida
     if (estado_anterior === estado_nuevo && !TRANSICIONES_VALIDAS[estado_anterior]?.includes(estado_nuevo)) {
       return false;
     }
 
-    // Validar transición
     const transiciones = TRANSICIONES_VALIDAS[estado_anterior];
     if (!transiciones || !transiciones.includes(estado_nuevo)) {
-      this.logger.warn('cuenta.transicion_invalida', {
-        cuenta_id, estado_anterior, estado_nuevo
-      });
+      this.logger.warn('cuenta.transicion_invalida', { cuenta_id, estado_anterior, estado_nuevo });
+      this.metrics?.increment?.('pizzepos-cuentas.errors', { kind: 'transicion_invalida', code: 'CONFLICT_STATE' });
       return false;
     }
 
-    cuenta.estado = estado_nuevo;
+    cuenta.estado     = estado_nuevo;
     cuenta.updated_at = new Date().toISOString();
 
-    // Gestionar timer de alerta según el nuevo estado
-    this.gestionarAlerta(cuenta_id, estado_nuevo);
+    this._gestionarAlerta(cuenta_id, estado_nuevo);
 
-    this.logger.info('cuenta.estado_cambiado', {
-      cuenta_id, estado_anterior, estado_nuevo
-    });
-
+    this.logger.info('cuenta.estado_cambiado', { cuenta_id, estado_anterior, estado_nuevo });
     this.metrics?.increment?.('cuenta.transicion.total');
 
-    await this.publishEstadoCambiado(cuenta.project_id, cuenta_id, estado_anterior, estado_nuevo);
-    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
-      estado: estado_nuevo
-    });
+    await this._publicarEvento('cuenta.estado_cambiado', {
+      project_id:      cuenta.project_id,
+      cuenta_id,
+      estado_anterior,
+      estado_nuevo,
+      changed_at:      cuenta.updated_at
+    }, sourcePayload);
+
+    await this._publishCuentaActualizada(cuenta.project_id, cuenta_id, { estado: estado_nuevo }, sourcePayload);
 
     return true;
   }
 
-  /**
-   * Gestiona el timer de alerta visual.
-   * Se activa en 'pendiente' tras ALERTA_PENDIENTE_MS sin actividad.
-   * Se cancela cuando la cuenta progresa a otro estado.
-   */
-  gestionarAlerta(cuenta_id, estado) {
-    // Cancelar timer anterior si existe
+  _gestionarAlerta(cuenta_id, estado) {
     const timerAnterior = this._alertaTimers.get(cuenta_id);
     if (timerAnterior) {
       clearTimeout(timerAnterior);
@@ -216,22 +176,20 @@ class CuentasModule {
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    // Desactivar alerta si la cuenta progresa
     if (estado !== 'pendiente' && cuenta.alerta) {
       cuenta.alerta = false;
-      this.publishCuentaActualizada(cuenta.project_id, cuenta_id, { alerta: false });
+      this._publishCuentaActualizada(cuenta.project_id, cuenta_id, { alerta: false });
     }
 
-    // Activar timer solo en estado pendiente
     if (estado === 'pendiente') {
       const timer = setTimeout(() => {
         this._alertaTimers.delete(cuenta_id);
         const c = this.cuentas.get(cuenta_id);
         if (c && c.estado === 'pendiente') {
-          c.alerta = true;
+          c.alerta     = true;
           c.updated_at = new Date().toISOString();
           this.logger.warn('cuenta.alerta.activada', { cuenta_id });
-          this.publishCuentaActualizada(c.project_id, cuenta_id, { alerta: true });
+          this._publishCuentaActualizada(c.project_id, cuenta_id, { alerta: true });
         }
       }, ALERTA_PENDIENTE_MS);
       this._alertaTimers.set(cuenta_id, timer);
@@ -239,109 +197,76 @@ class CuentasModule {
   }
 
   // ==========================================
-  // Event Handlers
+  // Bus handlers (subscribes)
   // ==========================================
 
-  /**
-   * comandero.item_agregado → pendiente→con_pedido (primer item) o actualizar totales
-   */
   async onComanderoItemAgregado(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, precio_total, cantidad } = data;
 
-    this.logger.info('comandero.item_agregado.received', {
-      cuenta_id,
-      correlation_id: event?.metadata?.correlationId
-    });
-
+    this.logger.info('comandero.item_agregado.received', { cuenta_id });
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) {
       this.logger.warn('cuenta.not_found', { cuenta_id });
       return;
     }
 
-    cuenta.items += (cantidad || 1);
-    cuenta.total += precio_total || 0;
+    cuenta.items     += (cantidad || 1);
+    cuenta.total     += precio_total || 0;
     cuenta.updated_at = new Date().toISOString();
 
-    // Transicionar a con_pedido si es el primer item
     if (cuenta.estado === 'pendiente') {
-      await this.transicionarEstado(cuenta_id, 'con_pedido');
+      await this._transicionarEstado(cuenta_id, 'con_pedido', data);
     }
-    // Siempre publicar items y total (transicionarEstado solo publica estado)
-    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
-      items: cuenta.items,
-      total: cuenta.total
-    });
+    await this._publishCuentaActualizada(cuenta.project_id, cuenta_id, {
+      items: cuenta.items, total: cuenta.total
+    }, data);
   }
 
-  /**
-   * comandero.item_eliminado → actualizar totales, volver a pendiente si items=0
-   */
   async onComanderoItemEliminado(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, precio_total, cantidad } = data;
 
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    cuenta.items = Math.max(0, cuenta.items - (cantidad || 1));
-    cuenta.total = Math.max(0, cuenta.total - (precio_total || 0));
+    cuenta.items     = Math.max(0, cuenta.items - (cantidad || 1));
+    cuenta.total     = Math.max(0, cuenta.total - (precio_total || 0));
     cuenta.updated_at = new Date().toISOString();
 
-    // Si se quedó sin items y estaba en con_pedido, regresar a pendiente.
-    // Esta transicion esta en TRANSICIONES_VALIDAS asi que pasa por la
-    // maquina de estados formal (publica cuenta.estado_cambiado y maneja
-    // alertas correctamente).
     if (cuenta.items === 0 && cuenta.estado === 'con_pedido') {
-      await this.transicionarEstado(cuenta_id, 'pendiente');
+      await this._transicionarEstado(cuenta_id, 'pendiente', data);
     }
 
-    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
-      items: cuenta.items,
-      total: cuenta.total
-    });
+    await this._publishCuentaActualizada(cuenta.project_id, cuenta_id, {
+      items: cuenta.items, total: cuenta.total
+    }, data);
   }
 
-  /**
-   * comandero.item_actualizado → ajustar items/total cuando cambia cantidad (+/-)
-   */
   async onComanderoItemActualizado(event) {
-    const data = event?.data || event?.payload || event;
-    const { cuenta_id, diff_cantidad, diff_precio, pedido_total, pedido_items } = data;
+    const data = this._unwrap(event);
+    const { cuenta_id, diff_cantidad, diff_precio } = data;
 
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    // Ajustar con la diferencia
-    cuenta.items = Math.max(0, cuenta.items + (diff_cantidad || 0));
-    cuenta.total = Math.max(0, cuenta.total + (diff_precio || 0));
+    cuenta.items     = Math.max(0, cuenta.items + (diff_cantidad || 0));
+    cuenta.total     = Math.max(0, cuenta.total + (diff_precio || 0));
     cuenta.updated_at = new Date().toISOString();
 
-    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
-      items: cuenta.items,
-      total: cuenta.total
-    });
+    await this._publishCuentaActualizada(cuenta.project_id, cuenta_id, {
+      items: cuenta.items, total: cuenta.total
+    }, data);
   }
 
-  /**
-   * comandero.enviar_cocina → con_pedido→en_preparacion (o listo/entregado→en_preparacion si piden más)
-   * Registra pedido_id en el tracking de pedidos activos en cocina.
-   */
   async onComanderoEnviarCocina(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, pedido_id } = data;
 
-    this.logger.info('comandero.enviar_cocina.received', {
-      cuenta_id,
-      pedido_id,
-      correlation_id: event?.metadata?.correlationId
-    });
-
+    this.logger.info('comandero.enviar_cocina.received', { cuenta_id, pedido_id });
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    // Registrar pedido en tracking de cocina
     if (pedido_id) {
       if (!this._pedidosEnCocina.has(cuenta_id)) {
         this._pedidosEnCocina.set(cuenta_id, new Set());
@@ -349,207 +274,81 @@ class CuentasModule {
       this._pedidosEnCocina.get(cuenta_id).add(pedido_id);
     }
 
-    // Transicionar a en_preparacion desde cualquier estado que lo permita
-    if (cuenta.estado === 'con_pedido' || cuenta.estado === 'listo' ||
-        cuenta.estado === 'entregado' || cuenta.estado === 'en_preparacion') {
-      await this.transicionarEstado(cuenta_id, 'en_preparacion');
+    if (['con_pedido', 'listo', 'entregado', 'en_preparacion'].includes(cuenta.estado)) {
+      await this._transicionarEstado(cuenta_id, 'en_preparacion', data);
     }
   }
 
-  /**
-   * cocina.pedido_listo → en_preparacion→listo (solo cuando TODOS los pedidos de la cuenta terminaron)
-   */
   async onCocinaPedidoListo(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, pedido_id } = data;
 
-    this.logger.info('cocina.pedido_listo.received', {
-      cuenta_id,
-      pedido_id,
-      correlation_id: event?.metadata?.correlationId
-    });
-
+    this.logger.info('cocina.pedido_listo.received', { cuenta_id, pedido_id });
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    // Quitar pedido del tracking de cocina
     const pedidosActivos = this._pedidosEnCocina.get(cuenta_id);
     if (pedidosActivos && pedido_id) {
       pedidosActivos.delete(pedido_id);
-
-      // Si quedan pedidos en cocina, NO transicionar aún
       if (pedidosActivos.size > 0) {
         this.logger.info('cocina.pedido_listo.pendientes_restantes', {
-          cuenta_id,
-          pedido_id,
-          pedidos_restantes: pedidosActivos.size
+          cuenta_id, pedido_id, pedidos_restantes: pedidosActivos.size
         });
         return;
       }
-
-      // Limpiar Set vacío
       this._pedidosEnCocina.delete(cuenta_id);
     }
 
     if (cuenta.estado === 'en_preparacion') {
-      await this.transicionarEstado(cuenta_id, 'listo');
+      await this._transicionarEstado(cuenta_id, 'listo', data);
     }
   }
 
-  /**
-   * cobro.iniciado → listo→para_cobrar
-   */
   async onCobroIniciado(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id } = data;
 
-    this.logger.info('cobro.iniciado.received', {
-      cuenta_id,
-      correlation_id: event?.metadata?.correlationId
-    });
-
+    this.logger.info('cobro.iniciado.received', { cuenta_id });
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    // Cuentas con pago_externo (llevadoo y similares) no pasan por caja
     if (this._pagoExterno(cuenta)) return;
 
-    if (cuenta.estado === 'listo' || cuenta.estado === 'entregado') {
-      await this.transicionarEstado(cuenta_id, 'para_cobrar');
+    if (['listo', 'entregado'].includes(cuenta.estado)) {
+      await this._transicionarEstado(cuenta_id, 'para_cobrar', data);
     }
   }
 
-  /**
-   * cobro.procesado → marcar pagado + transicionar a cobrado + programar eliminación.
-   * Comportamiento uniforme para TODOS los tipos de cuenta (mesa, telefono, llevar, etc.).
-   * El módulo cuentas-canales se encarga de la limpieza específica del canal
-   * y de publicar cuenta.cerrada cuando corresponda.
-   * Idempotente: ignora si ya estaba pagada o cobrada.
-   */
   async onCobroProcesado(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id } = data;
 
-    this.logger.info('cobro.procesado.received', {
-      cuenta_id,
-      correlation_id: event?.metadata?.correlationId
-    });
-
+    this.logger.info('cobro.procesado.received', { cuenta_id });
     const cuenta = this.cuentas.get(cuenta_id);
     if (!cuenta) return;
 
-    // Guardia de idempotencia: si ya está pagada o cobrada, ignorar duplicado
+    // Idempotencia: ignorar duplicados
     if (cuenta.pagado || cuenta.estado === 'cobrado') {
       this.logger.warn('cobro.procesado.duplicado_ignorado', {
-        cuenta_id,
-        pagado: cuenta.pagado,
-        estado: cuenta.estado
+        cuenta_id, pagado: cuenta.pagado, estado: cuenta.estado
       });
       return;
     }
 
-    cuenta.pagado = true;
+    cuenta.pagado     = true;
     cuenta.updated_at = new Date().toISOString();
+    await this._publishCuentaActualizada(cuenta.project_id, cuenta_id, { pagado: true }, data);
 
-    await this.publishCuentaActualizada(cuenta.project_id, cuenta_id, {
-      pagado: true
-    });
+    this.logger.info('cuenta.pagada', { cuenta_id, estado: cuenta.estado });
 
-    this.logger.info('cuenta.pagada', {
-      cuenta_id,
-      estado: cuenta.estado
-    });
-
-    // pago_externo: no pasa por caja (llevadoo y similares)
     if (this._pagoExterno(cuenta)) return;
-
-    // cerrar_al_cobrar=false: el cobro marca pagado pero NO cierra la cuenta.
-    // La cuenta vive hasta que otro trigger la cierre (ej. llevar → entregar).
     if (this._cerrarAlCobrar(cuenta) === false) return;
 
-    // Transicionar a cobrado usando la máquina de estados formal
-    await this.cerrarCuentaCobrada(cuenta_id);
+    await this._cerrarCuentaCobrada(cuenta_id, data);
   }
 
-  /**
-   * Reglas de comportamiento que vienen en cuenta.metadata como flags.
-   * Los fallback a cuenta.tipo son por compat con cuentas legacy creadas
-   * antes de que las strategies setearan los flags explicitos.
-   */
-  _pagoExterno(cuenta) {
-    if (cuenta?.metadata?.pago_externo !== undefined) {
-      return !!cuenta.metadata.pago_externo;
-    }
-    return cuenta?.tipo === 'llevadoo';
-  }
-
-  /**
-   * Devuelve true si el cobro debe cerrar la cuenta (comportamiento por defecto),
-   * false si el cobro solo marca pagado y el cierre lo dispara otro trigger.
-   */
-  _cerrarAlCobrar(cuenta) {
-    if (cuenta?.metadata?.cerrar_al_cobrar !== undefined) {
-      return !!cuenta.metadata.cerrar_al_cobrar;
-    }
-    // Legacy: llevar no cerraba al cobrar (cierre via llevar/entregar)
-    if (cuenta?.tipo === 'llevar') return false;
-    return true;
-  }
-
-  /**
-   * Cierra una cuenta cobrada: transiciona a cobrado y programa auto-eliminación.
-   * Usa transicionarEstado() para respetar la máquina de estados.
-   * Si la transición no es posible (estado actual no permite → cobrado), solo loguea.
-   * Programa eliminación automática a los 5 minutos como fallback
-   * (si cuentas-canales publica cuenta.cerrada antes, se eliminará inmediatamente).
-   */
-  async cerrarCuentaCobrada(cuenta_id) {
-    const cuenta = this.cuentas.get(cuenta_id);
-    if (!cuenta) return;
-
-    // Guardia: no cerrar dos veces
-    if (cuenta.estado === 'cobrado') return;
-
-    // Usar la máquina de estados formal
-    const ok = await this.transicionarEstado(cuenta_id, 'cobrado');
-    if (!ok) {
-      this.logger.warn('cuenta.cerrar_cobrada.transicion_fallida', {
-        cuenta_id,
-        estado_actual: cuenta.estado
-      });
-      return;
-    }
-
-    // Limpiar tracking de cocina
-    this._pedidosEnCocina.delete(cuenta_id);
-
-    // Cancelar timeout anterior si existía (re-entrante)
-    const timeoutAnterior = this._pendingTimeouts.get(cuenta_id);
-    if (timeoutAnterior) {
-      clearTimeout(timeoutAnterior);
-    }
-
-    // Programar eliminación automática a los 5 minutos (fallback).
-    // Si cuenta.cerrada llega desde cuentas-canales, onCuentaExternaCerrada
-    // cancelará este timeout y eliminará inmediatamente.
-    const project_id = cuenta.project_id;
-    const tipo = cuenta.tipo;
-    const timeout = setTimeout(() => {
-      this._pendingTimeouts.delete(cuenta_id);
-      this.cuentas.delete(cuenta_id);
-      this.publishCuentaEliminada(project_id, cuenta_id, tipo, 'cobro_completado');
-    }, 5 * 60 * 1000);
-
-    this._pendingTimeouts.set(cuenta_id, timeout);
-  }
-
-  /**
-   * cuenta.cerrada → limpiar cuenta del Map, timers y timeouts pendientes.
-   * Si cerrarCuentaCobrada() programó una eliminación con timeout,
-   * la cancelamos aquí porque la cuenta se elimina inmediatamente.
-   */
   async onCuentaExternaCerrada(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id } = data;
 
     if (!cuenta_id) return;
@@ -559,37 +358,28 @@ class CuentasModule {
     this.cuentas.delete(cuenta_id);
     this._pedidosEnCocina.delete(cuenta_id);
 
-    // Cancelar timeout de auto-eliminación si existía (ya no hace falta)
     const pendingTimeout = this._pendingTimeouts.get(cuenta_id);
     if (pendingTimeout) {
       clearTimeout(pendingTimeout);
       this._pendingTimeouts.delete(cuenta_id);
     }
 
-    // Limpiar timer de alerta
     if (this._alertaTimers.has(cuenta_id)) {
       clearTimeout(this._alertaTimers.get(cuenta_id));
       this._alertaTimers.delete(cuenta_id);
     }
 
-    // Publicar eliminación para que persistencia-comandero registre la venta
-    await this.publishCuentaEliminada(
-      cuenta?.project_id, cuenta_id, cuenta?.tipo, 'cuenta_cerrada_canal'
-    );
+    await this._publishCuentaEliminada(cuenta?.project_id, cuenta_id, cuenta?.tipo, 'cuenta_cerrada_canal', data);
 
-    this.logger.info('cuenta.externa.cerrada', {
-      cuenta_id,
-      tipo: cuenta?.tipo
-    });
+    this.logger.info('cuenta.externa.cerrada', { cuenta_id, tipo: cuenta?.tipo });
   }
 
   // ==========================================
-  // UI Handlers (MQTT Request/Response)
+  // UI Handlers (auto-wired desde module.json.ui_handlers)
   // ==========================================
 
   async handleCreateCuenta(data) {
     const start_time = Date.now();
-
     try {
       const {
         project_id, tipo, nombre, metadata, pedido_inicial,
@@ -598,15 +388,15 @@ class CuentasModule {
       } = data || {};
 
       if (!project_id) {
-        return { status: 400, error: 'project_id es requerido' };
+        this._logError('cuenta.create.validation_failed', { missing: 'project_id' }, 'ui_create', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
       }
 
       const tipoFinal = tipo || 'local';
-      // Si la strategy propone explicito, respetar; si no, generar opaco.
       const cuenta_id = cuentaIdPropuesto || this._buildCuentaId(tipoFinal);
-      const { turno, numero, ref_display } = this.generateRefDisplay(tipoFinal, nombre);
+      const { turno, ref_display } = this._generateRefDisplay(tipoFinal, nombre);
 
-      const now = new Date();
+      const now  = new Date();
       const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
       const cuenta = {
@@ -628,595 +418,597 @@ class CuentasModule {
       };
 
       this.cuentas.set(cuenta_id, cuenta);
+      this._gestionarAlerta(cuenta_id, 'pendiente');
 
-      // Iniciar timer de alerta para cuentas pendientes
-      this.gestionarAlerta(cuenta_id, 'pendiente');
-
-      // Métricas (con verificación de existencia)
       this.metrics?.increment?.('cuenta.creada.total');
       this.metrics?.increment?.(`cuenta.tipo.${tipoFinal}`);
       this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
       this.metrics?.timing?.('cuenta.create.duration', Date.now() - start_time);
 
-      await this.publishCuentaCreada(cuenta);
+      await this._publishCuentaCreada(cuenta, data);
 
       this.logger.info('cuenta.creada', {
         project_id, cuenta_id, tipo: tipoFinal, ref_display, duration: Date.now() - start_time
       });
 
-      // Si la creacion incluye un pedido inicial (caso delivery: Glovo, Llevadoo,
-      // integraciones externas que ya traen items resueltos), inyectarlo en el
-      // flujo estandar para que la cuenta entre con su turno en la cola general.
       if (pedido_inicial && Array.isArray(pedido_inicial.items) && pedido_inicial.items.length > 0) {
-        await this._inyectarPedidoInicial(cuenta, pedido_inicial);
+        await this._inyectarPedidoInicial(cuenta, pedido_inicial, data);
       }
 
       return { status: 201, data: cuenta };
-
-    } catch (error) {
-      this.metrics?.increment?.('cuenta.errors.total', 1, { operation: 'create' });
-      this.logger.error('cuenta.create.error', { error: error.message });
-      return { status: 500, error: error.message };
+    } catch (err) {
+      return this._handleHandlerError('cuenta.create.failed', err, 'ui_create');
     }
   }
 
-  /**
-   * Inyecta un pedido pre-formado en una cuenta recién creada (delivery
-   * webhooks, Glovo, Llevadoo, integraciones externas).
-   *
-   * Reusa el mismo bus de eventos que usa el comandero — publica
-   * `comandero.enviar_cocina` con los items, y deja que pedidos cree el
-   * pedido formal y cocina lo reciba. Cuentas (esta misma instancia)
-   * escucha `comandero.enviar_cocina` y transiciona la cuenta a
-   * `en_preparacion` en su propio handler `onComanderoEnviarCocina`.
-   *
-   * Ventajas: cero codigo nuevo en pedidos/cocina/persistencia. La cuenta
-   * delivery agarra el siguiente turno del contador global y aparece en
-   * la pantalla de cuentas como cualquier otra, en orden de llegada.
-   *
-   * @param {object} cuenta - Cuenta recien creada (estado: pendiente)
-   * @param {object} pedido_inicial - { items, total?, notas_generales? }
-   */
-  async _inyectarPedidoInicial(cuenta, pedido_inicial) {
-    const itemsCount = pedido_inicial.items.reduce(
-      (s, i) => s + (i.cantidad || 1), 0
-    );
+  async handleListCuentas(data) {
+    try {
+      const { project_id, tipo, estado } = data || {};
+      let cuentas = Array.from(this.cuentas.values());
+      if (project_id) cuentas = cuentas.filter(c => c.project_id === project_id);
+      if (tipo)       cuentas = cuentas.filter(c => c.tipo === tipo);
+      if (estado)     cuentas = cuentas.filter(c => c.estado === estado);
+      cuentas.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return { status: 200, data: { cuentas, total: cuentas.length } };
+    } catch (err) {
+      return this._handleHandlerError('cuenta.list.failed', err, 'ui_list');
+    }
+  }
+
+  async handleGetCuenta(data) {
+    try {
+      const { project_id, id } = data || {};
+      if (!id) {
+        this._logError('cuenta.get.validation_failed', { missing: 'id' }, 'ui_get', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      }
+      const cuenta = this.cuentas.get(id);
+      if (!cuenta || (project_id && cuenta.project_id !== project_id)) {
+        this._logError('cuenta.get.not_found', { id, project_id }, 'ui_get', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Cuenta ${id} no encontrada`, {
+          entity_type: 'cuenta', entity_id: id
+        });
+      }
+      return { status: 200, data: cuenta };
+    } catch (err) {
+      return this._handleHandlerError('cuenta.get.failed', err, 'ui_get');
+    }
+  }
+
+  async handleDeleteCuenta(data) {
+    try {
+      const { project_id, id } = data || {};
+      if (!id) {
+        this._logError('cuenta.delete.validation_failed', { missing: 'id' }, 'ui_delete', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      }
+      const cuenta = this.cuentas.get(id);
+      if (!cuenta || (project_id && cuenta.project_id !== project_id)) {
+        this._logError('cuenta.delete.not_found', { id, project_id }, 'ui_delete', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Cuenta ${id} no encontrada`, {
+          entity_type: 'cuenta', entity_id: id
+        });
+      }
+
+      this.cuentas.delete(id);
+      this._pedidosEnCocina.delete(id);
+
+      const alertaTimer = this._alertaTimers.get(id);
+      if (alertaTimer) {
+        clearTimeout(alertaTimer);
+        this._alertaTimers.delete(id);
+      }
+
+      this.metrics?.increment?.('cuenta.eliminada.total');
+      this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
+
+      await this._publishCuentaEliminada(cuenta.project_id, id, cuenta.tipo, 'eliminacion_manual', data);
+
+      this.logger.info('cuenta.eliminada', { project_id: cuenta.project_id, cuenta_id: id, tipo: cuenta.tipo });
+      return { status: 200, data: { id, deleted: true } };
+    } catch (err) {
+      return this._handleHandlerError('cuenta.delete.failed', err, 'ui_delete');
+    }
+  }
+
+  async handleMarcarEntregado(data) {
+    try {
+      const { project_id, id } = data || {};
+      if (!id) {
+        this._logError('cuenta.marcar_entregado.validation_failed', { missing: 'id' }, 'ui_marcar_entregado', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      }
+      const cuenta = this.cuentas.get(id);
+      if (!cuenta || (project_id && cuenta.project_id !== project_id)) {
+        this._logError('cuenta.marcar_entregado.not_found', { id, project_id }, 'ui_marcar_entregado', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Cuenta ${id} no encontrada`, {
+          entity_type: 'cuenta', entity_id: id
+        });
+      }
+      if (!['listo', 'en_preparacion'].includes(cuenta.estado)) {
+        this._logError('cuenta.marcar_entregado.estado_invalido', { id, estado: cuenta.estado }, 'ui_marcar_entregado', 'CONFLICT_STATE');
+        return this._errorResponse(409, 'CONFLICT_STATE',
+          `Cuenta debe estar en estado 'listo' o 'en_preparacion' (actual: ${cuenta.estado})`,
+          { current_state: cuenta.estado, allowed_states: ['listo', 'en_preparacion'] });
+      }
+
+      const ok = await this._transicionarEstado(id, 'entregado', data);
+      if (!ok) {
+        this._logError('cuenta.marcar_entregado.transicion_fallida', { id }, 'ui_marcar_entregado', 'INTERNAL_ERROR');
+        return this._errorResponse(500, 'INTERNAL_ERROR', 'No se pudo transicionar a entregado');
+      }
+
+      this.logger.info('cuenta.marcada_entregado', { cuenta_id: id, pagado: cuenta.pagado });
+
+      if (cuenta.pagado) {
+        await this._cerrarCuentaCobrada(id, data);
+      }
+      return { status: 200, data: { id, estado: 'entregado' } };
+    } catch (err) {
+      return this._handleHandlerError('cuenta.marcar_entregado.failed', err, 'ui_marcar_entregado');
+    }
+  }
+
+  async handleRenameCuenta(data) {
+    try {
+      const { project_id, id, nombre } = data || {};
+      if (!id) {
+        this._logError('cuenta.rename.validation_failed', { missing: 'id' }, 'ui_rename', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      }
+      if (!nombre || typeof nombre !== 'string' || nombre.trim().length === 0) {
+        this._logError('cuenta.rename.validation_failed', { id, missing: 'nombre' }, 'ui_rename', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
+      }
+      const cuenta = this.cuentas.get(id);
+      if (!cuenta || (project_id && cuenta.project_id !== project_id)) {
+        this._logError('cuenta.rename.not_found', { id, project_id }, 'ui_rename', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Cuenta ${id} no encontrada`, {
+          entity_type: 'cuenta', entity_id: id
+        });
+      }
+
+      const nombre_anterior = cuenta.nombre;
+      cuenta.nombre     = nombre.trim().slice(0, 50);
+      cuenta.updated_at = new Date().toISOString();
+
+      // Recomponer ref_display: si tenemos turno (fuente de verdad), regenerar
+      // limpio desde turno+tipo+nombre. Si no (cuenta legacy restaurada),
+      // extraer el codigo "X NNN" del ref_display actual.
+      if (Number.isInteger(cuenta.turno)) {
+        const numero = String(cuenta.turno).padStart(3, '0');
+        const symbol = CuentasModule.SIMBOLOS[cuenta.tipo] || 'M';
+        cuenta.ref_display = this._buildRefDisplay(symbol, numero, cuenta.nombre);
+      } else if (cuenta.ref_display) {
+        const match = cuenta.ref_display.match(/[A-Z]\s\d{3}/);
+        const code  = match ? match[0] : cuenta.ref_display;
+        cuenta.ref_display = cuenta.nombre ? `${cuenta.nombre} ${code}` : code;
+      }
+
+      await this._publishCuentaActualizada(cuenta.project_id, id, {
+        nombre: cuenta.nombre, ref_display: cuenta.ref_display || null
+      }, data);
+
+      this.logger.info('cuenta.renombrada', { cuenta_id: id, nombre_anterior, nombre_nuevo: cuenta.nombre });
+      return { status: 200, data: { id, nombre_anterior, nombre_nuevo: cuenta.nombre } };
+    } catch (err) {
+      return this._handleHandlerError('cuenta.rename.failed', err, 'ui_rename');
+    }
+  }
+
+  async handleGetStats() {
+    try {
+      const total = this.cuentas.size;
+      const por_tipo = { local: 0, delivery: 0, llevar: 0 };
+      const por_estado = {};
+      for (const cuenta of this.cuentas.values()) {
+        if (por_tipo[cuenta.tipo] !== undefined) por_tipo[cuenta.tipo]++;
+        por_estado[cuenta.estado] = (por_estado[cuenta.estado] || 0) + 1;
+      }
+      return { status: 200, data: { total, por_tipo, por_estado } };
+    } catch (err) {
+      return this._handleHandlerError('cuenta.stats.failed', err, 'ui_stats');
+    }
+  }
+
+  async handleHealthCheck() {
+    try {
+      const is_healthy = this.cuentas.size < 100;
+      return {
+        status: is_healthy ? 200 : 503,
+        data: {
+          status: is_healthy ? 'healthy' : 'unhealthy',
+          uptime: process.uptime(),
+          timestamp: new Date().toISOString(),
+          version: this.version,
+          cuentas_activas: this.cuentas.size,
+          pending_delete_timeouts: this._pendingTimeouts.size,
+          alerta_timers: this._alertaTimers.size
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('cuenta.health.failed', err, 'ui_health');
+    }
+  }
+
+  async handleGetMetrics() {
+    try {
+      const por_estado = {};
+      const por_tipo   = { local: 0, delivery: 0, llevar: 0 };
+      let alertas_activas = 0;
+      for (const cuenta of this.cuentas.values()) {
+        por_estado[cuenta.estado] = (por_estado[cuenta.estado] || 0) + 1;
+        if (por_tipo[cuenta.tipo] !== undefined) por_tipo[cuenta.tipo]++;
+        if (cuenta.alerta) alertas_activas++;
+      }
+      return {
+        status: 200,
+        data: {
+          cuentas_activas: this.cuentas.size,
+          por_estado, por_tipo, alertas_activas,
+          pending_delete_timeouts: this._pendingTimeouts.size,
+          alerta_timers: this._alertaTimers.size,
+          timestamp: new Date().toISOString()
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('cuenta.metrics.failed', err, 'ui_metrics');
+    }
+  }
+
+  // ==========================================
+  // Internals — pedido inicial, cobro cleanup, flags
+  // ==========================================
+
+  async _inyectarPedidoInicial(cuenta, pedido_inicial, sourcePayload = null) {
+    const itemsCount = pedido_inicial.items.reduce((s, i) => s + (i.cantidad || 1), 0);
     const total = pedido_inicial.total ?? pedido_inicial.items.reduce(
       (s, i) => s + (i.subtotal || (i.precio || 0) * (i.cantidad || 1)), 0
     );
 
-    // Actualizar totales locales (lo que onComanderoItemAgregado hace en el
-    // flujo normal del comandero, agrupado en una sola actualizacion).
-    cuenta.items = itemsCount;
-    cuenta.total = total;
+    cuenta.items     = itemsCount;
+    cuenta.total     = total;
     cuenta.updated_at = new Date().toISOString();
 
-    // Transicion pendiente → con_pedido (los items ya existen). Esto es lo
-    // que hace onComanderoItemAgregado en el primer item del flujo normal.
-    await this.transicionarEstado(cuenta.id, 'con_pedido');
-    await this.publishCuentaActualizada(cuenta.project_id, cuenta.id, {
-      items: cuenta.items,
-      total: cuenta.total
-    });
+    await this._transicionarEstado(cuenta.id, 'con_pedido', sourcePayload);
+    await this._publishCuentaActualizada(cuenta.project_id, cuenta.id, {
+      items: cuenta.items, total: cuenta.total
+    }, sourcePayload);
 
-    // Publicar comandero.enviar_cocina como si viniera del buffer del comandero.
-    // Este modulo escucha ese evento en onComanderoEnviarCocina y transiciona
-    // la cuenta a en_preparacion. Pedidos lo recoge en su propio bridge y
-    // crea el pedido formal + publica pedido.enviado_cocina (lo que cocina
-    // espera para mostrar el pedido en pantalla).
     const pedido_id = `ped_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
-    await this.eventBus.publish('comandero.enviar_cocina', {
-      cuenta_id: cuenta.id,
+    await this._publicarEvento('comandero.enviar_cocina', {
+      cuenta_id:       cuenta.id,
       pedido_id,
-      project_id: cuenta.project_id,
-      ref_display: cuenta.ref_display,
-      items: pedido_inicial.items,
+      project_id:      cuenta.project_id,
+      ref_display:     cuenta.ref_display,
+      items:           pedido_inicial.items,
       total,
       notas_generales: pedido_inicial.notas_generales || null,
-      created_at: cuenta.created_at
-    });
+      created_at:      cuenta.created_at
+    }, sourcePayload);
 
     this.logger.info('cuenta.pedido_inicial.inyectado', {
-      cuenta_id: cuenta.id,
-      pedido_id,
-      items_count: itemsCount,
-      total
+      cuenta_id: cuenta.id, pedido_id, items_count: itemsCount, total
     });
   }
 
-  async handleListCuentas(data) {
-    const { project_id, tipo, estado } = data || {};
+  async _cerrarCuentaCobrada(cuenta_id, sourcePayload = null) {
+    const cuenta = this.cuentas.get(cuenta_id);
+    if (!cuenta) return;
+    if (cuenta.estado === 'cobrado') return;
 
-    let cuentas = Array.from(this.cuentas.values());
-
-    // Filtrar por proyecto
-    if (project_id) {
-      cuentas = cuentas.filter(c => c.project_id === project_id);
-    }
-    if (tipo) {
-      cuentas = cuentas.filter(c => c.tipo === tipo);
-    }
-    if (estado) {
-      cuentas = cuentas.filter(c => c.estado === estado);
-    }
-
-    cuentas.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-    return {
-      status: 200,
-      data: { cuentas, total: cuentas.length }
-    };
-  }
-
-  async handleGetCuenta(data) {
-    const { project_id, id } = data;
-    const cuenta = this.cuentas.get(id);
-
-    if (!cuenta) {
-      return { status: 404, error: `Cuenta ${id} no encontrada` };
-    }
-
-    // Verificar que pertenece al proyecto (si se especifica)
-    if (project_id && cuenta.project_id !== project_id) {
-      return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
-    }
-
-    return { status: 200, data: cuenta };
-  }
-
-  async handleDeleteCuenta(data) {
-    const { project_id, id } = data;
-    const cuenta = this.cuentas.get(id);
-
-    if (!cuenta) {
-      return { status: 404, error: `Cuenta ${id} no encontrada` };
-    }
-
-    // Verificar que pertenece al proyecto (si se especifica)
-    if (project_id && cuenta.project_id !== project_id) {
-      return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
-    }
-
-    this.cuentas.delete(id);
-    this._pedidosEnCocina.delete(id);
-
-    // Limpiar timer de alerta si existía
-    const alertaTimer = this._alertaTimers.get(id);
-    if (alertaTimer) {
-      clearTimeout(alertaTimer);
-      this._alertaTimers.delete(id);
-    }
-
-    this.metrics?.increment?.('cuenta.eliminada.total');
-    this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
-
-    await this.publishCuentaEliminada(cuenta.project_id, id, cuenta.tipo, 'eliminacion_manual');
-
-    this.logger.info('cuenta.eliminada', { project_id: cuenta.project_id, cuenta_id: id, tipo: cuenta.tipo });
-
-    return { status: 200, data: { message: 'Cuenta eliminada' } };
-  }
-
-  async handleMarcarEntregado(data) {
-    const { project_id, id } = data;
-    const cuenta = this.cuentas.get(id);
-
-    if (!cuenta) {
-      return { status: 404, error: `Cuenta ${id} no encontrada` };
-    }
-
-    if (project_id && cuenta.project_id !== project_id) {
-      return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
-    }
-
-    if (!['listo', 'en_preparacion'].includes(cuenta.estado)) {
-      return { status: 400, error: `Cuenta debe estar en estado 'listo' o 'en_preparacion' para marcar entregado (actual: ${cuenta.estado})` };
-    }
-
-    const ok = await this.transicionarEstado(id, 'entregado');
+    const ok = await this._transicionarEstado(cuenta_id, 'cobrado', sourcePayload);
     if (!ok) {
-      return { status: 500, error: 'No se pudo transicionar a entregado' };
-    }
-
-    this.logger.info('cuenta.marcada_entregado', { project_id: cuenta.project_id, cuenta_id: id, pagado: cuenta.pagado });
-
-    // Si ya estaba pagado, cerrar automáticamente
-    if (cuenta.pagado) {
-      await this.cerrarCuentaCobrada(id);
-    }
-
-    return { status: 200, data: { message: 'Cuenta marcada como entregada' } };
-  }
-
-  async handleRenameCuenta(data) {
-    const { project_id, id, nombre } = data;
-
-    if (!nombre || typeof nombre !== 'string' || nombre.trim().length === 0) {
-      return { status: 400, error: 'nombre es requerido' };
-    }
-
-    const cuenta = this.cuentas.get(id);
-    if (!cuenta) {
-      return { status: 404, error: `Cuenta ${id} no encontrada` };
-    }
-
-    if (project_id && cuenta.project_id !== project_id) {
-      return { status: 404, error: `Cuenta ${id} no encontrada en proyecto ${project_id}` };
-    }
-
-    const nombre_anterior = cuenta.nombre;
-    cuenta.nombre = nombre.trim().slice(0, 50);
-    cuenta.updated_at = new Date().toISOString();
-
-    // Recomponer ref_display: si tenemos turno (fuente de verdad), regenerar
-    // limpio desde turno + tipo + nombre. Si no (cuenta restaurada sin turno,
-    // caso legacy), intentar extraer el código "X NNN" del ref_display actual.
-    if (Number.isInteger(cuenta.turno)) {
-      const numero = String(cuenta.turno).padStart(3, '0');
-      const symbol = CuentasModule.SIMBOLOS[cuenta.tipo] || 'M';
-      cuenta.ref_display = this.buildRefDisplay(symbol, numero, cuenta.nombre);
-    } else if (cuenta.ref_display) {
-      const match = cuenta.ref_display.match(/[A-Z]\s\d{3}/);
-      const code = match ? match[0] : cuenta.ref_display;
-      cuenta.ref_display = cuenta.nombre ? `${cuenta.nombre} ${code}` : code;
-    }
-
-    await this.publishCuentaActualizada(cuenta.project_id, id, {
-      nombre: cuenta.nombre,
-      ref_display: cuenta.ref_display || null
-    });
-
-    this.logger.info('cuenta.renombrada', {
-      cuenta_id: id, nombre_anterior, nombre_nuevo: cuenta.nombre
-    });
-
-    return { status: 200, data: { nombre_anterior, nombre_nuevo: cuenta.nombre } };
-  }
-
-  async handleGetStats() {
-    const total = this.cuentas.size;
-    const por_tipo = { local: 0, delivery: 0, llevar: 0 };
-    const por_estado = {};
-
-    for (const cuenta of this.cuentas.values()) {
-      if (por_tipo[cuenta.tipo] !== undefined) por_tipo[cuenta.tipo]++;
-      por_estado[cuenta.estado] = (por_estado[cuenta.estado] || 0) + 1;
-    }
-
-    return { status: 200, data: { total, por_tipo, por_estado } };
-  }
-
-  async handleHealthCheck() {
-    const is_healthy = this.cuentas.size < 100;
-
-    return {
-      status: is_healthy ? 200 : 503,
-      data: {
-        status: is_healthy ? 'healthy' : 'unhealthy',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-        version: this.version,
-        cuentas_activas: this.cuentas.size,
-        pending_delete_timeouts: this._pendingTimeouts.size,
-        alerta_timers: this._alertaTimers.size
-      }
-    };
-  }
-
-  async handleGetMetrics() {
-    const por_estado = {};
-    const por_tipo = { local: 0, delivery: 0, llevar: 0 };
-    let alertas_activas = 0;
-
-    for (const cuenta of this.cuentas.values()) {
-      por_estado[cuenta.estado] = (por_estado[cuenta.estado] || 0) + 1;
-      if (por_tipo[cuenta.tipo] !== undefined) por_tipo[cuenta.tipo]++;
-      if (cuenta.alerta) alertas_activas++;
-    }
-
-    return {
-      status: 200,
-      data: {
-        cuentas_activas: this.cuentas.size,
-        por_estado,
-        por_tipo,
-        alertas_activas,
-        pending_delete_timeouts: this._pendingTimeouts.size,
-        alerta_timers: this._alertaTimers.size,
-        timestamp: new Date().toISOString()
-      }
-    };
-  }
-
-  // ==========================================
-  // Event Publishers
-  // ==========================================
-
-  async publishCuentaCreada(cuenta) {
-    await this.eventBus.publish('cuenta.creada', {
-      project_id: cuenta.project_id,
-      cuenta_id: cuenta.id,
-      turno: cuenta.turno,
-      tipo: cuenta.tipo,
-      nombre: cuenta.nombre,
-      ref_display: cuenta.ref_display,
-      origen: cuenta.nombre || cuenta.tipo,
-      total: cuenta.total,
-      metadata: cuenta.metadata || {},
-      estado: cuenta.estado,
-      created_at: cuenta.created_at
-    });
-  }
-
-  async publishCuentaActualizada(project_id, cuenta_id, cambios) {
-    await this.eventBus.publish('cuenta.actualizada', {
-      project_id,
-      cuenta_id,
-      cambios,
-      updated_at: new Date().toISOString()
-    });
-  }
-
-  async publishEstadoCambiado(project_id, cuenta_id, estado_anterior, estado_nuevo) {
-    await this.eventBus.publish('cuenta.estado_cambiado', {
-      project_id,
-      cuenta_id,
-      estado_anterior,
-      estado_nuevo,
-      changed_at: new Date().toISOString()
-    });
-  }
-
-  async publishCuentaEliminada(project_id, cuenta_id, tipo, motivo) {
-    await this.eventBus.publish('cuenta.eliminada', {
-      project_id,
-      cuenta_id,
-      tipo,
-      motivo
-    });
-  }
-
-  // ==========================================
-  // Restauración desde persistencia
-  // ==========================================
-
-  /**
-   * Lee cuentas_activas.json y repuebla el Map en memoria.
-   * Se ejecuta en onLoad para sobrevivir reinicios del servidor.
-   */
-  async restaurarDesdeArchivo() {
-    try {
-      const archivo = path.join('./data/current', 'cuentas_activas.json');
-      const contenido = await fs.readFile(archivo, 'utf8');
-      const datos = JSON.parse(contenido);
-
-      if (!datos.cuentas || Object.keys(datos.cuentas).length === 0) return;
-
-      let restauradas = 0;
-      let maxTurnoVisto = 0;
-      for (const [cuenta_id, cp] of Object.entries(datos.cuentas)) {
-        // Usar estado real de persistencia si existe, sino inferir
-        let estado = cp.estado || 'pendiente';
-        if (estado === 'abierta') {
-          // Legacy: persistencia sin estado real
-          estado = (cp.pedidos && cp.pedidos.length > 0) ? 'con_pedido' : 'pendiente';
-        }
-
-        // Items: usar campo directo si persistencia lo guardó, sino contar desde pedidos
-        let itemsCount = cp.items || 0;
-        if (!itemsCount && cp.pedidos && Array.isArray(cp.pedidos)) {
-          for (const p of cp.pedidos) {
-            if (p.items && Array.isArray(p.items)) {
-              itemsCount += p.items.reduce((sum, i) => sum + (i.cantidad || 1), 0);
-            }
-          }
-        }
-
-        // Formatear hora
-        let hora = '--:--';
-        try {
-          const d = new Date(cp.created_at);
-          hora = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        } catch (_) { /* ignore */ }
-
-        // Restaurar turno persistido si existe (nunca regenerar — el turno es inmutable)
-        const turnoRestaurado = Number.isInteger(cp.turno) ? cp.turno : null;
-        if (turnoRestaurado && turnoRestaurado > maxTurnoVisto) {
-          maxTurnoVisto = turnoRestaurado;
-        }
-
-        // Nombre explícito del snapshot; evita fallbacks que contaminen con tipo
-        const nombreRestaurado =
-          cp.datos_especificos?.nombre || cp.nombre || null;
-
-        const cuenta = {
-          id: cuenta_id,
-          project_id: cp.project_id || null,
-          turno: turnoRestaurado,
-          tipo: cp.tipo || 'local',
-          nombre: nombreRestaurado,
-          cliente_nombre: cp.datos_especificos?.cliente_nombre || cp.cliente_nombre || null,
-          ref_display: cp.ref_display || null,
-          estado,
-          pagado: cp.pagado || false,
-          hora,
-          items: itemsCount,
-          total: cp.total || 0,
-          alerta: false,
-          metadata: cp.datos_especificos || cp.metadata || {},
-          created_at: cp.created_at || new Date().toISOString(),
-          updated_at: cp.updated_at || cp.created_at || new Date().toISOString()
-        };
-
-        this.cuentas.set(cuenta_id, cuenta);
-        restauradas++;
-      }
-
-      // Avanzar el contador global para que no re-use turnos ya asignados a
-      // cuentas restauradas. Solo sube nunca baja.
-      if (maxTurnoVisto > this._turno) {
-        this._turno = maxTurnoVisto;
-        this._saveTurnoDebounced();
-      }
-
-      this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
-
-      this.logger.info('cuentas.estado_restaurado', {
-        cuentas_restauradas: restauradas,
-        turno_actual: this._turno
+      this.logger.warn('cuenta.cerrar_cobrada.transicion_fallida', {
+        cuenta_id, estado_actual: cuenta.estado
       });
-    } catch (error) {
-      // No hay archivo o está vacío — arranque limpio
-      if (error.code !== 'ENOENT') {
-        this.logger.warn('cuentas.restaurar.error', { error: error.message });
-      }
+      return;
+    }
+
+    this._pedidosEnCocina.delete(cuenta_id);
+
+    const timeoutAnterior = this._pendingTimeouts.get(cuenta_id);
+    if (timeoutAnterior) clearTimeout(timeoutAnterior);
+
+    const project_id = cuenta.project_id;
+    const tipo       = cuenta.tipo;
+    const timeout    = setTimeout(() => {
+      this._pendingTimeouts.delete(cuenta_id);
+      this.cuentas.delete(cuenta_id);
+      this._publishCuentaEliminada(project_id, cuenta_id, tipo, 'cobro_completado');
+    }, POST_COBRADO_MS);
+
+    this._pendingTimeouts.set(cuenta_id, timeout);
+  }
+
+  _pagoExterno(cuenta) {
+    if (cuenta?.metadata?.pago_externo !== undefined) return !!cuenta.metadata.pago_externo;
+    return cuenta?.tipo === 'llevadoo';
+  }
+
+  _cerrarAlCobrar(cuenta) {
+    if (cuenta?.metadata?.cerrar_al_cobrar !== undefined) return !!cuenta.metadata.cerrar_al_cobrar;
+    if (cuenta?.tipo === 'llevar') return false;
+    return true;
+  }
+
+  // ==========================================
+  // Publishers tipados (delegan a _publicarEvento)
+  // ==========================================
+
+  async _publishCuentaCreada(cuenta, sourcePayload = null) {
+    await this._publicarEvento('cuenta.creada', {
+      project_id:  cuenta.project_id,
+      cuenta_id:   cuenta.id,
+      turno:       cuenta.turno,
+      tipo:        cuenta.tipo,
+      nombre:      cuenta.nombre,
+      ref_display: cuenta.ref_display,
+      origen:      cuenta.nombre || cuenta.tipo,
+      total:       cuenta.total,
+      metadata:    cuenta.metadata || {},
+      estado:      cuenta.estado,
+      created_at:  cuenta.created_at
+    }, sourcePayload);
+  }
+
+  async _publishCuentaActualizada(project_id, cuenta_id, cambios, sourcePayload = null) {
+    await this._publicarEvento('cuenta.actualizada', {
+      project_id, cuenta_id, cambios, updated_at: new Date().toISOString()
+    }, sourcePayload);
+  }
+
+  async _publishCuentaEliminada(project_id, cuenta_id, tipo, motivo, sourcePayload = null) {
+    await this._publicarEvento('cuenta.eliminada', {
+      project_id, cuenta_id, tipo, motivo
+    }, sourcePayload);
+  }
+
+  // ==========================================
+  // Helpers POC2
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
+  }
+
+  _handleHandlerError(logEvent, err, kind) {
+    const code   = err._code || this._classifyHandlerError(err);
+    const status = code === 'INVALID_INPUT'           ? 400 :
+                   code === 'RESOURCE_NOT_FOUND'      ? 404 :
+                   code === 'PERMISSION_DENIED'       ? 403 :
+                   code === 'AUTHENTICATION_REQUIRED' ? 401 :
+                   code === 'ALREADY_EXISTS'          ? 409 :
+                   code === 'CONFLICT_STATE'          ? 409 :
+                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
+                   code === 'EXTERNAL_API_FAILED'     ? 502 :
+                   code === 'TIMEOUT'                 ? 504 :
+                   code === 'FILESYSTEM_ERROR'        ? 500 : 500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code, kind });
+    this.metrics?.increment?.('pizzepos-cuentas.errors', { kind, code });
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg  = (err?.message || '').toLowerCase();
+    const ecod = err?.code || '';
+    if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
+    if (ecod === 'EACCES' || msg.includes('permission') || msg.includes('forbidden'))    return 'PERMISSION_DENIED';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    if (msg.includes('conflict') || msg.includes('already exists'))                       return 'ALREADY_EXISTS';
+    if (ecod && ecod.startsWith('E'))                                                     return 'FILESYSTEM_ERROR';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    if (!this.eventBus?.publish) return;
+    const enriched = {
+      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+      timestamp:      new Date().toISOString(),
+      ...payload,
+      project_id:     payload?.project_id || sourcePayload?.project_id || DEFAULT_PROJECT_ID
+    };
+    try {
+      await this.eventBus.publish(name, enriched);
+    } catch (err) {
+      this.logger.error('pizzepos-cuentas.publish_error', { event: name, error: err.message });
+      this.metrics?.increment?.('pizzepos-cuentas.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
     }
   }
 
-  // ==========================================
-  // Helpers
-  // ==========================================
-
-  // ── Contador único global de turnos (001→999→001, persistido) ──
-  //
-  // El turno es la identidad humana de la cuenta (orden de llegada). Se asigna
-  // una sola vez en creación, nunca cambia, y es independiente del canal.
-  // Una cuenta renombrada o que cambia de estado mantiene su turno original.
-
-  /**
-   * Genera un cuenta_id con formato `{tipo}_{uuid8}`.
-   * El prefijo es la palabra completa del tipo (mesa_, llevar_, delivery_,
-   * llevadoo_, telefono_, whatsapp_, glovo_). Esto permite al frontend
-   * identificar el canal de una cuenta con startsWith sin depender del
-   * campo `tipo` del evento (compat con el codigo existente).
-   *
-   * Aliases: `local` → `mesa` (historico).
-   */
-  _buildCuentaId(tipo) {
-    const tipoCanonico = tipo === 'local' ? 'mesa' : (tipo || 'cuenta');
-    const uuid8 = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
-    return `${tipoCanonico}_${uuid8}`;
+  // 5o helper auxiliar: escritura atomica .tmp + rename
+  async _atomicWriteFile(absPath, contents) {
+    const tmpPath = absPath + '.tmp';
+    await fs.writeFile(tmpPath, contents, 'utf-8');
+    await fs.rename(tmpPath, absPath);
   }
 
-  /**
-   * Devuelve el siguiente turno como entero (1..999, cicla).
-   * Persiste con debounce de 1s.
-   */
-  getNextTurno() {
-    this._turno++;
-    if (this._turno > 999) this._turno = 1;
-    this._saveTurnoDebounced();
-    return this._turno;
-  }
-
-  buildRefDisplay(symbol, number, nombre) {
-    const code = `${symbol} ${number}`;
-    return nombre ? `${nombre} ${code}` : code;
-  }
-
-  /**
-   * Genera turno + ref_display para una cuenta nueva.
-   * Punto único de generación — handleCreateCuenta lo usa.
-   * Devuelve { turno, numero, ref_display }:
-   *   - turno: entero (1..999), identidad humana
-   *   - numero: mismo turno formateado a 3 dígitos ("001")
-   *   - ref_display: string derivado "{nombre? }{simbolo} {numero}"
-   */
-  generateRefDisplay(tipo, nombre) {
-    const turno = this.getNextTurno();
-    const numero = String(turno).padStart(3, '0');
-    const symbol = CuentasModule.SIMBOLOS[tipo] || 'M';
-    // Excluir nombres automaticos ("Mesa 5", "Cliente 16", etc) y tambien
-    // los literales sin sufijo numerico ("Llevadoo", "Cliente Glovo", etc).
-    // El `(\s|$)` captura tanto "Mesa 5" como "Llevadoo" exacto — las
-    // strategies viejas/legacy pueden caer con un literal sin numero.
-    const esAuto = nombre && /^(Mesa|Llevadoo|Cliente Glovo|Cliente WhatsApp|Cliente)(\s|$)/i.test(nombre);
-    const nombreFinal = esAuto ? null : (nombre || null);
-    return { turno, numero, ref_display: this.buildRefDisplay(symbol, numero, nombreFinal) };
-  }
-
-  async _loadTurno() {
+  // 6o helper: lectura JSON con log+metric en error (no swallow silencioso)
+  async _readJsonSafe(filePath, kind) {
     try {
-      const data = await fs.readFile(this._turnoFile, 'utf8');
-      const json = JSON.parse(data);
-      // Acepta 'turno' (nuevo) o 'counter' (legacy) para no perder estado tras migración
-      this._turno = json.turno ?? json.counter ?? 0;
-      this.logger?.info?.('cuentas.turno.loaded', { turno: this._turno });
+      const raw = await fs.readFile(filePath, 'utf-8');
+      return JSON.parse(raw);
     } catch (err) {
       if (err.code !== 'ENOENT') {
-        this.logger?.warn?.('cuentas.turno.load_error', { error: err.message });
+        this.logger.warn('pizzepos-cuentas.read_error', { file: filePath, kind, error: err.message });
+        this.metrics?.increment?.('pizzepos-cuentas.errors', { kind: kind || 'read_json', code: this._classifyHandlerError(err) });
       }
+      return null;
+    }
+  }
+
+  _logError(logEvent, fields, kind, code) {
+    this.logger.error(logEvent, { ...fields, code, kind });
+    this.metrics?.increment?.('pizzepos-cuentas.errors', { kind, code });
+  }
+
+  _unwrap(event) { return event?.data || event?.payload || event || {}; }
+
+  // ==========================================
+  // Persistencia (turno + restauracion)
+  // ==========================================
+
+  async _loadTurno() {
+    const json = await this._readJsonSafe(this._turnoFile, 'turno_load');
+    if (json) {
+      this._turno = json.turno ?? json.counter ?? 0;
+      this.logger.info('cuentas.turno.loaded', { turno: this._turno });
+    } else {
       this._turno = 0;
     }
   }
 
   _saveTurnoDebounced() {
     if (this._turnoSaveTimer) clearTimeout(this._turnoSaveTimer);
-    // No persistir si no se ha inicializado (smoke tests, instanciacion sin onLoad)
     if (!this._turnoFile) return;
-    this._turnoSaveTimer = setTimeout(() => this._saveTurno(), 1000);
+    this._turnoSaveTimer = setTimeout(() => this._saveTurno(), TURNO_DEBOUNCE_MS);
   }
 
   async _saveTurno() {
     if (!this._turnoFile) return;
     try {
-      const dir = path.dirname(this._turnoFile);
-      await fs.mkdir(dir, { recursive: true });
-      // Escribe ambos campos durante migración para compat hacia atrás
-      await fs.writeFile(
+      await fs.mkdir(path.dirname(this._turnoFile), { recursive: true });
+      await this._atomicWriteFile(
         this._turnoFile,
         JSON.stringify({ turno: this._turno, counter: this._turno })
       );
     } catch (err) {
-      this.logger?.warn?.('cuentas.turno.save_error', { error: err.message });
+      this.logger.warn('cuentas.turno.save_error', { error: err.message });
+      this.metrics?.increment?.('pizzepos-cuentas.errors', { kind: 'turno_save', code: 'FILESYSTEM_ERROR' });
     }
   }
 
-  // Mapa de símbolo por tipo de canal
-  // Letra visible en el ref_display. `delivery` y `llevadoo` son tipos
-  // DISTINTOS aunque ambos sean domicilio:
-  //   - delivery: pedido a domicilio propio del local (desde /comandero)
-  //   - llevadoo: plataforma externa (desde /llevadoo, pago externo)
-  // El prefijo del cuenta_id usa palabra completa (mesa_, llevar_, etc)
-  // para compat con el frontend existente.
-  static SIMBOLOS = {
-    mesa: 'M', local: 'M',
-    llevar: 'L',
-    telefono: 'T',
-    whatsapp: 'W',
-    glovo: 'G',
-    delivery: 'D',
-    llevadoo: 'V'
-  };
+  async _restaurarDesdeArchivo() {
+    const datos = await this._readJsonSafe(
+      path.join('./data/current', 'cuentas_activas.json'),
+      'restaurar'
+    );
+    if (!datos?.cuentas || Object.keys(datos.cuentas).length === 0) return;
 
-  startMetricsReporting() {
-    this._metricsInterval = setInterval(() => {
-      if (!this.metrics?.gauge) return;
+    let restauradas    = 0;
+    let maxTurnoVisto  = 0;
 
-      this.metrics.gauge('cuenta.activas.count', this.cuentas.size);
-
-      const por_tipo = { local: 0, delivery: 0, llevar: 0 };
-      const por_estado = { pendiente: 0, con_pedido: 0, en_preparacion: 0, listo: 0, entregado: 0, para_cobrar: 0, cobrado: 0 };
-      let alertas = 0;
-
-      for (const cuenta of this.cuentas.values()) {
-        if (por_tipo[cuenta.tipo] !== undefined) por_tipo[cuenta.tipo]++;
-        if (por_estado[cuenta.estado] !== undefined) por_estado[cuenta.estado]++;
-        if (cuenta.alerta) alertas++;
+    for (const [cuenta_id, cp] of Object.entries(datos.cuentas)) {
+      let estado = cp.estado || 'pendiente';
+      if (estado === 'abierta') {
+        estado = (cp.pedidos && cp.pedidos.length > 0) ? 'con_pedido' : 'pendiente';
       }
 
-      this.metrics.gauge('cuenta.por_tipo.local', por_tipo.local);
-      this.metrics.gauge('cuenta.por_tipo.delivery', por_tipo.delivery);
-      this.metrics.gauge('cuenta.por_tipo.llevar', por_tipo.llevar);
-      this.metrics.gauge('cuenta.por_estado.pendiente', por_estado.pendiente);
-      this.metrics.gauge('cuenta.por_estado.con_pedido', por_estado.con_pedido);
-      this.metrics.gauge('cuenta.por_estado.en_preparacion', por_estado.en_preparacion);
-      this.metrics.gauge('cuenta.por_estado.listo', por_estado.listo);
-      this.metrics.gauge('cuenta.por_estado.entregado', por_estado.entregado);
-      this.metrics.gauge('cuenta.por_estado.para_cobrar', por_estado.para_cobrar);
-      this.metrics.gauge('cuenta.por_estado.cobrado', por_estado.cobrado);
-      this.metrics.gauge('cuenta.alertas.count', alertas);
-    }, 10000);
+      let itemsCount = cp.items || 0;
+      if (!itemsCount && Array.isArray(cp.pedidos)) {
+        for (const p of cp.pedidos) {
+          if (Array.isArray(p.items)) {
+            itemsCount += p.items.reduce((sum, i) => sum + (i.cantidad || 1), 0);
+          }
+        }
+      }
+
+      let hora = '--:--';
+      try {
+        const d = new Date(cp.created_at);
+        hora = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      } catch (_) { /* defaults */ }
+
+      const turnoRestaurado = Number.isInteger(cp.turno) ? cp.turno : null;
+      if (turnoRestaurado && turnoRestaurado > maxTurnoVisto) maxTurnoVisto = turnoRestaurado;
+
+      const nombreRestaurado = cp.datos_especificos?.nombre || cp.nombre || null;
+
+      this.cuentas.set(cuenta_id, {
+        id: cuenta_id,
+        project_id:      cp.project_id || null,
+        turno:           turnoRestaurado,
+        tipo:            cp.tipo || 'local',
+        nombre:          nombreRestaurado,
+        cliente_nombre:  cp.datos_especificos?.cliente_nombre || cp.cliente_nombre || null,
+        ref_display:     cp.ref_display || null,
+        estado,
+        pagado:          cp.pagado || false,
+        hora,
+        items:           itemsCount,
+        total:           cp.total || 0,
+        alerta:          false,
+        metadata:        cp.datos_especificos || cp.metadata || {},
+        created_at:      cp.created_at || new Date().toISOString(),
+        updated_at:      cp.updated_at || cp.created_at || new Date().toISOString()
+      });
+      restauradas++;
+    }
+
+    if (maxTurnoVisto > this._turno) {
+      this._turno = maxTurnoVisto;
+      this._saveTurnoDebounced();
+    }
+
+    this.metrics?.gauge?.('cuenta.activas.count', this.cuentas.size);
+    this.logger.info('cuentas.estado_restaurado', {
+      cuentas_restauradas: restauradas,
+      turno_actual:        this._turno
+    });
+  }
+
+  // ==========================================
+  // Helpers de identidad de cuenta (turno + ref_display)
+  // ==========================================
+
+  _buildCuentaId(tipo) {
+    const tipoCanonico = tipo === 'local' ? 'mesa' : (tipo || 'cuenta');
+    const uuid8 = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+    return `${tipoCanonico}_${uuid8}`;
+  }
+
+  _getNextTurno() {
+    this._turno++;
+    if (this._turno > 999) this._turno = 1;
+    this._saveTurnoDebounced();
+    return this._turno;
+  }
+
+  _buildRefDisplay(symbol, number, nombre) {
+    const code = `${symbol} ${number}`;
+    return nombre ? `${nombre} ${code}` : code;
+  }
+
+  _generateRefDisplay(tipo, nombre) {
+    const turno  = this._getNextTurno();
+    const numero = String(turno).padStart(3, '0');
+    const symbol = CuentasModule.SIMBOLOS[tipo] || 'M';
+    const esAuto = nombre && /^(Mesa|Llevadoo|Cliente Glovo|Cliente WhatsApp|Cliente)(\s|$)/i.test(nombre);
+    const nombreFinal = esAuto ? null : (nombre || null);
+    return { turno, numero, ref_display: this._buildRefDisplay(symbol, numero, nombreFinal) };
+  }
+
+  // ==========================================
+  // Metrics reporting (interval)
+  // ==========================================
+
+  _reportMetrics() {
+    if (!this.metrics?.gauge) return;
+    this.metrics.gauge('cuenta.activas.count', this.cuentas.size);
+
+    const por_tipo = { local: 0, delivery: 0, llevar: 0 };
+    const por_estado = {
+      pendiente: 0, con_pedido: 0, en_preparacion: 0,
+      listo: 0, entregado: 0, para_cobrar: 0, cobrado: 0
+    };
+    let alertas = 0;
+
+    for (const cuenta of this.cuentas.values()) {
+      if (por_tipo[cuenta.tipo] !== undefined)     por_tipo[cuenta.tipo]++;
+      if (por_estado[cuenta.estado] !== undefined) por_estado[cuenta.estado]++;
+      if (cuenta.alerta) alertas++;
+    }
+
+    for (const [tipo, count] of Object.entries(por_tipo)) {
+      this.metrics.gauge(`cuenta.por_tipo.${tipo}`, count);
+    }
+    for (const [estado, count] of Object.entries(por_estado)) {
+      this.metrics.gauge(`cuenta.por_estado.${estado}`, count);
+    }
+    this.metrics.gauge('cuenta.alertas.count', alertas);
   }
 }
 

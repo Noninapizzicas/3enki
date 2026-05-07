@@ -160,3 +160,6 @@ jobs:
 
       - name: Run unit tests (staff-manager — reescritura canonica)
         run: npm run test:staff-manager
+
+      - name: Run unit tests (pizzepos/cuentas — reescritura canonica)
+        run: npm run test:pizzepos__cuentas

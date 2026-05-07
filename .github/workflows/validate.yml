@@ -157,3 +157,6 @@ jobs:
 
       - name: Run unit tests (facturas — reescritura canonica)
         run: npm run test:facturas
+
+      - name: Run unit tests (staff-manager — reescritura canonica)
+        run: npm run test:staff-manager

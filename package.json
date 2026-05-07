@@ -45,6 +45,7 @@
     "test:firmware-manager": "node tests/unit/firmware-manager.test.js",
     "test:esp32-dev": "node tests/unit/esp32-dev.test.js",
     "test:device-shadow": "node tests/unit/device-shadow.test.js",
+    "test:code-executor": "node tests/unit/code-executor.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

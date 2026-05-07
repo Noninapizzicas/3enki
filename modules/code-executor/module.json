@@ -1,6 +1,6 @@
 {
   "name": "code-executor",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Shell command and script execution for AI with security controls",
   "author": "Event Core Team",
   "language": "en",
@@ -48,6 +48,7 @@
       "permissions": [
         "execute"
       ],
+      "errores_conocidos": ["VALIDATION_FAILED", "PERMISSION_DENIED", "TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -81,6 +82,7 @@
       "permissions": [
         "execute"
       ],
+      "errores_conocidos": ["VALIDATION_FAILED", "PERMISSION_DENIED", "RESOURCE_NOT_FOUND", "TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -118,6 +120,7 @@
       "permissions": [
         "execute"
       ],
+      "errores_conocidos": ["VALIDATION_FAILED", "PERMISSION_DENIED", "QUOTA_EXCEEDED"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -143,6 +146,7 @@
       "name": "shell.kill",
       "description": "Detiene un proceso en segundo plano por PID o nombre.",
       "handler": "handleToolKill",
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -161,6 +165,7 @@
       "name": "shell.list",
       "description": "Lista procesos en segundo plano activos.",
       "handler": "handleToolList",
+      "errores_conocidos": [],
       "parameters": {
         "type": "object",
         "properties": {}
@@ -205,12 +210,16 @@
     "metrics": {
       "enabled": true,
       "counters": [
-        "shell.exec.total",
-        "shell.exec.success",
-        "shell.exec.error",
-        "shell.exec.timeout",
-        "shell.exec.blocked"
+        "code-executor.exec.total",
+        "code-executor.exec.success",
+        "code-executor.exec.error",
+        "code-executor.exec.timeout",
+        "code-executor.exec.blocked",
+        "code-executor.errors"
       ]
+    },
+    "tracing": {
+      "propaga_correlation_id": true
     }
   }
 }

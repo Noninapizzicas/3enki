@@ -112,3 +112,6 @@ jobs:
 
       - name: Run unit tests (device-shadow — reescritura canonica)
         run: npm run test:device-shadow
+
+      - name: Run unit tests (code-executor — reescritura canonica)
+        run: npm run test:code-executor

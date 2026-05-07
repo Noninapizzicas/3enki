@@ -109,3 +109,6 @@ jobs:
 
       - name: Run unit tests (esp32-dev — reescritura canonica)
         run: npm run test:esp32-dev
+
+      - name: Run unit tests (device-shadow — reescritura canonica)
+        run: npm run test:device-shadow

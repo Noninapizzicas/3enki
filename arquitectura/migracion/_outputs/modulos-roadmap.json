@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T23:59:17.264Z",
+  "generated_at": "2026-05-07T00:10:19.011Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3557,
-    "loc_total": 48809,
+    "drifts_total": 3530,
+    "loc_total": 48822,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -326,21 +326,6 @@
       "orden_migracion": 19
     },
     {
-      "slug": "device-shadow",
-      "path": "modules/device-shadow",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 478,
-      "drifts": 53,
-      "events_publishes": 3,
-      "events_subscribes": 1,
-      "tools": 3,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 20
-    },
-    {
       "slug": "code-executor",
       "path": "modules/code-executor",
       "layer": "infra",
@@ -353,7 +338,7 @@
       "tools": 5,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 21
+      "orden_migracion": 20
     },
     {
       "slug": "firmware-builder",
@@ -368,7 +353,7 @@
       "tools": 4,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 22
+      "orden_migracion": 21
     },
     {
       "slug": "device-registry",
@@ -383,7 +368,7 @@
       "tools": 3,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 23
+      "orden_migracion": 22
     },
     {
       "slug": "esp32-dev",
@@ -398,7 +383,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 24
+      "orden_migracion": 23
     },
     {
       "slug": "metricas",
@@ -411,6 +396,21 @@
       "events_publishes": 2,
       "events_subscribes": 5,
       "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 24
+    },
+    {
+      "slug": "device-shadow",
+      "path": "modules/device-shadow",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 491,
+      "drifts": 26,
+      "events_publishes": 3,
+      "events_subscribes": 1,
+      "tools": 3,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 25

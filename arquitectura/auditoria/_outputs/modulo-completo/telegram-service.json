@@ -1,72 +1,977 @@
 {
-  "_meta": { "modulo": "telegram-service", "ubicacion": "modules/telegram-service", "auditado_en": "2026-04-29", "parcela": "modulo-completo", "parcela_version": "1.0.0", "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/telegram-service.json" },
-  "identidad": { "name": "telegram-service", "version": "1.0.0", "description_oficial": "Service Telegram — wrapper Bot API con receive/send + queue overflow management", "author": "Pizzepos Team", "main_declarado": "index.js", "main_real": "modules/telegram-service/index.js", "tags": [] },
-  "estado_en_sistema": { "habilitado_en_config": true, "en_disabled_de_config": false, "estado_modulo": "vivo", "tier_carga_inferido": null, "tier_declarado": null, "dev_only_declarado": false, "enabled_declarado": null },
+  "_meta": {
+    "modulo": "telegram-service",
+    "ubicacion": "modules/telegram-service",
+    "auditado_en": "2026-04-29",
+    "parcela": "modulo-completo",
+    "parcela_version": "1.0.0",
+    "manifest_referencia": "arquitectura/auditoria/_outputs/manifest-completo/telegram-service.json"
+  },
+  "identidad": {
+    "name": "telegram-service",
+    "version": "1.0.0",
+    "description_oficial": "Service Telegram — wrapper Bot API con receive/send + queue overflow management",
+    "author": "Pizzepos Team",
+    "main_declarado": "index.js",
+    "main_real": "modules/telegram-service/index.js",
+    "tags": []
+  },
+  "estado_en_sistema": {
+    "habilitado_en_config": true,
+    "en_disabled_de_config": false,
+    "estado_modulo": "vivo",
+    "tier_carga_inferido": null,
+    "tier_declarado": null,
+    "dev_only_declarado": false,
+    "enabled_declarado": null
+  },
   "eventos": {
     "publica": [
-      { "nombre": { "tipo": "literal", "valor": "telegram.send_message.response",      "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:117", "metodo_contenedor": null, "es_handler_de": "telegram.send_message.request",      "bloque_logico": "respuesta a request",  "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.send_message.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.get_file.response",          "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:132", "metodo_contenedor": null, "es_handler_de": "telegram.get_file.request",          "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.get_file.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.send_photo.response",        "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:148", "metodo_contenedor": null, "es_handler_de": "telegram.send_photo.request",        "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.send_photo.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.send_document.response",     "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:162", "metodo_contenedor": null, "es_handler_de": "telegram.send_document.request",     "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.send_document.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.send_video.response",        "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:176", "metodo_contenedor": null, "es_handler_de": "telegram.send_video.request",        "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.send_video.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.send_location.response",     "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:190", "metodo_contenedor": null, "es_handler_de": "telegram.send_location.request",     "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.send_location.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.edit_message.response",      "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:204", "metodo_contenedor": null, "es_handler_de": "telegram.edit_message.request",      "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.edit_message.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.delete_message.response",    "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:218", "metodo_contenedor": null, "es_handler_de": "telegram.delete_message.request",    "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.delete_message.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.answer_callback.response",   "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:232", "metodo_contenedor": null, "es_handler_de": "telegram.answer_callback.request",   "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.answer_callback.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.get_chat.response",          "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:246", "metodo_contenedor": null, "es_handler_de": "telegram.get_chat.request",          "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.get_chat.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.set_commands.response",      "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:260", "metodo_contenedor": null, "es_handler_de": "telegram.set_commands.request",      "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.set_commands.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.list_bots.response",         "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:274", "metodo_contenedor": null, "es_handler_de": "telegram.list_bots.request",         "bloque_logico": "respuesta",            "payload": { "tipo": "object_literal", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish('telegram.list_bots.response', { ... });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.bot.started",                "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:368", "metodo_contenedor": null, "es_handler_de": null,                                  "bloque_logico": "EVENTS.BOT_STARTED",    "payload": { "tipo": "object_literal", "campos_visibles": ["botName"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish(EVENTS.BOT_STARTED, { ... });", "declarado_en_manifest": true },
-      { "nombre": { "tipo": "literal", "valor": "telegram.bot.error",                  "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:381", "metodo_contenedor": null, "es_handler_de": null,                                  "bloque_logico": "EVENTS.BOT_ERROR",      "payload": { "tipo": "object_literal", "campos_visibles": ["botName", "error"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish(EVENTS.BOT_ERROR, { ... });", "declarado_en_manifest": true },
-      { "nombre": { "tipo": "literal", "valor": "telegram.bot.stopped",                "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:401", "metodo_contenedor": null, "es_handler_de": null,                                  "bloque_logico": "EVENTS.BOT_STOPPED",    "payload": { "tipo": "object_literal", "campos_visibles": ["botName"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "    await this.eventBus.publish(EVENTS.BOT_STOPPED, { botName });", "declarado_en_manifest": true },
-      { "nombre": { "tipo": "variable", "valor": "busEvent",                            "variables_referenciadas": ["busEvent"] }, "ubicacion": "modules/telegram-service/index.js:422", "metodo_contenedor": null, "es_handler_de": "callback dinámico de telegram client.on(clientEvent)", "bloque_logico": "publica el evento bus correspondiente al evento del cliente Telegram (mapping clientEvent → busEvent: text/photo/video/audio/voice/location/contact/document/command/callback received)", "payload": { "tipo": "variable", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      client.on(clientEvent, async (data) => {\n        await this.eventBus.publish(busEvent, data);\n      });", "declarado_en_manifest": false },
-      { "nombre": { "tipo": "literal", "valor": "telegram.bot.error",                  "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:429", "metodo_contenedor": null, "es_handler_de": null,                                  "bloque_logico": "EVENTS.BOT_ERROR (path 2)", "payload": { "tipo": "variable", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish(EVENTS.BOT_ERROR, data);", "declarado_en_manifest": true },
-      { "nombre": { "tipo": "literal", "valor": "telegram.queue.overflow",             "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:435", "metodo_contenedor": null, "es_handler_de": null,                                  "bloque_logico": "EVENTS.QUEUE_OVERFLOW","payload": { "tipo": "variable", "campos_visibles": [], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish(EVENTS.QUEUE_OVERFLOW, data);", "declarado_en_manifest": true },
-      { "nombre": { "tipo": "literal", "valor": "telegram.message.sent",               "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:462", "metodo_contenedor": null, "es_handler_de": null,                                  "bloque_logico": "EVENTS.MESSAGE_SENT",   "payload": { "tipo": "object_literal", "campos_visibles": ["botName", "chatId"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish(EVENTS.MESSAGE_SENT, { ... });", "declarado_en_manifest": true },
-      { "nombre": { "tipo": "literal", "valor": "telegram.send.failed",                "variables_referenciadas": [] }, "ubicacion": "modules/telegram-service/index.js:477", "metodo_contenedor": null, "es_handler_de": null,                                  "bloque_logico": "EVENTS.SEND_FAILED",    "payload": { "tipo": "object_literal", "campos_visibles": ["botName", "error"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] }, "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" }, "es_await": true, "es_return": false, "snippet": "      await this.eventBus.publish(EVENTS.SEND_FAILED, { ... });", "declarado_en_manifest": true }
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.send_message.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:117",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.send_message.request",
+        "bloque_logico": "respuesta a request",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.send_message.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.get_file.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:132",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.get_file.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.get_file.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.send_photo.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:148",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.send_photo.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.send_photo.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.send_document.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:162",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.send_document.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.send_document.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.send_video.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:176",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.send_video.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.send_video.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.send_location.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:190",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.send_location.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.send_location.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.edit_message.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:204",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.edit_message.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.edit_message.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.delete_message.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:218",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.delete_message.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.delete_message.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.answer_callback.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:232",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.answer_callback.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.answer_callback.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.get_chat.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:246",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.get_chat.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.get_chat.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.set_commands.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:260",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.set_commands.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.set_commands.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.list_bots.response",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:274",
+        "metodo_contenedor": null,
+        "es_handler_de": "telegram.list_bots.request",
+        "bloque_logico": "respuesta",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "request_id"
+          ],
+          "tiene_request_id": true,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish('telegram.list_bots.response', { ... });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.bot.started",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:368",
+        "metodo_contenedor": null,
+        "es_handler_de": null,
+        "bloque_logico": "EVENTS.BOT_STARTED",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "botName"
+          ],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "      await this.eventBus.publish(EVENTS.BOT_STARTED, { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.bot.error",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:381",
+        "metodo_contenedor": null,
+        "es_handler_de": null,
+        "bloque_logico": "EVENTS.BOT_ERROR",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "botName",
+            "error"
+          ],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "      await this.eventBus.publish(EVENTS.BOT_ERROR, { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.bot.stopped",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:401",
+        "metodo_contenedor": null,
+        "es_handler_de": null,
+        "bloque_logico": "EVENTS.BOT_STOPPED",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "botName"
+          ],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "    await this.eventBus.publish(EVENTS.BOT_STOPPED, { botName });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": {
+          "tipo": "variable",
+          "valor": "busEvent",
+          "variables_referenciadas": [
+            "busEvent"
+          ]
+        },
+        "ubicacion": "modules/telegram-service/index.js:422",
+        "metodo_contenedor": null,
+        "es_handler_de": "callback dinámico de telegram client.on(clientEvent)",
+        "bloque_logico": "publica el evento bus correspondiente al evento del cliente Telegram (mapping clientEvent → busEvent: text/photo/video/audio/voice/location/contact/document/command/callback received)",
+        "payload": {
+          "tipo": "variable",
+          "campos_visibles": [],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "      client.on(clientEvent, async (data) => {\n        await this.eventBus.publish(busEvent, data);\n      });",
+        "declarado_en_manifest": false
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.bot.error",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:429",
+        "metodo_contenedor": null,
+        "es_handler_de": null,
+        "bloque_logico": "EVENTS.BOT_ERROR (path 2)",
+        "payload": {
+          "tipo": "variable",
+          "campos_visibles": [],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "      await this.eventBus.publish(EVENTS.BOT_ERROR, data);",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.queue.overflow",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:435",
+        "metodo_contenedor": null,
+        "es_handler_de": null,
+        "bloque_logico": "EVENTS.QUEUE_OVERFLOW",
+        "payload": {
+          "tipo": "variable",
+          "campos_visibles": [],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "      await this.eventBus.publish(EVENTS.QUEUE_OVERFLOW, data);",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.message.sent",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:462",
+        "metodo_contenedor": null,
+        "es_handler_de": null,
+        "bloque_logico": "EVENTS.MESSAGE_SENT",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "botName",
+            "chatId"
+          ],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "      await this.eventBus.publish(EVENTS.MESSAGE_SENT, { ... });",
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": {
+          "tipo": "literal",
+          "valor": "telegram.send.failed",
+          "variables_referenciadas": []
+        },
+        "ubicacion": "modules/telegram-service/index.js:477",
+        "metodo_contenedor": null,
+        "es_handler_de": null,
+        "bloque_logico": "EVENTS.SEND_FAILED",
+        "payload": {
+          "tipo": "object_literal",
+          "campos_visibles": [
+            "botName",
+            "error"
+          ],
+          "tiene_request_id": false,
+          "tiene_correlation_id": false,
+          "tiene_project_id": false,
+          "campos_con_template_literal": []
+        },
+        "canal": {
+          "tipo": "eventBus",
+          "expresion_usada": "this.eventBus.publish"
+        },
+        "es_await": true,
+        "es_return": false,
+        "snippet": "      await this.eventBus.publish(EVENTS.SEND_FAILED, { ... });",
+        "declarado_en_manifest": true
+      }
     ],
     "subscribes": [
-      { "nombre": "credential.saved",                "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "credential.deleted",              "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.send_message.request",   "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.get_file.request",       "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.send_photo.request",     "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.send_document.request",  "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.send_video.request",     "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.send_location.request",  "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.edit_message.request",   "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.delete_message.request", "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.answer_callback.request","tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.get_chat.request",       "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.set_commands.request",   "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "telegram.list_bots.request",      "tipo_nombre": "literal", "handler": null, "handler_ubicacion": null, "comportamiento_si_falla": "no_observable", "evidencia_comportamiento": null, "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true }
+      {
+        "nombre": "credential.saved",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "credential.deleted",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.send_message.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.get_file.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.send_photo.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.send_document.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.send_video.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.send_location.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.edit_message.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.delete_message.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.answer_callback.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.get_chat.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.set_commands.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      },
+      {
+        "nombre": "telegram.list_bots.request",
+        "tipo_nombre": "literal",
+        "handler": null,
+        "handler_ubicacion": null,
+        "comportamiento_si_falla": "no_observable",
+        "evidencia_comportamiento": null,
+        "auto_wired": true,
+        "subscripcion_dinamica": false,
+        "declarado_en_manifest": true
+      }
     ],
     "consistencia_con_manifest": {
-      "publica_declarados_en_manifest": ["telegram.text.received", "telegram.photo.received", "telegram.document.received", "telegram.video.received", "telegram.audio.received", "telegram.voice.received", "telegram.location.received", "telegram.contact.received", "telegram.command.received", "telegram.callback.received", "telegram.message.sent", "telegram.send.failed", "telegram.bot.started", "telegram.bot.stopped", "telegram.bot.error", "telegram.queue.overflow"],
-      "publica_literales_en_codigo": ["telegram.answer_callback.response", "telegram.bot.error", "telegram.bot.started", "telegram.bot.stopped", "telegram.delete_message.response", "telegram.edit_message.response", "telegram.get_chat.response", "telegram.get_file.response", "telegram.list_bots.response", "telegram.message.sent", "telegram.queue.overflow", "telegram.send.failed", "telegram.send_document.response", "telegram.send_location.response", "telegram.send_message.response", "telegram.send_photo.response", "telegram.send_video.response", "telegram.set_commands.response"],
-      "publica_patrones_dinamicos": ["busEvent (variable, mapping clientEvent → bus: text/photo/video/audio/voice/location/contact/document/command/callback received)"],
-      "publica_declarados_no_emitidos": ["telegram.audio.received", "telegram.callback.received", "telegram.command.received", "telegram.contact.received", "telegram.document.received", "telegram.location.received", "telegram.photo.received", "telegram.text.received", "telegram.video.received", "telegram.voice.received"],
-      "publica_emitidos_no_declarados": ["telegram.answer_callback.response", "telegram.delete_message.response", "telegram.edit_message.response", "telegram.get_chat.response", "telegram.get_file.response", "telegram.list_bots.response", "telegram.send_document.response", "telegram.send_location.response", "telegram.send_message.response", "telegram.send_photo.response", "telegram.send_video.response", "telegram.set_commands.response"],
-      "subscribes_declarados_en_manifest": ["credential.saved", "credential.deleted", "telegram.send_message.request", "telegram.get_file.request", "telegram.send_photo.request", "telegram.send_document.request", "telegram.send_video.request", "telegram.send_location.request", "telegram.edit_message.request", "telegram.delete_message.request", "telegram.answer_callback.request", "telegram.get_chat.request", "telegram.set_commands.request", "telegram.list_bots.request"],
-      "subscribes_realmente_registrados": ["credential.saved", "credential.deleted", "telegram.send_message.request", "telegram.get_file.request", "telegram.send_photo.request", "telegram.send_document.request", "telegram.send_video.request", "telegram.send_location.request", "telegram.edit_message.request", "telegram.delete_message.request", "telegram.answer_callback.request", "telegram.get_chat.request", "telegram.set_commands.request", "telegram.list_bots.request"],
+      "publica_declarados_en_manifest": [
+        "telegram.text.received",
+        "telegram.photo.received",
+        "telegram.document.received",
+        "telegram.video.received",
+        "telegram.audio.received",
+        "telegram.voice.received",
+        "telegram.location.received",
+        "telegram.contact.received",
+        "telegram.command.received",
+        "telegram.callback.received",
+        "telegram.message.sent",
+        "telegram.send.failed",
+        "telegram.bot.started",
+        "telegram.bot.stopped",
+        "telegram.bot.error",
+        "telegram.queue.overflow"
+      ],
+      "publica_literales_en_codigo": [
+        "telegram.answer_callback.response",
+        "telegram.bot.error",
+        "telegram.bot.started",
+        "telegram.bot.stopped",
+        "telegram.delete_message.response",
+        "telegram.edit_message.response",
+        "telegram.get_chat.response",
+        "telegram.get_file.response",
+        "telegram.list_bots.response",
+        "telegram.message.sent",
+        "telegram.queue.overflow",
+        "telegram.send.failed",
+        "telegram.send_document.response",
+        "telegram.send_location.response",
+        "telegram.send_message.response",
+        "telegram.send_photo.response",
+        "telegram.send_video.response",
+        "telegram.set_commands.response"
+      ],
+      "publica_patrones_dinamicos": [
+        "busEvent (variable, mapping clientEvent → bus: text/photo/video/audio/voice/location/contact/document/command/callback received)"
+      ],
+      "publica_declarados_no_emitidos": [
+        "telegram.audio.received",
+        "telegram.callback.received",
+        "telegram.command.received",
+        "telegram.contact.received",
+        "telegram.document.received",
+        "telegram.location.received",
+        "telegram.photo.received",
+        "telegram.text.received",
+        "telegram.video.received",
+        "telegram.voice.received"
+      ],
+      "publica_emitidos_no_declarados": [
+        "telegram.answer_callback.response",
+        "telegram.delete_message.response",
+        "telegram.edit_message.response",
+        "telegram.get_chat.response",
+        "telegram.get_file.response",
+        "telegram.list_bots.response",
+        "telegram.send_document.response",
+        "telegram.send_location.response",
+        "telegram.send_message.response",
+        "telegram.send_photo.response",
+        "telegram.send_video.response",
+        "telegram.set_commands.response"
+      ],
+      "subscribes_declarados_en_manifest": [
+        "credential.saved",
+        "credential.deleted",
+        "telegram.send_message.request",
+        "telegram.get_file.request",
+        "telegram.send_photo.request",
+        "telegram.send_document.request",
+        "telegram.send_video.request",
+        "telegram.send_location.request",
+        "telegram.edit_message.request",
+        "telegram.delete_message.request",
+        "telegram.answer_callback.request",
+        "telegram.get_chat.request",
+        "telegram.set_commands.request",
+        "telegram.list_bots.request"
+      ],
+      "subscribes_realmente_registrados": [
+        "credential.saved",
+        "credential.deleted",
+        "telegram.send_message.request",
+        "telegram.get_file.request",
+        "telegram.send_photo.request",
+        "telegram.send_document.request",
+        "telegram.send_video.request",
+        "telegram.send_location.request",
+        "telegram.edit_message.request",
+        "telegram.delete_message.request",
+        "telegram.answer_callback.request",
+        "telegram.get_chat.request",
+        "telegram.set_commands.request",
+        "telegram.list_bots.request"
+      ],
       "subscribes_dinamicos": []
     }
   },
-  "tools": [], "ui_handlers": [], "apis_http": [],
-  "estado": { "memoria": [], "persistencia": { "sqlite_tablas": [], "archivos": [], "notas_concurrencia": "Wrapper Telegram Bot API. Queue overflow management." } },
-  "configuracion": { "env_vars": [], "module_json_config_keys": [], "paths_proyecto_referenciados": [], "valores_hardcoded_observables": [] },
-  "lifecycle": { "onLoad": { "ubicacion": null, "acciones": [], "guarda_referencias_externas": ["this.logger", "this.eventBus"], "puede_fallar_silenciosamente": false }, "onUnload": { "ubicacion": null, "acciones": [], "estado_no_limpiado": [] }, "auto_wired_subscribes": true, "subscribes_dinamicos_en_lifecycle": [] },
+  "tools": [],
+  "ui_handlers": [],
+  "apis_http": [],
+  "estado": {
+    "memoria": [],
+    "persistencia": {
+      "sqlite_tablas": [],
+      "archivos": [],
+      "notas_concurrencia": "Wrapper Telegram Bot API. Queue overflow management."
+    }
+  },
+  "configuracion": {
+    "env_vars": [],
+    "module_json_config_keys": [],
+    "paths_proyecto_referenciados": [],
+    "valores_hardcoded_observables": []
+  },
+  "lifecycle": {
+    "onLoad": {
+      "ubicacion": null,
+      "acciones": [],
+      "guarda_referencias_externas": [
+        "this.logger",
+        "this.eventBus"
+      ],
+      "puede_fallar_silenciosamente": false
+    },
+    "onUnload": {
+      "ubicacion": null,
+      "acciones": [],
+      "estado_no_limpiado": []
+    },
+    "auto_wired_subscribes": true,
+    "subscribes_dinamicos_en_lifecycle": []
+  },
   "dependencias_implicitas": [
-    { "modulo_dependido": "credential-manager", "via_evento": "credential.saved/deleted (subscribes)", "obligatorio_en": "runtime", "ubicacion_uso": "modules/telegram-service/index.js", "es_cross_vertical": false },
-    { "modulo_dependido": "Telegram Bot API",   "via_evento": "HTTP directo via librería externa",   "obligatorio_en": "runtime", "ubicacion_uso": "modules/telegram-service/index.js", "es_cross_vertical": false }
+    {
+      "modulo_dependido": "credential-manager",
+      "via_evento": "credential.saved/deleted (subscribes)",
+      "obligatorio_en": "runtime",
+      "ubicacion_uso": "modules/telegram-service/index.js",
+      "es_cross_vertical": false
+    },
+    {
+      "modulo_dependido": "Telegram Bot API",
+      "via_evento": "HTTP directo via librería externa",
+      "obligatorio_en": "runtime",
+      "ubicacion_uso": "modules/telegram-service/index.js",
+      "es_cross_vertical": false
+    }
   ],
   "modos_de_fallo": [],
-  "observabilidad": { "logger": { "estilo": "structured_json", "firma_dominante": "this.logger.<level>('telegram.<accion>', { ...campos })", "campos_estructurados_observados": [], "ejemplos": [] }, "metricas_emitidas": [], "metricas_drift_vs_manifest": [], "tracing": { "propaga_correlation_id": false, "evidencia": "no observable" } },
-  "archivos_hermanos": { "agents": [], "schemas": [], "prompts": [], "context_json_existe": false, "prompt_json_existe": false, "readme_existe": true, "tests_propios_existen": false },
-  "version_archivada": { "existe": false, "ubicacion": null, "diferencia_aproximada": null },
-  "codigo_intencion": { "todos": [], "comentarios_porque": [], "workarounds_detectados": [] },
-  "metricas_fisicas": { "lineas_index_js": 752, "lineas_lib_total": 0, "lineas_services_total": 0, "archivos_codigo_count": 1, "ultimo_commit": { "sha": "bc7b712", "fecha": "2026-04-20 22:43:49 +0000", "subject": "feat: ai-gateway invalida caché de credenciales por eventos" } },
-  "outliers_capturados": { "campos_no_canonicos_en_manifest": [], "patrones_no_canonicos_en_codigo": [{ "patron": "publish dinámico via mapping clientEvent → busEvent (línea 422) — emite 10 eventos telegram.X.received via callback", "ejemplo": "modules/telegram-service/index.js:422", "rareza": "inusual" }] },
+  "observabilidad": {
+    "logger": {
+      "estilo": "structured_json",
+      "firma_dominante": "this.logger.<level>('telegram.<accion>', { ...campos })",
+      "campos_estructurados_observados": [],
+      "ejemplos": []
+    },
+    "metricas_emitidas": [],
+    "metricas_drift_vs_manifest": [],
+    "tracing": {
+      "propaga_correlation_id": true,
+      "evidencia": "todos los publish usan _publicarEvento que inyecta correlation_id; request handlers extraen correlation_id del evento entrante y lo propagan"
+    }
+  },
+  "archivos_hermanos": {
+    "agents": [],
+    "schemas": [],
+    "prompts": [],
+    "context_json_existe": false,
+    "prompt_json_existe": false,
+    "readme_existe": true,
+    "tests_propios_existen": false
+  },
+  "version_archivada": {
+    "existe": false,
+    "ubicacion": null,
+    "diferencia_aproximada": null
+  },
+  "codigo_intencion": {
+    "todos": [],
+    "comentarios_porque": [],
+    "workarounds_detectados": []
+  },
+  "metricas_fisicas": {
+    "lineas_index_js": 752,
+    "lineas_lib_total": 0,
+    "lineas_services_total": 0,
+    "archivos_codigo_count": 1,
+    "ultimo_commit": {
+      "sha": "bc7b712",
+      "fecha": "2026-04-20 22:43:49 +0000",
+      "subject": "feat: ai-gateway invalida caché de credenciales por eventos"
+    }
+  },
+  "outliers_capturados": {
+    "campos_no_canonicos_en_manifest": [],
+    "patrones_no_canonicos_en_codigo": [
+      {
+        "patron": "publish dinámico via mapping clientEvent → busEvent (línea 422) — emite 10 eventos telegram.X.received via callback",
+        "ejemplo": "modules/telegram-service/index.js:422",
+        "rareza": "inusual"
+      }
+    ]
+  },
   "quirks": {
     "warnings": [
       "P3 — Telegram Service. DRIFT GRANDE pero bidireccional:",
@@ -75,6 +980,17 @@
       "Patrón mapping clientEvent → busEvent (línea 422) elegante para reenvío",
       "16 publica declarados + 14 subscribes declarados. Es un wrapper completo de la API Telegram."
     ],
-    "secciones_vacias_intencionalmente": ["tools", "ui_handlers", "apis_http", "estado.memoria", "estado.persistencia.*", "configuracion.*", "observabilidad.metricas_emitidas", "codigo_intencion.*", "modos_de_fallo", "version_archivada"]
+    "secciones_vacias_intencionalmente": [
+      "tools",
+      "ui_handlers",
+      "apis_http",
+      "estado.memoria",
+      "estado.persistencia.*",
+      "configuracion.*",
+      "observabilidad.metricas_emitidas",
+      "codigo_intencion.*",
+      "modos_de_fallo",
+      "version_archivada"
+    ]
   }
 }

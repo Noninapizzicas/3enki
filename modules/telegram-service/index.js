@@ -54,16 +54,21 @@ class TelegramServiceModule {
   _classifyHandlerError(error) {
     const msg = (error.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('no encontrado')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('requerido') || msg.includes('validation')) return 'VALIDATION_FAILED';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('required') || msg.includes('requerido') || msg.includes('validation')) return 'INVALID_INPUT';
+    return 'EXTERNAL_API_FAILED';
   }
 
   _handleHandlerError(metricName, error, kind) {
     const code = error._code || this._classifyHandlerError(error);
-    const statusMap = { RESOURCE_NOT_FOUND: 404, VALIDATION_FAILED: 400, UNAUTHORIZED: 401, FORBIDDEN: 403 };
+    const statusMap = { RESOURCE_NOT_FOUND: 404, INVALID_INPUT: 400, AUTHENTICATION_REQUIRED: 401, PERMISSION_DENIED: 403 };
     const status = statusMap[code] || 500;
     this.metrics?.increment(metricName);
     return this._errorResponse(status, code, error.message, error._details);
+  }
+
+  _maskApiKey(token) {
+    if (!token || token.length < 8) return '***';
+    return token.slice(0, 4) + '***' + token.slice(-4);
   }
 
   async _publicarEvento(eventName, payload, ctx = {}) {
@@ -112,10 +117,10 @@ class TelegramServiceModule {
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    for (const [botName, client] of this.bots) {
+    for (const [, client] of this.bots) {
       client.stopPolling();
-      this.logger.info('telegram.bot.stopping', { botName });
     }
+    this.logger.info('telegram.bots.stopped', { count: this.bots.size });
     this.bots.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
@@ -371,7 +376,7 @@ class TelegramServiceModule {
       return { status: 200, data: { messageId: result.message_id } };
     } catch (error) {
       await this._publicarEvento(EVENTS.SEND_FAILED, { botName, chatId, reason: error.message });
-      return this._handleHandlerError('telegram.errors.total', error, 'send_message');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'send_message') };
     }
   }
 
@@ -388,7 +393,7 @@ class TelegramServiceModule {
       return { status: 200, data: { messageId: result.message_id } };
     } catch (error) {
       await this._publicarEvento(EVENTS.SEND_FAILED, { botName, chatId, reason: error.message });
-      return this._handleHandlerError('telegram.errors.total', error, 'send_photo');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'send_photo') };
     }
   }
 
@@ -405,7 +410,7 @@ class TelegramServiceModule {
       return { status: 200, data: { messageId: result.message_id } };
     } catch (error) {
       await this._publicarEvento(EVENTS.SEND_FAILED, { botName, chatId, reason: error.message });
-      return this._handleHandlerError('telegram.errors.total', error, 'send_document');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'send_document') };
     }
   }
 
@@ -422,7 +427,7 @@ class TelegramServiceModule {
       return { status: 200, data: { messageId: result.message_id } };
     } catch (error) {
       await this._publicarEvento(EVENTS.SEND_FAILED, { botName, chatId, reason: error.message });
-      return this._handleHandlerError('telegram.errors.total', error, 'send_video');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'send_video') };
     }
   }
 
@@ -439,7 +444,7 @@ class TelegramServiceModule {
       return { status: 200, data: { messageId: result.message_id } };
     } catch (error) {
       await this._publicarEvento(EVENTS.SEND_FAILED, { botName, chatId, reason: error.message });
-      return this._handleHandlerError('telegram.errors.total', error, 'send_location');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'send_location') };
     }
   }
 
@@ -451,7 +456,7 @@ class TelegramServiceModule {
       await client.editMessageText(chatId, messageId, text);
       return { status: 200, data: { messageId } };
     } catch (error) {
-      return this._handleHandlerError('telegram.errors.total', error, 'edit_message');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'edit_message') };
     }
   }
 
@@ -463,7 +468,7 @@ class TelegramServiceModule {
       await client.deleteMessage(chatId, messageId);
       return { status: 200, data: { messageId } };
     } catch (error) {
-      return this._handleHandlerError('telegram.errors.total', error, 'delete_message');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'delete_message') };
     }
   }
 
@@ -475,7 +480,7 @@ class TelegramServiceModule {
       await client.answerCallbackQuery(callbackId, { text, showAlert });
       return { status: 200, data: { callbackId } };
     } catch (error) {
-      return this._handleHandlerError('telegram.errors.total', error, 'answer_callback');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'answer_callback') };
     }
   }
 
@@ -507,7 +512,7 @@ class TelegramServiceModule {
 
       return { status: 200, data };
     } catch (error) {
-      return this._handleHandlerError('telegram.errors.total', error, 'get_file');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'get_file') };
     }
   }
 
@@ -532,7 +537,7 @@ class TelegramServiceModule {
         }
       };
     } catch (error) {
-      return this._handleHandlerError('telegram.errors.total', error, 'get_chat');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'get_chat') };
     }
   }
 
@@ -544,7 +549,7 @@ class TelegramServiceModule {
       await client.setMyCommands(commands);
       return { status: 200, data: { count: commands.length } };
     } catch (error) {
-      return this._handleHandlerError('telegram.errors.total', error, 'set_commands');
+      return { ...this._handleHandlerError('telegram.errors.total', error, 'set_commands') };
     }
   }
 

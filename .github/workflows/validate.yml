@@ -130,3 +130,6 @@ jobs:
 
       - name: Run unit tests (system-inspector — reescritura canonica)
         run: npm run test:system-inspector
+
+      - name: Run unit tests (prompt-manager — reescritura canonica)
+        run: npm run test:prompt-manager

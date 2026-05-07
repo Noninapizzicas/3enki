@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T09:48:59Z_
+_Última regeneración: 2026-05-07T10:19:05Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 26 / 73 (36%)
-- **Drifts cerrados**: 647 / 3469 (19%)
-- **Drifts restantes en baseline**: 2822
+- **Drifts cerrados**: 647 / 3404 (19%)
+- **Drifts restantes en baseline**: 2757
 
 ### Progreso por capa
 
@@ -46,7 +46,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 25 | infra | `metricas` | 556 | 22 → 4 (-82%) | `b3a2a8a` 2026-05-07 |
 | 26 | infra | `code-executor` | 484 | 19 → 9 (-53%) | `dcbe2c2` 2026-05-07 |
 | 27 | infra | `security-p2p` | 292 | 16 → 6 (-63%) | `bc7b712` 2026-04-20 |
-| 28 | infra | `system-inspector` | 376 | 14 → 5 (-64%) | _n/a_ |
+| 28 | infra | `system-inspector` | 376 | 14 → 5 (-64%) | `422eb92` 2026-05-07 |
 | 65 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
 | 67 | dominio | `pizzepos__cocina-poc` | 452 | 0 → 0 (-0%) | `5437466` 2026-05-02 |
 
@@ -58,7 +58,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 8 | core | `plugin-manager` | 486 | 11 | 0 | drifts 6/11 (55%) — esperado <50% |
 | 14 | core | `conversacion__prompt-builder` | 435 | 13 | 2 | drifts 7/13 (54%) — esperado <50% |
 | 21 | infra | `device-registry` | 764 | 36 | 0 | drifts 20/36 (56%) — esperado <50% |
-| 29 | infra | `prompt-manager` | 1703 | 134 | 1 | sin tests/unit/ |
+| 29 | infra | `prompt-manager` | 1236 | 69 | 1 | drifts 38/69 (55%) — esperado <50% |
 | 30 | infra | `conversation-export` | 553 | 24 | 1 | sin tests/unit/ |
 | 31 | infra | `pdf-viewer` | 1097 | 101 | 2 | sin tests/unit/ |
 | 32 | infra | `telegram-service` | 753 | 91 | 2 | sin tests/unit/ |

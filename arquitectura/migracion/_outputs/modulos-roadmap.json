@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T09:48:57.949Z",
+  "generated_at": "2026-05-07T10:19:04.917Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3469,
-    "loc_total": 48971,
+    "drifts_total": 3404,
+    "loc_total": 48504,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -465,9 +465,9 @@
       "path": "modules/prompt-manager",
       "layer": "infra",
       "language": "en",
-      "version": "2.0.0",
-      "loc": 1703,
-      "drifts": 134,
+      "version": "3.0.0",
+      "loc": 1236,
+      "drifts": 69,
       "events_publishes": 7,
       "events_subscribes": 6,
       "tools": 3,

@@ -1,42 +1,48 @@
-const fs = require('fs').promises;
-const path = require('path');
-const crypto = require('crypto');
-const { EVENTS } = require('../../core/constants');
-
 /**
- * Prompt Manager Module
+ * prompt-manager — Reescritura canonica POC2.
  *
- * Manages AI prompts with versioning, templates, slots, and presets
- * Uses database-manager via events for persistence
- * Supports GLOBAL (_prompts) and PROJECT-specific prompts
+ * Cumple los 24 contratos transversales:
+ *   - errors.contract: handlers devuelven { status, data | error: { code, message, details? } }
+ *     con codigos canonicos (RESOURCE_NOT_FOUND + entity_type, VALIDATION_FAILED, ALREADY_EXISTS,
+ *     INTERNAL_ERROR). Helper _errorResponse + _classifyHandlerError + _handleHandlerError.
+ *   - events.contract: publish/subscribe via this.eventBus. _publicarEvento propaga correlation_id.
+ *   - lifecycle.contract: onLoad recibe context, onUnload clearTimeout pendings + clear Maps.
+ *   - observability.contract: logger estructurado + metrics.increment/timing en cada handler.
+ *   - persistence.contract: SQLite via database-manager, schema en disco, project_id `_prompts` global.
+ *   - tools.contract: cada tool retorna { status, data | error } canonico, errores_conocidos del catalogo.
+ *
+ * Migracion del monolito 2.0.0 (1702 LOC) — ver arquitectura/migracion/notas/prompt-manager-mapa.md.
  */
+
+'use strict';
+
+const fs     = require('fs').promises;
+const path   = require('path');
+const crypto = require('crypto');
+
+const SLOT_TYPES  = ['system', 'context', 'prefix', 'suffix', 'format'];
+const SLOT_ICONS  = { system: 'system', context: 'context', prefix: 'prefix', suffix: 'suffix', format: 'format' };
+const GLOBAL_PROJECT_ID = '_prompts';
+const DB_TIMEOUT_MS     = 10000;
+const SCHEMA_TIMEOUT_MS = 5000;
+
 class PromptManagerModule {
   constructor() {
-    // In-memory cache
+    this.name    = 'prompt-manager';
+    this.version = '3.0.0';
+
+    this.logger    = null;
+    this.eventBus  = null;
+    this.metrics   = null;
+    this.config    = null;
+    this.uiHandler = null;
+
     this.prompts = new Map();
     this.presets = new Map();
-    this.analytics = new Map();
 
-    // Pending DB requests
-    this.pendingRequests = new Map();
-
-    // Config
-    this.config = null;
-    this.logger = null;
-    this.eventBus = null;
-    this.uiHandler = null;
-    this.schemaInitialized = false;
-
-    // Constants
-    this.GLOBAL_PROJECT_ID = '_prompts';
-    this.SLOT_TYPES = ['system', 'context', 'prefix', 'suffix', 'format'];
-    this.SLOT_ICONS = {
-      system: '🧠',
-      context: '📋',
-      prefix: '⬆️',
-      suffix: '⬇️',
-      format: '📄'
-    };
+    this.pendingDb     = new Map();
+    this.pendingSchema = new Map();
+    this.schemaReady   = false;
   }
 
   // ==========================================
@@ -44,1543 +50,441 @@ class PromptManagerModule {
   // ==========================================
 
   async onLoad(context) {
-    this.logger = context.logger;
-    this.eventBus = context.eventBus;
-    this.uiHandler = context.uiHandler;
-    this.config = context.moduleConfig || {};
-    this.activity = context.activity?.forModule('prompt-manager');
+    this.logger    = context.logger;
+    this.eventBus  = context.eventBus;
+    this.metrics   = context.metrics || null;
+    this.config    = context.moduleConfig || {};
+    this.uiHandler = context.uiHandler || null;
 
-    this.activity?.action('module.loading', {});
+    this.logger.info('prompt-manager.module.loading', { module: this.name, version: this.version });
 
-    // Event subscriptions and UI handlers are auto-wired by the loader from module.json
+    try {
+      await this._initializeSchema();
+    } catch (err) {
+      this.logger.warn('prompt-manager.schema.init.failed', { error: err.message });
+    }
 
-    // Initialize schema in global DB
-    await this.initializeSchema();
+    try {
+      await this._loadFromDatabase();
+    } catch (err) {
+      this.logger.warn('prompt-manager.cache.load.failed', { error: err.message });
+    }
 
-    // Load prompts and presets into cache
-    await this.loadFromDatabase();
-
-    this.logger.info('prompt-manager.loaded', {
+    this.logger.info('prompt-manager.module.loaded', {
       prompts_count: this.prompts.size,
       presets_count: this.presets.size,
-      using: 'database-manager'
+      schema_ready: this.schemaReady
     });
   }
 
   async onUnload() {
-    this.logger.info('prompt-manager.unloaded', {
-      prompts_count: this.prompts.size
-    });
+    this.logger?.info('prompt-manager.module.unloading', { module: this.name });
+
+    for (const { timeout, reject } of this.pendingDb.values()) {
+      clearTimeout(timeout);
+      reject(new Error('module unloading'));
+    }
+    this.pendingDb.clear();
+
+    for (const { timeout, reject } of this.pendingSchema.values()) {
+      clearTimeout(timeout);
+      reject(new Error('module unloading'));
+    }
+    this.pendingSchema.clear();
+
+    this.prompts.clear();
+    this.presets.clear();
+    this.schemaReady = false;
+
+    this.logger?.info('prompt-manager.module.unloaded', { module: this.name });
   }
 
   // ==========================================
-  // Event Handlers (wired by loader from module.json)
+  // Bus subscribers (database-manager IPC)
   // ==========================================
 
-  onQueryResponse(event) {
-    const { request_id, success, data, error } = event.data || event;
+  onDbQueryResponse(event) {
+    const payload = event?.data || event || {};
+    const { request_id, success, data, error } = payload;
+    const pending = this.pendingDb.get(request_id);
+    if (!pending) return;
 
-    if (this.pendingRequests.has(request_id)) {
-      const { resolve, reject } = this.pendingRequests.get(request_id);
-      this.pendingRequests.delete(request_id);
+    clearTimeout(pending.timeout);
+    this.pendingDb.delete(request_id);
 
-      if (success) {
-        resolve(data);
-      } else {
-        reject(new Error(error || 'Query failed'));
-      }
+    const ok = success === true || (success === undefined && !error);
+    if (ok) pending.resolve(data ?? payload.rows ?? []);
+    else pending.reject(new Error(error || 'db query failed'));
+  }
+
+  onDbSchemaInitResponse(event) {
+    const payload = event?.data || event || {};
+    const { request_id, success, error } = payload;
+    const pending = this.pendingSchema.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timeout);
+    this.pendingSchema.delete(request_id);
+
+    if (success === true || (success === undefined && !error)) {
+      this.schemaReady = true;
+      pending.resolve(true);
+    } else {
+      pending.reject(new Error(error || 'schema init failed'));
     }
   }
 
-  onSchemaInitResponse(event) {
-    const { request_id, success, error } = event.data || event;
+  // ==========================================
+  // Bus subscribers (RPC cross-modulo)
+  // ==========================================
 
-    if (this.pendingRequests.has(request_id)) {
-      const { resolve, reject } = this.pendingRequests.get(request_id);
-      this.pendingRequests.delete(request_id);
+  async onPromptGetRequest(event) {
+    const payload = event?.data || event || {};
+    const { request_id, name, id } = payload;
+    const startTime = Date.now();
 
-      if (success) {
-        this.schemaInitialized = true;
-        resolve(true);
-      } else {
-        reject(new Error(error || 'Schema init failed'));
+    try {
+      const prompt = this._findPrompt({ id, name });
+
+      if (!prompt) {
+        await this._publicarEvento('prompt.get.response', {
+          request_id,
+          success: false,
+          error: { code: 'RESOURCE_NOT_FOUND', message: `Prompt not found: ${id || name}`, details: { entity_type: 'prompt', entity_id: id || name } }
+        }, payload);
+        this.metrics?.increment('prompt-manager.get.errors', { code: 'RESOURCE_NOT_FOUND' });
+        return;
       }
+
+      await this._publicarEvento('prompt.get.response', {
+        request_id,
+        success: true,
+        prompt: this._toPublicPrompt(prompt)
+      }, payload);
+
+      this.metrics?.increment('prompt-manager.get.success');
+      this.metrics?.timing('prompt-manager.get.duration_ms', Date.now() - startTime);
+    } catch (err) {
+      this.logger.error('prompt-manager.get.request.failed', { error: err.message });
+      this.metrics?.increment('prompt-manager.get.errors', { code: 'INTERNAL_ERROR' });
+      await this._publicarEvento('prompt.get.response', {
+        request_id,
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: err.message }
+      }, payload);
     }
   }
 
+  async onPromptListRequest(event) {
+    const payload = event?.data || event || {};
+    const { request_id } = payload;
+
+    try {
+      const prompts = Array.from(this.prompts.values()).map(p => this._toPublicPrompt(p));
+      await this._publicarEvento('prompt.list.response', {
+        request_id,
+        success: true,
+        prompts
+      }, payload);
+      this.metrics?.increment('prompt-manager.list.success');
+    } catch (err) {
+      this.logger.error('prompt-manager.list.request.failed', { error: err.message });
+      this.metrics?.increment('prompt-manager.list.errors', { code: 'INTERNAL_ERROR' });
+      await this._publicarEvento('prompt.list.response', {
+        request_id,
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: err.message }
+      }, payload);
+    }
+  }
+
+  async onAICompletionCompleted(event) {
+    const payload = event?.data || event || {};
+    const { prompt_id, version } = payload;
+    if (!prompt_id) return;
+    try {
+      await this._recordUsage(prompt_id, version || null);
+    } catch (err) {
+      this.logger.warn('prompt-manager.analytics.record.failed', { prompt_id, error: err.message });
+    }
+  }
+
+  async onAIRequestStarted(event) {
+    const payload = event?.data || event || {};
+    const { prompt_id } = payload;
+    if (!prompt_id) return;
+    this.metrics?.increment('prompt-manager.usage.started', { prompt_id });
+  }
+
   // ==========================================
-  // Database Operations (via events)
+  // Tools (LLM)
   // ==========================================
 
-  async dbQuery(query, params = [], projectId = null) {
-    const request_id = this.generateId();
-    const project_id = projectId || this.GLOBAL_PROJECT_ID;
+  async handleToolPromptList(args, sourcePayload = null) {
+    const startTime = Date.now();
+    try {
+      const filters = (args && typeof args === 'object') ? args : {};
+      const { slot_type, tag, search } = filters;
 
-    return new Promise((resolve, reject) => {
-      this.pendingRequests.set(request_id, { resolve, reject });
+      let results = Array.from(this.prompts.values());
+      if (slot_type && SLOT_TYPES.includes(slot_type)) {
+        results = results.filter(p => p.slot_type === slot_type);
+      }
+      if (tag) results = results.filter(p => Array.isArray(p.tags) && p.tags.includes(tag));
+      if (search) {
+        const s = String(search).toLowerCase();
+        results = results.filter(p =>
+          (p.name || '').toLowerCase().includes(s) ||
+          (p.title || '').toLowerCase().includes(s) ||
+          (p.description || '').toLowerCase().includes(s)
+        );
+      }
 
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        if (this.pendingRequests.has(request_id)) {
-          this.pendingRequests.delete(request_id);
-          reject(new Error('Query timeout'));
+      this.metrics?.increment('prompt-manager.tool.list.success');
+      this.metrics?.timing('prompt-manager.tool.list.duration_ms', Date.now() - startTime);
+
+      return {
+        status: 200,
+        data: {
+          prompts: results.map(p => this._toPublicPrompt(p, { include_content: false })),
+          total: results.length,
+          filters: { slot_type, tag, search }
         }
-      }, 10000);
-
-      this.eventBus.publish(EVENTS.DB.QUERY_REQUEST, {
-        project_id,
-        query,
-        params,
-        request_id
-      });
-    });
-  }
-
-  async initializeSchema() {
-    const request_id = this.generateId();
-    const schemaPath = path.join(__dirname, 'schema.sql');
-
-    try {
-      const schema = await fs.readFile(schemaPath, 'utf8');
-
-      return new Promise((resolve, reject) => {
-        this.pendingRequests.set(request_id, { resolve, reject });
-
-        setTimeout(() => {
-          if (this.pendingRequests.has(request_id)) {
-            this.pendingRequests.delete(request_id);
-            // Don't reject, just log - schema might already exist
-            this.logger.warn('prompt-manager.schema.timeout');
-            resolve(false);
-          }
-        }, 5000);
-
-        this.eventBus.publish(EVENTS.DB.SCHEMA_INIT_REQUEST, {
-          project_id: this.GLOBAL_PROJECT_ID,
-          schema,
-          request_id
-        });
-      });
-    } catch (error) {
-      this.logger.error('prompt-manager.schema.read.error', { error: error.message });
-      return false;
+      };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.tool.list.failed', err);
     }
   }
 
-  async loadFromDatabase() {
+  async handleToolPromptGet(args, sourcePayload = null) {
+    const startTime = Date.now();
     try {
-      // Load prompts
-      const prompts = await this.dbQuery('SELECT * FROM prompts ORDER BY name');
-      for (const p of prompts) {
-        const prompt = {
-          ...p,
-          variables: JSON.parse(p.variables || '[]'),
-          tags: JSON.parse(p.tags || '[]'),
-          metadata: JSON.parse(p.metadata || '{}')
-        };
-        this.prompts.set(p.id, prompt);
+      const { id, name } = (args && typeof args === 'object') ? args : {};
+      if (!id && !name) {
+        this.metrics?.increment('prompt-manager.tool.get.errors', { code: 'VALIDATION_FAILED' });
+        return this._errorResponse(400, 'VALIDATION_FAILED', 'Either id or name is required', { kind: 'shape' });
       }
 
-      // Load presets
-      const presets = await this.dbQuery('SELECT * FROM slot_presets ORDER BY name');
-      for (const preset of presets) {
-        this.presets.set(preset.id, preset);
+      const prompt = this._findPrompt({ id, name });
+      if (!prompt) {
+        this.metrics?.increment('prompt-manager.tool.get.errors', { code: 'RESOURCE_NOT_FOUND' });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id || name}`, { entity_type: 'prompt', entity_id: id || name });
       }
 
-      this.logger.info('prompt-manager.cache.loaded', {
-        prompts: this.prompts.size,
-        presets: this.presets.size
-      });
-    } catch (error) {
-      this.logger.warn('prompt-manager.cache.load.error', { error: error.message });
-      // Not fatal - might be first run
+      try { await this._recordUsage(prompt.id, prompt.current_version); } catch (_) { /* analytics non-fatal */ }
+
+      this.metrics?.increment('prompt-manager.tool.get.success');
+      this.metrics?.timing('prompt-manager.tool.get.duration_ms', Date.now() - startTime);
+
+      return { status: 200, data: { prompt: this._toPublicPrompt(prompt) } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.tool.get.failed', err);
+    }
+  }
+
+  async handleToolPromptRender(args, sourcePayload = null) {
+    const startTime = Date.now();
+    try {
+      const { id, name, variables } = (args && typeof args === 'object') ? args : {};
+      if (!id && !name) {
+        this.metrics?.increment('prompt-manager.tool.render.errors', { code: 'VALIDATION_FAILED' });
+        return this._errorResponse(400, 'VALIDATION_FAILED', 'Either id or name is required', { kind: 'shape' });
+      }
+
+      const prompt = this._findPrompt({ id, name });
+      if (!prompt) {
+        this.metrics?.increment('prompt-manager.tool.render.errors', { code: 'RESOURCE_NOT_FOUND' });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id || name}`, { entity_type: 'prompt', entity_id: id || name });
+      }
+
+      const rendered = this._renderTemplateString(prompt.content, variables || {});
+      const missing = this._missingVariables(prompt.variables, variables);
+
+      try { await this._recordUsage(prompt.id, prompt.current_version); } catch (_) { /* non-fatal */ }
+
+      this.metrics?.increment('prompt-manager.tool.render.success');
+      this.metrics?.timing('prompt-manager.tool.render.duration_ms', Date.now() - startTime);
+
+      return {
+        status: 200,
+        data: {
+          prompt_id: prompt.id,
+          prompt_name: prompt.name,
+          rendered,
+          variables_used: variables || {},
+          missing_variables: missing.length > 0 ? missing : undefined
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.tool.render.failed', err);
     }
   }
 
   // ==========================================
-  // API Handlers: Prompts CRUD
+  // HTTP API handlers (canonicos)
   // ==========================================
 
   async handleCreatePrompt(req, context) {
     try {
-      const {
-        name, title, description, content, slot_type,
-        variables, tags, metadata, project_id
-      } = req.body || {};
-
-      if (!name || !content) {
-        return {
-          status: 400,
-          data: { error: 'INVALID_REQUEST', message: 'name and content are required' }
-        };
-      }
-
-      // Validate slot_type
-      const validSlotType = this.SLOT_TYPES.includes(slot_type) ? slot_type : 'system';
-
-      const id = this.generateId();
-      const now = new Date().toISOString();
-
-      const prompt = {
-        id,
-        name,
-        title: title || name,
-        description: description || '',
-        slot_type: validSlotType,
-        content,
-        variables: JSON.stringify(variables || []),
-        tags: JSON.stringify(tags || []),
-        metadata: JSON.stringify(metadata || {}),
-        current_version: '1.0.0',
-        created_at: now,
-        updated_at: now
-      };
-
-      // Insert into DB
-      const targetProject = project_id || this.GLOBAL_PROJECT_ID;
-      await this.dbQuery(
-        `INSERT INTO prompts (id, name, title, description, slot_type, content, variables, tags, metadata, current_version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [prompt.id, prompt.name, prompt.title, prompt.description, prompt.slot_type,
-         prompt.content, prompt.variables, prompt.tags, prompt.metadata,
-         prompt.current_version, prompt.created_at, prompt.updated_at],
-        targetProject
-      );
-
-      // Insert first version
-      await this.dbQuery(
-        `INSERT INTO prompt_versions (prompt_id, version, content, variables, created_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [id, '1.0.0', content, prompt.variables, now, 'system'],
-        targetProject
-      );
-
-      // Update cache
-      const cachePrompt = {
-        ...prompt,
-        variables: variables || [],
-        tags: tags || [],
-        metadata: metadata || {},
-        level: targetProject === this.GLOBAL_PROJECT_ID ? 'GLOBAL' : 'PROJECT',
-        project_id: targetProject
-      };
-      this.prompts.set(id, cachePrompt);
-
-      // Publish event
-      await this.eventBus.publish('prompt.created', {
-        id,
-        name,
-        slot_type: validSlotType,
-        project_id: targetProject
-      });
-
-      this.logger.info('prompt-manager.prompt.created', { id, name, slot_type: validSlotType });
-
-      return { status: 201, data: { success: true, prompt: cachePrompt } };
-    } catch (error) {
-      this.logger.error('prompt-manager.create.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'CREATE_FAILED', message: error.message }
-      };
+      return await this._createPromptInternal(req?.body || {}, req?.body || {});
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.create.failed', err);
     }
   }
 
   async handleListPrompts(req, context) {
     try {
-      const { tag, search, slot_type, project_id } = req.query || {};
-
-      let prompts = Array.from(this.prompts.values());
-
-      // Filter by slot_type
-      if (slot_type && this.SLOT_TYPES.includes(slot_type)) {
-        prompts = prompts.filter(p => p.slot_type === slot_type);
-      }
-
-      // Filter by tag
-      if (tag) {
-        prompts = prompts.filter(p => p.tags && p.tags.includes(tag));
-      }
-
-      // Filter by project
-      if (project_id) {
-        prompts = prompts.filter(p =>
-          p.project_id === project_id || p.project_id === this.GLOBAL_PROJECT_ID
-        );
-      }
-
-      // Search
-      if (search) {
-        const s = search.toLowerCase();
-        prompts = prompts.filter(p =>
-          p.name.toLowerCase().includes(s) ||
-          (p.title && p.title.toLowerCase().includes(s)) ||
-          (p.description && p.description.toLowerCase().includes(s))
-        );
-      }
-
+      const filters = req?.query || {};
+      const prompts = this._filterPrompts(filters);
       return {
         status: 200,
         data: {
-          success: true,
-          prompts: prompts.map(p => ({
-            id: p.id,
-            name: p.name,
-            title: p.title,
-            description: p.description,
-            slot_type: p.slot_type,
-            slot_icon: this.SLOT_ICONS[p.slot_type] || '📝',
-            tags: p.tags,
-            level: p.level || 'GLOBAL',
-            current_version: p.current_version,
-            created_at: p.created_at,
-            updated_at: p.updated_at
-          })),
+          prompts: prompts.map(p => this._toPublicPrompt(p, { include_content: false })),
           total: prompts.length
         }
       };
-    } catch (error) {
-      this.logger.error('prompt-manager.list.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'LIST_FAILED', message: error.message }
-      };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.list.failed', err);
     }
   }
 
   async handleGetPrompt(req, context) {
     try {
-      const { id } = req.params || context.params || {};
-      const prompt = this.prompts.get(id);
-
+      const id = (req?.params || context?.params || {}).id;
+      const prompt = this._findPrompt({ id });
       if (!prompt) {
-        return {
-          status: 404,
-          data: { error: 'PROMPT_NOT_FOUND', message: `Prompt '${id}' not found` }
-        };
+        this.metrics?.increment('prompt-manager.get.errors', { code: 'RESOURCE_NOT_FOUND' });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id}`, { entity_type: 'prompt', entity_id: id });
       }
-
-      return { status: 200, data: { success: true, prompt } };
-    } catch (error) {
-      this.logger.error('prompt-manager.get.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'GET_FAILED', message: error.message }
-      };
+      return { status: 200, data: { prompt: this._toPublicPrompt(prompt) } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.get.failed', err);
     }
   }
 
   async handleUpdatePrompt(req, context) {
     try {
-      const { id } = req.params || context.params || {};
-      const updates = req.body || {};
-
-      const prompt = this.prompts.get(id);
-      if (!prompt) {
-        return {
-          status: 404,
-          data: { error: 'PROMPT_NOT_FOUND', message: `Prompt '${id}' not found` }
-        };
-      }
-
-      const now = new Date().toISOString();
-      const projectId = prompt.project_id || this.GLOBAL_PROJECT_ID;
-
-      // Check if content changed (new version)
-      if (updates.content && updates.content !== prompt.content) {
-        const newVersion = this.bumpVersion(prompt.current_version);
-
-        await this.dbQuery(
-          `INSERT INTO prompt_versions (prompt_id, version, content, variables, created_at, created_by)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [id, newVersion, updates.content, JSON.stringify(updates.variables || prompt.variables), now, 'system'],
-          projectId
-        );
-
-        prompt.current_version = newVersion;
-        prompt.content = updates.content;
-      }
-
-      // Update fields
-      if (updates.title) prompt.title = updates.title;
-      if (updates.description !== undefined) prompt.description = updates.description;
-      if (updates.slot_type && this.SLOT_TYPES.includes(updates.slot_type)) {
-        prompt.slot_type = updates.slot_type;
-      }
-      if (updates.variables) prompt.variables = updates.variables;
-      if (updates.tags) prompt.tags = updates.tags;
-      if (updates.metadata) prompt.metadata = { ...prompt.metadata, ...updates.metadata };
-
-      prompt.updated_at = now;
-
-      // Update DB
-      await this.dbQuery(
-        `UPDATE prompts SET title=?, description=?, slot_type=?, content=?, variables=?, tags=?, metadata=?, current_version=?, updated_at=?
-         WHERE id=?`,
-        [prompt.title, prompt.description, prompt.slot_type, prompt.content,
-         JSON.stringify(prompt.variables), JSON.stringify(prompt.tags), JSON.stringify(prompt.metadata),
-         prompt.current_version, prompt.updated_at, id],
-        projectId
-      );
-
-      // Publish event
-      await this.eventBus.publish('prompt.updated', { id, version: prompt.current_version });
-
-      this.logger.info('prompt-manager.prompt.updated', { id, version: prompt.current_version });
-
-      return { status: 200, data: { success: true, prompt } };
-    } catch (error) {
-      this.logger.error('prompt-manager.update.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'UPDATE_FAILED', message: error.message }
-      };
+      const id = (req?.params || context?.params || {}).id;
+      const updates = req?.body || {};
+      return await this._updatePromptInternal(id, updates, updates);
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.update.failed', err);
     }
   }
 
   async handleDeletePrompt(req, context) {
     try {
-      const { id } = req.params || context.params || {};
+      const id = (req?.params || context?.params || {}).id;
+      return await this._deletePromptInternal(id, req?.body || {});
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.delete.failed', err);
+    }
+  }
 
-      const prompt = this.prompts.get(id);
+  async handleListVersions(req, context) {
+    try {
+      const id = (req?.params || context?.params || {}).id;
+      const prompt = this._findPrompt({ id });
       if (!prompt) {
-        return {
-          status: 404,
-          data: { error: 'PROMPT_NOT_FOUND', message: `Prompt '${id}' not found` }
-        };
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id}`, { entity_type: 'prompt', entity_id: id });
       }
-
-      const projectId = prompt.project_id || this.GLOBAL_PROJECT_ID;
-
-      // Delete from DB (cascade will delete versions)
-      await this.dbQuery('DELETE FROM prompts WHERE id = ?', [id], projectId);
-
-      // Update cache
-      this.prompts.delete(id);
-
-      // Publish event
-      await this.eventBus.publish('prompt.deleted', { id });
-
-      this.logger.info('prompt-manager.prompt.deleted', { id });
-
-      return { status: 200, data: { success: true, message: 'Prompt deleted' } };
-    } catch (error) {
-      this.logger.error('prompt-manager.delete.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'DELETE_FAILED', message: error.message }
-      };
+      const projectId = prompt.project_id || GLOBAL_PROJECT_ID;
+      const versions = await this._db(projectId,
+        'SELECT version, content, variables, created_at, created_by FROM prompt_versions WHERE prompt_id = ? ORDER BY created_at DESC',
+        [id]);
+      return { status: 200, data: { prompt_id: id, current_version: prompt.current_version, versions } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.versions.failed', err);
     }
   }
-
-  // ==========================================
-  // API Handlers: Presets CRUD
-  // ==========================================
-
-  async handleCreatePreset(req, context) {
-    try {
-      const { name, description, slots } = req.body || {};
-
-      if (!name) {
-        return {
-          status: 400,
-          data: { error: 'INVALID_REQUEST', message: 'name is required' }
-        };
-      }
-
-      const id = this.generateId();
-      const now = new Date().toISOString();
-
-      // Insert preset
-      await this.dbQuery(
-        `INSERT INTO slot_presets (id, name, description, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [id, name, description || '', now, now]
-      );
-
-      // Insert slot-prompt relationships
-      if (slots) {
-        for (const [slotType, promptIds] of Object.entries(slots)) {
-          if (!this.SLOT_TYPES.includes(slotType)) continue;
-
-          const ids = Array.isArray(promptIds) ? promptIds : [promptIds];
-          for (let i = 0; i < ids.length; i++) {
-            await this.dbQuery(
-              `INSERT INTO slot_preset_prompts (preset_id, slot_type, prompt_id, position, created_at)
-               VALUES (?, ?, ?, ?, ?)`,
-              [id, slotType, ids[i], i, now]
-            );
-          }
-        }
-      }
-
-      const preset = { id, name, description: description || '', slots, created_at: now, updated_at: now };
-      this.presets.set(id, preset);
-
-      // Publish event
-      await this.eventBus.publish('preset.created', { id, name });
-
-      this.logger.info('prompt-manager.preset.created', { id, name });
-
-      return { status: 201, data: { success: true, preset } };
-    } catch (error) {
-      this.logger.error('prompt-manager.preset.create.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'CREATE_FAILED', message: error.message }
-      };
-    }
-  }
-
-  async handleListPresets(req, context) {
-    try {
-      const presets = Array.from(this.presets.values());
-
-      return {
-        status: 200,
-        data: {
-          success: true,
-          presets,
-          total: presets.length
-        }
-      };
-    } catch (error) {
-      this.logger.error('prompt-manager.presets.list.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'LIST_FAILED', message: error.message }
-      };
-    }
-  }
-
-  async handleGetPreset(req, context) {
-    try {
-      const { id } = req.params || context.params || {};
-      const preset = this.presets.get(id);
-
-      if (!preset) {
-        return {
-          status: 404,
-          data: { error: 'PRESET_NOT_FOUND', message: `Preset '${id}' not found` }
-        };
-      }
-
-      // Load slot-prompt relationships
-      const relations = await this.dbQuery(
-        `SELECT slot_type, prompt_id, position FROM slot_preset_prompts
-         WHERE preset_id = ? ORDER BY slot_type, position`,
-        [id]
-      );
-
-      const slots = {};
-      for (const rel of relations) {
-        if (!slots[rel.slot_type]) slots[rel.slot_type] = [];
-        slots[rel.slot_type].push(rel.prompt_id);
-      }
-
-      return {
-        status: 200,
-        data: { success: true, preset: { ...preset, slots } }
-      };
-    } catch (error) {
-      this.logger.error('prompt-manager.preset.get.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'GET_FAILED', message: error.message }
-      };
-    }
-  }
-
-  async handleDeletePreset(req, context) {
-    try {
-      const { id } = req.params || context.params || {};
-
-      if (!this.presets.has(id)) {
-        return {
-          status: 404,
-          data: { error: 'PRESET_NOT_FOUND', message: `Preset '${id}' not found` }
-        };
-      }
-
-      await this.dbQuery('DELETE FROM slot_presets WHERE id = ?', [id]);
-      this.presets.delete(id);
-
-      await this.eventBus.publish('preset.deleted', { id });
-
-      this.logger.info('prompt-manager.preset.deleted', { id });
-
-      return { status: 200, data: { success: true, message: 'Preset deleted' } };
-    } catch (error) {
-      this.logger.error('prompt-manager.preset.delete.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'DELETE_FAILED', message: error.message }
-      };
-    }
-  }
-
-  // ==========================================
-  // UI Request/Response Handlers (wired by loader from module.json)
-  // ==========================================
-
-  // --- Prompt UI Handlers ---
-
-  async handleUIList(data) {
-    const { slot_type, tag, search, project_id } = data || {};
-
-    let prompts = Array.from(this.prompts.values());
-
-    // Filter by slot_type
-    if (slot_type && this.SLOT_TYPES.includes(slot_type)) {
-      prompts = prompts.filter(p => p.slot_type === slot_type);
-    }
-
-    // Filter by tag
-    if (tag) {
-      prompts = prompts.filter(p => p.tags && p.tags.includes(tag));
-    }
-
-    // Filter by project
-    if (project_id) {
-      prompts = prompts.filter(p =>
-        p.project_id === project_id || p.project_id === this.GLOBAL_PROJECT_ID
-      );
-    }
-
-    // Search
-    if (search) {
-      const s = search.toLowerCase();
-      prompts = prompts.filter(p =>
-        p.name.toLowerCase().includes(s) ||
-        (p.title && p.title.toLowerCase().includes(s)) ||
-        (p.description && p.description.toLowerCase().includes(s))
-      );
-    }
-
-    // Group by slot_type for UI
-    const promptsBySlot = {};
-    for (const slotType of this.SLOT_TYPES) {
-      promptsBySlot[slotType] = [];
-    }
-
-    const promptsList = prompts.map(p => ({
-      id: p.id,
-      name: p.name,
-      title: p.title,
-      description: p.description,
-      content: p.content,
-      slot_type: p.slot_type,
-      slot_icon: this.SLOT_ICONS[p.slot_type] || '📝',
-      variables: p.variables,
-      tags: p.tags,
-      level: p.level || 'GLOBAL',
-      level_icon: p.level === 'PROJECT' ? '🔵' : '🟢',
-      current_version: p.current_version,
-      created_at: p.created_at,
-      updated_at: p.updated_at
-    }));
-
-    for (const prompt of promptsList) {
-      if (promptsBySlot[prompt.slot_type]) {
-        promptsBySlot[prompt.slot_type].push(prompt);
-      }
-    }
-
-    // Slot types metadata
-    const slotTypes = this.SLOT_TYPES.map(type => ({
-      id: type,
-      name: type.charAt(0).toUpperCase() + type.slice(1),
-      icon: this.SLOT_ICONS[type],
-      count: promptsBySlot[type].length
-    }));
-
-    // Stats
-    const stats = {
-      total: prompts.length,
-      by_slot: Object.fromEntries(
-        this.SLOT_TYPES.map(type => [type, promptsBySlot[type].length])
-      )
-    };
-
-    return { prompts: promptsList, promptsBySlot, slotTypes, stats };
-  }
-
-  async handleUIGet(data) {
-    const { id } = data || {};
-
-    if (!id) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'id is required' };
-    }
-
-    const prompt = this.prompts.get(id);
-    if (!prompt) {
-      throw { status: 404, code: 'NOT_FOUND', message: `Prompt '${id}' not found` };
-    }
-
-    return { prompt };
-  }
-
-  async handleUICreate(data) {
-    const { name, title, description, content, slot_type, variables, tags, metadata, project_id } = data || {};
-
-    if (!name || !content) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'name and content are required' };
-    }
-
-    const validSlotType = this.SLOT_TYPES.includes(slot_type) ? slot_type : 'system';
-    const id = this.generateId();
-    const now = new Date().toISOString();
-    const targetProject = project_id || this.GLOBAL_PROJECT_ID;
-
-    const prompt = {
-      id,
-      name,
-      title: title || name,
-      description: description || '',
-      slot_type: validSlotType,
-      content,
-      variables: variables || [],
-      tags: tags || [],
-      metadata: metadata || {},
-      current_version: '1.0.0',
-      level: targetProject === this.GLOBAL_PROJECT_ID ? 'GLOBAL' : 'PROJECT',
-      project_id: targetProject,
-      created_at: now,
-      updated_at: now
-    };
-
-    // Insert into DB
-    await this.dbQuery(
-      `INSERT INTO prompts (id, name, title, description, slot_type, content, variables, tags, metadata, current_version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, name, prompt.title, prompt.description, validSlotType, content,
-       JSON.stringify(prompt.variables), JSON.stringify(prompt.tags), JSON.stringify(prompt.metadata),
-       '1.0.0', now, now],
-      targetProject
-    );
-
-    // Insert first version
-    await this.dbQuery(
-      `INSERT INTO prompt_versions (prompt_id, version, content, variables, created_at, created_by)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, '1.0.0', content, JSON.stringify(prompt.variables), now, 'user'],
-      targetProject
-    );
-
-    // Update cache
-    this.prompts.set(id, prompt);
-
-    // Publish event
-    await this.eventBus.publish('prompt.created', { id, name, slot_type: validSlotType });
-
-    this.logger.info('prompt-manager.ui.created', { id, name, slot_type: validSlotType });
-
-    return { prompt };
-  }
-
-  async handleUIUpdate(data) {
-    const { id, ...updates } = data || {};
-
-    if (!id) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'id is required' };
-    }
-
-    const prompt = this.prompts.get(id);
-    if (!prompt) {
-      throw { status: 404, code: 'NOT_FOUND', message: `Prompt '${id}' not found` };
-    }
-
-    const now = new Date().toISOString();
-    const projectId = prompt.project_id || this.GLOBAL_PROJECT_ID;
-
-    // Check if content changed (new version)
-    if (updates.content && updates.content !== prompt.content) {
-      const newVersion = this.bumpVersion(prompt.current_version);
-
-      await this.dbQuery(
-        `INSERT INTO prompt_versions (prompt_id, version, content, variables, created_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [id, newVersion, updates.content, JSON.stringify(updates.variables || prompt.variables), now, 'user'],
-        projectId
-      );
-
-      prompt.current_version = newVersion;
-      prompt.content = updates.content;
-    }
-
-    // Update fields
-    if (updates.title !== undefined) prompt.title = updates.title;
-    if (updates.description !== undefined) prompt.description = updates.description;
-    if (updates.slot_type && this.SLOT_TYPES.includes(updates.slot_type)) {
-      prompt.slot_type = updates.slot_type;
-    }
-    if (updates.variables) prompt.variables = updates.variables;
-    if (updates.tags) prompt.tags = updates.tags;
-    if (updates.metadata) prompt.metadata = { ...prompt.metadata, ...updates.metadata };
-
-    prompt.updated_at = now;
-
-    // Update DB
-    await this.dbQuery(
-      `UPDATE prompts SET title=?, description=?, slot_type=?, content=?, variables=?, tags=?, metadata=?, current_version=?, updated_at=?
-       WHERE id=?`,
-      [prompt.title, prompt.description, prompt.slot_type, prompt.content,
-       JSON.stringify(prompt.variables), JSON.stringify(prompt.tags), JSON.stringify(prompt.metadata),
-       prompt.current_version, prompt.updated_at, id],
-      projectId
-    );
-
-    // Publish event
-    await this.eventBus.publish('prompt.updated', { id, version: prompt.current_version });
-
-    this.logger.info('prompt-manager.ui.updated', { id, version: prompt.current_version });
-
-    return { prompt };
-  }
-
-  async handleUIDelete(data) {
-    const { id } = data || {};
-
-    if (!id) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'id is required' };
-    }
-
-    const prompt = this.prompts.get(id);
-    if (!prompt) {
-      throw { status: 404, code: 'NOT_FOUND', message: `Prompt '${id}' not found` };
-    }
-
-    const projectId = prompt.project_id || this.GLOBAL_PROJECT_ID;
-
-    // Delete from DB
-    await this.dbQuery('DELETE FROM prompts WHERE id = ?', [id], projectId);
-
-    // Update cache
-    this.prompts.delete(id);
-
-    // Publish event
-    await this.eventBus.publish('prompt.deleted', { id });
-
-    this.logger.info('prompt-manager.ui.deleted', { id });
-
-    return { deleted: true };
-  }
-
-  async handleUIVersions(data) {
-    const { id } = data || {};
-
-    if (!id) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'id is required' };
-    }
-
-    const prompt = this.prompts.get(id);
-    if (!prompt) {
-      throw { status: 404, code: 'NOT_FOUND', message: `Prompt '${id}' not found` };
-    }
-
-    const projectId = prompt.project_id || this.GLOBAL_PROJECT_ID;
-    const versions = await this.dbQuery(
-      'SELECT version, content, variables, created_at, created_by FROM prompt_versions WHERE prompt_id = ? ORDER BY created_at DESC',
-      [id],
-      projectId
-    );
-
-    return {
-      prompt_id: id,
-      current_version: prompt.current_version,
-      versions
-    };
-  }
-
-  // --- Preset UI Handlers ---
-
-  async handleUIPresetList(data) {
-    const presets = Array.from(this.presets.values()).map(p => ({
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      created_at: p.created_at,
-      updated_at: p.updated_at
-    }));
-
-    return { presets, total: presets.length };
-  }
-
-  async handleUIPresetGet(data) {
-    const { id } = data || {};
-
-    if (!id) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'id is required' };
-    }
-
-    const preset = this.presets.get(id);
-    if (!preset) {
-      throw { status: 404, code: 'NOT_FOUND', message: `Preset '${id}' not found` };
-    }
-
-    // Load slot-prompt relationships
-    const relations = await this.dbQuery(
-      `SELECT slot_type, prompt_id, position FROM slot_preset_prompts
-       WHERE preset_id = ? ORDER BY slot_type, position`,
-      [id]
-    );
-
-    const slots = {};
-    for (const rel of relations) {
-      if (!slots[rel.slot_type]) slots[rel.slot_type] = [];
-      slots[rel.slot_type].push(rel.prompt_id);
-    }
-
-    return { preset: { ...preset, slots } };
-  }
-
-  async handleUIPresetCreate(data) {
-    const { name, description, slots } = data || {};
-
-    if (!name) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'name is required' };
-    }
-
-    const id = this.generateId();
-    const now = new Date().toISOString();
-
-    // Insert preset
-    await this.dbQuery(
-      `INSERT INTO slot_presets (id, name, description, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, name, description || '', now, now]
-    );
-
-    // Insert slot-prompt relationships
-    if (slots) {
-      for (const [slotType, promptIds] of Object.entries(slots)) {
-        if (!this.SLOT_TYPES.includes(slotType)) continue;
-
-        const ids = Array.isArray(promptIds) ? promptIds : [promptIds];
-        for (let i = 0; i < ids.length; i++) {
-          await this.dbQuery(
-            `INSERT INTO slot_preset_prompts (preset_id, slot_type, prompt_id, position, created_at)
-             VALUES (?, ?, ?, ?, ?)`,
-            [id, slotType, ids[i], i, now]
-          );
-        }
-      }
-    }
-
-    const preset = { id, name, description: description || '', slots, created_at: now, updated_at: now };
-    this.presets.set(id, preset);
-
-    // Publish event
-    await this.eventBus.publish('preset.created', { id, name });
-
-    this.logger.info('prompt-manager.ui.preset.created', { id, name });
-
-    return { preset };
-  }
-
-  async handleUIPresetDelete(data) {
-    const { id } = data || {};
-
-    if (!id) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'id is required' };
-    }
-
-    if (!this.presets.has(id)) {
-      throw { status: 404, code: 'NOT_FOUND', message: `Preset '${id}' not found` };
-    }
-
-    await this.dbQuery('DELETE FROM slot_presets WHERE id = ?', [id]);
-    this.presets.delete(id);
-
-    await this.eventBus.publish('preset.deleted', { id });
-
-    this.logger.info('prompt-manager.ui.preset.deleted', { id });
-
-    return { deleted: true };
-  }
-
-  async handleUIPresetApply(data) {
-    const { id } = data || {};
-
-    if (!id) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'id is required' };
-    }
-
-    const preset = this.presets.get(id);
-    if (!preset) {
-      throw { status: 404, code: 'NOT_FOUND', message: `Preset '${id}' not found` };
-    }
-
-    // Load slot-prompt relationships with full prompt data
-    const relations = await this.dbQuery(
-      `SELECT slot_type, prompt_id, position FROM slot_preset_prompts
-       WHERE preset_id = ? ORDER BY slot_type, position`,
-      [id]
-    );
-
-    const composerState = {};
-    for (const slotType of this.SLOT_TYPES) {
-      composerState[slotType] = [];
-    }
-
-    for (const rel of relations) {
-      const prompt = this.prompts.get(rel.prompt_id);
-      if (prompt && composerState[rel.slot_type]) {
-        composerState[rel.slot_type].push({
-          id: prompt.id,
-          name: prompt.name,
-          title: prompt.title,
-          content: prompt.content,
-          variables: prompt.variables
-        });
-      }
-    }
-
-    return { preset: { id, name: preset.name }, composerState };
-  }
-
-  // --- Composer UI Handlers ---
-
-  async handleUIComposerRender(data) {
-    const { slots, variables } = data || {};
-
-    if (!slots) {
-      throw { status: 400, code: 'VALIDATION_ERROR', message: 'slots is required' };
-    }
-
-    // Build final prompt from slots
-    const parts = [];
-    let totalVariables = new Set();
-
-    for (const slotType of this.SLOT_TYPES) {
-      const slotPromptIds = slots[slotType] || [];
-      for (const promptId of slotPromptIds) {
-        const prompt = this.prompts.get(promptId);
-        if (prompt) {
-          // Collect variables
-          if (prompt.variables) {
-            prompt.variables.forEach(v => totalVariables.add(v.name || v));
-          }
-
-          // Render template with provided variables
-          let content = prompt.content;
-          if (variables) {
-            content = this.renderTemplateString(content, variables);
-          }
-
-          parts.push({
-            slot_type: slotType,
-            slot_icon: this.SLOT_ICONS[slotType],
-            prompt_id: prompt.id,
-            prompt_name: prompt.name,
-            content
-          });
-        }
-      }
-    }
-
-    // Combine all parts
-    const finalPrompt = parts.map(p => p.content).join('\n\n');
-
-    // Estimate tokens (rough: ~4 chars per token)
-    const estimatedTokens = Math.ceil(finalPrompt.length / 4);
-
-    return {
-      parts,
-      finalPrompt,
-      estimatedTokens,
-      variables: Array.from(totalVariables),
-      variablesProvided: variables || {}
-    };
-  }
-
-  // --- Analytics UI Handler ---
-
-  async handleUIAnalytics(data) {
-    const { prompt_id } = data || {};
-
-    let analytics = await this.dbQuery(
-      'SELECT * FROM prompt_analytics' + (prompt_id ? ' WHERE prompt_id = ?' : ''),
-      prompt_id ? [prompt_id] : []
-    );
-
-    // Get top prompts by usage
-    const topPrompts = [...analytics]
-      .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))
-      .slice(0, 10)
-      .map(a => {
-        const prompt = this.prompts.get(a.prompt_id);
-        return {
-          prompt_id: a.prompt_id,
-          prompt_name: prompt?.name || 'Unknown',
-          slot_type: prompt?.slot_type || 'system',
-          slot_icon: this.SLOT_ICONS[prompt?.slot_type] || '📝',
-          usage_count: a.usage_count || 0,
-          last_used: a.last_used
-        };
-      });
-
-    // Stats by slot
-    const bySlot = {};
-    for (const slotType of this.SLOT_TYPES) {
-      const slotPromptIds = Array.from(this.prompts.values())
-        .filter(p => p.slot_type === slotType)
-        .map(p => p.id);
-
-      const slotAnalytics = analytics.filter(a => slotPromptIds.includes(a.prompt_id));
-      bySlot[slotType] = {
-        count: slotPromptIds.length,
-        total_usage: slotAnalytics.reduce((sum, a) => sum + (a.usage_count || 0), 0)
-      };
-    }
-
-    return {
-      total_prompts: this.prompts.size,
-      total_presets: this.presets.size,
-      topPrompts,
-      bySlot,
-      analytics
-    };
-  }
-
-  // ==========================================
-  // API Handlers: Render & Other
-  // ==========================================
 
   async handleRenderTemplate(req, context) {
     try {
-      const { id } = req.params || context.params || {};
-      const { variables, version } = req.body || {};
-
-      const prompt = this.prompts.get(id);
+      const id = (req?.params || context?.params || {}).id;
+      const { variables, version } = req?.body || {};
+      const prompt = this._findPrompt({ id });
       if (!prompt) {
-        return {
-          status: 404,
-          data: { error: 'PROMPT_NOT_FOUND', message: `Prompt '${id}' not found` }
-        };
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id}`, { entity_type: 'prompt', entity_id: id });
       }
 
       let content = prompt.content;
-
-      // Get specific version if requested
       if (version && version !== prompt.current_version) {
-        const projectId = prompt.project_id || this.GLOBAL_PROJECT_ID;
-        const versions = await this.dbQuery(
+        const projectId = prompt.project_id || GLOBAL_PROJECT_ID;
+        const rows = await this._db(projectId,
           'SELECT content FROM prompt_versions WHERE prompt_id = ? AND version = ?',
-          [id, version],
-          projectId
-        );
-        if (versions.length > 0) {
-          content = versions[0].content;
-        }
+          [id, version]);
+        if (Array.isArray(rows) && rows.length > 0) content = rows[0].content;
+        else return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Version not found: ${version}`, { entity_type: 'prompt_version', entity_id: version });
       }
 
-      // Render template
-      const rendered = this.renderTemplateString(content, variables || {});
-
-      // Record analytics
-      await this.recordUsage(id, version || prompt.current_version);
+      const rendered = this._renderTemplateString(content, variables || {});
+      try { await this._recordUsage(id, version || prompt.current_version); } catch (_) { /* non-fatal */ }
 
       return {
         status: 200,
         data: {
-          success: true,
           prompt_id: id,
           version: version || prompt.current_version,
           rendered,
           variables_used: variables || {}
         }
       };
-    } catch (error) {
-      this.logger.error('prompt-manager.render.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'RENDER_FAILED', message: error.message }
-      };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.render.failed', err);
     }
   }
 
-  async handleListVersions(req, context) {
+  async handleCreatePreset(req, context) {
     try {
-      const { id } = req.params || context.params || {};
+      return await this._createPresetInternal(req?.body || {}, req?.body || {});
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.preset.create.failed', err);
+    }
+  }
 
-      const prompt = this.prompts.get(id);
-      if (!prompt) {
-        return {
-          status: 404,
-          data: { error: 'PROMPT_NOT_FOUND', message: `Prompt '${id}' not found` }
-        };
+  async handleListPresets(req, context) {
+    try {
+      const presets = Array.from(this.presets.values());
+      return { status: 200, data: { presets, total: presets.length } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.preset.list.failed', err);
+    }
+  }
+
+  async handleGetPreset(req, context) {
+    try {
+      const id = (req?.params || context?.params || {}).id;
+      const preset = this.presets.get(id);
+      if (!preset) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Preset not found: ${id}`, { entity_type: 'preset', entity_id: id });
       }
+      const slots = await this._loadPresetSlots(id);
+      return { status: 200, data: { preset: { ...preset, slots } } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.preset.get.failed', err);
+    }
+  }
 
-      const projectId = prompt.project_id || this.GLOBAL_PROJECT_ID;
-      const versions = await this.dbQuery(
-        'SELECT version, content, variables, created_at, created_by FROM prompt_versions WHERE prompt_id = ? ORDER BY created_at DESC',
-        [id],
-        projectId
-      );
-
-      return {
-        status: 200,
-        data: {
-          success: true,
-          prompt_id: id,
-          current_version: prompt.current_version,
-          versions
-        }
-      };
-    } catch (error) {
-      this.logger.error('prompt-manager.versions.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'LIST_VERSIONS_FAILED', message: error.message }
-      };
+  async handleDeletePreset(req, context) {
+    try {
+      const id = (req?.params || context?.params || {}).id;
+      return await this._deletePresetInternal(id, req?.body || {});
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.preset.delete.failed', err);
     }
   }
 
   async handleGetAnalytics(req, context) {
     try {
-      const { prompt_id } = req.query || {};
-
-      let analytics = await this.dbQuery(
+      const { prompt_id } = req?.query || {};
+      const rows = await this._db(GLOBAL_PROJECT_ID,
         'SELECT * FROM prompt_analytics' + (prompt_id ? ' WHERE prompt_id = ?' : ''),
-        prompt_id ? [prompt_id] : []
-      );
-
-      return {
-        status: 200,
-        data: { success: true, analytics, total: analytics.length }
-      };
-    } catch (error) {
-      this.logger.error('prompt-manager.analytics.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'ANALYTICS_FAILED', message: error.message }
-      };
+        prompt_id ? [prompt_id] : []);
+      return { status: 200, data: { analytics: rows || [], total: (rows || []).length } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.analytics.failed', err);
     }
   }
-
-  // ==========================================
-  // UI Endpoint - UI-Ready State
-  // ==========================================
-
-  async handleGetUIState(req, context) {
-    try {
-      const { project_id } = req.query || {};
-
-      // Group prompts by slot_type
-      const promptsBySlot = {};
-      for (const slotType of this.SLOT_TYPES) {
-        promptsBySlot[slotType] = [];
-      }
-
-      for (const prompt of this.prompts.values()) {
-        const slot = prompt.slot_type || 'system';
-        if (promptsBySlot[slot]) {
-          promptsBySlot[slot].push({
-            id: prompt.id,
-            name: prompt.name,
-            title: prompt.title,
-            description: prompt.description,
-            tags: prompt.tags || [],
-            level: prompt.level || 'GLOBAL',
-            levelIcon: prompt.level === 'PROJECT' ? '🔵' : '🟢'
-          });
-        }
-      }
-
-      // Slot types with icons
-      const slotTypes = this.SLOT_TYPES.map(type => ({
-        id: type,
-        name: type.charAt(0).toUpperCase() + type.slice(1),
-        icon: this.SLOT_ICONS[type],
-        count: promptsBySlot[type].length
-      }));
-
-      // Presets for quick selection
-      const presets = Array.from(this.presets.values()).map(p => ({
-        id: p.id,
-        name: p.name,
-        description: p.description
-      }));
-
-      // Stats
-      const stats = {
-        total_prompts: this.prompts.size,
-        total_presets: this.presets.size,
-        by_slot: {}
-      };
-      for (const [slot, prompts] of Object.entries(promptsBySlot)) {
-        stats.by_slot[slot] = prompts.length;
-      }
-
-      return {
-        status: 200,
-        data: {
-          success: true,
-          slotTypes,
-          promptsBySlot,
-          presets,
-          stats
-        }
-      };
-    } catch (error) {
-      this.logger.error('prompt-manager.ui.state.error', { error: error.message });
-      return {
-        status: 500,
-        data: { error: 'UI_STATE_FAILED', message: error.message }
-      };
-    }
-  }
-
-  // ==========================================
-  // AI Tool Handlers
-  // ==========================================
-
-  /**
-   * Tool handler: Lista prompts disponibles para AI
-   * @param {Object} args - Tool arguments
-   * @param {string} [args.slot_type] - Filter by slot type
-   * @param {string} [args.tag] - Filter by tag
-   * @param {string} [args.search] - Search in name/description
-   * @returns {Object} List of prompts (metadata only, not full content)
-   */
-  async handleToolPromptList(args) {
-    const { slot_type, tag, search } = args || {};
-
-    this.logger.info('prompt.tool.list.called', { slot_type, tag, search });
-
-    let prompts = Array.from(this.prompts.values());
-
-    // Filter by slot_type
-    if (slot_type && this.SLOT_TYPES.includes(slot_type)) {
-      prompts = prompts.filter(p => p.slot_type === slot_type);
-    }
-
-    // Filter by tag
-    if (tag) {
-      prompts = prompts.filter(p => p.tags && p.tags.includes(tag));
-    }
-
-    // Search
-    if (search) {
-      const s = search.toLowerCase();
-      prompts = prompts.filter(p =>
-        p.name.toLowerCase().includes(s) ||
-        (p.title && p.title.toLowerCase().includes(s)) ||
-        (p.description && p.description.toLowerCase().includes(s))
-      );
-    }
-
-    // Return metadata only (not full content to avoid large responses)
-    const results = prompts.map(p => ({
-      id: p.id,
-      name: p.name,
-      title: p.title,
-      description: p.description,
-      slot_type: p.slot_type,
-      tags: p.tags,
-      variables: p.variables,
-      level: p.level || 'GLOBAL',
-      current_version: p.current_version
-    }));
-
-    this.logger.info('prompt.tool.list.result', { count: results.length });
-
-    return {
-      status: 200,
-      data: {
-        prompts: results,
-        total: results.length,
-        filters: { slot_type, tag, search }
-      }
-    };
-  }
-
-  /**
-   * Tool handler: Obtiene un prompt específico para AI
-   * @param {Object} args - Tool arguments
-   * @param {string} [args.id] - Prompt ID
-   * @param {string} [args.name] - Prompt name (alternative to ID)
-   * @returns {Object} Prompt with full content
-   */
-  async handleToolPromptGet(args) {
-    const { id, name } = args || {};
-
-    this.logger.info('prompt.tool.get.called', { id, name });
-
-    if (!id && !name) {
-      return {
-        status: 400,
-        data: { error: 'Either id or name is required' }
-      };
-    }
-
-    let prompt = null;
-
-    if (id) {
-      prompt = this.prompts.get(id);
-    } else if (name) {
-      // Find by name (case-insensitive)
-      const nameLower = name.toLowerCase();
-      for (const p of this.prompts.values()) {
-        if (p.name.toLowerCase() === nameLower) {
-          prompt = p;
-          break;
-        }
-      }
-    }
-
-    if (!prompt) {
-      return {
-        status: 404,
-        data: { error: `Prompt not found: ${id || name}` }
-      };
-    }
-
-    // Record usage
-    await this.recordUsage(prompt.id, prompt.current_version);
-
-    return {
-      status: 200,
-      data: {
-        prompt: {
-          id: prompt.id,
-          name: prompt.name,
-          title: prompt.title,
-          description: prompt.description,
-          content: prompt.content,
-          slot_type: prompt.slot_type,
-          variables: prompt.variables,
-          tags: prompt.tags,
-          level: prompt.level || 'GLOBAL',
-          current_version: prompt.current_version
-        }
-      }
-    };
-  }
-
-  /**
-   * Tool handler: Renderiza un prompt con variables para AI
-   * @param {Object} args - Tool arguments
-   * @param {string} [args.id] - Prompt ID
-   * @param {string} [args.name] - Prompt name (alternative to ID)
-   * @param {Object} [args.variables] - Variables to interpolate
-   * @returns {Object} Rendered prompt content
-   */
-  async handleToolPromptRender(args) {
-    const { id, name, variables } = args || {};
-
-    this.logger.info('prompt.tool.render.called', { id, name, variables });
-
-    if (!id && !name) {
-      return {
-        status: 400,
-        data: { error: 'Either id or name is required' }
-      };
-    }
-
-    let prompt = null;
-
-    if (id) {
-      prompt = this.prompts.get(id);
-    } else if (name) {
-      const nameLower = name.toLowerCase();
-      for (const p of this.prompts.values()) {
-        if (p.name.toLowerCase() === nameLower) {
-          prompt = p;
-          break;
-        }
-      }
-    }
-
-    if (!prompt) {
-      return {
-        status: 404,
-        data: { error: `Prompt not found: ${id || name}` }
-      };
-    }
-
-    // Render template with variables
-    const rendered = this.renderTemplateString(prompt.content, variables || {});
-
-    // Identify missing variables
-    const missingVars = [];
-    if (prompt.variables && prompt.variables.length > 0) {
-      for (const v of prompt.variables) {
-        const varName = v.name || v;
-        if (!variables || variables[varName] === undefined) {
-          missingVars.push(varName);
-        }
-      }
-    }
-
-    // Record usage
-    await this.recordUsage(prompt.id, prompt.current_version);
-
-    return {
-      status: 200,
-      data: {
-        prompt_id: prompt.id,
-        prompt_name: prompt.name,
-        rendered,
-        variables_used: variables || {},
-        missing_variables: missingVars.length > 0 ? missingVars : undefined
-      }
-    };
-  }
-
-  // ==========================================
-  // Helper Methods
-  // ==========================================
-
-  generateId() {
-    return crypto.randomBytes(16).toString('hex');
-  }
-
-  bumpVersion(version) {
-    const [major, minor, patch] = version.split('.').map(Number);
-    return `${major}.${minor}.${patch + 1}`;
-  }
-
-  renderTemplateString(template, variables) {
-    let rendered = template;
-    for (const [key, value] of Object.entries(variables)) {
-      const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
-      rendered = rendered.replace(regex, String(value));
-    }
-    return rendered;
-  }
-
-  async recordUsage(promptId, version) {
-    try {
-      const now = new Date().toISOString();
-
-      // Check if exists
-      const existing = await this.dbQuery(
-        'SELECT id, usage_count FROM prompt_analytics WHERE prompt_id = ? AND version = ?',
-        [promptId, version]
-      );
-
-      if (existing.length > 0) {
-        await this.dbQuery(
-          'UPDATE prompt_analytics SET usage_count = usage_count + 1, last_used = ? WHERE id = ?',
-          [now, existing[0].id]
-        );
-      } else {
-        await this.dbQuery(
-          `INSERT INTO prompt_analytics (prompt_id, version, usage_count, first_used, last_used)
-           VALUES (?, ?, 1, ?, ?)`,
-          [promptId, version, now, now]
-        );
-      }
-    } catch (error) {
-      this.logger.warn('prompt-manager.analytics.record.error', { error: error.message });
-    }
-  }
-
-  // ==========================================
-  // Health & Metrics
-  // ==========================================
 
   async handleHealthCheck(req, context) {
     return {
@@ -1590,112 +494,741 @@ class PromptManagerModule {
         module: 'prompt-manager',
         prompts_count: this.prompts.size,
         presets_count: this.presets.size,
-        schema_initialized: this.schemaInitialized,
-        using: 'database-manager'
+        schema_ready: this.schemaReady
       }
     };
-  }
-
-  // ==========================================
-  // Event Bus Handlers (inter-module communication)
-  // ==========================================
-
-  /**
-   * Handle prompt.get.request from other modules (e.g. prompt-composer).
-   * Responds with prompt.get.response containing the prompt data.
-   */
-  async onPromptGetRequest(event) {
-    const data = event.data || event;
-    const { request_id, name, id, correlation_id } = data;
-
-    let prompt = null;
-
-    if (id) {
-      prompt = this.prompts.get(id);
-    } else if (name) {
-      const nameLower = name.toLowerCase();
-      for (const p of this.prompts.values()) {
-        if (p.name.toLowerCase() === nameLower) {
-          prompt = p;
-          break;
-        }
-      }
-    }
-
-    if (prompt) {
-      await this.eventBus.publish('prompt.get.response', {
-        request_id,
-        success: true,
-        data: {
-          prompt: {
-            id: prompt.id,
-            name: prompt.name,
-            title: prompt.title,
-            description: prompt.description,
-            content: prompt.content,
-            slot_type: prompt.slot_type,
-            variables: prompt.variables,
-            tags: prompt.tags,
-            level: prompt.level || 'GLOBAL',
-            current_version: prompt.current_version
-          }
-        },
-        correlation_id
-      });
-    } else {
-      await this.eventBus.publish('prompt.get.response', {
-        request_id,
-        success: false,
-        error: `Prompt not found: ${id || name}`,
-        correlation_id
-      });
-    }
-  }
-
-  /**
-   * Handle prompt.list.request from other modules (e.g. prompt-composer).
-   * Responds with prompt.list.response containing all prompts.
-   */
-  async onPromptListRequest(event) {
-    const data = event.data || event;
-    const { request_id, correlation_id } = data;
-
-    const prompts = Array.from(this.prompts.values()).map(p => ({
-      id: p.id,
-      name: p.name,
-      title: p.title,
-      description: p.description,
-      slot_type: p.slot_type,
-      tags: p.tags,
-      level: p.level || 'GLOBAL',
-      current_version: p.current_version,
-      content: p.content || null
-    }));
-
-    await this.eventBus.publish('prompt.list.response', {
-      request_id,
-      success: true,
-      data: { prompts },
-      correlation_id
-    });
   }
 
   async handleGetMetrics(req, context) {
     return {
       status: 200,
       data: {
-        counters: {
-          prompts: this.prompts.size,
-          presets: this.presets.size
-        },
+        counters: { prompts: this.prompts.size, presets: this.presets.size },
         by_slot_type: Object.fromEntries(
-          this.SLOT_TYPES.map(type => [
-            type,
-            Array.from(this.prompts.values()).filter(p => p.slot_type === type).length
-          ])
+          SLOT_TYPES.map(type => [type, Array.from(this.prompts.values()).filter(p => p.slot_type === type).length])
         )
       }
     };
+  }
+
+  async handleGetUIState(req, context) {
+    try {
+      const promptsBySlot = {};
+      for (const t of SLOT_TYPES) promptsBySlot[t] = [];
+      for (const prompt of this.prompts.values()) {
+        const slot = SLOT_TYPES.includes(prompt.slot_type) ? prompt.slot_type : 'system';
+        promptsBySlot[slot].push({
+          id: prompt.id, name: prompt.name, title: prompt.title,
+          description: prompt.description, tags: prompt.tags || [],
+          level: prompt.level || 'GLOBAL'
+        });
+      }
+      const slotTypes = SLOT_TYPES.map(type => ({
+        id: type, name: type.charAt(0).toUpperCase() + type.slice(1),
+        icon: SLOT_ICONS[type], count: promptsBySlot[type].length
+      }));
+      const presets = Array.from(this.presets.values()).map(p => ({ id: p.id, name: p.name, description: p.description }));
+      const stats = {
+        total_prompts: this.prompts.size,
+        total_presets: this.presets.size,
+        by_slot: Object.fromEntries(SLOT_TYPES.map(t => [t, promptsBySlot[t].length]))
+      };
+      return { status: 200, data: { slotTypes, promptsBySlot, presets, stats } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.state.failed', err);
+    }
+  }
+
+  // ==========================================
+  // UI handlers (mqttRequest cross-modulo)
+  // ==========================================
+
+  async handleUIList(data) {
+    try {
+      const prompts = this._filterPrompts(data || {});
+      const promptsBySlot = {};
+      for (const t of SLOT_TYPES) promptsBySlot[t] = [];
+      const promptsList = prompts.map(p => this._toPublicPrompt(p));
+      for (const p of promptsList) if (promptsBySlot[p.slot_type]) promptsBySlot[p.slot_type].push(p);
+      const slotTypes = SLOT_TYPES.map(type => ({
+        id: type, name: type.charAt(0).toUpperCase() + type.slice(1),
+        icon: SLOT_ICONS[type], count: promptsBySlot[type].length
+      }));
+      const stats = {
+        total: prompts.length,
+        by_slot: Object.fromEntries(SLOT_TYPES.map(t => [t, promptsBySlot[t].length]))
+      };
+      return { status: 200, data: { prompts: promptsList, promptsBySlot, slotTypes, stats } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.list.failed', err);
+    }
+  }
+
+  async handleUIGet(data) {
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      const prompt = this._findPrompt({ id });
+      if (!prompt) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id}`, { entity_type: 'prompt', entity_id: id });
+      return { status: 200, data: { prompt: this._toPublicPrompt(prompt) } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.get.failed', err);
+    }
+  }
+
+  async handleUICreate(data) {
+    try {
+      return await this._createPromptInternal(data || {}, data || {});
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.create.failed', err);
+    }
+  }
+
+  async handleUIUpdate(data) {
+    try {
+      const { id, ...updates } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      return await this._updatePromptInternal(id, updates, data || {});
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.update.failed', err);
+    }
+  }
+
+  async handleUIDelete(data) {
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      return await this._deletePromptInternal(id, data || {});
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.delete.failed', err);
+    }
+  }
+
+  async handleUIVersions(data) {
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      const prompt = this._findPrompt({ id });
+      if (!prompt) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id}`, { entity_type: 'prompt', entity_id: id });
+      const projectId = prompt.project_id || GLOBAL_PROJECT_ID;
+      const versions = await this._db(projectId,
+        'SELECT version, content, variables, created_at, created_by FROM prompt_versions WHERE prompt_id = ? ORDER BY created_at DESC',
+        [id]);
+      return { status: 200, data: { prompt_id: id, current_version: prompt.current_version, versions } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.versions.failed', err);
+    }
+  }
+
+  async handleUIPresetList(data) {
+    try {
+      const presets = Array.from(this.presets.values()).map(p => ({
+        id: p.id, name: p.name, description: p.description,
+        created_at: p.created_at, updated_at: p.updated_at
+      }));
+      return { status: 200, data: { presets, total: presets.length } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.preset.list.failed', err);
+    }
+  }
+
+  async handleUIPresetGet(data) {
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      const preset = this.presets.get(id);
+      if (!preset) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Preset not found: ${id}`, { entity_type: 'preset', entity_id: id });
+      const slots = await this._loadPresetSlots(id);
+      return { status: 200, data: { preset: { ...preset, slots } } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.preset.get.failed', err);
+    }
+  }
+
+  async handleUIPresetCreate(data) {
+    try {
+      return await this._createPresetInternal(data || {}, data || {});
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.preset.create.failed', err);
+    }
+  }
+
+  async handleUIPresetDelete(data) {
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      return await this._deletePresetInternal(id, data || {});
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.preset.delete.failed', err);
+    }
+  }
+
+  async handleUIPresetApply(data) {
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+      const preset = this.presets.get(id);
+      if (!preset) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Preset not found: ${id}`, { entity_type: 'preset', entity_id: id });
+
+      const slots = await this._loadPresetSlots(id);
+      const composerState = {};
+      for (const t of SLOT_TYPES) composerState[t] = [];
+      for (const slotType of Object.keys(slots)) {
+        for (const promptId of slots[slotType] || []) {
+          const prompt = this.prompts.get(promptId);
+          if (prompt && composerState[slotType]) {
+            composerState[slotType].push({
+              id: prompt.id, name: prompt.name, title: prompt.title,
+              content: prompt.content, variables: prompt.variables
+            });
+          }
+        }
+      }
+      return { status: 200, data: { preset: { id, name: preset.name }, composerState } };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.preset.apply.failed', err);
+    }
+  }
+
+  async handleUIComposerRender(data) {
+    try {
+      const { slots, variables } = data || {};
+      if (!slots) return this._errorResponse(400, 'VALIDATION_FAILED', 'slots is required', { kind: 'shape', field: 'slots' });
+
+      const parts = [];
+      const totalVariables = new Set();
+      for (const slotType of SLOT_TYPES) {
+        const slotPromptIds = slots[slotType] || [];
+        for (const promptId of slotPromptIds) {
+          const prompt = this.prompts.get(promptId);
+          if (!prompt) continue;
+          if (Array.isArray(prompt.variables)) {
+            prompt.variables.forEach(v => totalVariables.add(v.name || v));
+          }
+          let content = prompt.content;
+          if (variables) content = this._renderTemplateString(content, variables);
+          parts.push({
+            slot_type: slotType, slot_icon: SLOT_ICONS[slotType],
+            prompt_id: prompt.id, prompt_name: prompt.name, content
+          });
+        }
+      }
+      const finalPrompt = parts.map(p => p.content).join('\n\n');
+      const estimatedTokens = Math.ceil(finalPrompt.length / 4);
+      return {
+        status: 200,
+        data: {
+          parts, finalPrompt, estimatedTokens,
+          variables: Array.from(totalVariables),
+          variablesProvided: variables || {}
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.composer.render.failed', err);
+    }
+  }
+
+  async handleUIAnalytics(data) {
+    try {
+      const { prompt_id } = data || {};
+      const rows = await this._db(GLOBAL_PROJECT_ID,
+        'SELECT * FROM prompt_analytics' + (prompt_id ? ' WHERE prompt_id = ?' : ''),
+        prompt_id ? [prompt_id] : []);
+      const analytics = rows || [];
+      const topPrompts = [...analytics]
+        .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))
+        .slice(0, 10)
+        .map(a => {
+          const p = this.prompts.get(a.prompt_id);
+          return {
+            prompt_id: a.prompt_id,
+            prompt_name: p?.name || 'Unknown',
+            slot_type: p?.slot_type || 'system',
+            slot_icon: SLOT_ICONS[p?.slot_type] || 'system',
+            usage_count: a.usage_count || 0,
+            last_used: a.last_used
+          };
+        });
+      const bySlot = {};
+      for (const slotType of SLOT_TYPES) {
+        const slotPromptIds = Array.from(this.prompts.values()).filter(p => p.slot_type === slotType).map(p => p.id);
+        const slotAnalytics = analytics.filter(a => slotPromptIds.includes(a.prompt_id));
+        bySlot[slotType] = {
+          count: slotPromptIds.length,
+          total_usage: slotAnalytics.reduce((sum, a) => sum + (a.usage_count || 0), 0)
+        };
+      }
+      return {
+        status: 200,
+        data: {
+          total_prompts: this.prompts.size,
+          total_presets: this.presets.size,
+          topPrompts, bySlot, analytics
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('prompt-manager.ui.analytics.failed', err);
+    }
+  }
+
+  // ==========================================
+  // Internals: domain operations (deduplicated)
+  // ==========================================
+
+  async _createPromptInternal(input, sourcePayload) {
+    const { name, title, description, content, slot_type, variables, tags, metadata, project_id } = input || {};
+
+    if (!name || typeof name !== 'string') {
+      this.metrics?.increment('prompt-manager.create.errors', { code: 'VALIDATION_FAILED' });
+      return this._errorResponse(400, 'VALIDATION_FAILED', 'name is required (string)', { kind: 'shape', field: 'name' });
+    }
+    if (!content || typeof content !== 'string') {
+      this.metrics?.increment('prompt-manager.create.errors', { code: 'VALIDATION_FAILED' });
+      return this._errorResponse(400, 'VALIDATION_FAILED', 'content is required (string)', { kind: 'shape', field: 'content' });
+    }
+
+    const validSlotType = SLOT_TYPES.includes(slot_type) ? slot_type : 'system';
+    const id = this._generateId();
+    const now = new Date().toISOString();
+    const targetProject = project_id || GLOBAL_PROJECT_ID;
+
+    const promptVariables = Array.isArray(variables) ? variables : [];
+    const promptTags      = Array.isArray(tags)      ? tags      : [];
+    const promptMetadata  = (metadata && typeof metadata === 'object') ? metadata : {};
+
+    try {
+      await this._db(targetProject,
+        `INSERT INTO prompts (id, name, title, description, slot_type, content, variables, tags, metadata, current_version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, name, title || name, description || '', validSlotType, content,
+         JSON.stringify(promptVariables), JSON.stringify(promptTags), JSON.stringify(promptMetadata),
+         '1.0.0', now, now]);
+
+      await this._db(targetProject,
+        `INSERT INTO prompt_versions (prompt_id, version, content, variables, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, '1.0.0', content, JSON.stringify(promptVariables), now, 'system']);
+    } catch (err) {
+      if (/UNIQUE/i.test(err.message)) {
+        this.metrics?.increment('prompt-manager.create.errors', { code: 'ALREADY_EXISTS' });
+        return this._errorResponse(409, 'ALREADY_EXISTS', `Prompt name already exists: ${name}`, { entity_type: 'prompt', field: 'name' });
+      }
+      throw err;
+    }
+
+    const cachePrompt = {
+      id, name, title: title || name, description: description || '',
+      slot_type: validSlotType, content,
+      variables: promptVariables, tags: promptTags, metadata: promptMetadata,
+      current_version: '1.0.0',
+      level: targetProject === GLOBAL_PROJECT_ID ? 'GLOBAL' : 'PROJECT',
+      project_id: targetProject,
+      created_at: now, updated_at: now
+    };
+    this.prompts.set(id, cachePrompt);
+
+    await this._publicarEvento('prompt.created', {
+      project_id: targetProject,
+      id, name, slot_type: validSlotType
+    }, sourcePayload);
+
+    this.metrics?.increment('prompt-manager.prompt.created');
+    this.logger.info('prompt-manager.prompt.created', { id, name, slot_type: validSlotType, project_id: targetProject });
+
+    return { status: 201, data: { prompt: cachePrompt } };
+  }
+
+  async _updatePromptInternal(id, updates, sourcePayload) {
+    if (!id) {
+      this.metrics?.increment('prompt-manager.update.errors', { code: 'VALIDATION_FAILED' });
+      return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+    }
+    const prompt = this.prompts.get(id);
+    if (!prompt) {
+      this.metrics?.increment('prompt-manager.update.errors', { code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id}`, { entity_type: 'prompt', entity_id: id });
+    }
+
+    const now = new Date().toISOString();
+    const projectId = prompt.project_id || GLOBAL_PROJECT_ID;
+
+    if (updates.content && updates.content !== prompt.content) {
+      const newVersion = this._bumpVersion(prompt.current_version);
+      const newVars = Array.isArray(updates.variables) ? updates.variables : prompt.variables;
+      await this._db(projectId,
+        `INSERT INTO prompt_versions (prompt_id, version, content, variables, created_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, newVersion, updates.content, JSON.stringify(newVars), now, 'system']);
+      prompt.current_version = newVersion;
+      prompt.content = updates.content;
+    }
+
+    if (updates.title !== undefined)       prompt.title = updates.title;
+    if (updates.description !== undefined) prompt.description = updates.description;
+    if (updates.slot_type && SLOT_TYPES.includes(updates.slot_type)) prompt.slot_type = updates.slot_type;
+    if (Array.isArray(updates.variables))  prompt.variables = updates.variables;
+    if (Array.isArray(updates.tags))       prompt.tags = updates.tags;
+    if (updates.metadata && typeof updates.metadata === 'object') {
+      prompt.metadata = { ...prompt.metadata, ...updates.metadata };
+    }
+    prompt.updated_at = now;
+
+    await this._db(projectId,
+      `UPDATE prompts SET title=?, description=?, slot_type=?, content=?, variables=?, tags=?, metadata=?, current_version=?, updated_at=?
+       WHERE id=?`,
+      [prompt.title, prompt.description, prompt.slot_type, prompt.content,
+       JSON.stringify(prompt.variables), JSON.stringify(prompt.tags), JSON.stringify(prompt.metadata),
+       prompt.current_version, prompt.updated_at, id]);
+
+    await this._publicarEvento('prompt.updated', {
+      project_id: projectId,
+      id, name: prompt.name, version: prompt.current_version
+    }, sourcePayload);
+
+    this.metrics?.increment('prompt-manager.prompt.updated');
+    this.logger.info('prompt-manager.prompt.updated', { id, version: prompt.current_version, project_id: projectId });
+
+    return { status: 200, data: { prompt } };
+  }
+
+  async _deletePromptInternal(id, sourcePayload) {
+    if (!id) {
+      this.metrics?.increment('prompt-manager.delete.errors', { code: 'VALIDATION_FAILED' });
+      return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+    }
+    const prompt = this.prompts.get(id);
+    if (!prompt) {
+      this.metrics?.increment('prompt-manager.delete.errors', { code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Prompt not found: ${id}`, { entity_type: 'prompt', entity_id: id });
+    }
+    const projectId = prompt.project_id || GLOBAL_PROJECT_ID;
+
+    await this._db(projectId, 'DELETE FROM prompts WHERE id = ?', [id]);
+    this.prompts.delete(id);
+
+    await this._publicarEvento('prompt.deleted', {
+      project_id: projectId, id
+    }, sourcePayload);
+
+    this.metrics?.increment('prompt-manager.prompt.deleted');
+    this.logger.info('prompt-manager.prompt.deleted', { id, project_id: projectId });
+
+    return { status: 200, data: { deleted: true, id } };
+  }
+
+  async _createPresetInternal(input, sourcePayload) {
+    const { name, description, slots, project_id } = input || {};
+    if (!name || typeof name !== 'string') {
+      this.metrics?.increment('prompt-manager.preset.create.errors', { code: 'VALIDATION_FAILED' });
+      return this._errorResponse(400, 'VALIDATION_FAILED', 'name is required (string)', { kind: 'shape', field: 'name' });
+    }
+
+    const id = this._generateId();
+    const now = new Date().toISOString();
+    const targetProject = project_id || GLOBAL_PROJECT_ID;
+
+    try {
+      await this._db(targetProject,
+        `INSERT INTO slot_presets (id, name, description, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [id, name, description || '', now, now]);
+    } catch (err) {
+      if (/UNIQUE/i.test(err.message)) {
+        this.metrics?.increment('prompt-manager.preset.create.errors', { code: 'ALREADY_EXISTS' });
+        return this._errorResponse(409, 'ALREADY_EXISTS', `Preset name already exists: ${name}`, { entity_type: 'preset', field: 'name' });
+      }
+      throw err;
+    }
+
+    if (slots && typeof slots === 'object') {
+      for (const [slotType, promptIds] of Object.entries(slots)) {
+        if (!SLOT_TYPES.includes(slotType)) continue;
+        const ids = Array.isArray(promptIds) ? promptIds : [promptIds];
+        for (let i = 0; i < ids.length; i++) {
+          await this._db(targetProject,
+            `INSERT INTO slot_preset_prompts (preset_id, slot_type, prompt_id, position, created_at)
+             VALUES (?, ?, ?, ?, ?)`,
+            [id, slotType, ids[i], i, now]);
+        }
+      }
+    }
+
+    const preset = { id, name, description: description || '', slots: slots || {}, created_at: now, updated_at: now };
+    this.presets.set(id, preset);
+
+    await this._publicarEvento('preset.created', {
+      project_id: targetProject, id, name
+    }, sourcePayload);
+
+    this.metrics?.increment('prompt-manager.preset.created');
+    this.logger.info('prompt-manager.preset.created', { id, name, project_id: targetProject });
+
+    return { status: 201, data: { preset } };
+  }
+
+  async _deletePresetInternal(id, sourcePayload) {
+    if (!id) {
+      this.metrics?.increment('prompt-manager.preset.delete.errors', { code: 'VALIDATION_FAILED' });
+      return this._errorResponse(400, 'VALIDATION_FAILED', 'id is required', { kind: 'shape', field: 'id' });
+    }
+    if (!this.presets.has(id)) {
+      this.metrics?.increment('prompt-manager.preset.delete.errors', { code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Preset not found: ${id}`, { entity_type: 'preset', entity_id: id });
+    }
+
+    await this._db(GLOBAL_PROJECT_ID, 'DELETE FROM slot_presets WHERE id = ?', [id]);
+    this.presets.delete(id);
+
+    await this._publicarEvento('preset.deleted', {
+      project_id: GLOBAL_PROJECT_ID, id
+    }, sourcePayload);
+
+    this.metrics?.increment('prompt-manager.preset.deleted');
+    this.logger.info('prompt-manager.preset.deleted', { id });
+
+    return { status: 200, data: { deleted: true, id } };
+  }
+
+  // ==========================================
+  // Internals: helpers
+  // ==========================================
+
+  _findPrompt({ id, name }) {
+    if (id && this.prompts.has(id)) return this.prompts.get(id);
+    if (name) {
+      const nameLower = String(name).toLowerCase();
+      for (const p of this.prompts.values()) {
+        if ((p.name || '').toLowerCase() === nameLower) return p;
+      }
+    }
+    return null;
+  }
+
+  _filterPrompts(filters) {
+    let prompts = Array.from(this.prompts.values());
+    const { slot_type, tag, search, project_id } = filters || {};
+    if (slot_type && SLOT_TYPES.includes(slot_type)) {
+      prompts = prompts.filter(p => p.slot_type === slot_type);
+    }
+    if (tag) prompts = prompts.filter(p => Array.isArray(p.tags) && p.tags.includes(tag));
+    if (project_id) {
+      prompts = prompts.filter(p => p.project_id === project_id || p.project_id === GLOBAL_PROJECT_ID);
+    }
+    if (search) {
+      const s = String(search).toLowerCase();
+      prompts = prompts.filter(p =>
+        (p.name || '').toLowerCase().includes(s) ||
+        (p.title || '').toLowerCase().includes(s) ||
+        (p.description || '').toLowerCase().includes(s)
+      );
+    }
+    return prompts;
+  }
+
+  _toPublicPrompt(prompt, opts = {}) {
+    const { include_content = true } = opts;
+    const out = {
+      id: prompt.id,
+      name: prompt.name,
+      title: prompt.title,
+      description: prompt.description,
+      slot_type: prompt.slot_type,
+      slot_icon: SLOT_ICONS[prompt.slot_type] || 'system',
+      tags: prompt.tags || [],
+      variables: prompt.variables || [],
+      level: prompt.level || 'GLOBAL',
+      current_version: prompt.current_version,
+      created_at: prompt.created_at,
+      updated_at: prompt.updated_at
+    };
+    if (include_content) out.content = prompt.content;
+    return out;
+  }
+
+  _missingVariables(declared, provided) {
+    const missing = [];
+    if (!Array.isArray(declared)) return missing;
+    for (const v of declared) {
+      const varName = (v && typeof v === 'object') ? v.name : v;
+      if (!varName) continue;
+      if (!provided || provided[varName] === undefined) missing.push(varName);
+    }
+    return missing;
+  }
+
+  async _loadPresetSlots(presetId) {
+    const rows = await this._db(GLOBAL_PROJECT_ID,
+      `SELECT slot_type, prompt_id, position FROM slot_preset_prompts
+       WHERE preset_id = ? ORDER BY slot_type, position`,
+      [presetId]);
+    const slots = {};
+    for (const rel of (rows || [])) {
+      if (!slots[rel.slot_type]) slots[rel.slot_type] = [];
+      slots[rel.slot_type].push(rel.prompt_id);
+    }
+    return slots;
+  }
+
+  async _recordUsage(promptId, version) {
+    if (!promptId) return;
+    const now = new Date().toISOString();
+    const existing = await this._db(GLOBAL_PROJECT_ID,
+      'SELECT id, usage_count FROM prompt_analytics WHERE prompt_id = ? AND version = ?',
+      [promptId, version || null]);
+    if (Array.isArray(existing) && existing.length > 0) {
+      await this._db(GLOBAL_PROJECT_ID,
+        'UPDATE prompt_analytics SET usage_count = usage_count + 1, last_used = ? WHERE id = ?',
+        [now, existing[0].id]);
+    } else {
+      await this._db(GLOBAL_PROJECT_ID,
+        `INSERT INTO prompt_analytics (prompt_id, version, usage_count, first_used, last_used)
+         VALUES (?, ?, 1, ?, ?)`,
+        [promptId, version || null, now, now]);
+    }
+    this.metrics?.increment('prompt-manager.usage.recorded');
+  }
+
+  async _initializeSchema() {
+    let schemaSql;
+    try {
+      schemaSql = await fs.readFile(path.join(__dirname, 'schema.sql'), 'utf8');
+    } catch (err) {
+      this.logger.error('prompt-manager.schema.read.failed', { error: err.message });
+      throw err;
+    }
+
+    const request_id = this._generateId();
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (this.pendingSchema.has(request_id)) {
+          this.pendingSchema.delete(request_id);
+          this.logger.warn('prompt-manager.schema.init.timeout');
+          resolve(false);
+        }
+      }, SCHEMA_TIMEOUT_MS);
+      this.pendingSchema.set(request_id, { resolve, reject, timeout });
+      this.eventBus.publish('db.schema.init.request', {
+        project_id: GLOBAL_PROJECT_ID,
+        schema: schemaSql,
+        request_id
+      });
+    });
+  }
+
+  async _loadFromDatabase() {
+    try {
+      const prompts = await this._db(GLOBAL_PROJECT_ID, 'SELECT * FROM prompts ORDER BY name', []);
+      for (const p of (prompts || [])) {
+        this.prompts.set(p.id, {
+          ...p,
+          variables: this._safeJsonParse(p.variables, []),
+          tags:      this._safeJsonParse(p.tags, []),
+          metadata:  this._safeJsonParse(p.metadata, {}),
+          level:     'GLOBAL',
+          project_id: GLOBAL_PROJECT_ID
+        });
+      }
+
+      const presets = await this._db(GLOBAL_PROJECT_ID, 'SELECT * FROM slot_presets ORDER BY name', []);
+      for (const preset of (presets || [])) {
+        this.presets.set(preset.id, preset);
+      }
+
+      this.logger.info('prompt-manager.cache.loaded', {
+        prompts: this.prompts.size,
+        presets: this.presets.size
+      });
+    } catch (err) {
+      this.logger.warn('prompt-manager.cache.load.error', { error: err.message });
+    }
+  }
+
+  _safeJsonParse(value, fallback) {
+    if (value == null) return fallback;
+    if (typeof value !== 'string') return value;
+    try { return JSON.parse(value); } catch (_) { return fallback; }
+  }
+
+  _generateId() {
+    return crypto.randomBytes(16).toString('hex');
+  }
+
+  _bumpVersion(version) {
+    const parts = String(version || '1.0.0').split('.').map(n => parseInt(n, 10) || 0);
+    const [major, minor, patch] = [parts[0] || 1, parts[1] || 0, parts[2] || 0];
+    return `${major}.${minor}.${patch + 1}`;
+  }
+
+  _renderTemplateString(template, variables) {
+    let rendered = String(template || '');
+    if (!variables || typeof variables !== 'object') return rendered;
+    for (const [key, value] of Object.entries(variables)) {
+      const safeKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\{\\{\\s*${safeKey}\\s*\\}\\}`, 'g');
+      rendered = rendered.replace(regex, String(value));
+    }
+    return rendered;
+  }
+
+  // ==========================================
+  // Helpers POC2 (canonicos)
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details !== undefined) error.details = details;
+    return { status, error };
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err && err.message ? err.message : String(err || '')).toLowerCase();
+    if (err && err._code) return err._code;
+    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('must be')) return 'VALIDATION_FAILED';
+    if (msg.includes('already exists') || msg.includes('unique')) return 'ALREADY_EXISTS';
+    if (msg.includes('timeout')) return 'TIMEOUT';
+    return 'INTERNAL_ERROR';
+  }
+
+  _handleHandlerError(logEvent, err, kind = 'handler') {
+    const code = this._classifyHandlerError(err);
+    const status = ({
+      RESOURCE_NOT_FOUND: 404,
+      VALIDATION_FAILED:  400,
+      ALREADY_EXISTS:     409,
+      TIMEOUT:            504,
+      INTERNAL_ERROR:     500
+    })[code] || 500;
+    const message = err && err.message ? err.message : String(err || 'unknown error');
+    const details = err && err._details ? err._details : undefined;
+
+    this.logger?.error(logEvent, { error: message, code, kind });
+    this.metrics?.increment(logEvent.replace(/\.failed$/, '.errors'), { code });
+
+    return this._errorResponse(status, code, message, details);
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    const enriched = {
+      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      ...payload
+    };
+    await this.eventBus.publish(name, enriched);
+  }
+
+  async _db(project_id, query, params = []) {
+    const request_id = this._generateId();
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (this.pendingDb.has(request_id)) {
+          this.pendingDb.delete(request_id);
+          reject(new Error(`db timeout: ${String(query).slice(0, 60)}`));
+        }
+      }, DB_TIMEOUT_MS);
+      this.pendingDb.set(request_id, { resolve, reject, timeout });
+      this.eventBus.publish('db.query.request', { project_id, query, params, request_id });
+    });
   }
 }
 

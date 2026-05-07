@@ -1,152 +1,120 @@
 {
   "name": "prompt-manager",
-  "version": "2.0.0",
-  "description": "Sistema de gestión de prompts con versionado, slots, presets y analytics. Usa database-manager para persistencia.",
+  "version": "3.0.0",
+  "description": "Sistema de gestion de prompts con versionado, slots, presets y analytics. Persistencia SQLite delegada a database-manager (project_id sentinela `_prompts` para datos compartidos cross-projects). Migrado al canon POC2: handlers HTTP/UI/Tool deduplicados via internals, shape canonico {status, data | error}, helpers POC2, propagacion de correlation_id.",
   "author": "Event Core Team",
   "language": "en",
-  "provides": [
-    "prompt-management",
-    "slot-management",
-    "preset-management",
-    "template-rendering",
-    "analytics"
+  "main": "index.js",
+
+  "events": {
+    "publishes": [
+      { "event": "prompt.created",        "description": "Prompt creado. Payload: { project_id, id, name, slot_type, correlation_id, timestamp }." },
+      { "event": "prompt.updated",        "description": "Prompt actualizado. Payload: { project_id, id, name, version, correlation_id, timestamp }." },
+      { "event": "prompt.deleted",        "description": "Prompt eliminado. Payload: { project_id, id, correlation_id, timestamp }." },
+      { "event": "preset.created",        "description": "Preset creado. Payload: { project_id, id, name, correlation_id, timestamp }." },
+      { "event": "preset.deleted",        "description": "Preset eliminado. Payload: { project_id, id, correlation_id, timestamp }." },
+      { "event": "prompt.get.response",   "description": "Response a prompt.get.request correlacionada por request_id. Par success { request_id, success:true, prompt } / failure { request_id, success:false, error: { code, message, details? } }." },
+      { "event": "prompt.list.response",  "description": "Response a prompt.list.request correlacionada por request_id." }
+    ],
+    "subscribes": [
+      {
+        "event": "db.query.response",
+        "handler": "onDbQueryResponse",
+        "description": "Response del database-manager a queries SQL via _db helper. Resuelve pendingDb por request_id."
+      },
+      {
+        "event": "db.schema.init.response",
+        "handler": "onDbSchemaInitResponse",
+        "description": "Response del database-manager a la inicializacion del schema (en onLoad)."
+      },
+      {
+        "event": "prompt.get.request",
+        "handler": "onPromptGetRequest",
+        "description": "RPC cross-modulo: prompt-builder, agentes y otros emisores piden un prompt por id o name. Publica prompt.get.response."
+      },
+      {
+        "event": "prompt.list.request",
+        "handler": "onPromptListRequest",
+        "description": "RPC cross-modulo: lista todos los prompts del cache. Publica prompt.list.response."
+      },
+      {
+        "event": "ai.completion.completed",
+        "handler": "onAICompletionCompleted",
+        "description": "Analytics opcional: si el evento trae prompt_id + version, registra usage en prompt_analytics."
+      },
+      {
+        "event": "ai.request.started",
+        "handler": "onAIRequestStarted",
+        "description": "Analytics opcional: incrementa metric prompt-manager.usage.started si trae prompt_id."
+      }
+    ]
+  },
+
+  "apis": [
+    { "method": "GET",    "path": "/ui/state",            "description": "Estado UI-ready con prompts agrupados por slot, presets y stats", "handler": "handleGetUIState" },
+    { "method": "POST",   "path": "/prompts",             "description": "Crear un nuevo prompt", "handler": "handleCreatePrompt" },
+    { "method": "GET",    "path": "/prompts",             "description": "Listar prompts (filtrar por slot_type, tag, search, project_id)", "handler": "handleListPrompts" },
+    { "method": "GET",    "path": "/prompts/:id",         "description": "Obtener un prompt especifico", "handler": "handleGetPrompt" },
+    { "method": "PUT",    "path": "/prompts/:id",         "description": "Actualizar un prompt existente (bump patch version si cambia content)", "handler": "handleUpdatePrompt" },
+    { "method": "DELETE", "path": "/prompts/:id",         "description": "Eliminar un prompt", "handler": "handleDeletePrompt" },
+    { "method": "GET",    "path": "/prompts/:id/versions","description": "Listar versiones historicas de un prompt", "handler": "handleListVersions" },
+    { "method": "POST",   "path": "/prompts/:id/render",  "description": "Renderizar template con variables (admite version)", "handler": "handleRenderTemplate" },
+    { "method": "POST",   "path": "/presets",             "description": "Crear un nuevo preset de slots", "handler": "handleCreatePreset" },
+    { "method": "GET",    "path": "/presets",             "description": "Listar todos los presets", "handler": "handleListPresets" },
+    { "method": "GET",    "path": "/presets/:id",         "description": "Obtener un preset con sus slots", "handler": "handleGetPreset" },
+    { "method": "DELETE", "path": "/presets/:id",         "description": "Eliminar un preset", "handler": "handleDeletePreset" },
+    { "method": "GET",    "path": "/analytics",           "description": "Obtener analytics agregados", "handler": "handleGetAnalytics" },
+    { "method": "GET",    "path": "/health",              "description": "Health check", "handler": "handleHealthCheck" },
+    { "method": "GET",    "path": "/metrics",             "description": "Metricas runtime", "handler": "handleGetMetrics" }
   ],
-  "subscribes": [
-    {
-      "event": "db.query.response",
-      "handler": "onQueryResponse"
-    },
-    {
-      "event": "db.schema.init.response",
-      "handler": "onSchemaInitResponse"
-    },
-    {
-      "event": "prompt.get.request",
-      "handler": "onPromptGetRequest"
-    },
-    {
-      "event": "prompt.list.request",
-      "handler": "onPromptListRequest"
-    },
-    "ai.completion.completed",
-    "ai.request.started"
-  ],
+
   "ui_handlers": [
-    {
-      "domain": "prompt",
-      "action": "list",
-      "handler": "handleUIList"
-    },
-    {
-      "domain": "prompt",
-      "action": "get",
-      "handler": "handleUIGet"
-    },
-    {
-      "domain": "prompt",
-      "action": "create",
-      "handler": "handleUICreate"
-    },
-    {
-      "domain": "prompt",
-      "action": "update",
-      "handler": "handleUIUpdate"
-    },
-    {
-      "domain": "prompt",
-      "action": "delete",
-      "handler": "handleUIDelete"
-    },
-    {
-      "domain": "prompt",
-      "action": "versions",
-      "handler": "handleUIVersions"
-    },
-    {
-      "domain": "preset",
-      "action": "list",
-      "handler": "handleUIPresetList"
-    },
-    {
-      "domain": "preset",
-      "action": "get",
-      "handler": "handleUIPresetGet"
-    },
-    {
-      "domain": "preset",
-      "action": "create",
-      "handler": "handleUIPresetCreate"
-    },
-    {
-      "domain": "preset",
-      "action": "delete",
-      "handler": "handleUIPresetDelete"
-    },
-    {
-      "domain": "preset",
-      "action": "apply",
-      "handler": "handleUIPresetApply"
-    },
-    {
-      "domain": "composer",
-      "action": "render",
-      "handler": "handleUIComposerRender"
-    },
-    {
-      "domain": "prompt",
-      "action": "analytics",
-      "handler": "handleUIAnalytics"
-    }
+    { "domain": "prompt",   "action": "list",     "handler": "handleUIList" },
+    { "domain": "prompt",   "action": "get",      "handler": "handleUIGet" },
+    { "domain": "prompt",   "action": "create",   "handler": "handleUICreate" },
+    { "domain": "prompt",   "action": "update",   "handler": "handleUIUpdate" },
+    { "domain": "prompt",   "action": "delete",   "handler": "handleUIDelete" },
+    { "domain": "prompt",   "action": "versions", "handler": "handleUIVersions" },
+    { "domain": "preset",   "action": "list",     "handler": "handleUIPresetList" },
+    { "domain": "preset",   "action": "get",      "handler": "handleUIPresetGet" },
+    { "domain": "preset",   "action": "create",   "handler": "handleUIPresetCreate" },
+    { "domain": "preset",   "action": "delete",   "handler": "handleUIPresetDelete" },
+    { "domain": "preset",   "action": "apply",    "handler": "handleUIPresetApply" },
+    { "domain": "composer", "action": "render",   "handler": "handleUIComposerRender" },
+    { "domain": "prompt",   "action": "analytics","handler": "handleUIAnalytics" }
   ],
+
   "tools": [
     {
       "name": "prompt.list",
-      "description": "Lista prompts disponibles por slot type, categoría o tags. Útil para conocer qué prompts hay configurados en el sistema.",
+      "description": "Lista prompts disponibles por slot_type, tag o search. Devuelve metadata sin content para evitar payloads grandes.",
       "handler": "handleToolPromptList",
       "parameters": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
-          "slot_type": {
-            "type": "string",
-            "enum": [
-              "system",
-              "context",
-              "prefix",
-              "suffix",
-              "format"
-            ],
-            "description": "Filtrar por tipo de slot (opcional)"
-          },
-          "tag": {
-            "type": "string",
-            "description": "Filtrar por tag (opcional)"
-          },
-          "search": {
-            "type": "string",
-            "description": "Buscar por nombre o descripción (opcional)"
-          }
+          "slot_type": { "type": "string", "enum": ["system", "context", "prefix", "suffix", "format"], "description": "Filtrar por tipo de slot." },
+          "tag":       { "type": "string", "description": "Filtrar por tag." },
+          "search":    { "type": "string", "description": "Buscar en name/title/description." }
         },
         "required": []
-      }
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "INTERNAL_ERROR"]
     },
     {
       "name": "prompt.get",
-      "description": "Obtiene el contenido completo de un prompt específico por ID o nombre.",
+      "description": "Obtiene el contenido completo de un prompt por id o name.",
       "handler": "handleToolPromptGet",
       "parameters": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
-          "id": {
-            "type": "string",
-            "description": "ID del prompt"
-          },
-          "name": {
-            "type": "string",
-            "description": "Nombre del prompt (alternativa al ID)"
-          }
+          "id":   { "type": "string", "description": "ID del prompt." },
+          "name": { "type": "string", "description": "Nombre del prompt (alternativa al ID)." }
         },
         "required": []
-      }
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "INTERNAL_ERROR"]
     },
     {
       "name": "prompt.render",
@@ -154,139 +122,80 @@
       "handler": "handleToolPromptRender",
       "parameters": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
-          "id": {
-            "type": "string",
-            "description": "ID del prompt a renderizar"
-          },
-          "name": {
-            "type": "string",
-            "description": "Nombre del prompt (alternativa al ID)"
-          },
-          "variables": {
-            "type": "object",
-            "description": "Variables para interpolar en el template"
-          }
+          "id":        { "type": "string", "description": "ID del prompt a renderizar." },
+          "name":      { "type": "string", "description": "Nombre del prompt (alternativa al ID)." },
+          "variables": { "type": "object", "description": "Variables para interpolar en el template." }
         },
         "required": []
-      }
+      },
+      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "INTERNAL_ERROR"]
     }
   ],
-  "publishes": [
-    "prompt.created",
-    "prompt.updated",
-    "prompt.deleted",
-    "prompt.get.response",
-    "prompt.list.response",
-    "preset.created",
-    "preset.deleted"
-  ],
-  "apis": [
-    {
-      "method": "GET",
-      "path": "/ui/state",
-      "description": "Estado UI-ready con prompts agrupados por slot, presets y stats",
-      "handler": "handleGetUIState"
-    },
-    {
-      "method": "POST",
-      "path": "/prompts",
-      "description": "Crear un nuevo prompt",
-      "handler": "handleCreatePrompt"
-    },
-    {
-      "method": "GET",
-      "path": "/prompts",
-      "description": "Listar todos los prompts (filtrar por slot_type, tag, search)",
-      "handler": "handleListPrompts"
-    },
-    {
-      "method": "GET",
-      "path": "/prompts/:id",
-      "description": "Obtener un prompt específico",
-      "handler": "handleGetPrompt"
-    },
-    {
-      "method": "PUT",
-      "path": "/prompts/:id",
-      "description": "Actualizar un prompt existente",
-      "handler": "handleUpdatePrompt"
-    },
-    {
-      "method": "DELETE",
-      "path": "/prompts/:id",
-      "description": "Eliminar un prompt",
-      "handler": "handleDeletePrompt"
-    },
-    {
-      "method": "GET",
-      "path": "/prompts/:id/versions",
-      "description": "Listar versiones de un prompt",
-      "handler": "handleListVersions"
-    },
-    {
-      "method": "POST",
-      "path": "/prompts/:id/render",
-      "description": "Renderizar template de prompt con variables",
-      "handler": "handleRenderTemplate"
-    },
-    {
-      "method": "POST",
-      "path": "/presets",
-      "description": "Crear un nuevo preset de slots",
-      "handler": "handleCreatePreset"
-    },
-    {
-      "method": "GET",
-      "path": "/presets",
-      "description": "Listar todos los presets",
-      "handler": "handleListPresets"
-    },
-    {
-      "method": "GET",
-      "path": "/presets/:id",
-      "description": "Obtener un preset específico con sus slots",
-      "handler": "handleGetPreset"
-    },
-    {
-      "method": "DELETE",
-      "path": "/presets/:id",
-      "description": "Eliminar un preset",
-      "handler": "handleDeletePreset"
-    },
-    {
-      "method": "GET",
-      "path": "/analytics",
-      "description": "Obtener analytics de prompts",
-      "handler": "handleGetAnalytics"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "description": "Health check del módulo",
-      "handler": "handleHealthCheck"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "description": "Métricas del módulo",
-      "handler": "handleGetMetrics"
-    }
-  ],
+
+  "dependencies": ["database-manager"],
+
   "config": {
     "max_versions_per_prompt": 10,
     "enable_analytics": true,
-    "analytics_retention_days": 90
+    "analytics_retention_days": 90,
+    "global_project_id": "_prompts",
+    "persistence": {
+      "pattern": "sqlite-via-database-manager",
+      "project_id_sentinel": "_prompts",
+      "schema_path": "modules/prompt-manager/schema.sql",
+      "tables": ["prompts", "prompt_versions", "slot_presets", "slot_preset_prompts", "prompt_analytics"],
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["pendingDb", "pendingSchema", "schemaReady (volatile cache)"]
+    }
   },
-  "dependencies": [
-    "database-manager"
-  ],
-  "tags": [
-    "ai",
-    "prompts",
-    "slots",
-    "presets",
-    "templates",
-    "analytics"
-  ]
+
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "prompt-manager.prompt.created",
+        "prompt-manager.prompt.updated",
+        "prompt-manager.prompt.deleted",
+        "prompt-manager.preset.created",
+        "prompt-manager.preset.deleted",
+        "prompt-manager.get.success",
+        "prompt-manager.list.success",
+        "prompt-manager.tool.list.success",
+        "prompt-manager.tool.get.success",
+        "prompt-manager.tool.render.success",
+        "prompt-manager.usage.recorded",
+        "prompt-manager.usage.started",
+        "prompt-manager.create.errors",
+        "prompt-manager.update.errors",
+        "prompt-manager.delete.errors",
+        "prompt-manager.preset.create.errors",
+        "prompt-manager.preset.delete.errors",
+        "prompt-manager.tool.list.errors",
+        "prompt-manager.tool.get.errors",
+        "prompt-manager.tool.render.errors",
+        "prompt-manager.get.errors",
+        "prompt-manager.list.errors"
+      ],
+      "timings": [
+        "prompt-manager.get.duration_ms",
+        "prompt-manager.tool.list.duration_ms",
+        "prompt-manager.tool.get.duration_ms",
+        "prompt-manager.tool.render.duration_ms"
+      ]
+    }
+  },
+
+  "tags": ["ai", "prompts", "slots", "presets", "templates", "analytics"]
 }

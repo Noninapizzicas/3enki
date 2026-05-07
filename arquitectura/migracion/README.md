@@ -7,7 +7,9 @@ Plataforma operativa para reescribir cada módulo del repo cumpliendo los 24 con
 - **`_outputs/modulos-roadmap.json`** — inventario priorizado de los 73 módulos. Cada entry lleva: `slug`, `path`, `layer` (core/infra/dominio/tooling), `loc`, `drifts` (heurística contra baseline), `dependencies` upstream, `events_publishes`, `events_subscribes`, `tools`, `agents`, `language`, `version`, `orden_migracion`. Generado por `scripts/inventario.js`. Regenerable cuando los módulos cambien.
 - **`_outputs/PROGRESO.md`** — panel de control humano-legible: estado global, % por capa, tabla de módulos migrados (con commit + drifts antes/después), tabla de próximos en la cola, lecciones operativas, próximo módulo recomendado. Generado por `scripts/progreso.js`. **Regenerar tras cada migración**.
 - **`scripts/inventario.js`** — scanner que descubre módulos, los clasifica y prioriza. Reglas de clasificación inline (sets `CORE_SLUGS`, `INFRA_SLUGS`, `TOOLING_SLUGS`; el resto es dominio).
-- **`scripts/progreso.js`** — detecta automáticamente qué módulos están migrados (criterio: `tests/unit/<slug>.test.js` existe AND drifts actuales ≤ 30% del valor del roadmap). Cruza con `git log` para extraer commit hash + fecha. Genera PROGRESO.md.
+- **`scripts/progreso.js`** — detecta automáticamente qué módulos están migrados (criterio: `tests/unit/<slug>.test.js` existe AND drifts actuales ≤ 50% del valor del roadmap). Cruza con `git log` para extraer commit hash + fecha. Genera PROGRESO.md.
+- **`scripts/scaffold-rewrite.js <slug>`** — automatiza la apertura de cada migración (~40% del trabajo mecánico). Archiva monolito en `_legacy/`, genera `notas/<slug>-mapa.md` pre-rellenado (identidad, eventos del audit, drift breakdown, secciones `<TODO>` para decisiones de dominio), genera `tests/unit/<slug>.test.js` skeleton (Group 1 Lifecycle + Group 7 Helpers POC2 listos), wirea `package.json` y `.github/workflows/validate.yml`.
+- **`scripts/finish-rewrite.js <slug> [--commit]`** — automatiza el cierre. Verifica tests verde, regenera baseline, valida CI, regenera inventario+PROGRESO, opcionalmente commitea con mensaje templateado leído del mapa. NO hace push.
 - **`README.md`** — este archivo.
 
 Y fuera de `arquitectura/migracion/`:
@@ -53,48 +55,88 @@ Construir un **inventario de responsabilidades** (texto en `arquitectura/migraci
 
 ### Pasos del flujo (después del mapa)
 
+El workflow esta automatizado por dos scripts que reservan a Claude solo la
+parte intelectual (decisiones de dominio + reescritura del index.js).
 
-
-1. **Leer su entrada en el roadmap**: `node -e "console.log(JSON.parse(require('fs').readFileSync('arquitectura/migracion/_outputs/modulos-roadmap.json')).modulos.find(m => m.slug === 'X'))"`. Saca capa, drifts, dependencies, LOC.
-
-2. **Leer su auditoría completa**: `arquitectura/auditoria/_outputs/modulo-completo/<slug>.json`. Si no existe, generarla primero.
-
-3. **Crear módulo nuevo a partir de la plantilla**:
+1. **Apertura — un comando**:
    ```bash
-   cp -r modules/_template modules/<nombre-real>
-   cd modules/<nombre-real>
-   # renombrar referencias: _template -> <nombre-real> en module.json e index.js
-   # quitar prefijo '_' del directorio si era plantilla nueva
+   node arquitectura/migracion/scripts/scaffold-rewrite.js <slug>
+   ```
+   Esto archiva el monolito en `_legacy/`, genera `notas/<slug>-mapa.md`
+   pre-rellenado con identidad+eventos+drift breakdown+secciones `<TODO>`,
+   genera `tests/unit/<slug>.test.js` con Group 1 (Lifecycle) y Group 7
+   (5 tests de Helpers POC2 identicos a todos los modulos), wirea
+   `package.json` y `.github/workflows/validate.yml`.
+
+2. **Trabajo intelectual de Claude** (NO automatizable):
+   - Completar las secciones `<TODO>` del mapa con decisiones de dominio
+     (descomponer? extension points? backward-compat?).
+   - Reescribir o patchear `modules/<slug>/index.js`:
+     * Para modulos >70% canonicos: **patch quirurgico con `Edit`** sobre
+       las 3-4 partes que faltan (anyadir 5 helpers POC2 + onUnload limpia
+       + metrics en error paths).
+     * Para modulos rotos: rewrite completo con `Write`.
+   - Bump `module.json` a v2.0.0+ con `tracing.propaga_correlation_id=true`,
+     observability completa, `errores_conocidos` en cada tool.
+   - Completar Groups 2-6 de los tests con domain logic (validation,
+     CRUD, bus handlers, eventos canonicos).
+
+3. **Cierre — un comando**:
+   ```bash
+   node arquitectura/migracion/scripts/finish-rewrite.js <slug> --commit
+   ```
+   Esto corre `npm run test:<slug>` (FAIL si rojos), regenera baseline,
+   valida CI (FAIL si drift nuevo no aceptado), regenera inventario+
+   PROGRESO, lee la "Responsabilidad acotada" del mapa para construir el
+   commit message, y commitea. NO hace push.
+
+4. **Push** (manual, para revision previa):
+   ```bash
+   git push -u origin <branch>
    ```
 
-4. **Rellenar la lógica del dominio** dentro del esqueleto canónico:
-   - `module.json`: declarar events publicados/consumidos reales, tools del dominio, ui_handlers, dependencies, observability counters específicos.
-   - `index.js`: handlers reales (mantener patrón try/catch con `return { status, error }`, propagación de `correlation_id`, `db.query.request` para persistencia, sin `moduleLoader.getModule`).
+### Reglas de eficiencia de la sesion
 
-5. **Crear tests**: `cp tests/_template/_template.test.js tests/unit/<nombre>.test.js`. Renombrar referencias. Añadir tests por handler real. Cada test cubre: shape canónico de retorno, error paths para cada `errores_conocidos`, validación defensiva, no acceso directo a otros módulos.
+Aprendido tras 12 migraciones POC2: **el coste por modulo escala con el
+modelo + tamano del rewrite + contexto acumulado**. Aplicar siempre:
 
-6. **Wire en CI**:
-   - `package.json` añadir `"test:<nombre>": "node tests/unit/<nombre>.test.js"`.
-   - `.github/workflows/validate.yml` añadir step `Run <nombre> tests`.
+- **Modelo**: `Sonnet 4.6` para migraciones rutinarias (pattern-matching
+  repetitivo). Reservar `Opus 4.7` solo para modulos que requieren
+  descomposicion o decisiones arquitectonicas no obvias. Ahorro
+  estimado: 3-4x en tokens.
+- **`/clear` entre modulos**: el scaffold/finish trabajan sobre disco,
+  no sobre el contexto del LLM. Resetear contexto entre modulos no
+  pierde nada y reduce ~50% de tokens en el siguiente.
+- **`Edit` quirurgico vs `Write` total**: si el modulo ya esta 70%+
+  canonico, los 4 cambios reales (anyadir helpers POC2 + limpiar
+  onUnload + metricas en error paths + tracing en module.json) caben
+  en 4-5 `Edit` calls. Reescribir el archivo entero con `Write` envia
+  3000+ tokens innecesarios. Ahorro: 5-10x en ese modulo.
+- **No iterar en bucle si un script falla**: si `finish-rewrite` falla
+  en step `[4/8] validate:ci` con drifts inesperados (problema conocido
+  de non-determinismo del frontend validator), reintentar el script
+  directamente — 1 reintento suele estabilizarlo. No hace falta debuggear
+  un fallo que el script ya corrige.
 
-7. **Verificar contratos**:
-   ```bash
-   npm run validate:ci          # 24 validators PASS sin drift nuevo vs baseline
-   npm run test:<nombre>        # tests del módulo verdes
-   ```
+### Issues conocidos de los scripts
 
-8. **Commit + push**:
-   ```bash
-   git commit -m "<modulo>: migracion canonica (POC2-style)"
-   git push origin claude/...
-   ```
-
-9. **Regenerar roadmap + progreso** tras la migración:
-   ```bash
-   node arquitectura/migracion/scripts/inventario.js   # roadmap.json fresco
-   node arquitectura/migracion/scripts/progreso.js     # PROGRESO.md actualizado
-   git add arquitectura/migracion/_outputs/ && git commit -m "<modulo>: actualizar roadmap + PROGRESO tras migracion"
-   ```
+- **`finish-rewrite.js`**: el regex que detecta "migrado vs pendiente" en
+  PROGRESO matchea ambas tablas con el mismo formato `| \`slug\` | …`,
+  asi que a veces el script imprime "migrado" cuando tecnicamente esta
+  pendiente por threshold de drifts. Confirmar siempre con
+  `arquitectura/migracion/_outputs/PROGRESO.md` (tabla "Modulos migrados"
+  vs "Proximos en la cola").
+- **Drift counts en `[5/8]` antes/despues**: cuenta sobre signatures
+  path-matching (estricto). PROGRESO usa otro count (broad-slug en
+  `inventario.js` vs narrow-path en `progreso.js`). Los dos numeros son
+  consistentes pero pueden diferir en magnitud — el veredicto
+  "migrado/pendiente" siempre lo da PROGRESO.
+- **Threshold del 50%**: modulos con muchos falsos positivos sistemicos
+  (`.request/.response`, `publish_dominio_sin_project_id` cuando son
+  modulos infra) pueden quedar en 51-60% drifts y no pasar el umbral
+  aunque el rewrite sea 100% canonico. No es un bug del rewrite — es
+  drift estructural del catalogo de validators que se cierra en otra
+  fase.
 
 ## Orden recomendado
 

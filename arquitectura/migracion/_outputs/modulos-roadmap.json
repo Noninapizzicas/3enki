@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T14:53:12.456Z",
+  "generated_at": "2026-05-06T23:59:17.264Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3663,
-    "loc_total": 48787,
+    "drifts_total": 3557,
+    "loc_total": 48809,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -296,36 +296,6 @@
       "orden_migracion": 17
     },
     {
-      "slug": "firmware-manager",
-      "path": "modules/firmware-manager",
-      "layer": "infra",
-      "language": "en",
-      "version": "2.0.0",
-      "loc": 1094,
-      "drifts": 126,
-      "events_publishes": 4,
-      "events_subscribes": 4,
-      "tools": 7,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 18
-    },
-    {
-      "slug": "esp32-dev",
-      "path": "modules/esp32-dev",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 735,
-      "drifts": 88,
-      "events_publishes": 4,
-      "events_subscribes": 0,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 19
-    },
-    {
       "slug": "certificate-authority",
       "path": "modules/certificate-authority",
       "layer": "infra",
@@ -338,7 +308,22 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 20
+      "orden_migracion": 18
+    },
+    {
+      "slug": "firmware-manager",
+      "path": "modules/firmware-manager",
+      "layer": "infra",
+      "language": "en",
+      "version": "3.0.0",
+      "loc": 1084,
+      "drifts": 67,
+      "events_publishes": 4,
+      "events_subscribes": 4,
+      "tools": 7,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 19
     },
     {
       "slug": "device-shadow",
@@ -353,7 +338,7 @@
       "tools": 3,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 21
+      "orden_migracion": 20
     },
     {
       "slug": "code-executor",
@@ -368,7 +353,7 @@
       "tools": 5,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 22
+      "orden_migracion": 21
     },
     {
       "slug": "firmware-builder",
@@ -383,7 +368,7 @@
       "tools": 4,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 23
+      "orden_migracion": 22
     },
     {
       "slug": "device-registry",
@@ -396,6 +381,21 @@
       "events_publishes": 5,
       "events_subscribes": 2,
       "tools": 3,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 23
+    },
+    {
+      "slug": "esp32-dev",
+      "path": "modules/esp32-dev",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 767,
+      "drifts": 41,
+      "events_publishes": 4,
+      "events_subscribes": 0,
+      "tools": 0,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 24

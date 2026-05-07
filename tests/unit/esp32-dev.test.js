@@ -294,7 +294,7 @@ async function runTests() {
     });
 
     assert(result.status === 400, 'status 400');
-    assert(result.error.includes('slug'), 'error menciona formato');
+    assert(result.error.code === 'INVALID_FORMAT', 'code INVALID_FORMAT');
 
     await mod.onUnload();
     cleanup();
@@ -328,7 +328,7 @@ async function runTests() {
     });
 
     assert(result.status === 400, 'status 400');
-    assert(result.error.includes('no soportado'), 'error menciona board');
+    assert(result.error.code === 'INVALID_INPUT', 'code INVALID_INPUT');
 
     await mod.onUnload();
     cleanup();
@@ -350,7 +350,7 @@ async function runTests() {
     });
 
     assert(result.status === 409, 'status 409');
-    assert(result.error.includes('ya existe'), 'error menciona duplicado');
+    assert(result.error.code === 'ALREADY_EXISTS', 'code ALREADY_EXISTS');
 
     await mod.onUnload();
     cleanup();
@@ -767,6 +767,65 @@ async function runTests() {
 
     await mod.onUnload();
     cleanup();
+  });
+
+  // ============================================
+  // GRUPO 11: Helpers POC2
+  // ============================================
+  console.log('\n🔩 Helpers POC2\n');
+
+  await test('_errorResponse construye shape canónico { status, error: { code, message, details? } }', async () => {
+    cleanup();
+    const mod = new ESP32DevModule();
+    await mod.onLoad(createMockCore());
+
+    const r = mod._errorResponse(404, 'RESOURCE_NOT_FOUND', 'no existe', { entity_type: 'project' });
+    assert(r.status === 404, 'status 404');
+    assert(r.error.code === 'RESOURCE_NOT_FOUND', 'code correcto');
+    assert(r.error.message === 'no existe', 'message correcto');
+    assert(r.error.details.entity_type === 'project', 'details.entity_type');
+    assert(!r.data, 'sin data');
+
+    const r2 = mod._errorResponse(400, 'MISSING_FIELD', 'campo requerido');
+    assert(!r2.error.details, 'sin details cuando no se pasan');
+
+    await mod.onUnload();
+    cleanup();
+  });
+
+  await test('_classifyHandlerError mapea ENOENT a FILESYSTEM_ERROR', async () => {
+    cleanup();
+    const mod = new ESP32DevModule();
+    await mod.onLoad(createMockCore());
+
+    assert(mod._classifyHandlerError(new Error('ENOENT: no such file')) === 'FILESYSTEM_ERROR', 'ENOENT → FILESYSTEM_ERROR');
+    assert(mod._classifyHandlerError(new Error('timeout expired')) === 'TIMEOUT', 'timeout → TIMEOUT');
+    assert(mod._classifyHandlerError(new Error('unexpected')) === 'UNKNOWN_ERROR', 'genérico → UNKNOWN_ERROR');
+
+    await mod.onUnload();
+    cleanup();
+  });
+
+  await test('_publicarEvento hereda correlation_id del sourcePayload', async () => {
+    cleanup();
+    const mod = new ESP32DevModule();
+    const core = createMockCore();
+    await mod.onLoad(core);
+
+    await mod._publicarEvento('test.event', { foo: 'bar' }, { correlation_id: 'cid-123' });
+    const pub = core.eventBus._published.find(e => e.event === 'test.event');
+    assert(pub, 'evento publicado');
+    assert(pub.data.correlation_id === 'cid-123', 'correlation_id heredado');
+    assert(pub.data.timestamp, 'timestamp presente');
+
+    await mod.onUnload();
+    cleanup();
+  });
+
+  await test('module.json v2.0.0 declara tracing.propaga_correlation_id=true', async () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../../modules/esp32-dev/module.json'), 'utf-8'));
+    assert(manifest.version === '2.0.0', 'version 2.0.0');
+    assert(manifest.observability?.tracing?.propaga_correlation_id === true, 'tracing.propaga_correlation_id=true');
   });
 
   // ============================================

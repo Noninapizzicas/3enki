@@ -1,6 +1,6 @@
 {
   "name": "firmware-manager",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Registro de firmwares, versionado con checksums, y orquestación de OTA via device-shadow",
   "author": "Enki",
   "language": "en",
@@ -329,6 +329,9 @@
     "ota_timeout_ms": 300000,
     "ota_cleanup_interval_ms": 60000,
     "validate_binaries_on_load": true
+  },
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "observability": {
     "logging": {

@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const crypto = require('crypto');
 
 // ==========================================
@@ -36,7 +37,7 @@ async function test(description, fn) {
 // Mocks
 // ==========================================
 
-const TEST_DATA_PATH = path.join(__dirname, '..', '.tmp-test-firmware');
+const TEST_DATA_PATH = path.join(os.tmpdir(), '.tmp-test-firmware-' + process.pid);
 
 function createMockCore(configOverrides = {}) {
   const published = [];
@@ -115,9 +116,9 @@ async function runTests() {
   const FirmwareManagerModule = require('../../modules/firmware-manager/index');
 
   // ============================================
-  // GRUPO 1: Lifecycle & Config
+  // Group 1: Lifecycle & Config
   // ============================================
-  console.log('\n📦 Lifecycle & Config\n');
+  console.log('\nGroup 1: Lifecycle & Config\n');
 
   cleanup();
 
@@ -208,7 +209,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 2: handleRegister
+  // Group 2: handleRegister
   // ============================================
   console.log('\n📝 handleRegister\n');
 
@@ -254,7 +255,7 @@ async function runTests() {
 
     const result = await mod.handleRegister({ version: '1.0.0', file: 'x.bin' });
     assert(result.status === 400, 'status 400');
-    assert(result.error.includes('type'), 'error menciona type');
+    assert(result.error.message.includes('type'), 'error menciona type');
 
     await mod.onUnload();
   });
@@ -281,7 +282,7 @@ async function runTests() {
 
     const result = await mod.handleRegister({ type: 'x', version: 'abc', file: 'x.bin' });
     assert(result.status === 400, 'status 400');
-    assert(result.error.includes('semver'), 'error menciona semver');
+    assert(result.error.message.includes('semver'), 'error menciona semver');
 
     await mod.onUnload();
   });
@@ -299,13 +300,13 @@ async function runTests() {
       file: 'no-existe.bin'
     });
     assert(result.status === 400, 'status 400');
-    assert(result.error.includes('no encontrado'), 'error menciona no encontrado');
+    assert(result.error.message.includes('no encontrado'), 'error menciona no encontrado');
 
     await mod.onUnload();
   });
 
   // ============================================
-  // GRUPO 3: handleTriggerOta
+  // Group 3: handleTriggerOta
   // ============================================
   console.log('\n🚀 handleTriggerOta\n');
 
@@ -400,7 +401,7 @@ async function runTests() {
     });
 
     assert(result.status === 400, 'status 400');
-    assert(result.error.includes('mínima'), 'error menciona versión mínima');
+    assert(result.error.message.includes('mínima'), 'error menciona versión mínima');
 
     await mod.onUnload();
   });
@@ -427,7 +428,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 4: onShadowUpdated (OTA completion)
+  // Group 4: onShadowUpdated (OTA completion)
   // ============================================
   console.log('\n📡 onShadowUpdated\n');
 
@@ -552,7 +553,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 5: OTA Timeout
+  // Group 5: OTA Timeout
   // ============================================
   console.log('\n⏱️  OTA Timeout\n');
 
@@ -614,7 +615,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 6: handleCleanupOtas
+  // Group 6: handleCleanupOtas
   // ============================================
   console.log('\n🧹 handleCleanupOtas\n');
 
@@ -664,7 +665,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 7: handleOtaStatus
+  // Group 7: handleOtaStatus
   // ============================================
   console.log('\n📊 handleOtaStatus\n');
 
@@ -712,7 +713,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 8: handleRollback
+  // Group 8: handleRollback
   // ============================================
   console.log('\n⏪ handleRollback\n');
 
@@ -756,7 +757,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 9: handleList & handleDeviceVersions
+  // Group 9: handleList & handleDeviceVersions
   // ============================================
   console.log('\n📋 handleList & handleDeviceVersions\n');
 
@@ -805,7 +806,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 10: handleServeBinary
+  // Group 10: handleServeBinary
   // ============================================
   console.log('\n📦 handleServeBinary\n');
 
@@ -845,7 +846,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 11: onDeviceRegistered
+  // Group 11: onDeviceRegistered
   // ============================================
   console.log('\n📱 onDeviceRegistered\n');
 
@@ -894,7 +895,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 12: Validación de integridad
+  // Group 12: Validación de integridad
   // ============================================
   console.log('\n🔍 Validación de integridad\n');
 
@@ -939,7 +940,7 @@ async function runTests() {
   });
 
   // ============================================
-  // GRUPO 13: _compareVersions
+  // Group 13: _compareVersions
   // ============================================
   console.log('\n🔢 _compareVersions\n');
 

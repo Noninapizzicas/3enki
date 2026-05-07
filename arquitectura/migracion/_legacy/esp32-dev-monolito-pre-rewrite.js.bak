@@ -63,7 +63,7 @@ const BOARDS = {
 class ESP32DevModule {
   constructor() {
     this.name = 'esp32-dev';
-    this.version = '2.0.0';
+    this.version = '1.0.0';
 
     // Dependencias inyectadas en onLoad
     this.eventBus = null;
@@ -177,23 +177,23 @@ class ESP32DevModule {
   async handleCreateProject(data) {
     const { project_name, template, board, framework, vars } = data;
 
-    if (!project_name) return this._errorResponse(400, 'MISSING_FIELD', 'project_name es obligatorio', { field: 'project_name' });
-    if (!template) return this._errorResponse(400, 'MISSING_FIELD', 'template es obligatorio', { field: 'template' });
+    if (!project_name) return { status: 400, error: 'project_name requerido' };
+    if (!template) return { status: 400, error: 'template requerido' };
 
     // Validar nombre
     if (!/^[a-z0-9][a-z0-9-]*$/.test(project_name)) {
-      return this._errorResponse(400, 'INVALID_FORMAT', 'project_name debe ser slug: lowercase, hyphens, empieza con alfanumérico', { field: 'project_name' });
+      return { status: 400, error: 'project_name debe ser slug (lowercase, hyphens, empieza con alfanumérico)' };
     }
 
     // Verificar que no existe
     if (this.projects[project_name]) {
-      return this._errorResponse(409, 'ALREADY_EXISTS', `Proyecto '${project_name}' ya existe`, { entity_type: 'project', entity_id: project_name });
+      return { status: 409, error: `Proyecto '${project_name}' ya existe` };
     }
 
     // Verificar template
     const tpl = this.templates.get(template);
     if (!tpl) {
-      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Template '${template}' no encontrado`, { entity_type: 'template', entity_id: template });
+      return { status: 404, error: `Template '${template}' no encontrado. Usa esp32.list-templates para ver disponibles.` };
     }
 
     const selectedBoard = board || tpl.defaultBoard || 'esp32dev';
@@ -201,7 +201,7 @@ class ESP32DevModule {
 
     // Verificar board
     if (!BOARDS[selectedBoard]) {
-      return this._errorResponse(400, 'INVALID_INPUT', `Board '${selectedBoard}' no soportado`, { field: 'board' });
+      return { status: 400, error: `Board '${selectedBoard}' no soportado. Usa esp32.list-boards para ver disponibles.` };
     }
 
     const projectDir = path.join(this.config.data_path, 'projects', project_name);
@@ -282,8 +282,10 @@ class ESP32DevModule {
         }
       };
     } catch (err) {
+      // Limpiar si falló a medias
       try { await fs.promises.rm(projectDir, { recursive: true, force: true }); } catch (_) {}
-      return this._handleHandlerError('handleCreateProject', err);
+      this.logger.error('esp32.project.create_failed', { project_name, error: err.message });
+      return { status: 500, error: `Error creando proyecto: ${err.message}` };
     }
   }
 
@@ -312,10 +314,10 @@ class ESP32DevModule {
    */
   async handleGetProject(data) {
     const { project_name } = data;
-    if (!project_name) return this._errorResponse(400, 'MISSING_FIELD', 'project_name es obligatorio', { field: 'project_name' });
+    if (!project_name) return { status: 400, error: 'project_name requerido' };
 
     const project = this.projects[project_name];
-    if (!project) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_name}' no encontrado`, { entity_type: 'project', entity_id: project_name });
+    if (!project) return { status: 404, error: `Proyecto '${project_name}' no encontrado` };
 
     // Listar archivos del proyecto
     const projectDir = project.path;
@@ -348,19 +350,19 @@ class ESP32DevModule {
    */
   async handleBuild(data) {
     const { project_name, clean } = data;
-    if (!project_name) return this._errorResponse(400, 'MISSING_FIELD', 'project_name es obligatorio', { field: 'project_name' });
+    if (!project_name) return { status: 400, error: 'project_name requerido' };
 
     const project = this.projects[project_name];
-    if (!project) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_name}' no encontrado`, { entity_type: 'project', entity_id: project_name });
+    if (!project) return { status: 404, error: `Proyecto '${project_name}' no encontrado` };
 
     // Verificar build en curso
     if (this.activeBuilds.has(project_name)) {
-      return this._errorResponse(409, 'CONFLICT_STATE', `Proyecto '${project_name}' ya está compilando`, { entity_type: 'project', entity_id: project_name });
+      return { status: 409, error: `Proyecto '${project_name}' ya está compilando` };
     }
 
     // Verificar límite de builds concurrentes
     if (this.activeBuilds.size >= this.config.max_concurrent_builds) {
-      return this._errorResponse(429, 'QUOTA_EXCEEDED', 'Máximo de builds concurrentes alcanzado', { limit: this.config.max_concurrent_builds });
+      return { status: 429, error: `Máximo de builds concurrentes alcanzado (${this.config.max_concurrent_builds})` };
     }
 
     const projectDir = project.path;
@@ -422,7 +424,7 @@ class ESP32DevModule {
       }
 
       const project = this.projects[projectName];
-      if (!project) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${projectName}' no encontrado`, { entity_type: 'project', entity_id: projectName });
+      if (!project) return { status: 404, error: `Proyecto '${projectName}' no encontrado` };
 
       return {
         status: 200,
@@ -471,14 +473,14 @@ class ESP32DevModule {
    */
   async handleDeleteProject(data) {
     const { project_name, confirm } = data;
-    if (!project_name) return this._errorResponse(400, 'MISSING_FIELD', 'project_name es obligatorio', { field: 'project_name' });
-    if (!confirm) return this._errorResponse(400, 'MISSING_FIELD', 'confirm: true requerido para eliminar', { field: 'confirm' });
+    if (!project_name) return { status: 400, error: 'project_name requerido' };
+    if (!confirm) return { status: 400, error: 'confirm: true requerido para eliminar' };
 
     const project = this.projects[project_name];
-    if (!project) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_name}' no encontrado`, { entity_type: 'project', entity_id: project_name });
+    if (!project) return { status: 404, error: `Proyecto '${project_name}' no encontrado` };
 
     if (this.activeBuilds.has(project_name)) {
-      return this._errorResponse(409, 'CONFLICT_STATE', `Proyecto '${project_name}' está compilando`, { entity_type: 'project', entity_id: project_name });
+      return { status: 409, error: `Proyecto '${project_name}' está compilando. Espera a que termine.` };
     }
 
     try {
@@ -704,40 +706,6 @@ class ESP32DevModule {
 
   async _ensureDir(dirPath) {
     await fs.promises.mkdir(dirPath, { recursive: true });
-  }
-
-  // ─── POC2 Helpers ──────────────────────────────────────────
-
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(handlerName, err) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'FILESYSTEM_ERROR' ? 500 : 500;
-    const message = err.message || String(err);
-    this.logger.error(`esp32-dev.${handlerName}.failed`, { error_code: code, error_message: message });
-    this.metrics?.increment('esp32-dev.handler.errors', 1, { code, kind: 'infrastructure' });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('enoent') || msg.includes('eacces') || msg.includes('eio')) return 'FILESYSTEM_ERROR';
-    if (msg.includes('timeout') || msg.includes('etimedout')) return 'TIMEOUT';
-    return 'UNKNOWN_ERROR';
-  }
-
-  _classifyDomainError(err) {
-    return this._classifyHandlerError(err);
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = { timestamp: new Date().toISOString(), ...payload };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    await this.eventBus.publish(name, enriched);
   }
 
   /**

@@ -604,6 +604,7 @@ class AiGatewayModule {
 
       await this._publicarEvento('llm.complete.response', {
         request_id,
+        project_id,
         ...result,
         duration_ms: Date.now() - started
       }, { correlation_id: cid });

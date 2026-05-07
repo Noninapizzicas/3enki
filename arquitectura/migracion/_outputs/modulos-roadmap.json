@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T00:57:39.417Z",
+  "generated_at": "2026-05-07T01:13:46.900Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3483,
-    "loc_total": 48848,
+    "drifts_total": 3476,
+    "loc_total": 48910,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -326,21 +326,6 @@
       "orden_migracion": 19
     },
     {
-      "slug": "device-registry",
-      "path": "modules/device-registry",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 702,
-      "drifts": 43,
-      "events_publishes": 5,
-      "events_subscribes": 2,
-      "tools": 3,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 20
-    },
-    {
       "slug": "esp32-dev",
       "path": "modules/esp32-dev",
       "layer": "infra",
@@ -351,6 +336,21 @@
       "events_publishes": 4,
       "events_subscribes": 0,
       "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 20
+    },
+    {
+      "slug": "device-registry",
+      "path": "modules/device-registry",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 764,
+      "drifts": 36,
+      "events_publishes": 5,
+      "events_subscribes": 2,
+      "tools": 3,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 21

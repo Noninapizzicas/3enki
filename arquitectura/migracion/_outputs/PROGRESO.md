@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T00:57:40Z_
+_Última regeneración: 2026-05-07T01:13:47Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 23 / 73 (32%)
-- **Drifts cerrados**: 605 / 3483 (17%)
-- **Drifts restantes en baseline**: 2878
+- **Drifts cerrados**: 605 / 3476 (17%)
+- **Drifts restantes en baseline**: 2871
 
 ### Progreso por capa
 
@@ -39,8 +39,8 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 17 | infra | `filesystem` | 1075 | 185 → 66 (-64%) | `bb98306` 2026-05-06 |
 | 18 | infra | `certificate-authority` | 409 | 67 → 24 (-64%) | `bc7b712` 2026-04-20 |
 | 19 | infra | `firmware-manager` | 1084 | 67 → 31 (-54%) | `7e2eb66` 2026-05-06 |
-| 21 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
-| 22 | infra | `firmware-builder` | 686 | 31 → 12 (-61%) | _n/a_ |
+| 20 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
+| 22 | infra | `firmware-builder` | 686 | 31 → 12 (-61%) | `d88eae5` 2026-05-07 |
 | 24 | infra | `device-shadow` | 491 | 26 → 7 (-73%) | `9ba470d` 2026-05-07 |
 | 27 | infra | `code-executor` | 484 | 19 → 9 (-53%) | `dcbe2c2` 2026-05-07 |
 | 28 | infra | `security-p2p` | 292 | 16 → 6 (-63%) | `bc7b712` 2026-04-20 |
@@ -54,7 +54,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 6 | core | `conversacion__ai-gateway` | 776 | 17 | 0 | drifts 13/17 (76%) — esperado <50% |
 | 8 | core | `plugin-manager` | 486 | 11 | 0 | drifts 6/11 (55%) — esperado <50% |
 | 14 | core | `conversacion__prompt-builder` | 435 | 13 | 2 | drifts 7/13 (54%) — esperado <50% |
-| 20 | infra | `device-registry` | 702 | 43 | 0 | sin tests/unit/ |
+| 21 | infra | `device-registry` | 764 | 36 | 0 | drifts 20/36 (56%) — esperado <50% |
 | 23 | infra | `metricas` | 714 | 29 | 0 | sin tests/unit/ |
 | 25 | infra | `device-health` | 477 | 24 | 0 | sin tests/unit/ |
 | 26 | infra | `system-inspector` | 236 | 20 | 0 | sin tests/unit/ |

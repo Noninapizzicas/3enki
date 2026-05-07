@@ -118,3 +118,6 @@ jobs:
 
       - name: Run unit tests (firmware-builder — reescritura canonica)
         run: npm run test:firmware-builder
+
+      - name: Run unit tests (device-registry — reescritura canonica)
+        run: npm run test:device-registry

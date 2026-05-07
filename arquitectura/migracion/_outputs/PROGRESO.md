@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T11:00:45Z_
+_Última regeneración: 2026-05-07T11:15:36Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 27 / 73 (37%)
-- **Drifts cerrados**: 655 / 3346 (20%)
-- **Drifts restantes en baseline**: 2691
+- **Drifts cerrados**: 655 / 3302 (20%)
+- **Drifts restantes en baseline**: 2647
 
 ### Progreso por capa
 
@@ -30,7 +30,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 5 | core | `credential-manager` | 843 | 28 → 12 (-57%) | `069f8c8` 2026-05-06 |
 | 7 | core | `gateway-manager` | 429 | 13 → 2 (-85%) | `8aa2b74` 2026-05-06 |
 | 9 | core | `conversacion__agent-observer` | 217 | 0 → 0 (-0%) | `54b7b7c` 2026-05-03 |
-| 10 | core | `channel-manager` | 590 | 34 → 17 (-50%) | `e7b3570` 2026-05-06 |
+| 10 | core | `channel-manager` | 590 | 30 → 13 (-57%) | `e7b3570` 2026-05-06 |
 | 11 | core | `conversacion__chat-io` | 758 | 30 → 10 (-67%) | `d107b0f` 2026-05-07 |
 | 12 | core | `conversacion__memory-user-profile` | 192 | 0 → 0 (-0%) | `6120cbd` 2026-05-03 |
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
@@ -60,8 +60,8 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 14 | core | `conversacion__prompt-builder` | 435 | 13 | 2 | drifts 7/13 (54%) — esperado <50% |
 | 21 | infra | `device-registry` | 764 | 36 | 0 | drifts 20/36 (56%) — esperado <50% |
 | 29 | infra | `prompt-manager` | 1236 | 69 | 1 | drifts 38/69 (55%) — esperado <50% |
-| 31 | infra | `telegram-service` | 753 | 91 | 2 | sin tests/unit/ |
-| 32 | infra | `pdf-viewer` | 634 | 54 | 2 | drifts 39/54 (72%) — esperado <50% |
+| 31 | infra | `pdf-viewer` | 634 | 54 | 2 | drifts 39/54 (72%) — esperado <50% |
+| 32 | infra | `telegram-service` | 568 | 52 | 2 | drifts 37/52 (71%) — esperado <50% |
 | 33 | dominio | `esp32-flasher` | 1138 | 151 | 0 | drifts 118/151 (78%) — esperado <50% |
 | 34 | dominio | `pizzepos__carta-manager` | 594 | 125 | 0 | sin tests/unit/ |
 | 35 | dominio | `escandallo` | 1237 | 96 | 0 | sin tests/unit/ |
@@ -76,7 +76,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 39 | dominio | `viabilidad` | 651 | 74 | 0 |
 | 40 | dominio | `pizzepos__carta-design` | 338 | 72 | 0 |
 | 41 | dominio | `pizzepos__pedidos` | 918 | 72 | 0 |
-| 42 | dominio | `facturas` | 573 | 69 | 0 |
+| 42 | dominio | `facturas` | 573 | 68 | 0 |
 | 43 | dominio | `staff-manager` | 394 | 67 | 0 |
 | 44 | dominio | `pizzepos__cuentas` | 1224 | 65 | 0 |
 | 45 | dominio | `notas` | 485 | 59 | 0 |

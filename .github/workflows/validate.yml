@@ -139,3 +139,6 @@ jobs:
 
       - name: Run unit tests (pdf-viewer — reescritura canonica)
         run: npm run test:pdf-viewer
+
+      - name: Run unit tests (telegram-service — reescritura canonica)
+        run: npm run test:telegram-service

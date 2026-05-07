@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T11:00:44.998Z",
+  "generated_at": "2026-05-07T11:15:35.812Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3346,
-    "loc_total": 48115,
+    "drifts_total": 3302,
+    "loc_total": 47930,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -164,7 +164,7 @@
       "language": "en",
       "version": "2.0.0",
       "loc": 590,
-      "drifts": 34,
+      "drifts": 30,
       "events_publishes": 7,
       "events_subscribes": 3,
       "tools": 2,
@@ -495,24 +495,6 @@
       "orden_migracion": 30
     },
     {
-      "slug": "telegram-service",
-      "path": "modules/telegram-service",
-      "layer": "infra",
-      "language": "en",
-      "version": "3.0.0",
-      "loc": 753,
-      "drifts": 91,
-      "events_publishes": 16,
-      "events_subscribes": 14,
-      "tools": 12,
-      "agents": 0,
-      "dependencies": [
-        "credential-manager",
-        "filesystem"
-      ],
-      "orden_migracion": 31
-    },
-    {
       "slug": "pdf-viewer",
       "path": "modules/pdf-viewer",
       "layer": "infra",
@@ -527,6 +509,24 @@
       "dependencies": [
         "filesystem",
         "project-manager"
+      ],
+      "orden_migracion": 31
+    },
+    {
+      "slug": "telegram-service",
+      "path": "modules/telegram-service",
+      "layer": "infra",
+      "language": "en",
+      "version": "3.1.0",
+      "loc": 568,
+      "drifts": 52,
+      "events_publishes": 16,
+      "events_subscribes": 14,
+      "tools": 12,
+      "agents": 0,
+      "dependencies": [
+        "credential-manager",
+        "filesystem"
       ],
       "orden_migracion": 32
     },
@@ -672,7 +672,7 @@
       "language": "es",
       "version": "2.0.0",
       "loc": 573,
-      "drifts": 69,
+      "drifts": 68,
       "events_publishes": 4,
       "events_subscribes": 1,
       "tools": 3,

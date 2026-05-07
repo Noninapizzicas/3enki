@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T23:25:17Z_
+_Última regeneración: 2026-05-07T23:28:08Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 682 / 2690 (25%)
-- **Drifts restantes en baseline**: 2008
+- **Drifts cerrados**: 682 / 2687 (25%)
+- **Drifts restantes en baseline**: 2005
 
 ### Progreso por capa
 
@@ -57,8 +57,8 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
-| 7 | core | `plugin-manager` | 486 | 11 | 0 | drifts 6/11 (55%) — esperado <50% |
-| 8 | core | `conversacion__ai-gateway` | 777 | 8 | 0 | drifts 8/8 (100%) — esperado <50% |
+| 7 | core | `conversacion__ai-gateway` | 777 | 8 | 0 | drifts 8/8 (100%) — esperado <50% |
+| 8 | core | `plugin-manager` | 495 | 8 | 0 | drifts 6/8 (75%) — esperado <50% |
 | 14 | core | `conversacion__prompt-builder` | 435 | 13 | 2 | drifts 7/13 (54%) — esperado <50% |
 | 21 | infra | `device-registry` | 764 | 36 | 0 | drifts 20/36 (56%) — esperado <50% |
 | 29 | infra | `prompt-manager` | 1236 | 69 | 1 | drifts 38/69 (55%) — esperado <50% |
@@ -144,14 +144,14 @@ Suite organizada en grupos:
 
 ## Decisiones pendientes / siguiente sesión
 
-**Próximo módulo recomendado**: `plugin-manager` (capa core, 486 LOC, 11 drifts en baseline).
+**Próximo módulo recomendado**: `conversacion__ai-gateway` (capa core, 777 LOC, 8 drifts en baseline).
 
 Pasos canónicos para el siguiente:
 
-1. Leer auditoría completa: `arquitectura/auditoria/_outputs/modulo-completo/plugin-manager.json`
-2. Identificar drifts del módulo: `node -e "const b=require('./drift-baseline.json').signatures; console.log(b.filter(s=>s.includes('plugin-manager')))"`
+1. Leer auditoría completa: `arquitectura/auditoria/_outputs/modulo-completo/conversacion__ai-gateway.json`
+2. Identificar drifts del módulo: `node -e "const b=require('./drift-baseline.json').signatures; console.log(b.filter(s=>s.includes('ai-gateway')))"`
 3. Aplicar los 5 helpers privados canónicos + reescritura siguiendo plantilla `modules/_template/`.
-4. Tests por capas en `tests/unit/plugin-manager.test.js`.
+4. Tests por capas en `tests/unit/conversacion__ai-gateway.test.js`.
 5. Wire en `package.json` + `.github/workflows/validate.yml`.
 6. Verificar drifts del módulo bajan ≥70%.
 7. Commit + push + regenerar este PROGRESO.md.

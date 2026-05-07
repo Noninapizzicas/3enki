@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T23:25:17.127Z",
+  "generated_at": "2026-05-07T23:28:07.786Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 2690,
-    "loc_total": 48495,
+    "drifts_total": 2687,
+    "loc_total": 48504,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -113,21 +113,6 @@
       "orden_migracion": 6
     },
     {
-      "slug": "plugin-manager",
-      "path": "modules/plugin-manager",
-      "layer": "core",
-      "language": "en",
-      "version": "2.1.0",
-      "loc": 486,
-      "drifts": 11,
-      "events_publishes": 6,
-      "events_subscribes": 2,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 7
-    },
-    {
       "slug": "conversacion__ai-gateway",
       "path": "modules/conversacion/ai-gateway",
       "layer": "core",
@@ -137,6 +122,21 @@
       "drifts": 8,
       "events_publishes": 8,
       "events_subscribes": 8,
+      "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 7
+    },
+    {
+      "slug": "plugin-manager",
+      "path": "modules/plugin-manager",
+      "layer": "core",
+      "language": "en",
+      "version": "2.1.0",
+      "loc": 495,
+      "drifts": 8,
+      "events_publishes": 6,
+      "events_subscribes": 2,
       "tools": 0,
       "agents": 0,
       "dependencies": [],

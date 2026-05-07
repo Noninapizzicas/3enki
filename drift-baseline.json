@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-07T23:25:11.379Z",
-  "total": 2763,
+  "generated_at": "2026-05-07T23:28:01.884Z",
+  "total": 2760,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -9,13 +9,13 @@
     "observability": 213,
     "errors": 694,
     "persistence": 154,
-    "http": 152,
+    "http": 150,
     "chat-flow": 2,
     "agent-flow": 8,
     "llm-flow": 2,
     "tools": 280,
     "agents-config": 94,
-    "module-rewrite": 70,
+    "module-rewrite": 69,
     "frontend": 460,
     "security": 1,
     "testing": 33,
@@ -27,7 +27,7 @@
   },
   "by_severity": {
     "warning": 2492,
-    "info": 288,
+    "info": 285,
     "error": 10
   },
   "signatures": [
@@ -1584,7 +1584,6 @@
     "http|drift_auth_undeclared|pizzepos/pedidos — 12/12 apis sin auth_required en module.json",
     "http|drift_auth_undeclared|pizzepos/productos — 11/11 apis sin auth_required en module.json",
     "http|drift_auth_undeclared|pizzepos/variaciones — 5/5 apis sin auth_required en module.json",
-    "http|drift_auth_undeclared|plugin-manager — 5/5 apis sin auth_required en module.json",
     "http|drift_auth_undeclared|project-manager — 13/13 apis sin auth_required en module.json",
     "http|drift_auth_undeclared|prompt-manager — 15/15 apis sin auth_required en module.json",
     "http|drift_auth_undeclared|scheduler — 12/12 apis sin auth_required en module.json",
@@ -1701,7 +1700,6 @@
     "http|module_http_audit_completeness|pizzepos/pedidos — manifest declara 12 apis pero audit.apis_http vacío",
     "http|module_http_audit_completeness|pizzepos/productos — manifest declara 11 apis pero audit.apis_http vacío",
     "http|module_http_audit_completeness|pizzepos/variaciones — manifest declara 5 apis pero audit.apis_http vacío",
-    "http|module_http_audit_completeness|plugin-manager — manifest declara 5 apis pero audit.apis_http vacío",
     "http|module_http_audit_completeness|project-manager — manifest declara 13 apis pero audit.apis_http vacío",
     "http|module_http_audit_completeness|prompt-manager — manifest declara 15 apis pero audit.apis_http vacío",
     "http|module_http_audit_completeness|scheduler — manifest declara 12 apis pero audit.apis_http vacío",
@@ -1823,7 +1821,6 @@
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|pizzepos__cuentas — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|pizzepos__impresion — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|pizzepos__persistencia-comandero — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
-    "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|plugin-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|prompt-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|recetas — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|staff-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",

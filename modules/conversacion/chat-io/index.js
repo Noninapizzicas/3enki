@@ -727,7 +727,7 @@ class ChatIoModule {
   // (en su idioma, sin tecnicismos). NO expone detalles internos del sistema.
   _userMessageForErrorCode(code, raw_message) {
     const M = {
-      'UPSTREAM_TIMEOUT':         'Tardé más de la cuenta en responder. Inténtalo de nuevo en un momento.',
+      'UPSTREAM_TIMEOUT':         'Tarde mas de la cuenta en responder. Intentalo de nuevo en un momento.',
       'UPSTREAM_RATE_LIMITED':    'Estoy recibiendo muchas peticiones. Intentalo en unos minutos.',
       'UPSTREAM_AUTH_FAILED':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
       'UPSTREAM_5XX':             'El motor del lenguaje tiene un fallo temporal. Intentalo en un momento.',

@@ -169,3 +169,6 @@ jobs:
 
       - name: Run unit tests (pizzepos/carta-digital — reescritura canonica)
         run: npm run test:pizzepos__carta-digital
+
+      - name: Run unit tests (pizzepos/impresion — reescritura canonica)
+        run: npm run test:pizzepos__impresion

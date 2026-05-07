@@ -136,3 +136,6 @@ jobs:
 
       - name: Run unit tests (conversation-export — reescritura canonica)
         run: npm run test:conversation-export
+
+      - name: Run unit tests (pdf-viewer — reescritura canonica)
+        run: npm run test:pdf-viewer

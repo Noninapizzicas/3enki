@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T10:45:44.096Z",
+  "generated_at": "2026-05-07T11:00:44.998Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3393,
-    "loc_total": 48578,
+    "drifts_total": 3346,
+    "loc_total": 48115,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -495,24 +495,6 @@
       "orden_migracion": 30
     },
     {
-      "slug": "pdf-viewer",
-      "path": "modules/pdf-viewer",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 1097,
-      "drifts": 101,
-      "events_publishes": 5,
-      "events_subscribes": 4,
-      "tools": 4,
-      "agents": 0,
-      "dependencies": [
-        "filesystem",
-        "project-manager"
-      ],
-      "orden_migracion": 31
-    },
-    {
       "slug": "telegram-service",
       "path": "modules/telegram-service",
       "layer": "infra",
@@ -527,6 +509,24 @@
       "dependencies": [
         "credential-manager",
         "filesystem"
+      ],
+      "orden_migracion": 31
+    },
+    {
+      "slug": "pdf-viewer",
+      "path": "modules/pdf-viewer",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 634,
+      "drifts": 54,
+      "events_publishes": 6,
+      "events_subscribes": 4,
+      "tools": 4,
+      "agents": 0,
+      "dependencies": [
+        "filesystem",
+        "project-manager"
       ],
       "orden_migracion": 32
     },

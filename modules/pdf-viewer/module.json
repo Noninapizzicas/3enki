@@ -1,6 +1,6 @@
 {
   "name": "pdf-viewer",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "PDF viewer and text extraction module",
   "author": "Aichat Team",
   "language": "en",
@@ -109,7 +109,8 @@
       "pdf.extract.response",
       "pdf.metadata.response",
       "pdf.list.response",
-      "pdf.error"
+      "db.query.request",
+      "local.pdf.create.request"
     ]
   },
   "ui_handlers": [
@@ -140,6 +141,11 @@
       "name": "pdf.create",
       "description": "Crea un archivo PDF desde texto plano. IMPORTANTE: usa texto plano corto (máx 3000 caracteres). NO envíes HTML largo ni contenido extenso — el JSON se truncará y fallará. Si el contenido es largo, resúmelo antes de llamar a esta tool. Usa el campo 'title' para el encabezado.",
       "handler": "handleToolCreate",
+      "errores_conocidos": [
+        { "code": "MISSING_FIELD", "cuando": "filename o content no provistos" },
+        { "code": "DEPENDENCY_UNAVAILABLE", "cuando": "pdfkit no instalado y provider no disponible" },
+        { "code": "FILESYSTEM_ERROR", "cuando": "error al escribir en disco" }
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -194,6 +200,10 @@
       "name": "pdf.list",
       "description": "Lista todos los archivos PDF en un proyecto.",
       "handler": "handleToolList",
+      "errores_conocidos": [
+        { "code": "MISSING_FIELD", "cuando": "projectId no provisto" },
+        { "code": "FILESYSTEM_ERROR", "cuando": "error de lectura del directorio" }
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -211,6 +221,12 @@
       "name": "pdf.metadata",
       "description": "Obtiene metadata de un archivo PDF (tamaño, fecha, etc.).",
       "handler": "handleToolMetadata",
+      "errores_conocidos": [
+        { "code": "MISSING_FIELD", "cuando": "projectId o filePath no provistos" },
+        { "code": "INVALID_INPUT", "cuando": "el archivo no es un PDF" },
+        { "code": "RESOURCE_NOT_FOUND", "cuando": "el archivo no existe" },
+        { "code": "PERMISSION_DENIED", "cuando": "path fuera del directorio del proyecto" }
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -233,6 +249,12 @@
       "name": "pdf.extract",
       "description": "Extrae texto de un archivo PDF. Puede extraer una página específica o todo el documento.",
       "handler": "handleToolExtract",
+      "errores_conocidos": [
+        { "code": "MISSING_FIELD", "cuando": "projectId o filePath no provistos" },
+        { "code": "INVALID_INPUT", "cuando": "el archivo no es un PDF" },
+        { "code": "RESOURCE_NOT_FOUND", "cuando": "el archivo no existe" },
+        { "code": "PERMISSION_DENIED", "cuando": "path fuera del directorio del proyecto" }
+      ],
       "parameters": {
         "type": "object",
         "properties": {
@@ -268,11 +290,23 @@
     },
     "metrics": {
       "enabled": true,
+      "prefix": "pdf-viewer",
       "custom": [
-        "pdfs_viewed_total",
-        "text_extractions_total",
-        "pdf_errors_total"
+        "pdf-viewer.view.success",
+        "pdf-viewer.view.failed",
+        "pdf-viewer.extract.success",
+        "pdf-viewer.extract.failed",
+        "pdf-viewer.metadata.success",
+        "pdf-viewer.metadata.failed",
+        "pdf-viewer.list.success",
+        "pdf-viewer.list.failed",
+        "pdf-viewer.tool.create.success",
+        "pdf-viewer.tool.extract.success",
+        "pdf-viewer.tool.extract.no_parser"
       ]
+    },
+    "tracing": {
+      "propaga_correlation_id": true
     }
   }
 }

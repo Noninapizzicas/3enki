@@ -47,7 +47,9 @@
     },
     {
       "event": "llm.complete.request",
-      "handler": "onLlmCompleteRequest"
+      "handler": "onLlmCompleteRequest",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.request.schema.json",
+      "description": "Entry point LLM generico: agentes y otros modulos solicitan completado LLM sin contexto chat. Selecciona provider, resuelve credencial, ejecuta agentic loop, publica response/failed."
     },
     {
       "event": "embedding.generate.request",

@@ -24,7 +24,7 @@ class BaseProvider {
   /**
    * Initialize provider (load API keys, etc.)
    */
-  async initialize() {
+  async configure() {
     throw new Error('initialize() must be implemented by subclass');
   }
 

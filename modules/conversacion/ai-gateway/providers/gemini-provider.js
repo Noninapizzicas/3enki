@@ -23,7 +23,7 @@ class GeminiProvider extends BaseProvider {
   /**
    * Initialize
    */
-  async initialize() {
+  async configure() {
     await this.refreshApiKey();
 
     if (!this.apiKey) {

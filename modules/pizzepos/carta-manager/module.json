@@ -1,6 +1,6 @@
 {
   "name": "carta-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Dueño de datos de cartas — CRUD, persistencia, versionado, búsqueda, estadísticas",
   "author": "Pizzepos Team",
   "language": "es",
@@ -60,17 +60,23 @@
     {
       "domain": "carta-manager",
       "action": "list",
-      "handler": "handleList"
+      "handler": "handleList",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
     },
     {
       "domain": "carta-manager",
       "action": "get",
-      "handler": "handleGet"
+      "handler": "handleGet",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
     },
     {
       "domain": "carta-manager",
       "action": "health",
-      "handler": "handleHealth"
+      "handler": "handleHealth",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
     }
   ],
   "tools": [
@@ -114,7 +120,8 @@
         "required": [
           "carta_id"
         ]
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
     },
     {
       "name": "carta.list",
@@ -123,7 +130,8 @@
       "parameters": {
         "type": "object",
         "properties": {}
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT"]
     },
     {
       "name": "carta.delete",
@@ -139,7 +147,8 @@
         "required": [
           "carta_id"
         ]
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
     },
     {
       "name": "carta.add_product",
@@ -303,7 +312,8 @@
         "required": [
           "carta_id"
         ]
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
     },
     {
       "name": "carta.versions",
@@ -319,7 +329,8 @@
         "required": [
           "carta_id"
         ]
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT"]
     },
     {
       "name": "carta.restore",
@@ -339,18 +350,30 @@
           "carta_id",
           "version_file"
         ]
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "FILESYSTEM_ERROR"]
     }
   ],
+  "config": {
+    "persistence": {
+      "pattern": "json_files",
+      "path_pattern": "data/projects/{slug}/storage/pizzepos/cartas/{carta_id}.json",
+      "versioning": true
+    }
+  },
   "observability": {
     "metrics": {
       "counters": [
-        "carta.saved",
-        "carta.deleted",
-        "carta.product.added",
-        "carta.product.removed",
-        "carta.prices.updated"
+        "carta-manager.carta.saved",
+        "carta-manager.carta.deleted",
+        "carta-manager.carta.product.added",
+        "carta-manager.carta.product.removed",
+        "carta-manager.carta.prices.updated",
+        "carta-manager.error"
       ]
     }
+  },
+  "tracing": {
+    "propaga_correlation_id": true
   }
 }

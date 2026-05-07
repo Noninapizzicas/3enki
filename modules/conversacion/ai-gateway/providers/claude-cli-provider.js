@@ -37,7 +37,7 @@ class ClaudeCliProvider extends BaseProvider {
   // Lifecycle
   // ==========================================
 
-  async initialize() {
+  async configure() {
     this.cliAvailable = await this.checkCliAvailable();
 
     if (this.cliAvailable) {

@@ -80,7 +80,7 @@ class AiGatewayModule {
       if (!cfg?.enabled) continue;
       try {
         const p = new Cls(cfg, this.logger, credentialResolver);
-        await p.initialize();
+        await p.configure();
         this.providers.set(name, p);
       } catch (err) {
         this.logger.warn('ai-gateway.provider.init.failed', { provider: name, error: err.message });
@@ -604,6 +604,7 @@ class AiGatewayModule {
 
       await this._publicarEvento('llm.complete.response', {
         request_id,
+        project_id,
         ...result,
         duration_ms: Date.now() - started
       }, { correlation_id: cid });

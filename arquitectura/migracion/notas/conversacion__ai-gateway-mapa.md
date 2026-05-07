@@ -90,7 +90,7 @@ arregladas en el código actual.
 ### Clasificación (1)
 - `_classifyError(err)` — mapeo a `{ code, message }` canónico.
 
-## Eventos
+## Bus map
 
 ### Publishes declarados (5)
 1. `ai.chat.response` (chat path) — payload completo con tool_calls_executed.

@@ -115,3 +115,6 @@ jobs:
 
       - name: Run unit tests (code-executor — reescritura canonica)
         run: npm run test:code-executor
+
+      - name: Run unit tests (firmware-builder — reescritura canonica)
+        run: npm run test:firmware-builder

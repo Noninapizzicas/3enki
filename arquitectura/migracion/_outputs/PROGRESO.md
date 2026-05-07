@@ -1,25 +1,25 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T00:25:16Z_
+_Última regeneración: 2026-05-07T00:57:40Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
-- **Migrados**: 22 / 73 (30%)
-- **Drifts cerrados**: 581 / 3497 (17%)
-- **Drifts restantes en baseline**: 2916
+- **Migrados**: 23 / 73 (32%)
+- **Drifts cerrados**: 605 / 3483 (17%)
+- **Drifts restantes en baseline**: 2878
 
 ### Progreso por capa
 
 | Capa | Done | Total | % |
 |------|------|-------|---|
 | core | 13 | 16 | 81% `████████████████░░░░` |
-| infra | 7 | 16 | 44% `█████████░░░░░░░░░░░` |
+| infra | 8 | 16 | 50% `██████████░░░░░░░░░░` |
 | dominio | 2 | 38 | 5% `█░░░░░░░░░░░░░░░░░░░` |
 | tooling | 0 | 3 | 0% `░░░░░░░░░░░░░░░░░░░░` |
 
-## Módulos migrados (22)
+## Módulos migrados (23)
 
 | # | Capa | Slug | LOC | Drifts antes → ahora | Commit |
 |---|------|------|-----|----------------------|--------|
@@ -36,36 +36,36 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
 | 15 | core | `conversacion__memory-conversation-summary` | 288 | 0 → 0 (-0%) | `3e988d8` 2026-05-04 |
 | 16 | core | `conversacion__memory-rag` | 381 | 0 → 0 (-0%) | `d131ebc` 2026-05-04 |
-| 17 | infra | `filesystem` | 1075 | 180 → 66 (-63%) | `bb98306` 2026-05-06 |
+| 17 | infra | `filesystem` | 1075 | 185 → 66 (-64%) | `bb98306` 2026-05-06 |
 | 18 | infra | `certificate-authority` | 409 | 67 → 24 (-64%) | `bc7b712` 2026-04-20 |
 | 19 | infra | `firmware-manager` | 1084 | 67 → 31 (-54%) | `7e2eb66` 2026-05-06 |
-| 22 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
+| 21 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
+| 22 | infra | `firmware-builder` | 686 | 31 → 12 (-61%) | _n/a_ |
 | 24 | infra | `device-shadow` | 491 | 26 → 7 (-73%) | `9ba470d` 2026-05-07 |
-| 27 | infra | `code-executor` | 484 | 19 → 9 (-53%) | _n/a_ |
+| 27 | infra | `code-executor` | 484 | 19 → 9 (-53%) | `dcbe2c2` 2026-05-07 |
 | 28 | infra | `security-p2p` | 292 | 16 → 6 (-63%) | `bc7b712` 2026-04-20 |
 | 65 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
 | 67 | dominio | `pizzepos__cocina-poc` | 452 | 0 → 0 (-0%) | `5437466` 2026-05-02 |
 
-## Próximos en la cola (top 10 de 51 pendientes)
+## Próximos en la cola (top 10 de 50 pendientes)
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
 | 6 | core | `conversacion__ai-gateway` | 776 | 17 | 0 | drifts 13/17 (76%) — esperado <50% |
 | 8 | core | `plugin-manager` | 486 | 11 | 0 | drifts 6/11 (55%) — esperado <50% |
 | 14 | core | `conversacion__prompt-builder` | 435 | 13 | 2 | drifts 7/13 (54%) — esperado <50% |
-| 20 | infra | `firmware-builder` | 526 | 50 | 0 | sin tests/unit/ |
-| 21 | infra | `device-registry` | 702 | 43 | 0 | sin tests/unit/ |
+| 20 | infra | `device-registry` | 702 | 43 | 0 | sin tests/unit/ |
 | 23 | infra | `metricas` | 714 | 29 | 0 | sin tests/unit/ |
 | 25 | infra | `device-health` | 477 | 24 | 0 | sin tests/unit/ |
 | 26 | infra | `system-inspector` | 236 | 20 | 0 | sin tests/unit/ |
 | 29 | infra | `prompt-manager` | 1703 | 134 | 1 | sin tests/unit/ |
 | 30 | infra | `conversation-export` | 553 | 24 | 1 | sin tests/unit/ |
+| 31 | infra | `pdf-viewer` | 1097 | 101 | 2 | sin tests/unit/ |
 
-<details><summary>Resto de pendientes (41 módulos)</summary>
+<details><summary>Resto de pendientes (40 módulos)</summary>
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
-| 31 | infra | `pdf-viewer` | 1097 | 101 | 2 |
 | 32 | infra | `telegram-service` | 753 | 91 | 2 |
 | 33 | dominio | `esp32-flasher` | 1138 | 151 | 0 |
 | 34 | dominio | `pizzepos__carta-manager` | 594 | 125 | 0 |

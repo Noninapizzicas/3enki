@@ -1,7 +1,7 @@
 {
   "name": "firmware-builder",
-  "version": "1.1.0",
-  "description": "Compilación de firmware ESP32 con arquitectura BASE + LÓGICA. Detecta drivers en firmware/drivers/, compila via PlatformIO",
+  "version": "2.0.0",
+  "description": "Compilación de firmware ESP32 por convención: detecta drivers en firmware/drivers/ y compila via PlatformIO. v2.0.0 (POC2): helpers canónicos, error shape { code, message, details? }, correlation_id propagado, persistence pattern declarado.",
   "author": "Enki",
   "language": "en",
   "tier": "tier_3_core",
@@ -17,15 +17,15 @@
     "publishes": [
       {
         "event": "firmware.build_started",
-        "description": "Compilación de driver iniciada"
+        "description": "Compilación de driver iniciada (spawn de platformio en background)"
       },
       {
         "event": "firmware.build_completed",
-        "description": "Compilación completada, binario disponible"
+        "description": "Compilación completada con éxito; binary_path disponible para auto-registro por firmware-manager"
       },
       {
         "event": "firmware.build_failed",
-        "description": "Compilación falló"
+        "description": "Compilación falló (timeout, exit_code != 0, o spawn_error)"
       }
     ]
   },
@@ -42,19 +42,11 @@
       "schema": {
         "type": "object",
         "properties": {
-          "driver": {
-            "type": "string"
-          },
-          "board": {
-            "type": "string"
-          },
-          "clean": {
-            "type": "boolean"
-          }
+          "driver": { "type": "string" },
+          "board": { "type": "string" },
+          "clean": { "type": "boolean" }
         },
-        "required": [
-          "driver"
-        ]
+        "required": ["driver"]
       }
     },
     {
@@ -76,11 +68,14 @@
       "parameters": {
         "type": "object",
         "properties": {}
-      }
+      },
+      "errores_conocidos": [
+        { "code": "INTERNAL_ERROR", "cuando": "fallo inesperado escaneando firmware_path (filesystem inaccesible)" }
+      ]
     },
     {
       "name": "builder.build",
-      "description": "Compila un driver ESP32 via PlatformIO. Asíncrono: retorna inmediatamente, usa builder.build_status para seguir el progreso.",
+      "description": "Compila un driver ESP32 via PlatformIO. Asíncrono: retorna 202 inmediatamente; el progreso se consulta con builder.build_status.",
       "handler": "handleBuild",
       "parameters": {
         "type": "object",
@@ -95,17 +90,21 @@
           },
           "clean": {
             "type": "boolean",
-            "description": "Limpiar build antes de compilar (más lento pero asegura build limpio)"
+            "description": "Limpiar build antes de compilar"
           }
         },
-        "required": [
-          "driver"
-        ]
-      }
+        "required": ["driver"]
+      },
+      "errores_conocidos": [
+        { "code": "VALIDATION_FAILED",  "cuando": "driver ausente o board no soportado" },
+        { "code": "RESOURCE_NOT_FOUND", "cuando": "driver no encontrado en firmware/drivers/" },
+        { "code": "CONFLICT_STATE",     "cuando": "driver ya está compilando" },
+        { "code": "QUOTA_EXCEEDED",     "cuando": "max_concurrent_builds alcanzado" }
+      ]
     },
     {
       "name": "builder.build_status",
-      "description": "Estado del build actual o último build de un driver. Incluye log de compilación.",
+      "description": "Estado del build en curso o último build de un driver. Incluye log de compilación.",
       "handler": "handleBuildStatus",
       "parameters": {
         "type": "object",
@@ -115,23 +114,33 @@
             "description": "Nombre del driver (opcional, sin filtro muestra todos los activos)"
           }
         }
-      }
+      },
+      "errores_conocidos": [
+        { "code": "RESOURCE_NOT_FOUND", "cuando": "driver indicado no existe en el catálogo escaneado" }
+      ]
     },
     {
       "name": "builder.list_boards",
-      "description": "Lista los boards ESP32 soportados (esp32dev, esp32-s3, esp32-c3, etc.)",
+      "description": "Lista los boards ESP32 soportados (esp32dev, esp32-s2, esp32-s3, esp32-c3, esp32-c6)",
       "handler": "handleListBoards",
       "parameters": {
         "type": "object",
         "properties": {}
-      }
+      },
+      "errores_conocidos": []
     }
   ],
   "config": {
     "firmware_path": "./firmware/drivers",
     "platformio_path": "platformio",
     "build_timeout_ms": 300000,
-    "max_concurrent_builds": 2
+    "max_concurrent_builds": 2,
+    "persistence": {
+      "pattern": "filesystem-read-only",
+      "path": "./firmware/drivers",
+      "restart_resilient": true,
+      "concurrency": "single-reader-multi-writer-external"
+    }
   },
   "observability": {
     "logging": {
@@ -143,7 +152,8 @@
       "counters": [
         "firmware.build_started.total",
         "firmware.build_completed.total",
-        "firmware.build_failed.total"
+        "firmware.build_failed.total",
+        "firmware-builder.errors"
       ],
       "gauges": [
         "firmware.active_builds.count",
@@ -152,6 +162,9 @@
       "timings": [
         "firmware.build.duration"
       ]
+    },
+    "tracing": {
+      "propaga_correlation_id": true
     }
   }
 }

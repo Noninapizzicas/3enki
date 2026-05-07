@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T00:25:15.801Z",
+  "generated_at": "2026-05-07T00:57:39.417Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3497,
-    "loc_total": 48688,
+    "drifts_total": 3483,
+    "loc_total": 48848,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -287,7 +287,7 @@
       "language": "en",
       "version": "2.0.0",
       "loc": 1075,
-      "drifts": 180,
+      "drifts": 185,
       "events_publishes": 24,
       "events_subscribes": 18,
       "tools": 14,
@@ -326,21 +326,6 @@
       "orden_migracion": 19
     },
     {
-      "slug": "firmware-builder",
-      "path": "modules/firmware-builder",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.1.0",
-      "loc": 526,
-      "drifts": 50,
-      "events_publishes": 3,
-      "events_subscribes": 0,
-      "tools": 4,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 20
-    },
-    {
       "slug": "device-registry",
       "path": "modules/device-registry",
       "layer": "infra",
@@ -353,7 +338,7 @@
       "tools": 3,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 21
+      "orden_migracion": 20
     },
     {
       "slug": "esp32-dev",
@@ -366,6 +351,21 @@
       "events_publishes": 4,
       "events_subscribes": 0,
       "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 21
+    },
+    {
+      "slug": "firmware-builder",
+      "path": "modules/firmware-builder",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 686,
+      "drifts": 31,
+      "events_publishes": 3,
+      "events_subscribes": 0,
+      "tools": 4,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 22

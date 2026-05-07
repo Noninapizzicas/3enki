@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T23:43:08Z_
+_Última regeneración: 2026-05-07T23:58:24Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 682 / 2687 (25%)
-- **Drifts restantes en baseline**: 2005
+- **Drifts cerrados**: 682 / 2631 (26%)
+- **Drifts restantes en baseline**: 1949
 
 ### Progreso por capa
 
@@ -65,20 +65,20 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 31 | infra | `pdf-viewer` | 634 | 54 | 2 | drifts 39/54 (72%) — esperado <50% |
 | 32 | infra | `telegram-service` | 573 | 32 | 2 | drifts 31/32 (97%) — esperado <50% |
 | 33 | dominio | `esp32-flasher` | 1138 | 151 | 0 | drifts 118/151 (78%) — esperado <50% |
-| 34 | dominio | `escandallo` | 1237 | 96 | 0 | sin tests/unit/ |
-| 35 | dominio | `log-manager` | 598 | 82 | 0 | sin tests/unit/ |
+| 34 | dominio | `log-manager` | 598 | 82 | 0 | sin tests/unit/ |
+| 35 | dominio | `viabilidad` | 651 | 74 | 0 | sin tests/unit/ |
 
 <details><summary>Resto de pendientes (34 módulos)</summary>
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
-| 36 | dominio | `viabilidad` | 651 | 74 | 0 |
-| 37 | dominio | `pizzepos__pedidos` | 918 | 72 | 0 |
-| 38 | dominio | `notas` | 485 | 59 | 0 |
-| 39 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
-| 40 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
-| 41 | dominio | `recetas` | 897 | 43 | 0 |
-| 42 | dominio | `calling-generator` | 812 | 40 | 0 |
+| 36 | dominio | `pizzepos__pedidos` | 918 | 72 | 0 |
+| 37 | dominio | `notas` | 485 | 59 | 0 |
+| 38 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
+| 39 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
+| 40 | dominio | `recetas` | 897 | 43 | 0 |
+| 41 | dominio | `calling-generator` | 812 | 40 | 0 |
+| 42 | dominio | `escandallo` | 1098 | 40 | 0 |
 | 43 | dominio | `pizzepos__tarifas` | 309 | 40 | 0 |
 | 44 | dominio | `pizzepos__carta-marketing` | 394 | 38 | 0 |
 | 45 | dominio | `facturacion__asesoria` | 520 | 36 | 0 |

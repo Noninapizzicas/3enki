@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T23:43:05.946Z",
+  "generated_at": "2026-05-07T23:58:23.742Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 2687,
-    "loc_total": 48504,
+    "drifts_total": 2631,
+    "loc_total": 48365,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -546,21 +546,6 @@
       "orden_migracion": 33
     },
     {
-      "slug": "escandallo",
-      "path": "modules/escandallo",
-      "layer": "dominio",
-      "language": "es",
-      "version": "1.0.0",
-      "loc": 1237,
-      "drifts": 96,
-      "events_publishes": 3,
-      "events_subscribes": 5,
-      "tools": 7,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 34
-    },
-    {
       "slug": "log-manager",
       "path": "modules/log-manager",
       "layer": "dominio",
@@ -573,7 +558,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 35
+      "orden_migracion": 34
     },
     {
       "slug": "viabilidad",
@@ -588,7 +573,7 @@
       "tools": 6,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 36
+      "orden_migracion": 35
     },
     {
       "slug": "pizzepos__pedidos",
@@ -603,7 +588,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 37
+      "orden_migracion": 36
     },
     {
       "slug": "notas",
@@ -618,7 +603,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 38
+      "orden_migracion": 37
     },
     {
       "slug": "pizzepos__carta-scheduler",
@@ -633,7 +618,7 @@
       "tools": 7,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 39
+      "orden_migracion": 38
     },
     {
       "slug": "pizzepos__productos",
@@ -648,7 +633,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 40
+      "orden_migracion": 39
     },
     {
       "slug": "recetas",
@@ -663,7 +648,7 @@
       "tools": 13,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 41
+      "orden_migracion": 40
     },
     {
       "slug": "calling-generator",
@@ -676,6 +661,21 @@
       "events_publishes": 7,
       "events_subscribes": 4,
       "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 41
+    },
+    {
+      "slug": "escandallo",
+      "path": "modules/escandallo",
+      "layer": "dominio",
+      "language": "es",
+      "version": "3.0.0",
+      "loc": 1098,
+      "drifts": 40,
+      "events_publishes": 3,
+      "events_subscribes": 5,
+      "tools": 7,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 42

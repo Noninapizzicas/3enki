@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T08:17:45.800Z",
+  "generated_at": "2026-05-07T09:48:57.949Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3475,
-    "loc_total": 48831,
+    "drifts_total": 3469,
+    "loc_total": 48971,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -416,21 +416,6 @@
       "orden_migracion": 25
     },
     {
-      "slug": "system-inspector",
-      "path": "modules/system-inspector",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 236,
-      "drifts": 20,
-      "events_publishes": 0,
-      "events_subscribes": 2,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 26
-    },
-    {
       "slug": "code-executor",
       "path": "modules/code-executor",
       "layer": "infra",
@@ -443,7 +428,7 @@
       "tools": 5,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 27
+      "orden_migracion": 26
     },
     {
       "slug": "security-p2p",
@@ -455,6 +440,21 @@
       "drifts": 16,
       "events_publishes": 4,
       "events_subscribes": 0,
+      "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 27
+    },
+    {
+      "slug": "system-inspector",
+      "path": "modules/system-inspector",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 376,
+      "drifts": 14,
+      "events_publishes": 0,
+      "events_subscribes": 2,
       "tools": 0,
       "agents": 0,
       "dependencies": [],

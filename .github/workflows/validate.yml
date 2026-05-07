@@ -148,3 +148,6 @@ jobs:
 
       - name: Run unit tests (recetas — reescritura canonica)
         run: npm run test:recetas
+
+      - name: Run unit tests (perifericos — reescritura canonica)
+        run: npm run test:perifericos

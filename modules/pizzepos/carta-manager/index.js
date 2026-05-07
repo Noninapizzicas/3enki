@@ -1,33 +1,13 @@
-/**
- * Carta Manager v1.0.0 — Dueño de datos de cartas
- *
- * CRUD, persistencia, versionado, búsqueda, estadísticas.
- * Gestiona cartas durante todo su ciclo de vida.
- * Los agentes (menu-structurer, tarifas-creator) guardan cartas via carta.save tool.
- *
- * Tools expuestos al LLM y agentes:
- *   carta.save         — Guardar carta (nueva o existente)
- *   carta.get          — Obtener por ID
- *   carta.list         — Listar todas
- *   carta.delete       — Eliminar (con versión de seguridad)
- *   carta.add_product  — Añadir producto
- *   carta.remove_product — Eliminar producto
- *   carta.update_product — Actualizar producto
- *   carta.add_category — Añadir categoría
- *   carta.update_prices — Ajustar precios
- *   carta.search       — Buscar productos
- *   carta.stats        — Estadísticas
- *   carta.versions     — Historial de versiones
- *   carta.restore      — Restaurar versión anterior
- */
+'use strict';
 
 const path = require('path');
 const fs = require('fs').promises;
+const crypto = require('crypto');
 
 class CartaManagerModule {
   constructor() {
     this.name = 'carta-manager';
-    this.version = '1.0.0';
+    this.version = '1.1.0';
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
@@ -49,6 +29,42 @@ class CartaManagerModule {
     this.cartasPerProject.clear();
     this.projectPaths.clear();
     this.logger.info('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // POC2 Helpers
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const err = { code, message };
+    if (details !== undefined) err.details = details;
+    return { status, error: err };
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('requiere') || msg.includes('inválid') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    if (msg.includes('already') || msg.includes('ya existe')) return 'ALREADY_EXISTS';
+    return 'UNKNOWN_ERROR';
+  }
+
+  _handleHandlerError(logKey, err, kind) {
+    const code = err._code || this._classifyHandlerError(err);
+    const statusMap = { RESOURCE_NOT_FOUND: 404, INVALID_INPUT: 400, ALREADY_EXISTS: 409, FILESYSTEM_ERROR: 500 };
+    const status = statusMap[code] || 500;
+    this.logger.error(`carta-manager.${logKey}`, { error: err.message, code });
+    this.metrics?.increment('carta-manager.error', { kind: kind || logKey, code });
+    return this._errorResponse(status, code, err.message, err._details);
+  }
+
+  async _publicarEvento(name, payload, ctx) {
+    const correlation_id = ctx?.correlation_id || crypto.randomUUID();
+    await this.eventBus.publish(name, { ...payload, correlation_id, timestamp: new Date().toISOString() });
+  }
+
+  async _emitCartaActualizada(carta, project_id, ctx) {
+    await this._publicarEvento('carta.actualizada', { ...carta, project_id }, ctx);
   }
 
   // ==========================================
@@ -89,7 +105,7 @@ class CartaManagerModule {
   }
 
   // ==========================================
-  // Domain event handlers (eventos canónicos .solicitado)
+  // Domain event handlers
   // ==========================================
 
   async onCartaListarSolicitada(event) {
@@ -97,16 +113,22 @@ class CartaManagerModule {
     const { project_id, request_id, correlation_id } = data;
     try {
       const result = await this.toolList({ project_id });
-      await this.eventBus.publish('carta.listada', {
-        request_id, correlation_id, project_id,
-        cartas: result?.data?.cartas || [],
-        total: result?.data?.total || 0
-      });
+      if (result.error) {
+        await this._publicarEvento('carta.listar.fallida', {
+          request_id, project_id, error: result.error
+        }, { correlation_id });
+        return;
+      }
+      await this._publicarEvento('carta.listada', {
+        request_id, project_id,
+        cartas: result.data.cartas, total: result.data.total
+      }, { correlation_id });
     } catch (err) {
-      await this.eventBus.publish('carta.listar.fallida', {
-        request_id, correlation_id, project_id,
-        error: err.message
-      });
+      const code = err._code || this._classifyHandlerError(err);
+      this.logger.error('carta-manager.listar.error', { project_id, error: err.message, code });
+      await this._publicarEvento('carta.listar.fallida', {
+        request_id, project_id, error: { code, message: err.message }
+      }, { correlation_id });
     }
   }
 
@@ -114,20 +136,24 @@ class CartaManagerModule {
     const data = event.data || event.payload || event;
     const { carta_id, project_id, cambios, request_id, correlation_id } = data;
     try {
-      // cambios: objeto con { producto_id?, nombre?, precio?, ingredientes?... } o lista de ops
-      // Por simplicidad: si llega {producto_id, ...rest}, llamar toolUpdateProduct
       if (cambios?.producto_id) {
-        await this.toolUpdateProduct({ carta_id, project_id, ...cambios });
+        const result = await this.toolUpdateProduct({ carta_id, project_id, ...cambios });
+        if (result.error) {
+          await this._publicarEvento('carta.editar.fallida', {
+            request_id, project_id, carta_id, error: result.error
+          }, { correlation_id });
+          return;
+        }
       }
-      await this.eventBus.publish('carta.editada', {
-        request_id, correlation_id, project_id, carta_id,
-        cambios_aplicados: cambios
-      });
+      await this._publicarEvento('carta.editada', {
+        request_id, project_id, carta_id, cambios_aplicados: cambios
+      }, { correlation_id });
     } catch (err) {
-      await this.eventBus.publish('carta.editar.fallida', {
-        request_id, correlation_id, project_id, carta_id,
-        error: err.message
-      });
+      const code = err._code || this._classifyHandlerError(err);
+      this.logger.error('carta-manager.editar.error', { project_id, carta_id, error: err.message, code });
+      await this._publicarEvento('carta.editar.fallida', {
+        request_id, project_id, carta_id, error: { code, message: err.message }
+      }, { correlation_id });
     }
   }
 
@@ -135,15 +161,22 @@ class CartaManagerModule {
     const data = event.data || event.payload || event;
     const { carta_id, project_id, request_id, correlation_id } = data;
     try {
-      await this.toolDelete({ carta_id, project_id });
-      await this.eventBus.publish('carta.borrada', {
-        request_id, correlation_id, project_id, carta_id
-      });
+      const result = await this.toolDelete({ carta_id, project_id });
+      if (result.error) {
+        await this._publicarEvento('carta.borrar.fallida', {
+          request_id, project_id, carta_id, error: result.error
+        }, { correlation_id });
+        return;
+      }
+      await this._publicarEvento('carta.borrada', {
+        request_id, project_id, carta_id
+      }, { correlation_id });
     } catch (err) {
-      await this.eventBus.publish('carta.borrar.fallida', {
-        request_id, correlation_id, project_id, carta_id,
-        error: err.message
-      });
+      const code = err._code || this._classifyHandlerError(err);
+      this.logger.error('carta-manager.borrar.error', { project_id, carta_id, error: err.message, code });
+      await this._publicarEvento('carta.borrar.fallida', {
+        request_id, project_id, carta_id, error: { code, message: err.message }
+      }, { correlation_id });
     }
   }
 
@@ -171,6 +204,8 @@ class CartaManagerModule {
       this.logger.warn('carta-manager.save_failed', {
         carta_id: carta.meta?.id, project_id: projectId, error: err.message
       });
+      this.metrics?.increment('carta-manager.save_failed', { project_id: projectId });
+      throw err;
     }
   }
 
@@ -191,12 +226,14 @@ class CartaManagerModule {
           this.logger.warn('carta-manager.load_failed', {
             file, project_id: projectId, error: err.message
           });
+          this.metrics?.increment('carta-manager.load_failed', { project_id: projectId });
         }
       }
     } catch (err) {
       this.logger.warn('carta-manager.dir_error', {
         project_id: projectId, error: err.message
       });
+      this.metrics?.increment('carta-manager.dir_error', { project_id: projectId });
     }
   }
 
@@ -220,7 +257,9 @@ class CartaManagerModule {
       const files = (await fs.readdir(vDir)).filter(f => f.endsWith('.json')).sort();
       if (files.length > 50) {
         for (const old of files.slice(0, files.length - 50)) {
-          await fs.unlink(path.join(vDir, old)).catch(() => {});
+          await fs.unlink(path.join(vDir, old)).catch(e => {
+            this.logger.debug('carta-manager.version.prune_failed', { carta_id: cartaId, file: old, error: e.message });
+          });
         }
       }
     } catch (err) {
@@ -237,7 +276,11 @@ class CartaManagerModule {
   // ==========================================
 
   async toolSave({ carta_id, nombre, carta, project_id }) {
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!project_id) {
+      this.logger.warn('carta-manager.save.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'save', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
 
     const cartas = this.getCartas(project_id);
     let cartaObj;
@@ -259,8 +302,14 @@ class CartaManagerModule {
     }
 
     cartaObj.meta.updated_at = new Date().toISOString();
-    await this.saveCartaToDisk(cartaObj, project_id);
-    await this.eventBus.publish('carta.actualizada', { ...cartaObj, project_id });
+    try {
+      await this.saveCartaToDisk(cartaObj, project_id);
+    } catch (err) {
+      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      return this._handleHandlerError('save.disk_error', e, 'save');
+    }
+    await this._emitCartaActualizada(cartaObj, project_id);
+    this.metrics?.increment('carta-manager.carta.saved', { project_id });
 
     return {
       status: 200,
@@ -273,16 +322,32 @@ class CartaManagerModule {
   }
 
   async toolGet({ carta_id, project_id }) {
-    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!carta_id) {
+      this.logger.warn('carta-manager.get.validation', { field: 'carta_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'get', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere carta_id');
+    }
+    if (!project_id) {
+      this.logger.warn('carta-manager.get.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'get', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
 
     const carta = this.getCartas(project_id).get(carta_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+    if (!carta) {
+      this.logger.warn('carta-manager.get.not_found', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'get', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Carta "${carta_id}" no encontrada`);
+    }
     return { status: 200, data: carta };
   }
 
   async toolList({ project_id }) {
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!project_id) {
+      this.logger.warn('carta-manager.list.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'list', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
 
     const cartas = Array.from(this.getCartas(project_id).values())
       .sort((a, b) => new Date(b.meta.created_at) - new Date(a.meta.created_at))
@@ -296,35 +361,73 @@ class CartaManagerModule {
   }
 
   async toolDelete({ carta_id, project_id }) {
-    if (!carta_id) return { status: 400, error: 'Se requiere carta_id' };
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
-    if (carta_id.includes('..') || carta_id.includes('/')) return { status: 400, error: 'carta_id inválido' };
+    if (!carta_id) {
+      this.logger.warn('carta-manager.delete.validation', { field: 'carta_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'delete', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere carta_id');
+    }
+    if (!project_id) {
+      this.logger.warn('carta-manager.delete.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'delete', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
+    if (carta_id.includes('..') || carta_id.includes('/')) {
+      this.logger.warn('carta-manager.delete.validation', { carta_id, reason: 'path_traversal' });
+      this.metrics?.increment('carta-manager.error', { kind: 'delete', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'carta_id inválido');
+    }
 
     const cartas = this.getCartas(project_id);
     const carta = cartas.get(carta_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+    if (!carta) {
+      this.logger.warn('carta-manager.delete.not_found', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'delete', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Carta "${carta_id}" no encontrada`);
+    }
 
     const nombre = carta.meta?.nombre || carta_id;
     const dir = this.cartasDirFor(project_id);
     if (dir) {
       await this.saveVersion(carta_id, dir);
-      try { await fs.unlink(path.join(dir, `${carta_id}.json`)); } catch (_) {}
+      try {
+        await fs.unlink(path.join(dir, `${carta_id}.json`));
+      } catch (err) {
+        this.logger.warn('carta-manager.delete.unlink_failed', { carta_id, project_id, error: err.message });
+        this.metrics?.increment('carta-manager.delete.unlink_failed', { project_id });
+      }
     }
     cartas.delete(carta_id);
+    this.metrics?.increment('carta-manager.carta.deleted', { project_id });
 
     return { status: 200, data: { carta_id, nombre, message: `Carta "${nombre}" eliminada.` } };
   }
 
   async toolAddProduct({ carta_id, project_id, nombre, categoria, precio, ingredientes }) {
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!project_id) {
+      this.logger.warn('carta-manager.add_product.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'add_product', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
     const carta = this.getCartas(project_id).get(carta_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+    if (!carta) {
+      this.logger.warn('carta-manager.add_product.not_found', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'add_product', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Carta "${carta_id}" no encontrada`);
+    }
 
     const cat = carta.categorias.find(c => c.id === categoria);
-    if (!cat) return { status: 400, error: `Categoría "${categoria}" no existe. Disponibles: ${carta.categorias.map(c => c.id).join(', ')}` };
+    if (!cat) {
+      this.logger.warn('carta-manager.add_product.categoria_not_found', { carta_id, categoria });
+      this.metrics?.increment('carta-manager.error', { kind: 'add_product', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', `Categoría "${categoria}" no existe. Disponibles: ${carta.categorias.map(c => c.id).join(', ')}`);
+    }
 
     const prodId = `${this.slugify(categoria)}_${this.slugify(nombre)}`;
-    if (carta.productos.find(p => p.id === prodId)) return { status: 409, error: `Ya existe "${prodId}"` };
+    if (carta.productos.find(p => p.id === prodId)) {
+      this.logger.warn('carta-manager.add_product.already_exists', { carta_id, prodId });
+      this.metrics?.increment('carta-manager.error', { kind: 'add_product', code: 'ALREADY_EXISTS' });
+      return this._errorResponse(409, 'ALREADY_EXISTS', `Ya existe "${prodId}"`);
+    }
 
     const producto = {
       id: prodId, nombre, categoria, precio: Number(precio),
@@ -332,68 +435,142 @@ class CartaManagerModule {
     };
     carta.productos.push(producto);
 
-    await this.saveCartaToDisk(carta, project_id);
-    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });
+    try {
+      await this.saveCartaToDisk(carta, project_id);
+    } catch (err) {
+      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      return this._handleHandlerError('add_product.disk_error', e, 'add_product');
+    }
+    await this._emitCartaActualizada(carta, project_id);
+    this.metrics?.increment('carta-manager.carta.product.added', { project_id });
     return { status: 201, data: producto };
   }
 
   async toolRemoveProduct({ carta_id, project_id, producto_id }) {
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!project_id) {
+      this.logger.warn('carta-manager.remove_product.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'remove_product', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
     const carta = this.getCartas(project_id).get(carta_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+    if (!carta) {
+      this.logger.warn('carta-manager.remove_product.not_found', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'remove_product', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Carta "${carta_id}" no encontrada`);
+    }
 
     const idx = carta.productos.findIndex(p => p.id === producto_id);
-    if (idx === -1) return { status: 404, error: `Producto "${producto_id}" no encontrado` };
+    if (idx === -1) {
+      this.logger.warn('carta-manager.remove_product.not_found', { carta_id, producto_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'remove_product', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Producto "${producto_id}" no encontrado`);
+    }
 
     const removed = carta.productos.splice(idx, 1)[0];
-    await this.saveCartaToDisk(carta, project_id);
-    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });
+    try {
+      await this.saveCartaToDisk(carta, project_id);
+    } catch (err) {
+      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      return this._handleHandlerError('remove_product.disk_error', e, 'remove_product');
+    }
+    await this._emitCartaActualizada(carta, project_id);
+    this.metrics?.increment('carta-manager.carta.product.removed', { project_id });
     return { status: 200, data: { removed: removed.nombre, productos_restantes: carta.productos.length } };
   }
 
   async toolUpdateProduct({ carta_id, project_id, producto_id, nombre, precio, categoria, ingredientes }) {
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!project_id) {
+      this.logger.warn('carta-manager.update_product.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'update_product', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
     const carta = this.getCartas(project_id).get(carta_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+    if (!carta) {
+      this.logger.warn('carta-manager.update_product.not_found', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'update_product', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Carta "${carta_id}" no encontrada`);
+    }
 
     const prod = carta.productos.find(p => p.id === producto_id);
-    if (!prod) return { status: 404, error: `Producto "${producto_id}" no encontrado` };
+    if (!prod) {
+      this.logger.warn('carta-manager.update_product.not_found', { carta_id, producto_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'update_product', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Producto "${producto_id}" no encontrado`);
+    }
 
     if (nombre !== undefined) prod.nombre = nombre;
     if (precio !== undefined) prod.precio = Number(precio);
     if (categoria !== undefined) {
-      if (!carta.categorias.find(c => c.id === categoria)) return { status: 400, error: `Categoría "${categoria}" no existe` };
+      if (!carta.categorias.find(c => c.id === categoria)) {
+        this.logger.warn('carta-manager.update_product.categoria_not_found', { carta_id, categoria });
+        this.metrics?.increment('carta-manager.error', { kind: 'update_product', code: 'INVALID_INPUT' });
+        return this._errorResponse(400, 'INVALID_INPUT', `Categoría "${categoria}" no existe`);
+      }
       prod.categoria = categoria;
     }
     if (ingredientes !== undefined) prod.ingredientes = this.normalizeIngredientes(ingredientes);
 
-    await this.saveCartaToDisk(carta, project_id);
-    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });
+    try {
+      await this.saveCartaToDisk(carta, project_id);
+    } catch (err) {
+      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      return this._handleHandlerError('update_product.disk_error', e, 'update_product');
+    }
+    await this._emitCartaActualizada(carta, project_id);
     return { status: 200, data: prod };
   }
 
   async toolAddCategory({ carta_id, project_id, nombre }) {
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!project_id) {
+      this.logger.warn('carta-manager.add_category.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'add_category', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
     const carta = this.getCartas(project_id).get(carta_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+    if (!carta) {
+      this.logger.warn('carta-manager.add_category.not_found', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'add_category', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Carta "${carta_id}" no encontrada`);
+    }
 
     const catId = this.slugify(nombre);
-    if (carta.categorias.find(c => c.id === catId)) return { status: 409, error: `Ya existe categoría "${catId}"` };
+    if (carta.categorias.find(c => c.id === catId)) {
+      this.logger.warn('carta-manager.add_category.already_exists', { carta_id, catId });
+      this.metrics?.increment('carta-manager.error', { kind: 'add_category', code: 'ALREADY_EXISTS' });
+      return this._errorResponse(409, 'ALREADY_EXISTS', `Ya existe categoría "${catId}"`);
+    }
 
     const maxOrden = carta.categorias.reduce((max, c) => Math.max(max, c.orden), 0);
     const cat = { id: catId, nombre, orden: maxOrden + 1 };
     carta.categorias.push(cat);
 
-    await this.saveCartaToDisk(carta, project_id);
-    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });
+    try {
+      await this.saveCartaToDisk(carta, project_id);
+    } catch (err) {
+      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      return this._handleHandlerError('add_category.disk_error', e, 'add_category');
+    }
+    await this._emitCartaActualizada(carta, project_id);
     return { status: 201, data: cat };
   }
 
   async toolUpdatePrices({ carta_id, project_id, porcentaje, categoria, precios }) {
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!project_id) {
+      this.logger.warn('carta-manager.update_prices.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'update_prices', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
     const carta = this.getCartas(project_id).get(carta_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
-    if (!porcentaje && !precios) return { status: 400, error: 'Se requiere "porcentaje" o "precios"' };
+    if (!carta) {
+      this.logger.warn('carta-manager.update_prices.not_found', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'update_prices', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Carta "${carta_id}" no encontrada`);
+    }
+    if (!porcentaje && !precios) {
+      this.logger.warn('carta-manager.update_prices.validation', { carta_id, reason: 'no_prices_or_porcentaje' });
+      this.metrics?.increment('carta-manager.error', { kind: 'update_prices', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere "porcentaje" o "precios"');
+    }
 
     const cambios = [];
     if (precios && typeof precios === 'object') {
@@ -417,16 +594,34 @@ class CartaManagerModule {
       }
     }
 
-    await this.saveCartaToDisk(carta, project_id);
-    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });
+    try {
+      await this.saveCartaToDisk(carta, project_id);
+    } catch (err) {
+      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      return this._handleHandlerError('update_prices.disk_error', e, 'update_prices');
+    }
+    await this._emitCartaActualizada(carta, project_id);
+    this.metrics?.increment('carta-manager.carta.prices.updated', { project_id });
     return { status: 200, data: { carta_id, productos_actualizados: cambios.length, cambios } };
   }
 
   async toolSearch({ carta_id, project_id, query }) {
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!project_id) {
+      this.logger.warn('carta-manager.search.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'search', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
     const carta = this.getCartas(project_id).get(carta_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
-    if (!query) return { status: 400, error: 'Se requiere "query"' };
+    if (!carta) {
+      this.logger.warn('carta-manager.search.not_found', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'search', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Carta "${carta_id}" no encontrada`);
+    }
+    if (!query) {
+      this.logger.warn('carta-manager.search.validation', { field: 'query' });
+      this.metrics?.increment('carta-manager.error', { kind: 'search', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere "query"');
+    }
 
     const q = query.toLowerCase();
     const results = carta.productos.filter(p =>
@@ -437,9 +632,17 @@ class CartaManagerModule {
   }
 
   async toolStats({ carta_id, project_id }) {
-    if (!project_id) return { status: 400, error: 'Se requiere project_id' };
+    if (!project_id) {
+      this.logger.warn('carta-manager.stats.validation', { field: 'project_id' });
+      this.metrics?.increment('carta-manager.error', { kind: 'stats', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id');
+    }
     const carta = this.getCartas(project_id).get(carta_id);
-    if (!carta) return { status: 404, error: `Carta "${carta_id}" no encontrada` };
+    if (!carta) {
+      this.logger.warn('carta-manager.stats.not_found', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'stats', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Carta "${carta_id}" no encontrada`);
+    }
 
     const precios = carta.productos.map(p => p.precio).filter(p => p > 0);
     const porCategoria = {};
@@ -460,7 +663,11 @@ class CartaManagerModule {
   }
 
   async toolVersions({ carta_id, project_id }) {
-    if (!carta_id || !project_id) return { status: 400, error: 'Se requiere carta_id y project_id' };
+    if (!carta_id || !project_id) {
+      this.logger.warn('carta-manager.versions.validation', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'versions', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere carta_id y project_id');
+    }
 
     const dir = this.cartasDirFor(project_id);
     if (!dir) return { status: 200, data: { carta_id, versions: [], total: 0 } };
@@ -478,34 +685,61 @@ class CartaManagerModule {
             nombre: c.meta?.nombre || carta_id,
             productos: c.productos?.length || 0, categorias: c.categorias?.length || 0
           });
-        } catch (_) {}
+        } catch (err) {
+          this.logger.warn('carta-manager.versions.read_failed', { carta_id, file, error: err.message });
+          this.metrics?.increment('carta-manager.versions.read_failed', { project_id });
+        }
       }
-    } catch (_) {}
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        this.logger.warn('carta-manager.versions.dir_error', { carta_id, project_id, error: err.message });
+        this.metrics?.increment('carta-manager.versions.dir_error', { project_id });
+      }
+    }
 
     return { status: 200, data: { carta_id, versions, total: versions.length } };
   }
 
   async toolRestore({ carta_id, version_file, project_id }) {
-    if (!carta_id || !version_file || !project_id) return { status: 400, error: 'Se requiere carta_id, version_file y project_id' };
-    if (carta_id.includes('..') || version_file.includes('..')) return { status: 400, error: 'Parámetro inválido' };
+    if (!carta_id || !version_file || !project_id) {
+      this.logger.warn('carta-manager.restore.validation', { carta_id, version_file, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'restore', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere carta_id, version_file y project_id');
+    }
+    if (carta_id.includes('..') || version_file.includes('..')) {
+      this.logger.warn('carta-manager.restore.validation', { carta_id, version_file, reason: 'path_traversal' });
+      this.metrics?.increment('carta-manager.error', { kind: 'restore', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Parámetro inválido');
+    }
 
     const dir = this.cartasDirFor(project_id);
-    if (!dir) return { status: 400, error: 'Proyecto sin paths' };
+    if (!dir) {
+      this.logger.warn('carta-manager.restore.no_paths', { carta_id, project_id });
+      this.metrics?.increment('carta-manager.error', { kind: 'restore', code: 'INVALID_INPUT' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'Proyecto sin paths');
+    }
 
     let carta;
     try {
       carta = JSON.parse(await fs.readFile(path.join(this.versionsDir(dir, carta_id), version_file), 'utf-8'));
-    } catch (_) {
-      return { status: 404, error: `Versión "${version_file}" no encontrada` };
+    } catch (err) {
+      this.logger.warn('carta-manager.restore.version_not_found', { carta_id, version_file, error: err.message });
+      this.metrics?.increment('carta-manager.error', { kind: 'restore', code: 'RESOURCE_NOT_FOUND' });
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Versión "${version_file}" no encontrada`);
     }
 
     await this.saveVersion(carta_id, dir);
     carta.meta.restored_from = version_file;
     carta.meta.restored_at = new Date().toISOString();
-    await fs.writeFile(path.join(dir, `${carta_id}.json`), JSON.stringify(carta, null, 2), 'utf-8');
+    try {
+      await fs.writeFile(path.join(dir, `${carta_id}.json`), JSON.stringify(carta, null, 2), 'utf-8');
+    } catch (err) {
+      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      return this._handleHandlerError('restore.disk_error', e, 'restore');
+    }
 
     this.getCartas(project_id).set(carta_id, carta);
-    await this.eventBus.publish('carta.actualizada', { ...carta, project_id });
+    await this._emitCartaActualizada(carta, project_id);
 
     return {
       status: 200,
@@ -524,7 +758,7 @@ class CartaManagerModule {
   async handleList(data) { return (await this.toolList({ project_id: data?.project_id })).data; }
   async handleGet(data) {
     const r = await this.toolGet({ carta_id: data.id || data.carta_id, project_id: data.project_id });
-    if (r.error) throw { status: r.status, code: 'NOT_FOUND', message: r.error };
+    if (r.error) throw { status: r.status, code: r.error.code, message: r.error.message };
     return r.data;
   }
   async handleHealth() {
@@ -540,7 +774,7 @@ class CartaManagerModule {
   slugify(text) {
     if (!text) return 'sin_nombre';
     return text.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '') || 'sin_nombre';
   }

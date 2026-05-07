@@ -142,3 +142,6 @@ jobs:
 
       - name: Run unit tests (telegram-service — reescritura canonica)
         run: npm run test:telegram-service
+
+      - name: Run unit tests (pizzepos/carta-manager — reescritura canonica)
+        run: npm run test:pizzepos__carta-manager

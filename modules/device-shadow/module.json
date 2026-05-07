@@ -1,6 +1,6 @@
 {
   "name": "device-shadow",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Sincronización bidireccional de estado desired/reported/delta entre servidor y dispositivos IoT",
   "author": "Enki",
   "language": "en",
@@ -77,7 +77,11 @@
         "required": [
           "device_id"
         ]
-      }
+      },
+      "errores_conocidos": [
+        { "code": "VALIDATION_FAILED", "cuando": "device_id ausente" },
+        { "code": "RESOURCE_NOT_FOUND", "cuando": "shadow no existe para el device_id" }
+      ]
     },
     {
       "name": "shadow.set_desired",
@@ -101,7 +105,10 @@
           "device_id",
           "state"
         ]
-      }
+      },
+      "errores_conocidos": [
+        { "code": "VALIDATION_FAILED", "cuando": "device_id o state ausentes" }
+      ]
     },
     {
       "name": "shadow.get_delta",
@@ -117,17 +124,30 @@
         "required": [
           "device_id"
         ]
-      }
+      },
+      "errores_conocidos": [
+        { "code": "VALIDATION_FAILED", "cuando": "device_id ausente" },
+        { "code": "RESOURCE_NOT_FOUND", "cuando": "shadow no existe para el device_id" }
+      ]
     }
   ],
   "config": {
     "persist_interval_ms": 30000,
-    "data_path": "./data/devices"
+    "data_path": "./data/devices",
+    "persistence": {
+      "type": "json-file",
+      "path": "data/devices/shadows.json",
+      "atomic": true
+    }
+  },
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "observability": {
     "logging": {
       "level": "info",
-      "structured": true
+      "structured": true,
+      "correlation_id": true
     },
     "metrics": {
       "enabled": true,
@@ -135,7 +155,8 @@
         "shadow.reported_updates.total",
         "shadow.desired_updates.total",
         "shadow.deltas_computed.total",
-        "shadow.synced.total"
+        "shadow.synced.total",
+        "device-shadow.errors"
       ]
     }
   }

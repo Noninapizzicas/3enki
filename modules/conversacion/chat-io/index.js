@@ -727,16 +727,16 @@ class ChatIoModule {
   // (en su idioma, sin tecnicismos). NO expone detalles internos del sistema.
   _userMessageForErrorCode(code, raw_message) {
     const M = {
-      'UPSTREAM_TIMEOUT':         'Tarde mas de la cuenta en responder. Intentalo de nuevo en un momento.',
-      'UPSTREAM_RATE_LIMITED':    'Estoy recibiendo muchas peticiones. Intentalo en unos minutos.',
+      'UPSTREAM_TIMEOUT':         'Tardé más de la cuenta en responder. Inténtalo de nuevo en un momento.',
+      'UPSTREAM_RATE_LIMITED':    'Estoy recibiendo muchas peticiones. Inténtalo en unos minutos.',
       'UPSTREAM_AUTH_FAILED':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
-      'UPSTREAM_5XX':             'El motor del lenguaje tiene un fallo temporal. Intentalo en un momento.',
-      'UPSTREAM_UNREACHABLE':     'No puedo conectar con el motor del lenguaje ahora mismo. Intentalo mas tarde.',
-      'UPSTREAM_INVALID_RESPONSE':'El motor del lenguaje devolvio algo que no entiendo. Intentalo de nuevo.',
+      'UPSTREAM_5XX':             'El motor del lenguaje tiene un fallo temporal. Inténtalo en un momento.',
+      'UPSTREAM_UNREACHABLE':     'No puedo conectar con el motor del lenguaje ahora mismo. Inténtalo más tarde.',
+      'UPSTREAM_INVALID_RESPONSE':'El motor del lenguaje devolvió algo que no entiendo. Inténtalo de nuevo.',
       'CREDENTIAL_NOT_FOUND':     'No tengo credenciales configuradas para responder. Avisa al administrador.',
-      'INTERNAL_ERROR':           'Algo se rompio por mi parte. Intentalo de nuevo o avisa si persiste.'
+      'INTERNAL_ERROR':           'Algo se rompió por mi parte. Inténtalo de nuevo o avisa si persiste.'
     };
-    return M[code] || `No pude completar la respuesta (${code || 'error desconocido'}). Intentalo de nuevo.`;
+    return M[code] || `No pude completar la respuesta (${code || 'error desconocido'}). Inténtalo de nuevo.`;
   }
 
   _publishMqtt(conversation_id, payload) {

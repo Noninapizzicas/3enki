@@ -251,7 +251,7 @@ class ScratchDesigner {
         }
         break;
       default:
-        error = 'Tipo de conexion no valido';
+        error = 'Tipo de conexión no válido';
     }
 
     res.json({ valid, error });

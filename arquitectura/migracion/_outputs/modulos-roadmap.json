@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-06T23:59:17.264Z",
+  "generated_at": "2026-05-07T01:13:46.900Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3557,
-    "loc_total": 48809,
+    "drifts_total": 3476,
+    "loc_total": 48910,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -287,7 +287,7 @@
       "language": "en",
       "version": "2.0.0",
       "loc": 1075,
-      "drifts": 180,
+      "drifts": 185,
       "events_publishes": 24,
       "events_subscribes": 18,
       "tools": 14,
@@ -326,66 +326,6 @@
       "orden_migracion": 19
     },
     {
-      "slug": "device-shadow",
-      "path": "modules/device-shadow",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 478,
-      "drifts": 53,
-      "events_publishes": 3,
-      "events_subscribes": 1,
-      "tools": 3,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 20
-    },
-    {
-      "slug": "code-executor",
-      "path": "modules/code-executor",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 618,
-      "drifts": 52,
-      "events_publishes": 4,
-      "events_subscribes": 1,
-      "tools": 5,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 21
-    },
-    {
-      "slug": "firmware-builder",
-      "path": "modules/firmware-builder",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.1.0",
-      "loc": 526,
-      "drifts": 50,
-      "events_publishes": 3,
-      "events_subscribes": 0,
-      "tools": 4,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 22
-    },
-    {
-      "slug": "device-registry",
-      "path": "modules/device-registry",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 702,
-      "drifts": 43,
-      "events_publishes": 5,
-      "events_subscribes": 2,
-      "tools": 3,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 23
-    },
-    {
       "slug": "esp32-dev",
       "path": "modules/esp32-dev",
       "layer": "infra",
@@ -398,7 +338,37 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 24
+      "orden_migracion": 20
+    },
+    {
+      "slug": "device-registry",
+      "path": "modules/device-registry",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 764,
+      "drifts": 36,
+      "events_publishes": 5,
+      "events_subscribes": 2,
+      "tools": 3,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 21
+    },
+    {
+      "slug": "firmware-builder",
+      "path": "modules/firmware-builder",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 686,
+      "drifts": 31,
+      "events_publishes": 3,
+      "events_subscribes": 0,
+      "tools": 4,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 22
     },
     {
       "slug": "metricas",
@@ -413,7 +383,22 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 25
+      "orden_migracion": 23
+    },
+    {
+      "slug": "device-shadow",
+      "path": "modules/device-shadow",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 491,
+      "drifts": 26,
+      "events_publishes": 3,
+      "events_subscribes": 1,
+      "tools": 3,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 24
     },
     {
       "slug": "device-health",
@@ -428,7 +413,7 @@
       "tools": 3,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 26
+      "orden_migracion": 25
     },
     {
       "slug": "system-inspector",
@@ -441,6 +426,21 @@
       "events_publishes": 0,
       "events_subscribes": 2,
       "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 26
+    },
+    {
+      "slug": "code-executor",
+      "path": "modules/code-executor",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 484,
+      "drifts": 19,
+      "events_publishes": 4,
+      "events_subscribes": 1,
+      "tools": 5,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 27

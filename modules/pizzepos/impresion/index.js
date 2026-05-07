@@ -380,14 +380,14 @@ class ImpresionModule {
       no_mac: 'Impresora sin configurar (no hay MAC)',
       init_failed: 'Error iniciando Bluetooth',
       connect_failed: 'No se pudo conectar a la impresora',
-      write_failed: 'Error escribiendo en la impresora (sin papel?)',
-      disconnected_mid_send: 'Impresora desconectada durante el envio',
-      missing_data: 'Job sin campo data (payload vacio)',
+      write_failed: 'Error escribiendo en la impresora (¿sin papel?)',
+      disconnected_mid_send: 'Impresora desconectada durante el envío',
+      missing_data: 'Job sin campo data (payload vacío)',
       payload_too_large: 'Payload demasiado grande para el buffer',
       base64_error: 'Error decodificando base64',
-      queue_full: 'Cola de impresion llena (intentar de nuevo)'
+      queue_full: 'Cola de impresión llena (intentar de nuevo)'
     };
-    return mensajes[code] || `Error desconocido (${code || 'sin codigo'})`;
+    return mensajes[code] || `Error desconocido (${code || 'sin código'})`;
   }
 
   // ==========================================

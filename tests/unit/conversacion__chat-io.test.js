@@ -479,13 +479,13 @@ async function createConversation(m, opts = {}) {
     assert.strictEqual(mocks.mqttPublished.length, 1);
     const payload = JSON.parse(mocks.mqttPublished[0][1]);
     assert.strictEqual(payload.role, 'system');
-    assert.ok(/Tarde mas de la cuenta/.test(payload.content));
+    assert.ok(/Tardé más de la cuenta/.test(payload.content));
     assert.strictEqual(payload.metadata.error_code, 'UPSTREAM_TIMEOUT');
 
     const load = await m.handleLoad({ project_id: VALID_PROJECT, conversation_id: cid });
     const sysMsg = load.data.messages.find(msg => msg.role === 'system');
     assert.ok(sysMsg);
-    assert.ok(/Tarde mas de la cuenta/.test(sysMsg.content));
+    assert.ok(/Tardé más de la cuenta/.test(sysMsg.content));
     await m.onUnload();
   });
 
@@ -602,7 +602,7 @@ async function createConversation(m, opts = {}) {
   await testAsync('_userMessageForErrorCode mapea codigos canonicos a mensajes legibles', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    assert.ok(/Tarde mas de la cuenta/.test(m._userMessageForErrorCode('UPSTREAM_TIMEOUT')));
+    assert.ok(/Tardé más de la cuenta/.test(m._userMessageForErrorCode('UPSTREAM_TIMEOUT')));
     assert.ok(/credenciales/.test(m._userMessageForErrorCode('CREDENTIAL_NOT_FOUND')));
     assert.ok(/desconocido|completar/.test(m._userMessageForErrorCode('NOT_IN_MAP', 'msg')));
     await m.onUnload();

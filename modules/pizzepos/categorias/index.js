@@ -1,33 +1,29 @@
 /**
- * Módulo Categorias v2.1
- * Catálogo de categorías - Multi-tenant por proyecto
- * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ * pizzepos/categorias v3.0.0 — Catalogo multi-tenant de categorias (POC2 rewrite).
  *
- * Emite: categoria.creada, categoria.actualizada, categoria.orden_actualizado
- * Consume: menu.generado
+ * Sincroniza desde `carta.actualizada` + expone CRUD manual via 7 ui_handlers.
+ *
+ * Eventos del bus:
+ *   subscribes (1): carta.actualizada (handler onCartaActualizada).
+ *   publishes  (3): categoria.{creada, actualizada, orden_actualizado}.
  */
+
+'use strict';
+
+const crypto = require('crypto');
+
+const DEFAULT_PROJECT_ID = 'default';
 
 class CategoriasModule {
   constructor() {
-    this.name = 'categorias';
-    this.version = '2.1.0';
+    this.name    = 'categorias';
+    this.version = '3.0.0';
 
-    // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-    this.uiHandler = null;
+    this.logger   = null;
+    this.metrics  = null;
 
-    // Estado en memoria - por proyecto
-    this.categoriasPerProject = new Map(); // project_id -> Map<categoria_id, categoria>
-  }
-
-  // Helpers para obtener/crear maps por proyecto
-  getCategorias(projectId) {
-    if (!this.categoriasPerProject.has(projectId)) {
-      this.categoriasPerProject.set(projectId, new Map());
-    }
-    return this.categoriasPerProject.get(projectId);
+    this.categoriasPerProject = new Map();
   }
 
   // ==========================================
@@ -35,395 +31,420 @@ class CategoriasModule {
   // ==========================================
 
   async onLoad(core) {
-    this.logger = core.logger;
-    this.metrics = core.metrics;
+    this.logger   = core.logger;
+    this.metrics  = core.metrics;
     this.eventBus = core.eventBus;
-    this.uiHandler = core.uiHandler;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
-
-    // Event subscriptions are auto-wired from module.json by the loader.
-    // Do NOT subscribe manually here to avoid duplicate handlers.
-    this.registerUIHandlers();
-
-    this.logger.info('module.loaded', { module: this.name, version: this.version });
+    this.logger.info('module.loaded',  { module: this.name, version: this.version });
   }
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
-
-    if (this.uiHandler) {
-      const actions = ['list', 'get', 'create', 'update', 'reorder', 'health', 'metrics'];
-      for (const action of actions) {
-        this.uiHandler.unregister('categorias', action);
-      }
-    }
-
     this.categoriasPerProject.clear();
-
     this.logger.info('module.unloaded', { module: this.name });
   }
 
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('categorias.uiHandler.not_available', { module: this.name });
-      return;
+  _getCategorias(projectId) {
+    if (!this.categoriasPerProject.has(projectId)) {
+      this.categoriasPerProject.set(projectId, new Map());
     }
-
-    this.uiHandler.register('categorias', 'list', this.handleListCategorias.bind(this));
-    this.uiHandler.register('categorias', 'get', this.handleGetCategoria.bind(this));
-    this.uiHandler.register('categorias', 'create', this.handleCreateCategoria.bind(this));
-    this.uiHandler.register('categorias', 'update', this.handleUpdateCategoria.bind(this));
-    this.uiHandler.register('categorias', 'reorder', this.handleReorderCategorias.bind(this));
-    this.uiHandler.register('categorias', 'health', this.handleHealthCheck.bind(this));
-    this.uiHandler.register('categorias', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.logger.info('categorias.ui_handlers.registered', {
-      handlers: ['list', 'get', 'create', 'update', 'reorder', 'health', 'metrics']
-    });
+    return this.categoriasPerProject.get(projectId);
   }
 
   // ==========================================
-  // Event Handlers
+  // Bus handler — sync desde carta.actualizada
   // ==========================================
 
   async onCartaActualizada(event) {
-    const eventData = event?.data || event?.payload || event;
-    const correlationId = event?.metadata?.correlationId;
-    const { project_id, categorias } = eventData;
+    const data = this._unwrap(event);
+    const { project_id, categorias } = data || {};
+    const correlationId = event?.metadata?.correlationId || data?.correlation_id;
 
-    if (!categorias || categorias.length === 0) {
-      return;
-    }
+    if (!categorias || categorias.length === 0) return;
 
     if (!project_id) {
-      this.logger.warn('categorias.menu_generado.no_project_id', {
-        categorias_count: categorias.length,
-        correlation_id: correlationId
-      });
+      this._logError('categorias.carta_actualizada.no_project_id', {
+        categorias_count: categorias.length, correlation_id: correlationId
+      }, 'sync', 'INVALID_INPUT');
       return;
     }
 
-    this.logger.info('menu.generado.received', {
-      project_id,
-      categorias_count: categorias.length,
-      correlation_id: correlationId
+    this.logger.info('categorias.sync.received', {
+      project_id, categorias_count: categorias.length, correlation_id: correlationId
     });
 
-    const categoriasMap = this.getCategorias(project_id);
-    let nuevas = 0;
+    const categoriasMap = this._getCategorias(project_id);
+    let nuevas       = 0;
     let actualizadas = 0;
 
     for (const cat of categorias) {
       const existente = categoriasMap.get(cat.id);
+      const now       = new Date().toISOString();
 
       if (!existente) {
         const categoria = {
-          id: cat.id,
-          nombre: cat.nombre,
-          emoji: cat.emoji || '📋',
-          orden: cat.orden !== undefined ? cat.orden : categoriasMap.size,
-          activa: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          id:         cat.id,
+          nombre:     cat.nombre,
+          emoji:      cat.emoji || '📋',
+          orden:      cat.orden !== undefined ? cat.orden : categoriasMap.size,
+          activa:     true,
+          created_at: now,
+          updated_at: now
         };
-
         categoriasMap.set(cat.id, categoria);
         nuevas++;
 
-        this.metrics?.increment('categoria.creada.total');
-        await this.publishCategoriaCreada(categoria, correlationId);
-
+        this.metrics?.increment('categoria.creada.total', { project_id });
+        await this._publicarEvento('categoria.creada', {
+          project_id,
+          categoria_id: categoria.id,
+          nombre:       categoria.nombre,
+          emoji:        categoria.emoji,
+          orden:        categoria.orden,
+          created_at:   categoria.created_at
+        }, data);
       } else {
         const cambios = {};
-        if (cat.emoji && cat.emoji !== existente.emoji) {
-          cambios.emoji = { anterior: existente.emoji, nuevo: cat.emoji };
-          existente.emoji = cat.emoji;
-        }
-        if (cat.nombre && cat.nombre !== existente.nombre) {
-          cambios.nombre = { anterior: existente.nombre, nuevo: cat.nombre };
-          existente.nombre = cat.nombre;
-        }
+        if (cat.emoji  && cat.emoji  !== existente.emoji)  { cambios.emoji  = { anterior: existente.emoji,  nuevo: cat.emoji  }; existente.emoji  = cat.emoji; }
+        if (cat.nombre && cat.nombre !== existente.nombre) { cambios.nombre = { anterior: existente.nombre, nuevo: cat.nombre }; existente.nombre = cat.nombre; }
 
         if (Object.keys(cambios).length > 0) {
-          existente.updated_at = new Date().toISOString();
+          existente.updated_at = now;
           categoriasMap.set(cat.id, existente);
           actualizadas++;
 
-          await this.publishCategoriaActualizada(cat.id, cambios, correlationId);
+          await this._publicarEvento('categoria.actualizada', {
+            project_id,
+            categoria_id: cat.id,
+            cambios,
+            updated_at:   now
+          }, data);
         }
       }
     }
 
-    this.metrics?.gauge('categoria.total.count', categoriasMap.size);
-    this.metrics?.gauge('categoria.activas.count',
-      Array.from(categoriasMap.values()).filter(c => c.activa).length);
+    this.metrics?.gauge('categoria.total.count',   categoriasMap.size, { project_id });
+    this.metrics?.gauge('categoria.activas.count', Array.from(categoriasMap.values()).filter(c => c.activa).length, { project_id });
 
     this.logger.info('categorias.sincronizadas', {
-      project_id,
-      nuevas,
-      actualizadas,
-      total: categoriasMap.size,
-      correlation_id: correlationId
+      project_id, nuevas, actualizadas, total: categoriasMap.size, correlation_id: correlationId
     });
   }
 
   // ==========================================
-  // UI Handlers (MQTT Request/Response)
+  // UI Handlers (auto-wired desde module.json)
   // ==========================================
 
   async handleListCategorias(data) {
-    const { project_id } = data || {};
+    try {
+      const { project_id } = data || {};
+      if (!project_id) {
+        this._logError('categorias.ui.list.validation_failed', { missing: 'project_id' }, 'ui_list', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      }
 
-    if (!project_id) {
-      return { status: 400, error: 'project_id es requerido' };
+      const categorias = Array.from(this._getCategorias(project_id).values())
+        .filter(c => c.activa)
+        .sort((a, b) => a.orden - b.orden);
+
+      return { status: 200, data: { project_id, categorias, total: categorias.length } };
+    } catch (err) {
+      return this._handleHandlerError('categorias.ui.list.failed', err, 'ui_list');
     }
-
-    const categorias = Array.from(this.getCategorias(project_id).values())
-      .filter(c => c.activa)
-      .sort((a, b) => a.orden - b.orden);
-
-    return {
-      status: 200,
-      data: { project_id, categorias, total: categorias.length }
-    };
   }
 
   async handleGetCategoria(data) {
-    const { project_id, id } = data || {};
+    try {
+      const { project_id, id } = data || {};
+      if (!project_id) {
+        this._logError('categorias.ui.get.validation_failed', { missing: 'project_id' }, 'ui_get', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      }
+      if (!id) {
+        this._logError('categorias.ui.get.validation_failed', { missing: 'id' }, 'ui_get', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      }
 
-    if (!project_id) {
-      return { status: 400, error: 'project_id es requerido' };
+      const categoria = this._getCategorias(project_id).get(id);
+      if (!categoria) {
+        this._logError('categorias.ui.get.not_found', { id, project_id }, 'ui_get', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Categoria no encontrada', {
+          entity_type: 'categoria', entity_id: id
+        });
+      }
+      return { status: 200, data: categoria };
+    } catch (err) {
+      return this._handleHandlerError('categorias.ui.get.failed', err, 'ui_get');
     }
-
-    const categoria = this.getCategorias(project_id).get(id);
-
-    if (!categoria) {
-      return { status: 404, error: 'Categoría no encontrada' };
-    }
-
-    return { status: 200, data: categoria };
   }
 
   async handleCreateCategoria(data) {
-    const { project_id, nombre, emoji, descripcion, color } = data || {};
+    try {
+      const { project_id, nombre, emoji, descripcion, color } = data || {};
+      if (!project_id) {
+        this._logError('categorias.ui.create.validation_failed', { missing: 'project_id' }, 'ui_create', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      }
+      if (!nombre) {
+        this._logError('categorias.ui.create.validation_failed', { missing: 'nombre' }, 'ui_create', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
+      }
 
-    if (!project_id) {
-      return { status: 400, error: 'project_id es requerido' };
+      const categoriasMap = this._getCategorias(project_id);
+      const categoria_id  = `cat_${this._slugify(nombre)}`;
+
+      if (categoriasMap.has(categoria_id)) {
+        this._logError('categorias.ui.create.already_exists', { categoria_id, project_id }, 'ui_create', 'ALREADY_EXISTS');
+        return this._errorResponse(409, 'ALREADY_EXISTS', `Categoria "${nombre}" ya existe`, {
+          entity_type: 'categoria', entity_id: categoria_id
+        });
+      }
+
+      const now = new Date().toISOString();
+      const categoria = {
+        id:         categoria_id,
+        nombre,
+        emoji:      emoji || '📋',
+        orden:      categoriasMap.size,
+        activa:     true,
+        descripcion: descripcion || null,
+        color:       color || null,
+        created_at: now,
+        updated_at: now
+      };
+
+      categoriasMap.set(categoria_id, categoria);
+      this.metrics?.increment('categoria.creada.total', { project_id, source: 'manual' });
+
+      await this._publicarEvento('categoria.creada', {
+        project_id,
+        categoria_id: categoria.id,
+        nombre:       categoria.nombre,
+        emoji:        categoria.emoji,
+        orden:        categoria.orden,
+        created_at:   categoria.created_at
+      }, data);
+
+      this.logger.info('categoria.creada', { project_id, categoria_id, nombre });
+      return { status: 201, data: categoria };
+    } catch (err) {
+      return this._handleHandlerError('categorias.ui.create.failed', err, 'ui_create');
     }
-
-    if (!nombre) {
-      return { status: 400, error: 'nombre requerido' };
-    }
-
-    const categoriasMap = this.getCategorias(project_id);
-    const categoria_id = `cat_${this.slugify(nombre)}`;
-
-    if (categoriasMap.has(categoria_id)) {
-      return { status: 409, error: 'Categoría ya existe' };
-    }
-
-    const categoria = {
-      id: categoria_id,
-      nombre,
-      emoji: emoji || '📋',
-      orden: categoriasMap.size,
-      activa: true,
-      descripcion,
-      color,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    categoriasMap.set(categoria_id, categoria);
-
-    this.metrics?.increment('categoria.creada.total');
-    await this.publishCategoriaCreada(categoria);
-
-    this.logger.info('categoria.creada', {
-      project_id,
-      categoria_id,
-      nombre
-    });
-
-    return { status: 201, data: categoria };
   }
 
   async handleUpdateCategoria(data) {
-    const { project_id, id, ...updates } = data || {};
-
-    if (!project_id) {
-      return { status: 400, error: 'project_id es requerido' };
-    }
-
-    const categoriasMap = this.getCategorias(project_id);
-    const categoria = categoriasMap.get(id);
-    if (!categoria) {
-      return { status: 404, error: 'Categoría no encontrada' };
-    }
-
-    const cambios = {};
-    Object.keys(updates).forEach(key => {
-      if (updates[key] !== categoria[key]) {
-        cambios[key] = { anterior: categoria[key], nuevo: updates[key] };
-        categoria[key] = updates[key];
+    try {
+      const { project_id, id, ...updates } = data || {};
+      if (!project_id) {
+        this._logError('categorias.ui.update.validation_failed', { missing: 'project_id' }, 'ui_update', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
       }
-    });
+      if (!id) {
+        this._logError('categorias.ui.update.validation_failed', { missing: 'id' }, 'ui_update', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      }
 
-    categoria.updated_at = new Date().toISOString();
-    categoriasMap.set(id, categoria);
+      const categoriasMap = this._getCategorias(project_id);
+      const categoria     = categoriasMap.get(id);
+      if (!categoria) {
+        this._logError('categorias.ui.update.not_found', { id, project_id }, 'ui_update', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Categoria no encontrada', {
+          entity_type: 'categoria', entity_id: id
+        });
+      }
 
-    this.metrics?.increment('categoria.actualizada.total');
-    await this.publishCategoriaActualizada(id, cambios);
+      const cambios = {};
+      for (const key of Object.keys(updates)) {
+        if (updates[key] !== categoria[key]) {
+          cambios[key]   = { anterior: categoria[key], nuevo: updates[key] };
+          categoria[key] = updates[key];
+        }
+      }
 
-    this.logger.info('categoria.actualizada', {
-      project_id,
-      categoria_id: id,
-      cambios_count: Object.keys(cambios).length
-    });
+      const now = new Date().toISOString();
+      categoria.updated_at = now;
+      categoriasMap.set(id, categoria);
 
-    return { status: 200, data: categoria };
+      this.metrics?.increment('categoria.actualizada.total', { project_id });
+      await this._publicarEvento('categoria.actualizada', {
+        project_id,
+        categoria_id: id,
+        cambios,
+        updated_at:   now
+      }, data);
+
+      this.logger.info('categoria.actualizada', {
+        project_id, categoria_id: id, cambios_count: Object.keys(cambios).length
+      });
+      return { status: 200, data: categoria };
+    } catch (err) {
+      return this._handleHandlerError('categorias.ui.update.failed', err, 'ui_update');
+    }
   }
 
   async handleReorderCategorias(data) {
-    const { project_id, orden } = data || {};
-
-    if (!project_id) {
-      return { status: 400, error: 'project_id es requerido' };
-    }
-
-    if (!orden || !Array.isArray(orden)) {
-      return { status: 400, error: 'orden array requerido' };
-    }
-
-    const categoriasMap = this.getCategorias(project_id);
-    const nuevo_orden = [];
-
-    orden.forEach((item, idx) => {
-      const categoria = categoriasMap.get(item.categoria_id);
-      if (categoria) {
-        categoria.orden = idx;
-        categoria.updated_at = new Date().toISOString();
-        categoriasMap.set(item.categoria_id, categoria);
-
-        nuevo_orden.push({
-          categoria_id: item.categoria_id,
-          orden: idx
-        });
+    try {
+      const { project_id, orden } = data || {};
+      if (!project_id) {
+        this._logError('categorias.ui.reorder.validation_failed', { missing: 'project_id' }, 'ui_reorder', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
       }
-    });
+      if (!orden || !Array.isArray(orden)) {
+        this._logError('categorias.ui.reorder.validation_failed', { missing: 'orden' }, 'ui_reorder', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'orden array es requerido', { field: 'orden' });
+      }
 
-    await this.publishOrdenActualizado(nuevo_orden);
+      const categoriasMap = this._getCategorias(project_id);
+      const nuevo_orden   = [];
+      const now           = new Date().toISOString();
 
-    this.logger.info('categorias.reordenadas', {
-      project_id,
-      count: nuevo_orden.length
-    });
+      orden.forEach((item, idx) => {
+        const categoria = categoriasMap.get(item.categoria_id);
+        if (categoria) {
+          categoria.orden      = idx;
+          categoria.updated_at = now;
+          categoriasMap.set(item.categoria_id, categoria);
+          nuevo_orden.push({ categoria_id: item.categoria_id, orden: idx });
+        }
+      });
 
-    return {
-      status: 200,
-      data: { message: 'Orden actualizado', nuevo_orden }
-    };
+      await this._publicarEvento('categoria.orden_actualizado', {
+        project_id,
+        nuevo_orden,
+        updated_at: now
+      }, data);
+
+      this.logger.info('categorias.reordenadas', { project_id, count: nuevo_orden.length });
+      return { status: 200, data: { project_id, nuevo_orden, user_hint: 'Orden actualizado' } };
+    } catch (err) {
+      return this._handleHandlerError('categorias.ui.reorder.failed', err, 'ui_reorder');
+    }
   }
 
   async handleHealthCheck() {
-    let totalCategorias = 0;
-    let totalActivas = 0;
-
-    for (const [, categorias] of this.categoriasPerProject) {
-      totalCategorias += categorias.size;
-      totalActivas += Array.from(categorias.values()).filter(c => c.activa).length;
-    }
-
-    return {
-      status: 200,
-      data: {
-        status: 'healthy',
-        module: this.name,
-        version: this.version,
-        catalogo: {
-          proyectos: this.categoriasPerProject.size,
-          total: totalCategorias,
-          activas: totalActivas
-        }
+    try {
+      let totalCategorias = 0;
+      let totalActivas    = 0;
+      for (const [, categorias] of this.categoriasPerProject) {
+        totalCategorias += categorias.size;
+        totalActivas    += Array.from(categorias.values()).filter(c => c.activa).length;
       }
-    };
+
+      return {
+        status: 200,
+        data: {
+          status:  'healthy',
+          module:  this.name,
+          version: this.version,
+          catalogo: {
+            proyectos: this.categoriasPerProject.size,
+            total:     totalCategorias,
+            activas:   totalActivas
+          }
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('categorias.ui.health.failed', err, 'ui_health');
+    }
   }
 
   async handleGetMetrics() {
-    let totalCategorias = 0;
-    let totalActivas = 0;
-
-    for (const [, categorias] of this.categoriasPerProject) {
-      totalCategorias += categorias.size;
-      totalActivas += Array.from(categorias.values()).filter(c => c.activa).length;
-    }
-
-    return {
-      status: 200,
-      data: {
-        counters: {
-          'categoria.creada.total': this.metrics?.getCounter('categoria.creada.total') || 0,
-          'categoria.actualizada.total': this.metrics?.getCounter('categoria.actualizada.total') || 0
-        },
-        gauges: {
-          'categoria.total.count': totalCategorias,
-          'categoria.activas.count': totalActivas
-        }
+    try {
+      let totalCategorias = 0;
+      let totalActivas    = 0;
+      for (const [, categorias] of this.categoriasPerProject) {
+        totalCategorias += categorias.size;
+        totalActivas    += Array.from(categorias.values()).filter(c => c.activa).length;
       }
+
+      return {
+        status: 200,
+        data: {
+          gauges: {
+            'categoria.total.count':   totalCategorias,
+            'categoria.activas.count': totalActivas,
+            'categoria.proyectos':     this.categoriasPerProject.size
+          }
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('categorias.ui.metrics.failed', err, 'ui_metrics');
+    }
+  }
+
+  // ==========================================
+  // Helpers POC2
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
+  }
+
+  _handleHandlerError(logEvent, err, kind) {
+    const code   = err._code || this._classifyHandlerError(err);
+    const status = code === 'INVALID_INPUT'           ? 400 :
+                   code === 'RESOURCE_NOT_FOUND'      ? 404 :
+                   code === 'PERMISSION_DENIED'       ? 403 :
+                   code === 'ALREADY_EXISTS'          ? 409 :
+                   code === 'CONFLICT_STATE'          ? 409 :
+                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
+                   code === 'EXTERNAL_API_FAILED'     ? 502 :
+                   code === 'TIMEOUT'                 ? 504 : 500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code, kind });
+    this.metrics?.increment('categorias.errors', { kind, code });
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found') || msg.includes('no encontrad'))                          return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('already exists') || msg.includes('ya existe'))                        return 'ALREADY_EXISTS';
+    if (msg.includes('permission') || msg.includes('forbidden'))                            return 'PERMISSION_DENIED';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    if (!this.eventBus?.publish) return;
+    const enriched = {
+      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+      timestamp:      new Date().toISOString(),
+      ...payload,
+      project_id:     payload?.project_id || sourcePayload?.project_id || DEFAULT_PROJECT_ID
     };
+    try {
+      await this.eventBus.publish(name, enriched);
+    } catch (err) {
+      this.logger.error('categorias.publish_error', { event: name, error: err.message });
+      this.metrics?.increment('categorias.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+    }
   }
 
-  // ==========================================
-  // Event Publishers
-  // ==========================================
-
-  async publishCategoriaCreada(categoria, correlation_id) {
-    await this.eventBus.publish('categoria.creada', {
-      categoria_id: categoria.id,
-      nombre: categoria.nombre,
-      emoji: categoria.emoji,
-      orden: categoria.orden,
-      created_at: categoria.created_at
-    }, {
-      correlationId: correlation_id
-    });
-  }
-
-  async publishCategoriaActualizada(categoria_id, cambios, correlation_id) {
-    await this.eventBus.publish('categoria.actualizada', {
-      categoria_id,
-      cambios,
-      updated_at: new Date().toISOString()
-    }, {
-      correlationId: correlation_id
-    });
-  }
-
-  async publishOrdenActualizado(nuevo_orden, correlation_id) {
-    await this.eventBus.publish('categoria.orden_actualizado', {
-      nuevo_orden
-    }, {
-      correlationId: correlation_id
-    });
-  }
-
-  // ==========================================
-  // Helper Methods
-  // ==========================================
-
-  slugify(text) {
-    return text
+  // 5o helper auxiliar — slugify canonico (preservado del monolito con prefix)
+  _slugify(text) {
+    return String(text || '')
       .toLowerCase()
       .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '');
   }
+
+  // 6o helper auxiliar — publishUIState (push de estado a UI mediante evento canonico)
+  async _publishUIState(domain, state, sourcePayload = null) {
+    await this._publicarEvento(`${domain}.ui_state`, state, sourcePayload);
+  }
+
+  _logError(logEvent, fields, kind, code) {
+    this.logger.error(logEvent, { ...fields, code, kind });
+    this.metrics?.increment('categorias.errors', { kind, code });
+  }
+
+  _unwrap(event) { return event?.data || event?.payload || event || {}; }
 }
 
 module.exports = CategoriasModule;

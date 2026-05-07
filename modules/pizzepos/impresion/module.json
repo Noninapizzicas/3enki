@@ -1,9 +1,10 @@
 {
   "name": "impresion",
-  "version": "3.0.0",
-  "description": "Formateo ESC/POS y envío directo a impresoras ESP32 via MQTT. Autodescubrimiento de impresoras. Sin capas intermedias.",
+  "version": "4.0.0",
+  "description": "Formateo ESC/POS y envio directo a impresoras ESP32 via MQTT. Autodescubrimiento de impresoras. Sin capas intermedias.",
   "author": "Pizzepos Team",
   "language": "es",
+  "main": "index.js",
   "provides": {
     "events": [
       "impresion.comanda_generada",
@@ -14,165 +15,49 @@
   },
   "events": {
     "publishes": [
-      {
-        "event": "impresion.comanda_generada",
-        "description": "Comanda formateada y enviada directamente al ESP32 via MQTT"
-      },
-      {
-        "event": "impresion.error",
-        "description": "Error al generar o enviar impresión"
-      },
-      {
-        "event": "impresion.ticket_venta_generado",
-        "description": "Ticket de venta formateado y enviado"
-      },
-      {
-        "event": "impresion.ticket_pieza_generado",
-        "description": "Ticket de pieza individual formateado y enviado"
-      }
+      { "event": "impresion.comanda_generada",      "description": "Comanda formateada y enviada al ESP32 via MQTT (lleva project_id top-level + correlation_id + timestamp)." },
+      { "event": "impresion.error",                 "description": "Error reportado por el ESP32 firmware (incluye error_code, error_detail, attempts, bt_mode, etc)." },
+      { "event": "impresion.ticket_venta_generado", "description": "Ticket de venta (recibo cliente) formateado y enviado." },
+      { "event": "impresion.ticket_pieza_generado", "description": "Ticket de pieza individual formateado y enviado (uno por item de cocina)." }
     ],
     "subscribes": [
-      {
-        "event": "cocina.item_ticket",
-        "description": "Imprimir ticket de pieza individual cuando horno marca item como salido",
-        "handler": "onItemTicket"
-      },
-      {
-        "event": "cuenta.creada",
-        "description": "Cachear ref_display canónico para impresión de tickets",
-        "handler": "onCuentaCreada"
-      },
-      {
-        "event": "mesa.abierta",
-        "description": "Cachear nombre de mesa para impresión de tickets (legacy)",
-        "handler": "onMesaAbierta"
-      },
-      {
-        "event": "mesa.renombrada",
-        "description": "Actualizar nombre de mesa cuando se renombra",
-        "handler": "onMesaRenombrada"
-      },
-      {
-        "event": "cuenta.eliminada",
-        "description": "Limpiar cache de ref_display al eliminar cualquier tipo de cuenta",
-        "handler": "onCuentaEliminada"
-      },
-      {
-        "event": "mesa.cerrada",
-        "description": "Limpiar cache de nombre al cerrar mesa",
-        "handler": "onMesaCerrada"
-      },
-      {
-        "event": "llevar.ticket_creado",
-        "description": "Cachear nombre de ticket llevar para impresión (legacy)",
-        "handler": "onLlevarTicketCreado"
-      },
-      {
-        "event": "cuenta.actualizada",
-        "description": "Actualizar ref_display en cache cuando se renombra cualquier cuenta",
-        "handler": "onCuentaActualizada"
-      },
-      {
-        "event": "caja.cerrada",
-        "description": "Cierre de caja - limpiar caches y historial",
-        "handler": "onCajaCerrada"
-      },
-      {
-        "event": "dia.iniciado",
-        "description": "Nuevo día - limpiar caches",
-        "handler": "onDiaIniciado"
-      }
+      { "event": "cocina.item_ticket",   "handler": "onItemTicket",          "description": "Imprimir ticket de pieza individual cuando horno marca item como salido." },
+      { "event": "cuenta.creada",        "handler": "onCuentaCreada",        "description": "Cachear ref_display canonico para impresion de tickets." },
+      { "event": "mesa.abierta",         "handler": "onMesaAbierta",         "description": "Cachear nombre de mesa (legacy)." },
+      { "event": "mesa.renombrada",      "handler": "onMesaRenombrada",      "description": "Actualizar nombre de mesa cuando se renombra." },
+      { "event": "cuenta.eliminada",     "handler": "onCuentaEliminada",     "description": "Limpiar cache de ref_display al eliminar cuenta." },
+      { "event": "mesa.cerrada",         "handler": "onMesaCerrada",         "description": "Limpiar cache de nombre al cerrar mesa." },
+      { "event": "llevar.ticket_creado", "handler": "onLlevarTicketCreado",  "description": "Cachear nombre de ticket llevar (legacy)." },
+      { "event": "cuenta.actualizada",   "handler": "onCuentaActualizada",   "description": "Actualizar ref_display en cache cuando se renombra cualquier cuenta." },
+      { "event": "caja.cerrada",         "handler": "onCajaCerrada",         "description": "Cierre de caja — limpiar caches y historial + reset metricas." },
+      { "event": "dia.iniciado",         "handler": "onDiaIniciado",         "description": "Nuevo dia — limpiar caches." }
     ]
   },
   "ui_handlers": [
-    {
-      "domain": "impresion",
-      "action": "ticket",
-      "handler": "handleImprimirComanda"
-    },
-    {
-      "domain": "impresion",
-      "action": "ticket-venta",
-      "handler": "handleImprimirTicketVenta"
-    },
-    {
-      "domain": "impresion",
-      "action": "estado",
-      "handler": "handleGetEstado"
-    },
-    {
-      "domain": "impresion",
-      "action": "historial",
-      "handler": "handleGetHistorial"
-    },
-    {
-      "domain": "impresion",
-      "action": "health",
-      "handler": "handleHealthCheck"
-    },
-    {
-      "domain": "impresion",
-      "action": "metrics",
-      "handler": "handleGetMetrics"
-    },
-    {
-      "domain": "impresion",
-      "action": "impresoras",
-      "handler": "handleListarImpresoras"
-    }
+    { "domain": "impresion", "action": "ticket",       "handler": "handleImprimirComanda",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "impresion", "action": "ticket-venta", "handler": "handleImprimirTicketVenta", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "impresion", "action": "estado",       "handler": "handleGetEstado",           "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "impresion", "action": "historial",    "handler": "handleGetHistorial",        "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "impresion", "action": "health",       "handler": "handleHealthCheck",         "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "impresion", "action": "metrics",      "handler": "handleGetMetrics",          "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "impresion", "action": "impresoras",   "handler": "handleListarImpresoras",    "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "apis": [
-    {
-      "method": "POST",
-      "path": "/ticket",
-      "handler": "handleImprimirComanda",
-      "description": "Reimprimir comanda manualmente. Body: { cuenta_id, items, destino?, project_id? }"
-    },
-    {
-      "method": "POST",
-      "path": "/ticket-venta",
-      "handler": "handleImprimirTicketVenta",
-      "description": "Imprimir ticket de venta (recibo cliente con precios, total, metodo pago)"
-    },
-    {
-      "method": "GET",
-      "path": "/estado",
-      "handler": "handleGetEstado",
-      "description": "Estado actual del módulo de impresión y impresoras descubiertas"
-    },
-    {
-      "method": "GET",
-      "path": "/historial",
-      "handler": "handleGetHistorial",
-      "description": "Historial de comandas impresas"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check — reporta impresoras listas"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Metricas del modulo"
-    },
-    {
-      "method": "GET",
-      "path": "/impresoras",
-      "handler": "handleListarImpresoras",
-      "description": "Lista impresoras ESP32 descubiertas via autodescubrimiento MQTT"
-    }
-  ],
+  "tools": [],
   "config": {
-    "ancho": "58mm",
-    "destino_default": ""
+    "ancho":           "58mm",
+    "destino_default": "",
+    "persistence": {
+      "type":  "in-memory + mqtt-passthrough",
+      "notes": "El modulo NO persiste a disco — los tickets se generan en memoria y se envian via MQTT directo a ESP32. El historial es ring buffer en memoria (last 100). Caches se limpian en caja.cerrada / dia.iniciado."
+    }
+  },
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "observability": {
     "logging": {
-      "level": "info",
-      "structured": true,
+      "level":          "info",
+      "structured":     true,
       "correlation_id": true
     },
     "metrics": {
@@ -181,7 +66,8 @@
         "impresion.comanda.total",
         "impresion.reimpresion.total",
         "impresion.error.total",
-        "impresion.impresoras.descubiertas"
+        "impresion.impresoras.descubiertas",
+        "impresion.errors"
       ]
     }
   }

@@ -1,39 +1,41 @@
 /**
- * Módulo Impresión v3.0
+ * pizzepos/impresion v4.0.0 — Formateo ESC/POS + envio directo MQTT a ESP32 (POC2 rewrite).
  *
- * Formatea ESC/POS y envía directamente a impresoras ESP32 via MQTT.
- * Los ESP32 son nodos de primera clase que se autodescubren y se registran
- * publicando su status en impresion/{project}/status/{device}.
+ * Sin capas intermedias: evento → formatear ESC/POS → MQTT impresion/<project>/print/<device> → ESP32 → impresora.
  *
- * Flujo directo (2 hops):
- *   evento → formatear ESC/POS → MQTT impresion/{project}/print/{device} → ESP32 → impresora
+ * Autodescubrimiento ESP32:
+ *   subscribe impresion/+/status/+ + enki/+/status/+ — ESP32 publica su status periodicamente.
+ *   subscribe impresion/+/printed/+                  — ACK de impresion con error_code firmware.
  *
- * Sin capas intermedias: no perifericos, no provider, no transport.
- * El ESP32 habla MQTT nativo — publicamos directo a su topic.
+ * Eventos del bus:
+ *   subscribes (10): cocina.item_ticket, cuenta.{creada,eliminada,actualizada}, mesa.{abierta,renombrada,cerrada},
+ *                    llevar.ticket_creado, caja.cerrada, dia.iniciado.
+ *   publishes  (4):  impresion.{error, ticket_pieza_generado, comanda_generada, ticket_venta_generado}.
  *
- * Autodescubrimiento:
- *   Los ESP32 publican su status periodicamente. Este módulo escucha esos
- *   mensajes y mantiene un registro vivo de impresoras disponibles con sus
- *   capacidades (ancho, mac, estado BLE, etc).
+ * 7 ui_handlers (auto-wired desde module.json.ui_handlers).
  */
+
+'use strict';
 
 const crypto = require('crypto');
 
+const DEFAULT_PROJECT_ID = 'default';
+
 // ==========================================
-// ESC/POS constants
+// ESC/POS constants (preservadas byte a byte del monolito)
 // ==========================================
 const ESC = '\x1B';
 const GS  = '\x1D';
 const CMD = {
   INIT:           `${ESC}@`,
-  CODEPAGE_437:   `${ESC}t\x00`,       // Code Page 437 (US)
+  CODEPAGE_437:   `${ESC}t\x00`,
   BOLD_ON:        `${ESC}E\x01`,
   BOLD_OFF:       `${ESC}E\x00`,
-  DOUBLE_ON:      `${GS}!\x11`,       // doble ancho + alto
+  DOUBLE_ON:      `${GS}!\x11`,
   DOUBLE_OFF:     `${GS}!\x00`,
-  WIDE_ON:        `${GS}!\x10`,       // solo doble ancho
+  WIDE_ON:        `${GS}!\x10`,
   WIDE_OFF:       `${GS}!\x00`,
-  TALL_ON:        `${GS}!\x01`,       // solo doble alto
+  TALL_ON:        `${GS}!\x01`,
   TALL_OFF:       `${GS}!\x00`,
   ALIGN_CENTER:   `${ESC}a\x01`,
   ALIGN_LEFT:     `${ESC}a\x00`,
@@ -48,102 +50,49 @@ const CMD = {
   UNDERLINE_OFF:  `${ESC}-\x00`
 };
 
-// ==========================================
-// Code Page 437 graphic characters
-// ==========================================
-const CP437 = {
-  // Box drawing
-  TOP_LEFT:     '\xC9',  // ╔
-  TOP_RIGHT:    '\xBB',  // ╗
-  BOT_LEFT:     '\xC8',  // ╚
-  BOT_RIGHT:    '\xBC',  // ╝
-  HORIZ:        '\xCD',  // ═
-  VERT:         '\xBA',  // ║
-  LIGHT_HORIZ:  '\xC4',  // ─
-  // Symbols
-  DIAMOND:      '\x04',  // ♦
-  BULLET:       '\x07',  // •
-  ARROW_R:      '\x10',  // ►
-  SQUARE:       '\xFE',  // ■
-  BLOCK:        '\xDB',  // █
-  SHADE_LIGHT:  '\xB0',  // ░
-  SHADE_MED:    '\xB1',  // ▒
-  TRIANGLE_R:   '\x10',  // ►
-  STAR:         '\x0F',  // ☼
-  PHONE:        '\x15',  // §
-  DOT:          '\xF9',  // ∙
-};
+const ANCHOS = { '58mm': 32, '80mm': 42 };
 
-// Icono CP437 por canal — discreto pero reconocible
 const CANAL_ICON = {
-  mesa:      '*',    // ♦ MESA
-  telefono:  'T',      // § TEL
-  llevar:    '>',    // ► LLEVAR
-  glovo:     '*',       // ☼ GLOVO
-  whatsapp:  '*',     // • WHATSAPP
-  uber_eats: '*',     // ■ UBER
-  just_eat:  '.',        // ∙ JUST EAT
-  default:   '*'      // ■
-};
-
-// Anchos por tipo de impresora
-const ANCHOS = {
-  '58mm': 32,
-  '80mm': 42
+  mesa:      '*', telefono:  'T', llevar:    '>',
+  glovo:     '*', whatsapp:  '*', uber_eats: '*',
+  just_eat:  '.', default:   '*'
 };
 
 class ImpresionModule {
   constructor() {
-    this.name = 'impresion';
-    this.version = '3.1.0';
+    this.name    = 'impresion';
+    this.version = '4.0.0';
 
-    // Dependencias (inyectadas en onLoad)
     this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
+    this.logger   = null;
+    this.metrics  = null;
 
-    // Config
     this.config = {
-      ancho: '58mm',
-      destino_default: ''   // vacío = usar primera impresora descubierta online
+      ancho:           '58mm',
+      destino_default: ''
     };
 
-    // Ancho de línea calculado
     this.lineWidth = ANCHOS['58mm'];
     this.separator = '';
     this.doubleSep = '';
 
-    // Impresoras descubiertas via MQTT status
-    // Map: device_id → { device_id, project_id, online, printer_ready, printer_name,
-    //                     printer_addr, ancho, wifi_rssi, ip, uptime_sec, last_seen }
-    this.impresoras = new Map();
+    this.impresoras    = new Map();
+    this.cuentaNombres = new Map();
+    this.historial     = [];
+    this.maxHistorial  = 100;
 
-    // Historial de comandas (últimas 100)
-    this.historial = [];
-    this.maxHistorial = 100;
-
-    // Métricas internas
     this.internalMetrics = {
-      comandas_generadas: 0,
-      reimpresiones: 0,
-      errores: 0,
+      comandas_generadas:      0,
+      reimpresiones:           0,
+      errores:                 0,
       impresoras_descubiertas: 0
     };
 
-    // Cache de ref_display canónico (cuenta_id → { ref })
-    // Se alimenta primariamente de cuenta.creada (ref_display), con fallback a eventos legacy
-    this.cuentaNombres = new Map();
-
-    // Referencia al listener MQTT para cleanup
     this._onMqttMessage = null;
-
-    // TTL: marcar impresoras offline si no reportan en 90s (3x status interval de 30s)
-    this._ttlInterval = null;
-    this._ttlMs = 90000;
-
-    // Pending jobs: job_id → { resolve, reject, timer, deviceId, timestamp }
-    this._pendingJobs = new Map();
-    this._jobTimeoutMs = 15000;
+    this._ttlInterval   = null;
+    this._ttlMs         = 90000;
+    this._pendingJobs   = new Map();
+    this._jobTimeoutMs  = 15000;
   }
 
   // ==========================================
@@ -151,30 +100,27 @@ class ImpresionModule {
   // ==========================================
 
   async onLoad(core) {
-    this.logger = core.logger;
-    this.metrics = core.metrics;
+    this.logger   = core.logger;
+    this.metrics  = core.metrics;
     this.eventBus = core.eventBus;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Merge config del módulo si existe
     if (core.config?.impresion) {
       this.config = { ...this.config, ...core.config.impresion };
     }
 
-    // Calcular ancho de línea
     this.lineWidth = ANCHOS[this.config.ancho] || 32;
     this.separator = '-'.repeat(this.lineWidth);
     this.doubleSep = '='.repeat(this.lineWidth);
 
-    // Iniciar autodescubrimiento de impresoras ESP32
     await this._iniciarAutoDescubrimiento();
 
     this.logger.info('module.loaded', {
-      module: this.name,
-      version: this.version,
-      ancho: this.config.ancho,
-      chars: this.lineWidth,
+      module:          this.name,
+      version:         this.version,
+      ancho:           this.config.ancho,
+      chars:           this.lineWidth,
       destino_default: this.config.destino_default || '(auto-discovery)'
     });
   }
@@ -183,46 +129,34 @@ class ImpresionModule {
     this.logger.info('module.unloading', { module: this.name });
     this._detenerAutoDescubrimiento();
     this.impresoras.clear();
+    this.cuentaNombres.clear();
     this.historial = [];
     this.logger.info('module.unloaded', { module: this.name });
   }
 
   // ==========================================
-  // Autodescubrimiento de impresoras ESP32
+  // Autodescubrimiento ESP32 via MQTT
   // ==========================================
 
-  /**
-   * Escucha impresion/+/status/+ para descubrir ESP32 que se anuncian.
-   * El ESP32 publica periódicamente su status con toda su info:
-   *   { device_id, project_id, online, printer_ready, printer_name,
-   *     printer_addr, wifi_rssi, wifi_ssid, ip, uptime_sec, print_count, ... }
-   */
   async _iniciarAutoDescubrimiento() {
     const mqtt = this.eventBus?.mqtt;
     if (!mqtt || !mqtt.isConnected) {
-      this.logger.warn('impresion.autodiscovery.sin_mqtt', {
-        nota: 'MQTT no disponible — autodescubrimiento deshabilitado'
-      });
+      this.logger.warn('impresion.autodiscovery.sin_mqtt');
       return;
     }
 
     this._onMqttMessage = this._handleStatusMessage.bind(this);
     mqtt.on('message', this._onMqttMessage);
 
+    const topics = ['impresion/+/status/+', 'enki/+/status/+', 'impresion/+/printed/+'];
     try {
-      await mqtt.subscribe('impresion/+/status/+');
-      await mqtt.subscribe('enki/+/status/+');
-      await mqtt.subscribe('impresion/+/printed/+');
-      this.logger.info('impresion.autodiscovery.iniciado', {
-        topics: ['impresion/+/status/+', 'enki/+/status/+', 'impresion/+/printed/+']
-      });
+      for (const t of topics) await mqtt.subscribe(t);
+      this.logger.info('impresion.autodiscovery.iniciado', { topics });
     } catch (err) {
-      this.logger.warn('impresion.autodiscovery.subscribe_error', {
-        error: err.message
-      });
+      this.logger.error('impresion.autodiscovery.subscribe_error', { error: err.message });
+      this.metrics?.increment('impresion.errors', { kind: 'mqtt_subscribe', code: 'INTERNAL_ERROR' });
     }
 
-    // TTL: cada 30s comprobar impresoras que no han reportado en 90s
     this._ttlInterval = setInterval(() => this._checkImpresorasTTL(), 30000);
   }
 
@@ -236,20 +170,12 @@ class ImpresionModule {
       clearInterval(this._ttlInterval);
       this._ttlInterval = null;
     }
-    // Limpiar pending jobs
-    for (const [jobId, job] of this._pendingJobs) {
-      clearTimeout(job.timer);
-    }
+    for (const [, job] of this._pendingJobs) clearTimeout(job.timer);
     this._pendingJobs.clear();
   }
 
-  /**
-   * Procesa mensajes de status de ESP32.
-   * Topics: impresion/{projectId}/status/{deviceId}
-   *         enki/{projectId}/status/{deviceId}
-   */
   _handleStatusMessage(topic, payload) {
-    // ACK de impresión: impresion/{project}/printed/{device}
+    // ACK de impresion
     const ackMatch = topic.match(/^impresion\/([^/]+)\/printed\/([^/]+)$/);
     if (ackMatch) {
       this._handlePrintAck(topic, payload);
@@ -260,85 +186,67 @@ class ImpresionModule {
     if (!match) return;
 
     const [, projectId, deviceId] = match;
-
-    let data;
-    try {
-      data = typeof payload === 'string' ? JSON.parse(payload)
-           : Buffer.isBuffer(payload) ? JSON.parse(payload.toString())
-           : payload;
-    } catch {
-      return;
-    }
+    const data = this._parsePayload(payload, 'autodiscovery');
+    if (!data) return;
 
     const esNueva = !this.impresoras.has(deviceId);
 
     this.impresoras.set(deviceId, {
-      device_id: deviceId,
-      project_id: projectId,
-      online: data.online !== false,
+      device_id:     deviceId,
+      project_id:    projectId,
+      online:        data.online !== false,
       printer_ready: data.printer_ready || false,
-      printer_name: data.printer_name || null,
-      printer_addr: data.printer_addr || null,
-      ancho: data.ancho || this.config.ancho || '58mm',
-      wifi_rssi: data.wifi_rssi || null,
-      wifi_ssid: data.wifi_ssid || null,
-      ip: data.ip || null,
-      uptime_sec: data.uptime_sec || 0,
-      print_count: data.print_count || 0,
-      error_count: data.error_count || 0,
-      free_heap: data.free_heap || null,
-      firmware: data.firmware || null,
-      last_seen: new Date().toISOString()
+      printer_name:  data.printer_name  || null,
+      printer_addr:  data.printer_addr  || null,
+      ancho:         data.ancho || this.config.ancho || '58mm',
+      wifi_rssi:     data.wifi_rssi || null,
+      wifi_ssid:     data.wifi_ssid || null,
+      ip:            data.ip || null,
+      uptime_sec:    data.uptime_sec || 0,
+      print_count:   data.print_count || 0,
+      error_count:   data.error_count || 0,
+      free_heap:     data.free_heap || null,
+      firmware:      data.firmware  || null,
+      last_seen:     new Date().toISOString()
     });
 
     if (esNueva) {
       this.internalMetrics.impresoras_descubiertas++;
+      this.metrics?.increment('impresion.impresoras.descubiertas');
       this.logger.info('impresion.impresora.descubierta', {
-        device_id: deviceId,
-        project_id: projectId,
-        printer_name: data.printer_name,
-        printer_addr: data.printer_addr,
-        ip: data.ip,
+        device_id:     deviceId,
+        project_id:    projectId,
+        printer_name:  data.printer_name,
+        printer_addr:  data.printer_addr,
+        ip:            data.ip,
         printer_ready: data.printer_ready
       });
     }
   }
 
-  // ==========================================
-  // ACK handling — saber si el ESP32 imprimió
-  // ==========================================
-
   _handlePrintAck(topic, payload) {
-    let data;
-    try {
-      data = typeof payload === 'string' ? JSON.parse(payload)
-           : Buffer.isBuffer(payload) ? JSON.parse(payload.toString())
-           : payload;
-    } catch {
-      return;
-    }
+    const data = this._parsePayload(payload, 'print_ack');
+    if (!data) return;
 
     const jobId = data.job_id;
     if (!jobId) return;
 
-    // Extraer diagnostico completo del ESP32
     const diagnostico = {
-      job_id: jobId,
-      device_id: data.device_id,
-      success: data.success,
-      error_code: data.error_code || null,
-      error_detail: this._mensajeError(data.error_code),
-      attempts: data.attempts || 1,
-      bt_mode: data.bt_mode || null,
-      ble_connected: data.ble_connected,
-      free_heap: data.free_heap || null,
-      reconnect_count: data.reconnect_count || null,
-      timestamp: new Date().toISOString()
+      job_id:           jobId,
+      device_id:        data.device_id,
+      success:          data.success,
+      error_code:       data.error_code || null,
+      error_detail:     this._mensajeError(data.error_code),
+      attempts:         data.attempts || 1,
+      bt_mode:          data.bt_mode || null,
+      ble_connected:    data.ble_connected,
+      free_heap:        data.free_heap || null,
+      reconnect_count:  data.reconnect_count || null,
+      timestamp:        new Date().toISOString()
     };
 
     const pending = this._pendingJobs.get(jobId);
 
-    // Resolver la promesa si estamos esperando este job
     if (pending) {
       clearTimeout(pending.timer);
       this._pendingJobs.delete(jobId);
@@ -355,69 +263,56 @@ class ImpresionModule {
         pending.resolve({ success: false, job_id: jobId, ...diagnostico });
       }
     } else if (!data.success) {
-      // ACK de error de un job que no estabamos esperando — loggear
       this.logger.warn('impresion.ack_error_huerfano', diagnostico);
     } else {
-      this.logger.info('impresion.ack_recibido', {
-        job_id: jobId, success: data.success, device: data.device_id
-      });
+      this.logger.info('impresion.ack_recibido', { job_id: jobId, success: data.success, device: data.device_id });
     }
 
-    // Publicar evento para el frontend SIEMPRE que haya error
     if (!data.success) {
-      this.eventBus.publish('impresion.error', {
+      this._publicarEvento('impresion.error', {
         ...diagnostico,
-        error: diagnostico.error_detail  // campo legible para el store del frontend
+        error: diagnostico.error_detail
       });
+      this.metrics?.increment('impresion.error.total', { code: diagnostico.error_code || 'unknown' });
     }
   }
 
-  /**
-   * Traduce error_code del firmware a mensaje legible en español
-   */
   _mensajeError(code) {
     const mensajes = {
-      no_mac: 'Impresora sin configurar (no hay MAC)',
-      init_failed: 'Error iniciando Bluetooth',
-      connect_failed: 'No se pudo conectar a la impresora',
-      write_failed: 'Error escribiendo en la impresora (¿sin papel?)',
-      disconnected_mid_send: 'Impresora desconectada durante el envío',
-      missing_data: 'Job sin campo data (payload vacío)',
-      payload_too_large: 'Payload demasiado grande para el buffer',
-      base64_error: 'Error decodificando base64',
-      queue_full: 'Cola de impresión llena (intentar de nuevo)'
+      no_mac:                  'Impresora sin configurar (no hay MAC)',
+      init_failed:             'Error iniciando Bluetooth',
+      connect_failed:          'No se pudo conectar a la impresora',
+      write_failed:            'Error escribiendo en la impresora (¿sin papel?)',
+      disconnected_mid_send:   'Impresora desconectada durante el envio',
+      missing_data:            'Job sin campo data (payload vacio)',
+      payload_too_large:       'Payload demasiado grande para el buffer',
+      base64_error:            'Error decodificando base64',
+      queue_full:              'Cola de impresion llena (intentar de nuevo)'
     };
-    return mensajes[code] || `Error desconocido (${code || 'sin código'})`;
+    return mensajes[code] || `Error desconocido (${code || 'sin codigo'})`;
   }
-
-  // ==========================================
-  // TTL — marcar impresoras offline si no reportan
-  // ==========================================
 
   _checkImpresorasTTL() {
     const now = Date.now();
     for (const [deviceId, imp] of this.impresoras) {
       if (!imp.online) continue;
-
       const lastSeen = new Date(imp.last_seen).getTime();
       if (now - lastSeen > this._ttlMs) {
         imp.online = false;
         imp.printer_ready = false;
         this.logger.warn('impresion.impresora.ttl_expirado', {
-          device_id: deviceId,
-          last_seen: imp.last_seen,
-          ttl_ms: this._ttlMs
+          device_id: deviceId, last_seen: imp.last_seen, ttl_ms: this._ttlMs
         });
       }
     }
   }
 
   // ==========================================
-  // Event Handler: ref_display canónico (cuenta.creada)
+  // Bus handlers — cache de ref_display
   // ==========================================
 
   async onCuentaCreada(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, ref_display } = data;
     if (cuenta_id && ref_display) {
       this.cuentaNombres.set(cuenta_id, { ref: ref_display });
@@ -425,14 +320,9 @@ class ImpresionModule {
     }
   }
 
-  // ==========================================
-  // Event Handlers: mesa nombre cache (legacy, para eventos sin ref_display)
-  // ==========================================
-
   async onMesaAbierta(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, nombre } = data;
-    // Only set if not already cached via cuenta.creada (ref_display takes priority)
     if (cuenta_id && nombre && !this.cuentaNombres.has(cuenta_id)) {
       this.cuentaNombres.set(cuenta_id, { ref: nombre });
       this.logger.info('impresion.cuenta_nombre.cached', { cuenta_id, nombre });
@@ -440,7 +330,7 @@ class ImpresionModule {
   }
 
   async onMesaRenombrada(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, nombre } = data;
     if (cuenta_id && nombre) {
       this.cuentaNombres.set(cuenta_id, { ref: nombre });
@@ -449,17 +339,14 @@ class ImpresionModule {
   }
 
   async onMesaCerrada(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id } = data;
-    if (cuenta_id) {
-      this.cuentaNombres.delete(cuenta_id);
-    }
+    if (cuenta_id) this.cuentaNombres.delete(cuenta_id);
   }
 
   async onLlevarTicketCreado(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, numero_ticket, cliente_nombre } = data;
-    // Only set if not already cached via cuenta.creada (ref_display takes priority)
     if (cuenta_id && numero_ticket != null && !this.cuentaNombres.has(cuenta_id)) {
       const esNombreReal = cliente_nombre && !/^Cliente\s+\d+$/i.test(cliente_nombre);
       const ref = esNombreReal ? cliente_nombre : `LLEVAR ${numero_ticket}`;
@@ -469,10 +356,9 @@ class ImpresionModule {
   }
 
   async onCuentaActualizada(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, cambios } = data;
     if (!cuenta_id) return;
-    // Prefer ref_display (canonical), fallback to nombre
     const newRef = cambios?.ref_display || cambios?.nombre || null;
     if (newRef) {
       const existing = this.cuentaNombres.get(cuenta_id);
@@ -482,57 +368,48 @@ class ImpresionModule {
   }
 
   async onCuentaEliminada(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id } = data;
-    if (cuenta_id) {
-      this.cuentaNombres.delete(cuenta_id);
-    }
+    if (cuenta_id) this.cuentaNombres.delete(cuenta_id);
   }
-
-  // ==========================================
-  // Reset: caja.cerrada / dia.iniciado
-  // ==========================================
 
   async onCajaCerrada(event) {
     this.cuentaNombres.clear();
     this.historial = [];
     this.internalMetrics.comandas_generadas = 0;
-    this.internalMetrics.reimpresiones = 0;
-    this.internalMetrics.errores = 0;
-
+    this.internalMetrics.reimpresiones      = 0;
+    this.internalMetrics.errores            = 0;
     this.logger.info('impresion.reset.caja_cerrada', {
-      correlation_id: event?.metadata?.correlationId
+      correlation_id: event?.metadata?.correlationId || this._unwrap(event)?.correlation_id
     });
   }
 
   async onDiaIniciado(event) {
     this.cuentaNombres.clear();
     this.historial = [];
-
     this.logger.info('impresion.reset.dia_iniciado', {
-      correlation_id: event?.metadata?.correlationId
+      correlation_id: event?.metadata?.correlationId || this._unwrap(event)?.correlation_id
     });
   }
 
   // ==========================================
-  // Event Handler: cocina.item_ticket
+  // Bus handler — cocina.item_ticket → ticket pieza
   // ==========================================
 
   async onItemTicket(event) {
-    const data = event?.data || event?.payload || event;
-    const { pedido_id, cuenta_id, canal, ref_display, item_id, nombre, cantidad, categoria, estacion,
-            ingredientes, variaciones, notas, impresora, project_id } = data;
+    const data = this._unwrap(event);
+    const {
+      pedido_id, cuenta_id, canal, ref_display,
+      item_id, nombre, cantidad, categoria, estacion,
+      ingredientes, variaciones, notas, impresora, project_id
+    } = data;
 
-    // Actualizar cache con ref_display si viene en el evento
     if (cuenta_id && ref_display) {
       this.cuentaNombres.set(cuenta_id, { ref: ref_display });
     }
 
     const destino = impresora?.destino || this.config.destino_default;
-
-    this.logger.info('impresion.ticket_pieza.generando', {
-      pedido_id, item_id, nombre, estacion, destino
-    });
+    this.logger.info('impresion.ticket_pieza.generando', { pedido_id, item_id, nombre, estacion, destino });
 
     try {
       const ticket = this.formatearTicketPieza({
@@ -541,336 +418,284 @@ class ImpresionModule {
         ingredientes, variaciones, notas
       });
 
-      await this.enviarImpresora(ticket, destino, project_id);
+      await this._enviarImpresora(ticket, destino, project_id);
 
       const registro = {
-        comanda_id: `tkt_${crypto.randomUUID().slice(0, 8)}`,
-        tipo: 'ticket_pieza',
+        comanda_id:   `tkt_${crypto.randomUUID().slice(0, 8)}`,
+        tipo:         'ticket_pieza',
         pedido_id,
         cuenta_id,
         item_id,
         nombre,
         estacion,
         destino,
-        generada_at: new Date().toISOString()
+        generada_at:  new Date().toISOString()
       };
 
-      this.guardarHistorial(registro);
+      this._guardarHistorial(registro);
       this.internalMetrics.comandas_generadas++;
+      this.metrics?.increment('impresion.comanda.total', { tipo: 'ticket_pieza' });
 
-      await this.eventBus.publish('impresion.ticket_pieza_generado', registro);
+      await this._publicarEvento('impresion.ticket_pieza_generado', registro, data);
 
-      this.logger.info('impresion.ticket_pieza.enviado', {
-        pedido_id, item_id, nombre, estacion, destino
-      });
-    } catch (error) {
+      this.logger.info('impresion.ticket_pieza.enviado', { pedido_id, item_id, nombre, estacion, destino });
+    } catch (err) {
       this.internalMetrics.errores++;
-      this.logger.error('impresion.ticket_pieza.error', {
-        pedido_id, item_id, error: error.message
-      });
+      this.metrics?.increment('impresion.errors', { kind: 'ticket_pieza', code: 'INTERNAL_ERROR' });
+      this.logger.error('impresion.ticket_pieza.error', { pedido_id, item_id, error: err.message });
     }
   }
 
   // ==========================================
-  // UI Handlers
+  // UI Handlers (auto-wired desde module.json)
   // ==========================================
 
-  /**
-   * POST /modules/impresion/ticket
-   * Reimprimir comanda manualmente
-   */
   async handleImprimirComanda(data) {
-    const { cuenta_id, pedido_id, items, canal, notas_generales, destino, project_id } = data;
-
-    if (!cuenta_id && !pedido_id) {
-      return { status: 400, error: 'Se requiere cuenta_id o pedido_id' };
-    }
-    if (!items || items.length === 0) {
-      return { status: 400, error: 'Se requiere al menos un item' };
-    }
-
     try {
+      const { cuenta_id, pedido_id, items, canal, notas_generales, destino, project_id } = data || {};
+
+      if (!cuenta_id && !pedido_id) {
+        this._logError('impresion.ui.ticket.validation_failed', { missing: 'cuenta_id|pedido_id' }, 'ui_ticket', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'cuenta_id o pedido_id es requerido', { fields: ['cuenta_id', 'pedido_id'] });
+      }
+      if (!items || items.length === 0) {
+        this._logError('impresion.ui.ticket.validation_failed', { missing: 'items' }, 'ui_ticket', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'items es requerido y no vacio', { field: 'items' });
+      }
+
       const comanda = this.formatearComanda({
         pedido_id: pedido_id || cuenta_id,
-        cuenta_id,
-        canal,
-        items,
-        notas_generales,
-        reimpresion: true
+        cuenta_id, canal, items, notas_generales, reimpresion: true
       });
-
-      await this.enviarImpresora(comanda, destino, project_id);
+      await this._enviarImpresora(comanda, destino, project_id);
 
       const registro = {
-        comanda_id: `cmd_${crypto.randomUUID().slice(0, 8)}`,
-        pedido_id: pedido_id || cuenta_id,
+        comanda_id:   `cmd_${crypto.randomUUID().slice(0, 8)}`,
+        pedido_id:    pedido_id || cuenta_id,
         cuenta_id,
-        canal: canal || null,
-        items_count: items.length,
-        reimpresion: true,
-        destino: destino || this.config.destino_default,
-        generada_at: new Date().toISOString()
+        canal:        canal || null,
+        items_count:  items.length,
+        reimpresion:  true,
+        destino:      destino || this.config.destino_default,
+        generada_at:  new Date().toISOString()
       };
 
-      this.guardarHistorial(registro);
+      this._guardarHistorial(registro);
       this.internalMetrics.reimpresiones++;
+      this.metrics?.increment('impresion.reimpresion.total');
 
-      await this.eventBus.publish('impresion.comanda_generada', registro);
+      await this._publicarEvento('impresion.comanda_generada', registro, data);
 
       return { status: 200, data: registro };
-    } catch (error) {
+    } catch (err) {
       this.internalMetrics.errores++;
-      this.logger.error('impresion.reimpresion.error', {
-        pedido_id, cuenta_id, error: error.message
-      });
-      return { status: 500, error: error.message };
+      return this._handleHandlerError('impresion.ui.ticket.failed', err, 'ui_ticket');
     }
   }
 
-  /**
-   * GET /modules/impresion/estado
-   */
-  async handleGetEstado() {
-    const impresorasOnline = Array.from(this.impresoras.values()).filter(i => i.online);
-    return {
-      status: 200,
-      data: {
-        modulo: { name: this.name, version: this.version },
-        impresora: {
-          ancho: this.config.ancho,
-          chars_linea: this.lineWidth
-        },
-        destino_default: this.config.destino_default || '(auto-discovery)',
-        impresoras_descubiertas: this.impresoras.size,
-        impresoras_online: impresorasOnline.length
+  async handleImprimirTicketVenta(data) {
+    try {
+      const { cuenta_id, items, total, metodo_pago, destino, project_id } = data || {};
+
+      if (!cuenta_id) {
+        this._logError('impresion.ui.ticket_venta.validation_failed', { missing: 'cuenta_id' }, 'ui_ticket_venta', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'cuenta_id es requerido', { field: 'cuenta_id' });
       }
-    };
+      if (!items || items.length === 0) {
+        this._logError('impresion.ui.ticket_venta.validation_failed', { missing: 'items' }, 'ui_ticket_venta', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'items es requerido y no vacio', { field: 'items' });
+      }
+      if (total === undefined || total === null) {
+        this._logError('impresion.ui.ticket_venta.validation_failed', { missing: 'total' }, 'ui_ticket_venta', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'total es requerido', { field: 'total' });
+      }
+
+      const ticket = this.formatearTicketVenta(data);
+      await this._enviarImpresora(ticket, destino, project_id);
+
+      const registro = {
+        comanda_id:   `vta_${crypto.randomUUID().slice(0, 8)}`,
+        tipo:         'ticket_venta',
+        cuenta_id,
+        items_count:  items.length,
+        total,
+        metodo_pago:  metodo_pago || null,
+        destino:      destino || this.config.destino_default,
+        generada_at:  new Date().toISOString()
+      };
+
+      this._guardarHistorial(registro);
+      this.internalMetrics.comandas_generadas++;
+      this.metrics?.increment('impresion.comanda.total', { tipo: 'ticket_venta' });
+
+      await this._publicarEvento('impresion.ticket_venta_generado', registro, data);
+
+      return { status: 200, data: registro };
+    } catch (err) {
+      this.internalMetrics.errores++;
+      return this._handleHandlerError('impresion.ui.ticket_venta.failed', err, 'ui_ticket_venta');
+    }
+  }
+
+  async handleGetEstado() {
+    try {
+      const impresorasOnline = Array.from(this.impresoras.values()).filter(i => i.online);
+      return {
+        status: 200,
+        data: {
+          modulo:                  { name: this.name, version: this.version },
+          impresora:               { ancho: this.config.ancho, chars_linea: this.lineWidth },
+          destino_default:         this.config.destino_default || '(auto-discovery)',
+          impresoras_descubiertas: this.impresoras.size,
+          impresoras_online:       impresorasOnline.length
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('impresion.ui.estado.failed', err, 'ui_estado');
+    }
   }
 
   async handleGetHistorial(data) {
-    const limit = parseInt(data?.limit) || 20;
-    return {
-      status: 200,
-      data: { comandas: this.historial.slice(0, limit), total: this.historial.length }
-    };
+    try {
+      const limit = parseInt(data?.limit) || 20;
+      return {
+        status: 200,
+        data: { comandas: this.historial.slice(0, limit), total: this.historial.length }
+      };
+    } catch (err) {
+      return this._handleHandlerError('impresion.ui.historial.failed', err, 'ui_historial');
+    }
   }
 
   async handleHealthCheck() {
-    const impresorasOnline = Array.from(this.impresoras.values()).filter(i => i.online && i.printer_ready);
-    return {
-      status: 200,
-      data: {
-        status: impresorasOnline.length > 0 ? 'healthy' : 'degraded',
-        module: this.name,
-        version: this.version,
-        destino_default: this.config.destino_default,
-        impresoras_listas: impresorasOnline.length,
-        impresoras_total: this.impresoras.size
-      }
-    };
+    try {
+      const impresorasOnline = Array.from(this.impresoras.values()).filter(i => i.online && i.printer_ready);
+      return {
+        status: 200,
+        data: {
+          status:            impresorasOnline.length > 0 ? 'healthy' : 'degraded',
+          module:            this.name,
+          version:           this.version,
+          destino_default:   this.config.destino_default,
+          impresoras_listas: impresorasOnline.length,
+          impresoras_total:  this.impresoras.size
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('impresion.ui.health.failed', err, 'ui_health');
+    }
   }
 
   async handleGetMetrics() {
-    return {
-      status: 200,
-      data: {
-        ...this.internalMetrics,
-        historial_size: this.historial.length,
-        impresoras_descubiertas: this.impresoras.size
-      }
-    };
-  }
-
-  /**
-   * GET /modules/impresion/impresoras
-   * Lista impresoras descubiertas via autodescubrimiento MQTT.
-   * El ESP32 se anuncia solo — sin registry manual.
-   */
-  async handleListarImpresoras() {
-    const impresoras = Array.from(this.impresoras.values()).map(imp => ({
-      device_id: imp.device_id,
-      project_id: imp.project_id,
-      online: imp.online,
-      printer_ready: imp.printer_ready,
-      printer_name: imp.printer_name,
-      printer_addr: imp.printer_addr,
-      ancho: imp.ancho,
-      ip: imp.ip,
-      wifi_rssi: imp.wifi_rssi,
-      uptime_sec: imp.uptime_sec,
-      print_count: imp.print_count,
-      last_seen: imp.last_seen
-    }));
-
-    return {
-      status: 200,
-      data: {
-        impresoras,
-        total: impresoras.length,
-        destino_default: this.config.destino_default
-      }
-    };
-  }
-
-  /**
-   * POST /modules/impresion/ticket-venta
-   */
-  async handleImprimirTicketVenta(data) {
-    const { cuenta_id, items, total, metodo_pago, destino, project_id } = data;
-
-    if (!cuenta_id) {
-      return { status: 400, error: 'Se requiere cuenta_id' };
-    }
-    if (!items || items.length === 0) {
-      return { status: 400, error: 'Se requiere al menos un item' };
-    }
-    if (total === undefined || total === null) {
-      return { status: 400, error: 'Se requiere total' };
-    }
-
     try {
-      const ticket = this.formatearTicketVenta(data);
-      await this.enviarImpresora(ticket, destino, project_id);
-
-      const registro = {
-        comanda_id: `vta_${crypto.randomUUID().slice(0, 8)}`,
-        tipo: 'ticket_venta',
-        cuenta_id,
-        items_count: items.length,
-        total,
-        metodo_pago: metodo_pago || null,
-        destino: destino || this.config.destino_default,
-        generada_at: new Date().toISOString()
+      return {
+        status: 200,
+        data: {
+          ...this.internalMetrics,
+          historial_size:          this.historial.length,
+          impresoras_descubiertas: this.impresoras.size
+        }
       };
+    } catch (err) {
+      return this._handleHandlerError('impresion.ui.metrics.failed', err, 'ui_metrics');
+    }
+  }
 
-      this.guardarHistorial(registro);
-      this.internalMetrics.comandas_generadas++;
-
-      await this.eventBus.publish('impresion.ticket_venta_generado', registro);
-
-      return { status: 200, data: registro };
-    } catch (error) {
-      this.internalMetrics.errores++;
-      this.logger.error('impresion.ticket_venta.error', {
-        cuenta_id, error: error.message
-      });
-      return { status: 500, error: error.message };
+  async handleListarImpresoras() {
+    try {
+      const impresoras = Array.from(this.impresoras.values()).map(imp => ({
+        device_id:      imp.device_id,
+        project_id:     imp.project_id,
+        online:         imp.online,
+        printer_ready:  imp.printer_ready,
+        printer_name:   imp.printer_name,
+        printer_addr:   imp.printer_addr,
+        ancho:          imp.ancho,
+        ip:             imp.ip,
+        wifi_rssi:      imp.wifi_rssi,
+        uptime_sec:     imp.uptime_sec,
+        print_count:    imp.print_count,
+        last_seen:      imp.last_seen
+      }));
+      return {
+        status: 200,
+        data: {
+          impresoras,
+          total:           impresoras.length,
+          destino_default: this.config.destino_default
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('impresion.ui.impresoras.failed', err, 'ui_impresoras');
     }
   }
 
   // ==========================================
-  // Formateador de Comandas (ESC/POS)
+  // ESC/POS Formatters (preservados byte a byte)
   // ==========================================
 
   formatearComanda({ pedido_id, cuenta_id, canal, items, notas_generales, reimpresion }) {
     const lineas = [];
     const w = this.lineWidth;
 
-    lineas.push(CMD.INIT);
-    lineas.push(CMD.CODEPAGE_437);
+    lineas.push(CMD.INIT, CMD.CODEPAGE_437);
 
-    // ══════════════════════════════════════════
-    // APARTADO 1: Header — ref pedido + hora
-    // ══════════════════════════════════════════
     const { ref: refCuenta, detalle: detalleCuenta } = this.extraerRefCuenta(cuenta_id, canal);
 
-    lineas.push(CMD.ALIGN_CENTER);
-    lineas.push(CMD.DOUBLE_ON);
-    lineas.push(CMD.BOLD_ON);
-    if (reimpresion) {
-      lineas.push('REIMP');
-    }
-    // Referencia principal (MESA 5, LLEVAR 1, etc)
+    lineas.push(CMD.ALIGN_CENTER, CMD.DOUBLE_ON, CMD.BOLD_ON);
+    if (reimpresion) lineas.push('REIMP');
     lineas.push(refCuenta || `#${pedido_id || '-'}`);
-    lineas.push(CMD.BOLD_OFF);
-    lineas.push(CMD.DOUBLE_OFF);
-    if (detalleCuenta) {
-      lineas.push(CMD.BOLD_ON + detalleCuenta + CMD.BOLD_OFF);
-    }
+    lineas.push(CMD.BOLD_OFF, CMD.DOUBLE_OFF);
+    if (detalleCuenta) lineas.push(CMD.BOLD_ON + detalleCuenta + CMD.BOLD_OFF);
 
-    // Hora/fecha
     lineas.push(CMD.FONT_NORMAL);
     const ahora = new Date();
-    const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-    const fecha = ahora.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+    const hora  = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    const fecha = ahora.toLocaleDateString('es-ES', { day:  '2-digit', month:  '2-digit' });
     lineas.push(`${hora}  ${fecha}`);
 
-    // ══════════════════════════════════════════
-    // APARTADO 2: Items — producto + ingredientes + variaciones
-    // ══════════════════════════════════════════
     lineas.push(CMD.ALIGN_LEFT);
-
     for (const item of items) {
       this.formatearItem(lineas, item);
       lineas.push(this._separadorLigero(w));
     }
 
-    // Notas generales
     if (notas_generales) {
-      lineas.push(CMD.BOLD_ON);
-      lineas.push(`${'>'} NOTAS:`);
-      lineas.push(CMD.BOLD_OFF);
-      lineas.push(this.truncar(notas_generales));
-      lineas.push(this._separadorLigero(w));
+      lineas.push(CMD.BOLD_ON, `${'>'} NOTAS:`, CMD.BOLD_OFF, this.truncar(notas_generales), this._separadorLigero(w));
     }
 
-    // Footer discreto
-    lineas.push(CMD.ALIGN_CENTER);
-    lineas.push(CMD.FONT_SMALL);
-    lineas.push(`${'.'} ${items.length} item(s) ${'.'}`);
-    lineas.push(CMD.FONT_NORMAL);
-
-    lineas.push(CMD.FEED_5);
-    lineas.push(CMD.PARTIAL_CUT);
-
+    lineas.push(CMD.ALIGN_CENTER, CMD.FONT_SMALL, `${'.'} ${items.length} item(s) ${'.'}`, CMD.FONT_NORMAL);
+    lineas.push(CMD.FEED_5, CMD.PARTIAL_CUT);
     return lineas.join('\n');
   }
 
   formatearItem(lineas, item) {
     const qty = item.cantidad > 1 ? `${item.cantidad}x ` : '';
 
-    // Nombre del producto — GRANDE y negrita (doble alto)
-    lineas.push(CMD.BOLD_ON);
-    lineas.push(CMD.TALL_ON);
-    lineas.push(this.truncar(`${qty}${item.nombre}`));
-    lineas.push(CMD.TALL_OFF);
-    lineas.push(CMD.BOLD_OFF);
+    lineas.push(CMD.BOLD_ON, CMD.TALL_ON, this.truncar(`${qty}${item.nombre}`), CMD.TALL_OFF, CMD.BOLD_OFF);
 
-    // Mitad-mitad
     if (item.tipo === 'mitad-mitad' || item.pizza_izquierda || item.pizza_derecha) {
-      if (item.pizza_izquierda) {
-        lineas.push(this.truncar(` ${'>'} IZQ: ${item.pizza_izquierda}`));
-      }
-      if (item.pizza_derecha) {
-        lineas.push(this.truncar(` ${'>'} DER: ${item.pizza_derecha}`));
-      }
+      if (item.pizza_izquierda) lineas.push(this.truncar(` ${'>'} IZQ: ${item.pizza_izquierda}`));
+      if (item.pizza_derecha)   lineas.push(this.truncar(` ${'>'} DER: ${item.pizza_derecha}`));
     }
 
-    // Ingredientes base — fuente normal, listados con dot
-    if (item.ingredientes && item.ingredientes.length > 0) {
+    if (item.ingredientes?.length > 0) {
       for (const ing of item.ingredientes) {
         const nombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
         lineas.push(this.truncar(` ${'.'} ${nombre}`));
       }
     }
 
-    // Variaciones — destacadas
     if (item.variaciones && Object.keys(item.variaciones).length > 0) {
       const v = item.variaciones;
 
-      // SIN — negrita + doble alto para que salte a la vista
-      if (v.ingredientes_quitar && v.ingredientes_quitar.length > 0) {
-        lineas.push(CMD.BOLD_ON);
-        lineas.push(CMD.TALL_ON);
-        for (const ing of v.ingredientes_quitar) {
-          lineas.push(this.truncar(` SIN ${ing.toUpperCase()}`));
-        }
-        lineas.push(CMD.TALL_OFF);
-        lineas.push(CMD.BOLD_OFF);
+      if (v.ingredientes_quitar?.length > 0) {
+        lineas.push(CMD.BOLD_ON, CMD.TALL_ON);
+        for (const ing of v.ingredientes_quitar) lineas.push(this.truncar(` SIN ${ing.toUpperCase()}`));
+        lineas.push(CMD.TALL_OFF, CMD.BOLD_OFF);
       }
 
-      // CON — negrita normal
-      if (v.ingredientes_anadir && v.ingredientes_anadir.length > 0) {
+      if (v.ingredientes_anadir?.length > 0) {
         lineas.push(CMD.BOLD_ON);
         for (const ing of v.ingredientes_anadir) {
           const nombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
@@ -879,24 +704,18 @@ class ImpresionModule {
         lineas.push(CMD.BOLD_OFF);
       }
 
-      // Otras variaciones
       for (const [key, val] of Object.entries(v)) {
         if (key === 'ingredientes_quitar' || key === 'ingredientes_anadir') continue;
         if (val === true) {
-          lineas.push(CMD.BOLD_ON);
-          lineas.push(` ${'*'} ${key.toUpperCase()}`);
-          lineas.push(CMD.BOLD_OFF);
+          lineas.push(CMD.BOLD_ON, ` ${'*'} ${key.toUpperCase()}`, CMD.BOLD_OFF);
         } else if (val && val !== false) {
           lineas.push(this.truncar(` ${'*'} ${key}: ${val}`));
         }
       }
     }
 
-    // Notas del item
     if (item.notas) {
-      lineas.push(CMD.UNDERLINE_ON);
-      lineas.push(this.truncar(` ${'>'} ${item.notas}`));
-      lineas.push(CMD.UNDERLINE_OFF);
+      lineas.push(CMD.UNDERLINE_ON, this.truncar(` ${'>'} ${item.notas}`), CMD.UNDERLINE_OFF);
     }
   }
 
@@ -904,48 +723,36 @@ class ImpresionModule {
                          nombre, cantidad, categoria, estacion,
                          ingredientes, variaciones, notas }) {
     const lineas = [];
-    const w = this.lineWidth;
-
     lineas.push(CMD.INIT + CMD.CODEPAGE_437);
-
-    // ── Header — ref pedido ──
     lineas.push(CMD.FEED_3);
-    // Fuente preferida: ref_display canonico que viene en cocina.item_ticket
-    // (mismo valor que muestra la pantalla de cocina). Garantiza trazabilidad
-    // exacta entre lo que ve el cocinero en pantalla y lo que llega al ticket.
-    // Solo cae al cache + parser legacy si el evento no trajo ref_display
-    // (caso excepcional: cuenta antigua o secuencia rara de eventos).
+
     let refCuenta, detalleCuenta;
     if (ref_display) {
-      refCuenta = ref_display.toUpperCase();
+      refCuenta     = ref_display.toUpperCase();
       detalleCuenta = null;
     } else {
       ({ ref: refCuenta, detalle: detalleCuenta } = this.extraerRefCuenta(cuenta_id, canal));
     }
     const ref = refCuenta || `#${pedido_id || '-'}`;
     lineas.push(CMD.ALIGN_CENTER + CMD.DOUBLE_ON + CMD.BOLD_ON + ref + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
-    if (detalleCuenta) {
-      lineas.push(CMD.ALIGN_CENTER + CMD.BOLD_ON + detalleCuenta + CMD.BOLD_OFF);
-    }
+    if (detalleCuenta) lineas.push(CMD.ALIGN_CENTER + CMD.BOLD_ON + detalleCuenta + CMD.BOLD_OFF);
 
-    // ── Espacio entre pedido y producto (~2cm) ──
-    lineas.push(`${ESC}d\x04`);  // feed 4 líneas ≈ 20mm
+    // Espacio entre pedido y producto (~2cm)
+    lineas.push(`${ESC}d\x04`);
 
-    // ── Producto ──
     const prod = cantidad > 1 ? this.truncar(`${cantidad}x ${nombre}`) : this.truncar(nombre);
     lineas.push(CMD.DOUBLE_ON + CMD.BOLD_ON + prod + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
 
-    // ── Variaciones (solo) ──
     if (variaciones && Object.keys(variaciones).length > 0) {
       const v = variaciones;
 
-      if (v.ingredientes_quitar && v.ingredientes_quitar.length > 0) {
+      if (v.ingredientes_quitar?.length > 0) {
         for (const ing of v.ingredientes_quitar) {
           lineas.push(CMD.BOLD_ON + CMD.TALL_ON + this.truncar(` SIN ${ing.toUpperCase()}`) + CMD.TALL_OFF + CMD.BOLD_OFF);
         }
       }
 
-      if (v.ingredientes_anadir && v.ingredientes_anadir.length > 0) {
+      if (v.ingredientes_anadir?.length > 0) {
         for (const ing of v.ingredientes_anadir) {
           const ingNombre = typeof ing === 'string' ? ing : ing.nombre || String(ing);
           lineas.push(CMD.BOLD_ON + this.truncar(` + CON ${ingNombre}`) + CMD.BOLD_OFF);
@@ -962,28 +769,22 @@ class ImpresionModule {
       }
     }
 
-    // Notas
     if (notas) {
       lineas.push(CMD.UNDERLINE_ON + this.truncar(` > ${notas}`) + CMD.UNDERLINE_OFF);
     }
 
     lineas.push(CMD.FEED_5 + CMD.PARTIAL_CUT);
-
     return lineas.join('\n');
   }
 
-  // ==========================================
-  // Formateador de Ticket de Venta (ESC/POS)
-  // ==========================================
-
-  formatearTicketVenta({ cuenta_id, canal, items, subtotal, iva, total, metodo_pago, propina, referencia_pago, datos_negocio }) {
+  formatearTicketVenta({ cuenta_id, canal, items, subtotal, iva, total, metodo_pago, propina, referencia_pago }) {
     const lineas = [];
     const w = this.lineWidth;
 
     lineas.push(CMD.INIT + CMD.CODEPAGE_437);
     lineas.push(CMD.ALIGN_CENTER);
 
-    // Logo
+    // Logo y datos del negocio (preservados byte a byte)
     lineas.push(CMD.DOUBLE_ON + CMD.BOLD_ON + 'NO NI NA' + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
     lineas.push('pizzicas  |  643283034');
     lineas.push(this.separator);
@@ -992,7 +793,7 @@ class ImpresionModule {
     const { ref: refCuenta, detalle: detalleCuenta } = this.extraerRefCuenta(cuenta_id, canal);
     const ahora = new Date();
     const fecha = ahora.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    const hora  = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
     if (refCuenta) {
       lineas.push(CMD.BOLD_ON + refCuenta + (detalleCuenta ? `  ${detalleCuenta}` : '') + CMD.BOLD_OFF);
@@ -1003,7 +804,7 @@ class ImpresionModule {
     lineas.push(CMD.BOLD_ON + this.lineaColumnas('PRODUCTO', 'EUR', w) + CMD.BOLD_OFF);
 
     for (const item of items) {
-      const qty = item.cantidad > 1 ? `${item.cantidad}x ` : '';
+      const qty    = item.cantidad > 1 ? `${item.cantidad}x ` : '';
       const nombre = `${qty}${item.nombre}`;
       const precio = this.formatPrecio(item.precio_total ?? (item.precio_unitario * item.cantidad));
       lineas.push(this.lineaColumnas(nombre, precio, w));
@@ -1021,7 +822,7 @@ class ImpresionModule {
       lineas.push(this.lineaColumnas('Subtotal', this.formatPrecio(subtotal), w));
     }
     if (iva !== undefined && iva !== null) {
-      const ivaLabel = typeof iva === 'object' ? `IVA ${iva.porcentaje || ''}%` : 'IVA';
+      const ivaLabel   = typeof iva === 'object' ? `IVA ${iva.porcentaje || ''}%` : 'IVA';
       const ivaImporte = typeof iva === 'object' ? iva.importe : iva;
       lineas.push(this.lineaColumnas(ivaLabel, this.formatPrecio(ivaImporte), w));
     }
@@ -1050,7 +851,6 @@ class ImpresionModule {
     lineas.push('Gracias por su visita' + CMD.FONT_NORMAL);
 
     lineas.push(CMD.FEED_3 + CMD.PARTIAL_CUT);
-
     return lineas.join('\n');
   }
 
@@ -1068,43 +868,27 @@ class ImpresionModule {
   }
 
   /**
-   * Devuelve { ref, detalle? } para imprimir en ticket.
-   * ref: línea principal (DOUBLE_ON), detalle: línea secundaria (tamaño normal).
+   * Devuelve { ref, detalle? } para imprimir en ticket. Cache + fallback legacy.
    */
   extraerRefCuenta(cuenta_id, canal) {
     if (!cuenta_id) return { ref: null };
 
-    // Primero: ref_display canónico cacheado (de cuenta.creada/cuenta.actualizada).
-    // El cache se alimenta del módulo `cuentas` con el contador global de turnos
-    // y es la fuente correcta — este método solo cae a fallbacks si el cache no
-    // tiene la cuenta (caso raro: ticket llega antes de que el evento se procese,
-    // o reinicio sin restaurar todavía).
     const cached = this.cuentaNombres.get(cuenta_id);
     if (cached) {
       return { ref: cached.ref.toUpperCase(), detalle: cached.detalle || null };
     }
 
-    // Fallback: extraer del prefijo de palabra completa del cuenta_id.
-    // mesa_7_20250325_001 → "MESA 7", llevadoo_xxxxxxxx → "LLEVADOO xxxx".
     const prefijosLegacy = {
-      mesa: 'MESA',
-      tel: 'TEL',
-      telefono: 'TEL',
-      llevar: 'LLEVAR',
-      glovo: 'GLOVO',
-      wa: 'WHATSAPP',
-      whatsapp: 'WHATSAPP',
-      delivery: 'DELIVERY',
-      llevadoo: 'LLEVADOO'
+      mesa: 'MESA', tel: 'TEL', telefono: 'TEL', llevar: 'LLEVAR',
+      glovo: 'GLOVO', wa: 'WHATSAPP', whatsapp: 'WHATSAPP',
+      delivery: 'DELIVERY', llevadoo: 'LLEVADOO'
     };
 
     for (const [prefijo, label] of Object.entries(prefijosLegacy)) {
       if (cuenta_id.startsWith(`${prefijo}_`)) {
         const rest = cuenta_id.slice(prefijo.length + 1);
-        const id = rest.replace(/_?\d{8}_\d+$/, '');
-        if (id) {
-          return { ref: `${label} ${id}` };
-        }
+        const id   = rest.replace(/_?\d{8}_\d+$/, '');
+        if (id) return { ref: `${label} ${id}` };
         const seqMatch = rest.match(/_(\d+)$/);
         const seq = seqMatch ? parseInt(seqMatch[1], 10) : rest;
         return { ref: `${label} ${seq}` };
@@ -1114,62 +898,49 @@ class ImpresionModule {
     if (canal && prefijosLegacy[canal]) {
       return { ref: `${prefijosLegacy[canal]} - ${cuenta_id}` };
     }
-
     return { ref: `REF: ${cuenta_id}` };
   }
 
   // ==========================================
-  // Envío directo MQTT al ESP32
+  // Envio MQTT directo a ESP32
   // ==========================================
 
-  /**
-   * Publica directamente al topic MQTT que el ESP32 escucha.
-   * Topic: impresion/{project_id}/print/{device_id}
-   * Payload: { job_id, data (base64) }
-   *
-   * El ESP32 recibe, decodifica base64, y envía los bytes ESC/POS por BLE.
-   * Sin intermediarios: impresion → MQTT → ESP32 → BLE → impresora.
-   *
-   * @param {string} contenido - datos ESC/POS formateados
-   * @param {string} [destino] - device_id del ESP32 (default: config.destino_default)
-   * @param {string} [projectId] - project_id para el topic (inferido de auto-discovery si no se pasa)
-   */
-  async enviarImpresora(contenido, destino, projectId) {
+  async _enviarImpresora(contenido, destino, projectId) {
     let deviceId = destino || this.config.destino_default;
-    let pid = projectId || '';
+    let pid      = projectId || '';
 
-    // Si no hay destino/project_id configurado, buscar la primera impresora descubierta online+ready
     if (!deviceId || !pid) {
-      const candidata = Array.from(this.impresoras.values())
-        .find(i => i.online && i.printer_ready);
+      const candidata = Array.from(this.impresoras.values()).find(i => i.online && i.printer_ready);
       if (candidata) {
         deviceId = deviceId || candidata.device_id;
-        pid = pid || candidata.project_id;
+        pid      = pid || candidata.project_id;
         this.logger.info('impresion.auto_destino', { device_id: deviceId, project_id: pid });
       }
     }
 
     if (!deviceId) {
-      throw new Error('No hay destino configurado ni impresoras descubiertas online');
+      const err = new Error('No hay destino configurado ni impresoras descubiertas online');
+      err._code = 'DEPENDENCY_UNAVAILABLE';
+      throw err;
     }
     if (!pid) {
-      throw new Error('No hay project_id configurado ni inferible de impresoras descubiertas');
+      const err = new Error('No hay project_id configurado ni inferible de impresoras descubiertas');
+      err._code = 'DEPENDENCY_UNAVAILABLE';
+      throw err;
     }
 
     const mqtt = this.eventBus?.mqtt;
     if (!mqtt || !mqtt.isConnected) {
-      throw new Error('MQTT no disponible — no se puede enviar a impresora');
+      const err = new Error('MQTT no disponible — no se puede enviar a impresora');
+      err._code = 'MQTT_NOT_AVAILABLE';
+      throw err;
     }
 
-    const topic = `impresion/${pid}/print/${deviceId}`;
-    const buffer = Buffer.from(contenido, 'binary');
-    const jobId = `job_${Date.now().toString(36)}_${crypto.randomBytes(2).toString('hex')}`;
-    const payload = JSON.stringify({
-      job_id: jobId,
-      data: buffer.toString('base64')
-    });
+    const topic   = `impresion/${pid}/print/${deviceId}`;
+    const buffer  = Buffer.from(contenido, 'binary');
+    const jobId   = `job_${Date.now().toString(36)}_${crypto.randomBytes(2).toString('hex')}`;
+    const payload = JSON.stringify({ job_id: jobId, data: buffer.toString('base64') });
 
-    // Publicar y esperar ACK (con timeout)
     const ackPromise = new Promise((resolve) => {
       const timer = setTimeout(() => {
         this._pendingJobs.delete(jobId);
@@ -1178,30 +949,23 @@ class ImpresionModule {
         });
         resolve({ success: false, job_id: jobId, error: 'ACK timeout' });
       }, this._jobTimeoutMs);
-
-      this._pendingJobs.set(jobId, {
-        resolve, timer, deviceId, timestamp: Date.now()
-      });
+      this._pendingJobs.set(jobId, { resolve, timer, deviceId, timestamp: Date.now() });
     });
 
     await mqtt.publish(topic, payload, { qos: 1 });
 
     this.logger.info('impresion.enviado', {
-      topic,
-      job_id: jobId,
-      device_id: deviceId,
-      bytes: buffer.length
+      topic, job_id: jobId, device_id: deviceId, bytes: buffer.length
     });
 
-    // ACK en background — no bloquea al caller para no serializar envíos
-    // Si llegan 10 items a la vez, todos se envían inmediatamente.
-    // El resultado del ACK se logea pero no bloquea.
+    // ACK en background — no bloquea para no serializar envios paralelos
     ackPromise.then(result => {
       if (!result.success) {
         this.logger.warn('impresion.job_fallido', {
           job_id: jobId, device_id: deviceId, error: result.error
         });
         this.internalMetrics.errores++;
+        this.metrics?.increment('impresion.error.total', { code: 'job_fallido' });
       }
     });
 
@@ -1209,48 +973,101 @@ class ImpresionModule {
   }
 
   // ==========================================
-  // Utilidades
+  // Helpers POC2
   // ==========================================
 
-  /**
-   * Linea superior o inferior de box con caracteres CP437
-   * top:    ╔══════════════════════════════╗
-   * bottom: ╚══════════════════════════════╝
-   */
-  _lineaBox(tipo, ancho) {
-    return '='.repeat(ancho);
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
   }
 
-  /**
-   * Separador ligero entre items
-   */
-  _separadorLigero(ancho) {
-    return '-'.repeat(ancho);
+  _handleHandlerError(logEvent, err, kind) {
+    const code   = err._code || this._classifyHandlerError(err);
+    const status = code === 'INVALID_INPUT'           ? 400 :
+                   code === 'RESOURCE_NOT_FOUND'      ? 404 :
+                   code === 'PERMISSION_DENIED'       ? 403 :
+                   code === 'CONFLICT_STATE'          ? 409 :
+                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
+                   code === 'MQTT_NOT_AVAILABLE'      ? 503 :
+                   code === 'EXTERNAL_API_FAILED'     ? 502 :
+                   code === 'TIMEOUT'                 ? 504 : 500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code, kind });
+    this.metrics?.increment('impresion.errors', { kind, code });
+    return this._errorResponse(status, code, message, err._details);
   }
 
-  /**
-   * Detecta el canal a partir de cuenta_id o canal explícito
-   */
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found') || msg.includes('no encontrad'))                         return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('permission') || msg.includes('forbidden'))                            return 'PERMISSION_DENIED';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation'))  return 'INVALID_INPUT';
+    if (msg.includes('mqtt') || msg.includes('no disponible'))                              return 'DEPENDENCY_UNAVAILABLE';
+    if (msg.includes('timeout'))                                                            return 'TIMEOUT';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    if (!this.eventBus?.publish) return;
+    const enriched = {
+      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+      timestamp:      new Date().toISOString(),
+      ...payload,
+      project_id:     payload?.project_id || sourcePayload?.project_id || DEFAULT_PROJECT_ID
+    };
+    try {
+      await this.eventBus.publish(name, enriched);
+    } catch (err) {
+      this.logger.error('impresion.publish_error', { event: name, error: err.message });
+      this.metrics?.increment('impresion.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+    }
+  }
+
+  // 5o helper auxiliar: parser MQTT (mismo patron que device-registry/perifericos)
+  _parsePayload(payload, source = '') {
+    try {
+      if (typeof payload === 'string')   return JSON.parse(payload);
+      if (Buffer.isBuffer(payload))      return JSON.parse(payload.toString());
+      return payload;
+    } catch {
+      this.logger.warn('impresion.mqtt.parse_error', { source });
+      this.metrics?.increment('impresion.errors', { kind: 'mqtt_parse', code: 'INVALID_INPUT' });
+      return null;
+    }
+  }
+
+  // 6o helper: trunca a lineWidth (preservado del monolito)
+  truncar(texto) {
+    return texto.length > this.lineWidth
+      ? texto.slice(0, this.lineWidth - 1) + '\xC4'
+      : texto;
+  }
+
+  _logError(logEvent, fields, kind, code) {
+    this.logger.error(logEvent, { ...fields, code, kind });
+    this.metrics?.increment('impresion.errors', { kind, code });
+  }
+
+  _unwrap(event) { return event?.data || event?.payload || event || {}; }
+
+  // ==========================================
+  // Internals
+  // ==========================================
+
+  _separadorLigero(ancho) { return '-'.repeat(ancho); }
+
   _detectarCanal(cuenta_id, canal) {
     if (canal && CANAL_ICON[canal]) return canal;
     if (!cuenta_id) return 'default';
-
     const prefijos = ['mesa', 'telefono', 'llevar', 'glovo', 'whatsapp', 'uber_eats', 'just_eat'];
-    for (const p of prefijos) {
-      if (cuenta_id.startsWith(`${p}_`)) return p;
-    }
+    for (const p of prefijos) if (cuenta_id.startsWith(`${p}_`)) return p;
     return 'default';
   }
 
-  truncar(texto) {
-    return texto.length > this.lineWidth ? texto.slice(0, this.lineWidth - 1) + '\xC4' : texto;
-  }
-
-  guardarHistorial(registro) {
+  _guardarHistorial(registro) {
     this.historial.unshift(registro);
-    if (this.historial.length > this.maxHistorial) {
-      this.historial.pop();
-    }
+    if (this.historial.length > this.maxHistorial) this.historial.pop();
   }
 }
 

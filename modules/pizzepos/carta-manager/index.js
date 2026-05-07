@@ -53,7 +53,7 @@ class CartaManagerModule {
     const code = err._code || this._classifyHandlerError(err);
     const statusMap = { RESOURCE_NOT_FOUND: 404, INVALID_INPUT: 400, ALREADY_EXISTS: 409, FILESYSTEM_ERROR: 500 };
     const status = statusMap[code] || 500;
-    this.logger.error(`carta-manager.${logKey}`, { error: err.message, code });
+    this.logger.error('carta-manager.handler_error', { handler: logKey, error: err.message, code });
     this.metrics?.increment('carta-manager.error', { kind: kind || logKey, code });
     return this._errorResponse(status, code, err.message, err._details);
   }
@@ -422,7 +422,7 @@ class CartaManagerModule {
       return this._errorResponse(400, 'INVALID_INPUT', `Categoría "${categoria}" no existe. Disponibles: ${carta.categorias.map(c => c.id).join(', ')}`);
     }
 
-    const prodId = `${this.slugify(categoria)}_${this.slugify(nombre)}`;
+    const prodId = `${this._slugify(categoria)}_${this._slugify(nombre)}`;
     if (carta.productos.find(p => p.id === prodId)) {
       this.logger.warn('carta-manager.add_product.already_exists', { carta_id, prodId });
       this.metrics?.increment('carta-manager.error', { kind: 'add_product', code: 'ALREADY_EXISTS' });
@@ -533,7 +533,7 @@ class CartaManagerModule {
       return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Carta "${carta_id}" no encontrada`);
     }
 
-    const catId = this.slugify(nombre);
+    const catId = this._slugify(nombre);
     if (carta.categorias.find(c => c.id === catId)) {
       this.logger.warn('carta-manager.add_category.already_exists', { carta_id, catId });
       this.metrics?.increment('carta-manager.error', { kind: 'add_category', code: 'ALREADY_EXISTS' });
@@ -734,8 +734,9 @@ class CartaManagerModule {
     try {
       await fs.writeFile(path.join(dir, `${carta_id}.json`), JSON.stringify(carta, null, 2), 'utf-8');
     } catch (err) {
-      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
-      return this._handleHandlerError('restore.disk_error', e, 'restore');
+      this.logger.error('carta-manager.restore.disk_error', { carta_id, error: err.message });
+      this.metrics?.increment('carta-manager.error', { kind: 'restore', code: 'FILESYSTEM_ERROR' });
+      return this._errorResponse(500, 'FILESYSTEM_ERROR', err.message);
     }
 
     this.getCartas(project_id).set(carta_id, carta);
@@ -771,7 +772,7 @@ class CartaManagerModule {
   // Utils
   // ==========================================
 
-  slugify(text) {
+  _slugify(text) {
     if (!text) return 'sin_nombre';
     return text.toLowerCase()
       .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -798,11 +799,11 @@ class CartaManagerModule {
 
   normalizeCarta(cartaId, raw, nombre) {
     const categorias = (raw.categorias || []).map((cat, idx) => ({
-      id: cat.id || this.slugify(cat.nombre), nombre: cat.nombre,
+      id: cat.id || this._slugify(cat.nombre), nombre: cat.nombre,
       orden: cat.orden !== undefined ? cat.orden : idx + 1
     }));
     const productos = (raw.productos || []).map(p => ({
-      id: p.id || `${this.slugify(p.categoria || 'general')}_${this.slugify(p.nombre)}`,
+      id: p.id || `${this._slugify(p.categoria || 'general')}_${this._slugify(p.nombre)}`,
       nombre: p.nombre, categoria: p.categoria || 'general',
       precio: typeof p.precio === 'number' ? p.precio : parseFloat(p.precio) || 0,
       ingredientes: this.normalizeIngredientes(p.ingredientes || []),

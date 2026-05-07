@@ -120,7 +120,8 @@
         "required": [
           "carta_id"
         ]
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
     },
     {
       "name": "carta.list",
@@ -129,7 +130,8 @@
       "parameters": {
         "type": "object",
         "properties": {}
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT"]
     },
     {
       "name": "carta.delete",
@@ -145,7 +147,8 @@
         "required": [
           "carta_id"
         ]
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
     },
     {
       "name": "carta.add_product",
@@ -309,7 +312,8 @@
         "required": [
           "carta_id"
         ]
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
     },
     {
       "name": "carta.versions",
@@ -325,7 +329,8 @@
         "required": [
           "carta_id"
         ]
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT"]
     },
     {
       "name": "carta.restore",
@@ -345,9 +350,17 @@
           "carta_id",
           "version_file"
         ]
-      }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "FILESYSTEM_ERROR"]
     }
   ],
+  "config": {
+    "persistence": {
+      "pattern": "json_files",
+      "path_pattern": "data/projects/{slug}/storage/pizzepos/cartas/{carta_id}.json",
+      "versioning": true
+    }
+  },
   "observability": {
     "metrics": {
       "counters": [

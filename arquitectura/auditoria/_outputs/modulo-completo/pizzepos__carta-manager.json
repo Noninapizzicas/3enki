@@ -257,9 +257,9 @@
       "puede_fallar_silenciosamente": false
     },
     "onUnload": {
-      "ubicacion": "modules/pizzepos/carta-manager/index.js:48",
-      "acciones": ["logger.info('module.unloaded')"],
-      "estado_no_limpiado": ["cartasPerProject", "projectPaths"]
+      "ubicacion": "modules/pizzepos/carta-manager/index.js:31",
+      "acciones": ["cartasPerProject.clear()", "projectPaths.clear()", "logger.info('module.unloaded')"],
+      "estado_no_limpiado": []
     },
     "auto_wired_subscribes": true,
     "subscribes_dinamicos_en_lifecycle": []

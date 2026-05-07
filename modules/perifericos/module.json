@@ -1,7 +1,7 @@
 {
   "name": "perifericos",
-  "version": "1.1.0",
-  "description": "Servicio core de periféricos — descubrimiento, registro y routing de dispositivos hardware. Capacidades: imprimir, display, abrir-cajon.",
+  "version": "2.0.0",
+  "description": "Servicio core de perifericos — descubrimiento, registro y routing de dispositivos hardware. Capacidades: imprimir, display, abrir-cajon. Auto-descubrimiento ESP32 via MQTT.",
   "author": "Event Core Team",
   "language": "es",
   "tier": "tier_2_platform",
@@ -13,149 +13,63 @@
       "periferico.error",
       "periferico.dispositivo.registrado",
       "periferico.dispositivo.desregistrado",
-      "periferico.dispositivo.online",
-      "periferico.dispositivo.offline",
       "periferico.estado.respuesta",
       "periferico.listado"
     ]
   },
   "events": {
     "publishes": [
-      {
-        "event": "periferico.impreso",
-        "description": "Datos enviados exitosamente a una impresora"
-      },
-      {
-        "event": "periferico.displayed",
-        "description": "Contenido enviado exitosamente a un display externo"
-      },
-      {
-        "event": "periferico.cajon-abierto",
-        "description": "Cajón de dinero abierto exitosamente"
-      },
-      {
-        "event": "periferico.error",
-        "description": "Error al enviar datos o conectar con dispositivo"
-      },
-      {
-        "event": "periferico.dispositivo.registrado",
-        "description": "Nuevo dispositivo registrado en el sistema"
-      },
-      {
-        "event": "periferico.dispositivo.desregistrado",
-        "description": "Dispositivo eliminado del registro"
-      },
-      {
-        "event": "periferico.dispositivo.online",
-        "description": "Dispositivo cambió a estado online"
-      },
-      {
-        "event": "periferico.dispositivo.offline",
-        "description": "Dispositivo cambió a estado offline"
-      },
-      {
-        "event": "periferico.estado.respuesta",
-        "description": "Respuesta a consulta de estado de un dispositivo"
-      },
-      {
-        "event": "periferico.listado",
-        "description": "Respuesta a consulta de listado de dispositivos"
-      }
+      { "event": "periferico.impreso",                  "description": "Datos enviados exitosamente a una impresora (lleva project_id top-level + correlation_id)" },
+      { "event": "periferico.displayed",                "description": "Contenido enviado exitosamente a un display externo" },
+      { "event": "periferico.cajon-abierto",            "description": "Cajon de dinero abierto exitosamente via comando ESC/POS" },
+      { "event": "periferico.error",                    "description": "Error en envio/conexion a un dispositivo (kind + code canonico + contexto)" },
+      { "event": "periferico.dispositivo.registrado",   "description": "Nuevo dispositivo registrado en el sistema (manual, UI o auto-descubierto)" },
+      { "event": "periferico.dispositivo.desregistrado","description": "Dispositivo eliminado del registro" },
+      { "event": "periferico.estado.respuesta",         "description": "Respuesta a consulta de estado de un dispositivo (par sync sobre pub/sub)" },
+      { "event": "periferico.listado",                  "description": "Respuesta a consulta de listado de dispositivos" }
     ],
     "subscribes": [
-      {
-        "event": "periferico.imprimir",
-        "handler": "onImprimir",
-        "description": "Envía datos a una impresora (ESC/POS, texto, gcode)"
-      },
-      {
-        "event": "periferico.display",
-        "handler": "onDisplay",
-        "description": "Envía contenido a una pantalla externa (TV cocina, LED barra, tablet fija)"
-      },
-      {
-        "event": "periferico.abrir-cajon",
-        "handler": "onAbrirCajon",
-        "description": "Abre cajón de dinero via comando ESC/POS estándar"
-      },
-      {
-        "event": "periferico.estado",
-        "handler": "onEstado",
-        "description": "Consulta estado de un dispositivo por nombre lógico"
-      },
-      {
-        "event": "periferico.listar",
-        "handler": "onListar",
-        "description": "Lista todos los dispositivos registrados"
-      },
-      {
-        "event": "periferico.registrar",
-        "handler": "onRegistrar",
-        "description": "Registra un nuevo dispositivo"
-      },
-      {
-        "event": "periferico.desregistrar",
-        "handler": "onDesregistrar",
-        "description": "Elimina un dispositivo del registro"
-      }
+      { "event": "periferico.imprimir",     "handler": "onImprimir",     "description": "Envia datos a una impresora (ESC/POS, texto, gcode)" },
+      { "event": "periferico.display",      "handler": "onDisplay",      "description": "Envia contenido a una pantalla externa (TV cocina, LED barra, tablet fija)" },
+      { "event": "periferico.abrir-cajon",  "handler": "onAbrirCajon",   "description": "Abre cajon de dinero via comando ESC/POS estandar" },
+      { "event": "periferico.estado",       "handler": "onEstado",       "description": "Consulta estado de un dispositivo por nombre logico" },
+      { "event": "periferico.listar",       "handler": "onListar",       "description": "Lista todos los dispositivos registrados" },
+      { "event": "periferico.registrar",    "handler": "onRegistrar",    "description": "Registra un nuevo dispositivo" },
+      { "event": "periferico.desregistrar", "handler": "onDesregistrar", "description": "Elimina un dispositivo del registro" }
     ]
   },
   "ui_handlers": [
-    {
-      "domain": "perifericos",
-      "action": "list",
-      "handler": "handleListar"
-    },
-    {
-      "domain": "perifericos",
-      "action": "get",
-      "handler": "handleGet"
-    },
-    {
-      "domain": "perifericos",
-      "action": "create",
-      "handler": "handleRegistrar"
-    },
-    {
-      "domain": "perifericos",
-      "action": "update",
-      "handler": "handleActualizar"
-    },
-    {
-      "domain": "perifericos",
-      "action": "delete",
-      "handler": "handleDesregistrar"
-    },
-    {
-      "domain": "perifericos",
-      "action": "test",
-      "handler": "handleTestDispositivo"
-    },
-    {
-      "domain": "perifericos",
-      "action": "status",
-      "handler": "handleEstado"
-    },
-    {
-      "domain": "perifericos",
-      "action": "discover",
-      "handler": "handleDescubrir"
-    },
-    {
-      "domain": "perifericos",
-      "action": "listar-por-capacidad",
-      "handler": "handleListarPorCapacidad"
-    }
+    { "domain": "perifericos", "action": "list",                 "handler": "handleListar",             "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "perifericos", "action": "get",                  "handler": "handleGet",                "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "perifericos", "action": "create",               "handler": "handleRegistrar",          "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "perifericos", "action": "update",               "handler": "handleActualizar",         "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "perifericos", "action": "delete",               "handler": "handleDesregistrar",       "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "perifericos", "action": "test",                 "handler": "handleTestDispositivo",    "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "perifericos", "action": "status",               "handler": "handleEstado",             "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "perifericos", "action": "discover",             "handler": "handleDescubrir",          "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "perifericos", "action": "listar-por-capacidad", "handler": "handleListarPorCapacidad", "type": "system_panel", "zone": "lateral_derecha" }
   ],
+  "tools": [],
+  "dependencies": [],
   "config": {
     "dataPath": "./data/perifericos",
     "dispositivos": [],
-    "health_check_interval_ms": 30000
+    "health_check_interval_ms": 30000,
+    "descubrimiento": { "esp32_auto": true },
+    "persistence": {
+      "type": "delegated",
+      "owner": "services/providers/local/perifericos/registry.js",
+      "note": "El modulo no persiste estado propio — el provider gestiona registry.json y transportes activos."
+    }
+  },
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "observability": {
     "logging": {
-      "level": "info",
-      "structured": true
+      "level":          "info",
+      "structured":     true,
+      "correlation_id": true
     },
     "metrics": {
       "enabled": true,
@@ -163,7 +77,8 @@
         "perifericos.envios.total",
         "perifericos.envios.ok",
         "perifericos.envios.error",
-        "perifericos.registros.total"
+        "perifericos.registros.total",
+        "perifericos.errors"
       ]
     }
   }

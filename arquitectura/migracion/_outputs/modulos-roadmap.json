@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T01:13:46.900Z",
+  "generated_at": "2026-05-07T06:56:19.669Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3476,
-    "loc_total": 48910,
+    "drifts_total": 3479,
+    "loc_total": 48989,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -386,6 +386,21 @@
       "orden_migracion": 23
     },
     {
+      "slug": "device-health",
+      "path": "modules/device-health",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 556,
+      "drifts": 27,
+      "events_publishes": 4,
+      "events_subscribes": 4,
+      "tools": 3,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 24
+    },
+    {
       "slug": "device-shadow",
       "path": "modules/device-shadow",
       "layer": "infra",
@@ -395,21 +410,6 @@
       "drifts": 26,
       "events_publishes": 3,
       "events_subscribes": 1,
-      "tools": 3,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 24
-    },
-    {
-      "slug": "device-health",
-      "path": "modules/device-health",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 477,
-      "drifts": 24,
-      "events_publishes": 4,
-      "events_subscribes": 4,
       "tools": 3,
       "agents": 0,
       "dependencies": [],

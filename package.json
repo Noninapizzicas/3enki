@@ -48,6 +48,7 @@
     "test:code-executor": "node tests/unit/code-executor.test.js",
     "test:firmware-builder": "node tests/unit/firmware-builder.test.js",
     "test:device-registry": "node tests/unit/device-registry.test.js",
+    "test:device-health": "node tests/unit/device-health.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

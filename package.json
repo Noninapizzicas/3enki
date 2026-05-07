@@ -63,6 +63,7 @@
     "test:staff-manager": "node tests/unit/staff-manager.test.js",
     "test:pizzepos__cuentas": "node tests/unit/pizzepos__cuentas.test.js",
     "test:pizzepos__persistencia-comandero": "node tests/unit/pizzepos__persistencia-comandero.test.js",
+    "test:pizzepos__carta-digital": "node tests/unit/pizzepos__carta-digital.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

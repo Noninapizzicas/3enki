@@ -58,11 +58,11 @@
       },
       {
         "nombre": { "tipo": "variable", "valor": "toolName", "variables_referenciadas": ["toolName"] },
-        "ubicacion": "modules/conversacion/ai-gateway/index.js:348",
+        "ubicacion": "modules/conversacion/ai-gateway/index.js:351",
         "metodo_contenedor": "_executeToolCall",
         "es_handler_de": "agentic loop — invoca tools del LLM",
         "bloque_logico": "fallback PATH 2 cuando tool no está en moduleLoader.toolsRegistry; publica el evento con nombre dinámico igual al toolName",
-        "payload": { "tipo": "mixto", "campos_visibles": ["request_id"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id", "project_id", "page_id", "conversation_id", "settings", "attachments", "prompt", "intencion", "_chat_context"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
         "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
         "es_await": false,
         "es_return": false,
@@ -71,34 +71,34 @@
       },
       {
         "nombre": { "tipo": "literal", "valor": "ai.chat.response", "variables_referenciadas": [] },
-        "ubicacion": "modules/conversacion/ai-gateway/index.js:479",
+        "ubicacion": "modules/conversacion/ai-gateway/index.js:529",
         "metodo_contenedor": "onChatPromptReady",
         "es_handler_de": "chat.prompt.ready",
-        "bloque_logico": "tras _executeLLM (success o error); respuesta consumida por chat-io",
-        "payload": { "tipo": "object_literal", "campos_visibles": ["project_id", "page_id", "conversation_id", "context", "settings", "prompt", "attachments", "intencion", "message", "message_id_user", "tool_calls_executed", "iterations", "tokens", "cost", "model", "provider"], "tiene_request_id": false, "tiene_correlation_id": false, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "bloque_logico": "tras _executeLLM (success); respuesta consumida por chat-io",
+        "payload": { "tipo": "object_literal", "campos_visibles": ["correlation_id", "conversation_id", "project_id", "user_id", "channel", "channel_context", "message_id", "message_id_assistant", "assistant_message", "model", "provider", "tokens", "duration_ms", "timestamp", "tool_calls_executed", "iterations", "cost", "finish_reason"], "tiene_request_id": false, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
         "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
         "es_await": true,
         "es_return": false,
-        "snippet": "    await this.eventBus.publish('ai.chat.response', {\n      project_id, page_id, conversation_id, context: context || {}, settings,\n      prompt: systemPrompt, attachments: attachments || [], intencion: intencion ?? null,\n      message: llmResult.content, message_id_user: message_id,\n      tool_calls_executed, iterations, tokens, cost, model, provider\n    });",
+        "snippet": "      await this.eventBus.publish('ai.chat.response', payload);",
         "declarado_en_manifest": true
       },
       {
         "nombre": { "tipo": "literal", "valor": "llm.complete.response", "variables_referenciadas": [] },
-        "ubicacion": "modules/conversacion/ai-gateway/index.js:521",
+        "ubicacion": "modules/conversacion/ai-gateway/index.js:605",
         "metodo_contenedor": "onLlmCompleteRequest",
         "es_handler_de": "llm.complete.request",
         "bloque_logico": "tras _executeLLM; cierra el request_response genérico (usado por agentes)",
-        "payload": { "tipo": "mixto", "campos_visibles": ["request_id", "success", "error", "...result"], "tiene_request_id": true, "tiene_correlation_id": false, "tiene_project_id": false, "campos_con_template_literal": [] },
-        "canal": { "tipo": "eventBus", "expresion_usada": "this.eventBus.publish" },
+        "payload": { "tipo": "mixto", "campos_visibles": ["request_id", "project_id", "duration_ms", "correlation_id"], "tiene_request_id": true, "tiene_correlation_id": true, "tiene_project_id": true, "campos_con_template_literal": [] },
+        "canal": { "tipo": "eventBus", "expresion_usada": "_publicarEvento" },
         "es_await": true,
         "es_return": false,
-        "snippet": "    await this.eventBus.publish('llm.complete.response', {\n      request_id,\n      success: !error,\n      ...(error ? { error } : { ...result })\n    });",
+        "snippet": "      await this._publicarEvento('llm.complete.response', {\n        request_id,\n        project_id,\n        ...result,\n        duration_ms: Date.now() - started\n      }, { correlation_id: cid });",
         "declarado_en_manifest": true
       }
     ],
     "subscribes": [
-      { "nombre": "chat.prompt.ready",         "tipo_nombre": "literal", "handler": "onChatPromptReady",     "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:445", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:475", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
-      { "nombre": "llm.complete.request",      "tipo_nombre": "literal", "handler": "onLlmCompleteRequest",  "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:503", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:518", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "chat.prompt.ready",         "tipo_nombre": "literal", "handler": "onChatPromptReady",     "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:450", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:530", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
+      { "nombre": "llm.complete.request",      "tipo_nombre": "literal", "handler": "onLlmCompleteRequest",  "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:584", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:611", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
       { "nombre": "credential.resolve.response","tipo_nombre": "literal", "handler": "onCredentialResponse",  "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:128", "comportamiento_si_falla": "rejecta_promise_pending", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:128", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
       { "nombre": "credential.saved",          "tipo_nombre": "literal", "handler": "onCredentialSaved",     "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:139", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:139", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
       { "nombre": "credential.updated",        "tipo_nombre": "literal", "handler": "onCredentialSaved",     "handler_ubicacion": "modules/conversacion/ai-gateway/index.js:139", "comportamiento_si_falla": "log_y_sigue", "evidencia_comportamiento": "modules/conversacion/ai-gateway/index.js:139", "auto_wired": true, "subscripcion_dinamica": false, "declarado_en_manifest": true },
@@ -165,8 +165,13 @@
     },
     "onUnload": {
       "ubicacion": "modules/conversacion/ai-gateway/index.js:53",
-      "acciones": [],
-      "estado_no_limpiado": ["providers", "credentialCache", "pendingCredentials", "pendingFsReads", "pagePrefixes (todos quedan en GC con la instancia — NO hay clearTimeout sobre los pending)"]
+      "acciones": [
+        "providers.clear()",
+        "credentialCache.clear()",
+        "clearTimeout en pendingCredentials.values(), luego pendingCredentials.clear()",
+        "clearTimeout en pendingFsReads.values(), luego pendingFsReads.clear()"
+      ],
+      "estado_no_limpiado": []
     },
     "auto_wired_subscribes": true,
     "subscribes_dinamicos_en_lifecycle": []
@@ -201,8 +206,8 @@
     "metricas_emitidas": [],
     "metricas_drift_vs_manifest": [],
     "tracing": {
-      "propaga_correlation_id": false,
-      "evidencia": "no observable — ai-gateway genera request_id local con crypto.randomUUID() para credential/fs/tool calls. No extrae correlation_id de chat.prompt.ready ni lo añade a publishes salientes."
+      "propaga_correlation_id": true,
+      "evidencia": "onChatPromptReady extrae correlation_id del evento y lo incluye en ai.chat.response y ai.chat.failed. onLlmCompleteRequest propaga via _publicarEvento. _publicarEvento añade correlation_id a todo publish."
     }
   },
 
@@ -229,7 +234,7 @@
   },
 
   "metricas_fisicas": {
-    "lineas_index_js": 529,
+    "lineas_index_js": 776,
     "lineas_lib_total": 0,
     "lineas_services_total": 0,
     "archivos_codigo_count": 9,

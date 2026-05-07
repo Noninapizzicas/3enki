@@ -16,7 +16,7 @@ class OllamaProvider extends BaseProvider {
   /**
    * Initialize
    */
-  async initialize() {
+  async configure() {
     // Ollama doesn't need API key (local)
     this.apiKey = 'local';
 

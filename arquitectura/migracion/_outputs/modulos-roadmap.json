@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T21:00:53.180Z",
+  "generated_at": "2026-05-07T21:48:53.044Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 2772,
-    "loc_total": 48459,
+    "drifts_total": 2774,
+    "loc_total": 48498,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -655,9 +655,9 @@
       "path": "modules/recetas",
       "layer": "dominio",
       "language": "es",
-      "version": "2.1.0",
-      "loc": 858,
-      "drifts": 41,
+      "version": "3.0.0",
+      "loc": 897,
+      "drifts": 43,
       "events_publishes": 7,
       "events_subscribes": 18,
       "tools": 13,

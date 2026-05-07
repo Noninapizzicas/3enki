@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T21:00:53Z_
+_Última regeneración: 2026-05-07T21:48:53Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 682 / 2772 (25%)
-- **Drifts restantes en baseline**: 2090
+- **Drifts cerrados**: 682 / 2774 (25%)
+- **Drifts restantes en baseline**: 2092
 
 ### Progreso por capa
 
@@ -77,7 +77,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 38 | dominio | `notas` | 485 | 59 | 0 |
 | 39 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
 | 40 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
-| 41 | dominio | `recetas` | 858 | 41 | 0 |
+| 41 | dominio | `recetas` | 897 | 43 | 0 |
 | 42 | dominio | `calling-generator` | 812 | 40 | 0 |
 | 43 | dominio | `pizzepos__tarifas` | 309 | 40 | 0 |
 | 44 | dominio | `pizzepos__carta-marketing` | 394 | 38 | 0 |

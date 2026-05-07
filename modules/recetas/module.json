@@ -1,6 +1,6 @@
 {
   "name": "recetas",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "Gestión de recetas con almacenamiento JSON por proyecto (data/projects/{slug}/recetas.json). Cada receta tiene history interno (versionado), incompleta flag y campos_pendientes. Cero SQL, cero schema migrations.",
   "author": "Event Core Team",
   "language": "es",

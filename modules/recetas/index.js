@@ -26,10 +26,12 @@ const CAMPOS_REQUERIDOS_PARA_COMPLETA = ['ingredientes', 'porciones', 'instrucci
 
 // ============================================================
 
+const DEFAULT_PROJECT_ID = 'default';
+
 class RecetasModule {
   constructor() {
     this.name = 'recetas';
-    this.version = '2.1.0';
+    this.version = '3.0.0';
     this.logger = null;
     this.eventBus = null;
     this.metrics = null;
@@ -89,10 +91,47 @@ class RecetasModule {
     return this._errorResponse(status, code, err.message, err._details);
   }
 
-  async _publicarEvento(name, payload, ctx) {
-    const correlation_id = ctx?.correlation_id || crypto.randomUUID();
-    await this.eventBus.publish(name, { ...payload, correlation_id, timestamp: new Date().toISOString() });
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    if (!this.eventBus?.publish) return;
+    const enriched = {
+      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+      timestamp:      new Date().toISOString(),
+      ...payload,
+      project_id:     payload?.project_id || payload?.proyecto_id || sourcePayload?.project_id || DEFAULT_PROJECT_ID
+    };
+    try {
+      await this.eventBus.publish(name, enriched);
+    } catch (err) {
+      this.logger.error('recetas.publish_error', { event: name, error: err.message });
+      this.metrics?.increment('recetas.error', { kind: 'publish', code: 'INTERNAL_ERROR' });
+    }
   }
+
+  // 5o helper auxiliar — alias canonico para escritura atomica.
+  // Delegacion al filesystem module via bus (fs.write.request es atomico end-to-end).
+  async _atomicWriteFile(slug, contents) {
+    return this._writeFile(slug, contents);
+  }
+
+  // 6o helper — alias canonico para lectura JSON segura.
+  async _readJsonSafe(slug, _kind) {
+    try {
+      const raw = await this._readFile(slug);
+      if (raw == null) return null;
+      return JSON.parse(raw);
+    } catch (err) {
+      this.logger.warn('recetas.read_json_error', { slug, error: err.message });
+      this.metrics?.increment('recetas.error', { kind: 'read_json', code: 'FILESYSTEM_ERROR' });
+      return null;
+    }
+  }
+
+  _logError(logEvent, fields, kind, code) {
+    this.logger.error(logEvent, { ...fields, code, kind });
+    this.metrics?.increment('recetas.error', { kind, code });
+  }
+
+  _unwrap(event) { return event?.data || event?.payload || event || {}; }
 
   _calcIncompleta(receta) {
     const pendientes = [];
@@ -370,8 +409,8 @@ class RecetasModule {
       this._calcIncompleta(receta);
       store.recetas.push(receta);
 
-      await this._publicarEvento('receta.creada', { proyecto_id, id, nombre: receta.nombre });
-      this.metrics?.increment('recetas.receta.creada', { proyecto_id });
+      await this._publicarEvento('receta.creada', { project_id: proyecto_id, id, nombre: receta.nombre }, params);
+      this.metrics?.increment('recetas.receta.creada', { project_id: proyecto_id });
 
       return {
         status: 201,
@@ -504,8 +543,8 @@ class RecetasModule {
       r.updated_at = Date.now();
       this._calcIncompleta(r);
 
-      await this._publicarEvento('receta.actualizada', { proyecto_id, id: r.id, nombre: r.nombre, version: r.version });
-      this.metrics?.increment('recetas.receta.actualizada', { proyecto_id });
+      await this._publicarEvento('receta.actualizada', { project_id: proyecto_id, id: r.id, nombre: r.nombre, version: r.version }, params);
+      this.metrics?.increment('recetas.receta.actualizada', { project_id: proyecto_id });
 
       return {
         status: 200,
@@ -578,7 +617,7 @@ class RecetasModule {
       r.updated_at = Date.now();
       this._calcIncompleta(r);
 
-      await this._publicarEvento('receta.actualizada', { proyecto_id, id: r.id, nombre: r.nombre, version: r.version, motivo: 'revertir' });
+      await this._publicarEvento('receta.actualizada', { project_id: proyecto_id, id: r.id, nombre: r.nombre, version: r.version, motivo: 'revertir' }, params);
 
       return {
         status: 200,
@@ -607,8 +646,8 @@ class RecetasModule {
       }
       r.estado = 'archivada';
       r.updated_at = Date.now();
-      await this._publicarEvento('receta.eliminada', { proyecto_id, id: r.id, nombre: r.nombre });
-      this.metrics?.increment('recetas.receta.eliminada', { proyecto_id });
+      await this._publicarEvento('receta.eliminada', { project_id: proyecto_id, id: r.id, nombre: r.nombre }, params);
+      this.metrics?.increment('recetas.receta.eliminada', { project_id: proyecto_id });
       return { status: 200, data: { id: r.id, nombre: r.nombre, status: 'archivada' } };
     });
   }
@@ -687,8 +726,8 @@ class RecetasModule {
         if (fuente) item.fuente = fuente;
         item.updated_at = now;
       }
-      await this._publicarEvento('ingrediente.precio.actualizado', { proyecto_id, nombre: item.nombre, precio_mercado });
-      this.metrics?.increment('recetas.ingrediente.precio.actualizado', { proyecto_id });
+      await this._publicarEvento('ingrediente.precio.actualizado', { project_id: proyecto_id, nombre: item.nombre, precio_mercado }, params);
+      this.metrics?.increment('recetas.ingrediente.precio.actualizado', { project_id: proyecto_id });
       return { status: 200, data: { nombre: item.nombre, precio_mercado, unidad: item.unidad, status: 'actualizado' } };
     });
   }

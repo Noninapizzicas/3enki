@@ -1,305 +1,90 @@
 {
   "name": "cuentas",
-  "version": "2.3.0",
-  "description": "Gestión de cuentas con ciclo de vida completo - 100% Event-Driven",
+  "version": "3.0.0",
+  "description": "Gestion de cuentas con ciclo de vida completo (POS ticket lifecycle) — 100% Event-Driven. State machine de 7 estados orquestando items + cocina + cobro.",
   "author": "Pizzepos Team",
   "language": "es",
+  "main": "index.js",
   "provides": {
     "events": [
       "cuenta.creada",
       "cuenta.actualizada",
       "cuenta.eliminada",
       "cuenta.estado_cambiado"
-    ],
-    "queries": [
-      "cuenta.obtener",
-      "cuenta.listar"
     ]
   },
   "events": {
     "publishes": [
       {
-        "event": "cuenta.creada",
-        "description": "Nueva cuenta creada",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/cuenta_creada"
-        }
+        "event":       "cuenta.creada",
+        "description": "Nueva cuenta creada (incluye turno + ref_display + project_id top-level + correlation_id + timestamp).",
+        "schema":      { "$ref": "./schemas/events.json#/definitions/cuenta_creada" }
       },
       {
-        "event": "cuenta.actualizada",
-        "description": "Cuenta actualizada",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/cuenta_actualizada"
-        }
+        "event":       "cuenta.actualizada",
+        "description": "Cuenta actualizada (cambios diff: items/total/estado/alerta/pagado/nombre/ref_display).",
+        "schema":      { "$ref": "./schemas/events.json#/definitions/cuenta_actualizada" }
       },
       {
-        "event": "cuenta.eliminada",
-        "description": "Cuenta eliminada",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/cuenta_eliminada"
-        }
+        "event":       "cuenta.estado_cambiado",
+        "description": "Transicion de estado de cuenta (estado_anterior → estado_nuevo).",
+        "schema":      { "$ref": "./schemas/events.json#/definitions/cuenta_estado_cambiado" }
       },
       {
-        "event": "cuenta.estado_cambiado",
-        "description": "Estado de cuenta cambió",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/cuenta_estado_cambiado"
-        }
+        "event":       "cuenta.eliminada",
+        "description": "Cuenta eliminada (motivo: eliminacion_manual | cobro_completado | cuenta_cerrada_canal).",
+        "schema":      { "$ref": "./schemas/events.json#/definitions/cuenta_eliminada" }
+      },
+      {
+        "event":       "comandero.enviar_cocina",
+        "description": "Cross-modulo: emitido por _inyectarPedidoInicial para integraciones delivery (Glovo, Llevadoo, webhooks externos). Pedidos lo recoge y crea el pedido formal."
       }
     ],
     "subscribes": [
-      {
-        "event": "comandero.item_agregado",
-        "description": "Item agregado al buffer del comandero, actualizar totales",
-        "handler": "onComanderoItemAgregado"
-      },
-      {
-        "event": "comandero.item_eliminado",
-        "description": "Item eliminado del buffer del comandero, actualizar totales",
-        "handler": "onComanderoItemEliminado"
-      },
-      {
-        "event": "comandero.item_actualizado",
-        "description": "Item actualizado (cantidad +/-), ajustar items/total",
-        "handler": "onComanderoItemActualizado"
-      },
-      {
-        "event": "comandero.enviar_cocina",
-        "description": "Envío a cocina, transicionar a en_preparacion",
-        "handler": "onComanderoEnviarCocina"
-      },
-      {
-        "event": "cocina.pedido_listo",
-        "description": "Pedido listo en cocina, transicionar a listo",
-        "handler": "onCocinaPedidoListo"
-      },
-      {
-        "event": "cobro.iniciado",
-        "description": "Cobro iniciado, transicionar a para_cobrar",
-        "handler": "onCobroIniciado"
-      },
-      {
-        "event": "cobro.procesado",
-        "description": "Cobro procesado, transicionar a cobrado y auto-eliminar",
-        "handler": "onCobroProcesado"
-      },
-      {
-        "event": "cuenta.cerrada",
-        "description": "Cuenta cerrada desde canal externo, limpiar del Map y timers",
-        "handler": "onCuentaExternaCerrada"
-      }
+      { "event": "comandero.item_agregado",    "handler": "onComanderoItemAgregado",    "description": "Item agregado al buffer del comandero — actualizar totales, transicionar a con_pedido si era el primero." },
+      { "event": "comandero.item_eliminado",   "handler": "onComanderoItemEliminado",   "description": "Item eliminado — ajustar totales, regresar a pendiente si items=0." },
+      { "event": "comandero.item_actualizado", "handler": "onComanderoItemActualizado", "description": "Cantidad de item modificada (+/-) — ajustar items/total con diff." },
+      { "event": "comandero.enviar_cocina",    "handler": "onComanderoEnviarCocina",    "description": "Envio a cocina — transicionar a en_preparacion + registrar pedido en tracking." },
+      { "event": "cocina.pedido_listo",        "handler": "onCocinaPedidoListo",        "description": "Pedido listo en cocina — transicionar a listo cuando todos los pedidos de la cuenta terminaron." },
+      { "event": "cobro.iniciado",             "handler": "onCobroIniciado",            "description": "Cobro iniciado — transicionar a para_cobrar (excepto pago_externo)." },
+      { "event": "cobro.procesado",            "handler": "onCobroProcesado",           "description": "Cobro procesado — marcar pagado e idempotente; transicionar a cobrado segun flags." },
+      { "event": "cuenta.cerrada",             "handler": "onCuentaExternaCerrada",     "description": "Cuenta cerrada desde canal externo (cuentas-canales) — limpiar Map + cancelar timers." }
     ]
   },
-  "apis": [
-    {
-      "method": "POST",
-      "path": "/cuentas",
-      "handler": "handleCreateCuenta",
-      "description": "Crear nueva cuenta (publica evento cuenta.creada)",
-      "request_schema": {
-        "$ref": "./schemas/cuenta.json#/definitions/create_request"
-      },
-      "response_schema": {
-        "$ref": "./schemas/cuenta.json#/definitions/create_response"
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/cuentas",
-      "handler": "handleListCuentas",
-      "description": "Listar cuentas activas",
-      "response_schema": {
-        "$ref": "./schemas/cuenta.json#/definitions/list_response"
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/cuentas/:id",
-      "handler": "handleGetCuenta",
-      "description": "Obtener cuenta por ID",
-      "response_schema": {
-        "$ref": "./schemas/cuenta.json#/definitions/get_response"
-      }
-    },
-    {
-      "method": "DELETE",
-      "path": "/cuentas/:id",
-      "handler": "handleDeleteCuenta",
-      "description": "Eliminar cuenta (publica evento cuenta.eliminada)"
-    },
-    {
-      "method": "POST",
-      "path": "/cuentas/:id/marcar_entregado",
-      "handler": "handleMarcarEntregado",
-      "description": "Marcar cuenta como entregada (listo → entregado)"
-    },
-    {
-      "method": "GET",
-      "path": "/stats",
-      "handler": "handleGetStats",
-      "description": "Estadísticas de cuentas"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Métricas del módulo"
-    }
+  "ui_handlers": [
+    { "domain": "cuenta", "action": "create",            "handler": "handleCreateCuenta",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cuenta", "action": "list",              "handler": "handleListCuentas",    "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cuenta", "action": "get",               "handler": "handleGetCuenta",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cuenta", "action": "delete",            "handler": "handleDeleteCuenta",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cuenta", "action": "marcar_entregado",  "handler": "handleMarcarEntregado","type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cuenta", "action": "rename",            "handler": "handleRenameCuenta",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cuenta", "action": "stats",             "handler": "handleGetStats",       "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cuenta", "action": "health",            "handler": "handleHealthCheck",    "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cuenta", "action": "metrics",           "handler": "handleGetMetrics",     "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "ui": {
-    "enabled": true,
-    "title": "Cuentas Activas",
-    "icon": "📋",
-    "description": "Pantalla principal - Gestión de mesas, delivery y para llevar",
-    "access_level": "camarero",
-    "is_main_screen": true,
-    "components": [
-      "cuenta-grid",
-      "cuenta-card",
-      "cuenta-type-button"
-    ],
-    "views": {
-      "main": {
-        "type": "dashboard",
-        "layout": "sidebar_content",
-        "sidebar_position": "right",
-        "header": {
-          "title": "📋 Cuentas Activas",
-          "show_clock": true,
-          "show_connection_status": true,
-          "info": [
-            {
-              "id": "connection-status",
-              "type": "mqtt-status",
-              "label": "Conexión"
-            },
-            {
-              "id": "current-time",
-              "type": "clock",
-              "format": "HH:mm"
-            },
-            {
-              "id": "cuenta-count",
-              "type": "counter",
-              "source": "cuentas.length",
-              "label": "cuentas"
-            }
-          ]
-        },
-        "sidebar": {
-          "enabled": true,
-          "position": "right",
-          "width": "80px",
-          "sections": [
-            {
-              "title": "Nueva Cuenta",
-              "buttons": [
-                {
-                  "component": "cuenta-type-button",
-                  "props": {
-                    "tipo": "local"
-                  }
-                },
-                {
-                  "component": "cuenta-type-button",
-                  "props": {
-                    "tipo": "delivery"
-                  }
-                },
-                {
-                  "component": "cuenta-type-button",
-                  "props": {
-                    "tipo": "llevar"
-                  }
-                }
-              ]
-            },
-            {
-              "title": "Acciones",
-              "buttons": [
-                {
-                  "type": "button",
-                  "icon": "🔄",
-                  "label": "Refrescar",
-                  "action": "refresh"
-                }
-              ]
-            }
-          ]
-        },
-        "content": {
-          "id": "cuentas_grid",
-          "type": "grid",
-          "component": "cuenta-grid",
-          "config": {
-            "endpoint": "/modules/cuentas/cuentas",
-            "mqtt_topics": [
-              "cuenta.creada",
-              "cuenta.actualizada",
-              "cuenta.eliminada",
-              "cuenta.estado_cambiado"
-            ],
-            "refresh_on_event": true,
-            "item_component": "cuenta-card",
-            "columns": {
-              "mobile": 1,
-              "tablet": 2,
-              "desktop": 2,
-              "wide": 3
-            }
-          }
-        }
-      }
-    },
-    "mqtt": {
-      "enabled": true,
-      "topics": [
-        "cuenta.creada",
-        "cuenta.actualizada",
-        "cuenta.eliminada",
-        "cuenta.estado_cambiado"
+  "tools": [],
+  "config": {
+    "max_cuentas_activas": 100,
+    "auto_numeracion":     true,
+    "persistence": {
+      "type":   "json-file",
+      "atomic": true,
+      "paths": [
+        "data/current/contador_global.json",
+        "data/current/cuentas_activas.json"
       ],
-      "auto_refresh": true,
-      "sounds": {
-        "cuenta.creada": "notification"
-      }
-    },
-    "permissions": {
-      "view": [
-        "admin",
-        "gerente",
-        "camarero"
-      ],
-      "create": [
-        "admin",
-        "gerente",
-        "camarero"
-      ],
-      "delete": [
-        "admin",
-        "gerente"
-      ]
-    },
-    "features": {
-      "filters": true,
-      "real_time": true,
-      "quick_create": true
-    },
-    "navigation": {
-      "on_cuenta_click": "/ui/comandero?cuenta_id={id}",
-      "on_create_success": "/ui/comandero?cuenta_id={new_id}"
+      "owner":       "modules/pizzepos/cuentas (contador) + persistencia-comandero (cuentas)",
+      "concurrency": "single-writer-per-archivo",
+      "notes":       "Modulo persiste contador global de turnos atomicamente; cuentas se restauran en onLoad desde cuentas_activas.json (escrito por persistencia-comandero)."
     }
+  },
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "observability": {
     "logging": {
-      "level": "info",
-      "structured": true,
+      "level":          "info",
+      "structured":     true,
       "correlation_id": true
     },
     "metrics": {
@@ -308,7 +93,8 @@
         "cuenta.creada.total",
         "cuenta.eliminada.total",
         "cuenta.transicion.total",
-        "cuenta.errors.total"
+        "cuenta.errors.total",
+        "pizzepos-cuentas.errors"
       ],
       "gauges": [
         "cuenta.activas.count",
@@ -330,13 +116,18 @@
       ]
     }
   },
-  "config": {
-    "max_cuentas_activas": 100,
-    "auto_numeracion": true,
-    "persistence": {
-      "enabled": false,
-      "type": "memory",
-      "notes": "En producción cambiar a DB"
+  "ui": {
+    "enabled":         true,
+    "title":           "Cuentas Activas",
+    "icon":            "📋",
+    "description":     "Pantalla principal — Gestion de mesas, delivery y para llevar",
+    "access_level":    "camarero",
+    "is_main_screen":  true,
+    "components":      ["cuenta-grid", "cuenta-card", "cuenta-type-button"],
+    "mqtt": {
+      "enabled":      true,
+      "topics":       ["cuenta.creada", "cuenta.actualizada", "cuenta.eliminada", "cuenta.estado_cambiado"],
+      "auto_refresh": true
     }
   }
 }

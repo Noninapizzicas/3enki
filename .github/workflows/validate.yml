@@ -154,3 +154,6 @@ jobs:
 
       - name: Run unit tests (pizzepos/carta-design — reescritura canonica)
         run: npm run test:pizzepos__carta-design
+
+      - name: Run unit tests (facturas — reescritura canonica)
+        run: npm run test:facturas

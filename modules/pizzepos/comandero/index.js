@@ -1,45 +1,46 @@
 /**
- * Módulo Comandero v2.0
- * Puerta de entrada del camarero - Buffer de pedido por cuenta
- * Alineado con patrones event-core: uiHandler, event envelope, cleanup
+ * pizzepos/comandero v3.0.0 — Buffer de pedido por cuenta + envio a cocina (POC2 rewrite).
  *
- * Flujo: cuenta abierta → comandero (add/remove items) → enviar cocina → cobrar
+ * El camarero añade items al buffer, modifica cantidades/notas, y envia a cocina.
+ * Mantiene caches de productos (catalogo + por carta) para resolver precio por canal.
+ * Persiste buffers transitorios atomicamente (debounced 1s) para sobrevivir restart.
+ *
+ * Eventos del bus:
+ *   subscribes (8): cuenta.{creada,actualizada}, caja.cerrada, dia.iniciado,
+ *                   catalogo.actualizado, producto.{creado,actualizado}, carta.actualizada.
+ *   publishes  (4): comandero.{item_agregado, item_eliminado, item_actualizado, enviar_cocina}.
+ *
+ * 7 ui_handlers (auto-wired desde module.json).
  */
 
+'use strict';
+
 const crypto = require('crypto');
-const fs = require('fs').promises;
-const path = require('path');
+const fs     = require('fs').promises;
+const path   = require('path');
+
+const DEFAULT_PROJECT_ID = 'default';
+const SAVE_DEBOUNCE_MS   = 1000;
 
 class ComanderoModule {
   constructor() {
-    this.name = 'comandero';
-    this.version = '2.0.0';
+    this.name    = 'comandero';
+    this.version = '3.0.0';
 
-    // Dependencias (inyectadas en onLoad)
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-    this.uiHandler = null;
+    this.eventBus  = null;
+    this.logger    = null;
+    this.metrics   = null;
     this.validator = null;
 
-    // Buffer de pedidos por cuenta: cuenta_id -> { items: [], notas: '', total: 0 }
-    this.pedidos = new Map();
-
-    // Cache de ref_display por cuenta (cuenta_id -> ref_display string)
-    this.refDisplayCache = new Map();
-
-    // Caché de productos (para resolver nombre/precio)
-    this.productosCache = new Map();
-
-    // Caché de productos por carta (carta_id → Map<producto_id, producto>)
+    this.pedidos              = new Map();
+    this.refDisplayCache      = new Map();
+    this.productosCache       = new Map();
     this.cartasProductosCache = new Map();
 
-    // Referencia al módulo de tarifas (para resolverCarta)
     this._tarifasModule = null;
-
-    // Persistencia del buffer (debounced)
-    this._bufferFile = path.join('./data/current', 'comandero_buffers.json');
-    this._saveTimer = null;
+    this._moduleLoader  = null;
+    this._bufferFile    = path.join('./data/current', 'comandero_buffers.json');
+    this._saveTimer     = null;
   }
 
   // ==========================================
@@ -47,64 +48,52 @@ class ComanderoModule {
   // ==========================================
 
   async onLoad(core) {
-    this.logger = core.logger;
-    this.metrics = core.metrics;
-    this.eventBus = core.eventBus;
-    this.uiHandler = core.uiHandler;
+    this.logger    = core.logger;
+    this.metrics   = core.metrics;
+    this.eventBus  = core.eventBus;
     this.validator = core.validationManager || null;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Referencia al moduleLoader para acceso lazy a menu-generator (tarifas)
     this._moduleLoader = core.moduleLoader || null;
 
-    // Registrar schemas de validación para los handlers
-    this.registerSchemas();
+    this._registerSchemas();
+    await this._restaurarBuffers();
 
-    // Event subscriptions are auto-wired from module.json by the loader.
-    this.registerUIHandlers();
-
-    // Restaurar buffers desde persistencia
-    await this.restaurarBuffers();
-
-    this.logger.info('module.loaded', { module: this.name, version: this.version });
+    this.logger.info('module.loaded', {
+      module:           this.name,
+      version:          this.version,
+      pedidos_restored: this.pedidos.size
+    });
   }
 
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
-
-    if (this.uiHandler) {
-      const actions = ['get', 'add-item', 'remove-item', 'update-item', 'send-kitchen', 'health', 'buffers'];
-      for (const action of actions) {
-        this.uiHandler.unregister('comandero', action);
-      }
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
     }
-
     this.pedidos.clear();
     this.productosCache.clear();
     this.cartasProductosCache.clear();
-
+    this.refDisplayCache.clear();
     this.logger.info('module.unloaded', { module: this.name });
   }
 
-  // ==========================================
-  // Validation Schemas
-  // ==========================================
-
-  registerSchemas() {
+  _registerSchemas() {
     if (!this.validator) return;
 
     this.validator.registerSchema('comandero.add-item', {
       type: 'object',
       required: ['cuenta_id', 'producto_id'],
       properties: {
-        cuenta_id: { type: 'string', minLength: 1 },
+        cuenta_id:   { type: 'string', minLength: 1 },
         producto_id: { type: 'string', minLength: 1 },
-        nombre: { type: 'string' },
-        precio: { type: 'number', minimum: 0 },
-        cantidad: { type: 'integer', minimum: 1 },
-        notas: { type: 'string' },
-        tipo: { type: 'string', enum: ['mitad_mitad', 'al_gusto'] },
+        nombre:      { type: 'string' },
+        precio:      { type: 'number', minimum: 0 },
+        cantidad:    { type: 'integer', minimum: 1 },
+        notas:       { type: 'string' },
+        tipo:        { type: 'string', enum: ['mitad_mitad', 'al_gusto'] },
         variaciones: { type: 'array' }
       }
     });
@@ -114,9 +103,9 @@ class ComanderoModule {
       required: ['cuenta_id', 'item_id'],
       properties: {
         cuenta_id: { type: 'string', minLength: 1 },
-        item_id: { type: 'string', minLength: 1 },
-        cantidad: { type: 'integer' },
-        notas: { type: 'string' }
+        item_id:   { type: 'string', minLength: 1 },
+        cantidad:  { type: 'integer' },
+        notas:     { type: 'string' }
       }
     });
 
@@ -125,7 +114,7 @@ class ComanderoModule {
       required: ['cuenta_id', 'item_id'],
       properties: {
         cuenta_id: { type: 'string', minLength: 1 },
-        item_id: { type: 'string', minLength: 1 }
+        item_id:   { type: 'string', minLength: 1 }
       }
     });
 
@@ -133,7 +122,7 @@ class ComanderoModule {
       type: 'object',
       required: ['cuenta_id'],
       properties: {
-        cuenta_id: { type: 'string', minLength: 1 },
+        cuenta_id:  { type: 'string', minLength: 1 },
         project_id: { type: 'string' }
       }
     });
@@ -141,610 +130,615 @@ class ComanderoModule {
     this.logger.info('comandero.schemas.registered', { count: 4 });
   }
 
-  // ==========================================
-  // Validation Helper
-  // ==========================================
-
-  validateInput(schemaId, data) {
+  _validateInput(schemaId, data) {
     if (!this.validator) return null;
     const result = this.validator.validate(schemaId, data);
     if (!result.valid) {
-      return { status: 400, error: 'Validación fallida', validation_errors: result.errors };
+      return this._errorResponse(400, 'INVALID_INPUT', 'Validacion fallida', { validation_errors: result.errors });
     }
     return null;
   }
 
   // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('comandero.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    this.uiHandler.register('comandero', 'get', this.handleGetPedido.bind(this));
-    this.uiHandler.register('comandero', 'add-item', this.handleAddItem.bind(this));
-    this.uiHandler.register('comandero', 'remove-item', this.handleRemoveItem.bind(this));
-    this.uiHandler.register('comandero', 'update-item', this.handleUpdateItem.bind(this));
-    this.uiHandler.register('comandero', 'send-kitchen', this.handleEnviarCocina.bind(this));
-    this.uiHandler.register('comandero', 'health', this.handleHealthCheck.bind(this));
-    this.uiHandler.register('comandero', 'buffers', this.handleListBuffers.bind(this));
-
-    this.logger.info('comandero.ui_handlers.registered', {
-      handlers: ['get', 'add-item', 'remove-item', 'update-item', 'send-kitchen', 'health', 'buffers']
-    });
-  }
-
-  // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    await this.eventBus.subscribe('cuenta.creada', this.onCuentaCreada.bind(this));
-    await this.eventBus.subscribe('cuenta.actualizada', this.onCuentaActualizada.bind(this));
-    await this.eventBus.subscribe('caja.cerrada', this.onCajaCerrada.bind(this));
-    await this.eventBus.subscribe('dia.iniciado', this.onDiaIniciado.bind(this));
-
-    // Caché de productos
-    await this.eventBus.subscribe('catalogo.actualizado', this.onCatalogoActualizado.bind(this));
-    await this.eventBus.subscribe('producto.creado', this.onProductoActualizado.bind(this));
-    await this.eventBus.subscribe('producto.actualizado', this.onProductoActualizado.bind(this));
-
-    this.logger.info('comandero.events.subscribed', {
-      events: [
-        'cuenta.actualizada', 'caja.cerrada', 'dia.iniciado',
-        'catalogo.actualizado', 'producto.creado', 'producto.actualizado'
-      ]
-    });
-  }
-
-  // ==========================================
-  // Event Handlers
+  // Bus handlers
   // ==========================================
 
   async onCuentaCreada(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, ref_display } = data;
-    if (cuenta_id && ref_display) {
-      this.refDisplayCache.set(cuenta_id, ref_display);
-    }
+    if (cuenta_id && ref_display) this.refDisplayCache.set(cuenta_id, ref_display);
   }
 
   async onCuentaActualizada(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { cuenta_id, cambios } = data;
-    if (cuenta_id && cambios?.ref_display) {
-      this.refDisplayCache.set(cuenta_id, cambios.ref_display);
-    }
+    if (cuenta_id && cambios?.ref_display) this.refDisplayCache.set(cuenta_id, cambios.ref_display);
   }
 
   async onCajaCerrada(event) {
     const size = this.pedidos.size;
     this.pedidos.clear();
-    this.guardarBuffers();
-
+    this._guardarBuffers();
     this.logger.info('comandero.reset.caja_cerrada', {
       pedidos_limpiados: size,
-      correlation_id: event?.metadata?.correlationId
+      correlation_id: event?.metadata?.correlationId || this._unwrap(event)?.correlation_id
     });
   }
 
   async onDiaIniciado(event) {
     const size = this.pedidos.size;
     this.pedidos.clear();
-    this.guardarBuffers();
-
+    this._guardarBuffers();
     this.logger.info('comandero.reset.dia_iniciado', {
       pedidos_limpiados: size,
-      correlation_id: event?.metadata?.correlationId
+      correlation_id: event?.metadata?.correlationId || this._unwrap(event)?.correlation_id
     });
   }
 
   async onCatalogoActualizado(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const productos = data?.productos || [];
 
     for (const producto of productos) {
       if (producto.id && producto.precio !== undefined) {
         this.productosCache.set(producto.id, {
-          nombre: producto.nombre || producto.id,
-          precio: producto.precio,
-          categoria: producto.categoria || null,
-          estaciones: producto.estaciones || null,
+          nombre:      producto.nombre || producto.id,
+          precio:      producto.precio,
+          categoria:   producto.categoria || null,
+          estaciones:  producto.estaciones || null,
           precio_fijo: producto.precio_fijo || false
         });
       }
     }
 
-    this.logger.info('comandero.catalogo.synced', {
-      productos_en_cache: this.productosCache.size
-    });
+    this.logger.info('comandero.catalogo.synced', { productos_en_cache: this.productosCache.size });
   }
 
   async onCartaActualizada(event) {
-    const data = event?.data || event?.payload || event;
+    const data    = this._unwrap(event);
     const cartaId = data?.meta?.id;
     const productos = data?.productos || [];
-
     if (!cartaId || productos.length === 0) return;
 
     const cartaCache = new Map();
     for (const p of productos) {
       if (p.id && p.precio !== undefined) {
         cartaCache.set(p.id, {
-          nombre: p.nombre || p.id,
-          precio: p.precio,
-          categoria: p.categoria || null,
+          nombre:     p.nombre || p.id,
+          precio:     p.precio,
+          categoria:  p.categoria || null,
           estaciones: p.estaciones || null
         });
       }
     }
 
     this.cartasProductosCache.set(cartaId, cartaCache);
-    this.logger.info('comandero.carta.cached', {
-      carta_id: cartaId, productos: cartaCache.size
-    });
+    this.logger.info('comandero.carta.cached', { carta_id: cartaId, productos: cartaCache.size });
   }
 
   async onProductoActualizado(event) {
-    const data = event?.data || event?.payload || event;
+    const data = this._unwrap(event);
     const { id, nombre, precio, categoria } = data;
-
     if (id && precio !== undefined) {
       const existing = this.productosCache.get(id);
       this.productosCache.set(id, {
-        nombre: nombre || id,
+        nombre:     nombre || id,
         precio,
-        categoria: categoria || existing?.categoria || null,
+        categoria:  categoria || existing?.categoria || null,
         estaciones: existing?.estaciones || null
       });
     }
   }
 
   // ==========================================
-  // UI Handlers (MQTT Request/Response)
+  // UI Handlers (auto-wired desde module.json)
   // ==========================================
 
   async handleGetPedido(data) {
-    const { cuenta_id } = data;
+    try {
+      const { cuenta_id } = data || {};
+      if (!cuenta_id) {
+        this._logError('comandero.ui.get.validation_failed', { missing: 'cuenta_id' }, 'ui_get', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'cuenta_id es requerido', { field: 'cuenta_id' });
+      }
 
-    if (!cuenta_id) {
-      return { status: 400, error: 'cuenta_id es requerido' };
+      let pedido = this.pedidos.get(cuenta_id);
+      if (!pedido) {
+        pedido = { items: [], notas: '', total: 0 };
+        this.pedidos.set(cuenta_id, pedido);
+      }
+      return { status: 200, data: { cuenta_id, ...pedido } };
+    } catch (err) {
+      return this._handleHandlerError('comandero.ui.get.failed', err, 'ui_get');
     }
-
-    let pedido = this.pedidos.get(cuenta_id);
-    if (!pedido) {
-      pedido = { items: [], notas: '', total: 0 };
-      this.pedidos.set(cuenta_id, pedido);
-    }
-
-    return {
-      status: 200,
-      data: { cuenta_id, ...pedido }
-    };
   }
 
   async handleAddItem(data) {
-    const invalid = this.validateInput('comandero.add-item', data);
-    if (invalid) return invalid;
-
-    const { cuenta_id, producto_id, nombre, precio, cantidad, categoria, variaciones, notas,
-            tipo, pizza_izquierda, pizza_derecha, ingredientes: metaIngredientes,
-            ingredientes_base, project_id } = data;
-
-    // Obtener o crear buffer de pedido
-    let pedido = this.pedidos.get(cuenta_id);
-    if (!pedido) {
-      pedido = { items: [], notas: '', total: 0 };
-      this.pedidos.set(cuenta_id, pedido);
-    }
-
-    // Resolver nombre/precio: prioridad data > cache > fallback
-    const cached = this.productosCache.get(producto_id);
-    const itemNombre = nombre || cached?.nombre || producto_id;
-    const precioBase = precio ?? cached?.precio ?? 0;
-    const itemCantidad = cantidad || 1;
-
-    if (!cached && precio === undefined) {
-      this.logger.warn('comandero.producto.not_in_cache', { producto_id });
-    }
-
-    // Resolver precio por canal: busca en la carta asignada al canal
-    const canal = this._detectarCanalCuenta(cuenta_id);
-    const itemPrecio = this._resolverPrecioCanal(producto_id, precioBase, canal, project_id);
-
-    const item_id = crypto.randomUUID();
-    const item = {
-      id: item_id,
-      producto_id,
-      nombre: itemNombre,
-      precio: itemPrecio,
-      cantidad: itemCantidad,
-      categoria: categoria || cached?.categoria || null,
-      estaciones: cached?.estaciones || null,
-      variaciones: variaciones || [],
-      notas: notas || '',
-      subtotal: itemPrecio * itemCantidad,
-      created_at: new Date().toISOString()
-    };
-
-    // Metadata especial: mitad_mitad, al_gusto, etc.
-    if (tipo) {
-      item.tipo = tipo;
-    }
-    if (pizza_izquierda) {
-      item.pizza_izquierda = pizza_izquierda;
-    }
-    if (pizza_derecha) {
-      item.pizza_derecha = pizza_derecha;
-    }
-    if (metaIngredientes) {
-      item.ingredientes = metaIngredientes;
-    }
-    if (ingredientes_base) {
-      item.ingredientes_base = ingredientes_base;
-    }
-
-    pedido.items.push(item);
-    pedido.total = this.calcularTotal(pedido.items);
-
-    this.metrics.increment('comandero.item_agregado.total');
-
-    const eventPayload = {
-      cuenta_id,
-      item_id,
-      producto_id,
-      nombre: itemNombre,
-      precio_unitario: itemPrecio,
-      precio_total: item.subtotal,
-      cantidad: itemCantidad,
-      pedido_total: pedido.total,
-      pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
-    };
-    if (tipo) eventPayload.tipo = tipo;
-    if (pizza_izquierda) eventPayload.pizza_izquierda = pizza_izquierda;
-    if (pizza_derecha) eventPayload.pizza_derecha = pizza_derecha;
-    if (item.variaciones) eventPayload.variaciones = item.variaciones;
-    if (item.ingredientes_base) eventPayload.ingredientes_base = item.ingredientes_base;
-    if (metaIngredientes) eventPayload.ingredientes = metaIngredientes;
-
-    await this.eventBus.publish('comandero.item_agregado', eventPayload);
-
-    // Persistir buffer a disco (debounced)
-    this.guardarBuffers();
-
-    this.logger.info('comandero.item.agregado', {
-      cuenta_id, item_id, producto_id, precio: itemPrecio, cantidad: itemCantidad
-    });
-
-    return {
-      status: 201,
-      data: {
-        item,
-        pedido: { cuenta_id, items: pedido.items, total: pedido.total }
+    try {
+      const invalid = this._validateInput('comandero.add-item', data);
+      if (invalid) {
+        this._logError('comandero.ui.add_item.validation_failed', { details: invalid.error.details }, 'ui_add_item', 'INVALID_INPUT');
+        return invalid;
       }
-    };
-  }
 
-  async handleRemoveItem(data) {
-    const invalid = this.validateInput('comandero.remove-item', data);
-    if (invalid) return invalid;
+      const { cuenta_id, producto_id, nombre, precio, cantidad, categoria, variaciones, notas,
+              tipo, pizza_izquierda, pizza_derecha,
+              ingredientes: metaIngredientes, ingredientes_base, project_id } = data;
 
-    const { cuenta_id, item_id } = data;
-
-    const pedido = this.pedidos.get(cuenta_id);
-    if (!pedido) {
-      return { status: 404, error: 'Pedido no encontrado' };
-    }
-
-    const itemIndex = pedido.items.findIndex(i => i.id === item_id);
-    if (itemIndex === -1) {
-      return { status: 404, error: 'Item no encontrado en pedido' };
-    }
-
-    const removedItem = pedido.items.splice(itemIndex, 1)[0];
-    pedido.total = this.calcularTotal(pedido.items);
-
-    this.metrics.increment('comandero.item_eliminado.total');
-
-    await this.eventBus.publish('comandero.item_eliminado', {
-      cuenta_id,
-      item_id,
-      producto_id: removedItem.producto_id,
-      cantidad: removedItem.cantidad || 1,
-      precio_total: removedItem.subtotal,
-      pedido_total: pedido.total,
-      pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
-    });
-
-    // Persistir buffer a disco (debounced)
-    this.guardarBuffers();
-
-    this.logger.info('comandero.item.eliminado', { cuenta_id, item_id });
-
-    return {
-      status: 200,
-      data: {
-        pedido: { cuenta_id, items: pedido.items, total: pedido.total }
+      let pedido = this.pedidos.get(cuenta_id);
+      if (!pedido) {
+        pedido = { items: [], notas: '', total: 0 };
+        this.pedidos.set(cuenta_id, pedido);
       }
-    };
-  }
 
-  async handleUpdateItem(data) {
-    const invalid = this.validateInput('comandero.update-item', data);
-    if (invalid) return invalid;
+      const cached       = this.productosCache.get(producto_id);
+      const itemNombre   = nombre || cached?.nombre || producto_id;
+      const precioBase   = precio ?? cached?.precio ?? 0;
+      const itemCantidad = cantidad || 1;
 
-    const { cuenta_id, item_id, cantidad, notas } = data;
-
-    const pedido = this.pedidos.get(cuenta_id);
-    if (!pedido) {
-      return { status: 404, error: 'Pedido no encontrado' };
-    }
-
-    const item = pedido.items.find(i => i.id === item_id);
-    if (!item) {
-      return { status: 404, error: 'Item no encontrado en pedido' };
-    }
-
-    if (cantidad !== undefined) {
-      if (cantidad <= 0) {
-        // cantidad 0 o negativa → eliminar item
-        const idx = pedido.items.indexOf(item);
-        pedido.items.splice(idx, 1);
-        pedido.total = this.calcularTotal(pedido.items);
-
-        await this.eventBus.publish('comandero.item_eliminado', {
-          cuenta_id, item_id, producto_id: item.producto_id,
-          cantidad: item.cantidad || 1,
-          precio_total: item.subtotal,
-          pedido_total: pedido.total,
-          pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
-        });
-
-        return {
-          status: 200,
-          data: { pedido: { cuenta_id, items: pedido.items, total: pedido.total } }
-        };
+      if (!cached && precio === undefined) {
+        this.logger.warn('comandero.producto.not_in_cache', { producto_id });
       }
-      const cantidadAnterior = item.cantidad;
-      const subtotalAnterior = item.subtotal;
-      item.cantidad = cantidad;
-      item.subtotal = item.precio * cantidad;
 
-      pedido.total = this.calcularTotal(pedido.items);
+      const canal      = this._detectarCanalCuenta(cuenta_id);
+      const itemPrecio = this._resolverPrecioCanal(producto_id, precioBase, canal, project_id);
 
-      // Notificar cambio de cantidad para que cuentas actualice items/total
-      const diffCantidad = cantidad - cantidadAnterior;
-      const diffPrecio = item.subtotal - subtotalAnterior;
-      await this.eventBus.publish('comandero.item_actualizado', {
-        cuenta_id, item_id, producto_id: item.producto_id,
-        nombre: item.nombre,
-        cantidad_anterior: cantidadAnterior,
-        cantidad_nueva: cantidad,
-        diff_cantidad: diffCantidad,
-        diff_precio: diffPrecio,
-        pedido_total: pedido.total,
-        pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
+      const item_id = crypto.randomUUID();
+      const item = {
+        id:          item_id,
+        producto_id,
+        nombre:      itemNombre,
+        precio:      itemPrecio,
+        cantidad:    itemCantidad,
+        categoria:   categoria || cached?.categoria || null,
+        estaciones:  cached?.estaciones || null,
+        variaciones: variaciones || [],
+        notas:       notas || '',
+        subtotal:    itemPrecio * itemCantidad,
+        created_at:  new Date().toISOString()
+      };
+
+      if (tipo)              item.tipo              = tipo;
+      if (pizza_izquierda)   item.pizza_izquierda   = pizza_izquierda;
+      if (pizza_derecha)     item.pizza_derecha     = pizza_derecha;
+      if (metaIngredientes)  item.ingredientes      = metaIngredientes;
+      if (ingredientes_base) item.ingredientes_base = ingredientes_base;
+
+      pedido.items.push(item);
+      pedido.total = this._calcularTotal(pedido.items);
+
+      this.metrics?.increment('comandero.item_agregado.total');
+
+      const eventPayload = {
+        cuenta_id,
+        item_id,
+        producto_id,
+        nombre:           itemNombre,
+        precio_unitario:  itemPrecio,
+        precio_total:     item.subtotal,
+        cantidad:         itemCantidad,
+        pedido_total:     pedido.total,
+        pedido_items:     pedido.items.reduce((s, i) => s + i.cantidad, 0)
+      };
+      if (tipo)              eventPayload.tipo              = tipo;
+      if (pizza_izquierda)   eventPayload.pizza_izquierda   = pizza_izquierda;
+      if (pizza_derecha)     eventPayload.pizza_derecha     = pizza_derecha;
+      if (item.variaciones)  eventPayload.variaciones       = item.variaciones;
+      if (item.ingredientes_base) eventPayload.ingredientes_base = item.ingredientes_base;
+      if (metaIngredientes)  eventPayload.ingredientes      = metaIngredientes;
+
+      await this._publicarEvento('comandero.item_agregado', eventPayload, data);
+      this._guardarBuffers();
+
+      this.logger.info('comandero.item.agregado', {
+        cuenta_id, item_id, producto_id, precio: itemPrecio, cantidad: itemCantidad
       });
 
-      // Persistir buffer a disco (debounced)
-      this.guardarBuffers();
-
-      this.logger.info('comandero.item.actualizado', { cuenta_id, item_id, cantidad, notas });
-
       return {
-        status: 200,
+        status: 201,
         data: {
           item,
           pedido: { cuenta_id, items: pedido.items, total: pedido.total }
         }
       };
+    } catch (err) {
+      return this._handleHandlerError('comandero.ui.add_item.failed', err, 'ui_add_item');
     }
+  }
 
-    if (notas !== undefined) {
-      item.notas = notas;
-    }
-
-    // Persistir buffer a disco (debounced)
-    this.guardarBuffers();
-
-    this.logger.info('comandero.item.actualizado', { cuenta_id, item_id, cantidad, notas });
-
-    return {
-      status: 200,
-      data: {
-        item,
-        pedido: { cuenta_id, items: pedido.items, total: pedido.total }
+  async handleRemoveItem(data) {
+    try {
+      const invalid = this._validateInput('comandero.remove-item', data);
+      if (invalid) {
+        this._logError('comandero.ui.remove_item.validation_failed', { details: invalid.error.details }, 'ui_remove_item', 'INVALID_INPUT');
+        return invalid;
       }
-    };
+
+      const { cuenta_id, item_id } = data;
+      const pedido = this.pedidos.get(cuenta_id);
+      if (!pedido) {
+        this._logError('comandero.ui.remove_item.pedido_not_found', { cuenta_id }, 'ui_remove_item', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', {
+          entity_type: 'pedido', entity_id: cuenta_id
+        });
+      }
+
+      const itemIndex = pedido.items.findIndex(i => i.id === item_id);
+      if (itemIndex === -1) {
+        this._logError('comandero.ui.remove_item.item_not_found', { cuenta_id, item_id }, 'ui_remove_item', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Item no encontrado en pedido', {
+          entity_type: 'item', entity_id: item_id
+        });
+      }
+
+      const removedItem = pedido.items.splice(itemIndex, 1)[0];
+      pedido.total = this._calcularTotal(pedido.items);
+
+      this.metrics?.increment('comandero.item_eliminado.total');
+
+      await this._publicarEvento('comandero.item_eliminado', {
+        cuenta_id,
+        item_id,
+        producto_id:  removedItem.producto_id,
+        cantidad:     removedItem.cantidad || 1,
+        precio_total: removedItem.subtotal,
+        pedido_total: pedido.total,
+        pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
+      }, data);
+
+      this._guardarBuffers();
+      this.logger.info('comandero.item.eliminado', { cuenta_id, item_id });
+
+      return {
+        status: 200,
+        data: { pedido: { cuenta_id, items: pedido.items, total: pedido.total } }
+      };
+    } catch (err) {
+      return this._handleHandlerError('comandero.ui.remove_item.failed', err, 'ui_remove_item');
+    }
+  }
+
+  async handleUpdateItem(data) {
+    try {
+      const invalid = this._validateInput('comandero.update-item', data);
+      if (invalid) {
+        this._logError('comandero.ui.update_item.validation_failed', { details: invalid.error.details }, 'ui_update_item', 'INVALID_INPUT');
+        return invalid;
+      }
+
+      const { cuenta_id, item_id, cantidad, notas } = data;
+      const pedido = this.pedidos.get(cuenta_id);
+      if (!pedido) {
+        this._logError('comandero.ui.update_item.pedido_not_found', { cuenta_id }, 'ui_update_item', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', {
+          entity_type: 'pedido', entity_id: cuenta_id
+        });
+      }
+
+      const item = pedido.items.find(i => i.id === item_id);
+      if (!item) {
+        this._logError('comandero.ui.update_item.item_not_found', { cuenta_id, item_id }, 'ui_update_item', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Item no encontrado en pedido', {
+          entity_type: 'item', entity_id: item_id
+        });
+      }
+
+      if (cantidad !== undefined) {
+        if (cantidad <= 0) {
+          // cantidad 0 o negativa → eliminar item
+          const idx = pedido.items.indexOf(item);
+          pedido.items.splice(idx, 1);
+          pedido.total = this._calcularTotal(pedido.items);
+
+          await this._publicarEvento('comandero.item_eliminado', {
+            cuenta_id, item_id,
+            producto_id:  item.producto_id,
+            cantidad:     item.cantidad || 1,
+            precio_total: item.subtotal,
+            pedido_total: pedido.total,
+            pedido_items: pedido.items.reduce((s, i) => s + i.cantidad, 0)
+          }, data);
+
+          this._guardarBuffers();
+          return { status: 200, data: { pedido: { cuenta_id, items: pedido.items, total: pedido.total } } };
+        }
+
+        const cantidadAnterior = item.cantidad;
+        const subtotalAnterior = item.subtotal;
+        item.cantidad = cantidad;
+        item.subtotal = item.precio * cantidad;
+        pedido.total  = this._calcularTotal(pedido.items);
+
+        await this._publicarEvento('comandero.item_actualizado', {
+          cuenta_id, item_id,
+          producto_id:        item.producto_id,
+          nombre:             item.nombre,
+          cantidad_anterior:  cantidadAnterior,
+          cantidad_nueva:     cantidad,
+          diff_cantidad:      cantidad - cantidadAnterior,
+          diff_precio:        item.subtotal - subtotalAnterior,
+          pedido_total:       pedido.total,
+          pedido_items:       pedido.items.reduce((s, i) => s + i.cantidad, 0)
+        }, data);
+
+        this._guardarBuffers();
+        this.logger.info('comandero.item.actualizado', { cuenta_id, item_id, cantidad, notas });
+
+        return {
+          status: 200,
+          data: { item, pedido: { cuenta_id, items: pedido.items, total: pedido.total } }
+        };
+      }
+
+      if (notas !== undefined) item.notas = notas;
+      this._guardarBuffers();
+      this.logger.info('comandero.item.actualizado', { cuenta_id, item_id, cantidad, notas });
+
+      return {
+        status: 200,
+        data: { item, pedido: { cuenta_id, items: pedido.items, total: pedido.total } }
+      };
+    } catch (err) {
+      return this._handleHandlerError('comandero.ui.update_item.failed', err, 'ui_update_item');
+    }
   }
 
   async handleEnviarCocina(data) {
-    const invalid = this.validateInput('comandero.send-kitchen', data);
-    if (invalid) return invalid;
+    try {
+      const invalid = this._validateInput('comandero.send-kitchen', data);
+      if (invalid) {
+        this._logError('comandero.ui.send_kitchen.validation_failed', { details: invalid.error.details }, 'ui_send_kitchen', 'INVALID_INPUT');
+        return invalid;
+      }
 
-    const { cuenta_id, project_id } = data;
+      const { cuenta_id, project_id } = data;
+      const pedido = this.pedidos.get(cuenta_id);
+      if (!pedido || pedido.items.length === 0) {
+        this._logError('comandero.ui.send_kitchen.empty', { cuenta_id }, 'ui_send_kitchen', 'CONFLICT_STATE');
+        return this._errorResponse(409, 'CONFLICT_STATE', 'No hay items en el pedido para enviar', {
+          cuenta_id
+        });
+      }
 
-    const pedido = this.pedidos.get(cuenta_id);
-    if (!pedido || pedido.items.length === 0) {
-      return { status: 400, error: 'No hay items en el pedido para enviar' };
-    }
+      const itemsParaEnviar = pedido.items.filter(i => !i.enviado);
+      if (itemsParaEnviar.length === 0) {
+        this._logError('comandero.ui.send_kitchen.all_sent', { cuenta_id }, 'ui_send_kitchen', 'CONFLICT_STATE');
+        return this._errorResponse(409, 'CONFLICT_STATE', 'Todos los items ya fueron enviados a cocina', {
+          cuenta_id
+        });
+      }
 
-    // Solo enviar items que no se hayan enviado aún
-    const itemsParaEnviar = pedido.items.filter(i => !i.enviado);
-    if (itemsParaEnviar.length === 0) {
-      return { status: 400, error: 'Todos los items ya fueron enviados a cocina' };
-    }
+      const pedido_id = `ped_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+      const ahora     = new Date().toISOString();
 
-    const pedido_id = `ped_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
-    const ahora = new Date().toISOString();
+      for (const item of itemsParaEnviar) {
+        item.enviado    = true;
+        item.enviado_at = ahora;
+        item.pedido_id  = pedido_id;
+      }
 
-    // Marcar items como enviados
-    for (const item of itemsParaEnviar) {
-      item.enviado = true;
-      item.enviado_at = ahora;
-      item.pedido_id = pedido_id;
-    }
+      const totalEnviado = this._calcularTotal(itemsParaEnviar);
+      this.metrics?.increment('comandero.enviado.total');
 
-    const totalEnviado = this.calcularTotal(itemsParaEnviar);
-
-    this.metrics.increment('comandero.enviado.total');
-
-    // comandero.enviar_cocina → Pedidos recoge, crea pedido formal, envía a cocina
-    await this.eventBus.publish('comandero.enviar_cocina', {
-      cuenta_id,
-      pedido_id,
-      project_id,
-      ref_display: this.refDisplayCache.get(cuenta_id) || null,
-      items: itemsParaEnviar,
-      total: totalEnviado,
-      notas_generales: pedido.notas,
-      created_at: ahora
-    });
-
-    // Persistir buffer a disco (items enviados ya no se guardan)
-    this.guardarBuffers();
-
-    this.logger.info('comandero.enviado_cocina', {
-      cuenta_id, pedido_id, items_enviados: itemsParaEnviar.length, total_enviado: totalEnviado
-    });
-
-    return {
-      status: 200,
-      data: {
+      await this._publicarEvento('comandero.enviar_cocina', {
         cuenta_id,
         pedido_id,
-        items_enviados: itemsParaEnviar.length,
-        total_enviado: totalEnviado,
-        pedido: { cuenta_id, items: pedido.items, total: pedido.total }
-      }
-    };
+        project_id,
+        ref_display:     this.refDisplayCache.get(cuenta_id) || null,
+        items:           itemsParaEnviar,
+        total:           totalEnviado,
+        notas_generales: pedido.notas,
+        created_at:      ahora
+      }, data);
+
+      this._guardarBuffers();
+
+      this.logger.info('comandero.enviado_cocina', {
+        cuenta_id, pedido_id, items_enviados: itemsParaEnviar.length, total_enviado: totalEnviado
+      });
+
+      return {
+        status: 200,
+        data: {
+          cuenta_id,
+          pedido_id,
+          items_enviados: itemsParaEnviar.length,
+          total_enviado:  totalEnviado,
+          pedido:         { cuenta_id, items: pedido.items, total: pedido.total }
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('comandero.ui.send_kitchen.failed', err, 'ui_send_kitchen');
+    }
   }
 
   async handleListBuffers() {
-    const buffers = [];
-    for (const [cuenta_id, pedido] of this.pedidos.entries()) {
-      // Solo items NO enviados a cocina (los enviados ya están en persistencia.pedidos[])
-      const pendientes = pedido.items.filter(i => !i.enviado);
-      if (pendientes.length === 0) continue;
-
-      buffers.push({
-        cuenta_id,
-        total: this.calcularTotal(pendientes),
-        items_count: pendientes.reduce((s, i) => s + i.cantidad, 0),
-        items: pendientes.map(i => ({
-          item_id: i.id,
-          producto_id: i.producto_id,
-          nombre: i.nombre,
-          cantidad: i.cantidad,
-          precio: i.precio,
-          subtotal: i.subtotal
-        }))
-      });
+    try {
+      const buffers = [];
+      for (const [cuenta_id, pedido] of this.pedidos.entries()) {
+        const pendientes = pedido.items.filter(i => !i.enviado);
+        if (pendientes.length === 0) continue;
+        buffers.push({
+          cuenta_id,
+          total:       this._calcularTotal(pendientes),
+          items_count: pendientes.reduce((s, i) => s + i.cantidad, 0),
+          items: pendientes.map(i => ({
+            item_id:     i.id,
+            producto_id: i.producto_id,
+            nombre:      i.nombre,
+            cantidad:    i.cantidad,
+            precio:      i.precio,
+            subtotal:    i.subtotal
+          }))
+        });
+      }
+      return { status: 200, data: { buffers } };
+    } catch (err) {
+      return this._handleHandlerError('comandero.ui.buffers.failed', err, 'ui_buffers');
     }
-
-    return {
-      status: 200,
-      data: { buffers }
-    };
   }
 
   async handleHealthCheck() {
-    return {
-      status: 200,
-      data: {
-        status: 'healthy',
-        module: this.name,
-        version: this.version,
-        pedidos_activos: this.pedidos.size,
-        productos_en_cache: this.productosCache.size,
-        timestamp: new Date().toISOString()
-      }
-    };
+    try {
+      return {
+        status: 200,
+        data: {
+          status:             'healthy',
+          module:             this.name,
+          version:            this.version,
+          pedidos_activos:    this.pedidos.size,
+          productos_en_cache: this.productosCache.size,
+          timestamp:          new Date().toISOString()
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('comandero.ui.health.failed', err, 'ui_health');
+    }
   }
 
   // ==========================================
   // Persistencia transitoria del buffer
   // ==========================================
 
-  /**
-   * Restaura buffers del comandero desde disco.
-   * Items no enviados a cocina sobreviven reinicio del servidor.
-   */
-  async restaurarBuffers() {
-    try {
-      const contenido = await fs.readFile(this._bufferFile, 'utf8');
-      const datos = JSON.parse(contenido);
+  async _restaurarBuffers() {
+    const datos = await this._readJsonSafe(this._bufferFile, 'restaurar_buffers');
+    if (!datos?.buffers) return;
 
-      if (!datos.buffers) return;
+    let restaurados = 0;
+    for (const [cuenta_id, buffer] of Object.entries(datos.buffers)) {
+      if (!buffer.items || buffer.items.length === 0) continue;
+      this.pedidos.set(cuenta_id, {
+        items: buffer.items,
+        notas: buffer.notas || '',
+        total: this._calcularTotal(buffer.items)
+      });
+      restaurados++;
+    }
 
-      let restaurados = 0;
-      for (const [cuenta_id, buffer] of Object.entries(datos.buffers)) {
-        if (!buffer.items || buffer.items.length === 0) continue;
-
-        this.pedidos.set(cuenta_id, {
-          items: buffer.items,
-          notas: buffer.notas || '',
-          total: this.calcularTotal(buffer.items)
-        });
-        restaurados++;
-      }
-
-      if (restaurados > 0) {
-        this.logger.info('comandero.buffers_restaurados', {
-          buffers_restaurados: restaurados,
-          items_total: Array.from(this.pedidos.values()).reduce((s, p) => s + p.items.length, 0)
-        });
-      }
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        this.logger.warn('comandero.restaurar.error', { error: error.message });
-      }
+    if (restaurados > 0) {
+      this.logger.info('comandero.buffers_restaurados', {
+        buffers_restaurados: restaurados,
+        items_total: Array.from(this.pedidos.values()).reduce((s, p) => s + p.items.length, 0)
+      });
     }
   }
 
-  /**
-   * Guarda buffers a disco (debounced 1s para no escribir en cada item).
-   */
-  guardarBuffers() {
+  _guardarBuffers() {
     if (this._saveTimer) clearTimeout(this._saveTimer);
     this._saveTimer = setTimeout(async () => {
       try {
         const buffers = {};
         for (const [cuenta_id, pedido] of this.pedidos.entries()) {
-          // Solo persistir items no enviados (los enviados ya están en persistencia-comandero)
           const itemsNoEnviados = pedido.items.filter(i => !i.enviado);
           if (itemsNoEnviados.length > 0) {
             buffers[cuenta_id] = {
               items: itemsNoEnviados,
               notas: pedido.notas,
-              total: this.calcularTotal(itemsNoEnviados)
+              total: this._calcularTotal(itemsNoEnviados)
             };
           }
         }
 
         await fs.mkdir(path.dirname(this._bufferFile), { recursive: true });
-        await fs.writeFile(this._bufferFile, JSON.stringify({ buffers, updated_at: new Date().toISOString() }, null, 2));
-      } catch (error) {
-        this.logger?.warn('comandero.guardar_buffers.error', { error: error.message });
+        await this._atomicWriteFile(
+          this._bufferFile,
+          JSON.stringify({ buffers, updated_at: new Date().toISOString() }, null, 2)
+        );
+      } catch (err) {
+        this.logger.warn('comandero.guardar_buffers.error', { error: err.message });
+        this.metrics?.increment('comandero.errors', { kind: 'guardar_buffers', code: 'FILESYSTEM_ERROR' });
       }
-    }, 1000);
+    }, SAVE_DEBOUNCE_MS);
   }
 
   // ==========================================
-  // Helpers
+  // Helpers POC2
   // ==========================================
 
-  calcularTotal(items) {
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
+  }
+
+  _handleHandlerError(logEvent, err, kind) {
+    const code   = err._code || this._classifyHandlerError(err);
+    const status = code === 'INVALID_INPUT'           ? 400 :
+                   code === 'RESOURCE_NOT_FOUND'      ? 404 :
+                   code === 'PERMISSION_DENIED'       ? 403 :
+                   code === 'CONFLICT_STATE'          ? 409 :
+                   code === 'ALREADY_EXISTS'          ? 409 :
+                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
+                   code === 'TIMEOUT'                 ? 504 :
+                   code === 'FILESYSTEM_ERROR'        ? 500 : 500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code, kind });
+    this.metrics?.increment('comandero.errors', { kind, code });
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg  = (err?.message || '').toLowerCase();
+    const ecod = err?.code || '';
+    if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    if (msg.includes('conflict') || msg.includes('already')) return 'CONFLICT_STATE';
+    if (ecod && ecod.startsWith('E')) return 'FILESYSTEM_ERROR';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    if (!this.eventBus?.publish) return;
+    const enriched = {
+      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+      timestamp:      new Date().toISOString(),
+      ...payload,
+      project_id:     payload?.project_id || sourcePayload?.project_id || DEFAULT_PROJECT_ID
+    };
+    try {
+      await this.eventBus.publish(name, enriched);
+    } catch (err) {
+      this.logger.error('comandero.publish_error', { event: name, error: err.message });
+      this.metrics?.increment('comandero.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+    }
+  }
+
+  // 5o helper auxiliar — escritura atomica .tmp + rename
+  async _atomicWriteFile(absPath, contents) {
+    const tmpPath = absPath + '.tmp';
+    await fs.writeFile(tmpPath, contents, 'utf-8');
+    await fs.rename(tmpPath, absPath);
+  }
+
+  // 6o helper — lectura JSON con log+metric en error (no swallow)
+  async _readJsonSafe(filePath, kind) {
+    try {
+      const raw = await fs.readFile(filePath, 'utf-8');
+      return JSON.parse(raw);
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        this.logger.warn('comandero.read_error', { file: filePath, kind, error: err.message });
+        this.metrics?.increment('comandero.errors', { kind: kind || 'read_json', code: this._classifyHandlerError(err) });
+      }
+      return null;
+    }
+  }
+
+  _logError(logEvent, fields, kind, code) {
+    this.logger.error(logEvent, { ...fields, code, kind });
+    this.metrics?.increment('comandero.errors', { kind, code });
+  }
+
+  _unwrap(event) { return event?.data || event?.payload || event || {}; }
+
+  // ==========================================
+  // Internals — calculo + canal + precio
+  // ==========================================
+
+  _calcularTotal(items) {
     return items.reduce((total, item) => total + item.subtotal, 0);
   }
 
-  /**
-   * Detecta el canal de venta a partir del prefijo del cuenta_id.
-   * Soporta formato nuevo (M_xxx) y legacy (mesa_xxx).
-   */
   _detectarCanalCuenta(cuenta_id) {
     if (!cuenta_id) return 'mesa';
     const PREFIJOS = {
@@ -762,22 +756,15 @@ class ComanderoModule {
   }
 
   /**
-   * Resuelve el precio de un producto para un canal de venta.
-   *
-   * Nuevo modelo (v2): cada canal tiene su propia carta con precios finales.
-   * Tarifas.resolverCarta(canal) devuelve el carta_id del canal.
-   * Se busca el producto en la carta del canal → precio ya es el correcto.
-   *
-   * Cascada:
-   *   1. Carta del canal (via tarifas.resolverCarta) → precio de esa carta
-   *   2. Cache general de productos (catalogo.actualizado) → precio base
-   *   3. Precio pasado en la request → fallback
+   * Resuelve precio por canal con cascada:
+   *   1. Carta del canal (via tarifas.resolverCarta) → precio de esa carta.
+   *   2. Cache general de productos → precio base.
+   *   3. Precio pasado en la request → fallback.
    */
   _resolverPrecioCanal(producto_id, precioBase, canal, projectId) {
     if (!canal || canal === 'mesa') return precioBase;
 
     try {
-      // Lazy load tarifas
       if (!this._tarifasModule && this._moduleLoader) {
         const mod = this._moduleLoader.getModule?.('tarifas');
         this._tarifasModule = mod?.instance || null;
@@ -785,22 +772,18 @@ class ComanderoModule {
 
       if (this._tarifasModule?.resolverCarta) {
         const cartaId = this._tarifasModule.resolverCarta(canal, projectId);
-
         if (cartaId) {
           const cartaCache = this.cartasProductosCache.get(cartaId);
           if (cartaCache) {
             const producto = cartaCache.get(producto_id);
-            if (producto) {
-              return producto.precio;  // Precio final — ya incluye la tarifa del canal
-            }
+            if (producto) return producto.precio;
           }
         }
       }
     } catch (err) {
-      this.logger?.debug('comandero.precio_canal.fallback', { error: err.message, canal });
+      this.logger.debug('comandero.precio_canal.fallback', { error: err.message, canal });
     }
 
-    // Fallback: precio base (carta general o el pasado en la request)
     return precioBase;
   }
 }

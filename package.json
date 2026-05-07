@@ -67,6 +67,7 @@
     "test:pizzepos__impresion": "node tests/unit/pizzepos__impresion.test.js",
     "test:pizzepos__carta-impresion": "node tests/unit/pizzepos__carta-impresion.test.js",
     "test:pizzepos__categorias": "node tests/unit/pizzepos__categorias.test.js",
+    "test:pizzepos__comandero": "node tests/unit/pizzepos__comandero.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

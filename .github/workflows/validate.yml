@@ -178,3 +178,6 @@ jobs:
 
       - name: Run unit tests (pizzepos/categorias — reescritura canonica)
         run: npm run test:pizzepos__categorias
+
+      - name: Run unit tests (pizzepos/comandero — reescritura canonica)
+        run: npm run test:pizzepos__comandero

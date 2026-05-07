@@ -1,6 +1,6 @@
 {
   "name": "carta-impresion",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Genera versiones imprimibles de cartas en HTML print-ready. Los agentes deciden layout y generan con criterio adaptado a cada carta y marca.",
   "author": "Pizzepos Team",
   "language": "es",
@@ -8,131 +8,114 @@
   "events": {
     "publishes": [
       {
-        "event": "carta.impresion.lista",
-        "description": "HTML imprimible generado y guardado"
+        "event":       "carta.impresion.lista",
+        "description": "HTML imprimible generado y guardado en disco. Lleva project_id top-level + correlation_id + timestamp."
       },
       {
-        "event": "agent.execute.request",
+        "event":               "agent.execute.request",
         "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
-        "description": "Invoca agente impresion-architect para decidir layout optimo"
+        "description":         "Invoca al agente impresion-architect para decidir layout optimo (sub-contrato agent-flow)."
       }
     ],
     "subscribes": [
-      {
-        "event": "project.activated",
-        "handler": "onProjectActivated"
-      },
-      {
-        "event": "project.deactivated",
-        "handler": "onProjectDeactivated"
-      },
-      {
-        "event": "carta.actualizada",
-        "handler": "onCartaActualizada"
-      }
+      { "event": "project.activated",   "handler": "onProjectActivated",   "description": "Registra path del proyecto activo." },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated", "description": "Multi-tenant — preserva estado." },
+      { "event": "carta.actualizada",   "handler": "onCartaActualizada",   "description": "Debounce 5s y dispara agente architect cuando deja de cambiar." }
     ]
   },
   "ui_handlers": [
-    {
-      "domain": "carta-impresion",
-      "action": "get",
-      "handler": "handleGet"
-    },
-    {
-      "domain": "carta-impresion",
-      "action": "generar",
-      "handler": "handleGenerar"
-    },
-    {
-      "domain": "carta-impresion",
-      "action": "health",
-      "handler": "handleHealth"
-    }
+    { "domain": "carta-impresion", "action": "get",     "handler": "handleGet",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "carta-impresion", "action": "generar", "handler": "handleGenerar", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "carta-impresion", "action": "health",  "handler": "handleHealth",  "type": "workspace_module", "zone": "barra_modulos" }
   ],
   "tools": [
     {
-      "name": "impresion.get",
-      "description": "Obtiene la versión imprimible HTML de una carta si existe. Si no, devuelve 404.",
-      "handler": "toolGet",
+      "name":        "impresion.get",
+      "description": "Devuelve el HTML print-ready guardado de una carta. Si no existe, devuelve 404 RESOURCE_NOT_FOUND.",
+      "handler":     "toolGet",
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string"
-          },
-          "carta_id": {
-            "type": "string"
-          }
+          "project_id": { "type": "string", "description": "ID del proyecto" },
+          "carta_id":   { "type": "string", "description": "ID de la carta" }
         },
-        "required": [
-          "project_id",
-          "carta_id"
-        ]
-      }
+        "required": ["project_id", "carta_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",      "cuando": "project_id o carta_id ausentes" },
+        { "code": "RESOURCE_NOT_FOUND", "cuando": "no existe HTML imprimible para esa carta" }
+      ]
     },
     {
-      "name": "impresion.generar",
-      "description": "Inicia la generación de la versión imprimible de una carta. Dispara al architect y builder.",
-      "handler": "toolGenerar",
+      "name":        "impresion.generar",
+      "description": "Inicia la generacion de la version imprimible de una carta. Dispara al agente architect que coordina con builder. Async — devuelve 202.",
+      "handler":     "toolGenerar",
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string"
-          },
-          "carta_id": {
-            "type": "string"
-          }
+          "project_id":     { "type": "string" },
+          "carta_id":       { "type": "string" },
+          "correlation_id": { "type": "string", "description": "ID de correlacion para trace" }
         },
-        "required": [
-          "project_id",
-          "carta_id"
-        ]
-      }
+        "required": ["project_id", "carta_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "project_id o carta_id ausentes" }
+      ]
     },
     {
-      "name": "impresion.save_html",
-      "description": "Guarda el HTML generado por el builder. Usado por el agente impresion-builder al terminar.",
-      "handler": "toolSaveHtml",
+      "name":        "impresion.save_html",
+      "description": "Guarda el HTML print-ready generado por el agente builder. Persiste atomicamente HTML + meta.json y publica carta.impresion.lista.",
+      "handler":     "toolSaveHtml",
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string"
-          },
-          "carta_id": {
-            "type": "string"
-          },
-          "html": {
-            "type": "string",
-            "description": "HTML completo print-ready"
-          },
-          "layout": {
-            "type": "object",
-            "description": "Guión de maquetación del architect"
-          },
-          "brand_applied": {
-            "type": "object",
-            "description": "Elementos de marca aplicados"
-          }
+          "project_id":    { "type": "string" },
+          "carta_id":      { "type": "string" },
+          "html":          { "type": "string", "description": "HTML5+CSS print-ready completo" },
+          "layout":        { "type": "object", "description": "Guion de maquetacion del architect" },
+          "brand_applied": { "type": "object", "description": "Elementos de marca aplicados (paleta, fonts, etc)" }
         },
-        "required": [
-          "project_id",
-          "carta_id",
-          "html"
-        ]
-      }
+        "required": ["project_id", "carta_id", "html"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",          "cuando": "project_id, carta_id o html ausentes" },
+        { "code": "DEPENDENCY_UNAVAILABLE", "cuando": "no se ha activado proyecto (no hay path)" },
+        { "code": "FILESYSTEM_ERROR",       "cuando": "fallo al persistir el archivo" }
+      ]
     }
   ],
   "agents": {
-    "impresion-architect": "Analiza la carta y decide layout óptimo (caras, columnas, formato, densidad)",
-    "impresion-builder": "Genera el HTML+CSS print-ready según el guión del architect y el perfil de marca"
+    "impresion-architect": "Analiza la carta y decide layout optimo (caras, columnas, formato, densidad)",
+    "impresion-builder":   "Genera el HTML+CSS print-ready segun el guion del architect y el perfil de marca"
+  },
+  "config": {
+    "persistence": {
+      "type":   "json-file",
+      "atomic": true,
+      "paths": [
+        "data/projects/<projectId>/storage/pizzepos/cartas-impresion/<carta_id>.html",
+        "data/projects/<projectId>/storage/pizzepos/cartas-impresion/<carta_id>.meta.json"
+      ],
+      "concurrency": "single-writer-per-carta",
+      "owner":       "modules/pizzepos/carta-impresion"
+    }
+  },
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "observability": {
+    "logging": {
+      "level":          "info",
+      "structured":     true,
+      "correlation_id": true
+    },
     "metrics": {
+      "enabled": true,
       "counters": [
         "carta-impresion.generacion.requested",
-        "carta-impresion.generacion.completada"
+        "carta-impresion.generacion.completada",
+        "carta-impresion.errors"
       ]
     }
   }

@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T20:42:23Z_
+_Última regeneración: 2026-05-07T21:00:53Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 682 / 2794 (24%)
-- **Drifts restantes en baseline**: 2112
+- **Drifts cerrados**: 682 / 2772 (25%)
+- **Drifts restantes en baseline**: 2090
 
 ### Progreso por capa
 
@@ -77,21 +77,21 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 38 | dominio | `notas` | 485 | 59 | 0 |
 | 39 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
 | 40 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
-| 41 | dominio | `pizzepos__carta-impresion` | 258 | 41 | 0 |
-| 42 | dominio | `recetas` | 858 | 41 | 0 |
-| 43 | dominio | `calling-generator` | 812 | 40 | 0 |
-| 44 | dominio | `pizzepos__tarifas` | 309 | 40 | 0 |
-| 45 | dominio | `pizzepos__carta-marketing` | 394 | 38 | 0 |
-| 46 | dominio | `facturacion__asesoria` | 520 | 36 | 0 |
-| 47 | dominio | `pizzepos__categorias` | 430 | 36 | 0 |
-| 48 | dominio | `pizzepos__cocina` | 1233 | 36 | 0 |
-| 49 | dominio | `pizzepos__comandero` | 809 | 36 | 0 |
-| 50 | dominio | `pizzepos__menu-generator` | 338 | 34 | 0 |
-| 51 | dominio | `pizzepos__ingredientes` | 697 | 33 | 0 |
-| 52 | dominio | `perifericos` | 856 | 32 | 0 |
-| 53 | dominio | `facturas` | 661 | 25 | 0 |
-| 54 | dominio | `pizzepos__carta-digital` | 401 | 25 | 0 |
-| 55 | dominio | `pizzepos__cuentas` | 1016 | 21 | 0 |
+| 41 | dominio | `recetas` | 858 | 41 | 0 |
+| 42 | dominio | `calling-generator` | 812 | 40 | 0 |
+| 43 | dominio | `pizzepos__tarifas` | 309 | 40 | 0 |
+| 44 | dominio | `pizzepos__carta-marketing` | 394 | 38 | 0 |
+| 45 | dominio | `facturacion__asesoria` | 520 | 36 | 0 |
+| 46 | dominio | `pizzepos__categorias` | 430 | 36 | 0 |
+| 47 | dominio | `pizzepos__cocina` | 1233 | 36 | 0 |
+| 48 | dominio | `pizzepos__comandero` | 809 | 36 | 0 |
+| 49 | dominio | `pizzepos__menu-generator` | 338 | 34 | 0 |
+| 50 | dominio | `pizzepos__ingredientes` | 697 | 33 | 0 |
+| 51 | dominio | `perifericos` | 856 | 32 | 0 |
+| 52 | dominio | `facturas` | 661 | 25 | 0 |
+| 53 | dominio | `pizzepos__carta-digital` | 401 | 25 | 0 |
+| 54 | dominio | `pizzepos__cuentas` | 1016 | 21 | 0 |
+| 55 | dominio | `pizzepos__carta-impresion` | 382 | 19 | 0 |
 | 57 | dominio | `pizzepos__cobros` | 661 | 18 | 0 |
 | 59 | dominio | `dashboard` | 361 | 17 | 0 |
 | 60 | dominio | `pizzepos__variaciones` | 443 | 17 | 0 |

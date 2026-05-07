@@ -124,3 +124,6 @@ jobs:
 
       - name: Run unit tests (device-health — reescritura canonica)
         run: npm run test:device-health
+
+      - name: Run unit tests (metricas — reescritura canonica)
+        run: npm run test:metricas

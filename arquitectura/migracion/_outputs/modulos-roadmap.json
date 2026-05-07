@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T06:56:19.669Z",
+  "generated_at": "2026-05-07T08:17:45.800Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3479,
-    "loc_total": 48989,
+    "drifts_total": 3475,
+    "loc_total": 48831,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -371,21 +371,6 @@
       "orden_migracion": 22
     },
     {
-      "slug": "metricas",
-      "path": "modules/metricas",
-      "layer": "infra",
-      "language": "es",
-      "version": "1.0.0",
-      "loc": 714,
-      "drifts": 29,
-      "events_publishes": 2,
-      "events_subscribes": 5,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 23
-    },
-    {
       "slug": "device-health",
       "path": "modules/device-health",
       "layer": "infra",
@@ -398,7 +383,7 @@
       "tools": 3,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 24
+      "orden_migracion": 23
     },
     {
       "slug": "device-shadow",
@@ -411,6 +396,21 @@
       "events_publishes": 3,
       "events_subscribes": 1,
       "tools": 3,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 24
+    },
+    {
+      "slug": "metricas",
+      "path": "modules/metricas",
+      "layer": "infra",
+      "language": "es",
+      "version": "2.0.0",
+      "loc": 556,
+      "drifts": 22,
+      "events_publishes": 1,
+      "events_subscribes": 5,
+      "tools": 0,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 25
@@ -672,7 +672,7 @@
       "language": "es",
       "version": "2.0.0",
       "loc": 573,
-      "drifts": 67,
+      "drifts": 69,
       "events_publishes": 4,
       "events_subscribes": 1,
       "tools": 3,
@@ -861,6 +861,21 @@
       "orden_migracion": 54
     },
     {
+      "slug": "facturacion__asesoria",
+      "path": "modules/facturacion/asesoria",
+      "layer": "dominio",
+      "language": "es",
+      "version": "1.0.0",
+      "loc": 520,
+      "drifts": 36,
+      "events_publishes": 2,
+      "events_subscribes": 0,
+      "tools": 2,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 55
+    },
+    {
       "slug": "pizzepos__categorias",
       "path": "modules/pizzepos/categorias",
       "layer": "dominio",
@@ -873,7 +888,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 55
+      "orden_migracion": 56
     },
     {
       "slug": "pizzepos__cocina",
@@ -888,7 +903,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 56
+      "orden_migracion": 57
     },
     {
       "slug": "pizzepos__comandero",
@@ -901,21 +916,6 @@
       "events_publishes": 4,
       "events_subscribes": 8,
       "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 57
-    },
-    {
-      "slug": "facturacion__asesoria",
-      "path": "modules/facturacion/asesoria",
-      "layer": "dominio",
-      "language": "es",
-      "version": "1.0.0",
-      "loc": 520,
-      "drifts": 35,
-      "events_publishes": 2,
-      "events_subscribes": 0,
-      "tools": 2,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 58

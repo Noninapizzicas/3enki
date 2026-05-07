@@ -121,3 +121,12 @@ jobs:
 
       - name: Run unit tests (device-registry — reescritura canonica)
         run: npm run test:device-registry
+
+      - name: Run unit tests (device-health — reescritura canonica)
+        run: npm run test:device-health
+
+      - name: Run unit tests (metricas — reescritura canonica)
+        run: npm run test:metricas
+
+      - name: Run unit tests (system-inspector — reescritura canonica)
+        run: npm run test:system-inspector

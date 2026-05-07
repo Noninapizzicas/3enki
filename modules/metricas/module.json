@@ -1,13 +1,13 @@
 {
   "name": "metricas",
-  "version": "1.0.0",
-  "description": "Módulo de métricas centralizado - Escucha eventos del sistema y genera métricas en tiempo real",
-  "author": "Pizzepos Team",
+  "version": "2.0.0",
+  "description": "Instrumentación pasiva del sistema — escucha wildcards de sufijo (*.creado/*.actualizado/*.eliminado/*.error/*.completado) y mantiene counters + gauges + timings agregados. Publica metricas.snapshot periódico. NO se mide a sí mismo (recursión).",
+  "author": "Enki",
   "language": "es",
+  "tier": "tier_2_platform",
   "provides": {
     "events": [
-      "metricas.snapshot",
-      "metricas.alerta"
+      "metricas.snapshot"
     ],
     "queries": [
       "metricas.obtener",
@@ -19,43 +19,36 @@
     "publishes": [
       {
         "event": "metricas.snapshot",
-        "description": "Snapshot periódico de todas las métricas del sistema",
+        "description": "Snapshot agregado periódico de toda la flota (NO lleva project_id porque agrega across-projects). Lleva correlation_id + timestamp.",
         "schema": {
           "$ref": "./schemas/events.json#/definitions/metricas_snapshot"
-        }
-      },
-      {
-        "event": "metricas.alerta",
-        "description": "Alerta cuando se detecta anomalía en métricas",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/metricas_alerta"
         }
       }
     ],
     "subscribes": [
       {
         "event": "*.creado",
-        "description": "Escucha todos los eventos de creación para generar counters",
+        "description": "Wildcard de sufijo — instrumenta cualquier evento de creación cross-system",
         "handler": "onEntityCreated"
       },
       {
         "event": "*.actualizado",
-        "description": "Escucha todos los eventos de actualización",
+        "description": "Wildcard de sufijo — instrumenta cualquier evento de actualización cross-system",
         "handler": "onEntityUpdated"
       },
       {
         "event": "*.eliminado",
-        "description": "Escucha todos los eventos de eliminación",
+        "description": "Wildcard de sufijo — instrumenta cualquier evento de eliminación cross-system",
         "handler": "onEntityDeleted"
       },
       {
         "event": "*.error",
-        "description": "Escucha eventos de error para tracking",
+        "description": "Wildcard de sufijo — instrumenta cualquier evento de error cross-system",
         "handler": "onError"
       },
       {
         "event": "*.completado",
-        "description": "Escucha eventos de operaciones completadas",
+        "description": "Wildcard de sufijo — instrumenta cualquier operación completada cross-system (con timings)",
         "handler": "onOperationCompleted"
       }
     ]
@@ -66,62 +59,45 @@
       "path": "/metrics",
       "handler": "handleGetAllMetrics",
       "description": "Obtener todas las métricas del sistema (counters, gauges, timings)",
-      "response_schema": {
-        "$ref": "./schemas/metrics.json#/definitions/all_metrics_response"
-      }
+      "response_schema": { "$ref": "./schemas/metrics.json#/definitions/all_metrics_response" }
     },
     {
       "method": "GET",
       "path": "/metrics/counters",
       "handler": "handleGetCounters",
       "description": "Obtener solo counters (eventos contados)",
-      "response_schema": {
-        "$ref": "./schemas/metrics.json#/definitions/counters_response"
-      }
+      "response_schema": { "$ref": "./schemas/metrics.json#/definitions/counters_response" }
     },
     {
       "method": "GET",
       "path": "/metrics/gauges",
       "handler": "handleGetGauges",
       "description": "Obtener solo gauges (valores instantáneos)",
-      "response_schema": {
-        "$ref": "./schemas/metrics.json#/definitions/gauges_response"
-      }
+      "response_schema": { "$ref": "./schemas/metrics.json#/definitions/gauges_response" }
     },
     {
       "method": "GET",
       "path": "/metrics/timings",
       "handler": "handleGetTimings",
-      "description": "Obtener timings de operaciones (últimos 1000)",
+      "description": "Obtener timings de operaciones (últimos N)",
       "query_params": [
-        {
-          "name": "limit",
-          "type": "number",
-          "default": 100,
-          "description": "Número de timings a retornar"
-        }
+        { "name": "limit", "type": "number", "default": 100, "description": "Número de timings a retornar" }
       ],
-      "response_schema": {
-        "$ref": "./schemas/metrics.json#/definitions/timings_response"
-      }
+      "response_schema": { "$ref": "./schemas/metrics.json#/definitions/timings_response" }
     },
     {
       "method": "GET",
       "path": "/metrics/eventos",
       "handler": "handleGetEventMetrics",
-      "description": "Métricas agrupadas por tipo de evento",
-      "response_schema": {
-        "$ref": "./schemas/metrics.json#/definitions/event_metrics_response"
-      }
+      "description": "Métricas agrupadas por tipo de evento (con cap LRU)",
+      "response_schema": { "$ref": "./schemas/metrics.json#/definitions/event_metrics_response" }
     },
     {
       "method": "DELETE",
       "path": "/metrics/reset",
       "handler": "handleResetMetrics",
-      "description": "Resetear todas las métricas (admin only)",
-      "response_schema": {
-        "$ref": "./schemas/metrics.json#/definitions/reset_response"
-      }
+      "description": "Resetear todas las métricas (admin only — auth pendiente)",
+      "response_schema": { "$ref": "./schemas/metrics.json#/definitions/reset_response" }
     },
     {
       "method": "GET",
@@ -133,7 +109,7 @@
   "ui": {
     "enabled": true,
     "title": "Métricas del Sistema",
-    "icon": "📊",
+    "icon": "graph",
     "components": [
       "dashboard-metricas",
       "metric-card"
@@ -144,14 +120,27 @@
         "component": "dashboard-metricas",
         "config": {
           "endpoint": "/modules/metricas/metrics",
-          "mqtt_topics": [
-            "metricas.snapshot"
-          ],
+          "mqtt_topics": ["metricas.snapshot"],
           "refresh_interval": 5000,
           "refresh_on_event": true
         }
       }
     }
+  },
+  "config": {
+    "snapshot_interval_ms":      10000,
+    "persist_interval_ms":       60000,
+    "max_timings_stored":         1000,
+    "max_event_metrics_tracked":  500,
+    "data_path": "./data",
+    "persistence": {
+      "type": "json-file",
+      "path": "data/metricas.json",
+      "atomic": true
+    }
+  },
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "observability": {
     "logging": {
@@ -161,12 +150,7 @@
     },
     "metrics": {
       "enabled": false,
-      "comment": "Este módulo ES el sistema de métricas, no genera métricas sobre sí mismo para evitar recursión"
+      "comment": "Este módulo ES el sistema de métricas — NO emite this.metrics.<X>(...) sobre sí mismo (causaría recursión vía wildcards de sufijo). Errores internos se registran en counters propios bajo prefix metricas.errors.*."
     }
-  },
-  "config": {
-    "snapshot_interval_ms": 10000,
-    "max_timings_stored": 1000,
-    "enable_alerts": false
   }
 }

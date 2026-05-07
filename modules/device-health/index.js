@@ -1,60 +1,67 @@
 /**
- * Módulo Device Health v1.0.0
+ * device-health v2.0.0 — Observador puro de la flota IoT.
  *
- * Monitoriza liveness de dispositivos, genera alertas y métricas de flota.
+ * Escucha eventos device.online/offline + firmware.ota_*, mantiene state
+ * por dispositivo (uptime, reconexiones, periodos offline, historial OTA),
+ * detecta condiciones de alerta (offline prolongado, reconnect-loops, OTA
+ * fallidos) y emite alertas + reporte periódico de la flota.
  *
- * Responsabilidades:
- *   - Escuchar eventos device.online/device.offline de device-registry
- *   - Detectar dispositivos offline prolongado (>N minutos)
- *   - Detectar reconnect loops (>N reconexiones en M minutos)
- *   - Alertas de OTA fallida
- *   - Métricas de uptime por dispositivo
- *   - Reporte periódico del estado de la flota
+ * NO toma acciones correctivas — solo informa.
  *
- * NO toma acciones correctivas — solo informa via eventos y alertas.
+ * Eventos del bus emitidos (todos con correlation_id + timestamp):
+ *   health.alert.offline         — dispositivo lleva > N minutos offline
+ *   health.alert.reconnect_loop  — dispositivo reconecta repetidamente
+ *   health.alert.ota_failed      — OTA falló para un dispositivo
+ *   health.report                — snapshot periódico agregado de la flota
  *
- * Tier: tier_3_core (depende de device-registry y firmware-manager)
+ * Subscribes:
+ *   device.online             → onDeviceOnline
+ *   device.offline            → onDeviceOffline
+ *   firmware.ota_failed       → onOtaFailed
+ *   firmware.ota_completed    → onOtaCompleted
  */
 
-const fs = require('fs');
-const path = require('path');
+'use strict';
+
+const fs     = require('fs');
+const path   = require('path');
+const crypto = require('crypto');
+
+const KNOWN_ALERT_TYPES = ['offline', 'reconnect_loop', 'ota_failed'];
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 class DeviceHealthModule {
   constructor() {
-    this.name = 'device-health';
-    this.version = '1.0.0';
+    this.name    = 'device-health';
+    this.version = '2.0.0';
 
-    // Dependencias
     this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
+    this.logger   = null;
+    this.metrics  = null;
 
-    // Config
     this.config = {
-      offline_threshold_min: 5,
-      reconnect_loop_threshold: 5,
+      offline_threshold_min:     5,
+      reconnect_loop_threshold:  5,
       reconnect_loop_window_min: 30,
-      report_interval_min: 60,
+      report_interval_min:       60,
       data_path: './data/devices'
     };
 
-    // Estado por dispositivo: device_id → DeviceHealthState
+    // device_id → DeviceHealthState
     this.deviceStates = new Map();
 
-    // Alertas activas: [ { type, device_id, message, timestamp, resolved } ]
-    this.alerts = [];
+    // FIFO acotado de alertas
+    this.alerts    = [];
     this.maxAlerts = 200;
 
-    // Timers
     this._offlineTimers = new Map();  // device_id → setTimeout handle
-    this._reportTimer = null;
+    this._reportTimer   = null;
 
-    // Métricas
     this.internalMetrics = {
-      alerts_total: 0,
-      alerts_offline: 0,
+      alerts_total:          0,
+      alerts_offline:        0,
       alerts_reconnect_loop: 0,
-      alerts_ota_failed: 0
+      alerts_ota_failed:     0
     };
   }
 
@@ -63,8 +70,8 @@ class DeviceHealthModule {
   // ==========================================
 
   async onLoad(core) {
-    this.logger = core.logger;
-    this.metrics = core.metrics;
+    this.logger   = core.logger;
+    this.metrics  = core.metrics;
     this.eventBus = core.eventBus;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
@@ -77,14 +84,13 @@ class DeviceHealthModule {
 
     await this._loadHistory();
 
-    // Reporte periódico
     const reportMs = this.config.report_interval_min * 60 * 1000;
     this._reportTimer = setInterval(() => this._publishReport(), reportMs);
 
     this.logger.info('module.loaded', {
-      module: this.name,
-      version: this.version,
-      devices_tracked: this.deviceStates.size,
+      module:                this.name,
+      version:               this.version,
+      devices_tracked:       this.deviceStates.size,
       offline_threshold_min: this.config.offline_threshold_min
     });
   }
@@ -97,86 +103,94 @@ class DeviceHealthModule {
       this._reportTimer = null;
     }
 
-    for (const timer of this._offlineTimers.values()) {
-      clearTimeout(timer);
-    }
+    for (const timer of this._offlineTimers.values()) clearTimeout(timer);
     this._offlineTimers.clear();
 
     await this._saveHistory();
+
+    this.deviceStates.clear();
+    this.alerts.length = 0;
+    this.internalMetrics = {
+      alerts_total: 0, alerts_offline: 0, alerts_reconnect_loop: 0, alerts_ota_failed: 0
+    };
 
     this.logger.info('module.unloaded', { module: this.name });
   }
 
   // ==========================================
-  // Event Handlers
+  // Bus handlers (subscribes)
   // ==========================================
 
   async onDeviceOnline(event) {
     const data = event?.data || event?.payload || event;
-    const { device_id, project_id } = data;
-    if (!device_id) return;
+    const { device_id, project_id, correlation_id } = data || {};
+    if (!device_id) {
+      this.logger.warn('device-health.online.missing_device_id');
+      this.metrics?.increment('device-health.errors', { kind: 'online', code: 'VALIDATION_FAILED' });
+      return;
+    }
 
     const state = this._getOrCreateState(device_id);
     const now = new Date();
+    const nowIso = now.toISOString();
 
-    // Si estaba offline, registrar duración
     if (state.is_offline && state.last_offline) {
       const offlineDuration = now - new Date(state.last_offline);
       state.offline_periods.push({
-        from: state.last_offline,
-        to: now.toISOString(),
+        from:        state.last_offline,
+        to:          nowIso,
         duration_ms: offlineDuration
       });
-      // Mantener solo últimos 50 periodos
       if (state.offline_periods.length > 50) {
         state.offline_periods = state.offline_periods.slice(-50);
       }
     }
 
-    state.is_offline = false;
-    state.last_online = now.toISOString();
-    state.reconnections_24h.push(now.toISOString());
+    state.is_offline  = false;
+    state.last_online = nowIso;
+    state.reconnections_24h.push(nowIso);
 
-    // Limpiar reconexiones fuera de ventana de 24h
-    const cutoff24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const cutoff24h = new Date(now - DAY_MS).toISOString();
     state.reconnections_24h = state.reconnections_24h.filter(t => t > cutoff24h);
 
-    // Cancelar timer de alerta offline
     this._clearOfflineTimer(device_id);
 
-    // Verificar reconnect loop
-    const windowMs = this.config.reconnect_loop_window_min * 60 * 1000;
+    // Reconnect loop detection
+    const windowMs     = this.config.reconnect_loop_window_min * 60 * 1000;
     const windowCutoff = new Date(now - windowMs).toISOString();
-    const recentReconnections = state.reconnections_24h.filter(t => t > windowCutoff).length;
+    const recent       = state.reconnections_24h.filter(t => t > windowCutoff).length;
 
-    if (recentReconnections >= this.config.reconnect_loop_threshold) {
-      await this._createAlert('reconnect_loop', device_id, project_id,
-        `Dispositivo ${device_id} reconectó ${recentReconnections} veces en ${this.config.reconnect_loop_window_min} minutos`
-      );
+    if (recent >= this.config.reconnect_loop_threshold) {
+      await this._createAlert('reconnect_loop', device_id, project_id, {
+        message: `Dispositivo ${device_id} reconectó ${recent} veces en ${this.config.reconnect_loop_window_min} minutos`,
+        details: { count: recent, window_min: this.config.reconnect_loop_window_min, threshold: this.config.reconnect_loop_threshold }
+      }, { correlation_id });
     }
   }
 
   async onDeviceOffline(event) {
     const data = event?.data || event?.payload || event;
-    const { device_id, project_id, reason } = data;
-    if (!device_id) return;
+    const { device_id, project_id, reason, correlation_id } = data || {};
+    if (!device_id) {
+      this.logger.warn('device-health.offline.missing_device_id');
+      this.metrics?.increment('device-health.errors', { kind: 'offline', code: 'VALIDATION_FAILED' });
+      return;
+    }
 
     const state = this._getOrCreateState(device_id);
-    state.is_offline = true;
+    state.is_offline   = true;
     state.last_offline = new Date().toISOString();
-
-    // Iniciar timer para alerta de offline prolongado
-    const thresholdMs = this.config.offline_threshold_min * 60 * 1000;
 
     this._clearOfflineTimer(device_id);
 
+    const thresholdMs = this.config.offline_threshold_min * 60 * 1000;
     const timer = setTimeout(async () => {
-      // Verificar que sigue offline
-      const currentState = this.deviceStates.get(device_id);
-      if (currentState?.is_offline) {
-        await this._createAlert('offline', device_id, project_id,
-          `Dispositivo ${device_id} lleva más de ${this.config.offline_threshold_min} minutos offline (razón: ${reason || 'unknown'})`
-        );
+      const current = this.deviceStates.get(device_id);
+      if (current?.is_offline) {
+        await this._createAlert('offline', device_id, project_id, {
+          message: `Dispositivo ${device_id} lleva más de ${this.config.offline_threshold_min} minutos offline (razón: ${reason || 'unknown'})`,
+          details: { offline_threshold_min: this.config.offline_threshold_min, reason: reason || 'unknown', last_offline: current.last_offline }
+        }, { correlation_id });
       }
     }, thresholdMs);
 
@@ -185,12 +199,17 @@ class DeviceHealthModule {
 
   async onOtaFailed(event) {
     const data = event?.data || event?.payload || event;
-    const { device_id, type, from, to } = data;
-    if (!device_id) return;
+    const { device_id, project_id, type, from, to, correlation_id } = data || {};
+    if (!device_id) {
+      this.logger.warn('device-health.ota_failed.missing_device_id');
+      this.metrics?.increment('device-health.errors', { kind: 'ota_failed', code: 'VALIDATION_FAILED' });
+      return;
+    }
 
-    await this._createAlert('ota_failed', device_id, null,
-      `OTA falló para ${device_id}: ${from || '?'} → ${to || '?'} (tipo: ${type || 'unknown'})`
-    );
+    await this._createAlert('ota_failed', device_id, project_id || null, {
+      message: `OTA falló para ${device_id}: ${from || '?'} → ${to || '?'} (tipo: ${type || 'unknown'})`,
+      details: { from: from || null, to: to || null, type: type || 'unknown' }
+    }, { correlation_id });
 
     const state = this._getOrCreateState(device_id);
     state.ota_history.push({
@@ -198,12 +217,19 @@ class DeviceHealthModule {
       from, to, type,
       timestamp: new Date().toISOString()
     });
+    if (state.ota_history.length > 20) {
+      state.ota_history = state.ota_history.slice(-20);
+    }
   }
 
   async onOtaCompleted(event) {
     const data = event?.data || event?.payload || event;
-    const { device_id, type, from, to } = data;
-    if (!device_id) return;
+    const { device_id, type, from, to } = data || {};
+    if (!device_id) {
+      this.logger.warn('device-health.ota_completed.missing_device_id');
+      this.metrics?.increment('device-health.errors', { kind: 'ota_completed', code: 'VALIDATION_FAILED' });
+      return;
+    }
 
     const state = this._getOrCreateState(device_id);
     state.ota_history.push({
@@ -211,161 +237,177 @@ class DeviceHealthModule {
       from, to, type,
       timestamp: new Date().toISOString()
     });
-
-    // Mantener solo últimos 20 OTAs
     if (state.ota_history.length > 20) {
       state.ota_history = state.ota_history.slice(-20);
     }
   }
 
   // ==========================================
-  // UI Handlers
+  // UI handlers
   // ==========================================
 
-  async handleDashboard() {
-    const devices = [];
-    const now = new Date();
-    const cutoff24h = new Date(now - 24 * 60 * 60 * 1000);
+  async handleDashboard(_data) {
+    try {
+      const devices = [];
+      const now       = new Date();
+      const cutoff24h = new Date(now - DAY_MS);
 
-    for (const [deviceId, state] of this.deviceStates) {
-      // Calcular uptime % últimas 24h
-      let totalOfflineMs = 0;
-      for (const period of state.offline_periods) {
-        const from = new Date(period.from);
-        const to = new Date(period.to);
-        if (to > cutoff24h) {
-          const effectiveFrom = from > cutoff24h ? from : cutoff24h;
-          totalOfflineMs += to - effectiveFrom;
+      for (const [deviceId, state] of this.deviceStates) {
+        let totalOfflineMs = 0;
+        for (const period of state.offline_periods) {
+          const from = new Date(period.from);
+          const to   = new Date(period.to);
+          if (to > cutoff24h) {
+            const effectiveFrom = from > cutoff24h ? from : cutoff24h;
+            totalOfflineMs += to - effectiveFrom;
+          }
         }
+        if (state.is_offline && state.last_offline) {
+          const offlineStart  = new Date(state.last_offline);
+          const effectiveStart = offlineStart > cutoff24h ? offlineStart : cutoff24h;
+          totalOfflineMs += now - effectiveStart;
+        }
+
+        const uptimePct = Math.max(0, Math.min(100,
+          ((DAY_MS - totalOfflineMs) / DAY_MS) * 100
+        ));
+
+        const reconnections = state.reconnections_24h.filter(t => new Date(t) > cutoff24h).length;
+
+        devices.push({
+          device_id:               deviceId,
+          is_offline:              state.is_offline,
+          uptime_pct_24h:          Math.round(uptimePct * 10) / 10,
+          reconnections_24h:       reconnections,
+          last_online:             state.last_online,
+          last_offline:            state.last_offline,
+          consecutive_offline_min: state.is_offline && state.last_offline
+            ? Math.round((now - new Date(state.last_offline)) / 60000)
+            : 0
+        });
       }
-      // Si actualmente offline, contar desde last_offline
-      if (state.is_offline && state.last_offline) {
-        const offlineStart = new Date(state.last_offline);
-        const effectiveStart = offlineStart > cutoff24h ? offlineStart : cutoff24h;
-        totalOfflineMs += now - effectiveStart;
-      }
 
-      const uptimePct = Math.max(0, Math.min(100,
-        ((24 * 60 * 60 * 1000 - totalOfflineMs) / (24 * 60 * 60 * 1000)) * 100
-      ));
+      const online       = devices.filter(d => !d.is_offline).length;
+      const offline      = devices.filter(d => d.is_offline).length;
+      const activeAlerts = this.alerts.filter(a => !a.resolved).length;
 
-      const reconnections = state.reconnections_24h.filter(t => new Date(t) > cutoff24h).length;
-
-      devices.push({
-        device_id: deviceId,
-        is_offline: state.is_offline,
-        uptime_pct_24h: Math.round(uptimePct * 10) / 10,
-        reconnections_24h: reconnections,
-        last_online: state.last_online,
-        last_offline: state.last_offline,
-        consecutive_offline_min: state.is_offline && state.last_offline
-          ? Math.round((now - new Date(state.last_offline)) / 60000)
-          : 0
-      });
+      return {
+        status: 200,
+        data: {
+          summary: {
+            total:          devices.length,
+            online,
+            offline,
+            active_alerts:  activeAlerts,
+            avg_uptime_pct: devices.length > 0
+              ? Math.round(devices.reduce((s, d) => s + d.uptime_pct_24h, 0) / devices.length * 10) / 10
+              : 100
+          },
+          devices,
+          recent_alerts: this.alerts.slice(0, 10)
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('device-health.ui.dashboard.failed', err, 'ui_dashboard');
     }
-
-    // Resumen
-    const online = devices.filter(d => !d.is_offline).length;
-    const offline = devices.filter(d => d.is_offline).length;
-    const activeAlerts = this.alerts.filter(a => !a.resolved).length;
-
-    return {
-      status: 200,
-      data: {
-        summary: {
-          total: devices.length,
-          online,
-          offline,
-          active_alerts: activeAlerts,
-          avg_uptime_pct: devices.length > 0
-            ? Math.round(devices.reduce((s, d) => s + d.uptime_pct_24h, 0) / devices.length * 10) / 10
-            : 100
-        },
-        devices,
-        recent_alerts: this.alerts.slice(0, 10)
-      }
-    };
   }
 
   async handleDeviceHistory(data) {
-    if (!data?.device_id) return { status: 400, error: 'device_id requerido' };
-
-    const state = this.deviceStates.get(data.device_id);
-    if (!state) return { status: 404, error: `No hay historial para ${data.device_id}` };
-
-    return {
-      status: 200,
-      data: {
-        device_id: data.device_id,
-        is_offline: state.is_offline,
-        last_online: state.last_online,
-        last_offline: state.last_offline,
-        reconnections_24h: state.reconnections_24h.length,
-        offline_periods: state.offline_periods.slice(-20),
-        ota_history: state.ota_history,
-        alerts: this.alerts.filter(a => a.device_id === data.device_id).slice(0, 20)
+    try {
+      if (!data?.device_id) {
+        return this._errorResponse(400, 'VALIDATION_FAILED', 'device_id requerido', { field: 'device_id' });
       }
-    };
+
+      const state = this.deviceStates.get(data.device_id);
+      if (!state) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `No hay historial para ${data.device_id}`, {
+          entity_type: 'device_health_state', entity_id: data.device_id
+        });
+      }
+
+      return {
+        status: 200,
+        data: {
+          device_id:         data.device_id,
+          is_offline:        state.is_offline,
+          last_online:       state.last_online,
+          last_offline:      state.last_offline,
+          reconnections_24h: state.reconnections_24h.length,
+          offline_periods:   state.offline_periods.slice(-20),
+          ota_history:       state.ota_history,
+          alerts:            this.alerts.filter(a => a.device_id === data.device_id).slice(0, 20)
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('device-health.ui.device_history.failed', err, 'ui_device_history');
+    }
   }
 
   async handleAlerts(data) {
-    let alerts = [...this.alerts];
+    try {
+      let alerts = [...this.alerts];
 
-    if (data?.active_only) {
-      alerts = alerts.filter(a => !a.resolved);
-    }
-    if (data?.device_id) {
-      alerts = alerts.filter(a => a.device_id === data.device_id);
-    }
-    if (data?.type) {
-      alerts = alerts.filter(a => a.type === data.type);
-    }
+      if (data?.active_only) alerts = alerts.filter(a => !a.resolved);
+      if (data?.device_id)   alerts = alerts.filter(a => a.device_id === data.device_id);
+      if (data?.type)        alerts = alerts.filter(a => a.type === data.type);
 
-    const limit = parseInt(data?.limit) || 50;
+      const limit = parseInt(data?.limit, 10) || 50;
 
-    return {
-      status: 200,
-      data: {
-        alerts: alerts.slice(0, limit),
-        total: alerts.length,
-        active: this.alerts.filter(a => !a.resolved).length
-      }
-    };
+      return {
+        status: 200,
+        data: {
+          alerts: alerts.slice(0, limit),
+          total:  alerts.length,
+          active: this.alerts.filter(a => !a.resolved).length
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('device-health.ui.alerts.failed', err, 'ui_alerts');
+    }
   }
 
   // ==========================================
   // Alert system
   // ==========================================
 
-  async _createAlert(type, deviceId, projectId, message) {
+  async _createAlert(type, deviceId, projectId, body, sourcePayload = null) {
+    if (!KNOWN_ALERT_TYPES.includes(type)) {
+      this.logger.warn('device-health.alert.unknown_type', { type, device_id: deviceId });
+      this.metrics?.increment('device-health.errors', { kind: 'alert', code: 'VALIDATION_FAILED' });
+      return;
+    }
+
+    const message   = body?.message || `Alerta ${type} en ${deviceId}`;
+    const details   = body?.details || {};
+    const timestamp = new Date().toISOString();
+
     const alert = {
       type,
-      device_id: deviceId,
+      device_id:  deviceId,
       project_id: projectId,
       message,
-      timestamp: new Date().toISOString(),
-      resolved: false
+      details,
+      timestamp,
+      resolved:   false
     };
 
     this.alerts.unshift(alert);
-    if (this.alerts.length > this.maxAlerts) {
-      this.alerts.pop();
-    }
+    if (this.alerts.length > this.maxAlerts) this.alerts.pop();
 
     this.internalMetrics.alerts_total++;
     this.internalMetrics[`alerts_${type}`] = (this.internalMetrics[`alerts_${type}`] || 0) + 1;
+    this.metrics?.increment('health.alerts.total');
+    this.metrics?.increment(`health.alerts.${type}`);
 
-    this.logger.warn(`device-health.alert.${type}`, {
-      device_id: deviceId,
-      message
-    });
+    this.logger.warn(`device-health.alert.${type}`, { device_id: deviceId, message, details });
 
-    await this.eventBus.publish(`health.alert.${type}`, {
-      device_id: deviceId,
+    await this._publicarEvento(`health.alert.${type}`, {
+      device_id:  deviceId,
       project_id: projectId,
       message,
-      timestamp: alert.timestamp
-    });
+      details,
+      timestamp
+    }, sourcePayload);
   }
 
   // ==========================================
@@ -374,11 +416,8 @@ class DeviceHealthModule {
 
   async _publishReport() {
     const now = new Date();
-    const cutoff24h = new Date(now - 24 * 60 * 60 * 1000);
 
-    let online = 0;
-    let offline = 0;
-
+    let online = 0, offline = 0;
     for (const state of this.deviceStates.values()) {
       if (state.is_offline) offline++;
       else online++;
@@ -386,12 +425,15 @@ class DeviceHealthModule {
 
     const activeAlerts = this.alerts.filter(a => !a.resolved).length;
 
-    await this.eventBus.publish('health.report', {
+    this.metrics?.gauge('health.flota.online',  online);
+    this.metrics?.gauge('health.flota.offline', offline);
+
+    await this._publicarEvento('health.report', {
       total_devices: this.deviceStates.size,
       online,
       offline,
       active_alerts: activeAlerts,
-      timestamp: now.toISOString()
+      timestamp:     now.toISOString()
     });
   }
 
@@ -402,12 +444,12 @@ class DeviceHealthModule {
   _getOrCreateState(deviceId) {
     if (!this.deviceStates.has(deviceId)) {
       this.deviceStates.set(deviceId, {
-        is_offline: true,
-        last_online: null,
-        last_offline: null,
+        is_offline:        true,
+        last_online:       null,
+        last_offline:      null,
         reconnections_24h: [],
-        offline_periods: [],
-        ota_history: []
+        offline_periods:   [],
+        ota_history:       []
       });
     }
     return this.deviceStates.get(deviceId);
@@ -422,29 +464,26 @@ class DeviceHealthModule {
   }
 
   // ==========================================
-  // Persistencia
+  // Persistencia (atomica via tmp + rename)
   // ==========================================
 
   async _loadHistory() {
     const filePath = path.join(this.config.data_path, 'health-history.json');
-
     try {
       await fs.promises.mkdir(this.config.data_path, { recursive: true });
-      const raw = await fs.promises.readFile(filePath, 'utf8');
+      const raw  = await fs.promises.readFile(filePath, 'utf8');
       const data = JSON.parse(raw);
-
-      if (data.states) {
+      if (data.states && typeof data.states === 'object') {
         for (const [deviceId, state] of Object.entries(data.states)) {
           this.deviceStates.set(deviceId, state);
         }
       }
-      if (data.alerts) {
+      if (Array.isArray(data.alerts)) {
         this.alerts = data.alerts;
       }
-
       this.logger.info('device-health.loaded_from_disk', {
         devices: this.deviceStates.size,
-        alerts: this.alerts.length
+        alerts:  this.alerts.length
       });
     } catch (err) {
       if (err.code !== 'ENOENT') {
@@ -455,21 +494,61 @@ class DeviceHealthModule {
 
   async _saveHistory() {
     const filePath = path.join(this.config.data_path, 'health-history.json');
-
+    const tmpPath  = filePath + '.tmp';
     try {
       await fs.promises.mkdir(this.config.data_path, { recursive: true });
-
       const data = {
-        _version: '1.0.0',
+        _version: '2.0.0',
         _updated: new Date().toISOString(),
-        states: Object.fromEntries(this.deviceStates),
-        alerts: this.alerts
+        states:   Object.fromEntries(this.deviceStates),
+        alerts:   this.alerts
       };
-
-      await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
+      await fs.promises.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+      await fs.promises.rename(tmpPath, filePath);
     } catch (err) {
       this.logger.error('device-health.save_error', { error: err.message });
+      this.metrics?.increment('device-health.errors', { kind: 'persist', code: 'INTERNAL_ERROR' });
     }
+  }
+
+  // ==========================================
+  // Helpers POC2
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details && typeof details === 'object') error.details = details;
+    return { status, error };
+  }
+
+  _handleHandlerError(logEvent, err, kind) {
+    const code   = err._code || this._classifyHandlerError(err);
+    const status = code === 'VALIDATION_FAILED'      ? 400 :
+                   code === 'RESOURCE_NOT_FOUND'     ? 404 :
+                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
+                   code === 'CONFLICT'               ? 409 : 500;
+    const message = err.message || String(err);
+    this.logger.error(logEvent, { error: message, code });
+    this.metrics?.increment('device-health.errors', { kind, code });
+    return this._errorResponse(status, code, message, err._details);
+  }
+
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found'))                                                          return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
+    if (msg.includes('unauthorized') || msg.includes('forbidden'))                          return 'AUTHORIZATION_REQUIRED';
+    if (msg.includes('conflict') || msg.includes('already exists'))                         return 'CONFLICT';
+    return 'INTERNAL_ERROR';
+  }
+
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    const enriched = {
+      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+      timestamp:      new Date().toISOString(),
+      ...payload
+    };
+    await this.eventBus.publish(name, enriched);
   }
 }
 

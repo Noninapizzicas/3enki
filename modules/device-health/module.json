@@ -1,7 +1,7 @@
 {
   "name": "device-health",
-  "version": "1.0.0",
-  "description": "Monitorización de liveness, uptime, alertas y métricas de la flota de dispositivos IoT",
+  "version": "2.0.0",
+  "description": "Observador puro de la flota IoT — uptime, alertas (offline prolongado, reconnect-loops, OTA fallidos) y reportes periódicos. NO toma acciones correctivas.",
   "author": "Enki",
   "language": "en",
   "tier": "tier_3_core",
@@ -18,69 +18,60 @@
       {
         "event": "device.online",
         "handler": "onDeviceOnline",
-        "description": "Dispositivo conectado — registrar timestamp, resetear contador offline"
+        "description": "Dispositivo conectado — registrar timestamp, resetear contador offline, detectar reconnect-loop"
       },
       {
         "event": "device.offline",
         "handler": "onDeviceOffline",
-        "description": "Dispositivo desconectado — iniciar conteo, verificar alertas"
+        "description": "Dispositivo desconectado — programar timer de alerta offline prolongado"
       },
       {
         "event": "firmware.ota_failed",
         "handler": "onOtaFailed",
-        "description": "OTA falló — generar alerta"
+        "description": "OTA falló — generar alerta + registro en historial"
       },
       {
         "event": "firmware.ota_completed",
         "handler": "onOtaCompleted",
-        "description": "OTA completada — registrar en historial"
+        "description": "OTA completada — registrar en historial (sin alerta)"
       }
     ],
     "publishes": [
       {
         "event": "health.alert.offline",
-        "description": "Dispositivo lleva más de N minutos offline"
+        "description": "Dispositivo lleva más de N minutos offline (lleva project_id top-level + correlation_id propagado del device.offline original)"
       },
       {
         "event": "health.alert.reconnect_loop",
-        "description": "Dispositivo reconectando repetidamente"
+        "description": "Dispositivo reconectando repetidamente (>= threshold en window_min)"
       },
       {
         "event": "health.alert.ota_failed",
-        "description": "OTA falló para un dispositivo"
+        "description": "OTA falló para un dispositivo (lleva details: { from, to, type })"
       },
       {
         "event": "health.report",
-        "description": "Reporte periódico de estado de la flota"
+        "description": "Snapshot agregado periódico de la flota completa (NO lleva project_id porque agrega across-projects)"
       }
     ]
   },
   "ui_handlers": [
-    {
-      "domain": "health",
-      "action": "dashboard",
-      "handler": "handleDashboard"
-    },
-    {
-      "domain": "health",
-      "action": "device-history",
-      "handler": "handleDeviceHistory"
-    },
-    {
-      "domain": "health",
-      "action": "alerts",
-      "handler": "handleAlerts"
-    }
+    { "domain": "health", "action": "dashboard",      "handler": "handleDashboard" },
+    { "domain": "health", "action": "device-history", "handler": "handleDeviceHistory" },
+    { "domain": "health", "action": "alerts",         "handler": "handleAlerts" }
   ],
   "tools": [
     {
       "name": "health.dashboard",
-      "description": "Dashboard de salud del parque: dispositivos online/offline, uptime%, alertas activas, reconexiones",
+      "description": "Dashboard de salud del parque: dispositivos online/offline, uptime%, alertas activas, reconexiones últimas 24h",
       "handler": "handleDashboard",
       "parameters": {
         "type": "object",
         "properties": {}
-      }
+      },
+      "errores_conocidos": [
+        { "code": "INTERNAL_ERROR", "cuando": "fallo inesperado al iterar deviceStates" }
+      ]
     },
     {
       "name": "health.device_history",
@@ -89,49 +80,53 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "device_id": {
-            "type": "string"
-          }
+          "device_id": { "type": "string" }
         },
-        "required": [
-          "device_id"
-        ]
-      }
+        "required": ["device_id"]
+      },
+      "errores_conocidos": [
+        { "code": "VALIDATION_FAILED",  "cuando": "device_id ausente" },
+        { "code": "RESOURCE_NOT_FOUND", "cuando": "no hay state registrado para ese device_id" }
+      ]
     },
     {
       "name": "health.alerts",
-      "description": "Lista de alertas de salud: offline prolongado, reconnect loops, OTA fallidos",
+      "description": "Lista filtrable de alertas de salud (offline, reconnect_loop, ota_failed)",
       "handler": "handleAlerts",
       "parameters": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "description": "Filtrar por tipo: offline, reconnect_loop, ota_failed"
-          },
-          "device_id": {
-            "type": "string",
-            "description": "Filtrar por dispositivo"
-          },
-          "active_only": {
-            "type": "boolean",
-            "description": "Solo alertas activas"
-          }
+          "type":        { "type": "string",  "description": "Filtrar por tipo: offline, reconnect_loop, ota_failed" },
+          "device_id":   { "type": "string",  "description": "Filtrar por dispositivo" },
+          "active_only": { "type": "boolean", "description": "Solo alertas activas (no resueltas)" },
+          "limit":       { "type": "integer", "description": "Tope de resultados (default 50)" }
         }
-      }
+      },
+      "errores_conocidos": [
+        { "code": "INTERNAL_ERROR", "cuando": "fallo inesperado al filtrar el catálogo de alertas" }
+      ]
     }
   ],
   "config": {
-    "offline_threshold_min": 5,
-    "reconnect_loop_threshold": 5,
+    "offline_threshold_min":     5,
+    "reconnect_loop_threshold":  5,
     "reconnect_loop_window_min": 30,
-    "report_interval_min": 60,
-    "data_path": "./data/devices"
+    "report_interval_min":       60,
+    "data_path": "./data/devices",
+    "persistence": {
+      "type": "json-file",
+      "path": "data/devices/health-history.json",
+      "atomic": true
+    }
+  },
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "observability": {
     "logging": {
       "level": "info",
-      "structured": true
+      "structured": true,
+      "correlation_id": true
     },
     "metrics": {
       "enabled": true,
@@ -139,7 +134,12 @@
         "health.alerts.total",
         "health.alerts.offline",
         "health.alerts.reconnect_loop",
-        "health.alerts.ota_failed"
+        "health.alerts.ota_failed",
+        "device-health.errors"
+      ],
+      "gauges": [
+        "health.flota.online",
+        "health.flota.offline"
       ]
     }
   }

@@ -1,22 +1,33 @@
 {
   "name": "system-inspector",
-  "version": "1.0.0",
-  "description": "Captura estado del sistema (HTTP, MQTT, errores, logs) para consulta por IA",
+  "version": "2.0.0",
+  "description": "Captura estado del sistema (HTTP, MQTT, errores, logs) en buffer circular in-memory + persiste snapshot atómico a archivo JSON. 4 APIs HTTP read-only para que la IA consulte el runtime. Dev-only: se desactiva en NODE_ENV=production salvo force_in_production.",
+  "author": "Enki",
   "language": "en",
+  "tier": "tier_2_platform",
   "main": "index.js",
   "dev_only": true,
   "provides": {
     "events": [],
     "queries": [
       "system.status",
-      "system.errors"
+      "system.errors",
+      "system.network"
     ]
   },
   "events": {
     "publishes": [],
     "subscribes": [
-      "core/+/events/#",
-      "core/+/errors/#"
+      {
+        "event": "core/+/events/#",
+        "description": "Wildcard de observación pasiva — capturado vía MqttInterceptor wrapping de eventBus, no via handler nominal. Buffer-only, NO se reemite (recursión).",
+        "handler": null
+      },
+      {
+        "event": "core/+/errors/#",
+        "description": "Wildcard de observación pasiva — capturado vía MqttInterceptor wrapping de eventBus, no via handler nominal. Buffer-only.",
+        "handler": null
+      }
     ]
   },
   "apis": [
@@ -24,25 +35,25 @@
       "method": "GET",
       "path": "/status",
       "handler": "handleGetStatus",
-      "description": "Retorna estado completo del sistema (como consola DevTools)"
+      "description": "Snapshot completo del runtime (entradas + summary + recent_errors)"
     },
     {
       "method": "GET",
       "path": "/errors",
       "handler": "handleGetErrors",
-      "description": "Retorna solo errores recientes"
+      "description": "Solo errores recientes capturados en buffer"
     },
     {
       "method": "GET",
       "path": "/network",
       "handler": "handleGetNetwork",
-      "description": "Retorna solo requests HTTP recientes"
+      "description": "Solo requests HTTP recientes (entradas type=network)"
     },
     {
       "method": "DELETE",
       "path": "/clear",
       "handler": "handleClear",
-      "description": "Limpia el buffer de consola"
+      "description": "Vacía el buffer in-memory (no toca archivo persistido)"
     }
   ],
   "config": {
@@ -50,29 +61,48 @@
     "write_interval_ms": 2000,
     "output_file": "./data/system-console.json",
     "truncate_bodies": 1000,
+    "force_in_production": false,
     "capture": {
       "http": true,
       "mqtt": true,
       "errors": true,
       "logs": true,
       "validation": true
+    },
+    "persistence": {
+      "type": "json-file",
+      "path": "./data/system-console.json",
+      "atomic": true,
+      "comment": "Escritura tmp+rename. POSIX garantiza atomicidad del rename. Sobrescribe el archivo en cada flush — NO append, NO crece infinitamente."
     }
+  },
+  "security": {
+    "auth_declared": false,
+    "rationale": "dev_only=true — el módulo no se carga en NODE_ENV=production. En entornos no-prod la exposición es aceptada. Auth real (token + IP allowlist) documentada como deuda P0 en MEJORAS.md.",
+    "deuda_pendiente": "MEJORAS.md#2 — añadir auth_token y allowed_ips opcionales"
+  },
+  "tracing": {
+    "propaga_correlation_id": true,
+    "comment": "Por consistencia POC2: el helper _publicarEvento propaga correlation_id si en el futuro el módulo emite al bus. Actualmente publica = []."
   },
   "observability": {
     "logging": {
       "level": "info",
-      "structured": true
+      "structured": true,
+      "correlation_id": true
     },
     "metrics": {
       "enabled": true,
       "counters": [
-        "system-inspector.entries.captured",
-        "system-inspector.errors.captured",
-        "system-inspector.http.captured",
-        "system-inspector.mqtt.captured"
+        "system-inspector.api.status.ok",
+        "system-inspector.api.errors.ok",
+        "system-inspector.api.network.ok",
+        "system-inspector.api.clear.ok",
+        "system-inspector.errors.total"
       ],
       "gauges": [
-        "system-inspector.buffer.size"
+        "system-inspector.buffer.size",
+        "system-inspector.buffer.maxSize"
       ]
     }
   }

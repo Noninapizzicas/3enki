@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T12:13:11Z_
+_Última regeneración: 2026-05-07T12:48:03Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 27 / 73 (37%)
-- **Drifts cerrados**: 655 / 3174 (21%)
-- **Drifts restantes en baseline**: 2519
+- **Drifts cerrados**: 655 / 3114 (21%)
+- **Drifts restantes en baseline**: 2459
 
 ### Progreso por capa
 
@@ -64,27 +64,27 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 32 | infra | `telegram-service` | 573 | 32 | 2 | drifts 31/32 (97%) — esperado <50% |
 | 33 | dominio | `esp32-flasher` | 1138 | 151 | 0 | drifts 118/151 (78%) — esperado <50% |
 | 34 | dominio | `escandallo` | 1237 | 96 | 0 | sin tests/unit/ |
-| 35 | dominio | `recetas` | 741 | 89 | 0 | sin tests/unit/ |
+| 35 | dominio | `log-manager` | 598 | 82 | 0 | sin tests/unit/ |
 
 <details><summary>Resto de pendientes (36 módulos)</summary>
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
-| 36 | dominio | `log-manager` | 598 | 82 | 0 |
-| 37 | dominio | `perifericos` | 739 | 79 | 0 |
-| 38 | dominio | `viabilidad` | 651 | 74 | 0 |
-| 39 | dominio | `pizzepos__carta-design` | 338 | 72 | 0 |
-| 40 | dominio | `pizzepos__pedidos` | 918 | 72 | 0 |
-| 41 | dominio | `facturas` | 573 | 68 | 0 |
-| 42 | dominio | `staff-manager` | 394 | 67 | 0 |
-| 43 | dominio | `pizzepos__cuentas` | 1224 | 65 | 0 |
-| 44 | dominio | `notas` | 485 | 58 | 0 |
-| 45 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
-| 46 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
-| 47 | dominio | `pizzepos__persistencia-comandero` | 1542 | 50 | 0 |
-| 48 | dominio | `pizzepos__carta-digital` | 299 | 43 | 0 |
-| 49 | dominio | `pizzepos__impresion` | 1258 | 43 | 0 |
-| 50 | dominio | `pizzepos__carta-impresion` | 258 | 41 | 0 |
+| 36 | dominio | `perifericos` | 739 | 79 | 0 |
+| 37 | dominio | `viabilidad` | 651 | 74 | 0 |
+| 38 | dominio | `pizzepos__carta-design` | 338 | 72 | 0 |
+| 39 | dominio | `pizzepos__pedidos` | 918 | 72 | 0 |
+| 40 | dominio | `facturas` | 573 | 68 | 0 |
+| 41 | dominio | `staff-manager` | 394 | 67 | 0 |
+| 42 | dominio | `pizzepos__cuentas` | 1224 | 65 | 0 |
+| 43 | dominio | `notas` | 485 | 58 | 0 |
+| 44 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
+| 45 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
+| 46 | dominio | `pizzepos__persistencia-comandero` | 1542 | 50 | 0 |
+| 47 | dominio | `pizzepos__carta-digital` | 299 | 43 | 0 |
+| 48 | dominio | `pizzepos__impresion` | 1258 | 43 | 0 |
+| 49 | dominio | `pizzepos__carta-impresion` | 258 | 41 | 0 |
+| 50 | dominio | `recetas` | 858 | 41 | 0 |
 | 51 | dominio | `calling-generator` | 812 | 40 | 0 |
 | 52 | dominio | `pizzepos__tarifas` | 309 | 40 | 0 |
 | 53 | dominio | `pizzepos__carta-marketing` | 394 | 38 | 0 |
@@ -94,10 +94,10 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 57 | dominio | `pizzepos__comandero` | 809 | 36 | 0 |
 | 58 | dominio | `pizzepos__menu-generator` | 338 | 34 | 0 |
 | 59 | dominio | `pizzepos__ingredientes` | 697 | 33 | 0 |
-| 60 | dominio | `pizzepos__carta-manager` | 828 | 27 | 0 |
-| 61 | dominio | `pizzepos__cobros` | 661 | 18 | 0 |
-| 62 | dominio | `dashboard` | 361 | 17 | 0 |
-| 63 | dominio | `pizzepos__variaciones` | 443 | 17 | 0 |
+| 60 | dominio | `pizzepos__cobros` | 661 | 18 | 0 |
+| 61 | dominio | `dashboard` | 361 | 17 | 0 |
+| 62 | dominio | `pizzepos__variaciones` | 443 | 17 | 0 |
+| 63 | dominio | `pizzepos__carta-manager` | 829 | 15 | 0 |
 | 64 | dominio | `pizzepos__cuentas-canales` | 368 | 4 | 0 |
 | 66 | dominio | `notas-poc` | 642 | 0 | 0 |
 | 68 | dominio | `facturacion__fuentes` | 264 | 20 | 1 |

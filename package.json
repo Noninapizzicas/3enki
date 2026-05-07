@@ -52,6 +52,7 @@
     "test:metricas": "node tests/unit/metricas.test.js",
     "test:system-inspector": "node tests/unit/system-inspector.test.js",
     "test:prompt-manager": "node tests/unit/prompt-manager.test.js",
+    "test:conversation-export": "node tests/unit/conversation-export.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

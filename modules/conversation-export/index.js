@@ -1,44 +1,28 @@
-/**
- * Conversation Export v1.0.0
- *
- * Expone endpoints HTTP públicos que permiten a un agente externo (ej: Claude)
- * acceder al detalle completo de una conversación: mensajes, tool calls,
- * eventos de agentes, errores.
- *
- * Autenticación: token en query param (?token=X). El token se configura en
- * module.json o se inyecta via config.
- *
- * Fuentes de datos:
- *   - chat-session (SQLite por proyecto): mensajes user/assistant
- *   - log-manager (./data/logs/): eventos del sistema, activity logs
- *   - ActivityLogger en memoria (si disponible): últimos eventos
- *
- * Endpoints:
- *   GET /modules/conversation-export/sessions/:project_id?token=X
- *   GET /modules/conversation-export/session/:session_id?token=X
- *   GET /modules/conversation-export/latest/:project_id?token=X
- */
+'use strict';
 
 const path = require('path');
 const fs = require('fs').promises;
+const crypto = require('crypto');
 
 class ConversationExportModule {
   constructor() {
     this.name = 'conversation-export';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
     this.config = null;
     this.token = null;
 
-    // Buffer de actividad en memoria (últimos 1000 eventos)
     this.activityBuffer = [];
     this.MAX_BUFFER = 1000;
-    this.activityUnsub = null;
 
-    // Para consultas DB via eventos
     this.pendingDbRequests = new Map();
+
+    this._activityUnsub = null;
+    this._agentFailedUnsub = null;
+    this._agentCompletedUnsub = null;
+    this._dbResponseUnsub = null;
   }
 
   async onLoad(context) {
@@ -47,28 +31,21 @@ class ConversationExportModule {
     this.metrics = context.metrics;
     this.config = context.moduleConfig || {};
 
-    // Token — obligatorio
     this.token = this.config.token || process.env.CONVERSATION_EXPORT_TOKEN || null;
     if (!this.token) {
       this.logger.warn('conversation-export.no_token', {
-        message: 'No hay token configurado. El endpoint NO responderá hasta que haya uno. Configura en module.json.config.token o ENV CONVERSATION_EXPORT_TOKEN'
+        module: this.name,
+        message: 'No auth token configured. All endpoints will reject requests.'
       });
     }
 
-    // Suscribirse a activity.logged para capturar eventos en tiempo real
-    this.activityUnsub = await this.eventBus.subscribe('activity.logged', (event) => {
-      const entry = event?.data || event?.payload || event;
-      this.activityBuffer.push(entry);
-      if (this.activityBuffer.length > this.MAX_BUFFER) {
-        this.activityBuffer.shift();
-      }
+    this._activityUnsub = await this.eventBus.subscribe('activity.logged', (event) => {
+      this._bufferActivity(event?.data || event?.payload || event);
     });
 
-    // Capturar completions/failures de agentes — agent-bridge emite estos eventos canónicos
-    // (ya incluyen conversation_id, a diferencia de los agent.{name}.completed del framework)
-    this.agentFailedUnsub = this.eventBus.subscribe('agent.failed', (event) => {
+    this._agentFailedUnsub = await this.eventBus.subscribe('agent.failed', (event) => {
       const data = event?.data || event?.payload || event;
-      this.activityBuffer.push({
+      this._bufferActivity({
         timestamp: new Date().toISOString(),
         type: 'AGENT_FAILURE',
         module: 'agent-bridge',
@@ -81,12 +58,11 @@ class ConversationExportModule {
           pipelineId: data.pipelineId
         }
       });
-      if (this.activityBuffer.length > this.MAX_BUFFER) this.activityBuffer.shift();
     });
 
-    this.agentCompletedUnsub = this.eventBus.subscribe('agent.completed', (event) => {
+    this._agentCompletedUnsub = await this.eventBus.subscribe('agent.completed', (event) => {
       const data = event?.data || event?.payload || event;
-      this.activityBuffer.push({
+      this._bufferActivity({
         timestamp: new Date().toISOString(),
         type: 'AGENT_COMPLETED',
         module: 'agent-bridge',
@@ -97,17 +73,13 @@ class ConversationExportModule {
           agent_name: data.agent_name,
           result_summary: typeof data.result === 'string'
             ? data.result.slice(0, 500)
-            : JSON.stringify(data.result).slice(0, 500),
+            : JSON.stringify(data.result || '').slice(0, 500),
           pipelineId: data.pipelineId
         }
       });
-      if (this.activityBuffer.length > this.MAX_BUFFER) {
-        this.activityBuffer.shift();
-      }
     });
 
-    // Respuestas de DB para queries directas
-    this.dbResponseUnsub = this.eventBus.subscribe('db.query.response', (event) => {
+    this._dbResponseUnsub = await this.eventBus.subscribe('db.query.response', (event) => {
       this._onDbQueryResponse(event);
     });
 
@@ -119,177 +91,218 @@ class ConversationExportModule {
   }
 
   async onUnload() {
-    if (this.activityUnsub) await this.activityUnsub();
-    if (this.agentFailedUnsub) await this.agentFailedUnsub();
-    if (this.agentCompletedUnsub) await this.agentCompletedUnsub();
-    if (this.dbResponseUnsub) await this.dbResponseUnsub();
-    for (const [, req] of this.pendingDbRequests.entries()) clearTimeout(req.timeout);
+    if (this._activityUnsub) { await this._activityUnsub(); this._activityUnsub = null; }
+    if (this._agentFailedUnsub) { await this._agentFailedUnsub(); this._agentFailedUnsub = null; }
+    if (this._agentCompletedUnsub) { await this._agentCompletedUnsub(); this._agentCompletedUnsub = null; }
+    if (this._dbResponseUnsub) { await this._dbResponseUnsub(); this._dbResponseUnsub = null; }
+
+    for (const [, req] of this.pendingDbRequests.entries()) {
+      clearTimeout(req.timeout);
+      req.reject(new Error('Module unloaded'));
+    }
     this.pendingDbRequests.clear();
     this.activityBuffer = [];
+
     this.logger.info('module.unloaded', { module: this.name });
   }
 
   // ==========================================
-  // Auth
+  // POC2 Helpers
   // ==========================================
 
-  checkToken(req) {
-    if (!this.token) {
-      return { ok: false, err: { status: 503, message: 'Token no configurado en el servidor' } };
-    }
-    const provided = req.query?.token || req.headers?.['x-token'] || req.headers?.['authorization']?.replace(/^Bearer\s+/, '');
-    if (!provided) {
-      return { ok: false, err: { status: 401, message: 'Falta token. Usar ?token=... o header X-Token' } };
-    }
-    if (provided !== this.token) {
-      return { ok: false, err: { status: 403, message: 'Token inválido' } };
-    }
-    return { ok: true };
+  _errorResponse(status, code, message, details) {
+    const r = { status, error: { code, message } };
+    if (details !== undefined) r.error.details = details;
+    return r;
   }
 
-  throwHttp(err) {
-    const e = new Error(err.message);
-    e.statusCode = err.status;
-    throw e;
+  _classifyHandlerError(error) {
+    const msg = (error.message || '').toLowerCase();
+    if (msg.includes('not found') || msg.includes('sin sesiones')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('requerido') || msg.includes('missing field')) return 'MISSING_FIELD';
+    if (msg.includes('invalid') || msg.includes('invalido')) return 'INVALID_INPUT';
+    if (msg.includes('timeout')) return 'TIMEOUT';
+    return 'UNKNOWN_ERROR';
+  }
+
+  _handleHandlerError(eventName, error, kind) {
+    const code = error._code || this._classifyHandlerError(error);
+    const details = error._details;
+    const statusMap = {
+      RESOURCE_NOT_FOUND: 404,
+      MISSING_FIELD: 400,
+      INVALID_INPUT: 400,
+      AUTHENTICATION_REQUIRED: 401,
+      PERMISSION_DENIED: 403,
+      DEPENDENCY_UNAVAILABLE: 503,
+      TIMEOUT: 504,
+      UNKNOWN_ERROR: 500
+    };
+    const status = statusMap[code] || 500;
+    const level = status < 500 ? 'warn' : 'error';
+    this.logger[level](eventName, { module: this.name, code, kind, error: error.message });
+    this.metrics?.increment(`${this.name}.handler_error`, { code, kind });
+    return this._errorResponse(status, code, error.message, details);
+  }
+
+  async _publicarEvento(event, payload, opts = {}) {
+    const correlationId = opts.correlation_id || crypto.randomUUID();
+    return this.eventBus.publish(event, {
+      ...payload,
+      correlation_id: correlationId,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  _buildCorrelationId() {
+    return crypto.randomUUID();
+  }
+
+  // ==========================================
+  // Auth (internal — returns Error or null)
+  // ==========================================
+
+  _checkAuth(req) {
+    if (!this.token) {
+      return Object.assign(new Error('Auth token not configured on server'), {
+        _code: 'DEPENDENCY_UNAVAILABLE'
+      });
+    }
+    const provided = req.query?.token
+      || req.headers?.['x-token']
+      || req.headers?.['authorization']?.replace(/^Bearer\s+/, '');
+    if (!provided) {
+      return Object.assign(new Error('Missing token. Use ?token=... or X-Token header'), {
+        _code: 'AUTHENTICATION_REQUIRED'
+      });
+    }
+    if (provided !== this.token) {
+      return Object.assign(new Error('Invalid token'), {
+        _code: 'PERMISSION_DENIED'
+      });
+    }
+    return null;
   }
 
   // ==========================================
   // HTTP Handlers
   // ==========================================
 
-  /**
-   * GET /modules/conversation-export/sessions/:project_id?token=X&limit=20
-   */
   async handleListSessions(req, res) {
-    const auth = this.checkToken(req);
-    if (!auth.ok) this.throwHttp(auth.err);
-
-    const projectId = req.params?.project_id;
-    if (!projectId) this.throwHttp({ status: 400, message: 'project_id requerido' });
-
-    const limit = parseInt(req.query?.limit) || 20;
-
-    const sessions = await this.loadSessionsFromChatSession(projectId, limit);
-    return {
-      project_id: projectId,
-      count: sessions.length,
-      sessions
-    };
-  }
-
-  /**
-   * GET /modules/conversation-export/session/:session_id?token=X&project_id=Y&verbose=true
-   */
-  async handleGetSession(req, res) {
-    const auth = this.checkToken(req);
-    if (!auth.ok) this.throwHttp(auth.err);
-
-    const sessionId = req.params?.session_id;
-    const projectId = req.query?.project_id;
-    const verbose = req.query?.verbose === 'true';
-
-    if (!sessionId) this.throwHttp({ status: 400, message: 'session_id requerido' });
-    if (!projectId) this.throwHttp({ status: 400, message: 'project_id requerido (query param)' });
-
-    return await this.buildSessionExport(projectId, sessionId, verbose);
-  }
-
-  /**
-   * GET /modules/conversation-export/latest/:project_id?token=X&verbose=true
-   */
-  async handleGetLatest(req, res) {
-    const auth = this.checkToken(req);
-    if (!auth.ok) this.throwHttp(auth.err);
-
-    const projectId = req.params?.project_id;
-    const verbose = req.query?.verbose === 'true';
-    if (!projectId) this.throwHttp({ status: 400, message: 'project_id requerido' });
-
-    const sessions = await this.loadSessionsFromChatSession(projectId, 1);
-    if (sessions.length === 0) {
-      this.throwHttp({ status: 404, message: `Sin sesiones en proyecto "${projectId}"` });
-    }
-    return await this.buildSessionExport(projectId, sessions[0].id, verbose);
-  }
-
-  /**
-   * GET /modules/conversation-export/health
-   */
-  async handleHealth(req, res) {
-    return {
-      module: this.name,
-      version: this.version,
-      token_configured: !!this.token,
-      activity_buffer: this.activityBuffer.length
-    };
-  }
-
-  // ==========================================
-  // Data sources
-  // ==========================================
-
-  async loadSessionsFromChatSession(projectId, limit = 20) {
-    const rows = await this._queryDB(projectId,
-      `SELECT id, project_id, title, created_at, updated_at, message_count
-       FROM conversations
-       ORDER BY updated_at DESC
-       LIMIT ?`,
-      [limit]
-    );
-    return rows || [];
-  }
-
-  async loadMessagesFromChatSession(projectId, sessionId) {
-    const rows = await this._queryDB(projectId,
-      `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`,
-      [sessionId]
-    );
-    return rows || [];
-  }
-
-  /**
-   * Busca en ./data/logs/sessions/ el log de una sesión específica.
-   */
-  async loadLogsForSession(sessionId, timeWindow) {
-    const logsPath = path.resolve(process.cwd(), './data/logs/sessions');
-
+    const correlationId = this._buildCorrelationId();
     try {
-      const files = await fs.readdir(logsPath);
-      const matchingFiles = files.filter(f =>
-        f.includes(sessionId) || f.endsWith('.jsonl') || f.endsWith('.log')
-      );
+      const authErr = this._checkAuth(req);
+      if (authErr) return this._handleHandlerError('conversation-export.list_sessions.auth', authErr, 'auth');
 
-      const logs = [];
-      for (const file of matchingFiles.slice(0, 5)) {
-        try {
-          const content = await fs.readFile(path.join(logsPath, file), 'utf-8');
-          // JSONL format
-          for (const line of content.split('\n')) {
-            if (!line.trim()) continue;
-            try {
-              const entry = JSON.parse(line);
-              // Filtrar por timeWindow si hay
-              if (timeWindow && entry.timestamp) {
-                const ts = new Date(entry.timestamp).getTime();
-                if (ts < timeWindow.start || ts > timeWindow.end) continue;
-              }
-              logs.push(entry);
-            } catch (_) {}
-          }
-        } catch (_) {}
+      const projectId = req.params?.project_id;
+      if (!projectId) {
+        return this._handleHandlerError(
+          'conversation-export.list_sessions.validation',
+          Object.assign(new Error('project_id required'), { _code: 'MISSING_FIELD' }),
+          'validation'
+        );
       }
 
-      return logs;
-    } catch (err) {
-      this.logger.debug('conversation-export.logs.not_available', { error: err.message });
-      return [];
+      const limit = parseInt(req.query?.limit) || 20;
+      const sessions = await this._loadSessionsFromDB(projectId, limit, correlationId);
+      return { status: 200, data: { project_id: projectId, count: sessions.length, sessions } };
+    } catch (error) {
+      return this._handleHandlerError('conversation-export.list_sessions.failed', error, 'internal');
     }
   }
 
-  /**
-   * Filtra el buffer de activity en memoria por ventana temporal.
-   */
-  filterActivityBuffer(timeWindow) {
+  async handleGetSession(req, res) {
+    const correlationId = this._buildCorrelationId();
+    try {
+      const authErr = this._checkAuth(req);
+      if (authErr) return this._handleHandlerError('conversation-export.get_session.auth', authErr, 'auth');
+
+      const sessionId = req.params?.session_id;
+      const projectId = req.query?.project_id;
+      const verbose = req.query?.verbose === 'true';
+
+      if (!sessionId) {
+        return this._handleHandlerError(
+          'conversation-export.get_session.validation',
+          Object.assign(new Error('session_id required'), { _code: 'MISSING_FIELD' }),
+          'validation'
+        );
+      }
+      if (!projectId) {
+        return this._handleHandlerError(
+          'conversation-export.get_session.validation',
+          Object.assign(new Error('project_id required (query param)'), { _code: 'MISSING_FIELD' }),
+          'validation'
+        );
+      }
+
+      const data = await this._buildSessionExport(projectId, sessionId, verbose, correlationId);
+      return { status: 200, data };
+    } catch (error) {
+      return this._handleHandlerError('conversation-export.get_session.failed', error, 'internal');
+    }
+  }
+
+  async handleGetLatest(req, res) {
+    const correlationId = this._buildCorrelationId();
+    try {
+      const authErr = this._checkAuth(req);
+      if (authErr) return this._handleHandlerError('conversation-export.get_latest.auth', authErr, 'auth');
+
+      const projectId = req.params?.project_id;
+      const verbose = req.query?.verbose === 'true';
+
+      if (!projectId) {
+        return this._handleHandlerError(
+          'conversation-export.get_latest.validation',
+          Object.assign(new Error('project_id required'), { _code: 'MISSING_FIELD' }),
+          'validation'
+        );
+      }
+
+      const sessions = await this._loadSessionsFromDB(projectId, 1, correlationId);
+      if (sessions.length === 0) {
+        return this._handleHandlerError(
+          'conversation-export.get_latest.not_found',
+          Object.assign(new Error(`No sessions in project "${projectId}"`), {
+            _code: 'RESOURCE_NOT_FOUND',
+            _details: { entity_type: 'session', project_id: projectId }
+          }),
+          'domain'
+        );
+      }
+
+      const data = await this._buildSessionExport(projectId, sessions[0].id, verbose, correlationId);
+      return { status: 200, data };
+    } catch (error) {
+      return this._handleHandlerError('conversation-export.get_latest.failed', error, 'internal');
+    }
+  }
+
+  async handleHealth(req, res) {
+    return {
+      status: 200,
+      data: {
+        module: this.name,
+        version: this.version,
+        token_configured: !!this.token,
+        activity_buffer: this.activityBuffer.length
+      }
+    };
+  }
+
+  // ==========================================
+  // Activity buffer
+  // ==========================================
+
+  _bufferActivity(entry) {
+    this.activityBuffer.push(entry);
+    if (this.activityBuffer.length > this.MAX_BUFFER) {
+      this.activityBuffer.shift();
+    }
+  }
+
+  _filterActivityBuffer(timeWindow) {
     if (!timeWindow) return [...this.activityBuffer];
     return this.activityBuffer.filter(entry => {
       if (!entry.timestamp) return true;
@@ -299,7 +312,7 @@ class ConversationExportModule {
   }
 
   // ==========================================
-  // DB directa — para agent_executions y metadata
+  // DB via events (RPC-over-pubsub — required by db.query.* architecture)
   // ==========================================
 
   _onDbQueryResponse(event) {
@@ -313,15 +326,18 @@ class ConversationExportModule {
     else pending.reject(new Error(error || 'DB query failed'));
   }
 
-  async _queryDB(projectId, query, params = []) {
-    const crypto = require('crypto');
+  async _queryDB(projectId, query, params = [], correlationId) {
     const requestId = crypto.randomUUID();
     const timeout = this.config.db_timeout_ms || 8000;
 
     const promise = new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.pendingDbRequests.delete(requestId);
-        reject(new Error('DB query timeout'));
+        this.logger.error('conversation-export.db_query.timeout', {
+          module: this.name, requestId, projectId
+        });
+        this.metrics?.increment(`${this.name}.db_query_timeout`);
+        reject(Object.assign(new Error('DB query timeout'), { _code: 'TIMEOUT' }));
       }, timeout);
       this.pendingDbRequests.set(requestId, { resolve, reject, timeout: timeoutId });
     });
@@ -331,67 +347,136 @@ class ConversationExportModule {
       query,
       params,
       read_only: true,
-      request_id: requestId
+      request_id: requestId,
+      correlation_id: correlationId || this._buildCorrelationId()
     });
 
     return promise;
   }
 
-  /**
-   * Carga ejecuciones de agentes para una conversación desde agent_executions.
-   * La tabla la crea agent-bridge. Si no existe, devuelve [].
-   */
-  async loadAgentExecutionsForSession(projectId, sessionId) {
-    try {
-      const rows = await this._queryDB(projectId,
-        `SELECT id, agent_name, task, status, started_at, completed_at, result, error
-         FROM agent_executions
-         WHERE conversation_id = ?
-         ORDER BY started_at ASC`,
-        [sessionId]
-      );
+  // ==========================================
+  // Data loaders
+  // ==========================================
 
-      return (rows || []).map(row => ({
-        ...row,
-        result: row.result ? (() => { try { return JSON.parse(row.result); } catch (_) { return row.result; } })() : null
-      }));
-    } catch (_) {
-      // La tabla puede no existir si agent-bridge no ha ejecutado aún
+  async _loadSessionsFromDB(projectId, limit = 20, correlationId) {
+    const rows = await this._queryDB(
+      projectId,
+      `SELECT id, project_id, title, created_at, updated_at, message_count
+       FROM conversations
+       ORDER BY updated_at DESC
+       LIMIT ?`,
+      [limit],
+      correlationId
+    );
+    return rows || [];
+  }
+
+  async _loadMessagesFromDB(projectId, sessionId, correlationId) {
+    const rows = await this._queryDB(
+      projectId,
+      `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`,
+      [sessionId],
+      correlationId
+    );
+    return rows || [];
+  }
+
+  async _loadLogsForSession(sessionId, timeWindow) {
+    const logsPath = path.resolve(process.cwd(), './data/logs/sessions');
+    try {
+      const files = await fs.readdir(logsPath);
+      const matchingFiles = files.filter(f =>
+        f.includes(sessionId) || f.endsWith('.jsonl') || f.endsWith('.log')
+      );
+      const logs = [];
+      for (const file of matchingFiles.slice(0, 5)) {
+        try {
+          const content = await fs.readFile(path.join(logsPath, file), 'utf-8');
+          for (const line of content.split('\n')) {
+            if (!line.trim()) continue;
+            try {
+              const entry = JSON.parse(line);
+              if (timeWindow && entry.timestamp) {
+                const ts = new Date(entry.timestamp).getTime();
+                if (ts < timeWindow.start || ts > timeWindow.end) continue;
+              }
+              logs.push(entry);
+            } catch (_) {}
+          }
+        } catch (err) {
+          this.logger.debug('conversation-export.log_file.read_failed', {
+            module: this.name, file, error: err.message
+          });
+          this.metrics?.increment(`${this.name}.log_file_read_failed`);
+        }
+      }
+      return logs;
+    } catch (err) {
+      this.logger.debug('conversation-export.logs.not_available', {
+        module: this.name, error: err.message
+      });
       return [];
     }
   }
 
-  /**
-   * Lee el metadata de la conversación para obtener el estado actual.
-   */
-  async loadConversationMetadata(projectId, sessionId) {
+  async _loadAgentExecutions(projectId, sessionId, correlationId) {
     try {
-      const rows = await this._queryDB(projectId,
+      const rows = await this._queryDB(
+        projectId,
+        `SELECT id, agent_name, task, status, started_at, completed_at, result, error
+         FROM agent_executions
+         WHERE conversation_id = ?
+         ORDER BY started_at ASC`,
+        [sessionId],
+        correlationId
+      );
+      return (rows || []).map(row => ({
+        ...row,
+        result: row.result
+          ? (() => { try { return JSON.parse(row.result); } catch (_) { return row.result; } })()
+          : null
+      }));
+    } catch (err) {
+      this.logger.debug('conversation-export.agent_executions.not_available', {
+        module: this.name, sessionId, error: err.message
+      });
+      this.metrics?.increment(`${this.name}.agent_executions_load_failed`);
+      return [];
+    }
+  }
+
+  async _loadConversationMetadata(projectId, sessionId, correlationId) {
+    try {
+      const rows = await this._queryDB(
+        projectId,
         `SELECT metadata FROM conversations WHERE id = ? LIMIT 1`,
-        [sessionId]
+        [sessionId],
+        correlationId
       );
       if (!rows || rows.length === 0) return null;
       const raw = rows[0]?.metadata;
       if (!raw) return null;
       return typeof raw === 'string' ? JSON.parse(raw) : raw;
-    } catch (_) {
+    } catch (err) {
+      this.logger.debug('conversation-export.conversation_metadata.not_available', {
+        module: this.name, sessionId, error: err.message
+      });
+      this.metrics?.increment(`${this.name}.metadata_load_failed`);
       return null;
     }
   }
 
   // ==========================================
-  // Build export JSON
+  // Export assembly
   // ==========================================
 
-  async buildSessionExport(projectId, sessionId, verbose = false) {
-    // Cargar todo en paralelo
+  async _buildSessionExport(projectId, sessionId, verbose = false, correlationId) {
     const [messages, agentExecutions, conversationMeta] = await Promise.all([
-      this.loadMessagesFromChatSession(projectId, sessionId),
-      this.loadAgentExecutionsForSession(projectId, sessionId),
-      this.loadConversationMetadata(projectId, sessionId)
+      this._loadMessagesFromDB(projectId, sessionId, correlationId),
+      this._loadAgentExecutions(projectId, sessionId, correlationId),
+      this._loadConversationMetadata(projectId, sessionId, correlationId)
     ]);
 
-    // Ventana temporal para buscar eventos relacionados
     let timeWindow = null;
     if (messages.length > 0) {
       const first = messages[0].created_at || messages[0].timestamp;
@@ -404,16 +489,15 @@ class ConversationExportModule {
       }
     }
 
-    const systemLogs = await this.loadLogsForSession(sessionId, timeWindow);
-    const activity = this.filterActivityBuffer(timeWindow);
-
-    const timeline = this.buildTimeline(messages, systemLogs, activity, agentExecutions, verbose);
-    const summary = this.buildSummary(messages, timeline, agentExecutions, conversationMeta);
+    const systemLogs = await this._loadLogsForSession(sessionId, timeWindow);
+    const activity = this._filterActivityBuffer(timeWindow);
+    const timeline = this._buildTimeline(messages, systemLogs, activity, agentExecutions, verbose);
+    const summary = this._buildSummary(messages, timeline, agentExecutions, conversationMeta);
 
     return {
       _format: 'conversation-export-v2',
       _generated_at: new Date().toISOString(),
-      _hint_llm: 'Transcripción cronológica completa. timeline = mensajes + tool calls + ejecuciones de agentes + errores. agent_executions = historial SQLite de cada agente.',
+      _hint_llm: 'Transcripcion cronologica completa. timeline = mensajes + tool calls + ejecuciones de agentes + errores. agent_executions = historial SQLite de cada agente.',
       project_id: projectId,
       session_id: sessionId,
       conversation_state: conversationMeta?.state || 'unknown',
@@ -424,10 +508,9 @@ class ConversationExportModule {
     };
   }
 
-  buildTimeline(messages, systemLogs, activity, agentExecutions = [], verbose) {
+  _buildTimeline(messages, systemLogs, activity, agentExecutions = [], verbose) {
     const items = [];
 
-    // Mensajes
     for (const m of messages) {
       items.push({
         _type: 'message',
@@ -441,10 +524,9 @@ class ConversationExportModule {
       });
     }
 
-    // Activity (tool calls, agent events, errores)
     for (const a of activity) {
-      const type = this.classifyActivity(a);
-      if (!verbose && type === 'internal_log') continue;  // filtrar ruido si no es verbose
+      const type = this._classifyActivity(a);
+      if (!verbose && type === 'internal_log') continue;
       items.push({
         _type: type,
         ts: a.timestamp,
@@ -455,7 +537,6 @@ class ConversationExportModule {
       });
     }
 
-    // Ejecuciones de agentes desde SQLite (fuente de verdad, no efímera)
     for (const exec of agentExecutions) {
       items.push({
         _type: 'agent_execution',
@@ -475,7 +556,6 @@ class ConversationExportModule {
       });
     }
 
-    // System logs
     for (const log of systemLogs) {
       if (!verbose && log.level !== 'error' && log.level !== 'warn') continue;
       items.push({
@@ -488,7 +568,6 @@ class ConversationExportModule {
       });
     }
 
-    // Orden cronológico
     items.sort((a, b) => {
       const ta = new Date(a.ts || 0).getTime();
       const tb = new Date(b.ts || 0).getTime();
@@ -498,10 +577,9 @@ class ConversationExportModule {
     return items;
   }
 
-  classifyActivity(entry) {
+  _classifyActivity(entry) {
     const action = entry.action || '';
     const type = entry.type || '';
-
     if (action.includes('agent.execute') || action.includes('agent.completed') || action.includes('agent.failed')) {
       return 'agent_event';
     }
@@ -512,7 +590,7 @@ class ConversationExportModule {
     return 'internal_log';
   }
 
-  buildSummary(messages, timeline, agentExecutions = [], conversationMeta = null) {
+  _buildSummary(messages, timeline, agentExecutions = [], conversationMeta = null) {
     const counts = {
       messages: messages.length,
       user_messages: messages.filter(m => m.role === 'user').length,
@@ -524,12 +602,8 @@ class ConversationExportModule {
       errors: timeline.filter(i => i._type === 'error').length
     };
 
-    const conversation_state = conversationMeta?.state || 'unknown';
-    const active_agent = conversationMeta?.active_agent || null;
-
     const tokens = messages.reduce((sum, m) => sum + (m.tokens || 0), 0);
     const cost = messages.reduce((sum, m) => sum + (m.cost || 0), 0);
-
     const firstMsg = messages[0];
     const lastMsg = messages[messages.length - 1];
 
@@ -537,8 +611,8 @@ class ConversationExportModule {
       counts,
       tokens,
       cost,
-      conversation_state,
-      active_agent,
+      conversation_state: conversationMeta?.state || 'unknown',
+      active_agent: conversationMeta?.active_agent || null,
       started_at: firstMsg?.created_at || firstMsg?.timestamp,
       ended_at: lastMsg?.created_at || lastMsg?.timestamp,
       duration_ms: firstMsg && lastMsg

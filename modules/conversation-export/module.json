@@ -1,7 +1,7 @@
 {
   "name": "conversation-export",
-  "version": "1.0.0",
-  "description": "Endpoints HTTP públicos para exportar conversaciones completas (mensajes + tool calls + eventos de agentes + errores) en JSON optimizado para análisis por LLMs externos. Autenticación por token.",
+  "version": "2.0.0",
+  "description": "Endpoints HTTP publicos para exportar conversaciones completas (mensajes + tool calls + eventos de agentes + errores) en JSON optimizado para analisis por LLMs externos. Autenticacion por token.",
   "author": "Pizzepos Team",
   "language": "en",
   "main": "index.js",
@@ -12,53 +12,78 @@
     },
     {
       "event": "activity.logged",
-      "handler": null
+      "handler": "_bufferActivity"
     },
     {
       "event": "agent.failed",
-      "handler": null
+      "handler": "_bufferActivity"
     },
     {
       "event": "agent.completed",
-      "handler": null
+      "handler": "_bufferActivity"
     }
   ],
   "config": {
     "token": null,
-    "_token_note": "Configurar token aquí o via ENV CONVERSATION_EXPORT_TOKEN. El token se pasa como ?token=... en las URLs de los endpoints.",
+    "_token_note": "Configurar token aqui o via ENV CONVERSATION_EXPORT_TOKEN. El token se pasa como ?token=... o header X-Token.",
+    "db_timeout_ms": 8000,
     "persistence": {
       "pattern":           "in-memory",
       "restart_resilient": false,
       "concurrency":       "single-writer",
-      "lost_on_restart":   ["pendingDbRequests"]
+      "lost_on_restart":   ["activityBuffer", "pendingDbRequests"]
     }
+  },
+  "auth": {
+    "scheme": "token",
+    "sources": ["query.token", "header.x-token", "header.authorization"],
+    "token_config_key": "token",
+    "token_env_var": "CONVERSATION_EXPORT_TOKEN",
+    "endpoints_exempt": ["/health"]
   },
   "apis": [
     {
       "method": "GET",
       "path": "/health",
       "handler": "handleHealth",
+      "auth_required": false,
       "description": "Health check. Indica si hay token configurado."
     },
     {
       "method": "GET",
       "path": "/sessions/:project_id",
       "handler": "handleListSessions",
+      "auth_required": true,
       "description": "Lista las sesiones recientes de un proyecto. Query: ?token=X&limit=20"
     },
     {
       "method": "GET",
       "path": "/session/:session_id",
       "handler": "handleGetSession",
-      "description": "Export completo de una sesión. Query: ?token=X&project_id=Y&verbose=true"
+      "auth_required": true,
+      "description": "Export completo de una sesion. Query: ?token=X&project_id=Y&verbose=true"
     },
     {
       "method": "GET",
       "path": "/latest/:project_id",
       "handler": "handleGetLatest",
-      "description": "Export de la sesión más reciente de un proyecto. Query: ?token=X&verbose=true"
+      "auth_required": true,
+      "description": "Export de la sesion mas reciente de un proyecto. Query: ?token=X&verbose=true"
     }
   ],
+  "observability": {
+    "metrics_prefix": "conversation-export",
+    "counters": [
+      "conversation-export.handler_error",
+      "conversation-export.db_query_timeout",
+      "conversation-export.log_file_read_failed",
+      "conversation-export.agent_executions_load_failed",
+      "conversation-export.metadata_load_failed"
+    ]
+  },
+  "tracing": {
+    "propaga_correlation_id": true
+  },
   "dependencies": [
     "database-manager"
   ],

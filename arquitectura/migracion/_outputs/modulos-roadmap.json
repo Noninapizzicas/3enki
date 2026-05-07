@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T10:19:04.917Z",
+  "generated_at": "2026-05-07T10:45:44.096Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 3404,
-    "loc_total": 48504,
+    "drifts_total": 3393,
+    "loc_total": 48578,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -482,9 +482,9 @@
       "path": "modules/conversation-export",
       "layer": "infra",
       "language": "en",
-      "version": "1.0.0",
-      "loc": 553,
-      "drifts": 24,
+      "version": "2.0.0",
+      "loc": 627,
+      "drifts": 13,
       "events_publishes": 0,
       "events_subscribes": 4,
       "tools": 0,

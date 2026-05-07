@@ -1,25 +1,25 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T10:19:05Z_
+_Última regeneración: 2026-05-07T10:45:44Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
-- **Migrados**: 26 / 73 (36%)
-- **Drifts cerrados**: 647 / 3404 (19%)
-- **Drifts restantes en baseline**: 2757
+- **Migrados**: 27 / 73 (37%)
+- **Drifts cerrados**: 655 / 3393 (19%)
+- **Drifts restantes en baseline**: 2738
 
 ### Progreso por capa
 
 | Capa | Done | Total | % |
 |------|------|-------|---|
 | core | 13 | 16 | 81% `████████████████░░░░` |
-| infra | 11 | 16 | 69% `██████████████░░░░░░` |
+| infra | 12 | 16 | 75% `███████████████░░░░░` |
 | dominio | 2 | 38 | 5% `█░░░░░░░░░░░░░░░░░░░` |
 | tooling | 0 | 3 | 0% `░░░░░░░░░░░░░░░░░░░░` |
 
-## Módulos migrados (26)
+## Módulos migrados (27)
 
 | # | Capa | Slug | LOC | Drifts antes → ahora | Commit |
 |---|------|------|-----|----------------------|--------|
@@ -47,10 +47,11 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 26 | infra | `code-executor` | 484 | 19 → 9 (-53%) | `dcbe2c2` 2026-05-07 |
 | 27 | infra | `security-p2p` | 292 | 16 → 6 (-63%) | `bc7b712` 2026-04-20 |
 | 28 | infra | `system-inspector` | 376 | 14 → 5 (-64%) | `422eb92` 2026-05-07 |
+| 30 | infra | `conversation-export` | 627 | 13 → 5 (-62%) | _n/a_ |
 | 65 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
 | 67 | dominio | `pizzepos__cocina-poc` | 452 | 0 → 0 (-0%) | `5437466` 2026-05-02 |
 
-## Próximos en la cola (top 10 de 47 pendientes)
+## Próximos en la cola (top 10 de 46 pendientes)
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
@@ -59,17 +60,16 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 14 | core | `conversacion__prompt-builder` | 435 | 13 | 2 | drifts 7/13 (54%) — esperado <50% |
 | 21 | infra | `device-registry` | 764 | 36 | 0 | drifts 20/36 (56%) — esperado <50% |
 | 29 | infra | `prompt-manager` | 1236 | 69 | 1 | drifts 38/69 (55%) — esperado <50% |
-| 30 | infra | `conversation-export` | 553 | 24 | 1 | sin tests/unit/ |
 | 31 | infra | `pdf-viewer` | 1097 | 101 | 2 | sin tests/unit/ |
 | 32 | infra | `telegram-service` | 753 | 91 | 2 | sin tests/unit/ |
 | 33 | dominio | `esp32-flasher` | 1138 | 151 | 0 | drifts 118/151 (78%) — esperado <50% |
 | 34 | dominio | `pizzepos__carta-manager` | 594 | 125 | 0 | sin tests/unit/ |
+| 35 | dominio | `escandallo` | 1237 | 96 | 0 | sin tests/unit/ |
 
-<details><summary>Resto de pendientes (37 módulos)</summary>
+<details><summary>Resto de pendientes (36 módulos)</summary>
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
-| 35 | dominio | `escandallo` | 1237 | 96 | 0 |
 | 36 | dominio | `recetas` | 741 | 89 | 0 |
 | 37 | dominio | `log-manager` | 598 | 82 | 0 |
 | 38 | dominio | `perifericos` | 739 | 79 | 0 |

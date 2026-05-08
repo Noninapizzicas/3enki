@@ -193,3 +193,6 @@ jobs:
 
       - name: Run unit tests (conversacion/agent-observer — reescritura canonica)
         run: npm run test:conversacion__agent-observer
+
+      - name: Run unit tests (conversacion/memory-user-profile — reescritura canonica)
+        run: npm run test:conversacion__memory-user-profile

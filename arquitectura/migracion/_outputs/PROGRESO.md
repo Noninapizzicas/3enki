@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T12:04:20Z_
+_Última regeneración: 2026-05-08T12:09:01Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 682 / 2487 (27%)
-- **Drifts restantes en baseline**: 1805
+- **Drifts cerrados**: 684 / 2497 (27%)
+- **Drifts restantes en baseline**: 1813
 
 ### Progreso por capa
 
@@ -36,7 +36,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
 | 15 | core | `conversacion__memory-conversation-summary` | 339 | 2 → 0 (-100%) | `b7e84bc` 2026-05-08 |
 | 16 | core | `conversacion__memory-rag` | 438 | 2 → 0 (-100%) | `d125ab7` 2026-05-08 |
-| 17 | infra | `filesystem` | 1075 | 188 → 66 (-65%) | `bb98306` 2026-05-06 |
+| 17 | infra | `filesystem` | 1075 | 190 → 66 (-65%) | `bb98306` 2026-05-06 |
 | 18 | infra | `firmware-manager` | 1084 | 67 → 31 (-54%) | `7e2eb66` 2026-05-06 |
 | 19 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
 | 21 | infra | `firmware-builder` | 686 | 31 → 12 (-61%) | `d88eae5` 2026-05-07 |
@@ -105,7 +105,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 70 | dominio | `pizzepos__menu-generator` | 375 | 41 | 3 |
 | 71 | tooling | `ui-designer` | 1281 | 120 | 0 |
 | 72 | tooling | `scratch-designer` | 413 | 31 | 0 |
-| 73 | tooling | `admin-panel` | 543 | 22 | 0 |
+| 73 | tooling | `admin-panel` | 520 | 30 | 2 |
 
 </details>
 

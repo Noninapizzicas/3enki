@@ -247,3 +247,6 @@ jobs:
 
       - name: Run unit tests (bot-manager — reescritura canonica)
         run: npm run test:bot-manager
+
+      - name: Run unit tests (admin-panel — reescritura canonica)
+        run: npm run test:admin-panel

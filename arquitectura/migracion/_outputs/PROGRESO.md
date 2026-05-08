@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T06:53:10Z_
+_Última regeneración: 2026-05-08T07:09:49Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 30 / 73 (41%)
-- **Drifts cerrados**: 721 / 2525 (29%)
-- **Drifts restantes en baseline**: 1804
+- **Drifts cerrados**: 721 / 2499 (29%)
+- **Drifts restantes en baseline**: 1778
 
 ### Progreso por capa
 
@@ -48,11 +48,11 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 27 | infra | `security-p2p` | 292 | 16 → 6 (-63%) | `bc7b712` 2026-04-20 |
 | 28 | infra | `system-inspector` | 376 | 14 → 5 (-64%) | `422eb92` 2026-05-07 |
 | 30 | infra | `conversation-export` | 627 | 13 → 5 (-62%) | `fd86a7c` 2026-05-07 |
-| 45 | dominio | `pizzepos__cuentas` | 1016 | 32 → 11 (-66%) | `1f2733d` 2026-05-07 |
-| 51 | dominio | `pizzepos__carta-design` | 545 | 18 → 8 (-56%) | `56a566a` 2026-05-07 |
-| 52 | dominio | `staff-manager` | 494 | 18 → 2 (-89%) | `10739b7` 2026-05-07 |
-| 60 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
-| 62 | dominio | `pizzepos__cocina-poc` | 452 | 0 → 0 (-0%) | `5437466` 2026-05-02 |
+| 44 | dominio | `pizzepos__cuentas` | 1016 | 32 → 11 (-66%) | `1f2733d` 2026-05-07 |
+| 50 | dominio | `pizzepos__carta-design` | 545 | 18 → 8 (-56%) | `56a566a` 2026-05-07 |
+| 51 | dominio | `staff-manager` | 494 | 18 → 2 (-89%) | `10739b7` 2026-05-07 |
+| 59 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
+| 61 | dominio | `pizzepos__cocina-poc` | 452 | 0 → 0 (-0%) | `5437466` 2026-05-02 |
 
 ## Próximos en la cola (top 10 de 43 pendientes)
 
@@ -66,40 +66,40 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 31 | infra | `pdf-viewer` | 634 | 54 | 2 | drifts 39/54 (72%) — esperado <50% |
 | 32 | infra | `telegram-service` | 573 | 32 | 2 | drifts 31/32 (97%) — esperado <50% |
 | 33 | dominio | `log-manager` | 598 | 82 | 0 | sin tests/unit/ |
-| 34 | dominio | `viabilidad` | 651 | 74 | 0 | sin tests/unit/ |
-| 35 | dominio | `esp32-flasher` | 1155 | 68 | 0 | drifts 53/68 (78%) — esperado <50% |
+| 34 | dominio | `esp32-flasher` | 1155 | 68 | 0 | drifts 53/68 (78%) — esperado <50% |
+| 35 | dominio | `pizzepos__carta-scheduler` | 605 | 62 | 0 | drifts 51/62 (82%) — esperado <50% |
 
 <details><summary>Resto de pendientes (33 módulos)</summary>
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
-| 36 | dominio | `pizzepos__carta-scheduler` | 605 | 62 | 0 |
-| 37 | dominio | `notas` | 485 | 59 | 0 |
-| 38 | dominio | `recetas` | 897 | 43 | 0 |
-| 39 | dominio | `calling-generator` | 812 | 40 | 0 |
-| 40 | dominio | `escandallo` | 1098 | 40 | 0 |
-| 41 | dominio | `facturacion__asesoria` | 520 | 36 | 0 |
-| 42 | dominio | `pizzepos__cocina` | 1206 | 33 | 0 |
-| 43 | dominio | `perifericos` | 856 | 32 | 0 |
-| 44 | dominio | `pizzepos__carta-marketing` | 472 | 32 | 0 |
-| 46 | dominio | `pizzepos__tarifas` | 408 | 26 | 0 |
-| 47 | dominio | `facturas` | 661 | 25 | 0 |
-| 48 | dominio | `pizzepos__carta-digital` | 401 | 25 | 0 |
-| 49 | dominio | `pizzepos__pedidos` | 915 | 25 | 0 |
-| 50 | dominio | `pizzepos__carta-impresion` | 382 | 19 | 0 |
-| 53 | dominio | `dashboard` | 361 | 17 | 0 |
-| 54 | dominio | `pizzepos__carta-manager` | 829 | 15 | 0 |
-| 55 | dominio | `pizzepos__impresion` | 1075 | 13 | 0 |
-| 56 | dominio | `pizzepos__persistencia-comandero` | 1366 | 13 | 0 |
-| 57 | dominio | `pizzepos__comandero` | 792 | 9 | 0 |
-| 58 | dominio | `pizzepos__categorias` | 451 | 6 | 0 |
-| 59 | dominio | `pizzepos__ingredientes` | 690 | 6 | 0 |
-| 61 | dominio | `notas-poc` | 642 | 0 | 0 |
-| 63 | dominio | `pizzepos__cobros` | 700 | 29 | 1 |
-| 64 | dominio | `facturacion__fuentes` | 264 | 20 | 1 |
-| 65 | dominio | `pizzepos__variaciones` | 497 | 17 | 1 |
-| 66 | dominio | `pizzepos__cuentas-canales` | 418 | 15 | 1 |
-| 67 | dominio | `text-editor` | 580 | 54 | 2 |
+| 36 | dominio | `notas` | 485 | 59 | 0 |
+| 37 | dominio | `recetas` | 897 | 43 | 0 |
+| 38 | dominio | `calling-generator` | 812 | 40 | 0 |
+| 39 | dominio | `escandallo` | 1098 | 40 | 0 |
+| 40 | dominio | `facturacion__asesoria` | 520 | 36 | 0 |
+| 41 | dominio | `pizzepos__cocina` | 1206 | 33 | 0 |
+| 42 | dominio | `perifericos` | 856 | 32 | 0 |
+| 43 | dominio | `pizzepos__carta-marketing` | 472 | 32 | 0 |
+| 45 | dominio | `pizzepos__tarifas` | 408 | 26 | 0 |
+| 46 | dominio | `facturas` | 661 | 25 | 0 |
+| 47 | dominio | `pizzepos__carta-digital` | 401 | 25 | 0 |
+| 48 | dominio | `pizzepos__pedidos` | 915 | 25 | 0 |
+| 49 | dominio | `pizzepos__carta-impresion` | 382 | 19 | 0 |
+| 52 | dominio | `dashboard` | 361 | 17 | 0 |
+| 53 | dominio | `pizzepos__carta-manager` | 829 | 15 | 0 |
+| 54 | dominio | `pizzepos__impresion` | 1075 | 13 | 0 |
+| 55 | dominio | `pizzepos__persistencia-comandero` | 1366 | 13 | 0 |
+| 56 | dominio | `pizzepos__comandero` | 792 | 9 | 0 |
+| 57 | dominio | `pizzepos__categorias` | 451 | 6 | 0 |
+| 58 | dominio | `pizzepos__ingredientes` | 690 | 6 | 0 |
+| 60 | dominio | `notas-poc` | 642 | 0 | 0 |
+| 62 | dominio | `pizzepos__cobros` | 700 | 29 | 1 |
+| 63 | dominio | `facturacion__fuentes` | 264 | 20 | 1 |
+| 64 | dominio | `pizzepos__variaciones` | 497 | 17 | 1 |
+| 65 | dominio | `pizzepos__cuentas-canales` | 418 | 15 | 1 |
+| 66 | dominio | `text-editor` | 580 | 54 | 2 |
+| 67 | dominio | `viabilidad` | 789 | 48 | 2 |
 | 68 | dominio | `pizzepos__productos` | 1265 | 26 | 2 |
 | 69 | dominio | `bot-manager` | 327 | 19 | 2 |
 | 70 | dominio | `pizzepos__menu-generator` | 375 | 41 | 3 |

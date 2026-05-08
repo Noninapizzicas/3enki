@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T01:44:27Z_
+_Última regeneración: 2026-05-08T01:47:50Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 702 / 2576 (27%)
-- **Drifts restantes en baseline**: 1874
+- **Drifts cerrados**: 702 / 2570 (27%)
+- **Drifts restantes en baseline**: 1868
 
 ### Progreso por capa
 
@@ -77,11 +77,11 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 38 | dominio | `recetas` | 897 | 43 | 0 |
 | 39 | dominio | `calling-generator` | 812 | 40 | 0 |
 | 40 | dominio | `escandallo` | 1098 | 40 | 0 |
-| 41 | dominio | `pizzepos__carta-marketing` | 394 | 38 | 0 |
-| 42 | dominio | `facturacion__asesoria` | 520 | 36 | 0 |
-| 43 | dominio | `pizzepos__menu-generator` | 338 | 34 | 0 |
-| 44 | dominio | `pizzepos__cocina` | 1206 | 33 | 0 |
-| 45 | dominio | `perifericos` | 856 | 32 | 0 |
+| 41 | dominio | `facturacion__asesoria` | 520 | 36 | 0 |
+| 42 | dominio | `pizzepos__menu-generator` | 338 | 34 | 0 |
+| 43 | dominio | `pizzepos__cocina` | 1206 | 33 | 0 |
+| 44 | dominio | `perifericos` | 856 | 32 | 0 |
+| 45 | dominio | `pizzepos__carta-marketing` | 472 | 32 | 0 |
 | 46 | dominio | `pizzepos__tarifas` | 408 | 26 | 0 |
 | 47 | dominio | `facturas` | 661 | 25 | 0 |
 | 48 | dominio | `pizzepos__carta-digital` | 401 | 25 | 0 |

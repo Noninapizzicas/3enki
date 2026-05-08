@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-08T01:44:26.359Z",
+  "generated_at": "2026-05-08T01:47:49.965Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 2576,
-    "loc_total": 48770,
+    "drifts_total": 2570,
+    "loc_total": 48848,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -653,21 +653,6 @@
       "orden_migracion": 40
     },
     {
-      "slug": "pizzepos__carta-marketing",
-      "path": "modules/pizzepos/carta-marketing",
-      "layer": "dominio",
-      "language": "es",
-      "version": "1.0.0",
-      "loc": 394,
-      "drifts": 38,
-      "events_publishes": 1,
-      "events_subscribes": 3,
-      "tools": 4,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 41
-    },
-    {
       "slug": "facturacion__asesoria",
       "path": "modules/facturacion/asesoria",
       "layer": "dominio",
@@ -680,7 +665,7 @@
       "tools": 2,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 42
+      "orden_migracion": 41
     },
     {
       "slug": "pizzepos__menu-generator",
@@ -695,7 +680,7 @@
       "tools": 1,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 43
+      "orden_migracion": 42
     },
     {
       "slug": "pizzepos__cocina",
@@ -710,7 +695,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 44
+      "orden_migracion": 43
     },
     {
       "slug": "perifericos",
@@ -723,6 +708,21 @@
       "events_publishes": 8,
       "events_subscribes": 7,
       "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 44
+    },
+    {
+      "slug": "pizzepos__carta-marketing",
+      "path": "modules/pizzepos/carta-marketing",
+      "layer": "dominio",
+      "language": "es",
+      "version": "2.0.0",
+      "loc": 472,
+      "drifts": 32,
+      "events_publishes": 1,
+      "events_subscribes": 3,
+      "tools": 4,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 45

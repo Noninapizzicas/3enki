@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-08T01:59:52.164Z",
+  "generated_at": "2026-05-08T06:53:08.883Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,9 +10,9 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 2610,
-    "loc_total": 49028,
-    "tools_total": 148,
+    "drifts_total": 2525,
+    "loc_total": 49045,
+    "tools_total": 150,
     "agents_total": 30
   },
   "layers": {
@@ -289,7 +289,7 @@
       "language": "en",
       "version": "2.0.0",
       "loc": 1075,
-      "drifts": 190,
+      "drifts": 188,
       "events_publishes": 24,
       "events_subscribes": 18,
       "tools": 14,
@@ -533,21 +533,6 @@
       "orden_migracion": 32
     },
     {
-      "slug": "esp32-flasher",
-      "path": "modules/esp32-flasher",
-      "layer": "dominio",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 1138,
-      "drifts": 151,
-      "events_publishes": 5,
-      "events_subscribes": 1,
-      "tools": 6,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 33
-    },
-    {
       "slug": "log-manager",
       "path": "modules/log-manager",
       "layer": "dominio",
@@ -560,7 +545,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 34
+      "orden_migracion": 33
     },
     {
       "slug": "viabilidad",
@@ -573,6 +558,21 @@
       "events_publishes": 2,
       "events_subscribes": 6,
       "tools": 6,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 34
+    },
+    {
+      "slug": "esp32-flasher",
+      "path": "modules/esp32-flasher",
+      "layer": "dominio",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 1155,
+      "drifts": 68,
+      "events_publishes": 5,
+      "events_subscribes": 1,
+      "tools": 8,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 35

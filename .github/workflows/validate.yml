@@ -232,3 +232,6 @@ jobs:
 
       - name: Run unit tests (pizzepos/cuentas-canales — reescritura canonica)
         run: npm run test:pizzepos__cuentas-canales
+
+      - name: Run unit tests (esp32-flasher — reescritura canonica)
+        run: npm run test:esp32-flasher

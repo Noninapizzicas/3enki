@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T01:59:52Z_
+_Última regeneración: 2026-05-08T06:53:10Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 30 / 73 (41%)
-- **Drifts cerrados**: 723 / 2610 (28%)
-- **Drifts restantes en baseline**: 1887
+- **Drifts cerrados**: 721 / 2525 (29%)
+- **Drifts restantes en baseline**: 1804
 
 ### Progreso por capa
 
@@ -36,7 +36,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
 | 15 | core | `conversacion__memory-conversation-summary` | 339 | 2 → 0 (-100%) | `b7e84bc` 2026-05-08 |
 | 16 | core | `conversacion__memory-rag` | 438 | 2 → 0 (-100%) | `d125ab7` 2026-05-08 |
-| 17 | infra | `filesystem` | 1075 | 190 → 66 (-65%) | `bb98306` 2026-05-06 |
+| 17 | infra | `filesystem` | 1075 | 188 → 66 (-65%) | `bb98306` 2026-05-06 |
 | 18 | infra | `certificate-authority` | 409 | 67 → 24 (-64%) | `bc7b712` 2026-04-20 |
 | 19 | infra | `firmware-manager` | 1084 | 67 → 31 (-54%) | `7e2eb66` 2026-05-06 |
 | 20 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
@@ -65,9 +65,9 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 29 | infra | `prompt-manager` | 1236 | 69 | 1 | drifts 38/69 (55%) — esperado <50% |
 | 31 | infra | `pdf-viewer` | 634 | 54 | 2 | drifts 39/54 (72%) — esperado <50% |
 | 32 | infra | `telegram-service` | 573 | 32 | 2 | drifts 31/32 (97%) — esperado <50% |
-| 33 | dominio | `esp32-flasher` | 1138 | 151 | 0 | drifts 118/151 (78%) — esperado <50% |
-| 34 | dominio | `log-manager` | 598 | 82 | 0 | sin tests/unit/ |
-| 35 | dominio | `viabilidad` | 651 | 74 | 0 | sin tests/unit/ |
+| 33 | dominio | `log-manager` | 598 | 82 | 0 | sin tests/unit/ |
+| 34 | dominio | `viabilidad` | 651 | 74 | 0 | sin tests/unit/ |
+| 35 | dominio | `esp32-flasher` | 1155 | 68 | 0 | drifts 53/68 (78%) — esperado <50% |
 
 <details><summary>Resto de pendientes (33 módulos)</summary>
 

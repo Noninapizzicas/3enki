@@ -190,3 +190,6 @@ jobs:
 
       - name: Run unit tests (pizzepos/cocina — reescritura canonica)
         run: npm run test:pizzepos__cocina
+
+      - name: Run unit tests (conversacion/agent-observer — reescritura canonica)
+        run: npm run test:conversacion__agent-observer

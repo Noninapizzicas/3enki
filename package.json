@@ -71,6 +71,7 @@
     "test:pizzepos__ingredientes": "node tests/unit/pizzepos__ingredientes.test.js",
     "test:escandallo": "node tests/unit/escandallo.test.js",
     "test:pizzepos__cocina": "node tests/unit/pizzepos__cocina.test.js",
+    "test:conversacion__agent-observer": "node tests/unit/conversacion__agent-observer.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

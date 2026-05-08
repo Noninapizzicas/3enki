@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-08T00:40:23.171Z",
-  "total": 2701,
+  "generated_at": "2026-05-08T01:10:33.754Z",
+  "total": 2703,
   "by_validator": {
     "naming": 52,
     "glossary": 1,
@@ -15,7 +15,7 @@
     "llm-flow": 2,
     "tools": 282,
     "agents-config": 94,
-    "module-rewrite": 72,
+    "module-rewrite": 74,
     "frontend": 452,
     "security": 1,
     "testing": 36,
@@ -26,8 +26,8 @@
     "scheduling": 2
   },
   "by_severity": {
-    "warning": 2440,
-    "info": 278,
+    "warning": 2441,
+    "info": 279,
     "error": 10
   },
   "signatures": [
@@ -1695,6 +1695,7 @@
     "lifecycle|drift_signature_no_canonica|system-inspector modules/system-inspector/index.js:168 — método prohibido \"start\" (usar onLoad/onUnload)",
     "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-agent-framework consume \"llm.complete.response\" sin request_schema_ref/schema_ref en module.json",
     "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-agent-framework publica \"llm.complete.request\" sin response_schema_ref/schema_ref en module.json",
+    "module-rewrite|drift_modulo_migrado_codes_fuera_catalogo|conversacion__agent-observer — codes en source no presentes en errors.json: INTERNAL_ERROR, PUBLISH_FAILED",
     "module-rewrite|drift_modulo_migrado_codes_fuera_catalogo|device-health — codes en source no presentes en errors.json: VALIDATION_FAILED, INTERNAL_ERROR",
     "module-rewrite|drift_modulo_migrado_codes_fuera_catalogo|device-registry — codes en source no presentes en errors.json: INTERNAL_ERROR, VALIDATION_FAILED",
     "module-rewrite|drift_modulo_migrado_codes_fuera_catalogo|device-shadow — codes en source no presentes en errors.json: INTERNAL_ERROR",
@@ -1733,6 +1734,7 @@
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|channel-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|code-executor — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|composition-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
+    "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|conversacion__agent-observer — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|conversacion__chat-io — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|conversacion__prompt-builder — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|conversation-export — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",

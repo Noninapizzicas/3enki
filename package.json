@@ -17,7 +17,6 @@
     "test:security": "node tests/unit/security-p2p.test.js",
     "test:integration": "node tests/integration/full-stack.test.js",
     "test:ai-gateway-poc": "node tests/unit/ai-gateway-poc.test.js",
-    "test:carta-scheduler": "node tests/unit/carta-scheduler.test.js",
     "test:scheduler": "node tests/unit/scheduler.test.js",
     "test:credential-manager": "node tests/unit/credential-manager.test.js",
     "test:project-manager": "node tests/unit/project-manager.test.js",

@@ -244,3 +244,6 @@ jobs:
 
       - name: Run unit tests (security-p2p — reescritura canonica)
         run: npm run test:security-p2p
+
+      - name: Run unit tests (dashboard — reescritura canonica)
+        run: npm run test:dashboard

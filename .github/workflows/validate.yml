@@ -241,3 +241,6 @@ jobs:
 
       - name: Run unit tests (certificate-authority — reescritura canonica)
         run: npm run test:certificate-authority
+
+      - name: Run unit tests (security-p2p — reescritura canonica)
+        run: npm run test:security-p2p

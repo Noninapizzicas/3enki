@@ -1,84 +1,67 @@
 {
   "name": "security-p2p",
-  "version": "1.0.0",
-  "description": "P2P Zero Trust Security with E2E Encryption",
+  "version": "2.0.0",
+  "description": "P2P Zero Trust Security para Event Core. Cifra/descifra eventos entre cores usando X25519 + AES-256-GCM via hooks transparentes (beforeEventPublish, afterEventReceive). Cache de shared_secrets in-memory con eviction LRU (max_shared_secrets, default 100). Handshake P2P over MQTT (core/+/security/handshake/{request,response}/#).",
   "author": "Event Core Team",
   "language": "en",
-  "provides": {
-    "hooks": [
-      "beforeEventPublish",
-      "afterEventReceive"
-    ],
-    "apis": [
-      {
-        "name": "status",
-        "method": "GET",
-        "path": "/status",
-        "description": "Get security status and trusted peers"
-      },
-      {
-        "name": "getPublicKey",
-        "method": "GET",
-        "path": "/public-key",
-        "description": "Get this core's public key and fingerprint"
-      },
-      {
-        "name": "trustPeer",
-        "method": "POST",
-        "path": "/trust-peer",
-        "description": "Add a peer as trusted"
-      },
-      {
-        "name": "revokePeer",
-        "method": "DELETE",
-        "path": "/trust-peer",
-        "description": "Revoke trust for a peer"
-      },
-      {
-        "name": "listTrustedPeers",
-        "method": "GET",
-        "path": "/trusted-peers",
-        "description": "List all trusted peers"
-      }
-    ]
+  "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "events": {
     "publishes": [
-      {
-        "event": "security.peer.trusted",
-        "description": "Peer trusted after successful handshake"
-      },
-      {
-        "event": "security.peer.revoked",
-        "description": "Trust revoked for a peer"
-      },
-      {
-        "event": "security.handshake.timeout",
-        "description": "Handshake timed out"
-      },
-      {
-        "event": "security.handshake.failed",
-        "description": "Handshake failed (HMAC mismatch)"
-      }
+      { "event": "security.peer.trusted",       "description": "Peer trusted (manual o tras handshake exitoso). project_id top-level + correlation_id + timestamp." },
+      { "event": "security.peer.revoked",       "description": "Trust revocado para un peer. project_id top-level + correlation_id + timestamp." },
+      { "event": "security.handshake.timeout",  "description": "Handshake timeout (no response del peer en handshake_timeout_ms)." },
+      { "event": "security.handshake.failed",   "description": "Handshake fallo (HMAC mismatch, clave invalida, etc.)." }
     ],
     "subscribes": []
   },
+  "ui_handlers": [
+    { "domain": "security-p2p", "action": "status",         "handler": "handleStatus",            "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "security-p2p", "action": "public-key",     "handler": "handleGetPublicKey",      "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "security-p2p", "action": "trust-peer",     "handler": "handleTrustPeer",         "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "security-p2p", "action": "revoke-peer",    "handler": "handleRevokePeer",        "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "security-p2p", "action": "trusted-peers",  "handler": "handleListTrustedPeers",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "security-p2p", "action": "health",         "handler": "handleHealthCheck",       "type": "system_panel", "zone": "lateral_derecha" }
+  ],
+  "tools": [],
+  "dependencies": [],
+  "provides": {
+    "hooks": ["beforeEventPublish", "afterEventReceive"]
+  },
   "config": {
     "handshake_timeout_ms": 30000,
-    "auto_trust_enabled": false
+    "auto_trust_enabled": false,
+    "max_shared_secrets": 100,
+    "persistence": {
+      "type": "in-memory",
+      "owner": "SecurityP2PModule (KeyManager keys + Map _sharedSecrets con eviction LRU + CryptoHandshake pendientes)",
+      "restart_resilient": false,
+      "concurrency": "single-instance",
+      "lost_on_restart": ["_sharedSecrets", "cryptoHandshake.pending", "stats"],
+      "eviction_strategy": {
+        "policy": "lru",
+        "max_entries": 100,
+        "field": "_sharedSecrets"
+      }
+    }
   },
   "observability": {
     "logging": {
       "level": "info",
-      "structured": true
+      "structured": true,
+      "correlation_id": true
     },
     "metrics": {
       "enabled": true,
       "counters": [
-        "security.events_encrypted",
-        "security.events_decrypted",
-        "security.encryption_errors",
-        "security.decryption_errors",
+        "security-p2p.events_encrypted",
+        "security-p2p.events_decrypted",
+        "security-p2p.encryption_errors",
+        "security-p2p.decryption_errors",
+        "security-p2p.shared_secrets_evicted",
+        "security-p2p.errors",
         "security.handshakes.successful",
         "security.handshakes.failed"
       ]

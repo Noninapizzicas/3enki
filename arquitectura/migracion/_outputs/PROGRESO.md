@@ -1,25 +1,25 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T11:07:37Z_
+_Última regeneración: 2026-05-08T11:20:23Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
-- **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 678 / 2460 (28%)
-- **Drifts restantes en baseline**: 1782
+- **Migrados**: 28 / 73 (38%)
+- **Drifts cerrados**: 668 / 2462 (27%)
+- **Drifts restantes en baseline**: 1794
 
 ### Progreso por capa
 
 | Capa | Done | Total | % |
 |------|------|-------|---|
 | core | 13 | 16 | 81% `████████████████░░░░` |
-| infra | 11 | 16 | 69% `██████████████░░░░░░` |
+| infra | 10 | 16 | 63% `█████████████░░░░░░░` |
 | dominio | 5 | 38 | 13% `███░░░░░░░░░░░░░░░░░` |
 | tooling | 0 | 3 | 0% `░░░░░░░░░░░░░░░░░░░░` |
 
-## Módulos migrados (29)
+## Módulos migrados (28)
 
 | # | Capa | Slug | LOC | Drifts antes → ahora | Commit |
 |---|------|------|-----|----------------------|--------|
@@ -44,7 +44,6 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 24 | infra | `device-shadow` | 491 | 26 → 7 (-73%) | `9ba470d` 2026-05-07 |
 | 25 | infra | `metricas` | 556 | 22 → 4 (-82%) | `b3a2a8a` 2026-05-07 |
 | 26 | infra | `code-executor` | 484 | 19 → 9 (-53%) | `dcbe2c2` 2026-05-07 |
-| 27 | infra | `security-p2p` | 292 | 16 → 6 (-63%) | `bc7b712` 2026-04-20 |
 | 28 | infra | `system-inspector` | 376 | 14 → 5 (-64%) | `422eb92` 2026-05-07 |
 | 30 | infra | `conversation-export` | 627 | 13 → 5 (-62%) | `fd86a7c` 2026-05-07 |
 | 44 | dominio | `pizzepos__cuentas` | 1016 | 32 → 11 (-66%) | `1f2733d` 2026-05-07 |
@@ -53,7 +52,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 59 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
 | 61 | dominio | `pizzepos__cocina-poc` | 452 | 0 → 0 (-0%) | `5437466` 2026-05-02 |
 
-## Próximos en la cola (top 10 de 44 pendientes)
+## Próximos en la cola (top 10 de 45 pendientes)
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
@@ -62,16 +61,17 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 14 | core | `conversacion__prompt-builder` | 435 | 13 | 2 | drifts 7/13 (54%) — esperado <50% |
 | 20 | infra | `device-registry` | 764 | 36 | 0 | drifts 20/36 (56%) — esperado <50% |
 | 22 | infra | `certificate-authority` | 462 | 28 | 0 | drifts 15/28 (54%) — esperado <50% |
+| 27 | infra | `security-p2p` | 450 | 18 | 0 | drifts 10/18 (56%) — esperado <50% |
 | 29 | infra | `prompt-manager` | 1236 | 69 | 1 | drifts 38/69 (55%) — esperado <50% |
 | 31 | infra | `pdf-viewer` | 634 | 54 | 2 | drifts 39/54 (72%) — esperado <50% |
 | 32 | infra | `telegram-service` | 573 | 32 | 2 | drifts 31/32 (97%) — esperado <50% |
 | 33 | dominio | `log-manager` | 598 | 82 | 0 | sin tests/unit/ |
-| 34 | dominio | `esp32-flasher` | 1155 | 68 | 0 | drifts 53/68 (78%) — esperado <50% |
 
-<details><summary>Resto de pendientes (34 módulos)</summary>
+<details><summary>Resto de pendientes (35 módulos)</summary>
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
+| 34 | dominio | `esp32-flasher` | 1155 | 68 | 0 |
 | 35 | dominio | `pizzepos__carta-scheduler` | 605 | 62 | 0 |
 | 36 | dominio | `notas` | 485 | 59 | 0 |
 | 37 | dominio | `recetas` | 897 | 43 | 0 |

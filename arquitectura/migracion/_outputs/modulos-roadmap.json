@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-08T11:07:35.465Z",
+  "generated_at": "2026-05-08T11:20:22.099Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 2460,
-    "loc_total": 49236,
+    "drifts_total": 2462,
+    "loc_total": 49394,
     "tools_total": 150,
     "agents_total": 30
   },
@@ -437,9 +437,9 @@
       "path": "modules/security-p2p",
       "layer": "infra",
       "language": "en",
-      "version": "1.0.0",
-      "loc": 292,
-      "drifts": 16,
+      "version": "2.0.0",
+      "loc": 450,
+      "drifts": 18,
       "events_publishes": 4,
       "events_subscribes": 0,
       "tools": 0,

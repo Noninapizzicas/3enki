@@ -220,3 +220,6 @@ jobs:
 
       - name: Run unit tests (pizzepos/carta-marketing — reescritura canonica)
         run: npm run test:pizzepos__carta-marketing
+
+      - name: Run unit tests (pizzepos/menu-generator — reescritura canonica)
+        run: npm run test:pizzepos__menu-generator

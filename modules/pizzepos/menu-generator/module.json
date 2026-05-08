@@ -1,121 +1,91 @@
 {
   "name": "menu-generator",
-  "version": "6.1.0",
-  "description": "Genera cartas estructuradas en JSON desde cualquier input: fotos, PDF, texto. Pipeline OCR determinista (Google Vision) + agente IA para estructuración. Siempre pregunta el nombre.",
+  "version": "7.0.0",
+  "description": "Generador puro de cartas estructuradas en JSON desde cualquier input (foto, PDF, texto, audio, dictado). Pipeline OCR determinista (pdfjs.render → sharp.prepare-ocr → Google Vision OCR) + agente menu-structurer (LLM) para estructuracion. Siempre pregunta el nombre.",
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
   "events": {
     "publishes": [
-      {
-        "event": "menu.generation.progress",
-        "description": "Progreso del pipeline: extracting, structuring"
-      },
-      {
-        "event": "menu.generation.failed",
-        "description": "Error en el pipeline de generación"
-      },
+      { "event": "menu.generation.progress", "description": "Progreso del pipeline: extracting, structuring. Lleva project_id top-level + correlation_id + timestamp." },
+      { "event": "menu.generation.failed",   "description": "Error en el pipeline de generacion. project_id top-level + correlation_id + timestamp." },
       {
         "event": "agent.execute.request",
         "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
-        "description": "Invoca agente menu-structurer para estructurar carta"
+        "description": "Invoca agente menu-structurer para estructurar la carta. project_id top-level + correlation_id + timestamp."
       },
-      {
-        "event": "carta.generar.iniciada",
-        "description": "Aceptada carta.generar.solicitada — pipeline en marcha"
-      },
-      {
-        "event": "carta.generar.fallida",
-        "description": "Fallo al iniciar generación"
-      }
+      { "event": "carta.generar.iniciada", "description": "Aceptada carta.generar.solicitada — pipeline en marcha." },
+      { "event": "carta.generar.fallida",  "description": "Fallo al iniciar generacion." }
     ],
     "subscribes": [
-      {
-        "event": "carta.generar.solicitada",
-        "handler": "onCartaGenerarSolicitada"
-      }
+      { "event": "carta.generar.solicitada", "handler": "onCartaGenerarSolicitada", "description": "Solicitud externa para generar una carta — invoca toolGenerate y emite carta.generar.{iniciada,fallida}." }
     ]
   },
   "ui_handlers": [
-    {
-      "domain": "menu",
-      "action": "generate",
-      "handler": "handleGenerate"
-    },
-    {
-      "domain": "menu",
-      "action": "health",
-      "handler": "handleHealth"
-    }
+    { "domain": "menu", "action": "generate", "handler": "handleGenerate", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "menu", "action": "health",   "handler": "handleHealth",   "type": "workspace_module", "zone": "barra_modulos" }
   ],
   "tools": [
     {
       "name": "menu.generate",
-      "description": "Genera una carta estructurada desde cualquier input. SIEMPRE requiere nombre — pregúntalo antes de llamar. Acepta texto (OCR, dictado, lista, JSON, recetas) o filePath (PDF/imagen). Si es archivo, extrae texto con Google Vision antes de estructurar.",
+      "description": "Genera una carta estructurada desde cualquier input. SIEMPRE requiere nombre — preguntalo antes de llamar. Acepta texto (OCR, dictado, lista, JSON, recetas) o filePath (PDF/imagen). Si es archivo, extrae texto con Google Vision antes de estructurar.",
       "handler": "toolGenerate",
       "parameters": {
         "type": "object",
         "properties": {
-          "nombre": {
-            "type": "string",
-            "description": "Nombre de la carta (OBLIGATORIO — preguntar al usuario)"
-          },
-          "texto": {
-            "type": "string",
-            "description": "Contenido del menú en cualquier formato textual"
-          },
-          "filePath": {
-            "type": "string",
-            "description": "Ruta a archivo PDF o imagen (alternativa a texto)"
-          },
-          "project_id": {
-            "type": "string",
-            "description": "ID del proyecto (obligatorio)"
-          }
+          "nombre":     { "type": "string", "description": "Nombre de la carta (OBLIGATORIO — preguntar al usuario)" },
+          "texto":      { "type": "string", "description": "Contenido del menu en cualquier formato textual" },
+          "filePath":   { "type": "string", "description": "Ruta a archivo PDF o imagen (alternativa a texto)" },
+          "project_id": { "type": "string", "description": "ID del proyecto (obligatorio)" }
         },
-        "required": [
-          "nombre",
-          "project_id"
-        ]
-      }
+        "required": ["nombre", "project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",       "cuando": "nombre, project_id o (texto|filePath) ausentes" },
+        { "code": "RESOURCE_NOT_FOUND",  "cuando": "filePath con extension no soportada (no PDF/JPG/PNG/WebP/TIFF)" },
+        { "code": "EXTRACTION_FAILED",   "cuando": "fallo del pipeline OCR (pdfjs/sharp/google-vision)" },
+        { "code": "TIMEOUT",             "cuando": "timeout en cualquier paso del pipeline" }
+      ]
     }
   ],
-  "pipeline": {
-    "extraction": {
-      "description": "Pipeline OCR determinista (no usa LLM)",
-      "steps": [
-        "pdfjs.render (si PDF)",
-        "sharp.prepare-ocr",
-        "google-vision.extract"
-      ],
-      "provider": "Google Vision",
-      "timeouts": {
-        "pdfInfo": 15000,
-        "pdfRender": 30000,
-        "sharp": 15000,
-        "ocr": 60000
+  "dependencies": ["pdfjs", "sharp", "google-vision"],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "config": {
+    "pipeline": {
+      "extraction": {
+        "description": "Pipeline OCR determinista (no usa LLM)",
+        "steps": ["pdfjs.render (si PDF)", "sharp.prepare-ocr", "google-vision.extract"],
+        "provider": "Google Vision",
+        "timeouts_ms": { "pdfInfo": 15000, "pdfRender": 30000, "sharp": 15000, "ocr": 60000 }
+      },
+      "structuring": {
+        "description": "Agente IA que estructura el texto en carta JSON",
+        "agent": "menu-structurer"
       }
     },
-    "structuring": {
-      "description": "Agente IA que estructura el texto en carta JSON",
-      "agent": "menu-structurer",
-      "trigger": "menu.text.request"
+    "persistence": {
+      "type": "stateless",
+      "owner": "MenuGeneratorModule (sin estado in-memory mas alla de ServiceExecutor)",
+      "restart_resilient": true,
+      "concurrency": "single-instance",
+      "lost_on_restart": []
     }
   },
   "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
     "metrics": {
+      "enabled": true,
       "counters": [
         "menu.generate.requested",
-        "menu.generate.extract_failed"
+        "menu.generate.extract_failed",
+        "menu-generator.errors"
       ]
-    }
-  },
-  "config": {
-    "persistence": {
-      "pattern":           "in-memory",
-      "restart_resilient": false,
-      "concurrency":       "single-writer",
-      "lost_on_restart":   ["services"]
     }
   }
 }

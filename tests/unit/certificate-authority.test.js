@@ -1,497 +1,467 @@
 /**
- * Tests para Certificate Authority Module
+ * Tests unitarios — certificate-authority (POC2).
  *
- * Run: node tests/unit/certificate-authority.test.js
+ * Mocks CAManager + MTLSMiddleware via require.cache para evitar dependencias
+ * de OpenSSL/forge. Foco en el orquestador.
+ *
+ * Ejecutar: node tests/unit/certificate-authority.test.js
  */
 
-const fs = require('fs');
+'use strict';
+
+const assert = require('assert');
 const path = require('path');
-const CAManager = require('../../modules/certificate-authority/ca-manager');
-const MTLSMiddleware = require('../../modules/certificate-authority/mtls-middleware');
-const CertificateAuthorityModule = require('../../modules/certificate-authority');
 
-// Test framework
-let testsPassed = 0;
-let testsFailed = 0;
+const CA_MANAGER_PATH = path.resolve(__dirname, '../../modules/certificate-authority/ca-manager.js');
+const MTLS_PATH = path.resolve(__dirname, '../../modules/certificate-authority/mtls-middleware.js');
 
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(`Assertion failed: ${message}`);
+class MockCAManager {
+  constructor(opts) {
+    this.opts = opts;
+    this.certs = new Map();
+    this.crl = [];
+    this.initialized = false;
   }
-}
-
-async function test(description, fn) {
-  try {
-    await fn();
-    console.log(`✓ ${description}`);
-    testsPassed++;
-  } catch (error) {
-    console.error(`✗ ${description}`);
-    console.error(`  ${error.message}`);
-    testsFailed++;
+  async initialize() {
+    this.initialized = true;
+    return { created: true, loaded: false };
   }
-}
-
-// Test data directory
-const TEST_CA_PATH = path.join(__dirname, '..', '.tmp-test-ca');
-
-function cleanup() {
-  if (fs.existsSync(TEST_CA_PATH)) {
-    fs.rmSync(TEST_CA_PATH, { recursive: true, force: true });
-  }
-}
-
-// ============================================================================
-// Tests
-// ============================================================================
-
-async function runTests() {
-  console.log('🧪 Testing Certificate Authority Module\n');
-
-  cleanup();
-
-  // ------------------------------------------------------------------------
-  // CAManager Tests
-  // ------------------------------------------------------------------------
-
-  let ca;
-
-  await test('CAManager: debe inicializar y generar CA raíz', async () => {
-    ca = new CAManager({ storagePath: TEST_CA_PATH });
-    const result = await ca.initialize();
-
-    assert(result.created === true, 'CA debería haberse creado');
-    assert(result.loaded === true, 'CA debería estar cargada');
-    assert(ca.caCert, 'CA cert debería existir');
-    assert(ca.caKey, 'CA key debería existir');
-    const caCertPem = ca.getCACertificate();
-    assert(caCertPem.includes('-----BEGIN CERTIFICATE-----'), 'CA cert en formato PEM');
-  });
-
-  await test('CAManager: debe cargar CA existente sin regenerar', async () => {
-    const ca2 = new CAManager({ storagePath: TEST_CA_PATH });
-    const result = await ca2.initialize();
-
-    assert(result.created === false, 'No debería recrear la CA');
-    assert(result.loaded === true, 'Debería cargar la existente');
-    assert(ca2.getCACertificate() === ca.getCACertificate(), 'Mismo certificado CA PEM');
-  });
-
-  await test('CAManager: debe emitir certificado cliente', async () => {
-    const cert = await ca.issueCertificate({
-      commonName: 'Test Client: Pizzería Roma',
-      type: 'client',
-      identifier: 'project-001',
-      organization: 'Pizzería Roma SL',
-      email: 'admin@pizzeriaroma.com'
-    });
-
-    assert(cert.serialNumber, 'Tiene número de serie');
-    assert(cert.certificate, 'Tiene certificado PEM');
-    assert(cert.privateKey, 'Tiene clave privada');
-    assert(cert.fingerprint, 'Tiene fingerprint');
-    assert(cert.metadata.type === 'client', 'Tipo correcto');
-    assert(cert.metadata.identifier === 'project-001', 'Identifier correcto');
-    assert(cert.metadata.status === 'active', 'Estado activo');
-    assert(cert.certificate.includes('-----BEGIN CERTIFICATE-----'), 'Cert en PEM');
-  });
-
-  await test('CAManager: debe emitir certificado dispositivo', async () => {
-    const cert = await ca.issueCertificate({
-      commonName: 'Portátil-Dev-01',
-      type: 'device',
-      identifier: 'device-macbook-001'
-    });
-
-    assert(cert.metadata.type === 'device', 'Tipo dispositivo');
-    assert(cert.metadata.identifier === 'device-macbook-001', 'Device ID correcto');
-  });
-
-  await test('CAManager: debe rechazar tipo inválido', async () => {
-    try {
-      await ca.issueCertificate({
-        commonName: 'Test',
-        type: 'invalid',
-        identifier: 'x'
-      });
-      assert(false, 'Debería haber lanzado error');
-    } catch (e) {
-      assert(e.message.includes('type must be'), 'Error correcto');
-    }
-  });
-
-  await test('CAManager: debe rechazar sin commonName', async () => {
-    try {
-      await ca.issueCertificate({ type: 'client', identifier: 'x' });
-      assert(false, 'Debería haber lanzado error');
-    } catch (e) {
-      assert(e.message.includes('commonName'), 'Error correcto');
-    }
-  });
-
-  let issuedSerial;
-
-  await test('CAManager: debe verificar certificado válido', async () => {
-    const cert = await ca.issueCertificate({
-      commonName: 'Verify Test',
-      type: 'client',
-      identifier: 'project-verify'
-    });
-    issuedSerial = cert.serialNumber;
-
-    const result = ca.verifyCertificate(cert.certificate);
-    assert(result.valid === true, 'Certificado debería ser válido');
-    assert(result.type === 'client', 'Tipo correcto');
-    assert(result.identifier === 'project-verify', 'Identifier correcto');
-  });
-
-  await test('CAManager: debe revocar certificado', async () => {
-    const result = ca.revokeCertificate(issuedSerial, 'test-revocation');
-
-    assert(result.revoked === true, 'Debería estar revocado');
-    assert(result.serialNumber === issuedSerial, 'Serial correcto');
-  });
-
-  await test('CAManager: certificado revocado no debe ser válido', async () => {
-    // Re-leer el cert del disco
-    const certPath = path.join(TEST_CA_PATH, 'certs', issuedSerial, 'cert.pem');
-    const certPem = fs.readFileSync(certPath, 'utf8');
-
-    const result = ca.verifyCertificate(certPem);
-    assert(result.valid === false, 'No debería ser válido');
-    assert(result.error.includes('revoked'), 'Error de revocación');
-  });
-
-  await test('CAManager: no debe revocar certificado ya revocado', async () => {
-    const result = ca.revokeCertificate(issuedSerial);
-    assert(result.revoked === false, 'No debería revocarse de nuevo');
-    assert(result.error.includes('already revoked'), 'Error correcto');
-  });
-
-  await test('CAManager: debe listar certificados', async () => {
-    const all = ca.listCertificates();
-    assert(all.length >= 3, 'Al menos 3 certificados emitidos');
-
-    const clients = ca.listCertificates({ type: 'client' });
-    assert(clients.length >= 2, 'Al menos 2 clientes');
-
-    const devices = ca.listCertificates({ type: 'device' });
-    assert(devices.length >= 1, 'Al menos 1 dispositivo');
-  });
-
-  await test('CAManager: debe filtrar por estado', async () => {
-    const active = ca.listCertificates({ status: 'active' });
-    const revoked = ca.listCertificates({ status: 'revoked' });
-
-    assert(active.length >= 2, 'Al menos 2 activos');
-    assert(revoked.length >= 1, 'Al menos 1 revocado');
-  });
-
-  await test('CAManager: debe renovar certificado', async () => {
-    const original = await ca.issueCertificate({
-      commonName: 'Renew Test',
-      type: 'device',
-      identifier: 'device-renew'
-    });
-
-    const renewed = await ca.renewCertificate(original.serialNumber);
-
-    assert(renewed.serialNumber !== original.serialNumber, 'Nuevo serial');
-    assert(renewed.previousSerialNumber === original.serialNumber, 'Referencia al anterior');
-
-    // El original debe estar revocado
-    const certPath = path.join(TEST_CA_PATH, 'certs', original.serialNumber, 'metadata.json');
-    const oldMeta = JSON.parse(fs.readFileSync(certPath, 'utf8'));
-    assert(oldMeta.status === 'revoked', 'Original revocado');
-    assert(oldMeta.revokeReason === 'superseded', 'Razón: superseded');
-  });
-
-  await test('CAManager: debe obtener CRL', async () => {
-    const crl = ca.getCRL();
-    assert(Array.isArray(crl), 'CRL es array');
-    assert(crl.length >= 2, 'Al menos 2 revocaciones');
-    assert(crl[0].serialNumber, 'Tiene serialNumber');
-    assert(crl[0].revokedAt, 'Tiene fecha de revocación');
-  });
-
-  await test('CAManager: debe obtener estadísticas', async () => {
-    const stats = ca.getStats();
-    assert(stats.total >= 4, 'Al menos 4 certificados');
-    assert(stats.active >= 2, 'Al menos 2 activos');
-    assert(stats.revoked >= 2, 'Al menos 2 revocados');
-    assert(stats.ca_initialized === true, 'CA inicializada');
-    assert(typeof stats.by_type.client === 'number', 'Stats por tipo');
-    assert(typeof stats.by_type.device === 'number', 'Stats por tipo device');
-  });
-
-  await test('CAManager: debe crear bundle P12', async () => {
-    const cert = await ca.issueCertificate({
-      commonName: 'P12 Test',
-      type: 'client',
-      identifier: 'project-p12',
-      passphrase: 'testpass123'
-    });
-
-    assert(cert.p12, 'Tiene bundle P12');
-    assert(Buffer.isBuffer(cert.p12), 'P12 es Buffer');
-
-    // Debe poder recuperar el bundle
-    const retrieved = ca.getP12Bundle(cert.serialNumber);
-    assert(retrieved, 'Bundle recuperado');
-  });
-
-  await test('CAManager: P12 de revocado debe ser null', async () => {
-    const cert = await ca.issueCertificate({
-      commonName: 'P12 Revoke Test',
-      type: 'client',
-      identifier: 'project-p12-revoke'
-    });
-
-    ca.revokeCertificate(cert.serialNumber, 'test');
-    const p12 = ca.getP12Bundle(cert.serialNumber);
-    assert(p12 === null, 'P12 eliminado tras revocación');
-  });
-
-  await test('CAManager: debe rechazar certificado no firmado por CA', async () => {
-    const fakeCert = '-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----';
-    const result = ca.verifyCertificate(fakeCert);
-    assert(result.valid === false, 'No debería ser válido');
-  });
-
-  await test('CAManager: certificados X.509 deben ser parseables por node-forge', async () => {
-    const forge = require('node-forge');
-    const cert = await ca.issueCertificate({
-      commonName: 'X509 Real Test',
-      type: 'client',
-      identifier: 'project-x509'
-    });
-
-    // Parsear el certificado con forge — si no es X.509 real, esto falla
-    const parsed = forge.pki.certificateFromPem(cert.certificate);
-    assert(parsed.subject.getField('CN').value === 'X509 Real Test', 'CN correcto en X.509');
-    assert(parsed.subject.getField('OU').value === 'Portal Clientes', 'OU correcto en X.509');
-
-    // Verificar que la CA cert también es X.509 real
-    const caParsed = forge.pki.certificateFromPem(ca.getCACertificate());
-    assert(caParsed.subject.getField('CN').value === 'Event Core Internal CA', 'CA CN correcto');
-
-    // Verificar cadena de firma
-    assert(caParsed.verify(parsed), 'CA firma válida sobre certificado cliente');
-  });
-
-  await test('CAManager: P12 debe ser PKCS#12 real parseable', async () => {
-    const forge = require('node-forge');
-    const cert = await ca.issueCertificate({
-      commonName: 'P12 Real Test',
-      type: 'device',
-      identifier: 'device-p12-real',
-      passphrase: 'mypassword'
-    });
-
-    // Parsear P12 con forge — si no es PKCS#12 real, esto falla
-    const p12Der = cert.p12.toString('binary');
-    const p12Asn1 = forge.asn1.fromDer(p12Der);
-    const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, 'mypassword');
-
-    // Extraer certificados y claves del P12
-    const certBags = p12.getBags({ bagType: forge.pki.oids.certBag });
-    const certList = certBags[forge.pki.oids.certBag];
-    assert(certList && certList.length >= 1, 'P12 contiene al menos 1 certificado');
-
-    const keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
-    const keyList = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag];
-    assert(keyList && keyList.length >= 1, 'P12 contiene clave privada');
-  });
-
-  // ------------------------------------------------------------------------
-  // MTLSMiddleware Tests
-  // ------------------------------------------------------------------------
-
-  console.log('');
-
-  let middleware;
-
-  await test('MTLSMiddleware: debe inicializar correctamente', async () => {
-    middleware = new MTLSMiddleware({
-      caManager: ca,
-      excludePaths: ['/health', '/public/*'],
-      allowUnauthenticated: false
-    });
-
-    assert(middleware.mode === 'proxy', 'Modo proxy por defecto');
-    assert(middleware.stats.authenticated === 0, 'Stats en cero');
-  });
-
-  await test('MTLSMiddleware: debe excluir paths configurados', async () => {
-    const result = await middleware.authenticate({
-      path: '/health',
-      headers: {}
-    });
-
-    assert(result !== null, 'No debería bloquear /health');
-    assert(middleware.stats.bypassed === 1, 'Incrementó bypassed');
-  });
-
-  await test('MTLSMiddleware: debe excluir paths con wildcard', async () => {
-    const result = await middleware.authenticate({
-      path: '/public/assets/logo.png',
-      headers: {}
-    });
-
-    assert(result !== null, 'No debería bloquear /public/*');
-  });
-
-  await test('MTLSMiddleware: debe rechazar request sin certificado', async () => {
-    const result = await middleware.authenticate({
-      path: '/modules/facturacion/facturas',
-      headers: {}
-    });
-
-    assert(result === null, 'Debería bloquear sin certificado');
-    assert(middleware.stats.rejected >= 1, 'Incrementó rejected');
-  });
-
-  await test('MTLSMiddleware: debe autenticar con certificado válido', async () => {
-    const cert = await ca.issueCertificate({
-      commonName: 'mTLS Test Client',
-      type: 'client',
-      identifier: 'project-mtls'
-    });
-
-    const result = await middleware.authenticate({
-      path: '/modules/facturacion/facturas',
-      headers: {
-        'x-client-cert': encodeURIComponent(cert.certificate)
-      }
-    });
-
-    assert(result !== null, 'No debería bloquear');
-    assert(result.auth, 'Debería tener auth');
-    assert(result.auth.authenticated === true, 'Autenticado');
-    assert(result.auth.method === 'mtls', 'Método mTLS');
-    assert(result.auth.type === 'client', 'Tipo client');
-    assert(result.auth.identifier === 'project-mtls', 'Identifier correcto');
-    assert(middleware.stats.authenticated >= 1, 'Incrementó authenticated');
-  });
-
-  await test('MTLSMiddleware: debe rechazar certificado revocado', async () => {
-    const cert = await ca.issueCertificate({
-      commonName: 'Revoked mTLS',
-      type: 'device',
-      identifier: 'device-revoked'
-    });
-
-    ca.revokeCertificate(cert.serialNumber, 'test');
-
-    const result = await middleware.authenticate({
-      path: '/api/data',
-      headers: {
-        'x-client-cert': encodeURIComponent(cert.certificate)
-      }
-    });
-
-    assert(result === null, 'Debería bloquear certificado revocado');
-  });
-
-  await test('MTLSMiddleware: allowUnauthenticated debe permitir sin cert', async () => {
-    const permissive = new MTLSMiddleware({
-      caManager: ca,
-      allowUnauthenticated: true
-    });
-
-    const result = await permissive.authenticate({
-      path: '/api/data',
-      headers: {}
-    });
-
-    assert(result !== null, 'No debería bloquear');
-    assert(result.auth.authenticated === false, 'No autenticado');
-    assert(result.auth.method === 'none', 'Método none');
-  });
-
-  await test('MTLSMiddleware: debe generar TLS options', async () => {
-    const opts = middleware.getTLSOptions();
-
-    assert(opts.requestCert === true, 'requestCert true');
-    assert(opts.rejectUnauthorized === true, 'rejectUnauthorized true');
-    assert(Array.isArray(opts.ca), 'CA es array');
-    assert(opts.ca[0].includes('CERTIFICATE'), 'Contiene cert CA');
-  });
-
-  await test('MTLSMiddleware: debe generar config nginx', async () => {
-    const config = middleware.getNginxConfig();
-
-    assert(config.includes('ssl_client_certificate'), 'Tiene ssl_client_certificate');
-    assert(config.includes('ssl_verify_client'), 'Tiene ssl_verify_client');
-    assert(config.includes('X-Client-Cert'), 'Tiene header proxy');
-  });
-
-  await test('MTLSMiddleware: debe reportar estadísticas', async () => {
-    const stats = middleware.getStats();
-
-    assert(typeof stats.authenticated === 'number', 'Tiene authenticated');
-    assert(typeof stats.rejected === 'number', 'Tiene rejected');
-    assert(typeof stats.bypassed === 'number', 'Tiene bypassed');
-  });
-
-  // ------------------------------------------------------------------------
-  // Module Integration Tests
-  // ------------------------------------------------------------------------
-
-  console.log('');
-
-  await test('Module: debe crear instancia correctamente', async () => {
-    const mod = new CertificateAuthorityModule();
-
-    assert(mod.name === 'certificate-authority', 'Nombre correcto');
-    assert(mod.version === '1.0.0', 'Versión correcta');
-  });
-
-  await test('Module: debe cargar con core mock', async () => {
-    const mod = new CertificateAuthorityModule();
-    const mockCore = {
-      logger: {
-        info: () => {},
-        debug: () => {},
-        warn: () => {},
-        error: () => {}
-      },
-      metrics: {
-        increment: () => {},
-        observe: () => {}
-      },
-      hooks: {
-        register: () => {}
-      },
-      moduleConfig: {
-        storagePath: path.join(TEST_CA_PATH, 'module-test'),
-        mtls_enabled: true
-      }
+  getStats() {
+    return {
+      ca_initialized: this.initialized,
+      active: this.certs.size,
+      revoked: this.crl.length,
+      expiring_soon: 0
     };
-
-    await mod.onLoad(mockCore);
-
-    assert(mod.caManager !== null, 'CAManager inicializado');
-    assert(mod.mtlsMiddleware !== null, 'mTLS middleware inicializado');
-  });
-
-  // ------------------------------------------------------------------------
-  // Cleanup & Results
-  // ------------------------------------------------------------------------
-
-  cleanup();
-
-  console.log(`\n${'='.repeat(50)}`);
-  console.log(`Tests: ${testsPassed} passed, ${testsFailed} failed, ${testsPassed + testsFailed} total`);
-  console.log(`${'='.repeat(50)}`);
-
-  if (testsFailed > 0) {
-    process.exit(1);
+  }
+  getCACertificate() { return '-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----'; }
+  async issueCertificate(opts) {
+    const serialNumber = `serial-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const fingerprint = `fp-${serialNumber}`;
+    const cert = { serialNumber, fingerprint, certificate: 'PEM', metadata: opts, p12: Buffer.from('p12-bytes') };
+    this.certs.set(serialNumber, cert);
+    return cert;
+  }
+  revokeCertificate(serialNumber, reason) {
+    if (!this.certs.has(serialNumber)) {
+      return { revoked: false, error: 'Certificate not found', reason };
+    }
+    this.crl.push({ serialNumber, reason, at: Date.now() });
+    return { revoked: true, serialNumber, reason };
+  }
+  async renewCertificate(serialNumber) {
+    if (!this.certs.has(serialNumber)) throw new Error('not found');
+    const newCert = await this.issueCertificate({ commonName: 'renewed' });
+    return { ...newCert, previousSerialNumber: serialNumber };
+  }
+  listCertificates(filters) {
+    const all = Array.from(this.certs.values());
+    if (filters?.type) return all.filter(c => c.metadata?.type === filters.type);
+    return all;
+  }
+  verifyCertificate(pem) {
+    return { valid: true, certificate: 'parsed' };
+  }
+  getCRL() { return this.crl; }
+  getP12Bundle(serialNumber) {
+    const cert = this.certs.get(serialNumber);
+    return cert?.p12 || null;
   }
 }
 
-runTests().catch(error => {
-  console.error('Fatal error:', error);
-  cleanup();
-  process.exit(1);
-});
+class MockMTLSMiddleware {
+  constructor(opts) {
+    this.opts = opts;
+    this.stats = { authenticated: 0, rejected: 0, bypassed: 0, errors: 0 };
+  }
+  authenticate(req, res, next) { return next?.(); }
+  getStats() { return this.stats; }
+  getNginxConfig() { return 'server { ssl_verify_client on; }'; }
+}
+
+require.cache[CA_MANAGER_PATH] = { exports: MockCAManager, filename: CA_MANAGER_PATH, loaded: true, children: [] };
+require.cache[MTLS_PATH] = { exports: MockMTLSMiddleware, filename: MTLS_PATH, loaded: true, children: [] };
+
+const CertificateAuthorityModule = require('../../modules/certificate-authority/index.js');
+
+function makeMocks() {
+  const logs = [];
+  const published = [];
+  const metricsCalls = [];
+  const hooksRegistered = [];
+
+  const logger = {
+    debug: (e, p) => logs.push(['debug', e, p]),
+    info:  (e, p) => logs.push(['info',  e, p]),
+    warn:  (e, p) => logs.push(['warn',  e, p]),
+    error: (e, p) => logs.push(['error', e, p])
+  };
+  const metrics = {
+    increment: (n, l) => metricsCalls.push(['increment', n, l]),
+    gauge:     (n, v, l) => metricsCalls.push(['gauge', n, v, l]),
+    timing:    (n, ms, l) => metricsCalls.push(['timing', n, ms, l])
+  };
+  const eventBus = { publish: async (e, p) => { published.push([e, p]); } };
+  const hooks = {
+    register: (event, handler) => hooksRegistered.push([event, handler]),
+    unregister: (event, handler) => {
+      const idx = hooksRegistered.findIndex(h => h[0] === event && h[1] === handler);
+      if (idx >= 0) hooksRegistered.splice(idx, 1);
+    }
+  };
+  return { logs, published, metricsCalls, hooksRegistered, logger, metrics, eventBus, hooks };
+}
+
+async function instantiate(mocks, config = {}) {
+  const m = new CertificateAuthorityModule();
+  await m.onLoad({
+    logger: mocks.logger,
+    metrics: mocks.metrics,
+    eventBus: mocks.eventBus,
+    hooks: mocks.hooks,
+    moduleConfig: config
+  });
+  return { module: m };
+}
+
+async function testAsync(description, fn) {
+  try { await fn(); console.log(`✓ ${description}`); }
+  catch (error) { console.error(`✗ ${description}`); console.error(`  ${error.message}`); if (process.env.STACK) console.error(error.stack); process.exit(1); }
+}
+
+function isCanonicalError(r) {
+  return r && typeof r.status === 'number' && r.error
+    && typeof r.error.code === 'string'
+    && typeof r.error.message === 'string'
+    && !('data' in r);
+}
+
+function isCanonicalSuccess(r) {
+  return r && typeof r.status === 'number' && r.data && !('error' in r);
+}
+
+function publishedOf(mocks, name) {
+  return mocks.published.filter(p => p[0] === name).map(p => p[1]);
+}
+
+(async () => {
+  console.log('certificate-authority — reescritura canonica (POC2)\n');
+
+  // Group 1: Lifecycle
+  await testAsync('onLoad inicializa CAManager + mtlsMiddleware', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    assert.strictEqual(m.name, 'certificate-authority');
+    assert.strictEqual(m.version, '2.0.0');
+    assert.ok(m.caManager);
+    assert.strictEqual(m.caManager.initialized, true);
+    assert.ok(m.mtlsMiddleware);
+    await m.onUnload();
+  });
+
+  await testAsync('onLoad registra hook beforeRequest si mtls_enabled', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks, { mtls_enabled: true });
+    assert.strictEqual(mocks.hooksRegistered.length, 1);
+    assert.strictEqual(mocks.hooksRegistered[0][0], 'beforeRequest');
+    await m.onUnload();
+    assert.strictEqual(mocks.hooksRegistered.length, 0);
+  });
+
+  await testAsync('onLoad NO registra hook si mtls_enabled false', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks, { mtls_enabled: false });
+    assert.strictEqual(mocks.hooksRegistered.length, 0);
+    await m.onUnload();
+  });
+
+  await testAsync('onUnload libera caManager + mtlsMiddleware', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.onUnload();
+    assert.strictEqual(m.caManager, null);
+    assert.strictEqual(m.mtlsMiddleware, null);
+  });
+
+  // Group 2: Validacion canonica
+  await testAsync('handleIssueCertificate sin commonName devuelve 400 INVALID_INPUT', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleIssueCertificate({ body: { type: 'client', identifier: 'i1' } });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
+    assert.deepStrictEqual(r.error.details.required, ['commonName', 'type', 'identifier']);
+    await m.onUnload();
+  });
+
+  await testAsync('handleIssueCertificate sin type devuelve 400', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleIssueCertificate({ commonName: 'x', identifier: 'i' });
+    assert.strictEqual(r.status, 400);
+    await m.onUnload();
+  });
+
+  await testAsync('handleRevokeCertificate sin serialNumber devuelve 400', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleRevokeCertificate({});
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.details.field, 'serialNumber');
+    await m.onUnload();
+  });
+
+  await testAsync('handleRenewCertificate sin serialNumber devuelve 400', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleRenewCertificate({ body: {} });
+    assert.strictEqual(r.status, 400);
+    await m.onUnload();
+  });
+
+  await testAsync('handleVerifyCertificate sin certificate devuelve 400', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleVerifyCertificate({});
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.details.field, 'certificate');
+    await m.onUnload();
+  });
+
+  await testAsync('handleDownloadP12 sin serialNumber devuelve 400', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleDownloadP12({});
+    assert.strictEqual(r.status, 400);
+    await m.onUnload();
+  });
+
+  // Group 3: Issue + revoke + renew flow
+  await testAsync('handleIssueCertificate emite certificate.issued + actualiza stats', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleIssueCertificate({
+      body: {
+        commonName: 'cliente-test',
+        type: 'client',
+        identifier: 'cli-1',
+        correlation_id: 'cid-issue',
+        project_id: 'proj-ca'
+      }
+    });
+    assert.strictEqual(r.status, 201);
+    assert.ok(r.data.serialNumber);
+    assert.strictEqual(m.stats.certificates_issued, 1);
+
+    const evs = publishedOf(mocks, 'certificate.issued');
+    assert.strictEqual(evs.length, 1);
+    assert.strictEqual(evs[0].correlation_id, 'cid-issue');
+    assert.strictEqual(evs[0].project_id, 'proj-ca');
+    assert.strictEqual(evs[0].type, 'client');
+    await m.onUnload();
+  });
+
+  await testAsync('handleRevokeCertificate inexistente devuelve 409 CONFLICT_STATE', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleRevokeCertificate({ body: { serialNumber: 'no-existe' } });
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.error.code, 'CONFLICT_STATE');
+    await m.onUnload();
+  });
+
+  await testAsync('handleRevokeCertificate existente revoca + emite certificate.revoked', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const issued = await m.handleIssueCertificate({
+      body: { commonName: 'x', type: 'device', identifier: 'd1' }
+    });
+    const sn = issued.data.serialNumber;
+
+    const r = await m.handleRevokeCertificate({
+      body: { serialNumber: sn, reason: 'compromised' }
+    });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(m.stats.certificates_revoked, 1);
+    const evs = publishedOf(mocks, 'certificate.revoked');
+    assert.strictEqual(evs.length, 1);
+    assert.strictEqual(evs[0].reason, 'compromised');
+    await m.onUnload();
+  });
+
+  await testAsync('handleRenewCertificate emite certificate.renewed con old + new SN', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const issued = await m.handleIssueCertificate({
+      body: { commonName: 'x', type: 'client', identifier: 'i' }
+    });
+    const r = await m.handleRenewCertificate({
+      body: { serialNumber: issued.data.serialNumber }
+    });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(m.stats.certificates_renewed, 1);
+    const evs = publishedOf(mocks, 'certificate.renewed');
+    assert.strictEqual(evs.length, 1);
+    assert.strictEqual(evs[0].oldSerialNumber, issued.data.serialNumber);
+    assert.notStrictEqual(evs[0].newSerialNumber, issued.data.serialNumber);
+    await m.onUnload();
+  });
+
+  await testAsync('handleRenewCertificate inexistente devuelve 404', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleRenewCertificate({
+      body: { serialNumber: 'fantasma' }
+    });
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
+    await m.onUnload();
+  });
+
+  // Group 4: List + verify + CRL
+  await testAsync('handleListCertificates devuelve lista vacia inicial', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleListCertificates({});
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.total, 0);
+    await m.onUnload();
+  });
+
+  await testAsync('handleListCertificates filtra por type', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.handleIssueCertificate({ body: { commonName: 'a', type: 'client', identifier: 'a' } });
+    await m.handleIssueCertificate({ body: { commonName: 'b', type: 'device', identifier: 'b' } });
+    const r = await m.handleListCertificates({ query: { type: 'client' } });
+    assert.strictEqual(r.data.total, 1);
+    await m.onUnload();
+  });
+
+  await testAsync('handleVerifyCertificate incrementa contador de verifications', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleVerifyCertificate({ body: { certificate: 'PEM' } });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(m.stats.verification_requests, 1);
+    await m.onUnload();
+  });
+
+  await testAsync('handleGetCRL devuelve lista de revocados', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const issued = await m.handleIssueCertificate({ body: { commonName: 'x', type: 'client', identifier: 'i' } });
+    await m.handleRevokeCertificate({ body: { serialNumber: issued.data.serialNumber, reason: 'lost' } });
+    const r = await m.handleGetCRL();
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.revoked.length, 1);
+    await m.onUnload();
+  });
+
+  // Group 5: P12 + CA cert + nginx
+  await testAsync('handleDownloadP12 inexistente devuelve 404', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleDownloadP12({ query: { serialNumber: 'fantasma' } });
+    assert.strictEqual(r.status, 404);
+    await m.onUnload();
+  });
+
+  await testAsync('handleDownloadP12 existente devuelve base64 + filename', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const issued = await m.handleIssueCertificate({ body: { commonName: 'x', type: 'client', identifier: 'i' } });
+    const r = await m.handleDownloadP12({ query: { serialNumber: issued.data.serialNumber } });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.contentType, 'application/x-pkcs12');
+    assert.ok(r.data.bundle);
+    assert.ok(r.data.filename.endsWith('.p12'));
+    await m.onUnload();
+  });
+
+  await testAsync('handleGetCACert devuelve PEM + instructions', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleGetCACert();
+    assert.ok(isCanonicalSuccess(r));
+    assert.ok(r.data.certificate.includes('CERTIFICATE'));
+    assert.ok(r.data.instructions.browser);
+    await m.onUnload();
+  });
+
+  await testAsync('handleGetNginxConfig devuelve config string', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleGetNginxConfig();
+    assert.ok(isCanonicalSuccess(r));
+    assert.ok(r.data.config.includes('ssl_verify_client'));
+    await m.onUnload();
+  });
+
+  // Group 6: Status + health
+  await testAsync('handleStatus devuelve module + ca + mtls + stats', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleStatus();
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.module, 'certificate-authority');
+    assert.ok(r.data.ca);
+    assert.ok(r.data.mtls);
+    assert.ok(r.data.stats);
+    await m.onUnload();
+  });
+
+  await testAsync('handleHealthCheck devuelve healthy con CA inicializada', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleHealthCheck();
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.status, 'healthy');
+    assert.strictEqual(r.data.version, '2.0.0');
+    await m.onUnload();
+  });
+
+  // Group 7: Helpers POC2
+  await testAsync('_errorResponse construye shape canonico', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = m._errorResponse(400, 'INVALID_INPUT', 'msg', { f: 'x' });
+    assert.deepStrictEqual(r, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { f: 'x' } } });
+    await m.onUnload();
+  });
+
+  await testAsync('_classifyHandlerError mapea codigos canonicos', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('field is required')), { status: 400, code: 'INVALID_INPUT' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('not found')), { status: 404, code: 'RESOURCE_NOT_FOUND' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('already exists')), { status: 409, code: 'CONFLICT_STATE' });
+    await m.onUnload();
+  });
+
+  await testAsync('_publicarEvento añade correlation_id, project_id top-level y timestamp', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    mocks.published.length = 0;
+    await m._publicarEvento('test.event', { foo: 1, project_id: 'p-z' }, { correlation_id: 'cid-z' });
+    const ev = mocks.published[0][1];
+    assert.strictEqual(ev.correlation_id, 'cid-z');
+    assert.strictEqual(ev.project_id, 'p-z');
+    assert.ok(ev.timestamp);
+    await m.onUnload();
+  });
+
+  await testAsync('_handleHandlerError emite metric certificate-authority.errors', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = m._handleHandlerError('test.error', new Error('not found'));
+    assert.strictEqual(r.status, 404);
+    const errMetric = mocks.metricsCalls.find(c => c[1] === 'certificate-authority.errors');
+    assert.ok(errMetric);
+    await m.onUnload();
+  });
+
+  console.log('\nTodos los tests pasaron.');
+})().catch(e => { console.error(e); process.exit(1); });

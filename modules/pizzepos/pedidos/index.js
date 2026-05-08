@@ -1,30 +1,39 @@
 /**
- * Módulo Pedidos v2.0
- * Gestión completa de pedidos - 100% event-driven
- * Alineado con patrones event-core: uiHandler, event envelope, credential cascade
+ * Modulo Pedidos v3.0.0 — POC2 canonico.
+ *
+ * Gestion completa de pedidos formales pizzepos. Recibe del comandero
+ * (bridge `comandero.enviar_cocina`) o se crea via UI handler. Persiste
+ * en memoria (Map pedidos + Map pedidosPorCuenta) con restauracion
+ * desde cuentas_activas.json al arrancar (delegacion a persistencia-comandero).
+ *
+ * Cache de productos invalidada por catalogo.actualizado / producto.{creado,actualizado}.
  */
+
+'use strict';
 
 const crypto = require('crypto');
 const fs = require('fs').promises;
 const path = require('path');
 
+const UI_ACTIONS = [
+  'list', 'get', 'create', 'add-item', 'update-item', 'delete-item',
+  'send-kitchen', 'complete', 'cancel', 'total', 'health'
+];
+
 class PedidosModule {
   constructor() {
     this.name = 'pedidos';
-    this.version = '2.0.0';
+    this.version = '3.0.0';
 
-    // Estado
-    this.pedidos = new Map(); // pedido_id -> pedido
-    this.pedidosPorCuenta = new Map(); // cuenta_id -> Set(pedido_ids)
+    this.pedidos = new Map();
+    this.pedidosPorCuenta = new Map();
+    this.productosCache = new Map();
 
-    // Caché de productos (resuelve precio dinámicamente)
-    this.productosCache = new Map(); // producto_id -> { nombre, precio, ... }
-
-    // Dependencias (inyectadas en onLoad)
     this.logger = null;
     this.metrics = null;
     this.eventBus = null;
     this.uiHandler = null;
+    this.config = null;
   }
 
   // ==========================================
@@ -36,14 +45,12 @@ class PedidosModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.uiHandler = core.uiHandler;
+    this.config = core.config || null;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Event subscriptions are auto-wired from module.json by the loader.
-    this.registerUIHandlers();
-
-    // Restaurar pedidos activos desde persistencia (sobrevive reinicio servidor)
-    await this.restaurarDesdeArchivo();
+    this._registerUIHandlers();
+    await this._restaurarDesdeArchivo();
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
@@ -51,18 +58,12 @@ class PedidosModule {
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    // Desregistrar UI handlers
     if (this.uiHandler) {
-      const actions = [
-        'list', 'get', 'create', 'add-item', 'update-item',
-        'delete-item', 'send-kitchen', 'complete', 'cancel', 'total', 'health'
-      ];
-      for (const action of actions) {
+      for (const action of UI_ACTIONS) {
         this.uiHandler.unregister('pedido', action);
       }
     }
 
-    // Limpiar estado
     this.pedidos.clear();
     this.pedidosPorCuenta.clear();
     this.productosCache.clear();
@@ -71,105 +72,139 @@ class PedidosModule {
   }
 
   // ==========================================
+  // Helpers POC2
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details !== undefined) error.details = details;
+    return { status, error };
+  }
+
+  _classifyHandlerError(err) {
+    const msg = err?.message || String(err);
+    const code = err?.code;
+    if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
+    if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    if (/conflict|estado|already|ya esta/i.test(msg)) return { status: 409, code: 'CONFLICT_STATE' };
+    return { status: 500, code: 'INTERNAL_ERROR' };
+  }
+
+  _handleHandlerError(logEvent, err, kind = 'handler') {
+    const { status, code } = this._classifyHandlerError(err);
+    this.logger?.error?.(logEvent, {
+      kind,
+      error_code: code,
+      error_message: err?.message || String(err)
+    });
+    this.metrics?.increment?.('pedidos.errors', { code, kind });
+    return this._errorResponse(status, code, err?.message || 'Error interno');
+  }
+
+  async _publicarEvento(name, payload, sourcePayload) {
+    const correlation_id =
+      payload?.correlation_id ||
+      sourcePayload?.correlation_id ||
+      sourcePayload?.metadata?.correlationId ||
+      null;
+    const project_id =
+      payload?.project_id ??
+      sourcePayload?.project_id ??
+      sourcePayload?.data?.project_id ??
+      null;
+    const enriched = {
+      ...payload,
+      correlation_id,
+      timestamp: payload?.timestamp || new Date().toISOString()
+    };
+    if (project_id !== null && project_id !== undefined) enriched.project_id = project_id;
+    await this.eventBus.publish(name, enriched);
+    return enriched;
+  }
+
+  async _readJsonSafe(filePath) {
+    try {
+      const raw = await fs.readFile(filePath, 'utf8');
+      return JSON.parse(raw);
+    } catch (err) {
+      if (err.code === 'ENOENT') return null;
+      this.logger?.warn?.('pedidos.read_json.error', {
+        file: filePath,
+        error_code: err.code || 'PARSE_ERROR',
+        error_message: err.message
+      });
+      return null;
+    }
+  }
+
+  // ==========================================
   // UI Handler Registration
   // ==========================================
 
-  registerUIHandlers() {
+  _registerUIHandlers() {
     if (!this.uiHandler) {
       this.logger.warn('pedidos.uiHandler.not_available', { module: this.name });
       return;
     }
 
-    this.uiHandler.register('pedido', 'list', this.handleListPedidos.bind(this));
-    this.uiHandler.register('pedido', 'get', this.handleGetPedido.bind(this));
-    this.uiHandler.register('pedido', 'create', this.handleCreatePedido.bind(this));
-    this.uiHandler.register('pedido', 'add-item', this.handleAgregarItem.bind(this));
-    this.uiHandler.register('pedido', 'update-item', this.handleActualizarItem.bind(this));
-    this.uiHandler.register('pedido', 'delete-item', this.handleEliminarItem.bind(this));
-    this.uiHandler.register('pedido', 'send-kitchen', this.handleEnviarCocina.bind(this));
-    this.uiHandler.register('pedido', 'complete', this.handleCompletarPedido.bind(this));
-    this.uiHandler.register('pedido', 'cancel', this.handleCancelarPedido.bind(this));
-    this.uiHandler.register('pedido', 'total', this.handleCalcularTotal.bind(this));
-    this.uiHandler.register('pedido', 'health', this.handleHealthCheck.bind(this));
+    const map = {
+      'list': this.handleListPedidos,
+      'get': this.handleGetPedido,
+      'create': this.handleCreatePedido,
+      'add-item': this.handleAgregarItem,
+      'update-item': this.handleActualizarItem,
+      'delete-item': this.handleEliminarItem,
+      'send-kitchen': this.handleEnviarCocina,
+      'complete': this.handleCompletarPedido,
+      'cancel': this.handleCancelarPedido,
+      'total': this.handleCalcularTotal,
+      'health': this.handleHealthCheck
+    };
 
-    this.logger.info('pedidos.ui_handlers.registered', {
-      handlers: ['list', 'get', 'create', 'add-item', 'update-item', 'delete-item', 'send-kitchen', 'complete', 'cancel', 'total', 'health']
-    });
+    for (const [action, fn] of Object.entries(map)) {
+      this.uiHandler.register('pedido', action, fn.bind(this));
+    }
+
+    this.logger.info('pedidos.ui_handlers.registered', { handlers: Object.keys(map) });
   }
 
   // ==========================================
-  // Event Subscriptions
-  // ==========================================
-
-  async subscribeToEvents() {
-    // Eventos de otros módulos
-    await this.eventBus.subscribe('variacion.validada', this.onVariacionValidada.bind(this));
-    await this.eventBus.subscribe('variacion.rechazada', this.onVariacionRechazada.bind(this));
-    await this.eventBus.subscribe('cuenta.creada', this.onCuentaCreada.bind(this));
-
-    // Caché de productos — sync desde catálogo
-    await this.eventBus.subscribe('catalogo.actualizado', this.onCatalogoActualizado.bind(this));
-    await this.eventBus.subscribe('producto.creado', this.onProductoActualizado.bind(this));
-    await this.eventBus.subscribe('producto.actualizado', this.onProductoActualizado.bind(this));
-
-    this.logger.info('pedidos.events.subscribed', {
-      events: [
-        'variacion.validada', 'variacion.rechazada', 'cuenta.creada',
-        'catalogo.actualizado', 'producto.creado', 'producto.actualizado'
-      ]
-    });
-  }
-
-  // ==========================================
-  // Event Handlers
+  // Bus Subscribers (auto-wired desde manifest)
   // ==========================================
 
   async onVariacionValidada(event) {
     const data = event?.data || event?.payload || event;
-    const { producto_id, precio_total, ingredientes_finales } = data;
-
-    this.logger.info('variacion.validada.received', {
-      producto_id,
-      precio_total,
+    this.logger.info('pedidos.variacion.validada.received', {
+      producto_id: data?.producto_id,
+      precio_total: data?.precio_total,
       correlation_id: event?.metadata?.correlationId
     });
   }
 
   async onVariacionRechazada(event) {
     const data = event?.data || event?.payload || event;
-    const { producto_id, motivo } = data;
-
-    this.logger.warn('variacion.rechazada.received', {
-      producto_id,
-      motivo,
+    this.logger.warn('pedidos.variacion.rechazada.received', {
+      producto_id: data?.producto_id,
+      motivo: data?.motivo,
       correlation_id: event?.metadata?.correlationId
     });
   }
 
   async onCuentaCreada(event) {
     const data = event?.data || event?.payload || event;
-    const { cuenta_id } = data;
-
-    this.logger.info('cuenta.creada.received', {
-      cuenta_id,
-      correlation_id: event?.metadata?.correlationId
-    });
-
+    const { cuenta_id } = data || {};
+    if (!cuenta_id) return;
     if (!this.pedidosPorCuenta.has(cuenta_id)) {
       this.pedidosPorCuenta.set(cuenta_id, new Set());
     }
   }
 
-  // ==========================================
-  // Reset: caja.cerrada / dia.iniciado
-  // ==========================================
-
   async onCajaCerrada(event) {
     const size = this.pedidos.size;
     this.pedidos.clear();
     this.pedidosPorCuenta.clear();
-
-    this.metrics?.gauge?.('pedido.activos.count', 0);
+    this.metrics?.gauge?.('pedidos.activos.count', 0);
     this.logger.info('pedidos.reset.caja_cerrada', {
       pedidos_limpiados: size,
       correlation_id: event?.metadata?.correlationId
@@ -180,40 +215,31 @@ class PedidosModule {
     const size = this.pedidos.size;
     this.pedidos.clear();
     this.pedidosPorCuenta.clear();
-
-    this.metrics?.gauge?.('pedido.activos.count', 0);
+    this.metrics?.gauge?.('pedidos.activos.count', 0);
     this.logger.info('pedidos.reset.dia_iniciado', {
       pedidos_limpiados: size,
       correlation_id: event?.metadata?.correlationId
     });
   }
 
-  // ==========================================
-  // Bridge: Comandero → Pedidos
-  // ==========================================
-
   async onComanderoEnviarCocina(event) {
-    const data = event?.data || event?.payload || event;
-    const correlationId = event?.metadata?.correlationId;
-    const { cuenta_id, pedido_id: comandero_pedido_id, items, total, notas_generales, created_at, project_id, ref_display } = data;
-
-    if (!cuenta_id || !items || items.length === 0) {
-      this.logger.warn('pedidos.bridge.datos_incompletos', { cuenta_id, correlation_id: correlationId });
-      return;
-    }
-
-    this.logger.info('pedidos.bridge.recibido', {
-      cuenta_id,
-      items_count: items.length,
-      total,
-      correlation_id: correlationId
-    });
-
     try {
-      const pedido_id = comandero_pedido_id || require('crypto').randomUUID();
+      const data = event?.data || event?.payload || event;
+      const correlationId = event?.metadata?.correlationId;
+      const { cuenta_id, pedido_id: comandero_pedido_id, items, total, notas_generales, created_at, project_id, ref_display } = data || {};
 
-      // Detectar canal por prefijo del cuenta_id
-      const canal = this.detectarCanal(cuenta_id);
+      if (!cuenta_id || !items || items.length === 0) {
+        this.logger.warn('pedidos.bridge.datos_incompletos', { cuenta_id, correlation_id: correlationId });
+        return;
+      }
+
+      this.logger.info('pedidos.bridge.recibido', {
+        cuenta_id, items_count: items.length, total,
+        correlation_id: correlationId
+      });
+
+      const pedido_id = comandero_pedido_id || crypto.randomUUID();
+      const canal = this._detectarCanal(cuenta_id);
 
       const pedido = {
         id: pedido_id,
@@ -221,27 +247,7 @@ class PedidosModule {
         canal,
         ref_display: ref_display || null,
         project_id: project_id || null,
-        items: items.map(item => ({
-          item_id: item.id || item.item_id || require('crypto').randomUUID(),
-          producto_id: item.producto_id,
-          nombre: item.nombre,
-          categoria: item.categoria || null,
-          estaciones: item.estaciones || null,
-          cantidad: item.cantidad || 1,
-          precio_unitario: item.precio || 0,
-          precio_total: item.subtotal || (item.precio || 0) * (item.cantidad || 1),
-          variaciones: item.variaciones || null,
-          notas: item.notas || null,
-          estado: 'en_cocina',
-          // Metadata especial: mitad-mitad, al gusto, ingredientes_base, etc.
-          ...(item.tipo && { tipo: item.tipo }),
-          ...(item.pizza_izquierda && { pizza_izquierda: item.pizza_izquierda }),
-          ...(item.pizza_derecha && { pizza_derecha: item.pizza_derecha }),
-          ...(item.ingredientes && { ingredientes: item.ingredientes }),
-          ...(item.ingredientes_base && { ingredientes_base: item.ingredientes_base }),
-          created_at: item.created_at || new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })),
+        items: items.map(item => this._buildPedidoItem(item, 'en_cocina')),
         estado: 'en_cocina',
         subtotal: total || 0,
         total: total || 0,
@@ -251,41 +257,33 @@ class PedidosModule {
         updated_at: new Date().toISOString()
       };
 
-      // Registrar pedido formal
       this.pedidos.set(pedido_id, pedido);
-
       if (!this.pedidosPorCuenta.has(cuenta_id)) {
         this.pedidosPorCuenta.set(cuenta_id, new Set());
       }
       this.pedidosPorCuenta.get(cuenta_id).add(pedido_id);
 
-      // Métricas
-      this.metrics.increment('pedido.creado.total');
-      this.metrics.increment('pedido.enviado_cocina.total');
-      this.metrics.gauge('pedido.activos.count', this.pedidos.size);
+      this.metrics?.increment?.('pedidos.creado.total');
+      this.metrics?.increment?.('pedidos.enviado_cocina.total');
+      this.metrics?.gauge?.('pedidos.activos.count', this.pedidos.size);
 
-      // Publicar eventos formales que el resto del sistema escucha
-      await this.publishPedidoCreado(pedido);
-      await this.publishEnviadoCocina(pedido);
+      await this._publishPedidoCreado(pedido, { correlation_id: correlationId });
+      await this._publishEnviadoCocina(pedido, { correlation_id: correlationId });
 
       this.logger.info('pedidos.bridge.pedido_formal_creado', {
-        pedido_id,
-        cuenta_id,
+        pedido_id, cuenta_id,
         items_count: pedido.items.length,
         total: pedido.total,
         correlation_id: correlationId
       });
-
-    } catch (error) {
-      this.metrics.increment('pedido.errors.total', 1, { operation: 'bridge_enviar_cocina' });
-      this.logger.error('pedidos.bridge.error', { error: error.message, correlation_id: correlationId });
+    } catch (err) {
+      this._handleHandlerError('pedidos.bridge.error', err, 'subscribe');
     }
   }
 
   async onCatalogoActualizado(event) {
     const data = event?.data || event?.payload || event;
     const productos = data?.productos || [];
-
     for (const producto of productos) {
       if (producto.id && producto.precio !== undefined) {
         this.productosCache.set(producto.id, {
@@ -296,7 +294,6 @@ class PedidosModule {
         });
       }
     }
-
     this.logger.info('pedidos.catalogo.synced', {
       productos_en_cache: this.productosCache.size
     });
@@ -304,31 +301,56 @@ class PedidosModule {
 
   async onProductoActualizado(event) {
     const data = event?.data || event?.payload || event;
-    const { id, nombre, precio, categoria } = data;
-
+    const { id, nombre, precio, categoria } = data || {};
     if (id && precio !== undefined) {
       this.productosCache.set(id, { nombre: nombre || id, precio, categoria });
-
       this.logger.info('pedidos.producto.cache_updated', { producto_id: id, precio });
     }
   }
 
+  _buildPedidoItem(item, defaultEstado = 'pendiente') {
+    const precio = item.precio || item.precio_unitario || 0;
+    const cantidad = item.cantidad || 1;
+    const built = {
+      item_id: item.id || item.item_id || crypto.randomUUID(),
+      producto_id: item.producto_id,
+      nombre: item.nombre,
+      categoria: item.categoria || null,
+      estaciones: item.estaciones || null,
+      cantidad,
+      precio_unitario: precio,
+      precio_total: item.subtotal || item.precio_total || precio * cantidad,
+      variaciones: item.variaciones || null,
+      notas: item.notas || null,
+      estado: defaultEstado,
+      created_at: item.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    if (item.tipo) built.tipo = item.tipo;
+    if (item.pizza_izquierda) built.pizza_izquierda = item.pizza_izquierda;
+    if (item.pizza_derecha) built.pizza_derecha = item.pizza_derecha;
+    if (item.ingredientes) built.ingredientes = item.ingredientes;
+    if (item.ingredientes_base) built.ingredientes_base = item.ingredientes_base;
+    return built;
+  }
+
   // ==========================================
-  // UI Handlers (MQTT Request/Response)
+  // UI Handlers
   // ==========================================
 
   async handleCreatePedido(data) {
-    const start_time = Date.now();
-
     try {
-      const { cuenta_id, project_id, notas_generales } = data;
+      const start_time = Date.now();
+      const { cuenta_id, project_id, notas_generales } = data || {};
 
       if (!cuenta_id) {
-        return { status: 400, error: 'cuenta_id es requerido' };
+        this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create' });
+        this.logger.warn('pedidos.create.missing', { field: 'cuenta_id' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'cuenta_id es requerido', { field: 'cuenta_id' });
       }
 
       const pedido_id = crypto.randomUUID();
-      const canal = this.detectarCanal(cuenta_id);
+      const canal = this._detectarCanal(cuenta_id);
 
       const pedido = {
         id: pedido_id,
@@ -345,99 +367,98 @@ class PedidosModule {
       };
 
       this.pedidos.set(pedido_id, pedido);
-
-      // Índice por cuenta
       if (!this.pedidosPorCuenta.has(cuenta_id)) {
         this.pedidosPorCuenta.set(cuenta_id, new Set());
       }
       this.pedidosPorCuenta.get(cuenta_id).add(pedido_id);
 
-      // Métricas
-      this.metrics.increment('pedido.creado.total');
-      this.metrics.gauge('pedido.activos.count', this.pedidos.size);
-      this.metrics.timing('pedido.create.duration', Date.now() - start_time);
+      this.metrics?.increment?.('pedidos.creado.total');
+      this.metrics?.gauge?.('pedidos.activos.count', this.pedidos.size);
+      this.metrics?.timing?.('pedidos.create.duration', Date.now() - start_time);
 
-      // Evento
-      await this.publishPedidoCreado(pedido);
+      await this._publishPedidoCreado(pedido, data);
 
-      this.logger.info('pedido.creado', {
+      this.logger.info('pedidos.creado', {
         pedido_id, cuenta_id, duration: Date.now() - start_time
       });
 
       return { status: 201, data: pedido };
-
-    } catch (error) {
-      this.metrics.increment('pedido.errors.total', 1, { operation: 'create' });
-      this.logger.error('pedido.create.error', { error: error.message });
-      return { status: 500, error: error.message };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.create.error', err);
     }
   }
 
   async handleListPedidos(data) {
-    const { cuenta_id, estado } = data || {};
-
-    let pedidos = Array.from(this.pedidos.values());
-
-    if (cuenta_id) {
-      pedidos = pedidos.filter(p => p.cuenta_id === cuenta_id);
+    try {
+      const { cuenta_id, estado } = data || {};
+      let pedidos = Array.from(this.pedidos.values());
+      if (cuenta_id) pedidos = pedidos.filter(p => p.cuenta_id === cuenta_id);
+      if (estado) pedidos = pedidos.filter(p => p.estado === estado);
+      pedidos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return { status: 200, data: { pedidos, total: pedidos.length } };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.list.error', err);
     }
-    if (estado) {
-      pedidos = pedidos.filter(p => p.estado === estado);
-    }
-
-    pedidos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-    return { status: 200, data: { pedidos, total: pedidos.length } };
   }
 
   async handleGetPedido(data) {
-    const { id } = data;
-    const pedido = this.pedidos.get(id);
-
-    if (!pedido) {
-      return { status: 404, error: 'Pedido no encontrado' };
+    try {
+      const { id } = data || {};
+      if (!id) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'id requerido', { field: 'id' });
+      }
+      const pedido = this.pedidos.get(id);
+      if (!pedido) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'get' });
+        this.logger.warn('pedidos.get.not_found', { id });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', { id });
+      }
+      return { status: 200, data: pedido };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.get.error', err);
     }
-
-    return { status: 200, data: pedido };
   }
 
   async handleAgregarItem(data) {
-    const start_time = Date.now();
-    const { pedido_id, producto_id, cantidad, variaciones, notas } = data;
-
-    const pedido = this.pedidos.get(pedido_id);
-    if (!pedido) {
-      return { status: 404, error: 'Pedido no encontrado' };
-    }
-
-    if (pedido.estado !== 'borrador' && pedido.estado !== 'confirmado') {
-      return { status: 400, error: `No se pueden agregar items a un pedido en estado ${pedido.estado}` };
-    }
-
-    if (!producto_id) {
-      return { status: 400, error: 'producto_id es requerido' };
-    }
-
     try {
-      const item_id = crypto.randomUUID();
+      const start_time = Date.now();
+      const { pedido_id, producto_id, cantidad, variaciones, notas } = data || {};
 
-      // Resolver precio y nombre desde caché de productos
+      const pedido = this.pedidos.get(pedido_id);
+      if (!pedido) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'add-item' });
+        this.logger.warn('pedidos.add_item.not_found', { pedido_id });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', { pedido_id });
+      }
+
+      if (pedido.estado !== 'borrador' && pedido.estado !== 'confirmado') {
+        this.metrics?.increment?.('pedidos.errors', { code: 'CONFLICT_STATE', kind: 'add-item' });
+        this.logger.warn('pedidos.add_item.bad_state', { pedido_id, estado: pedido.estado });
+        return this._errorResponse(409, 'CONFLICT_STATE',
+          `No se pueden agregar items a un pedido en estado ${pedido.estado}`,
+          { pedido_id, estado: pedido.estado });
+      }
+
+      if (!producto_id) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'add-item' });
+        this.logger.warn('pedidos.add_item.missing', { field: 'producto_id' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'producto_id es requerido', { field: 'producto_id' });
+      }
+
+      const item_id = crypto.randomUUID();
       const producto = this.productosCache.get(producto_id);
       const precio_unitario = producto?.precio ?? 0;
       const nombre_producto = producto?.nombre ?? producto_id;
 
       if (!producto) {
-        this.logger.warn('pedido.producto.not_in_cache', {
-          producto_id,
-          cache_size: this.productosCache.size
+        this.logger.warn('pedidos.producto.not_in_cache', {
+          producto_id, cache_size: this.productosCache.size
         });
       }
 
       const cantidadFinal = cantidad || 1;
-
       const item = {
-        item_id,
-        producto_id,
+        item_id, producto_id,
         nombre: nombre_producto,
         cantidad: cantidadFinal,
         precio_unitario,
@@ -450,238 +471,241 @@ class PedidosModule {
       };
 
       pedido.items.push(item);
-      pedido.subtotal = this.calcularSubtotal(pedido);
+      pedido.subtotal = this._calcularSubtotal(pedido);
       pedido.total = pedido.subtotal;
       pedido.updated_at = new Date().toISOString();
 
-      // Métricas
-      this.metrics.increment('pedido.item_agregado.total');
-      this.metrics.gauge('pedido.items_total.count',
+      this.metrics?.increment?.('pedidos.item_agregado.total');
+      this.metrics?.gauge?.('pedidos.items_total.count',
         Array.from(this.pedidos.values()).reduce((sum, p) => sum + p.items.length, 0)
       );
 
-      // Evento
-      await this.publishItemAgregado(pedido, item);
+      await this._publishItemAgregado(pedido, item, data);
 
-      this.logger.info('pedido.item_agregado', {
-        pedido_id, item_id, producto_id, cantidad: cantidadFinal, precio_unitario
+      this.logger.info('pedidos.item_agregado', {
+        pedido_id, item_id, producto_id, cantidad: cantidadFinal, precio_unitario,
+        duration: Date.now() - start_time
       });
 
-      return {
-        status: 201,
-        data: { pedido_id, item, total: pedido.total }
-      };
-
-    } catch (error) {
-      this.metrics.increment('pedido.errors.total', 1, { operation: 'agregar_item' });
-      this.logger.error('pedido.agregar_item.error', { error: error.message });
-      return { status: 500, error: error.message };
+      return { status: 201, data: { pedido_id, item, total: pedido.total } };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.add_item.error', err);
     }
   }
 
   async handleActualizarItem(data) {
-    const { pedido_id, item_id, cantidad, variaciones, notas } = data;
+    try {
+      const { pedido_id, item_id, cantidad, variaciones, notas } = data || {};
+      const pedido = this.pedidos.get(pedido_id);
+      if (!pedido) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'update-item' });
+        this.logger.warn('pedidos.update_item.pedido_not_found', { pedido_id });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', { pedido_id });
+      }
 
-    const pedido = this.pedidos.get(pedido_id);
-    if (!pedido) {
-      return { status: 404, error: 'Pedido no encontrado' };
+      const itemIndex = pedido.items.findIndex(i => i.item_id === item_id);
+      if (itemIndex === -1) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'update-item' });
+        this.logger.warn('pedidos.update_item.item_not_found', { pedido_id, item_id });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Item no encontrado', { item_id });
+      }
+
+      const item = pedido.items[itemIndex];
+      const cambios = {};
+
+      if (cantidad !== undefined && cantidad !== item.cantidad) {
+        cambios.cantidad = { anterior: item.cantidad, nuevo: cantidad };
+        item.cantidad = cantidad;
+        item.precio_total = item.precio_unitario * item.cantidad;
+      }
+      if (variaciones !== undefined) {
+        cambios.variaciones = { anterior: item.variaciones, nuevo: variaciones };
+        item.variaciones = variaciones;
+      }
+      if (notas !== undefined) {
+        cambios.notas = { anterior: item.notas, nuevo: notas };
+        item.notas = notas;
+      }
+
+      item.updated_at = new Date().toISOString();
+      pedido.subtotal = this._calcularSubtotal(pedido);
+      pedido.total = pedido.subtotal;
+      pedido.updated_at = new Date().toISOString();
+
+      await this._publishItemActualizado(pedido, item_id, cambios, data);
+      this.logger.info('pedidos.item_actualizado', { pedido_id, item_id, cambios });
+      return { status: 200, data: { pedido_id, item, total: pedido.total } };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.update_item.error', err);
     }
-
-    const itemIndex = pedido.items.findIndex(i => i.item_id === item_id);
-    if (itemIndex === -1) {
-      return { status: 404, error: 'Item no encontrado' };
-    }
-
-    const item = pedido.items[itemIndex];
-    const cambios = {};
-
-    if (cantidad !== undefined && cantidad !== item.cantidad) {
-      cambios.cantidad = { anterior: item.cantidad, nuevo: cantidad };
-      item.cantidad = cantidad;
-      item.precio_total = item.precio_unitario * item.cantidad;
-    }
-
-    if (variaciones !== undefined) {
-      cambios.variaciones = { anterior: item.variaciones, nuevo: variaciones };
-      item.variaciones = variaciones;
-    }
-
-    if (notas !== undefined) {
-      cambios.notas = { anterior: item.notas, nuevo: notas };
-      item.notas = notas;
-    }
-
-    item.updated_at = new Date().toISOString();
-    pedido.subtotal = this.calcularSubtotal(pedido);
-    pedido.total = pedido.subtotal;
-    pedido.updated_at = new Date().toISOString();
-
-    await this.publishItemActualizado(pedido.id, item_id, cambios);
-
-    this.logger.info('pedido.item_actualizado', { pedido_id, item_id, cambios });
-
-    return {
-      status: 200,
-      data: { pedido_id, item, total: pedido.total }
-    };
   }
 
   async handleEliminarItem(data) {
-    const { pedido_id, item_id } = data;
+    try {
+      const { pedido_id, item_id } = data || {};
+      const pedido = this.pedidos.get(pedido_id);
+      if (!pedido) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'delete-item' });
+        this.logger.warn('pedidos.delete_item.pedido_not_found', { pedido_id });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', { pedido_id });
+      }
+      const itemIndex = pedido.items.findIndex(i => i.item_id === item_id);
+      if (itemIndex === -1) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'delete-item' });
+        this.logger.warn('pedidos.delete_item.item_not_found', { pedido_id, item_id });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Item no encontrado', { item_id });
+      }
 
-    const pedido = this.pedidos.get(pedido_id);
-    if (!pedido) {
-      return { status: 404, error: 'Pedido no encontrado' };
+      pedido.items.splice(itemIndex, 1);
+      pedido.subtotal = this._calcularSubtotal(pedido);
+      pedido.total = pedido.subtotal;
+      pedido.updated_at = new Date().toISOString();
+
+      await this._publishItemEliminado(pedido, item_id, data);
+      this.logger.info('pedidos.item_eliminado', { pedido_id, item_id });
+      return { status: 200, data: { pedido_id, item_id, total: pedido.total } };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.delete_item.error', err);
     }
-
-    const itemIndex = pedido.items.findIndex(i => i.item_id === item_id);
-    if (itemIndex === -1) {
-      return { status: 404, error: 'Item no encontrado' };
-    }
-
-    pedido.items.splice(itemIndex, 1);
-    pedido.subtotal = this.calcularSubtotal(pedido);
-    pedido.total = pedido.subtotal;
-    pedido.updated_at = new Date().toISOString();
-
-    await this.publishItemEliminado(pedido.id, item_id);
-
-    this.logger.info('pedido.item_eliminado', { pedido_id, item_id });
-
-    return {
-      status: 200,
-      data: { pedido_id, item_id, total: pedido.total }
-    };
   }
 
   async handleEnviarCocina(data) {
-    const start_time = Date.now();
-    const { id } = data;
-
-    const pedido = this.pedidos.get(id);
-    if (!pedido) {
-      return { status: 404, error: 'Pedido no encontrado' };
-    }
-
-    if (pedido.items.length === 0) {
-      return { status: 400, error: 'No se puede enviar un pedido vacío a cocina' };
-    }
-
-    if (pedido.estado === 'en_cocina') {
-      return { status: 400, error: 'Pedido ya está en cocina' };
-    }
-
-    pedido.estado = 'en_cocina';
-    pedido.enviado_cocina_at = new Date().toISOString();
-    pedido.updated_at = new Date().toISOString();
-
-    pedido.items.forEach(item => {
-      if (item.estado === 'pendiente') {
-        item.estado = 'en_cocina';
+    try {
+      const start_time = Date.now();
+      const { id } = data || {};
+      const pedido = this.pedidos.get(id);
+      if (!pedido) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'send-kitchen' });
+        this.logger.warn('pedidos.send_kitchen.not_found', { id });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', { id });
       }
-    });
-
-    // Métricas
-    this.metrics.increment('pedido.enviado_cocina.total');
-    this.metrics.gauge('pedido.en_cocina.count',
-      Array.from(this.pedidos.values()).filter(p => p.estado === 'en_cocina').length
-    );
-    this.metrics.timing('pedido.envio_cocina.duration', Date.now() - start_time);
-
-    await this.publishEnviadoCocina(pedido);
-
-    this.logger.info('pedido.enviado_cocina', {
-      pedido_id: id, items_count: pedido.items.length, duration: Date.now() - start_time
-    });
-
-    return {
-      status: 200,
-      data: {
-        pedido_id: id,
-        estado: pedido.estado,
-        items_count: pedido.items.length,
-        enviado_at: pedido.enviado_cocina_at
+      if (pedido.items.length === 0) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'send-kitchen' });
+        this.logger.warn('pedidos.send_kitchen.empty', { id });
+        return this._errorResponse(400, 'INVALID_INPUT', 'No se puede enviar un pedido vacio a cocina', { id });
       }
-    };
+      if (pedido.estado === 'en_cocina') {
+        this.metrics?.increment?.('pedidos.errors', { code: 'CONFLICT_STATE', kind: 'send-kitchen' });
+        this.logger.warn('pedidos.send_kitchen.already', { id });
+        return this._errorResponse(409, 'CONFLICT_STATE', 'Pedido ya esta en cocina', { id });
+      }
+
+      pedido.estado = 'en_cocina';
+      pedido.enviado_cocina_at = new Date().toISOString();
+      pedido.updated_at = new Date().toISOString();
+      pedido.items.forEach(item => {
+        if (item.estado === 'pendiente') item.estado = 'en_cocina';
+      });
+
+      this.metrics?.increment?.('pedidos.enviado_cocina.total');
+      this.metrics?.gauge?.('pedidos.en_cocina.count',
+        Array.from(this.pedidos.values()).filter(p => p.estado === 'en_cocina').length
+      );
+      this.metrics?.timing?.('pedidos.envio_cocina.duration', Date.now() - start_time);
+
+      await this._publishEnviadoCocina(pedido, data);
+      this.logger.info('pedidos.enviado_cocina', {
+        pedido_id: id, items_count: pedido.items.length,
+        duration: Date.now() - start_time
+      });
+
+      return {
+        status: 200,
+        data: {
+          pedido_id: id,
+          estado: pedido.estado,
+          items_count: pedido.items.length,
+          enviado_at: pedido.enviado_cocina_at
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.send_kitchen.error', err);
+    }
   }
 
   async handleCompletarPedido(data) {
-    const { id } = data;
-
-    const pedido = this.pedidos.get(id);
-    if (!pedido) {
-      return { status: 404, error: 'Pedido no encontrado' };
-    }
-
-    pedido.estado = 'completado';
-    pedido.completado_at = new Date().toISOString();
-    pedido.updated_at = new Date().toISOString();
-
-    const duracion = Math.floor((new Date(pedido.completado_at) - new Date(pedido.created_at)) / 1000 / 60);
-
-    this.metrics.increment('pedido.completado.total');
-
-    await this.publishPedidoCompletado(pedido, duracion);
-
-    this.logger.info('pedido.completado', { pedido_id: id, duracion_minutos: duracion });
-
-    return {
-      status: 200,
-      data: {
-        pedido_id: id,
-        estado: pedido.estado,
-        completado_at: pedido.completado_at,
-        duracion_minutos: duracion
+    try {
+      const { id } = data || {};
+      const pedido = this.pedidos.get(id);
+      if (!pedido) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'complete' });
+        this.logger.warn('pedidos.complete.not_found', { id });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', { id });
       }
-    };
+      pedido.estado = 'completado';
+      pedido.completado_at = new Date().toISOString();
+      pedido.updated_at = new Date().toISOString();
+      const duracion = Math.floor((new Date(pedido.completado_at) - new Date(pedido.created_at)) / 1000 / 60);
+
+      this.metrics?.increment?.('pedidos.completado.total');
+      await this._publishPedidoCompletado(pedido, duracion, data);
+      this.logger.info('pedidos.completado', { pedido_id: id, duracion_minutos: duracion });
+
+      return {
+        status: 200,
+        data: {
+          pedido_id: id,
+          estado: pedido.estado,
+          completado_at: pedido.completado_at,
+          duracion_minutos: duracion
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.complete.error', err);
+    }
   }
 
   async handleCancelarPedido(data) {
-    const { id, motivo } = data;
-
-    const pedido = this.pedidos.get(id);
-    if (!pedido) {
-      return { status: 404, error: 'Pedido no encontrado' };
-    }
-
-    pedido.estado = 'cancelado';
-    pedido.cancelado_at = new Date().toISOString();
-    pedido.updated_at = new Date().toISOString();
-
-    this.metrics.increment('pedido.cancelado.total');
-
-    await this.publishPedidoCancelado(pedido, motivo);
-
-    this.logger.info('pedido.cancelado', { pedido_id: id, motivo });
-
-    return {
-      status: 200,
-      data: {
-        pedido_id: id,
-        estado: pedido.estado,
-        motivo: motivo || null,
-        cancelado_at: pedido.cancelado_at
+    try {
+      const { id, motivo } = data || {};
+      const pedido = this.pedidos.get(id);
+      if (!pedido) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'cancel' });
+        this.logger.warn('pedidos.cancel.not_found', { id });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', { id });
       }
-    };
+      pedido.estado = 'cancelado';
+      pedido.cancelado_at = new Date().toISOString();
+      pedido.updated_at = new Date().toISOString();
+
+      this.metrics?.increment?.('pedidos.cancelado.total');
+      await this._publishPedidoCancelado(pedido, motivo, data);
+      this.logger.info('pedidos.cancelado', { pedido_id: id, motivo });
+
+      return {
+        status: 200,
+        data: {
+          pedido_id: id,
+          estado: pedido.estado,
+          motivo: motivo || null,
+          cancelado_at: pedido.cancelado_at
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.cancel.error', err);
+    }
   }
 
   async handleCalcularTotal(data) {
-    const { id } = data;
-
-    const pedido = this.pedidos.get(id);
-    if (!pedido) {
-      return { status: 404, error: 'Pedido no encontrado' };
-    }
-
-    return {
-      status: 200,
-      data: {
-        pedido_id: id,
-        subtotal: pedido.subtotal,
-        total: pedido.total,
-        items_count: pedido.items.length
+    try {
+      const { id } = data || {};
+      const pedido = this.pedidos.get(id);
+      if (!pedido) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'total' });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', { id });
       }
-    };
+      return {
+        status: 200,
+        data: {
+          pedido_id: id,
+          subtotal: pedido.subtotal,
+          total: pedido.total,
+          items_count: pedido.items.length
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.total.error', err);
+    }
   }
 
   async handleHealthCheck() {
@@ -689,8 +713,7 @@ class PedidosModule {
       status: 200,
       data: {
         status: 'healthy',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
+        module: this.name,
         version: this.version,
         productos_en_cache: this.productosCache.size,
         pedidos: {
@@ -704,11 +727,11 @@ class PedidosModule {
   }
 
   // ==========================================
-  // Event Publishers
+  // Event Publishers (canonicos via _publicarEvento)
   // ==========================================
 
-  async publishPedidoCreado(pedido) {
-    await this.eventBus.publish('pedido.creado', {
+  async _publishPedidoCreado(pedido, sourcePayload) {
+    await this._publicarEvento('pedido.creado', {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       canal: pedido.canal || null,
@@ -718,13 +741,14 @@ class PedidosModule {
       total: pedido.total,
       items: pedido.items || [],
       created_at: pedido.created_at
-    });
+    }, sourcePayload);
   }
 
-  async publishItemAgregado(pedido, item) {
-    await this.eventBus.publish('pedido.item_agregado', {
+  async _publishItemAgregado(pedido, item, sourcePayload) {
+    await this._publicarEvento('pedido.item_agregado', {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
+      project_id: pedido.project_id || null,
       item_id: item.item_id,
       producto_id: item.producto_id,
       nombre: item.nombre,
@@ -733,27 +757,29 @@ class PedidosModule {
       precio_total: item.precio_total,
       variaciones: item.variaciones,
       notas: item.notas
-    });
+    }, sourcePayload);
   }
 
-  async publishItemActualizado(pedido_id, item_id, cambios) {
-    await this.eventBus.publish('pedido.item_actualizado', {
-      pedido_id,
+  async _publishItemActualizado(pedido, item_id, cambios, sourcePayload) {
+    await this._publicarEvento('pedido.item_actualizado', {
+      pedido_id: pedido.id,
+      project_id: pedido.project_id || null,
       item_id,
       cambios
-    });
+    }, sourcePayload);
   }
 
-  async publishItemEliminado(pedido_id, item_id) {
-    await this.eventBus.publish('pedido.item_eliminado', {
-      pedido_id,
+  async _publishItemEliminado(pedido, item_id, sourcePayload) {
+    await this._publicarEvento('pedido.item_eliminado', {
+      pedido_id: pedido.id,
+      project_id: pedido.project_id || null,
       item_id,
       motivo: 'eliminado_por_usuario'
-    });
+    }, sourcePayload);
   }
 
-  async publishEnviadoCocina(pedido) {
-    await this.eventBus.publish('pedido.enviado_cocina', {
+  async _publishEnviadoCocina(pedido, sourcePayload) {
+    await this._publicarEvento('pedido.enviado_cocina', {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       canal: pedido.canal || null,
@@ -770,7 +796,6 @@ class PedidosModule {
           variaciones: item.variaciones,
           notas: item.notas
         };
-        // Incluir metadata especial para cocina
         if (item.tipo) mapped.tipo = item.tipo;
         if (item.pizza_izquierda) mapped.pizza_izquierda = item.pizza_izquierda;
         if (item.pizza_derecha) mapped.pizza_derecha = item.pizza_derecha;
@@ -781,135 +806,107 @@ class PedidosModule {
       items_count: pedido.items.length,
       notas_generales: pedido.notas_generales,
       enviado_at: pedido.enviado_cocina_at
-    });
+    }, sourcePayload);
   }
 
-  async publishPedidoCompletado(pedido, duracion_minutos) {
-    await this.eventBus.publish('pedido.completado', {
+  async _publishPedidoCompletado(pedido, duracion_minutos, sourcePayload) {
+    await this._publicarEvento('pedido.completado', {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
+      project_id: pedido.project_id || null,
       total: pedido.total,
       items_count: pedido.items.length,
       completado_at: pedido.completado_at,
       duracion_minutos
-    });
+    }, sourcePayload);
   }
 
-  async publishPedidoCancelado(pedido, motivo) {
-    await this.eventBus.publish('pedido.cancelado', {
+  async _publishPedidoCancelado(pedido, motivo, sourcePayload) {
+    await this._publicarEvento('pedido.cancelado', {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
+      project_id: pedido.project_id || null,
       motivo: motivo || 'sin_especificar',
       cancelado_at: pedido.cancelado_at
-    });
+    }, sourcePayload);
   }
 
   // ==========================================
-  // Restauración desde persistencia
+  // Restauracion legacy desde cuentas_activas.json
   // ==========================================
 
-  /**
-   * Lee cuentas_activas.json y reconstruye pedidos formales desde los pedidos
-   * almacenados en cada cuenta activa.
-   */
-  async restaurarDesdeArchivo() {
-    try {
-      const archivo = path.join('./data/current', 'cuentas_activas.json');
-      const contenido = await fs.readFile(archivo, 'utf8');
-      const datos = JSON.parse(contenido);
+  async _restaurarDesdeArchivo() {
+    const archivo = path.join('./data/current', 'cuentas_activas.json');
+    const datos = await this._readJsonSafe(archivo);
+    if (!datos?.cuentas) return;
 
-      if (!datos.cuentas) return;
-
-      let restaurados = 0;
-      for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
-        if (!cuenta.pedidos || cuenta.pedidos.length === 0) continue;
-
-        if (!this.pedidosPorCuenta.has(cuenta_id)) {
-          this.pedidosPorCuenta.set(cuenta_id, new Set());
-        }
-
-        const canal = this.detectarCanal(cuenta_id);
-
-        for (const pedidoData of cuenta.pedidos) {
-          const pedido_id = pedidoData.pedido_id;
-          if (!pedido_id || this.pedidos.has(pedido_id)) continue;
-
-          const pedido = {
-            id: pedido_id,
-            cuenta_id,
-            canal,
-            project_id: cuenta.project_id || null,
-            items: (pedidoData.items || []).map(item => ({
-              item_id: item.item_id || item.id || crypto.randomUUID(),
-              producto_id: item.producto_id,
-              nombre: item.nombre,
-              categoria: item.categoria || null,
-              cantidad: item.cantidad || 1,
-              precio_unitario: item.precio || item.precio_unitario || 0,
-              precio_total: item.subtotal || item.precio_total || (item.precio || 0) * (item.cantidad || 1),
-              variaciones: item.variaciones || null,
-              notas: item.notas || null,
-              estado: 'en_cocina',
-              created_at: item.created_at || cuenta.created_at || new Date().toISOString(),
-              updated_at: cuenta.updated_at || new Date().toISOString()
-            })),
-            estado: 'en_cocina',
-            subtotal: pedidoData.total || 0,
-            total: pedidoData.total || 0,
-            notas_generales: null,
-            created_at: cuenta.created_at || new Date().toISOString(),
-            updated_at: cuenta.updated_at || new Date().toISOString()
-          };
-
-          this.pedidos.set(pedido_id, pedido);
-          this.pedidosPorCuenta.get(cuenta_id).add(pedido_id);
-          restaurados++;
-        }
+    let restaurados = 0;
+    for (const [cuenta_id, cuenta] of Object.entries(datos.cuentas)) {
+      if (!cuenta.pedidos || cuenta.pedidos.length === 0) continue;
+      if (!this.pedidosPorCuenta.has(cuenta_id)) {
+        this.pedidosPorCuenta.set(cuenta_id, new Set());
       }
+      const canal = this._detectarCanal(cuenta_id);
 
-      if (restaurados > 0) {
-        this.metrics?.gauge?.('pedido.activos.count', this.pedidos.size);
-        this.logger.info('pedidos.estado_restaurado', {
-          pedidos_restaurados: restaurados,
-          cuentas_con_pedidos: this.pedidosPorCuenta.size
-        });
+      for (const pedidoData of cuenta.pedidos) {
+        const pedido_id = pedidoData.pedido_id;
+        if (!pedido_id || this.pedidos.has(pedido_id)) continue;
+
+        const pedido = {
+          id: pedido_id,
+          cuenta_id,
+          canal,
+          project_id: cuenta.project_id || null,
+          items: (pedidoData.items || []).map(item => this._buildPedidoItem(item, 'en_cocina')),
+          estado: 'en_cocina',
+          subtotal: pedidoData.total || 0,
+          total: pedidoData.total || 0,
+          notas_generales: null,
+          created_at: cuenta.created_at || new Date().toISOString(),
+          updated_at: cuenta.updated_at || new Date().toISOString()
+        };
+
+        this.pedidos.set(pedido_id, pedido);
+        this.pedidosPorCuenta.get(cuenta_id).add(pedido_id);
+        restaurados++;
       }
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        this.logger.warn('pedidos.restaurar.error', { error: error.message });
-      }
+    }
+
+    if (restaurados > 0) {
+      this.metrics?.gauge?.('pedidos.activos.count', this.pedidos.size);
+      this.logger.info('pedidos.estado_restaurado', {
+        pedidos_restaurados: restaurados,
+        cuentas_con_pedidos: this.pedidosPorCuenta.size
+      });
     }
   }
 
   // ==========================================
-  // Helpers
+  // Helpers internos
   // ==========================================
 
-  calcularSubtotal(pedido) {
+  _calcularSubtotal(pedido) {
     return pedido.items.reduce((sum, item) => sum + item.precio_total, 0);
   }
 
-  /**
-   * Detecta el canal de venta por el prefijo del cuenta_id (palabra completa).
-   * Sin prefijo conocido → null (cuenta simple sin canal).
-   */
-  detectarCanal(cuenta_id) {
+  _detectarCanal(cuenta_id) {
     if (!cuenta_id) return null;
-    // Prefijos largos (legacy)
-    if (cuenta_id.startsWith('llevadoo_')) return 'llevadoo';
-    if (cuenta_id.startsWith('mesa_')) return 'mesa';
-    if (cuenta_id.startsWith('llevar_')) return 'llevar';
-    if (cuenta_id.startsWith('telefono_') || cuenta_id.startsWith('tel_')) return 'telefono';
-    if (cuenta_id.startsWith('whatsapp_') || cuenta_id.startsWith('wa_')) return 'whatsapp';
-    if (cuenta_id.startsWith('glovo_')) return 'glovo';
-    if (cuenta_id.startsWith('delivery_')) return 'delivery';
-    // Prefijos cortos (nuevos)
-    if (cuenta_id.startsWith('M_')) return 'mesa';
-    if (cuenta_id.startsWith('L_')) return 'llevar';
-    if (cuenta_id.startsWith('T_')) return 'telefono';
-    if (cuenta_id.startsWith('W_')) return 'whatsapp';
-    if (cuenta_id.startsWith('G_')) return 'glovo';
-    if (cuenta_id.startsWith('D_')) return 'llevadoo';
+    const longPrefixes = [
+      ['llevadoo_', 'llevadoo'], ['mesa_', 'mesa'], ['llevar_', 'llevar'],
+      ['telefono_', 'telefono'], ['tel_', 'telefono'],
+      ['whatsapp_', 'whatsapp'], ['wa_', 'whatsapp'],
+      ['glovo_', 'glovo'], ['delivery_', 'delivery']
+    ];
+    for (const [prefix, canal] of longPrefixes) {
+      if (cuenta_id.startsWith(prefix)) return canal;
+    }
+    const shortPrefixes = [
+      ['M_', 'mesa'], ['L_', 'llevar'], ['T_', 'telefono'],
+      ['W_', 'whatsapp'], ['G_', 'glovo'], ['D_', 'llevadoo']
+    ];
+    for (const [prefix, canal] of shortPrefixes) {
+      if (cuenta_id.startsWith(prefix)) return canal;
+    }
     return null;
   }
 }

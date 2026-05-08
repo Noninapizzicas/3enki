@@ -1,21 +1,10 @@
 /**
- * memory-conversation-summary — Memoria narrativa del compañero.
+ * memory-conversation-summary v2.0.0 — POC2 canonico.
  *
- * Escucha cada chat.message.saved y mantiene un contador de mensajes
- * por conversation_id. Cuando pasa el threshold (config.summarize_after_messages,
- * default 20), pide al LLM (via llm.complete.request a ai-gateway) que
- * genere un resumen de la conversacion y lo persiste en SQLite por
- * (project_id, conversation_id).
- *
- * En cada chat.message.saved subsiguiente, publica chat.context.enriched
- * con el resumen actual para que prompt-builder lo agregue al system
- * prompt. Asi, cuando el FIFO recorta el principio del historial,
- * la esencia narrativa del viaje queda preservada.
- *
- * Diseno event-driven puro:
- *   - No instancia DB propio (db.query.request a database-manager).
- *   - No llama directo al LLM (llm.complete.request a ai-gateway).
- *   - No conoce a prompt-builder (publica chat.context.enriched canonico).
+ * Memoria narrativa: cuenta mensajes por conversation_id; al pasar threshold
+ * pide al LLM un resumen via llm.complete.request, lo persiste en SQLite via
+ * db.query.request, y publica chat.context.enriched (priority 200) para que
+ * prompt-builder lo agregue al system prompt cuando FIFO recorte el historial.
  */
 
 'use strict';
@@ -34,67 +23,129 @@ CREATE TABLE IF NOT EXISTS conversation_summaries (
 CREATE INDEX IF NOT EXISTS idx_conversation_summaries_user ON conversation_summaries(user_id);
 `;
 
+const DEFAULT_DB_TIMEOUT_MS = 10000;
+const DEFAULT_LLM_TIMEOUT_MS = 60000;
+const DEFAULT_PRIORITY = 200;
+const DEFAULT_THRESHOLD = 20;
+const DEFAULT_SUMMARY_MAX_CHARS = 800;
+
 class MemoryConversationSummaryModule {
   constructor() {
-    this.name     = 'memory-conversation-summary';
-    this.version  = '1.0.0';
-    this.logger   = null;
+    this.name = 'memory-conversation-summary';
+    this.version = '2.0.0';
+    this.logger = null;
     this.eventBus = null;
-    this.config   = null;
-    this.pendingDb        = new Map();
-    this.pendingLlm       = new Map();
-    this.schemaReady      = new Set();
-    this.messageCounters  = new Map();
-    this.summaryInFlight  = new Set();
+    this.metrics = null;
+    this.config = null;
+    this.pendingDb = new Map();
+    this.pendingLlm = new Map();
+    this.schemaReady = new Set();
+    this.messageCounters = new Map();
+    this.summaryInFlight = new Set();
   }
 
   async onLoad(context) {
-    this.logger   = context.logger;
+    this.logger = context.logger;
     this.eventBus = context.eventBus;
-    this.config   = context.moduleConfig || {};
+    this.metrics = context.metrics || null;
+    this.config = context.moduleConfig || context.config || {};
     this.logger.info('memory-conversation-summary.loaded', {
-      priority: this.config.priority_in_prompt || 200,
-      threshold: this.config.summarize_after_messages || 20
+      enabled: this.config.enabled !== false,
+      priority: this.config.priority_in_prompt || DEFAULT_PRIORITY,
+      threshold: this.config.summarize_after_messages || DEFAULT_THRESHOLD
     });
   }
 
   async onUnload() {
-    for (const { timeout } of this.pendingDb.values()) clearTimeout(timeout);
+    for (const { timeout, reject } of this.pendingDb.values()) {
+      clearTimeout(timeout);
+      reject(new Error('module unloaded'));
+    }
     this.pendingDb.clear();
-    for (const { timeout } of this.pendingLlm.values()) clearTimeout(timeout);
+    for (const { timeout, reject } of this.pendingLlm.values()) {
+      clearTimeout(timeout);
+      reject(new Error('module unloaded'));
+    }
     this.pendingLlm.clear();
     this.schemaReady.clear();
     this.messageCounters.clear();
     this.summaryInFlight.clear();
+    this.logger?.info?.('memory-conversation-summary.unloaded', {});
   }
 
   // ============================================================
-  // Handlers
+  // Helpers POC2
+  // ============================================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details !== undefined) error.details = details;
+    return { status, error };
+  }
+
+  _classifyHandlerError(err) {
+    const msg = err?.message || String(err);
+    const code = err?.code;
+    if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
+    if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
+    if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    return { status: 500, code: 'INTERNAL_ERROR' };
+  }
+
+  _handleHandlerError(logEvent, err, kind = 'subscribe') {
+    const { status, code } = this._classifyHandlerError(err);
+    this.logger?.error?.(logEvent, {
+      kind,
+      error_code: code,
+      error_message: err?.message || String(err)
+    });
+    this.metrics?.increment?.('memory-conversation-summary.errors', { code, kind });
+    return this._errorResponse(status, code, err?.message || 'Error interno');
+  }
+
+  async _publicarEvento(name, payload, sourcePayload) {
+    const correlation_id =
+      payload?.correlation_id ||
+      sourcePayload?.correlation_id ||
+      crypto.randomUUID();
+    const project_id =
+      payload?.project_id ??
+      sourcePayload?.project_id ??
+      null;
+    const enriched = {
+      ...payload,
+      correlation_id,
+      timestamp: payload?.timestamp || new Date().toISOString()
+    };
+    if (project_id !== null && project_id !== undefined) enriched.project_id = project_id;
+    await this.eventBus.publish(name, enriched);
+    return enriched;
+  }
+
+  // ============================================================
+  // Bus subscribers
   // ============================================================
 
   async onMessageSaved(event) {
-    if (this.config.enabled === false) return;
-    const data = event.data || event;
-    const {
-      project_id, user_id, conversation_id, message_id,
-      user_message, correlation_id
-    } = data;
-
-    if (!project_id || !user_id || !conversation_id || !message_id || !user_message) return;
-
     try {
+      if (this.config.enabled === false) return;
+      const data = event?.data || event;
+      const { project_id, user_id, conversation_id, message_id, user_message, correlation_id } = data || {};
+
+      if (!project_id || !user_id || !conversation_id || !message_id || !user_message) return;
+
       await this._ensureSchema(project_id);
 
       const counter = (this.messageCounters.get(conversation_id) || 0) + 1;
       this.messageCounters.set(conversation_id, counter);
 
       const existing = await this._loadSummary(project_id, conversation_id);
-      const threshold = this.config.summarize_after_messages || 20;
+      const threshold = this.config.summarize_after_messages || DEFAULT_THRESHOLD;
 
       if (existing) {
         await this._publishContextEnriched({
-          correlation_id, conversation_id, message_id,
-          summary: existing.summary
+          project_id, correlation_id, conversation_id, message_id, summary: existing.summary
         });
       }
 
@@ -105,36 +156,34 @@ class MemoryConversationSummaryModule {
       if (messagesSinceSummary >= threshold && !this.summaryInFlight.has(conversation_id)) {
         this.summaryInFlight.add(conversation_id);
         this._scheduleSummarize({
-          project_id, user_id, conversation_id, message_id,
-          correlation_id, message_count: counter
+          project_id, user_id, conversation_id, message_id, correlation_id, message_count: counter
         }).catch(err => {
           this.logger.error('memory-conversation-summary.summarize.scheduling_failed', {
-            error: err.message, conversation_id
+            error_message: err.message, conversation_id
           });
+          this.metrics?.increment?.('memory-conversation-summary.errors', { code: 'SCHEDULING_FAILED', kind: 'summarize' });
           this.summaryInFlight.delete(conversation_id);
         });
       }
     } catch (err) {
-      this.logger.error('memory-conversation-summary.onMessageSaved.failed', {
-        error: err.message, conversation_id, message_id
-      });
+      this._handleHandlerError('memory-conversation-summary.message_saved.error', err);
     }
   }
 
   onDbQueryResponse(event) {
-    const payload = event.data || event;
-    const { request_id, error } = payload;
+    const payload = event?.data || event;
+    const request_id = payload?.request_id;
     const pending = this.pendingDb.get(request_id);
     if (!pending) return;
     clearTimeout(pending.timeout);
     this.pendingDb.delete(request_id);
-    if (error) pending.reject(new Error(error));
+    if (payload.error) pending.reject(new Error(payload.error));
     else pending.resolve(payload.data ?? payload.rows ?? []);
   }
 
   onLlmResponse(event) {
-    const payload = event.data || event;
-    const { request_id } = payload;
+    const payload = event?.data || event;
+    const request_id = payload?.request_id;
     const pending = this.pendingLlm.get(request_id);
     if (!pending) return;
     clearTimeout(pending.timeout);
@@ -143,13 +192,13 @@ class MemoryConversationSummaryModule {
   }
 
   onLlmFailed(event) {
-    const payload = event.data || event;
-    const { request_id, error } = payload;
+    const payload = event?.data || event;
+    const request_id = payload?.request_id;
     const pending = this.pendingLlm.get(request_id);
     if (!pending) return;
     clearTimeout(pending.timeout);
     this.pendingLlm.delete(request_id);
-    pending.reject(new Error(error?.message || 'llm.complete.failed'));
+    pending.reject(new Error(payload.error?.message || 'llm.complete.failed'));
   }
 
   // ============================================================
@@ -168,9 +217,9 @@ class MemoryConversationSummaryModule {
       const transcript = messages
         .map(m => `${m.role === 'user' ? 'Usuario' : 'Asistente'}: ${m.content}`)
         .join('\n');
-      const maxChars = this.config.summary_max_chars || 800;
+      const maxChars = this.config.summary_max_chars || DEFAULT_SUMMARY_MAX_CHARS;
 
-      const summaryText = await this._requestLlmSummary(transcript, maxChars);
+      const summaryText = await this._requestLlmSummary(transcript, maxChars, correlation_id);
 
       const now = Date.now();
       await this._db(project_id,
@@ -184,27 +233,29 @@ class MemoryConversationSummaryModule {
            updated_at = excluded.updated_at`,
         [conversation_id, user_id, summaryText, message_id, message_count, now]);
 
+      this.metrics?.increment?.('memory-conversation-summary.summary.generated');
       this.logger.info('memory-conversation-summary.summarize.completed', {
         conversation_id, summary_length: summaryText.length, message_count
       });
 
       await this._publishContextEnriched({
-        correlation_id, conversation_id, message_id, summary: summaryText
+        project_id, correlation_id, conversation_id, message_id, summary: summaryText
       });
     } finally {
       this.summaryInFlight.delete(conversation_id);
     }
   }
 
-  async _requestLlmSummary(transcript, maxChars) {
+  async _requestLlmSummary(transcript, maxChars, correlation_id) {
     const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.llm_timeout_ms || DEFAULT_LLM_TIMEOUT_MS;
     const systemPrompt = `Eres un asistente que resume conversaciones. Devuelve un resumen narrativo en espanol de la conversacion (no listado, no titulos), conservando los hechos importantes que el usuario menciono y las decisiones tomadas. Maximo ${maxChars} caracteres. NO incluyas saludos, NO incluyas meta-comentarios sobre el resumen, NO uses formato markdown. Solo el resumen, en prosa fluida.`;
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingLlm.delete(request_id);
         reject(new Error('llm summary timeout'));
-      }, 60000);
+      }, timeoutMs);
       this.pendingLlm.set(request_id, {
         resolve: (payload) => {
           const content = payload?.result?.content || payload?.content || '';
@@ -219,6 +270,7 @@ class MemoryConversationSummaryModule {
       });
       this.eventBus.publish('llm.complete.request', {
         request_id,
+        correlation_id: correlation_id || crypto.randomUUID(),
         system_prompt: systemPrompt,
         messages: [{ role: 'user', content: transcript }],
         settings: {
@@ -249,27 +301,26 @@ class MemoryConversationSummaryModule {
     return rows || [];
   }
 
-  async _publishContextEnriched({ correlation_id, conversation_id, message_id, summary }) {
+  async _publishContextEnriched({ project_id, correlation_id, conversation_id, message_id, summary }) {
     if (!summary) return;
-    await this.eventBus.publish('chat.context.enriched', {
-      correlation_id: correlation_id || crypto.randomUUID(),
+    await this._publicarEvento('chat.context.enriched', {
       conversation_id,
       message_id,
       source: 'memory-conversation-summary',
       context_addition: `Resumen de la conversacion hasta ahora:\n${summary}`,
-      priority: this.config.priority_in_prompt || 200,
-      timestamp: new Date().toISOString(),
+      priority: this.config.priority_in_prompt || DEFAULT_PRIORITY,
       metadata: { summary_length: summary.length }
-    });
+    }, { correlation_id, project_id });
   }
 
   async _db(project_id, query, params = [], read_only = false) {
     const request_id = crypto.randomUUID();
+    const timeoutMs = this.config.db_timeout_ms || DEFAULT_DB_TIMEOUT_MS;
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingDb.delete(request_id);
         reject(new Error(`db timeout: ${query.slice(0, 40)}`));
-      }, 10000);
+      }, timeoutMs);
       this.pendingDb.set(request_id, { resolve, reject, timeout });
       this.eventBus.publish('db.query.request', { project_id, query, params, read_only, request_id });
     });

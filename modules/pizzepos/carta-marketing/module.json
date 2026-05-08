@@ -1,7 +1,7 @@
 {
   "name": "carta-marketing",
-  "version": "1.0.0",
-  "description": "Equipo de marketing silencioso. Escucha cambios en cartas y automáticamente enriquece, pule y mejora según el perfil de marca del proyecto. Aprende con el tiempo.",
+  "version": "2.0.0",
+  "description": "Equipo de marketing silencioso pizzepos. Escucha carta.actualizada y dispara agentes especializados (marketing-copywriter, marketing-strategist, marketing-brand-keeper) cuando detecta necesidades. Loop prevention via hash. Perfil de marca persistido en {project.base_path}/storage/config/marca.json (write atomico).",
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
@@ -10,62 +10,34 @@
       {
         "event": "agent.execute.request",
         "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
-        "description": "Invoca agentes de marketing (cartadigital-ofertas, marketing-strategist, etc.) cuando detecta necesidades."
+        "description": "Invoca agentes de marketing cuando detecta necesidades en carta. Lleva project_id top-level + correlation_id heredado + timestamp."
       }
     ],
     "subscribes": [
-      {
-        "event": "project.activated",
-        "handler": "onProjectActivated"
-      },
-      {
-        "event": "project.deactivated",
-        "handler": "onProjectDeactivated"
-      },
-      {
-        "event": "carta.actualizada",
-        "handler": "onCartaActualizada"
-      }
+      { "event": "project.activated",   "handler": "onProjectActivated",   "description": "Cache base_path + carga perfil de marca." },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated", "description": "No-op multi-tenant." },
+      { "event": "carta.actualizada",   "handler": "onCartaActualizada",   "description": "Detecta necesidades y dispara agentes (con loop prevention via hash)." }
     ]
   },
   "ui_handlers": [
-    {
-      "domain": "carta-marketing",
-      "action": "perfil",
-      "handler": "handleGetPerfil"
-    },
-    {
-      "domain": "carta-marketing",
-      "action": "update-perfil",
-      "handler": "handleUpdatePerfil"
-    },
-    {
-      "domain": "carta-marketing",
-      "action": "actividad",
-      "handler": "handleGetActividad"
-    },
-    {
-      "domain": "carta-marketing",
-      "action": "health",
-      "handler": "handleHealth"
-    }
+    { "domain": "carta-marketing", "action": "perfil",         "handler": "handleGetPerfil",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "carta-marketing", "action": "update-perfil",  "handler": "handleUpdatePerfil",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "carta-marketing", "action": "actividad",      "handler": "handleGetActividad",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "carta-marketing", "action": "health",         "handler": "handleHealth",        "type": "workspace_module", "zone": "barra_modulos" }
   ],
   "tools": [
     {
       "name": "marketing.get_perfil",
-      "description": "Obtiene el perfil de marca del proyecto: tono, idioma, público, colores, valores, prohibiciones",
+      "description": "Obtiene el perfil de marca del proyecto: tono, idioma, publico, colores, valores, prohibiciones",
       "handler": "toolGetPerfil",
       "parameters": {
         "type": "object",
-        "properties": {
-          "project_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_id"
-        ]
-      }
+        "properties": { "project_id": { "type": "string" } },
+        "required": ["project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
+      ]
     },
     {
       "name": "marketing.update_perfil",
@@ -74,62 +46,36 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": {
-            "type": "string"
-          },
-          "nombre": {
-            "type": "string",
-            "description": "Nombre del negocio"
-          },
-          "tono": {
-            "type": "string",
-            "description": "Tono de comunicación (ej: cercano, formal, divertido)"
-          },
-          "idioma": {
-            "type": "string",
-            "description": "Idioma principal (es, en, it, etc.)"
-          },
-          "publico": {
-            "type": "string",
-            "description": "Público objetivo (ej: familias, jóvenes, turistas)"
-          },
-          "valores": {
-            "type": "string",
-            "description": "Valores de marca (ej: producto fresco, tradición, innovación)"
-          },
-          "colores": {
-            "type": "object",
-            "description": "Paleta de colores { primario, secundario, acento }"
-          },
-          "prohibido": {
-            "type": "string",
-            "description": "Qué evitar (ej: anglicismos, tono pretencioso)"
-          },
-          "referencia_visual": {
-            "type": "string",
-            "description": "Estilo visual de referencia (ej: trattoria moderna, minimalista)"
-          }
+          "project_id": { "type": "string" },
+          "nombre": { "type": "string" },
+          "tono": { "type": "string" },
+          "idioma": { "type": "string" },
+          "publico": { "type": "string" },
+          "valores": { "type": "string" },
+          "colores": { "type": "object" },
+          "prohibido": { "type": "string" },
+          "referencia_visual": { "type": "string" }
         },
-        "required": [
-          "project_id"
-        ]
-      }
+        "required": ["project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",     "cuando": "project_id ausente" },
+        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del perfil" }
+      ]
     },
     {
       "name": "marketing.completar_onboarding",
-      "description": "Marca el onboarding como completado. A partir de aquí, marketing trabaja automáticamente en cada cambio de carta.",
+      "description": "Marca el onboarding como completado. A partir de aqui, marketing trabaja automaticamente en cada cambio de carta.",
       "handler": "toolCompletarOnboarding",
       "parameters": {
         "type": "object",
-        "properties": {
-          "project_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_id"
-        ]
-      }
+        "properties": { "project_id": { "type": "string" } },
+        "required": ["project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",     "cuando": "project_id ausente" },
+        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del perfil" }
+      ]
     },
     {
       "name": "marketing.actividad",
@@ -137,22 +83,42 @@
       "handler": "toolGetActividad",
       "parameters": {
         "type": "object",
-        "properties": {
-          "project_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "project_id"
-        ]
-      }
+        "properties": { "project_id": { "type": "string" } },
+        "required": ["project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
+      ]
     }
   ],
-  "agents": {
-    "description": "Equipo de agentes especializados que trabajan automáticamente",
-    "marketing-onboarding": "Entrevista conversacional para construir perfil de marca",
-    "marketing-copywriter": "Descripciones, tono, lenguaje adaptado al proyecto",
-    "marketing-strategist": "Ingeniería de menú: productos estrella, orden, psicología de precios",
-    "marketing-brand-keeper": "Coherencia de marca entre cartas y variantes"
+  "dependencies": [],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "config": {
+    "persistence": {
+      "type": "json-file-per-project",
+      "owner": "CartaMarketingModule (Map perfilesPerProject + Map projectPaths + Map processedHashes)",
+      "paths": [
+        "{project.base_path}/storage/config/marca.json (write atomico tmp+rename)"
+      ],
+      "restart_resilient": true,
+      "concurrency": "single-writer-per-project",
+      "lost_on_restart": ["processedHashes"]
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "carta-marketing.procesado",
+        "carta-marketing.errors"
+      ]
+    }
   }
 }

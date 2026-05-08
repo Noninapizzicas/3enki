@@ -1,44 +1,95 @@
 {
   "name": "ai-agent-framework",
-  "version": "1.2.0",
-  "description": "Carga agentes desde agents/*.json + prompts/*.json. Registra la tool invoke_agent (para el LLM) y escucha agent.execute.request (para módulos del dominio). Ambos paths usan el mismo helper interno _runAgent: arma el prompt del agente y llama al LLM via llm.complete.request. Emite agent.execute.progress (canonico v1.1.0) en step='started' y step='finalizing' para que la tarjeta del agente en el chat se actualice. Cuando se incluye conversation_id, también publica el resultado como mensaje en la conversación con metadata.author del agente (preparado para chat multi-participante).",
+  "version": "2.0.0",
+  "description": "Carga agentes desde agents/*.json + prompts/*.{json,md}. Registra la tool invoke_agent (LLM tool flow legacy) en moduleLoader.toolsRegistry y escucha agent.execute.request (entry point canonico agent-flow v1.0.0+) desde modulos del dominio / cron / channels. Publishes canonicos: agent.execute.response (success), agent.execute.failed (no_silent_failures), agent.execute.progress (chat_inline_rendering). Cuando se incluye conversation_id tambien publica chat.assistant.saved con metadata.author del agente para chat multi-participante.",
   "author": "Event Core Team",
   "language": "en",
-  "publishes": [
-    {
-      "event": "agent.execute.response",
-      "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.response.schema.json",
-      "description": "Agente termino exitosamente. Result aplanado a nivel raiz; agent.execute.failed maneja errores."
-    },
-    {
-      "event": "agent.execute.failed",
-      "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.failed.schema.json",
-      "description": "Cierre canonico en error (agente no encontrado, timeout, input invalido, error LLM upstream). Sin esto los flujos de agentes quedan colgados — viola garantia no_silent_failures."
-    },
-    {
-      "event": "agent.execute.progress",
-      "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.progress.schema.json",
-      "description": "Feedback intermedio del agente (step='started' y 'finalizing' por ahora; el agente puede emitir mas via this.eventBus.publish). Habilita la tarjeta agent_intervention en el chat (ver agent-flow.contract.chat_inline_rendering)."
-    },
-    "invoke_agent.response",
-    "chat.assistant.saved",
-    "llm.complete.request"
-  ],
-  "subscribes": [
-    {
-      "event": "invoke_agent",
-      "handler": "onInvokeAgent",
-      "description": "Tool del LLM (agentic loop de ai-gateway). Mantiene shape propio del invoke_agent flow — NO es evento agent_flow canonico."
-    },
-    {
-      "event": "agent.execute.request",
-      "handler": "onAgentExecuteRequest",
-      "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
-      "description": "Entry point canonico para invocar agentes desde modulos del dominio, scheduler/cron, etc."
-    },
-    {
-      "event": "llm.complete.response",
-      "handler": "onLlmCompleteResponse"
+  "main": "index.js",
+  "events": {
+    "publishes": [
+      {
+        "event": "agent.execute.response",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.response.schema.json",
+        "description": "Agente termino exitosamente. Result aplanado a nivel raiz; agent.execute.failed maneja errores. Lleva correlation_id heredado + project_id top-level + timestamp."
+      },
+      {
+        "event": "agent.execute.failed",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.failed.schema.json",
+        "description": "Cierre canonico en error (agente no encontrado, timeout, input invalido, error LLM upstream). Cumple no_silent_failures. Lleva correlation_id heredado + project_id top-level + timestamp."
+      },
+      {
+        "event": "agent.execute.progress",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.progress.schema.json",
+        "description": "Feedback intermedio (step='started' y 'finalizing'). Habilita la tarjeta agent_intervention en el chat. Lleva correlation_id heredado + project_id top-level + timestamp."
+      },
+      {
+        "event": "invoke_agent.response",
+        "description": "Response del LLM tool flow legacy. Shape propio (no es agent_flow canonico)."
+      },
+      {
+        "event": "chat.assistant.saved",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.assistant.saved.schema.json",
+        "description": "Inyecta el resultado del agente como mensaje del companero con metadata.author={kind:'agent'} para chat multi-participante (cuando hay conversation_id)."
+      },
+      {
+        "event": "llm.complete.request",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.request.schema.json",
+        "description": "Request a ai-gateway con system prompt del agente + tools del agente."
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "invoke_agent",
+        "handler": "onInvokeAgent",
+        "description": "Tool del LLM (agentic loop de ai-gateway). Mantiene shape propio del invoke_agent flow — NO es evento agent_flow canonico."
+      },
+      {
+        "event": "agent.execute.request",
+        "handler": "onAgentExecuteRequest",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
+        "description": "Entry point canonico para invocar agentes desde modulos del dominio, scheduler/cron, etc."
+      },
+      {
+        "event": "llm.complete.response",
+        "handler": "onLlmCompleteResponse",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.response.schema.json",
+        "description": "Response del LLM. Despacha al shape canonico (agent.execute.response/failed) o al legacy (invoke_agent.response) segun pending.shape."
+      }
+    ]
+  },
+  "ui_handlers": [],
+  "tools": [],
+  "dependencies": ["ai-gateway"],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "config": {
+    "conversation_cache_ttl_ms": 300000,
+    "persistence": {
+      "type": "in-memory",
+      "owner": "AiAgentFrameworkModule (Map agents + Map pendingLlm + Map _conversationCache)",
+      "filesystem_read": [
+        "modules/conversacion/ai-agent-framework/agents/*.json",
+        "modules/conversacion/ai-agent-framework/prompts/*.{json,md}",
+        "modules/conversacion/_shared/base.prompt.json"
+      ],
+      "restart_resilient": false,
+      "concurrency": "single-instance",
+      "lost_on_restart": ["pendingLlm", "_conversationCache"]
     }
-  ]
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "ai-agent-framework.agent.executed",
+        "ai-agent-framework.errors"
+      ]
+    }
+  }
 }

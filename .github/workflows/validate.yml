@@ -29,9 +29,6 @@ jobs:
       - name: Run POC tests (ai-gateway-poc)
         run: npm run test:ai-gateway-poc
 
-      - name: Run unit tests (carta-scheduler)
-        run: npm run test:carta-scheduler
-
       - name: Run unit tests (scheduler — migracion canonica)
         run: npm run test:scheduler
 
@@ -190,3 +187,60 @@ jobs:
 
       - name: Run unit tests (pizzepos/cocina — reescritura canonica)
         run: npm run test:pizzepos__cocina
+
+      - name: Run unit tests (conversacion/agent-observer — reescritura canonica)
+        run: npm run test:conversacion__agent-observer
+
+      - name: Run unit tests (conversacion/memory-user-profile — reescritura canonica)
+        run: npm run test:conversacion__memory-user-profile
+
+      - name: Run unit tests (conversacion/memory-conversation-summary — reescritura canonica)
+        run: npm run test:conversacion__memory-conversation-summary
+
+      - name: Run unit tests (conversacion/memory-rag — reescritura canonica)
+        run: npm run test:conversacion__memory-rag
+
+      - name: Run unit tests (conversacion/ai-agent-framework — reescritura canonica)
+        run: npm run test:conversacion__ai-agent-framework
+
+      - name: Run unit tests (pizzepos/pedidos — reescritura canonica)
+        run: npm run test:pizzepos__pedidos
+
+      - name: Run unit tests (pizzepos/carta-scheduler — reescritura canonica)
+        run: npm run test:pizzepos__carta-scheduler
+
+      - name: Run unit tests (pizzepos/productos — reescritura canonica)
+        run: npm run test:pizzepos__productos
+
+      - name: Run unit tests (pizzepos/tarifas — reescritura canonica)
+        run: npm run test:pizzepos__tarifas
+
+      - name: Run unit tests (pizzepos/carta-marketing — reescritura canonica)
+        run: npm run test:pizzepos__carta-marketing
+
+      - name: Run unit tests (pizzepos/menu-generator — reescritura canonica)
+        run: npm run test:pizzepos__menu-generator
+
+      - name: Run unit tests (pizzepos/cobros — reescritura canonica)
+        run: npm run test:pizzepos__cobros
+
+      - name: Run unit tests (pizzepos/variaciones — reescritura canonica)
+        run: npm run test:pizzepos__variaciones
+
+      - name: Run unit tests (pizzepos/cuentas-canales — reescritura canonica)
+        run: npm run test:pizzepos__cuentas-canales
+
+      - name: Run unit tests (esp32-flasher — reescritura canonica)
+        run: npm run test:esp32-flasher
+
+      - name: Run unit tests (viabilidad — reescritura canonica)
+        run: npm run test:viabilidad
+
+      - name: Run unit tests (certificate-authority — reescritura canonica)
+        run: npm run test:certificate-authority
+
+      - name: Run unit tests (security-p2p — reescritura canonica)
+        run: npm run test:security-p2p
+
+      - name: Run unit tests (dashboard — reescritura canonica)
+        run: npm run test:dashboard

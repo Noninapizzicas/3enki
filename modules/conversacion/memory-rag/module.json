@@ -1,49 +1,63 @@
 {
   "name": "memory-rag",
-  "version": "1.0.0",
-  "description": "Memoria modular semantica del compañero. Indexa cada mensaje del chat (user + assistant) en un vector store por proyecto, y en cada chat.message.saved hace busqueda semantica top-K en el historico para enriquecer el system prompt via chat.context.enriched (priority 500). Asi, cuando el FIFO recorta el principio, los snippets relevantes del pasado siguen disponibles para el compañero.\n\nIndexacion: publica embedding.generate.request (consumido por ai-gateway) y persiste el vector en SQLite por proyecto. Consulta: en cada chat.message.saved del usuario, hace embedding del mensaje, calcula cosine similarity contra los vectores en memoria, devuelve top-K. Aislamiento por (project_id, user_id) obligatorio.",
+  "version": "2.0.0",
+  "description": "Memoria modular semantica del companero. Indexa cada mensaje del chat (user + assistant) en un vector store por proyecto, y en cada chat.message.saved hace busqueda semantica top-K en el historico para enriquecer el system prompt via chat.context.enriched (priority 500). Asi, cuando el FIFO recorta el principio, los snippets relevantes del pasado siguen disponibles para el companero. Aislamiento por (project_id, user_id) obligatorio.",
   "author": "Event Core Team",
   "language": "es",
-  "publishes": [
-    {
-      "event": "chat.context.enriched",
-      "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
-      "description": "Aporta los snippets semanticamente relevantes del historico (priority 500 — RAG, mas alta que perfil 100/summary 200, menor que especulativa 1000+)."
-    },
-    {
-      "event": "embedding.generate.request",
-      "request_schema_ref": "arquitectura/decisiones/_schemas/embedding-flow/embedding.generate.request.schema.json",
-      "description": "Solicita embedding del mensaje al subir-indexar (cada user_message y cada assistant_message) y al consultar (user_message del turno actual)."
-    },
-    "db.query.request"
-  ],
-  "subscribes": [
-    {
-      "event": "chat.message.saved",
-      "handler": "onMessageSaved",
-      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
-      "description": "Cada mensaje del usuario: indexa (genera embedding y persiste) + consulta (busca top-K en historico, publica chat.context.enriched)."
-    },
-    {
-      "event": "ai.chat.response",
-      "handler": "onAiChatResponse",
-      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.response.schema.json",
-      "description": "Cada respuesta del compañero: indexa (genera embedding del assistant_message y persiste). NO consulta — la consulta es solo en el turno del usuario."
-    },
-    {
-      "event": "embedding.generate.response",
-      "handler": "onEmbeddingResponse"
-    },
-    {
-      "event": "embedding.generate.failed",
-      "handler": "onEmbeddingFailed"
-    },
-    {
-      "event": "db.query.response",
-      "handler": "onDbQueryResponse"
-    }
-  ],
+  "main": "index.js",
+  "events": {
+    "publishes": [
+      {
+        "event": "chat.context.enriched",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
+        "description": "Aporta los snippets semanticamente relevantes del historico (priority 500 — RAG, mas alta que perfil 100/summary 200, menor que especulativa 1000+). Lleva correlation_id heredado + project_id top-level + timestamp."
+      },
+      {
+        "event": "embedding.generate.request",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/embedding-flow/embedding.generate.request.schema.json",
+        "description": "Solicita embedding del mensaje al subir-indexar (cada user_message y cada assistant_message) y al consultar (user_message del turno actual)."
+      },
+      {
+        "event": "db.query.request",
+        "description": "Request a database-manager para persistir/consultar vectores. Correlacionado por request_id."
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "chat.message.saved",
+        "handler": "onMessageSaved",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
+        "description": "Cada mensaje del usuario: indexa (genera embedding y persiste) + consulta (busca top-K en historico, publica chat.context.enriched)."
+      },
+      {
+        "event": "ai.chat.response",
+        "handler": "onAiChatResponse",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/ai.chat.response.schema.json",
+        "description": "Cada respuesta del companero: indexa (genera embedding del assistant_message y persiste). NO consulta — la consulta es solo en el turno del usuario."
+      },
+      {
+        "event": "embedding.generate.response",
+        "handler": "onEmbeddingResponse",
+        "description": "Resolves pending embedding promises por request_id."
+      },
+      {
+        "event": "embedding.generate.failed",
+        "handler": "onEmbeddingFailed",
+        "description": "Rejects pending embedding promises por error."
+      },
+      {
+        "event": "db.query.response",
+        "handler": "onDbQueryResponse",
+        "description": "Resolves pending DB query promises por request_id."
+      }
+    ]
+  },
+  "ui_handlers": [],
+  "tools": [],
   "dependencies": ["database-manager", "ai-gateway"],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
   "config": {
     "enabled": true,
     "priority_in_prompt": 500,
@@ -54,11 +68,30 @@
     "embedding_model": "embedding-001",
     "skip_messages_shorter_than": 8,
     "max_index_size_per_project": 10000,
+    "embedding_timeout_ms": 30000,
+    "db_timeout_ms": 10000,
     "persistence": {
-      "pattern": "sqlite-blob",
+      "type": "delegated-sqlite-blob",
+      "owner": "database-manager (SQLite por proyecto via db.query.request)",
+      "table": "rag_messages (vector como BLOB binario)",
       "restart_resilient": true,
-      "concurrency": "single-writer",
+      "concurrency": "single-writer-per-project",
       "lost_on_restart": ["pendingDb", "pendingEmbeddings", "schemaReady", "vectorCache"]
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "memory-rag.indexed",
+        "memory-rag.context.enriched",
+        "memory-rag.errors"
+      ]
     }
   }
 }

@@ -1,44 +1,27 @@
 {
   "name": "dashboard",
-  "version": "2.0.0",
-  "description": "Observability Dashboard - Web UI para monitorear todos los cores",
+  "version": "3.0.0",
+  "description": "Observability Dashboard - Web UI bus-driven para monitorear todos los cores en la red en tiempo real (active cores via discovery, logs streaming SSE, events streaming SSE, metrics agregadas). Buffers in-memory (logBuffer, eventBuffer) populados por suscripcion al bus (core/+/logs/#, core/+/events/#).",
   "author": "Event Core Team",
   "language": "en",
-  "provides": {
-    "apis": [
-      {
-        "name": "cores",
-        "method": "GET",
-        "path": "/api/cores",
-        "description": "Get list of active cores"
-      },
-      {
-        "name": "coreDetail",
-        "method": "GET",
-        "path": "/api/cores/:id",
-        "description": "Get detailed info about specific core"
-      },
-      {
-        "name": "logs",
-        "method": "GET",
-        "path": "/api/logs/stream",
-        "description": "Stream logs in real-time (SSE)"
-      },
-      {
-        "name": "metrics",
-        "method": "GET",
-        "path": "/api/metrics",
-        "description": "Get aggregated metrics from all cores"
-      },
-      {
-        "name": "events",
-        "method": "GET",
-        "path": "/api/events/stream",
-        "description": "Stream events in real-time (SSE)"
-      }
-    ],
-    "hooks": []
+  "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
   },
+  "events": {
+    "publishes": [],
+    "subscribes": []
+  },
+  "ui_handlers": [
+    { "domain": "dashboard", "action": "cores",       "handler": "handleCores",      "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "dashboard", "action": "core-detail", "handler": "handleCoreDetail", "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "dashboard", "action": "logs",        "handler": "handleLogs",       "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "dashboard", "action": "events",      "handler": "handleEvents",     "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "dashboard", "action": "metrics",     "handler": "handleMetrics",    "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "dashboard", "action": "health",      "handler": "handleHealth",     "type": "system_panel", "zone": "lateral_derecha" }
+  ],
+  "tools": [],
+  "dependencies": [],
   "subscribes": [
     "core/+/logs/#",
     "core/+/events/#",
@@ -47,181 +30,27 @@
   "requires": {
     "core": ">=0.5.0"
   },
-  "ui": {
-    "enabled": true,
-    "version": "2.0",
-    "title": "Dashboard",
-    "icon": "⚡",
-    "description": "Observability Dashboard - Monitor all cores in real-time",
-    "views": {
-      "main": {
-        "type": "dashboard",
-        "permissions": [
-          "admin",
-          "user"
-        ],
-        "layout": {
-          "type": "two-column",
-          "config": {
-            "leftWidth": "65%",
-            "rightWidth": "35%",
-            "gap": "var(--space-lg)"
-          }
-        },
-        "header": {
-          "title": "⚡ Event Core Dashboard",
-          "subtitle": "Real-time monitoring of all cores"
-        },
-        "sections": [
-          {
-            "id": "stats",
-            "widget": "widget-group",
-            "config": {
-              "layout": "horizontal",
-              "widgets": [
-                {
-                  "type": "stat-card",
-                  "title": "Active Cores",
-                  "value": "@data.cores.total",
-                  "icon": "🖥️",
-                  "color": "primary",
-                  "endpoint": "/modules/dashboard/api/cores",
-                  "mqtt_topics": [
-                    "core/+/heartbeat"
-                  ]
-                },
-                {
-                  "type": "stat-card",
-                  "title": "Status",
-                  "value": "Connected",
-                  "icon": "✓",
-                  "color": "success"
-                }
-              ]
-            }
-          },
-          {
-            "id": "cores_section",
-            "widget": "card",
-            "config": {
-              "title": "🖥️ Active Cores",
-              "actions": [
-                {
-                  "type": "button",
-                  "label": "Refresh",
-                  "icon": "↻",
-                  "action": "refresh"
-                }
-              ],
-              "content": {
-                "type": "grid",
-                "endpoint": "/modules/dashboard/api/cores",
-                "data_path": "cores",
-                "mqtt_topics": [
-                  "core/+/heartbeat"
-                ],
-                "refresh_on_event": true,
-                "item_template": {
-                  "type": "card",
-                  "title": "@item.id",
-                  "subtitle": "@item.host:@item.port",
-                  "badge": {
-                    "text": "@item.version",
-                    "color": "info"
-                  },
-                  "status_indicator": {
-                    "field": "is_alive",
-                    "true_color": "success",
-                    "false_color": "danger"
-                  },
-                  "fields": [
-                    {
-                      "label": "Uptime",
-                      "value": "@compute.formatDuration(@item.uptime_ms)"
-                    },
-                    {
-                      "label": "Modules",
-                      "value": "@compute.count(@item.modules)"
-                    },
-                    {
-                      "label": "Heartbeats",
-                      "value": "@item.heartbeat_count"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "id": "logs_section",
-            "widget": "card",
-            "config": {
-              "title": "📝 Real-time Logs",
-              "actions": [
-                {
-                  "type": "checkbox",
-                  "label": "Auto-scroll",
-                  "checked": true,
-                  "action": "toggle_autoscroll"
-                },
-                {
-                  "type": "button",
-                  "label": "Clear",
-                  "action": "clear_logs"
-                }
-              ],
-              "content": {
-                "type": "log-viewer",
-                "sse_endpoint": "/modules/dashboard/api/logs/stream",
-                "max_lines": 100,
-                "auto_scroll": true,
-                "format": "json"
-              }
-            }
-          },
-          {
-            "id": "events_section",
-            "widget": "card",
-            "config": {
-              "title": "📡 Event Stream",
-              "collapsible": true,
-              "actions": [
-                {
-                  "type": "button",
-                  "label": "Clear",
-                  "action": "clear_events"
-                }
-              ],
-              "content": {
-                "type": "event-stream",
-                "sse_endpoint": "/modules/dashboard/api/events/stream",
-                "max_items": 50,
-                "format": "compact"
-              }
-            }
-          },
-          {
-            "id": "metrics_section",
-            "widget": "card",
-            "config": {
-              "title": "📊 Metrics",
-              "content": {
-                "type": "metrics-display",
-                "endpoint": "/modules/dashboard/api/metrics",
-                "refresh_interval": 5000
-              }
-            }
-          }
-        ]
-      }
+  "config": {
+    "max_buffer_size": 1000,
+    "persistence": {
+      "type": "in-memory",
+      "owner": "DashboardModule (logBuffer + eventBuffer + Sets de SSE clients + ref a discovery)",
+      "restart_resilient": false,
+      "concurrency": "single-instance",
+      "lost_on_restart": ["logBuffer", "eventBuffer", "sseClients", "discovery"]
     }
   },
-  "config": {
-    "persistence": {
-      "pattern":           "in-memory",
-      "restart_resilient": false,
-      "concurrency":       "single-writer",
-      "lost_on_restart":   ["logBuffer", "eventBuffer", "sseClients", "discovery"]
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "dashboard.errors"
+      ]
     }
   }
 }

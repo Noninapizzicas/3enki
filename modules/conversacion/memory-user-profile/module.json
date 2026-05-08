@@ -1,40 +1,72 @@
 {
   "name": "memory-user-profile",
-  "version": "1.0.0",
-  "description": "Memoria modular del compañero. Acumula hechos sobre el usuario extraidos de sus mensajes (ej. 'me gusta el espresso', 'soy de Madrid', 'trabajo de medico') y los inyecta en cada chat.prompt.ready vía chat.context.enriched. Primer modulo de memoria modular del subsistema — demuestra que añadir memorias futuras (memory-rag, memory-long-term, memory-project-knowledge) no requiere tocar prompt-builder.",
+  "version": "2.0.0",
+  "description": "Memoria modular del companero. Acumula hechos sobre el usuario extraidos via heuristicas regex (es) de cada chat.message.saved y los inyecta en cada chat.prompt.ready via chat.context.enriched (priority 100). Primer modulo de memoria modular del subsistema — demuestra que añadir memorias futuras (memory-rag, memory-long-term, memory-project-knowledge) no requiere tocar prompt-builder.",
   "author": "Event Core Team",
   "language": "es",
-  "publishes": [
-    {
-      "event": "chat.context.enriched",
-      "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
-      "description": "Aporta el perfil acumulado del user_id como contexto adicional al system prompt (priority 100 — perfil de usuario)."
-    },
-    "db.query.request"
-  ],
-  "subscribes": [
-    {
-      "event": "chat.message.saved",
-      "handler": "onMessageSaved",
-      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
-      "description": "Cada mensaje del usuario: extrae hechos nuevos, persiste, emite chat.context.enriched con el perfil completo."
-    },
-    {
-      "event": "db.query.response",
-      "handler": "onDbQueryResponse"
-    }
-  ],
+  "main": "index.js",
+  "events": {
+    "publishes": [
+      {
+        "event": "chat.context.enriched",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
+        "description": "Aporta el perfil acumulado del user_id como contexto adicional al system prompt (priority 100 — perfil de usuario). Lleva correlation_id heredado + project_id top-level + timestamp."
+      },
+      {
+        "event": "db.query.request",
+        "description": "Request a database-manager para persistir/consultar facts del perfil. Correlacionado por request_id."
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "chat.message.saved",
+        "handler": "onMessageSaved",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
+        "description": "Cada mensaje del usuario: extrae hechos nuevos, persiste, emite chat.context.enriched con el perfil completo."
+      },
+      {
+        "event": "db.query.response",
+        "handler": "onDbQueryResponse",
+        "description": "Resolves the pending promise correlacionada por request_id."
+      }
+    ]
+  },
+  "ui_handlers": [],
+  "tools": [],
   "dependencies": ["database-manager"],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
   "config": {
     "enabled": true,
     "priority_in_prompt": 100,
     "max_facts_per_user": 200,
     "min_fact_length": 4,
+    "db_timeout_ms": 10000,
     "persistence": {
-      "pattern": "in-memory",
-      "restart_resilient": false,
-      "concurrency": "single-writer",
+      "type": "delegated",
+      "owner": "database-manager (SQLite por proyecto via db.query.request)",
+      "table": "user_profile_facts",
+      "restart_resilient": true,
+      "concurrency": "single-writer-per-project",
       "lost_on_restart": ["pendingDb", "schemaReady"]
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "memory-user-profile.context.enriched",
+        "memory-user-profile.errors"
+      ],
+      "gauges": [
+        "memory-user-profile.facts.count"
+      ]
     }
   }
 }

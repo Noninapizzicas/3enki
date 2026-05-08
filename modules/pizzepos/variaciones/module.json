@@ -1,81 +1,42 @@
 {
   "name": "variaciones",
-  "version": "3.0.0",
-  "description": "Gestión de variaciones de productos (quitar/añadir ingredientes)",
+  "version": "4.0.0",
+  "description": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
   "author": "Pizzepos Team",
   "language": "es",
-  "provides": {
-    "events": [
-      "variacion.validada",
-      "variacion.rechazada"
-    ],
-    "queries": [
-      "variacion.validar",
-      "variacion.calcular_precio"
-    ]
-  },
+  "main": "index.js",
   "events": {
     "publishes": [
-      {
-        "event": "variacion.validada",
-        "description": "Variación validada correctamente",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/variacion_validada"
-        }
-      },
-      {
-        "event": "variacion.rechazada",
-        "description": "Variación rechazada (no permitida)",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/variacion_rechazada"
-        }
-      }
+      { "event": "variacion.validada",  "description": "Variacion validada correctamente. project_id top-level + correlation_id + timestamp." },
+      { "event": "variacion.rechazada", "description": "Variacion rechazada (no permitida o ingrediente no disponible). project_id top-level + correlation_id + timestamp." }
     ],
     "subscribes": [
-      {
-        "event": "producto.creado",
-        "description": "Producto creado - registrar variaciones permitidas",
-        "handler": "onProductoCreado"
-      },
-      {
-        "event": "comandero.item_agregado",
-        "description": "Item agregado al buffer del comandero - validar variaciones",
-        "handler": "onComanderoItemAgregado"
-      }
+      { "event": "producto.creado",         "handler": "onProductoCreado",         "description": "Producto creado — registrar variaciones permitidas en cache." },
+      { "event": "comandero.item_agregado", "handler": "onComanderoItemAgregado",  "description": "Item agregado al buffer del comandero — auto-validar variaciones." }
     ]
   },
-  "apis": [
-    {
-      "method": "GET",
-      "path": "/productos/:producto_id/variaciones",
-      "handler": "handleGetVariacionesProducto",
-      "description": "Obtener variaciones permitidas para un producto"
-    },
-    {
-      "method": "POST",
-      "path": "/validar",
-      "handler": "handleValidarVariacion",
-      "description": "Validar si una variación es permitida"
-    },
-    {
-      "method": "POST",
-      "path": "/calcular-precio",
-      "handler": "handleCalcularPrecio",
-      "description": "Calcular precio final con variaciones"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Métricas del módulo"
-    }
+  "ui_handlers": [
+    { "domain": "variaciones", "action": "get",             "handler": "handleGetVariacionesProducto", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "variaciones", "action": "validar",         "handler": "handleValidarVariacion",       "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "variaciones", "action": "calcular_precio", "handler": "handleCalcularPrecio",         "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "variaciones", "action": "health",          "handler": "handleHealthCheck",            "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "variaciones", "action": "metrics",         "handler": "handleGetMetrics",             "type": "workspace_module", "zone": "barra_modulos" }
   ],
+  "tools": [],
+  "dependencies": ["ingredientes"],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "config": {
+    "persistence": {
+      "type": "in-memory",
+      "owner": "VariacionesModule (Map configuraciones por producto_id)",
+      "filesystem_read": [],
+      "restart_resilient": false,
+      "concurrency": "single-instance",
+      "lost_on_restart": ["configuraciones"]
+    }
+  },
   "observability": {
     "logging": {
       "level": "info",
@@ -86,7 +47,8 @@
       "enabled": true,
       "counters": [
         "variacion.validada.total",
-        "variacion.rechazada.total"
+        "variacion.rechazada.total",
+        "variaciones.errors"
       ],
       "gauges": [
         "variacion.productos_configurados.count"

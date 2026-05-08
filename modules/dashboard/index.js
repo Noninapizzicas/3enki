@@ -1,162 +1,280 @@
 /**
- * Dashboard Module - Observability Web UI
+ * Dashboard Module v3.0.0 — POC2 canonico.
  *
- * Provides a web interface to monitor all cores in the network:
- * - Active cores with status
- * - Real-time logs streaming
- * - Metrics visualization
- * - Event flow monitoring
+ * Observability Dashboard - UI bus-driven para monitorear todos los cores en
+ * tiempo real (active cores, logs streaming, events streaming, metrics
+ * agregadas).
+ *
+ * Buffers in-memory (logBuffer, eventBuffer) populados por suscripcion al bus.
+ * SSE clients (logs, events) tracked en Sets para broadcast push-based.
  */
 
-const fs = require('fs');
-const path = require('path');
+'use strict';
+
+const DEFAULT_BUFFER_SIZE = 1000;
+const DEFAULT_LOGS_INITIAL = 50;
+const DEFAULT_EVENTS_INITIAL = 20;
 
 class DashboardModule {
   constructor() {
+    this.name = 'dashboard';
+    this.version = '3.0.0';
+
     this.core = null;
+    this.eventBus = null;
     this.logger = null;
+    this.metrics = null;
     this.discovery = null;
 
-    // Buffers for real-time streaming
     this.logBuffer = [];
     this.eventBuffer = [];
-    this.maxBufferSize = 1000;
+    this.maxBufferSize = DEFAULT_BUFFER_SIZE;
 
-    // SSE clients
     this.sseClients = {
       logs: new Set(),
       events: new Set()
     };
+
+    this._busMessageHandler = null;
   }
 
-  /**
-   * Module lifecycle: onLoad
-   */
+  // ==========================================
+  // Lifecycle
+  // ==========================================
+
   async onLoad(core) {
     this.core = core;
+    this.eventBus = core.eventBus || null;
     this.logger = core.logger;
+    this.metrics = core.metrics || null;
 
-    // Discovery will be set later via setDiscovery()
-    this.discovery = null;
+    const config = core.moduleConfig || core.config || {};
+    this.maxBufferSize = config.max_buffer_size || DEFAULT_BUFFER_SIZE;
 
-    if (this.logger) {
-      this.logger.info('dashboard.loaded', {
-        module: 'dashboard',
-        version: '1.0.0'
-      });
-    }
+    this.discovery = null; // se inyecta via setDiscovery()
 
-    // Subscribe to logs and events for buffering
-    this.subscribeToStreams();
+    this._subscribeToStreams();
 
-    // APIs are auto-registered from module.json via handle* methods
-  }
-
-  /**
-   * Set discovery instance (called after discovery is created)
-   */
-  setDiscovery(discovery) {
-    this.discovery = discovery;
-    if (this.logger) {
-      this.logger.debug('dashboard.discovery.set');
-    }
-  }
-
-  /**
-   * Module lifecycle: onUnload
-   */
-  async onUnload() {
-    // Close all SSE connections
-    for (const client of this.sseClients.logs) {
-      try {
-        client.end();
-      } catch (e) {}
-    }
-    for (const client of this.sseClients.events) {
-      try {
-        client.end();
-      } catch (e) {}
-    }
-
-    if (this.logger) {
-      this.logger.info('dashboard.unloaded');
-    }
-  }
-
-  /**
-   * Subscribe to MQTT topics for buffering
-   */
-  subscribeToStreams() {
-    if (!this.core.eventBus) return;
-
-    // Buffer logs and events
-    this.core.eventBus.on('message', (topic, message) => {
-      if (topic.includes('/logs/')) {
-        this.addToBuffer('logs', { topic, message, timestamp: Date.now() });
-      }
-
-      if (topic.includes('/events/')) {
-        this.addToBuffer('events', { topic, message, timestamp: Date.now() });
-      }
+    this.logger?.info?.('module.loaded', {
+      module: this.name,
+      version: this.version,
+      max_buffer_size: this.maxBufferSize
     });
   }
 
-  /**
-   * Add item to buffer with size limit
-   */
-  addToBuffer(bufferName, item) {
+  setDiscovery(discovery) {
+    this.discovery = discovery;
+    this.logger?.debug?.('dashboard.discovery.set', {});
+  }
+
+  async onUnload() {
+    if (this._busMessageHandler && this.eventBus?.off) {
+      try { this.eventBus.off('message', this._busMessageHandler); } catch (_) { /* ignore */ }
+    } else if (this._busMessageHandler && this.eventBus?.removeListener) {
+      try { this.eventBus.removeListener('message', this._busMessageHandler); } catch (_) { /* ignore */ }
+    }
+    this._busMessageHandler = null;
+
+    for (const client of this.sseClients.logs) {
+      try { client.end(); }
+      catch (e) {
+        this.logger?.debug?.('dashboard.sse.close_error', {
+          stream: 'logs', error_message: e.message
+        });
+      }
+    }
+    for (const client of this.sseClients.events) {
+      try { client.end(); }
+      catch (e) {
+        this.logger?.debug?.('dashboard.sse.close_error', {
+          stream: 'events', error_message: e.message
+        });
+      }
+    }
+    this.sseClients.logs.clear();
+    this.sseClients.events.clear();
+    this.logBuffer = [];
+    this.eventBuffer = [];
+    this.discovery = null;
+
+    this.logger?.info?.('module.unloaded', { module: this.name });
+  }
+
+  // ==========================================
+  // Helpers POC2
+  // ==========================================
+
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details !== undefined) error.details = details;
+    return { status, error };
+  }
+
+  _classifyHandlerError(err) {
+    const msg = err?.message || String(err);
+    const code = err?.code;
+    if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
+    if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    if (/unavailable|no disponible|not available/i.test(msg)) return { status: 503, code: 'DEPENDENCY_UNAVAILABLE' };
+    return { status: 500, code: 'INTERNAL_ERROR' };
+  }
+
+  _handleHandlerError(logEvent, err, kind = 'handler') {
+    const { status, code } = this._classifyHandlerError(err);
+    this.logger?.error?.(logEvent, {
+      kind,
+      error_code: code,
+      error_message: err?.message || String(err)
+    });
+    this.metrics?.increment?.('dashboard.errors', { code, kind });
+    return this._errorResponse(status, code, err?.message || 'Error interno');
+  }
+
+  async _publicarEvento(name, payload, sourcePayload) {
+    if (!this.eventBus?.publish) return payload;
+    const correlation_id =
+      payload?.correlation_id ||
+      sourcePayload?.correlation_id ||
+      sourcePayload?.metadata?.correlationId ||
+      null;
+    const project_id =
+      payload?.project_id ??
+      sourcePayload?.project_id ??
+      null;
+    const enriched = {
+      ...payload,
+      correlation_id,
+      timestamp: payload?.timestamp || new Date().toISOString()
+    };
+    if (project_id !== null && project_id !== undefined) enriched.project_id = project_id;
+    try {
+      await this.eventBus.publish(name, enriched);
+    } catch (err) {
+      this.logger?.warn?.('dashboard.publish.failed', {
+        event: name, error_message: err.message
+      });
+    }
+    return enriched;
+  }
+
+  // ==========================================
+  // Bus subscription + buffering
+  // ==========================================
+
+  _subscribeToStreams() {
+    if (!this.eventBus?.on) return;
+
+    this._busMessageHandler = (topic, message) => {
+      try {
+        if (topic.includes('/logs/')) {
+          this._addToBuffer('logs', { topic, message, timestamp: Date.now() });
+        }
+        if (topic.includes('/events/')) {
+          this._addToBuffer('events', { topic, message, timestamp: Date.now() });
+        }
+      } catch (err) {
+        this.logger?.warn?.('dashboard.buffer.error', {
+          topic, error_message: err.message
+        });
+        this.metrics?.increment?.('dashboard.errors', { code: 'BUFFER_ERROR', kind: 'subscribe' });
+      }
+    };
+    this.eventBus.on('message', this._busMessageHandler);
+  }
+
+  _addToBuffer(bufferName, item) {
     const buffer = bufferName === 'logs' ? this.logBuffer : this.eventBuffer;
-
     buffer.push(item);
-
-    // Keep only last N items
     if (buffer.length > this.maxBufferSize) {
       buffer.shift();
     }
-
-    // Broadcast to SSE clients
-    this.broadcastToSSEClients(bufferName, item);
+    this._broadcastToSSEClients(bufferName, item);
   }
 
-  /**
-   * Broadcast to all SSE clients
-   */
-  broadcastToSSEClients(stream, data) {
+  _broadcastToSSEClients(stream, data) {
     const clients = this.sseClients[stream];
     if (!clients) return;
-
     const payload = `data: ${JSON.stringify(data)}\n\n`;
-
     for (const client of clients) {
       try {
         client.write(payload);
-      } catch (error) {
-        // Client disconnected, remove from set
+      } catch (err) {
         clients.delete(client);
+        this.logger?.debug?.('dashboard.sse.client_disconnected', {
+          stream, error_message: err.message
+        });
       }
     }
   }
 
-  // UI rendering is now handled by Auto-UI v2
-  // Static HTML serving removed - dashboard is now JSON-driven
+  // ==========================================
+  // UI Handlers (canonical shape)
+  // ==========================================
 
-  /**
-   * Get list of active cores
-   */
-  async getCoresList(req) {
-    if (!this.discovery) {
-      return {
-        error: 'Discovery system not available',
-        cores: [],
-        total: 0
-      };
-    }
-
+  async handleCores() {
     try {
+      if (!this.discovery) {
+        this.metrics?.increment?.('dashboard.errors', { code: 'DEPENDENCY_UNAVAILABLE', kind: 'cores' });
+        this.logger?.warn?.('dashboard.cores.no_discovery', {});
+        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE',
+          'Discovery system not available', { dependency: 'discovery' });
+      }
+
       const cores = this.discovery.getActiveCores();
+      return {
+        status: 200,
+        data: {
+          cores: Array.from(cores.values()).map(core => ({
+            id: core.core_id,
+            version: core.version,
+            host: core.host,
+            port: core.port,
+            started_at: core.started_at,
+            last_seen: core.last_seen,
+            heartbeat_count: core.heartbeat_count,
+            is_alive: core.is_alive,
+            modules: core.modules || [],
+            uptime_ms: Date.now() - core.started_at
+          })),
+          total: cores.size,
+          timestamp: Date.now()
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('dashboard.cores.error', err);
+    }
+  }
+
+  async handleCoreDetail(input) {
+    try {
+      const coreId = input?.params?.id || input?.id;
+
+      if (!coreId) {
+        this.metrics?.increment?.('dashboard.errors', { code: 'INVALID_INPUT', kind: 'core-detail' });
+        this.logger?.warn?.('dashboard.core_detail.missing', { field: 'id' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'Core ID required', { field: 'id' });
+      }
+
+      if (!this.discovery) {
+        this.metrics?.increment?.('dashboard.errors', { code: 'DEPENDENCY_UNAVAILABLE', kind: 'core-detail' });
+        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE',
+          'Discovery system not available', { dependency: 'discovery' });
+      }
+
+      const cores = this.discovery.getActiveCores();
+      const core = cores.get(coreId);
+
+      if (!core) {
+        this.metrics?.increment?.('dashboard.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'core-detail' });
+        this.logger?.warn?.('dashboard.core_detail.not_found', { core_id: coreId });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND',
+          'Core not found', { core_id: coreId });
+      }
 
       return {
-        cores: Array.from(cores.values()).map(core => ({
+        status: 200,
+        data: {
           id: core.core_id,
           version: core.version,
           host: core.host,
@@ -166,150 +284,106 @@ class DashboardModule {
           heartbeat_count: core.heartbeat_count,
           is_alive: core.is_alive,
           modules: core.modules || [],
-          uptime_ms: Date.now() - core.started_at
-        })),
-        total: cores.size,
-        timestamp: Date.now()
-      };
-    } catch (error) {
-      return {
-        error: error.message,
-        cores: [],
-        total: 0
-      };
-    }
-  }
-
-  /**
-   * Get detailed info about specific core
-   */
-  async getCoreDetail(req) {
-    const coreId = req.params?.id;
-
-    if (!coreId) {
-      return {
-        error: 'Core ID required'
-      };
-    }
-
-    if (!this.discovery) {
-      return {
-        error: 'Discovery system not available'
-      };
-    }
-
-    try {
-      const cores = this.discovery.getActiveCores();
-      const core = cores.get(coreId);
-
-      if (!core) {
-        return {
-          error: 'Core not found'
-        };
-      }
-
-      return {
-        id: core.core_id,
-        version: core.version,
-        host: core.host,
-        port: core.port,
-        started_at: core.started_at,
-        last_seen: core.last_seen,
-        heartbeat_count: core.heartbeat_count,
-        is_alive: core.is_alive,
-        modules: core.modules || [],
-        capabilities: core.capabilities || {},
-        uptime_ms: Date.now() - core.started_at,
-        uptime_human: this.formatUptime(Date.now() - core.started_at)
-      };
-    } catch (error) {
-      return {
-        error: error.message
-      };
-    }
-  }
-
-  /**
-   * Stream logs via Server-Sent Events
-   */
-  async streamLogs(req) {
-    return {
-      _responseType: 'sse',
-      onConnect: (res) => {
-        // Add client to set
-        this.sseClients.logs.add(res);
-
-        // Send initial buffer
-        for (const log of this.logBuffer.slice(-50)) { // Last 50 logs
-          res.write(`data: ${JSON.stringify(log)}\n\n`);
-        }
-
-        // Handle client disconnect
-        req.on('close', () => {
-          this.sseClients.logs.delete(res);
-        });
-      }
-    };
-  }
-
-  /**
-   * Stream events via Server-Sent Events
-   */
-  async streamEvents(req) {
-    return {
-      _responseType: 'sse',
-      onConnect: (res) => {
-        // Add client to set
-        this.sseClients.events.add(res);
-
-        // Send initial buffer
-        for (const event of this.eventBuffer.slice(-20)) { // Last 20 events
-          res.write(`data: ${JSON.stringify(event)}\n\n`);
-        }
-
-        // Handle client disconnect
-        req.on('close', () => {
-          this.sseClients.events.delete(res);
-        });
-      }
-    };
-  }
-
-  /**
-   * Get aggregated metrics
-   */
-  async getMetrics(req) {
-    const metrics = {
-      timestamp: Date.now(),
-      cores: {},
-      aggregate: {
-        total_cores: 0,
-        total_events: 0,
-        total_messages: 0
-      }
-    };
-
-    if (this.discovery) {
-      const cores = this.discovery.getActiveCores();
-      metrics.aggregate.total_cores = cores.size;
-
-      // Basic metrics from discovery
-      for (const [coreId, core] of cores) {
-        metrics.cores[coreId] = {
+          capabilities: core.capabilities || {},
           uptime_ms: Date.now() - core.started_at,
-          heartbeat_count: core.heartbeat_count,
-          is_alive: core.is_alive
-        };
-      }
+          uptime_human: this._formatUptime(Date.now() - core.started_at)
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('dashboard.core_detail.error', err);
     }
-
-    return metrics;
   }
 
-  /**
-   * Helper: Format uptime in human-readable format
-   */
-  formatUptime(ms) {
+  async handleLogs(req) {
+    return {
+      _responseType: 'sse',
+      onConnect: (res) => {
+        this.sseClients.logs.add(res);
+        for (const log of this.logBuffer.slice(-DEFAULT_LOGS_INITIAL)) {
+          try { res.write(`data: ${JSON.stringify(log)}\n\n`); }
+          catch (_) { /* client disconnected */ }
+        }
+        if (req?.on) {
+          req.on('close', () => { this.sseClients.logs.delete(res); });
+        }
+      }
+    };
+  }
+
+  async handleEvents(req) {
+    return {
+      _responseType: 'sse',
+      onConnect: (res) => {
+        this.sseClients.events.add(res);
+        for (const event of this.eventBuffer.slice(-DEFAULT_EVENTS_INITIAL)) {
+          try { res.write(`data: ${JSON.stringify(event)}\n\n`); }
+          catch (_) { /* client disconnected */ }
+        }
+        if (req?.on) {
+          req.on('close', () => { this.sseClients.events.delete(res); });
+        }
+      }
+    };
+  }
+
+  async handleMetrics() {
+    try {
+      const result = {
+        timestamp: Date.now(),
+        cores: {},
+        aggregate: {
+          total_cores: 0,
+          total_events: 0,
+          total_messages: 0,
+          buffer_logs: this.logBuffer.length,
+          buffer_events: this.eventBuffer.length,
+          sse_clients_logs: this.sseClients.logs.size,
+          sse_clients_events: this.sseClients.events.size
+        }
+      };
+
+      if (this.discovery) {
+        const cores = this.discovery.getActiveCores();
+        result.aggregate.total_cores = cores.size;
+
+        for (const [coreId, core] of cores) {
+          result.cores[coreId] = {
+            uptime_ms: Date.now() - core.started_at,
+            heartbeat_count: core.heartbeat_count,
+            is_alive: core.is_alive
+          };
+        }
+      }
+
+      return { status: 200, data: result };
+    } catch (err) {
+      return this._handleHandlerError('dashboard.metrics.error', err);
+    }
+  }
+
+  async handleHealth() {
+    return {
+      status: 200,
+      data: {
+        module: this.name,
+        version: this.version,
+        status: this.discovery ? 'healthy' : 'degraded',
+        discovery_available: !!this.discovery,
+        buffer_logs: this.logBuffer.length,
+        buffer_events: this.eventBuffer.length,
+        sse_clients: {
+          logs: this.sseClients.logs.size,
+          events: this.sseClients.events.size
+        }
+      }
+    };
+  }
+
+  // ==========================================
+  // Helpers internos
+  // ==========================================
+
+  _formatUptime(ms) {
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
@@ -319,41 +393,6 @@ class DashboardModule {
     if (hours > 0) return `${hours}h ${minutes % 60}m`;
     if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
     return `${seconds}s`;
-  }
-
-  /**
-   * API Handler: Get cores list (called by ModuleLoader)
-   */
-  async handleCores(req) {
-    return this.getCoresList(req);
-  }
-
-  /**
-   * API Handler: Get core detail (called by ModuleLoader)
-   */
-  async handleCoreDetail(req) {
-    return this.getCoreDetail(req);
-  }
-
-  /**
-   * API Handler: Stream logs (called by ModuleLoader)
-   */
-  async handleLogs(req) {
-    return this.streamLogs(req);
-  }
-
-  /**
-   * API Handler: Get metrics (called by ModuleLoader)
-   */
-  async handleMetrics(req) {
-    return this.getMetrics(req);
-  }
-
-  /**
-   * API Handler: Stream events (called by ModuleLoader)
-   */
-  async handleEvents(req) {
-    return this.streamEvents(req);
   }
 }
 

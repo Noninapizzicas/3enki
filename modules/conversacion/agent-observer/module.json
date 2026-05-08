@@ -1,51 +1,77 @@
 {
   "name": "agent-observer",
-  "version": "1.0.0",
-  "description": "Observer canonico del subsistema agentes. Escucha los 4 eventos agent_flow (request, progress, response, failed) y los traduce a chat.assistant.saved cuando hay conversation_id presente, para que la tarjeta agent_intervention del agente se renderice en el chat (ver agent-flow.contract.chat_inline_rendering + frontend.contract.bloques_canonicos_inline_render). Sin este modulo, los agentes invocados desde modulos del dominio (carta-digital, menu-generator, etc.) son silenciosos para el usuario — ejecutan sus tools y terminan sin que la UI muestre nada.",
+  "version": "2.0.0",
+  "description": "Observer canonico del subsistema agentes. Escucha los 4 eventos agent-flow (request/progress/response/failed) y los traduce a chat.assistant.saved con metadata.block.type='agent_intervention' cuando hay conversation_id presente, para que la tarjeta colapsable del agente se renderice inline en el chat. Politica fail-silent: sin conversation_id no emite nada. Sin este modulo, los agentes invocados desde modulos del dominio son silenciosos para el usuario.",
   "author": "Event Core Team",
   "language": "en",
-  "publishes": [
-    {
-      "event": "chat.assistant.saved",
-      "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.assistant.saved.schema.json",
-      "description": "Inyecta el progreso/resultado del agente como mensaje del compañero con metadata.author={kind:'agent'} y metadata.block={type:'agent_intervention',status:'open|closed|failed'}. El frontend renderiza como tarjeta colapsable inline en el chat."
-    }
-  ],
-  "subscribes": [
-    {
-      "event": "agent.execute.request",
-      "handler": "onAgentExecuteRequest",
-      "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
-      "description": "Cuando llega un request con conversation_id, abre tarjeta agent_intervention con status='open'."
-    },
-    {
-      "event": "agent.execute.progress",
-      "handler": "onAgentExecuteProgress",
-      "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.progress.schema.json",
-      "description": "Actualiza la tarjeta abierta del agente con el step actual. NO crea mensaje nuevo — el frontend correlaciona por request_id y muta la tarjeta."
-    },
-    {
-      "event": "agent.execute.response",
-      "handler": "onAgentExecuteResponse",
-      "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.response.schema.json",
-      "description": "Cierra la tarjeta del agente con status='closed' y el assistant_message del resumen del result."
-    },
-    {
-      "event": "agent.execute.failed",
-      "handler": "onAgentExecuteFailed",
-      "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.failed.schema.json",
-      "description": "Cierra la tarjeta del agente con status='failed' y el error.code+message legible. El frontend muestra opcion 'reintentar'."
-    }
-  ],
+  "main": "index.js",
+  "events": {
+    "publishes": [
+      {
+        "event": "chat.assistant.saved",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.assistant.saved.schema.json",
+        "description": "Inyecta el progreso/resultado del agente como mensaje del companero con metadata.author={kind:'agent'} y metadata.block={type:'agent_intervention',status:'open|closed|failed'}. Lleva correlation_id heredado del agent.execute + project_id top-level + timestamp."
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "agent.execute.request",
+        "handler": "onAgentExecuteRequest",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
+        "description": "Cuando llega un request con conversation_id, abre tarjeta agent_intervention con status='open'."
+      },
+      {
+        "event": "agent.execute.progress",
+        "handler": "onAgentExecuteProgress",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.progress.schema.json",
+        "description": "Actualiza la tarjeta abierta del agente con el step actual. NO crea mensaje nuevo — el frontend correlaciona por request_id y muta la tarjeta."
+      },
+      {
+        "event": "agent.execute.response",
+        "handler": "onAgentExecuteResponse",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.response.schema.json",
+        "description": "Cierra la tarjeta del agente con status='closed' y el assistant_message del resumen del result."
+      },
+      {
+        "event": "agent.execute.failed",
+        "handler": "onAgentExecuteFailed",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.failed.schema.json",
+        "description": "Cierra la tarjeta del agente con status='failed' y el error.code+message legible."
+      }
+    ]
+  },
+  "ui_handlers": [],
+  "tools": [],
+  "dependencies": [],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
   "config": {
     "enabled": true,
     "min_message_for_progress": "thinking",
     "summary_max_chars": 280,
     "persistence": {
-      "pattern": "in-memory",
+      "type": "in-memory",
+      "owner": "AgentObserverModule (Map openCards correlacionado por request_id)",
       "restart_resilient": false,
       "concurrency": "single-writer",
       "lost_on_restart": ["openCards"]
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "agent-observer.card.opened",
+        "agent-observer.card.progress",
+        "agent-observer.card.closed",
+        "agent-observer.errors"
+      ]
     }
   }
 }

@@ -1,328 +1,54 @@
 {
   "name": "cobros",
-  "version": "2.1.0",
-  "description": "Gestión unificada de cobros - 7 métodos de pago: efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr. Abre cajón via periferico.abrir-cajon.",
+  "version": "3.0.0",
+  "description": "Gestion unificada de cobros pizzepos — 7 metodos de pago: efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr. Cuentas Llevadoo se pagan externamente (rechazo INVALID_INPUT). Idempotencia: rechaza cobro nuevo si ya hay pendiente/procesando/completado para la cuenta. Abre cajon de dinero via periferico.abrir-cajon en pagos en efectivo (best-effort).",
   "author": "Pizzepos Team",
   "language": "es",
-  "provides": {
-    "events": [
-      "cobro.iniciado",
-      "cobro.procesado",
-      "cobro.reembolsado",
-      "periferico.abrir-cajon"
-    ],
-    "queries": [
-      "cobro.obtener",
-      "cobro.listar",
-      "cobro.por_cuenta"
-    ]
-  },
+  "main": "index.js",
   "events": {
     "publishes": [
-      {
-        "event": "cobro.iniciado",
-        "description": "Cobro iniciado para una cuenta",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/cobro_iniciado"
-        }
-      },
-      {
-        "event": "cobro.procesado",
-        "description": "Cobro procesado exitosamente",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/cobro_procesado"
-        }
-      },
-      {
-        "event": "cobro.reembolsado",
-        "description": "Cobro reembolsado al cliente",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/cobro_reembolsado"
-        }
-      },
-      {
-        "event": "periferico.abrir-cajon",
-        "description": "Abre cajón de dinero al confirmar pago en efectivo"
-      }
+      { "event": "cobro.iniciado",        "description": "Cobro iniciado para una cuenta. project_id top-level + correlation_id + timestamp." },
+      { "event": "cobro.procesado",       "description": "Cobro procesado exitosamente (cuentas escucha esto para marcar como cobrado). project_id top-level + correlation_id + timestamp." },
+      { "event": "cobro.reembolsado",     "description": "Cobro reembolsado al cliente. project_id top-level + correlation_id + timestamp." },
+      { "event": "periferico.abrir-cajon","description": "Abre cajon de dinero al confirmar pago en efectivo. Best-effort." }
     ],
     "subscribes": [
-      {
-        "event": "cuenta.creada",
-        "description": "Cachear ref_display para tickets de cobro",
-        "handler": "onCuentaCreada"
-      },
-      {
-        "event": "cuenta.actualizada",
-        "description": "Actualizar ref_display en cache",
-        "handler": "onCuentaActualizada"
-      },
-      {
-        "event": "pedido.completado",
-        "description": "Pedido completado - permitir cobro",
-        "handler": "onPedidoCompletado"
-      },
-      {
-        "event": "caja.cerrada",
-        "description": "Cierre de caja - limpiar cobros del día",
-        "handler": "onCajaCerrada"
-      },
-      {
-        "event": "dia.iniciado",
-        "description": "Nuevo día - limpiar cobros stale",
-        "handler": "onDiaIniciado"
-      }
+      { "event": "cuenta.creada",      "handler": "onCuentaCreada",      "description": "Cachear ref_display para tickets de cobro." },
+      { "event": "cuenta.actualizada", "handler": "onCuentaActualizada", "description": "Actualizar ref_display en cache." },
+      { "event": "pedido.completado",  "handler": "onPedidoCompletado",  "description": "Pedido completado — permite cobro." },
+      { "event": "caja.cerrada",       "handler": "onCajaCerrada",       "description": "Cierre de caja — limpiar cobros del dia." },
+      { "event": "dia.iniciado",       "handler": "onDiaIniciado",       "description": "Nuevo dia — limpiar cobros stale." }
     ]
   },
-  "ui": {
-    "enabled": true,
-    "title": "Sistema de Cobros",
-    "icon": "💰",
-    "description": "Gestión de pagos con 7 métodos disponibles",
-    "access_level": "camarero",
-    "components": [
-      "payment-grid",
-      "payment-card",
-      "form-payment",
-      "payment-detail"
-    ],
-    "views": {
-      "main": {
-        "type": "dashboard",
-        "layout": "fullwidth",
-        "header": {
-          "title": "💰 Historial de Cobros",
-          "subtitle": "Gestión de pagos y transacciones",
-          "actions": [
-            {
-              "type": "button",
-              "label": "Exportar",
-              "icon": "📊",
-              "action": "export",
-              "variant": "secondary",
-              "permissions": [
-                "admin",
-                "gerente"
-              ]
-            }
-          ]
-        },
-        "content": {
-          "id": "payments_grid",
-          "type": "table",
-          "component": "payment-grid",
-          "config": {
-            "endpoint": "/modules/cobros/cobros",
-            "mqtt_topics": [
-              "cobro.iniciado",
-              "cobro.procesado",
-              "cobro.reembolsado"
-            ],
-            "refresh_on_event": true
-          }
-        }
-      },
-      "create": {
-        "type": "modal",
-        "width": "500px",
-        "component": "form-payment",
-        "mode": "create",
-        "config": {
-          "title": "Cobrar",
-          "endpoint": "/modules/cobros/cobros",
-          "method": "POST",
-          "on_success": {
-            "navigate": "/cuentas",
-            "show_toast": {
-              "message": "Cobro completado",
-              "type": "success"
-            }
-          }
-        }
-      },
-      "detail": {
-        "type": "fullscreen",
-        "component": "payment-detail",
-        "config": {
-          "endpoint": "/modules/cobros/cobros/{id}",
-          "show_header": true,
-          "show_breadcrumbs": true,
-          "breadcrumbs": [
-            {
-              "label": "Cobros",
-              "path": "/cobros"
-            },
-            {
-              "label": "Recibo #{id}",
-              "path": "/cobros/{id}"
-            }
-          ]
-        }
-      }
-    },
-    "mqtt": {
-      "enabled": true,
-      "topics": [
-        "cobro.iniciado",
-        "cobro.procesado",
-        "cobro.reembolsado"
-      ],
-      "auto_refresh": true,
-      "sounds": {
-        "cobro.procesado": "success"
-      }
-    },
-    "permissions": {
-      "view": [
-        "admin",
-        "gerente",
-        "camarero"
-      ],
-      "create": [
-        "admin",
-        "gerente",
-        "camarero"
-      ],
-      "confirm": [
-        "admin",
-        "gerente",
-        "camarero"
-      ],
-      "refund": [
-        "admin",
-        "gerente"
-      ],
-      "export": [
-        "admin",
-        "gerente"
-      ]
-    },
-    "features": {
-      "search": false,
-      "filters": true,
-      "sorting": true,
-      "pagination": true,
-      "export": true,
-      "real_time": true,
-      "print_receipt": true
-    }
-  },
-  "apis": [
-    {
-      "method": "POST",
-      "path": "/cobros",
-      "handler": "handleIniciarCobro",
-      "description": "Iniciar cobro para una cuenta",
-      "request_schema": {
-        "$ref": "./schemas/cobro.json#/definitions/iniciar_cobro_request"
-      },
-      "response_schema": {
-        "$ref": "./schemas/cobro.json#/definitions/cobro"
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/cobros",
-      "handler": "handleListCobros",
-      "description": "Listar cobros (filtros: cuenta_id, metodo, estado)"
-    },
-    {
-      "method": "GET",
-      "path": "/cobros/:id",
-      "handler": "handleGetCobro",
-      "description": "Obtener cobro por ID"
-    },
-    {
-      "method": "POST",
-      "path": "/cobros/:id/confirmar",
-      "handler": "handleConfirmarCobro",
-      "description": "Confirmar cobro (marca como completado)"
-    },
-    {
-      "method": "POST",
-      "path": "/cobros/:id/reembolsar",
-      "handler": "handleReembolsarCobro",
-      "description": "Reembolsar cobro"
-    },
-    {
-      "method": "GET",
-      "path": "/metodos-pago",
-      "handler": "handleListMetodosPago",
-      "description": "Listar métodos de pago disponibles"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Métricas del módulo"
-    },
-    {
-      "method": "GET",
-      "path": "/cajones",
-      "handler": "handleListarCajones",
-      "description": "Lista dispositivos con cajón de dinero disponibles para selección"
-    }
+  "ui_handlers": [
+    { "domain": "cobro", "action": "create",          "handler": "handleCreateCobro",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cobro", "action": "list",            "handler": "handleListCobros",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cobro", "action": "get",             "handler": "handleGetCobro",        "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cobro", "action": "confirm",         "handler": "handleConfirmarCobro",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cobro", "action": "refund",          "handler": "handleReembolsarCobro", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cobro", "action": "payment-methods", "handler": "handleGetMetodosPago",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cobro", "action": "list-cajones",    "handler": "handleListarCajones",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cobro", "action": "health",          "handler": "handleHealthCheck",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cobro", "action": "metrics",         "handler": "handleGetMetrics",      "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "metodos_pago": {
-    "efectivo": {
-      "enabled": true,
-      "nombre": "Efectivo",
-      "icono": "💵",
-      "requiere_confirmacion": true,
-      "permite_cambio": true
-    },
-    "tarjeta": {
-      "enabled": true,
-      "nombre": "Tarjeta",
-      "icono": "💳",
-      "requiere_confirmacion": false,
-      "soporta_contactless": true,
-      "proveedores": [
-        "redsys",
-        "stripe"
-      ]
-    },
-    "bizum": {
-      "enabled": true,
-      "nombre": "Bizum",
-      "icono": "📱",
-      "requiere_confirmacion": false,
-      "telefono_comercio": "+34600000000"
-    },
-    "transferencia": {
-      "enabled": false,
-      "nombre": "Transferencia",
-      "icono": "🏦",
-      "requiere_confirmacion": true
-    },
-    "mixto": {
-      "enabled": true,
-      "nombre": "Pago Mixto",
-      "icono": "🔀",
-      "requiere_confirmacion": true,
-      "requiere_desglose": true,
-      "descripcion": "Split payment entre múltiples métodos"
-    },
-    "link_pago": {
-      "enabled": true,
-      "nombre": "Link de Pago",
-      "icono": "🔗",
-      "requiere_confirmacion": false,
-      "expiracion_horas": 24,
-      "descripcion": "Link de pago para pedidos online/delivery"
-    },
-    "qr": {
-      "enabled": true,
-      "nombre": "Código QR",
-      "icono": "📲",
-      "requiere_confirmacion": false,
-      "expiracion_minutos": 30,
-      "descripcion": "QR de pago rápido para Bizum/wallets"
+  "tools": [],
+  "dependencies": ["perifericos"],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "config": {
+    "payment_base_url": "https://pay.pizzepos.com",
+    "link_expiracion_horas": 24,
+    "qr_expiracion_minutos": 30,
+    "merchant_id": "PIZZEPOS",
+    "api_base_url": "http://localhost:3339",
+    "cobros": { "cajon_destino": "caja" },
+    "persistence": {
+      "type": "in-memory",
+      "owner": "CobrosModule (Map cobros + Map refDisplayCache)",
+      "restart_resilient": false,
+      "concurrency": "single-instance",
+      "lost_on_restart": ["cobros", "refDisplayCache", "internalMetrics"]
     }
   },
   "observability": {
@@ -334,25 +60,12 @@
     "metrics": {
       "enabled": true,
       "counters": [
-        "cobro.iniciado.total",
-        "cobro.procesado.total",
-        "cobro.reembolsado.total"
+        "cobros.iniciados.total",
+        "cobros.completados.total",
+        "cobros.reembolsados.total",
+        "cobros.errors"
       ],
-      "gauges": [
-        "cobro.pendiente.count",
-        "cobro.monto_total.sum"
-      ],
-      "timings": [
-        "cobro.procesamiento.duration"
-      ]
-    }
-  },
-  "config": {
-    "persistence": {
-      "pattern":           "in-memory",
-      "restart_resilient": false,
-      "concurrency":       "single-writer",
-      "lost_on_restart":   ["refDisplayCache", "cobros"]
+      "gauges": ["cobros.monto_total"]
     }
   }
 }

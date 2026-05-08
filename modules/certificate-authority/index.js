@@ -1,19 +1,20 @@
 /**
- * Certificate Authority Module v1.0.0
+ * Certificate Authority Module v2.0.0 — POC2 canonico.
  *
- * Módulo de Autoridad Certificadora interna para Event Core.
- * Emite, revoca y verifica certificados X.509 cliente.
+ * Modulo de Autoridad Certificadora interna para Event Core. Emite, revoca y
+ * verifica certificados X.509 cliente. Hook beforeRequest para autenticacion
+ * mTLS transparente cuando config.mtls_enabled.
  *
- * Dos casos de uso:
- *   1. Certificados para clientes del portal de facturación
+ * Casos de uso:
+ *   1. Certificados para clientes del portal de facturacion
  *   2. Certificados para dispositivos de trabajo
  *
- * Se integra al gateway HTTP vía hook beforeRequest para
- * autenticación mTLS transparente.
- *
- * Emite: certificate.issued, certificate.revoked, certificate.renewed, certificate.expired
- * Hooks: beforeRequest (autenticación mTLS)
+ * Publishes (canonicos): certificate.issued, certificate.revoked,
+ * certificate.renewed, certificate.expired (todos con correlation_id +
+ * timestamp via _publicarEvento).
  */
+
+'use strict';
 
 const CAManager = require('./ca-manager');
 const MTLSMiddleware = require('./mtls-middleware');
@@ -21,10 +22,12 @@ const MTLSMiddleware = require('./mtls-middleware');
 class CertificateAuthorityModule {
   constructor() {
     this.name = 'certificate-authority';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
     this.caManager = null;
     this.mtlsMiddleware = null;
+    this._mtlsHookHandler = null;
+    this._coreHooks = null;
 
     this.stats = {
       certificates_issued: 0,
@@ -33,8 +36,8 @@ class CertificateAuthorityModule {
       verification_requests: 0
     };
 
-    // Dependencias (inyectadas en onLoad)
     this.core = null;
+    this.eventBus = null;
     this.logger = null;
     this.metrics = null;
   }
@@ -45,13 +48,12 @@ class CertificateAuthorityModule {
 
   async onLoad(core) {
     this.core = core;
+    this.eventBus = core.eventBus || null;
     this.logger = core.logger;
     this.metrics = core.metrics;
 
-    // Leer configuración del módulo (inyectada por el loader desde module.json)
-    const config = core.moduleConfig || {};
+    const config = core.moduleConfig || core.config || {};
 
-    // Inicializar CA Manager
     this.caManager = new CAManager({
       storagePath: config.storagePath,
       ca_cn: config.ca_cn,
@@ -63,7 +65,6 @@ class CertificateAuthorityModule {
 
     const result = await this.caManager.initialize();
 
-    // Inicializar middleware mTLS
     this.mtlsMiddleware = new MTLSMiddleware({
       caManager: this.caManager,
       logger: this.logger,
@@ -71,128 +72,181 @@ class CertificateAuthorityModule {
       mode: config.mtls_mode || 'proxy',
       certHeader: config.cert_header || 'x-client-cert',
       excludePaths: config.exclude_paths || [
-        '/health',
-        '/ready',
-        '/stats',
+        '/health', '/ready', '/stats',
         '/modules/certificate-authority/ca-cert',
         '/modules/certificate-authority/status'
       ],
-      allowUnauthenticated: config.allow_unauthenticated !== false // true por defecto durante desarrollo
+      allowUnauthenticated: config.allow_unauthenticated !== false
     });
 
-    // Registrar hook para autenticación mTLS
     if (core.hooks && config.mtls_enabled) {
-      core.hooks.register('beforeRequest', this.mtlsMiddleware.authenticate.bind(this.mtlsMiddleware));
+      this._coreHooks = core.hooks;
+      this._mtlsHookHandler = this.mtlsMiddleware.authenticate.bind(this.mtlsMiddleware);
+      core.hooks.register('beforeRequest', this._mtlsHookHandler);
     }
 
-    if (this.logger) {
-      this.logger.info('module.loaded', {
-        module: this.name,
-        version: this.version,
-        ca_created: result.created,
-        ca_loaded: result.loaded,
-        mtls_enabled: !!config.mtls_enabled,
-        mtls_mode: config.mtls_mode || 'proxy'
-      });
-    }
+    this.logger?.info?.('module.loaded', {
+      module: this.name,
+      version: this.version,
+      ca_created: result.created,
+      ca_loaded: result.loaded,
+      mtls_enabled: !!config.mtls_enabled,
+      mtls_mode: config.mtls_mode || 'proxy'
+    });
   }
 
   async onUnload() {
-    // UI handlers auto-unwired by loader
-    if (this.logger) {
-      this.logger.info('module.unloaded', { module: this.name });
+    if (this._coreHooks && this._mtlsHookHandler && typeof this._coreHooks.unregister === 'function') {
+      try { this._coreHooks.unregister('beforeRequest', this._mtlsHookHandler); } catch (_) { /* ignore */ }
     }
+    this._coreHooks = null;
+    this._mtlsHookHandler = null;
+    this.caManager = null;
+    this.mtlsMiddleware = null;
+    this.logger?.info?.('module.unloaded', { module: this.name });
   }
 
   // ==========================================
-  // API Handlers
+  // Helpers POC2
   // ==========================================
 
-  /**
-   * GET /status — Estado del módulo y la CA
-   */
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details !== undefined) error.details = details;
+    return { status, error };
+  }
+
+  _classifyHandlerError(err) {
+    const msg = err?.message || String(err);
+    const code = err?.code;
+    if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
+    if (/not found|no encontrado|revoked|expired/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    if (/already|conflict/i.test(msg)) return { status: 409, code: 'CONFLICT_STATE' };
+    return { status: 500, code: 'INTERNAL_ERROR' };
+  }
+
+  _handleHandlerError(logEvent, err, kind = 'handler') {
+    const { status, code } = this._classifyHandlerError(err);
+    this.logger?.error?.(logEvent, {
+      kind,
+      error_code: code,
+      error_message: err?.message || String(err)
+    });
+    this.metrics?.increment?.('certificate-authority.errors', { code, kind });
+    return this._errorResponse(status, code, err?.message || 'Error interno');
+  }
+
+  async _publicarEvento(name, payload, sourcePayload) {
+    if (!this.eventBus) {
+      // Fallback al core.emit legacy si no hay eventBus
+      if (this.core?.emit) this.core.emit(name, payload || {});
+      return payload;
+    }
+    const correlation_id =
+      payload?.correlation_id ||
+      sourcePayload?.correlation_id ||
+      sourcePayload?.metadata?.correlationId ||
+      null;
+    const project_id =
+      payload?.project_id ??
+      sourcePayload?.project_id ??
+      null;
+    const enriched = {
+      ...payload,
+      correlation_id,
+      timestamp: payload?.timestamp || new Date().toISOString()
+    };
+    if (project_id !== null && project_id !== undefined) enriched.project_id = project_id;
+    try {
+      await this.eventBus.publish(name, enriched);
+    } catch (err) {
+      this.logger?.warn?.('certificate-authority.publish.failed', {
+        event: name, error_message: err.message
+      });
+    }
+    return enriched;
+  }
+
+  // ==========================================
+  // UI Handlers (canonical shape)
+  // ==========================================
+
   async handleStatus() {
-    return {
-      status: 200,
-      data: {
-        module: this.name,
-        version: this.version,
-        ca: this.caManager.getStats(),
-        mtls: this.mtlsMiddleware.getStats(),
-        stats: this.stats
-      }
-    };
-  }
-
-  /**
-   * GET /ca-cert — Descargar certificado raíz de la CA
-   * (público — para que clientes/dispositivos instalen la CA)
-   */
-  async handleGetCACert() {
-    const cert = this.caManager.getCACertificate();
-    return {
-      status: 200,
-      data: {
-        certificate: cert,
-        instructions: {
-          browser: 'Importar como "Autoridad de certificación" en Configuración > Certificados',
-          windows: 'Doble click > Instalar certificado > Almacén: Entidades de certificación raíz de confianza',
-          macos: 'Abrir con Acceso a Llaveros > Añadir a "Sistema" > Confiar siempre',
-          linux: 'Copiar a /usr/local/share/ca-certificates/ y ejecutar update-ca-certificates',
-          android: 'Configuración > Seguridad > Instalar desde almacenamiento',
-          ios: 'Enviar por email > Instalar perfil > Configuración > General > Gestión de perfiles'
-        }
-      }
-    };
-  }
-
-  /**
-   * POST /issue — Emitir nuevo certificado
-   */
-  async handleIssueCertificate({ body }) {
-    const { commonName, type, identifier, organization, email, validityDays, passphrase } = body || {};
-
-    if (!commonName || !type || !identifier) {
+    try {
       return {
-        status: 400,
+        status: 200,
         data: {
-          error: 'Required fields: commonName, type (client|device), identifier'
+          module: this.name,
+          version: this.version,
+          ca: this.caManager.getStats(),
+          mtls: this.mtlsMiddleware.getStats(),
+          stats: this.stats
         }
       };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.status.error', err);
     }
+  }
 
+  async handleGetCACert() {
     try {
+      const cert = this.caManager.getCACertificate();
+      return {
+        status: 200,
+        data: {
+          certificate: cert,
+          instructions: {
+            browser: 'Importar como "Autoridad de certificacion" en Configuracion > Certificados',
+            windows: 'Doble click > Instalar certificado > Almacen: Entidades de certificacion raiz de confianza',
+            macos: 'Abrir con Acceso a Llaveros > Anadir a "Sistema" > Confiar siempre',
+            linux: 'Copiar a /usr/local/share/ca-certificates/ y ejecutar update-ca-certificates',
+            android: 'Configuracion > Seguridad > Instalar desde almacenamiento',
+            ios: 'Enviar por email > Instalar perfil > Configuracion > General > Gestion de perfiles'
+          }
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.ca_cert.error', err);
+    }
+  }
+
+  async handleIssueCertificate(input) {
+    try {
+      // Acepta { body: {...} } (legacy HTTP) o el data plano (UI bus).
+      const body = input?.body || input || {};
+      const {
+        commonName, type, identifier, organization, email,
+        validityDays, passphrase, project_id, correlation_id
+      } = body;
+
+      if (!commonName || !type || !identifier) {
+        this.metrics?.increment?.('certificate-authority.errors', { code: 'INVALID_INPUT', kind: 'issue' });
+        this.logger?.warn?.('certificate-authority.issue.missing', {
+          missing: ['commonName', 'type', 'identifier'].filter(f => !body[f])
+        });
+        return this._errorResponse(400, 'INVALID_INPUT',
+          'Required fields: commonName, type (client|device), identifier',
+          { required: ['commonName', 'type', 'identifier'] });
+      }
+
       const result = await this.caManager.issueCertificate({
-        commonName,
-        type,
-        identifier,
-        organization,
-        email,
-        validityDays,
-        passphrase
+        commonName, type, identifier, organization, email, validityDays, passphrase
       });
 
       this.stats.certificates_issued++;
+      this.metrics?.increment?.('certificate-authority.certificates_issued');
 
-      // Emitir evento
-      if (this.core?.emit) {
-        this.core.emit('certificate.issued', {
-          serialNumber: result.serialNumber,
-          type,
-          identifier,
-          commonName,
-          fingerprint: result.fingerprint
-        });
-      }
+      await this._publicarEvento('certificate.issued', {
+        serialNumber: result.serialNumber,
+        type, identifier, commonName,
+        fingerprint: result.fingerprint
+      }, { correlation_id, project_id });
 
-      if (this.logger) {
-        this.logger.info('certificate.issued', {
-          serialNumber: result.serialNumber,
-          type,
-          identifier,
-          commonName
-        });
-      }
+      this.logger?.info?.('certificate.issued', {
+        serialNumber: result.serialNumber, type, identifier, commonName
+      });
 
       return {
         status: 201,
@@ -200,83 +254,74 @@ class CertificateAuthorityModule {
           serialNumber: result.serialNumber,
           fingerprint: result.fingerprint,
           metadata: result.metadata,
-          // No devolver la clave privada por HTTP — solo disponible via download P12
           certificate: result.certificate,
           hasP12: !!result.p12
         }
       };
-    } catch (error) {
-      return {
-        status: 400,
-        data: { error: error.message }
-      };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.issue.error', err);
     }
   }
 
-  /**
-   * POST /revoke — Revocar certificado
-   */
-  async handleRevokeCertificate({ body }) {
-    const { serialNumber, reason } = body || {};
-
-    if (!serialNumber) {
-      return { status: 400, data: { error: 'serialNumber is required' } };
-    }
-
-    const result = this.caManager.revokeCertificate(serialNumber, reason);
-
-    if (result.revoked) {
-      this.stats.certificates_revoked++;
-
-      if (this.core?.emit) {
-        this.core.emit('certificate.revoked', {
-          serialNumber,
-          reason: reason || 'unspecified'
-        });
-      }
-
-      if (this.logger) {
-        this.logger.info('certificate.revoked', { serialNumber, reason });
-      }
-    }
-
-    return {
-      status: result.revoked ? 200 : 400,
-      data: result
-    };
-  }
-
-  /**
-   * POST /renew — Renovar certificado
-   */
-  async handleRenewCertificate({ body }) {
-    const { serialNumber, passphrase, validityDays } = body || {};
-
-    if (!serialNumber) {
-      return { status: 400, data: { error: 'serialNumber is required' } };
-    }
-
+  async handleRevokeCertificate(input) {
     try {
-      const result = await this.caManager.renewCertificate(serialNumber, {
-        passphrase,
-        validityDays
-      });
+      const body = input?.body || input || {};
+      const { serialNumber, reason, project_id, correlation_id } = body;
+
+      if (!serialNumber) {
+        this.metrics?.increment?.('certificate-authority.errors', { code: 'INVALID_INPUT', kind: 'revoke' });
+        this.logger?.warn?.('certificate-authority.revoke.missing', { field: 'serialNumber' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'serialNumber is required', { field: 'serialNumber' });
+      }
+
+      const result = this.caManager.revokeCertificate(serialNumber, reason);
+
+      if (!result.revoked) {
+        this.metrics?.increment?.('certificate-authority.errors', { code: 'CONFLICT_STATE', kind: 'revoke' });
+        this.logger?.warn?.('certificate-authority.revoke.failed', { serialNumber, reason });
+        return this._errorResponse(409, 'CONFLICT_STATE',
+          result.error || 'Certificate could not be revoked',
+          { serialNumber, reason: result.reason });
+      }
+
+      this.stats.certificates_revoked++;
+      this.metrics?.increment?.('certificate-authority.certificates_revoked');
+
+      await this._publicarEvento('certificate.revoked', {
+        serialNumber, reason: reason || 'unspecified'
+      }, { correlation_id, project_id });
+
+      this.logger?.info?.('certificate.revoked', { serialNumber, reason });
+
+      return { status: 200, data: result };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.revoke.error', err);
+    }
+  }
+
+  async handleRenewCertificate(input) {
+    try {
+      const body = input?.body || input || {};
+      const { serialNumber, passphrase, validityDays, project_id, correlation_id } = body;
+
+      if (!serialNumber) {
+        this.metrics?.increment?.('certificate-authority.errors', { code: 'INVALID_INPUT', kind: 'renew' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'serialNumber is required', { field: 'serialNumber' });
+      }
+
+      const result = await this.caManager.renewCertificate(serialNumber, { passphrase, validityDays });
 
       this.stats.certificates_renewed++;
+      this.metrics?.increment?.('certificate-authority.certificates_renewed');
 
-      if (this.core?.emit) {
-        this.core.emit('certificate.renewed', {
-          oldSerialNumber: serialNumber,
-          newSerialNumber: result.serialNumber
-        });
-      }
+      await this._publicarEvento('certificate.renewed', {
+        oldSerialNumber: serialNumber,
+        newSerialNumber: result.serialNumber
+      }, { correlation_id, project_id });
 
-      if (this.logger) {
-        this.logger.info('certificate.renewed', {
-          old: serialNumber,
-          new: result.serialNumber
-        });
-      }
+      this.logger?.info?.('certificate.renewed', {
+        old: serialNumber, new: result.serialNumber
+      });
 
       return {
         status: 200,
@@ -287,122 +332,130 @@ class CertificateAuthorityModule {
           metadata: result.metadata
         }
       };
-    } catch (error) {
-      return { status: 400, data: { error: error.message } };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.renew.error', err);
     }
   }
 
-  /**
-   * GET /list — Listar certificados
-   */
-  async handleListCertificates({ query }) {
-    const filters = {};
-    if (query?.type) filters.type = query.type;
-    if (query?.status) filters.status = query.status;
-    if (query?.identifier) filters.identifier = query.identifier;
+  async handleListCertificates(input) {
+    try {
+      const query = input?.query || input || {};
+      const filters = {};
+      if (query.type) filters.type = query.type;
+      if (query.status) filters.status = query.status;
+      if (query.identifier) filters.identifier = query.identifier;
 
-    const certs = this.caManager.listCertificates(filters);
+      const certs = this.caManager.listCertificates(filters);
 
-    return {
-      status: 200,
-      data: {
-        certificates: certs,
-        total: certs.length,
-        filters
+      return {
+        status: 200,
+        data: { certificates: certs, total: certs.length, filters }
+      };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.list.error', err);
+    }
+  }
+
+  async handleVerifyCertificate(input) {
+    try {
+      const body = input?.body || input || {};
+      const { certificate } = body;
+
+      if (!certificate) {
+        this.metrics?.increment?.('certificate-authority.errors', { code: 'INVALID_INPUT', kind: 'verify' });
+        return this._errorResponse(400, 'INVALID_INPUT',
+          'certificate (PEM) is required',
+          { field: 'certificate' });
       }
-    };
-  }
 
-  /**
-   * POST /verify — Verificar certificado
-   */
-  async handleVerifyCertificate({ body }) {
-    const { certificate } = body || {};
+      this.stats.verification_requests++;
+      this.metrics?.increment?.('certificate-authority.verification_requests');
+      const result = this.caManager.verifyCertificate(certificate);
 
-    if (!certificate) {
-      return { status: 400, data: { error: 'certificate (PEM) is required' } };
+      return { status: 200, data: result };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.verify.error', err);
     }
-
-    this.stats.verification_requests++;
-    const result = this.caManager.verifyCertificate(certificate);
-
-    return {
-      status: 200,
-      data: result
-    };
   }
 
-  /**
-   * GET /crl — Obtener lista de revocación
-   */
   async handleGetCRL() {
-    return {
-      status: 200,
-      data: {
-        revoked: this.caManager.getCRL(),
-        updated: new Date().toISOString()
-      }
-    };
+    try {
+      return {
+        status: 200,
+        data: {
+          revoked: this.caManager.getCRL(),
+          updated: new Date().toISOString()
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.crl.error', err);
+    }
   }
 
-  /**
-   * GET /download-p12/:serialNumber — Descargar bundle .p12
-   */
-  async handleDownloadP12({ query }) {
-    const { serialNumber } = query || {};
+  async handleDownloadP12(input) {
+    try {
+      const query = input?.query || input || {};
+      const { serialNumber } = query;
 
-    if (!serialNumber) {
-      return { status: 400, data: { error: 'serialNumber query param is required' } };
-    }
-
-    const p12 = this.caManager.getP12Bundle(serialNumber);
-
-    if (!p12) {
-      return { status: 404, data: { error: 'P12 bundle not found (may have been revoked)' } };
-    }
-
-    return {
-      status: 200,
-      data: {
-        serialNumber,
-        bundle: p12.toString('base64'),
-        contentType: 'application/x-pkcs12',
-        filename: `certificate-${serialNumber.substring(0, 8)}.p12`
+      if (!serialNumber) {
+        return this._errorResponse(400, 'INVALID_INPUT',
+          'serialNumber is required', { field: 'serialNumber' });
       }
-    };
+
+      const p12 = this.caManager.getP12Bundle(serialNumber);
+
+      if (!p12) {
+        this.metrics?.increment?.('certificate-authority.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'download-p12' });
+        this.logger?.warn?.('certificate-authority.download_p12.not_found', { serialNumber });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND',
+          'P12 bundle not found (may have been revoked)',
+          { serialNumber });
+      }
+
+      return {
+        status: 200,
+        data: {
+          serialNumber,
+          bundle: p12.toString('base64'),
+          contentType: 'application/x-pkcs12',
+          filename: `certificate-${serialNumber.substring(0, 8)}.p12`
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.download_p12.error', err);
+    }
   }
 
-  /**
-   * GET /nginx-config — Configuración nginx para mTLS
-   */
   async handleGetNginxConfig() {
-    return {
-      status: 200,
-      data: {
-        config: this.mtlsMiddleware.getNginxConfig()
-      }
-    };
+    try {
+      return {
+        status: 200,
+        data: { config: this.mtlsMiddleware.getNginxConfig() }
+      };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.nginx_config.error', err);
+    }
   }
 
-  /**
-   * GET /health — Health check
-   */
   async handleHealthCheck() {
-    const caStats = this.caManager.getStats();
-
-    return {
-      status: 200,
-      data: {
-        module: this.name,
-        status: caStats.ca_initialized ? 'healthy' : 'degraded',
-        ca_initialized: caStats.ca_initialized,
-        active_certificates: caStats.active,
-        expiring_soon: caStats.expiring_soon,
-        mtls_stats: this.mtlsMiddleware.getStats()
-      }
-    };
+    try {
+      const caStats = this.caManager.getStats();
+      return {
+        status: 200,
+        data: {
+          module: this.name,
+          status: caStats.ca_initialized ? 'healthy' : 'degraded',
+          version: this.version,
+          ca_initialized: caStats.ca_initialized,
+          active_certificates: caStats.active,
+          expiring_soon: caStats.expiring_soon,
+          mtls_stats: this.mtlsMiddleware.getStats()
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('certificate-authority.health.error', err);
+    }
   }
-
 }
 
 module.exports = CertificateAuthorityModule;

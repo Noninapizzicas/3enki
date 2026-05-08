@@ -7,6 +7,7 @@
   "additionalProperties": false,
   "required": [
     "correlation_id",
+    "project_id",
     "conversation_id",
     "message_id",
     "source",
@@ -16,6 +17,7 @@
   ],
   "properties": {
     "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
     "conversation_id": { "$ref": "_common.schema.json#/$defs/conversation_id" },
     "message_id":      { "$ref": "_common.schema.json#/$defs/message_id" },
     "source": {

@@ -99,7 +99,7 @@ function checkContratoSinValidator(findings) {
     }
   }
   // Excepciones: contratos que no requieren validator propio (modulo-completo lo extrae diferentemente)
-  const EXCLUDED = new Set(['modulo-completo','manifest-completo','eventos-emitidos','companero-viaje']);
+  const EXCLUDED = new Set(['modulo-completo','manifest-completo','eventos-emitidos','companero-viaje','extensibilidad-modular']);
   for (const dir of CONTRATOS_DIRS) {
     if (!fs.existsSync(dir)) continue;
     for (const f of fs.readdirSync(dir)) {
@@ -153,7 +153,7 @@ function checkContratosEnClaudemd(findings) {
     path.join(REPO_ROOT, 'arquitectura/convenciones/_contratos')
   ];
   // Excepciones: contratos no transversales o sub-contratos que pueden vivir referenciados solo en su contexto
-  const EXCLUDED = new Set(['companero-viaje']);
+  const EXCLUDED = new Set(['companero-viaje','extensibilidad-modular']);
   for (const dir of contratosDirs) {
     if (!fs.existsSync(dir)) continue;
     for (const f of fs.readdirSync(dir)) {

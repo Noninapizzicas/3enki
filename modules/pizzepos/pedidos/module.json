@@ -1,382 +1,62 @@
 {
   "name": "pedidos",
-  "version": "2.0.0",
-  "description": "Gestión completa de pedidos - Reemplazo de comandero 100% event-driven",
+  "version": "3.0.0",
+  "description": "Gestion completa de pedidos formales pizzepos. Recibe del comandero (bridge comandero.enviar_cocina) o se crea via UI handler. Persiste en memoria con restauracion desde cuentas_activas.json al arrancar (delegacion a persistencia-comandero). Cache de productos invalidada por catalogo.actualizado y producto.{creado,actualizado}.",
   "author": "Pizzepos Team",
   "language": "es",
-  "provides": {
-    "events": [
-      "pedido.creado",
-      "pedido.item_agregado",
-      "pedido.item_actualizado",
-      "pedido.item_eliminado",
-      "pedido.enviado_cocina",
-      "pedido.completado",
-      "pedido.cancelado"
-    ],
-    "queries": [
-      "pedido.obtener",
-      "pedido.listar",
-      "pedido.por_cuenta"
-    ]
-  },
+  "main": "index.js",
   "events": {
     "publishes": [
-      {
-        "event": "pedido.creado",
-        "description": "Nuevo pedido creado para una cuenta",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/pedido_creado"
-        }
-      },
-      {
-        "event": "pedido.item_agregado",
-        "description": "Item agregado al pedido (con variaciones)",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/pedido_item_agregado"
-        }
-      },
-      {
-        "event": "pedido.item_actualizado",
-        "description": "Item del pedido actualizado (cantidad, variaciones)",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/pedido_item_actualizado"
-        }
-      },
-      {
-        "event": "pedido.item_eliminado",
-        "description": "Item eliminado del pedido",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/pedido_item_eliminado"
-        }
-      },
-      {
-        "event": "pedido.enviado_cocina",
-        "description": "Pedido enviado a cocina para preparación",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/pedido_enviado_cocina"
-        }
-      },
-      {
-        "event": "pedido.completado",
-        "description": "Pedido completado (todos los items servidos)",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/pedido_completado"
-        }
-      },
-      {
-        "event": "pedido.cancelado",
-        "description": "Pedido cancelado",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/pedido_cancelado"
-        }
-      }
+      { "event": "pedido.creado",            "description": "Nuevo pedido formal creado. Lleva project_id top-level + correlation_id + timestamp." },
+      { "event": "pedido.item_agregado",     "description": "Item agregado al pedido. project_id top-level + correlation_id + timestamp." },
+      { "event": "pedido.item_actualizado",  "description": "Item del pedido actualizado (cantidad, variaciones, notas). project_id top-level + correlation_id + timestamp." },
+      { "event": "pedido.item_eliminado",    "description": "Item eliminado del pedido. project_id top-level + correlation_id + timestamp." },
+      { "event": "pedido.enviado_cocina",    "description": "Pedido enviado a cocina para preparacion (consumido por pizzepos__cocina). project_id top-level + correlation_id + timestamp." },
+      { "event": "pedido.completado",        "description": "Pedido completado (todos los items servidos). project_id top-level + correlation_id + timestamp." },
+      { "event": "pedido.cancelado",         "description": "Pedido cancelado. project_id top-level + correlation_id + timestamp." }
     ],
     "subscribes": [
-      {
-        "event": "comandero.enviar_cocina",
-        "description": "Bridge: Comandero solicita enviar a cocina → crear pedido formal y publicar pedido.enviado_cocina",
-        "handler": "onComanderoEnviarCocina"
-      },
-      {
-        "event": "variacion.validada",
-        "description": "Variación validada - confirmar precio del item",
-        "handler": "onVariacionValidada"
-      },
-      {
-        "event": "variacion.rechazada",
-        "description": "Variación rechazada - rechazar item",
-        "handler": "onVariacionRechazada"
-      },
-      {
-        "event": "cuenta.creada",
-        "description": "Cuenta creada - vincular pedido si necesario",
-        "handler": "onCuentaCreada"
-      },
-      {
-        "event": "catalogo.actualizado",
-        "description": "Catálogo actualizado - sync caché de productos",
-        "handler": "onCatalogoActualizado"
-      },
-      {
-        "event": "producto.creado",
-        "description": "Producto creado - actualizar caché",
-        "handler": "onProductoActualizado"
-      },
-      {
-        "event": "producto.actualizado",
-        "description": "Producto actualizado - actualizar caché",
-        "handler": "onProductoActualizado"
-      },
-      {
-        "event": "caja.cerrada",
-        "description": "Cierre de caja - limpiar pedidos del día",
-        "handler": "onCajaCerrada"
-      },
-      {
-        "event": "dia.iniciado",
-        "description": "Nuevo día - limpiar pedidos stale",
-        "handler": "onDiaIniciado"
-      }
+      { "event": "comandero.enviar_cocina",  "handler": "onComanderoEnviarCocina", "description": "Bridge: comandero solicita enviar a cocina → crear pedido formal y publicar pedido.enviado_cocina." },
+      { "event": "variacion.validada",       "handler": "onVariacionValidada",     "description": "Variacion validada — confirmar precio del item." },
+      { "event": "variacion.rechazada",      "handler": "onVariacionRechazada",    "description": "Variacion rechazada — rechazar item." },
+      { "event": "cuenta.creada",            "handler": "onCuentaCreada",          "description": "Cuenta creada — vincular pedido si necesario." },
+      { "event": "catalogo.actualizado",     "handler": "onCatalogoActualizado",   "description": "Catalogo actualizado — sync cache de productos." },
+      { "event": "producto.creado",          "handler": "onProductoActualizado",   "description": "Producto creado — actualizar cache." },
+      { "event": "producto.actualizado",     "handler": "onProductoActualizado",   "description": "Producto actualizado — actualizar cache." },
+      { "event": "caja.cerrada",             "handler": "onCajaCerrada",           "description": "Cierre de caja — limpiar pedidos del dia." },
+      { "event": "dia.iniciado",             "handler": "onDiaIniciado",           "description": "Nuevo dia — limpiar pedidos stale." }
     ]
   },
-  "ui": {
-    "enabled": true,
-    "title": "Gestión de Pedidos",
-    "icon": "📋",
-    "description": "Sistema de pedidos event-driven para camareros",
-    "access_level": "camarero",
-    "components": [
-      "order-grid",
-      "order-card",
-      "form-order",
-      "order-detail"
-    ],
-    "views": {
-      "main": {
-        "type": "dashboard",
-        "layout": "fullwidth",
-        "header": {
-          "title": "📋 Pedidos Activos",
-          "subtitle": "Gestión de pedidos en tiempo real",
-          "actions": [
-            {
-              "type": "button",
-              "label": "Nuevo Pedido",
-              "icon": "➕",
-              "action": "open_form",
-              "variant": "primary",
-              "permissions": [
-                "admin",
-                "gerente",
-                "camarero"
-              ]
-            },
-            {
-              "type": "button",
-              "label": "Refrescar",
-              "icon": "🔄",
-              "action": "refresh",
-              "variant": "ghost"
-            }
-          ]
-        },
-        "content": {
-          "id": "orders_grid",
-          "type": "grid",
-          "component": "order-grid",
-          "config": {
-            "endpoint": "/modules/pedidos/pedidos",
-            "mqtt_topics": [
-              "pedido.creado",
-              "pedido.item_agregado",
-              "pedido.item_actualizado",
-              "pedido.item_eliminado",
-              "pedido.enviado_cocina",
-              "pedido.completado",
-              "pedido.cancelado"
-            ],
-            "refresh_on_event": true,
-            "item_component": "order-card"
-          }
-        },
-        "sidebar": {
-          "enabled": false
-        }
-      },
-      "create": {
-        "type": "fullscreen",
-        "component": "form-order",
-        "mode": "create",
-        "config": {
-          "title": "Nuevo Pedido",
-          "endpoint": "/modules/pedidos/pedidos",
-          "method": "POST",
-          "on_success": {
-            "navigate": "/pedidos/{id}",
-            "show_toast": {
-              "message": "Pedido creado correctamente",
-              "type": "success"
-            }
-          }
-        }
-      },
-      "edit": {
-        "type": "fullscreen",
-        "component": "form-order",
-        "mode": "edit",
-        "config": {
-          "title": "Editar Pedido",
-          "load_endpoint": "/modules/pedidos/pedidos/{id}",
-          "endpoint": "/modules/pedidos/pedidos/{id}",
-          "method": "PATCH",
-          "on_success": {
-            "navigate": "/pedidos/{id}",
-            "show_toast": {
-              "message": "Pedido actualizado correctamente",
-              "type": "success"
-            }
-          }
-        }
-      },
-      "detail": {
-        "type": "fullscreen",
-        "component": "order-detail",
-        "config": {
-          "endpoint": "/modules/pedidos/pedidos/{id}",
-          "show_header": true,
-          "show_breadcrumbs": true,
-          "breadcrumbs": [
-            {
-              "label": "Pedidos",
-              "path": "/pedidos"
-            },
-            {
-              "label": "Mesa {mesa}",
-              "path": "/pedidos/{id}"
-            }
-          ]
-        }
-      }
-    },
-    "mqtt": {
-      "enabled": true,
-      "topics": [
-        "pedido.creado",
-        "pedido.item_agregado",
-        "pedido.item_actualizado",
-        "pedido.item_eliminado",
-        "pedido.enviado_cocina",
-        "pedido.completado",
-        "pedido.cancelado"
+  "ui_handlers": [
+    { "domain": "pedido", "action": "list",         "handler": "handleListPedidos",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "get",          "handler": "handleGetPedido",       "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "create",       "handler": "handleCreatePedido",    "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "add-item",     "handler": "handleAgregarItem",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "update-item",  "handler": "handleActualizarItem",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "delete-item",  "handler": "handleEliminarItem",    "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "send-kitchen", "handler": "handleEnviarCocina",    "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "complete",     "handler": "handleCompletarPedido", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "cancel",       "handler": "handleCancelarPedido",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "total",        "handler": "handleCalcularTotal",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "pedido", "action": "health",       "handler": "handleHealthCheck",     "type": "workspace_module", "zone": "barra_modulos" }
+  ],
+  "tools": [],
+  "dependencies": [],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "config": {
+    "persistence": {
+      "type": "in-memory",
+      "owner": "PedidosModule (Map pedidos + Map pedidosPorCuenta + Map productosCache)",
+      "filesystem_read": [
+        "data/current/cuentas_activas.json (lectura legacy fallback al arrancar)"
       ],
-      "auto_refresh": true,
-      "sounds": {
-        "pedido.creado": "notification",
-        "pedido.enviado_cocina": "sent",
-        "pedido.completado": "success"
-      }
-    },
-    "permissions": {
-      "view": [
-        "admin",
-        "gerente",
-        "camarero"
-      ],
-      "create": [
-        "admin",
-        "gerente",
-        "camarero"
-      ],
-      "edit": [
-        "admin",
-        "gerente",
-        "camarero"
-      ],
-      "delete": [
-        "admin",
-        "gerente"
-      ],
-      "send_kitchen": [
-        "admin",
-        "gerente",
-        "camarero"
-      ]
-    },
-    "features": {
-      "search": false,
-      "filters": true,
-      "sorting": true,
-      "bulk_actions": false,
-      "export": false,
-      "import": false,
-      "real_time": true,
-      "sounds": true
+      "restart_resilient": false,
+      "concurrency": "single-instance",
+      "lost_on_restart": ["pedidos", "pedidosPorCuenta", "productosCache"]
     }
   },
-  "apis": [
-    {
-      "method": "POST",
-      "path": "/pedidos",
-      "handler": "handleCreatePedido",
-      "description": "Crear nuevo pedido para una cuenta",
-      "request_schema": {
-        "$ref": "./schemas/pedido.json#/definitions/create_request"
-      },
-      "response_schema": {
-        "$ref": "./schemas/pedido.json#/definitions/pedido"
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/pedidos",
-      "handler": "handleListPedidos",
-      "description": "Listar pedidos (filtros: cuenta_id, estado)"
-    },
-    {
-      "method": "GET",
-      "path": "/pedidos/:id",
-      "handler": "handleGetPedido",
-      "description": "Obtener pedido por ID"
-    },
-    {
-      "method": "POST",
-      "path": "/pedidos/:id/items",
-      "handler": "handleAgregarItem",
-      "description": "Agregar item al pedido (publica pedido.item_agregado)",
-      "request_schema": {
-        "$ref": "./schemas/pedido.json#/definitions/agregar_item_request"
-      }
-    },
-    {
-      "method": "PATCH",
-      "path": "/pedidos/:id/items/:item_id",
-      "handler": "handleActualizarItem",
-      "description": "Actualizar item (cantidad, variaciones)"
-    },
-    {
-      "method": "DELETE",
-      "path": "/pedidos/:id/items/:item_id",
-      "handler": "handleEliminarItem",
-      "description": "Eliminar item del pedido"
-    },
-    {
-      "method": "POST",
-      "path": "/pedidos/:id/enviar-cocina",
-      "handler": "handleEnviarCocina",
-      "description": "Enviar pedido a cocina (publica pedido.enviado_cocina)"
-    },
-    {
-      "method": "POST",
-      "path": "/pedidos/:id/completar",
-      "handler": "handleCompletarPedido",
-      "description": "Marcar pedido como completado"
-    },
-    {
-      "method": "POST",
-      "path": "/pedidos/:id/cancelar",
-      "handler": "handleCancelarPedido",
-      "description": "Cancelar pedido"
-    },
-    {
-      "method": "GET",
-      "path": "/pedidos/:id/total",
-      "handler": "handleCalcularTotal",
-      "description": "Calcular total del pedido"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Métricas del módulo"
-    }
-  ],
   "observability": {
     "logging": {
       "level": "info",
@@ -386,21 +66,21 @@
     "metrics": {
       "enabled": true,
       "counters": [
-        "pedido.creado.total",
-        "pedido.item_agregado.total",
-        "pedido.enviado_cocina.total",
-        "pedido.completado.total",
-        "pedido.cancelado.total",
-        "pedido.errors.total"
+        "pedidos.creado.total",
+        "pedidos.item_agregado.total",
+        "pedidos.enviado_cocina.total",
+        "pedidos.completado.total",
+        "pedidos.cancelado.total",
+        "pedidos.errors"
       ],
       "gauges": [
-        "pedido.activos.count",
-        "pedido.en_cocina.count",
-        "pedido.items_total.count"
+        "pedidos.activos.count",
+        "pedidos.en_cocina.count",
+        "pedidos.items_total.count"
       ],
       "timings": [
-        "pedido.create.duration",
-        "pedido.envio_cocina.duration"
+        "pedidos.create.duration",
+        "pedidos.envio_cocina.duration"
       ]
     }
   }

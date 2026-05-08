@@ -205,3 +205,6 @@ jobs:
 
       - name: Run unit tests (conversacion/ai-agent-framework — reescritura canonica)
         run: npm run test:conversacion__ai-agent-framework
+
+      - name: Run unit tests (pizzepos/pedidos — reescritura canonica)
+        run: npm run test:pizzepos__pedidos

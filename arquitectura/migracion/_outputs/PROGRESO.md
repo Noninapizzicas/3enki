@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T01:23:49Z_
+_Última regeneración: 2026-05-08T01:31:19Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 694 / 2651 (26%)
-- **Drifts restantes en baseline**: 1957
+- **Drifts cerrados**: 695 / 2605 (27%)
+- **Drifts restantes en baseline**: 1910
 
 ### Progreso por capa
 
@@ -29,14 +29,14 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 4 | core | `credential-manager` | 843 | 28 → 12 (-57%) | `069f8c8` 2026-05-06 |
 | 5 | core | `gateway-manager` | 429 | 13 → 2 (-85%) | `8aa2b74` 2026-05-06 |
 | 8 | core | `conversacion__agent-observer` | 279 | 2 → 0 (-100%) | `2e263af` 2026-05-08 |
-| 9 | core | `conversacion__ai-agent-framework` | 627 | 148 → 48 (-68%) | _n/a_ |
+| 9 | core | `conversacion__ai-agent-framework` | 627 | 148 → 48 (-68%) | `3c227b8` 2026-05-08 |
 | 10 | core | `channel-manager` | 590 | 30 → 13 (-57%) | `e7b3570` 2026-05-06 |
 | 11 | core | `conversacion__chat-io` | 758 | 30 → 10 (-67%) | `d107b0f` 2026-05-07 |
 | 12 | core | `conversacion__memory-user-profile` | 252 | 2 → 0 (-100%) | `5de7746` 2026-05-08 |
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
 | 15 | core | `conversacion__memory-conversation-summary` | 339 | 2 → 0 (-100%) | `b7e84bc` 2026-05-08 |
 | 16 | core | `conversacion__memory-rag` | 438 | 2 → 0 (-100%) | `d125ab7` 2026-05-08 |
-| 17 | infra | `filesystem` | 1075 | 189 → 66 (-65%) | `bb98306` 2026-05-06 |
+| 17 | infra | `filesystem` | 1075 | 190 → 66 (-65%) | `bb98306` 2026-05-06 |
 | 18 | infra | `certificate-authority` | 409 | 67 → 24 (-64%) | `bc7b712` 2026-04-20 |
 | 19 | infra | `firmware-manager` | 1084 | 67 → 31 (-54%) | `7e2eb66` 2026-05-06 |
 | 20 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
@@ -72,21 +72,21 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
-| 36 | dominio | `pizzepos__pedidos` | 918 | 72 | 0 |
-| 37 | dominio | `notas` | 485 | 59 | 0 |
-| 38 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
-| 39 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
-| 40 | dominio | `recetas` | 897 | 43 | 0 |
-| 41 | dominio | `calling-generator` | 812 | 40 | 0 |
-| 42 | dominio | `escandallo` | 1098 | 40 | 0 |
-| 43 | dominio | `pizzepos__tarifas` | 309 | 40 | 0 |
-| 44 | dominio | `pizzepos__carta-marketing` | 394 | 38 | 0 |
-| 45 | dominio | `facturacion__asesoria` | 520 | 36 | 0 |
-| 46 | dominio | `pizzepos__menu-generator` | 338 | 34 | 0 |
-| 47 | dominio | `pizzepos__cocina` | 1206 | 33 | 0 |
-| 48 | dominio | `perifericos` | 856 | 32 | 0 |
-| 49 | dominio | `facturas` | 661 | 25 | 0 |
-| 50 | dominio | `pizzepos__carta-digital` | 401 | 25 | 0 |
+| 36 | dominio | `notas` | 485 | 59 | 0 |
+| 37 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
+| 38 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
+| 39 | dominio | `recetas` | 897 | 43 | 0 |
+| 40 | dominio | `calling-generator` | 812 | 40 | 0 |
+| 41 | dominio | `escandallo` | 1098 | 40 | 0 |
+| 42 | dominio | `pizzepos__tarifas` | 309 | 40 | 0 |
+| 43 | dominio | `pizzepos__carta-marketing` | 394 | 38 | 0 |
+| 44 | dominio | `facturacion__asesoria` | 520 | 36 | 0 |
+| 45 | dominio | `pizzepos__menu-generator` | 338 | 34 | 0 |
+| 46 | dominio | `pizzepos__cocina` | 1206 | 33 | 0 |
+| 47 | dominio | `perifericos` | 856 | 32 | 0 |
+| 48 | dominio | `facturas` | 661 | 25 | 0 |
+| 49 | dominio | `pizzepos__carta-digital` | 401 | 25 | 0 |
+| 50 | dominio | `pizzepos__pedidos` | 915 | 25 | 0 |
 | 51 | dominio | `pizzepos__cuentas` | 1016 | 21 | 0 |
 | 52 | dominio | `pizzepos__carta-impresion` | 382 | 19 | 0 |
 | 54 | dominio | `pizzepos__cobros` | 661 | 18 | 0 |

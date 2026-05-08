@@ -1,0 +1,412 @@
+/**
+ * Tests unitarios — pizzepos__pedidos (POC2).
+ *
+ * Ejecutar: node tests/unit/pizzepos__pedidos.test.js
+ */
+
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const PedidosModule = require('../../modules/pizzepos/pedidos/index.js');
+
+let TMP_ROOT, ORIG_CWD;
+
+function setupTmpCwd() {
+  ORIG_CWD = process.cwd();
+  TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'pedidos-test-'));
+  process.chdir(TMP_ROOT);
+  fs.mkdirSync(path.join(TMP_ROOT, 'data', 'current'), { recursive: true });
+}
+
+function teardownTmpCwd() {
+  if (ORIG_CWD) process.chdir(ORIG_CWD);
+  if (TMP_ROOT) {
+    try { fs.rmSync(TMP_ROOT, { recursive: true, force: true }); } catch (_) {}
+  }
+}
+
+function makeMocks() {
+  const logs = [];
+  const published = [];
+  const metricsCalls = [];
+  const uiRegistered = [];
+
+  const logger = {
+    debug: (e, p) => logs.push(['debug', e, p]),
+    info:  (e, p) => logs.push(['info',  e, p]),
+    warn:  (e, p) => logs.push(['warn',  e, p]),
+    error: (e, p) => logs.push(['error', e, p])
+  };
+  const metrics = {
+    increment: (n, l) => metricsCalls.push(['increment', n, l]),
+    gauge:     (n, v, l) => metricsCalls.push(['gauge', n, v, l]),
+    timing:    (n, ms, l) => metricsCalls.push(['timing', n, ms, l])
+  };
+  const eventBus = {
+    publish: async (event, payload) => { published.push([event, payload]); }
+  };
+  const uiHandler = {
+    register: (domain, action, fn) => uiRegistered.push([domain, action]),
+    unregister: () => {}
+  };
+  return { logs, published, metricsCalls, uiRegistered, logger, metrics, eventBus, uiHandler };
+}
+
+async function instantiate(mocks, opts = {}) {
+  const m = new PedidosModule();
+  await m.onLoad({
+    logger: mocks.logger,
+    metrics: mocks.metrics,
+    eventBus: mocks.eventBus,
+    uiHandler: mocks.uiHandler,
+    config: opts.config || null
+  });
+  return { module: m };
+}
+
+async function testAsync(description, fn) {
+  try { await fn(); console.log(`✓ ${description}`); }
+  catch (error) { console.error(`✗ ${description}`); console.error(`  ${error.message}`); if (process.env.STACK) console.error(error.stack); process.exit(1); }
+}
+
+function isCanonicalError(r) {
+  return r && typeof r.status === 'number' && r.error
+    && typeof r.error.code === 'string'
+    && typeof r.error.message === 'string'
+    && !('data' in r);
+}
+
+function isCanonicalSuccess(r) {
+  return r && typeof r.status === 'number' && r.data && !('error' in r);
+}
+
+function publishedOf(mocks, name) {
+  return mocks.published.filter(p => p[0] === name).map(p => p[1]);
+}
+
+(async () => {
+  setupTmpCwd();
+  console.log('pizzepos__pedidos — reescritura canonica (POC2)\n');
+
+  // Group 1: Lifecycle
+  await testAsync('onLoad inicializa estado limpio + registra 11 ui_handlers', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    assert.strictEqual(m.name, 'pedidos');
+    assert.strictEqual(m.version, '3.0.0');
+    assert.strictEqual(m.pedidos.size, 0);
+    assert.strictEqual(m.pedidosPorCuenta.size, 0);
+    assert.strictEqual(m.productosCache.size, 0);
+    assert.strictEqual(mocks.uiRegistered.length, 11);
+    await m.onUnload();
+  });
+
+  await testAsync('onUnload limpia maps', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.pedidos.set('p1', { items: [] });
+    m.pedidosPorCuenta.set('c1', new Set());
+    m.productosCache.set('prod1', { precio: 10 });
+    await m.onUnload();
+    assert.strictEqual(m.pedidos.size, 0);
+    assert.strictEqual(m.pedidosPorCuenta.size, 0);
+    assert.strictEqual(m.productosCache.size, 0);
+  });
+
+  // Group 2: Validacion canonica
+  await testAsync('handleCreatePedido sin cuenta_id devuelve 400 INVALID_INPUT', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleCreatePedido({});
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
+    await m.onUnload();
+  });
+
+  await testAsync('handleGetPedido sin pedido devuelve 404 RESOURCE_NOT_FOUND', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleGetPedido({ id: 'x' });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
+    await m.onUnload();
+  });
+
+  await testAsync('handleAgregarItem sin pedido devuelve 404', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleAgregarItem({ pedido_id: 'no', producto_id: 'p' });
+    assert.ok(isCanonicalError(r));
+    assert.strictEqual(r.status, 404);
+    await m.onUnload();
+  });
+
+  await testAsync('handleAgregarItem en estado en_cocina devuelve 409 CONFLICT_STATE', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const c = await m.handleCreatePedido({ cuenta_id: 'mesa_1' });
+    const pedido_id = c.data.id;
+    m.pedidos.get(pedido_id).estado = 'en_cocina';
+    const r = await m.handleAgregarItem({ pedido_id, producto_id: 'p' });
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.error.code, 'CONFLICT_STATE');
+    await m.onUnload();
+  });
+
+  await testAsync('handleEnviarCocina con pedido vacio devuelve 400', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const c = await m.handleCreatePedido({ cuenta_id: 'mesa_1' });
+    const r = await m.handleEnviarCocina({ id: c.data.id });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
+    await m.onUnload();
+  });
+
+  // Group 3: Flujo completo (create → add-item → send-kitchen → complete)
+  await testAsync('flujo completo: create → add-item → send-kitchen → complete', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.productosCache.set('pizza-margarita', { nombre: 'Margarita', precio: 10 });
+
+    // create
+    const c = await m.handleCreatePedido({ cuenta_id: 'mesa_1', project_id: 'proj-1' });
+    assert.strictEqual(c.status, 201);
+    const pedido_id = c.data.id;
+    assert.strictEqual(c.data.canal, 'mesa');
+
+    // add-item
+    const a = await m.handleAgregarItem({ pedido_id, producto_id: 'pizza-margarita', cantidad: 2 });
+    assert.strictEqual(a.status, 201);
+    assert.strictEqual(a.data.total, 20);
+
+    // send-kitchen
+    const sk = await m.handleEnviarCocina({ id: pedido_id });
+    assert.strictEqual(sk.status, 200);
+    assert.strictEqual(sk.data.estado, 'en_cocina');
+
+    // complete
+    const cp = await m.handleCompletarPedido({ id: pedido_id });
+    assert.strictEqual(cp.status, 200);
+    assert.strictEqual(cp.data.estado, 'completado');
+
+    // events publicados
+    assert.strictEqual(publishedOf(mocks, 'pedido.creado').length, 1);
+    assert.strictEqual(publishedOf(mocks, 'pedido.item_agregado').length, 1);
+    assert.strictEqual(publishedOf(mocks, 'pedido.enviado_cocina').length, 1);
+    assert.strictEqual(publishedOf(mocks, 'pedido.completado').length, 1);
+
+    // project_id top-level en eventos
+    assert.strictEqual(publishedOf(mocks, 'pedido.creado')[0].project_id, 'proj-1');
+    assert.strictEqual(publishedOf(mocks, 'pedido.completado')[0].project_id, 'proj-1');
+
+    await m.onUnload();
+  });
+
+  await testAsync('handleEnviarCocina ya en cocina devuelve 409', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.productosCache.set('p1', { precio: 5 });
+    const c = await m.handleCreatePedido({ cuenta_id: 'mesa_1' });
+    await m.handleAgregarItem({ pedido_id: c.data.id, producto_id: 'p1' });
+    await m.handleEnviarCocina({ id: c.data.id });
+    const r = await m.handleEnviarCocina({ id: c.data.id });
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.error.code, 'CONFLICT_STATE');
+    await m.onUnload();
+  });
+
+  // Group 4: Bridge comandero
+  await testAsync('onComanderoEnviarCocina crea pedido formal + publica creado + enviado_cocina', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.onComanderoEnviarCocina({
+      metadata: { correlationId: 'cid-bridge' },
+      data: {
+        cuenta_id: 'M_42',
+        items: [{ id: 'i1', producto_id: 'p1', nombre: 'X', cantidad: 1, precio: 10 }],
+        total: 10,
+        project_id: 'proj-bridge'
+      }
+    });
+    assert.strictEqual(m.pedidos.size, 1);
+    const creado = publishedOf(mocks, 'pedido.creado');
+    const enviado = publishedOf(mocks, 'pedido.enviado_cocina');
+    assert.strictEqual(creado.length, 1);
+    assert.strictEqual(enviado.length, 1);
+    assert.strictEqual(creado[0].correlation_id, 'cid-bridge');
+    assert.strictEqual(creado[0].project_id, 'proj-bridge');
+    await m.onUnload();
+  });
+
+  await testAsync('onComanderoEnviarCocina con datos incompletos no crea ni publica', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.onComanderoEnviarCocina({ data: { cuenta_id: 'mesa_1' } });
+    assert.strictEqual(m.pedidos.size, 0);
+    assert.strictEqual(publishedOf(mocks, 'pedido.creado').length, 0);
+    await m.onUnload();
+  });
+
+  // Group 5: Cache productos + cuenta lifecycle
+  await testAsync('onCatalogoActualizado popula productosCache', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.onCatalogoActualizado({
+      data: {
+        productos: [
+          { id: 'p1', nombre: 'A', precio: 10, categoria: 'pizzas' },
+          { id: 'p2', nombre: 'B', precio: 5, categoria: 'bebidas' }
+        ]
+      }
+    });
+    assert.strictEqual(m.productosCache.size, 2);
+    assert.strictEqual(m.productosCache.get('p1').precio, 10);
+    await m.onUnload();
+  });
+
+  await testAsync('onProductoActualizado actualiza cache de un producto', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.onProductoActualizado({ data: { id: 'p1', nombre: 'X', precio: 20, categoria: 'pizzas' } });
+    assert.strictEqual(m.productosCache.get('p1').precio, 20);
+    await m.onUnload();
+  });
+
+  await testAsync('onCajaCerrada limpia pedidos + emite gauge 0', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.pedidos.set('p1', {});
+    m.pedidosPorCuenta.set('c1', new Set(['p1']));
+    await m.onCajaCerrada({});
+    assert.strictEqual(m.pedidos.size, 0);
+    assert.strictEqual(m.pedidosPorCuenta.size, 0);
+    await m.onUnload();
+  });
+
+  // Group 6: Update + Delete + Cancel
+  await testAsync('handleActualizarItem cambia cantidad + recalcula total', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.productosCache.set('p1', { precio: 10 });
+    const c = await m.handleCreatePedido({ cuenta_id: 'mesa_1' });
+    const a = await m.handleAgregarItem({ pedido_id: c.data.id, producto_id: 'p1', cantidad: 1 });
+    const item_id = a.data.item.item_id;
+    const r = await m.handleActualizarItem({ pedido_id: c.data.id, item_id, cantidad: 3 });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.item.cantidad, 3);
+    assert.strictEqual(r.data.total, 30);
+    assert.strictEqual(publishedOf(mocks, 'pedido.item_actualizado').length, 1);
+    await m.onUnload();
+  });
+
+  await testAsync('handleEliminarItem remueve item + recalcula total', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.productosCache.set('p1', { precio: 10 });
+    const c = await m.handleCreatePedido({ cuenta_id: 'mesa_1' });
+    const a = await m.handleAgregarItem({ pedido_id: c.data.id, producto_id: 'p1', cantidad: 1 });
+    const r = await m.handleEliminarItem({ pedido_id: c.data.id, item_id: a.data.item.item_id });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.total, 0);
+    assert.strictEqual(publishedOf(mocks, 'pedido.item_eliminado').length, 1);
+    await m.onUnload();
+  });
+
+  await testAsync('handleCancelarPedido publica pedido.cancelado con motivo', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const c = await m.handleCreatePedido({ cuenta_id: 'mesa_1' });
+    const r = await m.handleCancelarPedido({ id: c.data.id, motivo: 'cliente cancelo' });
+    assert.strictEqual(r.status, 200);
+    const evs = publishedOf(mocks, 'pedido.cancelado');
+    assert.strictEqual(evs.length, 1);
+    assert.strictEqual(evs[0].motivo, 'cliente cancelo');
+    await m.onUnload();
+  });
+
+  await testAsync('handleHealthCheck devuelve estado canonico', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleHealthCheck();
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.status, 'healthy');
+    assert.strictEqual(r.data.version, '3.0.0');
+    await m.onUnload();
+  });
+
+  // Group 7: Helpers POC2 + auxiliar + internos
+  await testAsync('_errorResponse construye shape canonico', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { f: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { f: 'x' } } });
+    await m.onUnload();
+  });
+
+  await testAsync('_classifyHandlerError mapea codigos canonicos', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('field is required')), { status: 400, code: 'INVALID_INPUT' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('not found')), { status: 404, code: 'RESOURCE_NOT_FOUND' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('ya esta')), { status: 409, code: 'CONFLICT_STATE' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('boom')), { status: 500, code: 'INTERNAL_ERROR' });
+    await m.onUnload();
+  });
+
+  await testAsync('_publicarEvento añade correlation_id, project_id top-level y timestamp', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    mocks.published.length = 0;
+    const r = await m._publicarEvento('test.event', { foo: 1 }, { correlation_id: 'cid-z', project_id: 'p-z' });
+    assert.strictEqual(r.correlation_id, 'cid-z');
+    assert.strictEqual(r.project_id, 'p-z');
+    assert.ok(r.timestamp);
+    await m.onUnload();
+  });
+
+  await testAsync('_handleHandlerError emite metric pedidos.errors', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = m._handleHandlerError('test.error', new Error('not found'));
+    assert.strictEqual(r.status, 404);
+    const errMetric = mocks.metricsCalls.find(c => c[1] === 'pedidos.errors');
+    assert.ok(errMetric);
+    await m.onUnload();
+  });
+
+  await testAsync('_detectarCanal reconoce prefijos largos y cortos', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    assert.strictEqual(m._detectarCanal('mesa_1'), 'mesa');
+    assert.strictEqual(m._detectarCanal('M_42'), 'mesa');
+    assert.strictEqual(m._detectarCanal('whatsapp_X'), 'whatsapp');
+    assert.strictEqual(m._detectarCanal('W_9'), 'whatsapp');
+    assert.strictEqual(m._detectarCanal('algo-raro'), null);
+    assert.strictEqual(m._detectarCanal(null), null);
+    await m.onUnload();
+  });
+
+  await testAsync('_calcularSubtotal suma precio_total de todos los items', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const subtotal = m._calcularSubtotal({
+      items: [{ precio_total: 10 }, { precio_total: 5.5 }, { precio_total: 0 }]
+    });
+    assert.strictEqual(subtotal, 15.5);
+    await m.onUnload();
+  });
+
+  teardownTmpCwd();
+  console.log('\nTodos los tests pasaron.');
+})().catch(e => {
+  teardownTmpCwd();
+  console.error(e);
+  process.exit(1);
+});

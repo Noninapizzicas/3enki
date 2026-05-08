@@ -77,6 +77,7 @@
     "test:conversacion__memory-rag": "node tests/unit/conversacion__memory-rag.test.js",
     "test:conversacion__ai-agent-framework": "node tests/unit/conversacion__ai-agent-framework.test.js",
     "test:pizzepos__pedidos": "node tests/unit/pizzepos__pedidos.test.js",
+    "test:pizzepos__carta-scheduler": "node tests/unit/pizzepos__carta-scheduler.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

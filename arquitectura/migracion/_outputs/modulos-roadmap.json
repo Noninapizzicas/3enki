@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-08T01:31:18.977Z",
+  "generated_at": "2026-05-08T01:36:42.576Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 2605,
-    "loc_total": 48581,
+    "drifts_total": 2619,
+    "loc_total": 48626,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -29,7 +29,7 @@
       "language": "en",
       "version": "1.0.0",
       "loc": 907,
-      "drifts": 98,
+      "drifts": 105,
       "events_publishes": 8,
       "events_subscribes": 1,
       "tools": 3,
@@ -578,6 +578,21 @@
       "orden_migracion": 35
     },
     {
+      "slug": "pizzepos__carta-scheduler",
+      "path": "modules/pizzepos/carta-scheduler",
+      "layer": "dominio",
+      "language": "es",
+      "version": "3.0.0",
+      "loc": 605,
+      "drifts": 62,
+      "events_publishes": 7,
+      "events_subscribes": 3,
+      "tools": 7,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 36
+    },
+    {
       "slug": "notas",
       "path": "modules/notas",
       "layer": "dominio",
@@ -588,21 +603,6 @@
       "events_publishes": 3,
       "events_subscribes": 0,
       "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 36
-    },
-    {
-      "slug": "pizzepos__carta-scheduler",
-      "path": "modules/pizzepos/carta-scheduler",
-      "layer": "dominio",
-      "language": "es",
-      "version": "2.0.0",
-      "loc": 560,
-      "drifts": 55,
-      "events_publishes": 7,
-      "events_subscribes": 3,
-      "tools": 7,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 37

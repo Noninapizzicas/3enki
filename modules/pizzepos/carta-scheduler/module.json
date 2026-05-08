@@ -1,10 +1,13 @@
 {
   "name": "carta-scheduler",
-  "version": "2.0.0",
-  "description": "Programacion de cambios de carta por canal. Conversacional via agente planner, deteccion de conflictos, confirmacion previa antes de aplicar. Aplica los 8 contratos arquitectonicos (multi-tenant con json-file-per-project, lifecycle con timers limpios, tools del agente con prefix correcto, mqttRequest para scheduler/tarifas — sin moduleLoader.getModule). Sucesor de v1.0.0 (POC3 promocionado).",
+  "version": "3.0.0",
+  "description": "Programacion de cambios de carta por canal. Conversacional via agente planner, deteccion de conflictos, confirmacion previa antes de aplicar. Multi-tenant con json-file-per-project, lifecycle con timers limpios, tools del agente con prefix correcto, mqttRequest para scheduler/tarifas (sin moduleLoader.getModule). Reescritura POC2 al ancho de los 24 contratos.",
   "author": "Enki",
   "language": "es",
-  "tier": "tier_4_dominio",
+  "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
+  },
 
   "events": {
     "publishes": [
@@ -47,7 +50,11 @@
           "regla":      { "type": "object", "description": "{ descripcion, cambios: [{canal, carta_id}], trigger: {type, ...}, activa? }" }
         },
         "required": ["project_id", "regla"]
-      }
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",     "cuando": "project_id o regla ausentes" },
+        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del archivo de reglas" }
+      ]
     },
     {
       "name":        "carta-scheduler.listar_reglas",
@@ -57,7 +64,10 @@
         "type": "object",
         "properties": { "project_id": { "type": "string" } },
         "required":   ["project_id"]
-      }
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
+      ]
     },
     {
       "name":        "carta-scheduler.eliminar_regla",
@@ -70,7 +80,12 @@
           "regla_id":   { "type": "string" }
         },
         "required": ["project_id", "regla_id"]
-      }
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",      "cuando": "project_id o regla_id ausentes" },
+        { "code": "RESOURCE_NOT_FOUND", "cuando": "regla_id no existe" },
+        { "code": "FILESYSTEM_ERROR",   "cuando": "fallo de escritura tras eliminar" }
+      ]
     },
     {
       "name":        "carta-scheduler.detectar_conflictos",
@@ -83,7 +98,10 @@
           "nueva_regla":  { "type": "object" }
         },
         "required": ["project_id", "nueva_regla"]
-      }
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "project_id o nueva_regla ausentes" }
+      ]
     },
     {
       "name":        "carta-scheduler.proximos_cambios",
@@ -93,7 +111,10 @@
         "type": "object",
         "properties": { "project_id": { "type": "string" } },
         "required":   ["project_id"]
-      }
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
+      ]
     },
     {
       "name":        "carta-scheduler.confirmar",
@@ -106,7 +127,14 @@
           "pendiente_id":  { "type": "string" }
         },
         "required": ["project_id", "pendiente_id"]
-      }
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",         "cuando": "project_id o pendiente_id ausentes" },
+        { "code": "RESOURCE_NOT_FOUND",    "cuando": "pendiente_id no existe" },
+        { "code": "CONFLICT_STATE",        "cuando": "pendiente no esta esperando_confirmacion" },
+        { "code": "DEPENDENCY_UNAVAILABLE","cuando": "tarifas.assign no disponible" },
+        { "code": "TIMEOUT",               "cuando": "mqttRequest a tarifas timeout" }
+      ]
     },
     {
       "name":        "carta-scheduler.rechazar",
@@ -120,14 +148,19 @@
           "razon":         { "type": "string" }
         },
         "required": ["project_id", "pendiente_id"]
-      }
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",      "cuando": "project_id o pendiente_id ausentes" },
+        { "code": "RESOURCE_NOT_FOUND", "cuando": "pendiente_id no existe" },
+        { "code": "FILESYSTEM_ERROR",   "cuando": "fallo de escritura del archivo de pendientes" }
+      ]
     }
   ],
 
   "ui_handlers": [
-    { "domain": "carta-scheduler", "action": "reglas",   "handler": "handleListarReglas",   "description": "UI: lista reglas del proyecto." },
-    { "domain": "carta-scheduler", "action": "proximos", "handler": "handleProximosCambios", "description": "UI: lista pendientes de confirmacion." },
-    { "domain": "carta-scheduler", "action": "health",   "handler": "handleHealth",          "description": "UI: estado del modulo (totales reglas y pendientes)." }
+    { "domain": "carta-scheduler", "action": "reglas",   "handler": "handleListarReglas",    "type": "workspace_module", "zone": "barra_modulos", "description": "UI: lista reglas del proyecto." },
+    { "domain": "carta-scheduler", "action": "proximos", "handler": "handleProximosCambios", "type": "workspace_module", "zone": "barra_modulos", "description": "UI: lista pendientes de confirmacion." },
+    { "domain": "carta-scheduler", "action": "health",   "handler": "handleHealth",          "type": "workspace_module", "zone": "barra_modulos", "description": "UI: estado del modulo (totales reglas y pendientes)." }
   ],
 
   "agents": {
@@ -166,5 +199,22 @@
     "cleanup_interval_ms":       3600000,
     "mqtt_request_timeout_ms":   5000,
     "max_pendientes_per_project": 1000
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "carta-scheduler.regla.triggered",
+        "carta-scheduler.pendiente.aplicado",
+        "carta-scheduler.pendiente.rechazado",
+        "carta-scheduler.pendiente.vencido",
+        "carta-scheduler.errors"
+      ]
+    }
   }
 }

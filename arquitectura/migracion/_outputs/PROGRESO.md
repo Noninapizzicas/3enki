@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T01:31:19Z_
+_Última regeneración: 2026-05-08T01:36:43Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 695 / 2605 (27%)
-- **Drifts restantes en baseline**: 1910
+- **Drifts cerrados**: 702 / 2619 (27%)
+- **Drifts restantes en baseline**: 1917
 
 ### Progreso por capa
 
@@ -23,7 +23,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 
 | # | Capa | Slug | LOC | Drifts antes → ahora | Commit |
 |---|------|------|-----|----------------------|--------|
-| 1 | core | `scheduler` | 907 | 98 → 23 (-77%) | `077b2b4` 2026-05-04 |
+| 1 | core | `scheduler` | 907 | 105 → 23 (-78%) | `077b2b4` 2026-05-04 |
 | 2 | core | `composition-manager` | 1028 | 49 → 14 (-71%) | `665555a` 2026-05-06 |
 | 3 | core | `database-manager` | 793 | 44 → 22 (-50%) | `edd468e` 2026-05-06 |
 | 4 | core | `credential-manager` | 843 | 28 → 12 (-57%) | `069f8c8` 2026-05-06 |
@@ -72,8 +72,8 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
-| 36 | dominio | `notas` | 485 | 59 | 0 |
-| 37 | dominio | `pizzepos__carta-scheduler` | 560 | 55 | 0 |
+| 36 | dominio | `pizzepos__carta-scheduler` | 605 | 62 | 0 |
+| 37 | dominio | `notas` | 485 | 59 | 0 |
 | 38 | dominio | `pizzepos__productos` | 1220 | 55 | 0 |
 | 39 | dominio | `recetas` | 897 | 43 | 0 |
 | 40 | dominio | `calling-generator` | 812 | 40 | 0 |

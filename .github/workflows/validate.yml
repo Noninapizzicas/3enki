@@ -211,3 +211,6 @@ jobs:
 
       - name: Run unit tests (pizzepos/carta-scheduler — reescritura canonica)
         run: npm run test:pizzepos__carta-scheduler
+
+      - name: Run unit tests (pizzepos/productos — reescritura canonica)
+        run: npm run test:pizzepos__productos

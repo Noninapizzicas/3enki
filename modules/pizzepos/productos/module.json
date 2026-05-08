@@ -1,317 +1,58 @@
 {
   "name": "productos",
-  "version": "2.3.0",
-  "description": "Catálogo de productos - Actualizado desde menús generados por IA",
+  "version": "3.0.0",
+  "description": "Catalogo de productos pizzepos multi-tenant. Cada proyecto tiene su propio catalogo, sincronizado desde menus generados por IA o cartas (carta.actualizada). Persiste a disco como cartas JSON en {project.base_path}/storage/pizzepos/cartas/. Emite producto.{creado,actualizado,eliminado} y catalogo.actualizado para que comandero/pedidos refresquen su cache.",
   "author": "Pizzepos Team",
   "language": "es",
-  "provides": {
-    "events": [
-      "producto.creado",
-      "producto.actualizado",
-      "producto.eliminado"
-    ],
-    "queries": [
-      "producto.obtener",
-      "producto.listar",
-      "producto.buscar"
-    ]
-  },
+  "main": "index.js",
   "events": {
     "publishes": [
-      {
-        "event": "producto.creado",
-        "description": "Nuevo producto creado desde menú generado",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/producto_creado"
-        }
-      },
-      {
-        "event": "producto.actualizado",
-        "description": "Producto actualizado",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/producto_actualizado"
-        }
-      },
-      {
-        "event": "producto.eliminado",
-        "description": "Producto eliminado del catálogo",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/producto_eliminado"
-        }
-      },
-      {
-        "event": "catalogo.actualizado",
-        "description": "Catálogo completo actualizado desde menú",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/catalogo_actualizado"
-        }
-      }
+      { "event": "producto.creado",       "description": "Nuevo producto creado desde menu generado o carta. project_id top-level + correlation_id + timestamp." },
+      { "event": "producto.actualizado",  "description": "Producto actualizado (precio, ingredientes, activo). project_id top-level + correlation_id + timestamp." },
+      { "event": "producto.eliminado",    "description": "Producto eliminado del catalogo. project_id top-level + correlation_id + timestamp." },
+      { "event": "catalogo.actualizado",  "description": "Catalogo completo actualizado desde menu o carta. Consumido por pedidos/comandero para refrescar cache. project_id top-level + correlation_id + timestamp." },
+      { "event": "menu.generado",         "description": "Re-emitido tras carga inicial desde disco para que categorias se popule (source=disk_load)." },
+      { "event": "project.get.request",   "description": "Request a project-manager para resolver base_path. Correlacionado por request_id." }
     ],
     "subscribes": [
-      {
-        "event": "carta.actualizada",
-        "description": "Carta creada o modificada — auto-sync al catálogo de productos",
-        "handler": "onCartaGenerada"
-      },
-      {
-        "event": "project.activated",
-        "description": "Cache base_path del proyecto para resolver rutas de cartas",
-        "handler": "onProjectActivated"
-      },
-      {
-        "event": "project.get.response",
-        "description": "Respuesta con datos del proyecto (para resolver base_path)",
-        "handler": "onProjectGetResponse"
-      }
+      { "event": "carta.actualizada",     "handler": "onCartaGenerada",      "description": "Carta creada o modificada — auto-sync al catalogo de productos." },
+      { "event": "menu.generado",         "handler": "onMenuGenerado",       "description": "Menu generado por IA — guarda en menusPendientes esperando validacion." },
+      { "event": "menu.validado",         "handler": "onMenuValidado",       "description": "Menu validado — sync al catalogo y persiste a disco." },
+      { "event": "project.activated",     "handler": "onProjectActivated",   "description": "Cache base_path del proyecto + auto-load cartas desde disco." },
+      { "event": "project.get.response",  "handler": "onProjectGetResponse", "description": "Resolves pending project path resolve por request_id." }
     ]
   },
-  "apis": [
-    {
-      "method": "GET",
-      "path": "/productos",
-      "handler": "handleListProductos",
-      "description": "Listar productos (filtros: categoria, activo)"
-    },
-    {
-      "method": "GET",
-      "path": "/productos/:id",
-      "handler": "handleGetProducto",
-      "description": "Obtener producto por ID"
-    },
-    {
-      "method": "GET",
-      "path": "/productos/search",
-      "handler": "handleSearchProductos",
-      "description": "Buscar productos por nombre"
-    },
-    {
-      "method": "GET",
-      "path": "/categorias",
-      "handler": "handleListCategorias",
-      "description": "Listar categorías disponibles"
-    },
-    {
-      "method": "GET",
-      "path": "/ingredientes",
-      "handler": "handleListIngredientes",
-      "description": "Listar ingredientes disponibles para pizzas al gusto"
-    },
-    {
-      "method": "GET",
-      "path": "/pizzas",
-      "handler": "handleListPizzas",
-      "description": "Listar pizzas disponibles para mitad y mitad"
-    },
-    {
-      "method": "PATCH",
-      "path": "/productos/:id",
-      "handler": "handleUpdateProducto",
-      "description": "Actualizar producto (publica producto.actualizado)",
-      "request_schema": {
-        "$ref": "./schemas/producto.json#/definitions/update_request"
-      }
-    },
-    {
-      "method": "DELETE",
-      "path": "/productos/:id",
-      "handler": "handleDeleteProducto",
-      "description": "Eliminar producto (publica producto.eliminado)"
-    },
-    {
-      "method": "GET",
-      "path": "/stats",
-      "handler": "handleGetStats",
-      "description": "Estadísticas del catálogo"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Métricas del módulo"
-    }
+  "ui_handlers": [
+    { "domain": "productos", "action": "list",            "handler": "handleListProductos",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "get",             "handler": "handleGetProducto",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "search",          "handler": "handleSearchProductos", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "update",          "handler": "handleUpdateProducto",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "delete",          "handler": "handleDeleteProducto",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "categorias",      "handler": "handleListCategorias",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "ingredientes",    "handler": "handleListIngredientes","type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "pizzas",          "handler": "handleListPizzas",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "stats",           "handler": "handleGetStats",        "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "health",          "handler": "handleHealthCheck",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "metrics",         "handler": "handleGetMetrics",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "load_carta",      "handler": "handleLoadCarta",       "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "productos", "action": "carta_completa",  "handler": "handleCartaCompleta",   "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "ui": {
-    "enabled": true,
-    "title": "Catálogo de Productos",
-    "icon": "📦",
-    "description": "Gestión completa del catálogo de productos actualizado desde IA",
-    "access_level": "gerente",
-    "components": [
-      "product-grid",
-      "product-card",
-      "form-product",
-      "product-detail"
-    ],
-    "views": {
-      "main": {
-        "type": "dashboard",
-        "layout": "fullwidth",
-        "header": {
-          "title": "📦 Catálogo de Productos",
-          "subtitle": "Gestión de productos sincronizados con menús IA",
-          "actions": [
-            {
-              "type": "button",
-              "label": "Nuevo Producto",
-              "icon": "➕",
-              "action": "open_form",
-              "variant": "primary",
-              "permissions": [
-                "admin",
-                "gerente"
-              ]
-            },
-            {
-              "type": "button",
-              "label": "Importar desde Menú",
-              "icon": "📄",
-              "action": "navigate",
-              "target": "/menu-generator",
-              "variant": "secondary",
-              "permissions": [
-                "admin",
-                "gerente"
-              ]
-            },
-            {
-              "type": "button",
-              "label": "Exportar Catálogo",
-              "icon": "💾",
-              "action": "download",
-              "endpoint": "/modules/productos/export",
-              "variant": "outline",
-              "permissions": [
-                "admin"
-              ]
-            }
-          ]
-        },
-        "content": {
-          "id": "products_grid",
-          "type": "grid",
-          "component": "product-grid",
-          "config": {
-            "endpoint": "/modules/productos/productos",
-            "mqtt_topics": [
-              "producto.creado",
-              "producto.actualizado",
-              "producto.eliminado",
-              "catalogo.actualizado"
-            ],
-            "refresh_on_event": true,
-            "item_component": "product-card"
-          }
-        },
-        "sidebar": {
-          "enabled": false
-        }
-      },
-      "create": {
-        "type": "modal",
-        "component": "form-product",
-        "mode": "create",
-        "config": {
-          "title": "Crear Producto",
-          "width": "600px",
-          "height": "auto",
-          "endpoint": "/modules/productos/productos",
-          "method": "POST",
-          "on_success": {
-            "close": true,
-            "refresh_view": "main",
-            "show_toast": {
-              "message": "Producto creado correctamente",
-              "type": "success"
-            }
-          }
-        }
-      },
-      "edit": {
-        "type": "modal",
-        "component": "form-product",
-        "mode": "edit",
-        "config": {
-          "title": "Editar Producto",
-          "width": "600px",
-          "height": "auto",
-          "load_endpoint": "/modules/productos/productos/{id}",
-          "endpoint": "/modules/productos/productos/{id}",
-          "method": "PATCH",
-          "on_success": {
-            "close": true,
-            "refresh_view": "main",
-            "show_toast": {
-              "message": "Producto actualizado correctamente",
-              "type": "success"
-            }
-          }
-        }
-      },
-      "detail": {
-        "type": "fullscreen",
-        "component": "product-detail",
-        "config": {
-          "endpoint": "/modules/productos/productos/{id}",
-          "show_header": true,
-          "show_breadcrumbs": true,
-          "breadcrumbs": [
-            {
-              "label": "Productos",
-              "path": "/productos"
-            },
-            {
-              "label": "{nombre}",
-              "path": "/productos/{id}"
-            }
-          ]
-        }
-      }
-    },
-    "mqtt": {
-      "enabled": true,
-      "topics": [
-        "producto.creado",
-        "producto.actualizado",
-        "producto.eliminado",
-        "catalogo.actualizado"
+  "tools": [],
+  "dependencies": ["project-manager", "ingredientes"],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "config": {
+    "persistence": {
+      "type": "json-file-per-project",
+      "owner": "ProductosModule (Map productosPerProject + Map categoriasPerProject + Map menusPendientes)",
+      "paths": [
+        "{project.base_path}/storage/pizzepos/cartas/*.json (read+write)",
+        "{project.base_path}/storage/pizzepos/cartas/catalogo_activo.json (write atomic on update/delete)"
       ],
-      "auto_refresh": true
-    },
-    "permissions": {
-      "view": [
-        "admin",
-        "gerente",
-        "camarero"
-      ],
-      "create": [
-        "admin",
-        "gerente"
-      ],
-      "edit": [
-        "admin",
-        "gerente"
-      ],
-      "delete": [
-        "admin"
-      ],
-      "export": [
-        "admin"
-      ]
-    },
-    "features": {
-      "search": true,
-      "filters": true,
-      "sorting": true,
-      "bulk_actions": true,
-      "export": true,
-      "import": false,
-      "real_time": true
+      "restart_resilient": true,
+      "concurrency": "single-writer-per-project",
+      "lost_on_restart": ["menusPendientes", "pendingProjectRequests"]
     }
   },
   "observability": {
@@ -327,7 +68,7 @@
         "producto.actualizado.total",
         "producto.eliminado.total",
         "catalogo.actualizado.total",
-        "producto.errors.total"
+        "productos.errors"
       ],
       "gauges": [
         "producto.activos.count",

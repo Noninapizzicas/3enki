@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-08T12:49:05.306Z",
+  "generated_at": "2026-05-08T13:08:04.521Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 72,
@@ -10,8 +10,8 @@
       "dominio": 37,
       "tooling": 3
     },
-    "drifts_total": 2474,
-    "loc_total": 48713,
+    "drifts_total": 2496,
+    "loc_total": 48719,
     "tools_total": 150,
     "agents_total": 30
   },
@@ -289,7 +289,7 @@
       "language": "en",
       "version": "2.0.0",
       "loc": 1075,
-      "drifts": 190,
+      "drifts": 202,
       "events_publishes": 24,
       "events_subscribes": 18,
       "tools": 14,
@@ -593,6 +593,21 @@
       "orden_migracion": 36
     },
     {
+      "slug": "facturacion__asesoria",
+      "path": "modules/facturacion/asesoria",
+      "layer": "dominio",
+      "language": "es",
+      "version": "2.0.0",
+      "loc": 526,
+      "drifts": 46,
+      "events_publishes": 2,
+      "events_subscribes": 0,
+      "tools": 2,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 37
+    },
+    {
       "slug": "recetas",
       "path": "modules/recetas",
       "layer": "dominio",
@@ -605,7 +620,7 @@
       "tools": 13,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 37
+      "orden_migracion": 38
     },
     {
       "slug": "escandallo",
@@ -618,21 +633,6 @@
       "events_publishes": 3,
       "events_subscribes": 5,
       "tools": 7,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 38
-    },
-    {
-      "slug": "facturacion__asesoria",
-      "path": "modules/facturacion/asesoria",
-      "layer": "dominio",
-      "language": "es",
-      "version": "1.0.0",
-      "loc": 520,
-      "drifts": 36,
-      "events_publishes": 2,
-      "events_subscribes": 0,
-      "tools": 2,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 39

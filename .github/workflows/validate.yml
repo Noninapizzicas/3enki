@@ -256,3 +256,6 @@ jobs:
 
       - name: Run unit tests (facturacion/fuentes — reescritura canonica)
         run: npm run test:facturacion__fuentes
+
+      - name: Run unit tests (facturacion/asesoria — reescritura canonica)
+        run: npm run test:facturacion__asesoria

@@ -1,188 +1,91 @@
 {
   "name": "cocina",
-  "version": "3.1.0",
-  "description": "Display de cocina en tiempo real - Sistema de preparación de pedidos. Publica periferico.display para pantallas externas.",
+  "version": "3.2.0",
+  "description": "Display de cocina en tiempo real - Sistema de preparacion de pedidos. Sistema de pases multi-estacion (general, horno) + multi-device con colores. Snapshot persistente atomico. Publica periferico.display para pantallas externas.",
   "author": "Pizzepos Team",
   "language": "es",
-  "routes": [
-    "/cocina"
-  ],
-  "provides": {
-    "events": [
-      "cocina.item_preparando",
-      "cocina.item_preparado",
-      "cocina.pedido_listo",
-      "cocina.item_ticket",
-      "periferico.display"
-    ],
-    "queries": [
-      "cocina.activos",
-      "cocina.historial"
-    ]
-  },
+  "main": "index.js",
   "events": {
     "publishes": [
       {
         "event": "cocina.item_preparando",
-        "description": "Cocinero empieza a preparar un item (primer tap)",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "pedido_id": {
-              "type": "string"
-            },
-            "cuenta_id": {
-              "type": "string"
-            },
-            "item_id": {
-              "type": "string"
-            },
-            "nombre": {
-              "type": "string"
-            },
-            "preparando_at": {
-              "type": "string"
-            }
-          }
-        }
+        "description": "Cocinero empieza a preparar un item (primer tap pendiente -> preparando). Lleva project_id top-level + correlation_id + timestamp."
+      },
+      {
+        "event": "cocina.item_avanzado",
+        "description": "Item avanza de estacion (pase++). Payload incluye desde_estacion + estado (pendiente|preparando segun auto_preparar). project_id top-level + correlation_id + timestamp."
       },
       {
         "event": "cocina.item_preparado",
-        "description": "Item marcado como preparado",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/cocina_item_preparado"
-        }
-      },
-      {
-        "event": "cocina.pedido_listo",
-        "description": "Pedido completamente preparado y listo para servir",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/cocina_pedido_listo"
-        }
-      },
-      {
-        "event": "periferico.display",
-        "description": "Notificación a display externo de cocina (TV, LED, tablet) con estado de pedidos"
+        "description": "Item terminado en estacion final. project_id top-level + correlation_id + timestamp."
       },
       {
         "event": "cocina.item_ticket",
-        "description": "Ticket de pieza individual — se imprime al completar item en estación con impresión configurada",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "pedido_id": {
-              "type": "string"
-            },
-            "cuenta_id": {
-              "type": "string"
-            },
-            "canal": {
-              "type": "string"
-            },
-            "item_id": {
-              "type": "string"
-            },
-            "nombre": {
-              "type": "string"
-            },
-            "cantidad": {
-              "type": "number"
-            },
-            "categoria": {
-              "type": "string"
-            },
-            "estacion": {
-              "type": "string"
-            },
-            "fases": {
-              "type": "array"
-            }
-          }
-        }
+        "description": "Ticket de pieza individual cuando estacion tiene imprime_al_completar. Incluye ingredientes, variaciones, notas, impresora. project_id top-level + correlation_id + timestamp."
+      },
+      {
+        "event": "cocina.pedido_listo",
+        "description": "Pedido completamente preparado y listo para servir. project_id top-level + correlation_id + timestamp."
+      },
+      {
+        "event": "periferico.display",
+        "description": "Notificacion a display externo de cocina (TV, LED, tablet) con accion + contenido + prioridad. project_id top-level + correlation_id + timestamp."
+      },
+      {
+        "event": "cocina.device_registered",
+        "description": "Device fisico de cocina registrado con color asignado. project_id top-level + correlation_id + timestamp."
+      },
+      {
+        "event": "cocina.device_unregistered",
+        "description": "Device fisico de cocina removido. project_id top-level + correlation_id + timestamp."
+      },
+      {
+        "event": "cocina.device_updated",
+        "description": "Device fisico re-conectado o metadata actualizada. project_id top-level + correlation_id + timestamp."
       }
     ],
     "subscribes": [
-      {
-        "event": "pedido.enviado_cocina",
-        "description": "Pedido formal enviado a cocina (desde módulo Pedidos)",
-        "handler": "onPedidoEnviadoCocina"
-      },
-      {
-        "event": "pedido.cancelado",
-        "description": "Pedido cancelado - remover de cocina",
-        "handler": "onPedidoCancelado"
-      },
-      {
-        "event": "cuenta.creada",
-        "description": "Cachear nombre de cuenta para mostrar en cocina",
-        "handler": "onCuentaCreada"
-      },
-      {
-        "event": "cuenta.actualizada",
-        "description": "Actualizar nombre de cuenta cuando se renombra",
-        "handler": "onCuentaActualizada"
-      },
-      {
-        "event": "cuenta.eliminada",
-        "description": "Limpiar cache de ref_display al eliminar cuenta (housekeeping)",
-        "handler": "onCuentaEliminada"
-      },
-      {
-        "event": "caja.cerrada",
-        "description": "Cierre de caja - limpiar pedidos activos y snapshot",
-        "handler": "onCajaCerrada"
-      },
-      {
-        "event": "dia.iniciado",
-        "description": "Nuevo día - limpiar estado de cocina",
-        "handler": "onDiaIniciado"
-      }
+      { "event": "pedido.enviado_cocina", "handler": "onPedidoEnviadoCocina", "description": "Pedido formal enviado a cocina (desde modulo Pedidos)." },
+      { "event": "pedido.cancelado",      "handler": "onPedidoCancelado",     "description": "Pedido cancelado - remover de cocina." },
+      { "event": "cuenta.creada",         "handler": "onCuentaCreada",        "description": "Cachear ref_display de cuenta para mostrar en cocina." },
+      { "event": "cuenta.actualizada",    "handler": "onCuentaActualizada",   "description": "Actualizar ref_display cuando cuenta se renombra y propagar a pedidos activos." },
+      { "event": "cuenta.eliminada",      "handler": "onCuentaEliminada",     "description": "Limpiar cache + housekeeping de pedidos huerfanos al eliminar cuenta." },
+      { "event": "caja.cerrada",          "handler": "onCajaCerrada",         "description": "Cierre de caja - reset de pedidos activos y snapshot." },
+      { "event": "dia.iniciado",          "handler": "onDiaIniciado",         "description": "Nuevo dia - reset de estado de cocina." }
     ]
   },
-  "apis": [
-    {
-      "method": "GET",
-      "path": "/cocina/activos",
-      "handler": "handleGetActivos",
-      "description": "Listar pedidos activos en cocina"
-    },
-    {
-      "method": "GET",
-      "path": "/cocina/historial",
-      "handler": "handleGetHistorial",
-      "description": "Historial de pedidos completados"
-    },
-    {
-      "method": "GET",
-      "path": "/cocina/pedidos/:pedido_id",
-      "handler": "handleGetPedido",
-      "description": "Obtener detalle de pedido en cocina"
-    },
-    {
-      "method": "POST",
-      "path": "/cocina/items/:item_id/preparar",
-      "handler": "handlePrepararItem",
-      "description": "Marcar item como preparado"
-    },
-    {
-      "method": "POST",
-      "path": "/cocina/pedidos/:pedido_id/listo",
-      "handler": "handleMarcarListo",
-      "description": "Marcar pedido completo como listo"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Métricas del módulo"
-    }
+  "ui_handlers": [
+    { "domain": "cocina", "action": "list-active",        "handler": "handleGetActivos",       "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "get",                "handler": "handleGetPedido",        "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "history",            "handler": "handleGetHistorial",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "prepare-item",       "handler": "handlePrepararItem",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "mark-ready",         "handler": "handleMarcarListo",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "register-device",    "handler": "handleRegisterDevice",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "unregister-device",  "handler": "handleUnregisterDevice", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "list-devices",       "handler": "handleListDevices",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "list-station-types", "handler": "handleListTiposEstacion","type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "list-displays",      "handler": "handleListarDisplays",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "health",             "handler": "handleHealthCheck",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cocina", "action": "metrics",            "handler": "handleGetMetrics",       "type": "workspace_module", "zone": "barra_modulos" }
   ],
+  "tools": [],
+  "dependencies": [],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "config": {
+    "display_destino": "display-cocina",
+    "persistence": {
+      "type": "filesystem-snapshot",
+      "owner": "CocinaModule (snapshot atomico tmp + rename con debounce 1s)",
+      "paths": [
+        "data/current/cocina_snapshot.json",
+        "data/current/cuentas_activas.json (lectura legacy fallback)"
+      ],
+      "restart_resilient": true,
+      "concurrency": "single-instance (in-memory pedidosActivos + devices)"
+    }
+  },
   "observability": {
     "logging": {
       "level": "info",
@@ -193,9 +96,11 @@
       "enabled": true,
       "counters": [
         "cocina.pedido_recibido.total",
+        "cocina.pedido_cancelado.total",
         "cocina.item_preparado.total",
+        "cocina.item_avanzado.total",
         "cocina.pedido_listo.total",
-        "cocina.pedido_cancelado.total"
+        "cocina.errors"
       ],
       "gauges": [
         "cocina.pedidos_activos.count",

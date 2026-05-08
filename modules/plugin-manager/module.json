@@ -21,17 +21,20 @@
     ]
   },
 
-  "apis": [
-    { "method": "GET",  "path": "/plugins/:name",  "handler": "handleGetPlugin",     "auth_required": false, "description": "Get specific plugin definition (404 si no existe)." },
-    { "method": "GET",  "path": "/plugins",        "handler": "handleListPlugins",   "auth_required": false, "description": "List all loaded plugins con summary." },
-    { "method": "POST", "path": "/plugins/reload", "handler": "handleReloadPlugins", "auth_required": false, "description": "Reload all plugins from disk. Publica plugin.reloaded." },
-    { "method": "GET",  "path": "/health",         "handler": "handleHealthCheck",   "auth_required": false, "description": "Health check endpoint." },
-    { "method": "GET",  "path": "/metrics",        "handler": "handleGetMetrics",    "auth_required": false, "description": "Module metrics snapshot." }
+  "ui_handlers": [
+    { "domain": "plugin-manager", "action": "get",     "handler": "handleGetPlugin",     "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "plugin-manager", "action": "list",    "handler": "handleListPlugins",   "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "plugin-manager", "action": "reload",  "handler": "handleReloadPlugins", "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "plugin-manager", "action": "health",  "handler": "handleHealthCheck",   "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "plugin-manager", "action": "metrics", "handler": "handleGetMetrics",    "type": "system_panel", "zone": "lateral_derecha" }
   ],
 
   "tools": [],
-  "ui_handlers": [],
   "dependencies": [],
+
+  "tracing": {
+    "propaga_correlation_id": true
+  },
 
   "config": {
     "pluginsPath": "../../plugins",

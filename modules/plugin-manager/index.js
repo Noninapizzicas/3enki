@@ -480,6 +480,15 @@ class PluginManagerModule {
     const content = fs.readFileSync(filePath, 'utf-8');
     return JSON.parse(content);
   }
+
+  // 6o helper auxiliar — slugify canonico (para nombres de plugin como ids estables)
+  _slugify(text) {
+    if (!text) return 'plugin';
+    return String(text).toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'plugin';
+  }
 }
 
 module.exports = PluginManagerModule;

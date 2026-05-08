@@ -175,3 +175,18 @@ jobs:
 
       - name: Run unit tests (pizzepos/carta-impresion — reescritura canonica)
         run: npm run test:pizzepos__carta-impresion
+
+      - name: Run unit tests (pizzepos/categorias — reescritura canonica)
+        run: npm run test:pizzepos__categorias
+
+      - name: Run unit tests (pizzepos/comandero — reescritura canonica)
+        run: npm run test:pizzepos__comandero
+
+      - name: Run unit tests (pizzepos/ingredientes — reescritura canonica)
+        run: npm run test:pizzepos__ingredientes
+
+      - name: Run unit tests (escandallo — reescritura canonica)
+        run: npm run test:escandallo
+
+      - name: Run unit tests (pizzepos/cocina — reescritura canonica)
+        run: npm run test:pizzepos__cocina

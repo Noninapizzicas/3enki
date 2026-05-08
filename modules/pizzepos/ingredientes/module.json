@@ -1,163 +1,66 @@
 {
   "name": "ingredientes",
-  "version": "4.0.0",
-  "description": "Catálogo de ingredientes - Actualizado desde menús generados por IA",
+  "version": "5.0.0",
+  "description": "Catalogo de ingredientes organizado por GRUPO (categoria de producto). Fuente unica de precios (precio_extra). Sincronizado desde carta.actualizada y producto.creado.",
   "author": "Pizzepos Team",
   "language": "es",
+  "main": "index.js",
   "provides": {
     "events": [
       "ingrediente.creado",
       "ingrediente.actualizado"
-    ],
-    "queries": [
-      "ingrediente.obtener",
-      "ingrediente.listar",
-      "ingrediente.buscar"
     ]
   },
   "events": {
     "publishes": [
-      {
-        "event": "ingrediente.creado",
-        "description": "Nuevo ingrediente creado desde menú generado",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/ingrediente_creado"
-        }
-      },
-      {
-        "event": "ingrediente.actualizado",
-        "description": "Ingrediente actualizado",
-        "schema": {
-          "$ref": "./schemas/events.json#/definitions/ingrediente_actualizado"
-        }
-      }
+      { "event": "ingrediente.creado",      "description": "Nuevo ingrediente creado desde carta o producto. Lleva project_id top-level + correlation_id + timestamp." },
+      { "event": "ingrediente.actualizado", "description": "Ingrediente modificado (nombre, emoji, precio_extra, grupos, es_alergeno, etc) con diff." }
     ],
     "subscribes": [
-      {
-        "event": "carta.actualizada",
-        "description": "Carta creada o modificada — extraer y sincronizar ingredientes",
-        "handler": "onCartaActualizada"
-      },
-      {
-        "event": "producto.creado",
-        "description": "Producto creado - registrar ingredientes",
-        "handler": "onProductoCreado"
-      },
-      {
-        "event": "project.activated",
-        "description": "Proyecto activado - cargar ingredientes desde disco",
-        "handler": "onProjectActivated"
-      },
-      {
-        "event": "ingrediente.actualizado",
-        "description": "Ingrediente actualizado externamente (menu-generator) - sincronizar en memoria",
-        "handler": "onIngredienteActualizadoExterno"
-      }
+      { "event": "project.activated",       "handler": "onProjectActivated",            "description": "Set storagePath y carga catalogo desde disco." },
+      { "event": "carta.actualizada",       "handler": "onCartaActualizada",            "description": "Sincroniza ingredientes_catalogo + extrae de productos.ingredientes_base." },
+      { "event": "producto.creado",         "handler": "onProductoCreado",              "description": "Registra ingredientes del producto en su grupo (categoria)." },
+      { "event": "ingrediente.actualizado", "handler": "onIngredienteActualizadoExterno","description": "Sync desde menu-generator. Loop-safe via comparacion de valores." }
     ]
   },
-  "apis": [
-    {
-      "method": "GET",
-      "path": "/ingredientes",
-      "handler": "handleListIngredientes",
-      "description": "Listar ingredientes (filtros: tipo, alergeno)"
-    },
-    {
-      "method": "GET",
-      "path": "/ingredientes/:id",
-      "handler": "handleGetIngrediente",
-      "description": "Obtener ingrediente por ID"
-    },
-    {
-      "method": "GET",
-      "path": "/ingredientes/search",
-      "handler": "handleSearchIngredientes",
-      "description": "Buscar ingredientes por nombre"
-    },
-    {
-      "method": "GET",
-      "path": "/alergenos",
-      "handler": "handleListAlergenos",
-      "description": "Listar ingredientes alérgenos"
-    },
-    {
-      "method": "PATCH",
-      "path": "/ingredientes/:id",
-      "handler": "handleUpdateIngrediente",
-      "description": "Actualizar ingrediente"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check"
-    },
-    {
-      "method": "GET",
-      "path": "/metrics",
-      "handler": "handleGetMetrics",
-      "description": "Métricas del módulo"
-    }
+  "ui_handlers": [
+    { "domain": "ingredientes", "action": "list",            "handler": "handleListIngredientes",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "get",             "handler": "handleGetIngrediente",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "get_precio",      "handler": "handleGetPrecio",          "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "search",          "handler": "handleSearchIngredientes", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "alergenos",       "handler": "handleListAlergenos",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "update",          "handler": "handleUpdateIngrediente",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "update_precios",  "handler": "handleUpdatePrecios",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "health",          "handler": "handleHealthCheck",        "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "metrics",         "handler": "handleGetMetrics",         "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "ui": {
-    "enabled": true,
-    "title": "Ingredientes",
-    "icon": "🥬",
-    "description": "Catálogo de ingredientes y alérgenos",
-    "access_level": "gerente",
-    "components": [
-      "ingrediente-list",
-      "ingrediente-form"
-    ],
-    "views": {
-      "main": {
-        "type": "dashboard",
-        "layout": "fullwidth",
-        "component": "ingrediente-list",
-        "config": {
-          "endpoint": "/modules/ingredientes/ingredientes",
-          "mqtt_topics": [
-            "ingrediente.creado",
-            "ingrediente.actualizado"
-          ],
-          "searchable": true
-        }
-      }
-    },
-    "mqtt": {
-      "enabled": true,
-      "topics": [
-        "ingrediente.creado",
-        "ingrediente.actualizado"
+  "tools": [],
+  "config": {
+    "persistence": {
+      "type":   "json-file",
+      "atomic": true,
+      "paths": [
+        "data/projects/<projectId>/storage/pizzepos/ingredientes.json"
       ],
-      "auto_refresh": true
-    },
-    "permissions": {
-      "view": [
-        "admin",
-        "gerente"
-      ],
-      "edit": [
-        "admin",
-        "gerente"
-      ]
-    },
-    "features": {
-      "search": true,
-      "filters": true
+      "concurrency": "single-instance-per-process",
+      "owner":       "modules/pizzepos/ingredientes"
     }
+  },
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "observability": {
     "logging": {
-      "level": "info",
-      "structured": true,
+      "level":          "info",
+      "structured":     true,
       "correlation_id": true
     },
     "metrics": {
       "enabled": true,
       "counters": [
         "ingrediente.creado.total",
-        "ingrediente.actualizado.total"
+        "ingrediente.actualizado.total",
+        "ingredientes.errors"
       ],
       "gauges": [
         "ingrediente.total.count",

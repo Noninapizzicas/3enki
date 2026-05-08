@@ -1,39 +1,59 @@
 {
   "name": "memory-conversation-summary",
-  "version": "1.0.0",
-  "description": "Memoria modular del compañero. Genera resumenes LLM de los tramos de conversacion que el FIFO va a recortar, y los inyecta en chat.prompt.ready via chat.context.enriched (priority 200). Sin esto, cuando una conversacion se hace larga y FIFO recorta el principio, el compañero pierde la esencia del histórico — con esto, el viaje sostiene memoria narrativa de la conversacion.",
+  "version": "2.0.0",
+  "description": "Memoria modular del companero. Genera resumenes LLM de los tramos de conversacion que el FIFO va a recortar, y los inyecta en chat.prompt.ready via chat.context.enriched (priority 200). Sin esto, cuando una conversacion se hace larga y FIFO recorta el principio, el companero pierde la esencia del historico — con esto, el viaje sostiene memoria narrativa.",
   "author": "Event Core Team",
   "language": "es",
-  "publishes": [
-    {
-      "event": "chat.context.enriched",
-      "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
-      "description": "Aporta el resumen de la conversacion como contexto adicional al system prompt (priority 200 — narrativa conversacional, antes de perfil de usuario)."
-    },
-    "db.query.request",
-    "llm.complete.request"
-  ],
-  "subscribes": [
-    {
-      "event": "chat.message.saved",
-      "handler": "onMessageSaved",
-      "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
-      "description": "Cuenta mensajes por conversacion. Si pasa threshold, dispara summarizacion. Siempre publica el summary actual (si existe) para enriquecer prompt."
-    },
-    {
-      "event": "db.query.response",
-      "handler": "onDbQueryResponse"
-    },
-    {
-      "event": "llm.complete.response",
-      "handler": "onLlmResponse"
-    },
-    {
-      "event": "llm.complete.failed",
-      "handler": "onLlmFailed"
-    }
-  ],
+  "main": "index.js",
+  "events": {
+    "publishes": [
+      {
+        "event": "chat.context.enriched",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.context.enriched.schema.json",
+        "description": "Aporta el resumen de la conversacion como contexto adicional al system prompt (priority 200 — narrativa conversacional, antes de perfil de usuario). Lleva correlation_id heredado + project_id top-level + timestamp."
+      },
+      {
+        "event": "db.query.request",
+        "description": "Request a database-manager para persistir/consultar resumenes y mensajes. Correlacionado por request_id."
+      },
+      {
+        "event": "llm.complete.request",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.request.schema.json",
+        "description": "Request a ai-gateway para generar el resumen narrativo. Correlacionado por request_id."
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "chat.message.saved",
+        "handler": "onMessageSaved",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.message.saved.schema.json",
+        "description": "Cuenta mensajes por conversacion. Si pasa threshold, dispara summarizacion. Siempre publica el summary actual (si existe) para enriquecer el prompt."
+      },
+      {
+        "event": "db.query.response",
+        "handler": "onDbQueryResponse",
+        "description": "Resolves pending DB query promises by request_id."
+      },
+      {
+        "event": "llm.complete.response",
+        "handler": "onLlmResponse",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.response.schema.json",
+        "description": "Resolves pending LLM summary promises by request_id."
+      },
+      {
+        "event": "llm.complete.failed",
+        "handler": "onLlmFailed",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.failed.schema.json",
+        "description": "Rejects pending LLM summary promises por error."
+      }
+    ]
+  },
+  "ui_handlers": [],
+  "tools": [],
   "dependencies": ["database-manager", "ai-gateway"],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
   "config": {
     "enabled": true,
     "priority_in_prompt": 200,
@@ -43,11 +63,29 @@
     "llm_provider": "deepseek",
     "llm_temperature": 0.3,
     "llm_max_tokens": 400,
+    "llm_timeout_ms": 60000,
+    "db_timeout_ms": 10000,
     "persistence": {
-      "pattern": "in-memory",
-      "restart_resilient": false,
-      "concurrency": "single-writer",
-      "lost_on_restart": ["pendingDb", "pendingLlm", "schemaReady", "messageCounters"]
+      "type": "delegated",
+      "owner": "database-manager (SQLite por proyecto via db.query.request)",
+      "table": "conversation_summaries",
+      "restart_resilient": true,
+      "concurrency": "single-writer-per-conversation",
+      "lost_on_restart": ["pendingDb", "pendingLlm", "schemaReady", "messageCounters", "summaryInFlight"]
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "memory-conversation-summary.summary.generated",
+        "memory-conversation-summary.errors"
+      ]
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-08T07:09:47.470Z",
+  "generated_at": "2026-05-08T11:07:35.465Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 2499,
-    "loc_total": 49183,
+    "drifts_total": 2460,
+    "loc_total": 49236,
     "tools_total": 150,
     "agents_total": 30
   },
@@ -298,21 +298,6 @@
       "orden_migracion": 17
     },
     {
-      "slug": "certificate-authority",
-      "path": "modules/certificate-authority",
-      "layer": "infra",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 409,
-      "drifts": 67,
-      "events_publishes": 4,
-      "events_subscribes": 0,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 18
-    },
-    {
       "slug": "firmware-manager",
       "path": "modules/firmware-manager",
       "layer": "infra",
@@ -325,7 +310,7 @@
       "tools": 7,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 19
+      "orden_migracion": 18
     },
     {
       "slug": "esp32-dev",
@@ -340,7 +325,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 20
+      "orden_migracion": 19
     },
     {
       "slug": "device-registry",
@@ -355,7 +340,7 @@
       "tools": 3,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 21
+      "orden_migracion": 20
     },
     {
       "slug": "firmware-builder",
@@ -368,6 +353,21 @@
       "events_publishes": 3,
       "events_subscribes": 0,
       "tools": 4,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 21
+    },
+    {
+      "slug": "certificate-authority",
+      "path": "modules/certificate-authority",
+      "layer": "infra",
+      "language": "en",
+      "version": "2.0.0",
+      "loc": 462,
+      "drifts": 28,
+      "events_publishes": 4,
+      "events_subscribes": 0,
+      "tools": 0,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 22

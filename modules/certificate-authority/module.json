@@ -1,171 +1,40 @@
 {
   "name": "certificate-authority",
-  "version": "1.0.0",
-  "description": "Internal Certificate Authority with mTLS authentication for client portal and device management",
+  "version": "2.0.0",
+  "description": "Internal Certificate Authority for Event Core. Issues, revokes and verifies X.509 client certificates (clientes del portal de facturacion + dispositivos de trabajo). Hook beforeRequest para autenticacion mTLS transparente cuando config.mtls_enabled. Persiste certificados + CRL en filesystem (CAManager).",
   "author": "Event Core Team",
   "language": "en",
-  "routeCode": "3333",
-  "apis": [
-    {
-      "method": "GET",
-      "path": "/status",
-      "handler": "handleStatus",
-      "description": "Get CA status, certificate stats, and mTLS middleware stats"
-    },
-    {
-      "method": "GET",
-      "path": "/ca-cert",
-      "handler": "handleGetCACert",
-      "description": "Download CA root certificate (public - for client/device installation)"
-    },
-    {
-      "method": "POST",
-      "path": "/issue",
-      "handler": "handleIssueCertificate",
-      "description": "Issue a new client or device certificate"
-    },
-    {
-      "method": "POST",
-      "path": "/revoke",
-      "handler": "handleRevokeCertificate",
-      "description": "Revoke a certificate by serial number"
-    },
-    {
-      "method": "POST",
-      "path": "/renew",
-      "handler": "handleRenewCertificate",
-      "description": "Renew a certificate (revokes old, issues new)"
-    },
-    {
-      "method": "GET",
-      "path": "/list",
-      "handler": "handleListCertificates",
-      "description": "List all issued certificates with optional filters"
-    },
-    {
-      "method": "POST",
-      "path": "/verify",
-      "handler": "handleVerifyCertificate",
-      "description": "Verify a certificate against the CA"
-    },
-    {
-      "method": "GET",
-      "path": "/crl",
-      "handler": "handleGetCRL",
-      "description": "Get Certificate Revocation List"
-    },
-    {
-      "method": "GET",
-      "path": "/download-p12",
-      "handler": "handleDownloadP12",
-      "description": "Download .p12 bundle for a certificate"
-    },
-    {
-      "method": "GET",
-      "path": "/nginx-config",
-      "handler": "handleGetNginxConfig",
-      "description": "Get nginx mTLS configuration template"
-    },
-    {
-      "method": "GET",
-      "path": "/health",
-      "handler": "handleHealthCheck",
-      "description": "Health check"
-    }
-  ],
-  "provides": {
-    "hooks": [
-      "beforeRequest"
-    ]
+  "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
   },
   "events": {
     "publishes": [
-      {
-        "event": "certificate.issued",
-        "description": "New certificate issued for client or device"
-      },
-      {
-        "event": "certificate.revoked",
-        "description": "Certificate revoked (compromised, lost device, etc.)"
-      },
-      {
-        "event": "certificate.renewed",
-        "description": "Certificate renewed (old revoked, new issued)"
-      },
-      {
-        "event": "certificate.expired",
-        "description": "Certificate reached expiration date"
-      }
+      { "event": "certificate.issued",   "description": "Nuevo certificado emitido (cliente o dispositivo). project_id top-level + correlation_id + timestamp." },
+      { "event": "certificate.revoked",  "description": "Certificado revocado (compromised, lost device, etc.). project_id top-level + correlation_id + timestamp." },
+      { "event": "certificate.renewed",  "description": "Certificado renovado (revoca el viejo, emite uno nuevo). project_id top-level + correlation_id + timestamp." },
+      { "event": "certificate.expired",  "description": "Certificado alcanzo fecha de expiracion. project_id top-level + correlation_id + timestamp." }
     ],
     "subscribes": []
   },
   "ui_handlers": [
-    {
-      "domain": "certificate-authority",
-      "action": "status",
-      "handler": "handleStatus"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "ca-cert",
-      "handler": "handleGetCACert"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "issue",
-      "handler": "handleIssueCertificate"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "revoke",
-      "handler": "handleRevokeCertificate"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "renew",
-      "handler": "handleRenewCertificate"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "list",
-      "handler": "handleListCertificates"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "verify",
-      "handler": "handleVerifyCertificate"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "crl",
-      "handler": "handleGetCRL"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "download-p12",
-      "handler": "handleDownloadP12"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "stats",
-      "handler": "handleStatus"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "nginx-config",
-      "handler": "handleGetNginxConfig"
-    },
-    {
-      "domain": "certificate-authority",
-      "action": "health",
-      "handler": "handleHealthCheck"
-    }
+    { "domain": "certificate-authority", "action": "status",       "handler": "handleStatus",            "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "ca-cert",      "handler": "handleGetCACert",         "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "issue",        "handler": "handleIssueCertificate",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "revoke",       "handler": "handleRevokeCertificate", "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "renew",        "handler": "handleRenewCertificate",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "list",         "handler": "handleListCertificates",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "verify",       "handler": "handleVerifyCertificate", "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "crl",          "handler": "handleGetCRL",            "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "download-p12", "handler": "handleDownloadP12",       "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "stats",        "handler": "handleStatus",            "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "nginx-config", "handler": "handleGetNginxConfig",    "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "certificate-authority", "action": "health",       "handler": "handleHealthCheck",       "type": "system_panel", "zone": "lateral_derecha" }
   ],
-  "ui": {
-    "enabled": true,
-    "title": "Certificate Authority",
-    "icon": "🔐",
-    "description": "Gestionar certificados de clientes y dispositivos"
+  "tools": [],
+  "dependencies": [],
+  "provides": {
+    "hooks": ["beforeRequest"]
   },
   "config": {
     "mtls_enabled": false,
@@ -176,20 +45,35 @@
     "ca_org": "Event Core",
     "ca_validity_days": 3650,
     "cert_validity_days": 365,
-    "key_size": 2048
+    "key_size": 2048,
+    "persistence": {
+      "type": "filesystem",
+      "owner": "CAManager (CA cert + private key + emitted certs + CRL en disk)",
+      "paths": [
+        "{config.storagePath}/ca.crt",
+        "{config.storagePath}/ca.key",
+        "{config.storagePath}/issued/<serialNumber>.{crt,p12,json}",
+        "{config.storagePath}/crl.json"
+      ],
+      "restart_resilient": true,
+      "concurrency": "single-instance",
+      "lost_on_restart": ["mtlsMiddleware.requestStats"]
+    }
   },
   "observability": {
     "logging": {
       "level": "info",
-      "structured": true
+      "structured": true,
+      "correlation_id": true
     },
     "metrics": {
       "enabled": true,
       "counters": [
-        "ca.certificates_issued",
-        "ca.certificates_revoked",
-        "ca.certificates_renewed",
-        "ca.verification_requests",
+        "certificate-authority.certificates_issued",
+        "certificate-authority.certificates_revoked",
+        "certificate-authority.certificates_renewed",
+        "certificate-authority.verification_requests",
+        "certificate-authority.errors",
         "mtls.authenticated",
         "mtls.rejected",
         "mtls.bypassed",

@@ -1,25 +1,25 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T07:09:49Z_
+_Última regeneración: 2026-05-08T11:07:37Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
-- **Migrados**: 30 / 73 (41%)
-- **Drifts cerrados**: 721 / 2499 (29%)
-- **Drifts restantes en baseline**: 1778
+- **Migrados**: 29 / 73 (40%)
+- **Drifts cerrados**: 678 / 2460 (28%)
+- **Drifts restantes en baseline**: 1782
 
 ### Progreso por capa
 
 | Capa | Done | Total | % |
 |------|------|-------|---|
 | core | 13 | 16 | 81% `████████████████░░░░` |
-| infra | 12 | 16 | 75% `███████████████░░░░░` |
+| infra | 11 | 16 | 69% `██████████████░░░░░░` |
 | dominio | 5 | 38 | 13% `███░░░░░░░░░░░░░░░░░` |
 | tooling | 0 | 3 | 0% `░░░░░░░░░░░░░░░░░░░░` |
 
-## Módulos migrados (30)
+## Módulos migrados (29)
 
 | # | Capa | Slug | LOC | Drifts antes → ahora | Commit |
 |---|------|------|-----|----------------------|--------|
@@ -37,10 +37,9 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 15 | core | `conversacion__memory-conversation-summary` | 339 | 2 → 0 (-100%) | `b7e84bc` 2026-05-08 |
 | 16 | core | `conversacion__memory-rag` | 438 | 2 → 0 (-100%) | `d125ab7` 2026-05-08 |
 | 17 | infra | `filesystem` | 1075 | 188 → 66 (-65%) | `bb98306` 2026-05-06 |
-| 18 | infra | `certificate-authority` | 409 | 67 → 24 (-64%) | `bc7b712` 2026-04-20 |
-| 19 | infra | `firmware-manager` | 1084 | 67 → 31 (-54%) | `7e2eb66` 2026-05-06 |
-| 20 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
-| 22 | infra | `firmware-builder` | 686 | 31 → 12 (-61%) | `d88eae5` 2026-05-07 |
+| 18 | infra | `firmware-manager` | 1084 | 67 → 31 (-54%) | `7e2eb66` 2026-05-06 |
+| 19 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
+| 21 | infra | `firmware-builder` | 686 | 31 → 12 (-61%) | `d88eae5` 2026-05-07 |
 | 23 | infra | `device-health` | 556 | 27 → 12 (-56%) | `0fc5e8d` 2026-05-07 |
 | 24 | infra | `device-shadow` | 491 | 26 → 7 (-73%) | `9ba470d` 2026-05-07 |
 | 25 | infra | `metricas` | 556 | 22 → 4 (-82%) | `b3a2a8a` 2026-05-07 |
@@ -54,25 +53,26 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 59 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
 | 61 | dominio | `pizzepos__cocina-poc` | 452 | 0 → 0 (-0%) | `5437466` 2026-05-02 |
 
-## Próximos en la cola (top 10 de 43 pendientes)
+## Próximos en la cola (top 10 de 44 pendientes)
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
 | 6 | core | `conversacion__ai-gateway` | 777 | 8 | 0 | drifts 8/8 (100%) — esperado <50% |
 | 7 | core | `plugin-manager` | 495 | 8 | 0 | drifts 6/8 (75%) — esperado <50% |
 | 14 | core | `conversacion__prompt-builder` | 435 | 13 | 2 | drifts 7/13 (54%) — esperado <50% |
-| 21 | infra | `device-registry` | 764 | 36 | 0 | drifts 20/36 (56%) — esperado <50% |
+| 20 | infra | `device-registry` | 764 | 36 | 0 | drifts 20/36 (56%) — esperado <50% |
+| 22 | infra | `certificate-authority` | 462 | 28 | 0 | drifts 15/28 (54%) — esperado <50% |
 | 29 | infra | `prompt-manager` | 1236 | 69 | 1 | drifts 38/69 (55%) — esperado <50% |
 | 31 | infra | `pdf-viewer` | 634 | 54 | 2 | drifts 39/54 (72%) — esperado <50% |
 | 32 | infra | `telegram-service` | 573 | 32 | 2 | drifts 31/32 (97%) — esperado <50% |
 | 33 | dominio | `log-manager` | 598 | 82 | 0 | sin tests/unit/ |
 | 34 | dominio | `esp32-flasher` | 1155 | 68 | 0 | drifts 53/68 (78%) — esperado <50% |
-| 35 | dominio | `pizzepos__carta-scheduler` | 605 | 62 | 0 | drifts 51/62 (82%) — esperado <50% |
 
-<details><summary>Resto de pendientes (33 módulos)</summary>
+<details><summary>Resto de pendientes (34 módulos)</summary>
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
+| 35 | dominio | `pizzepos__carta-scheduler` | 605 | 62 | 0 |
 | 36 | dominio | `notas` | 485 | 59 | 0 |
 | 37 | dominio | `recetas` | 897 | 43 | 0 |
 | 38 | dominio | `calling-generator` | 812 | 40 | 0 |

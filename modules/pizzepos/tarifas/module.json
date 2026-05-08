@@ -1,7 +1,7 @@
 {
   "name": "tarifas",
-  "version": "2.0.0",
-  "description": "Asignación carta+canal + registro de variantes. Cada canal tiene su carta con precios finales escritos. Sin cálculos en runtime.",
+  "version": "3.0.0",
+  "description": "Asignacion carta+canal + registro de variantes pizzepos. Cada canal tiene su carta con precios finales escritos. Sin calculos en runtime, sin duplicacion (tarifas-creator y tarifas-sync agentes lo hacen). Comandero llama resolverCarta(canal) para obtener el carta_id efectivo.",
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
@@ -9,36 +9,18 @@
     "publishes": [
       {
         "event": "tarifas.config.actualizada",
-        "description": "Config cambiada (asignación canal, variante registrada)"
+        "description": "Config cambiada (asignacion canal, variante registrada, carta general). Lleva project_id top-level + correlation_id + timestamp."
       }
     ],
     "subscribes": [
-      {
-        "event": "project.activated",
-        "handler": "onProjectActivated"
-      },
-      {
-        "event": "project.deactivated",
-        "handler": "onProjectDeactivated"
-      }
+      { "event": "project.activated",   "handler": "onProjectActivated",   "description": "Cache base_path + carga config del proyecto." },
+      { "event": "project.deactivated", "handler": "onProjectDeactivated", "description": "No-op multi-tenant: preserva config en memoria." }
     ]
   },
   "ui_handlers": [
-    {
-      "domain": "tarifas",
-      "action": "get",
-      "handler": "handleGet"
-    },
-    {
-      "domain": "tarifas",
-      "action": "health",
-      "handler": "handleHealth"
-    },
-    {
-      "domain": "tarifas",
-      "action": "assign",
-      "handler": "toolAssign"
-    }
+    { "domain": "tarifas", "action": "get",    "handler": "handleGet",    "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "tarifas", "action": "assign", "handler": "toolAssign",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "tarifas", "action": "health", "handler": "handleHealth", "type": "workspace_module", "zone": "barra_modulos" }
   ],
   "tools": [
     {
@@ -48,15 +30,15 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id": {
-            "type": "string",
-            "description": "ID de la carta general"
-          }
+          "carta_id":   { "type": "string", "description": "ID de la carta general" },
+          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
         },
-        "required": [
-          "carta_id"
-        ]
-      }
+        "required": ["carta_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",     "cuando": "carta_id o project_id ausentes" },
+        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del archivo de config" }
+      ]
     },
     {
       "name": "tarifas.assign",
@@ -65,73 +47,49 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "canal": {
-            "type": "string",
-            "enum": [
-              "mesa",
-              "llevar",
-              "telefono",
-              "whatsapp",
-              "glovo",
-              "llevadoo"
-            ],
-            "description": "Canal de venta"
-          },
-          "carta_id": {
-            "type": "string",
-            "description": "ID de carta a asignar (null = usar general)"
-          }
+          "canal":      { "type": "string", "enum": ["mesa", "llevar", "telefono", "whatsapp", "glovo", "llevadoo"], "description": "Canal de venta" },
+          "carta_id":   { "type": "string", "description": "ID de carta a asignar (null = usar general)" },
+          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
         },
-        "required": [
-          "canal"
-        ]
-      }
+        "required": ["canal"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",     "cuando": "canal ausente o no esta en la lista de canales validos" },
+        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del archivo de config" }
+      ]
     },
     {
       "name": "tarifas.get",
-      "description": "Config actual: carta general + qué carta usa cada canal + variantes registradas",
+      "description": "Config actual: carta general + que carta usa cada canal + variantes registradas",
       "handler": "toolGet",
       "parameters": {
         "type": "object",
-        "properties": {}
-      }
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+        }
+      },
+      "errores_conocidos": []
     },
     {
       "name": "tarifas.register_variant",
-      "description": "Registra una variante de carta con sus reglas y la asigna a canales. Las reglas describen cómo se creó (para que tarifas-sync pueda reproducir los cambios cuando la base cambie).",
+      "description": "Registra una variante de carta con sus reglas y la asigna a canales. Las reglas describen como se creo (para que tarifas-sync pueda reproducir los cambios cuando la base cambie).",
       "handler": "toolRegisterVariant",
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id": {
-            "type": "string",
-            "description": "ID de la carta variante"
-          },
-          "base_carta_id": {
-            "type": "string",
-            "description": "ID de la carta base de la que se derivó"
-          },
-          "nombre": {
-            "type": "string",
-            "description": "Nombre descriptivo de la variante"
-          },
-          "canales": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Canales que usan esta variante"
-          },
-          "reglas": {
-            "type": "object",
-            "description": "Reglas de la variante en lenguaje natural. Ej: { precio: '+15%', excluir_categorias: ['ensaladas'], descripcion: 'Carta delivery sin ensaladas' }"
-          }
+          "carta_id":      { "type": "string", "description": "ID de la carta variante" },
+          "base_carta_id": { "type": "string", "description": "ID de la carta base de la que se derivo" },
+          "nombre":        { "type": "string", "description": "Nombre descriptivo de la variante" },
+          "canales":       { "type": "array", "items": { "type": "string" }, "description": "Canales que usan esta variante" },
+          "reglas":        { "type": "object", "description": "Reglas de la variante en lenguaje natural." },
+          "project_id":    { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
         },
-        "required": [
-          "carta_id",
-          "base_carta_id"
-        ]
-      }
+        "required": ["carta_id", "base_carta_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",     "cuando": "carta_id o base_carta_id ausentes" },
+        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del archivo de config" }
+      ]
     },
     {
       "name": "tarifas.get_variants",
@@ -139,20 +97,41 @@
       "handler": "toolGetVariants",
       "parameters": {
         "type": "object",
-        "properties": {}
-      }
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+        }
+      },
+      "errores_conocidos": []
     }
   ],
-  "agents": {
-    "description": "Los agentes crean y sincronizan variantes de carta",
-    "tarifas-creator": "Crea variante desde carta base: duplica, ajusta precios, filtra productos, renombra, registra",
-    "tarifas-sync": "Cuando la carta base cambia, evalúa cada variante y propaga cambios según reglas"
+  "dependencies": [],
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "config": {
+    "persistence": {
+      "type": "json-file-per-project",
+      "owner": "TarifasModule (Map configPerProject + Map projectPaths)",
+      "paths": [
+        "{project.base_path}/storage/config/tarifas.json (write atomico tmp+rename)"
+      ],
+      "restart_resilient": true,
+      "concurrency": "single-writer-per-project",
+      "lost_on_restart": []
+    }
   },
   "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
     "metrics": {
+      "enabled": true,
       "counters": [
         "tarifas.assign.updated",
-        "tarifas.variant.registered"
+        "tarifas.variant.registered",
+        "tarifas.errors"
       ]
     }
   }

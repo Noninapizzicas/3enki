@@ -1,17 +1,19 @@
 /**
- * Módulo Fuentes
+ * Fuentes Module v2.0.0 — POC2 canonico.
  *
- * Adaptadores de entrada para facturas — patrón Strategy.
- * Cada fuente (telegram, gmail, ...) es una strategy que traduce
- * eventos externos en `factura.entrada` para que el módulo facturas procese.
+ * Adaptador strategy-pattern entre canales externos (Telegram push, Gmail pull,
+ * extensible) y el pipeline `facturas`. NO procesa facturas: solo traduce input
+ * externo en `factura.entrada` con shape canonico
+ * { projectId, filePath, source, origen, correlation_id, project_id, timestamp }.
  *
- * El módulo facturas NO sabe de Telegram ni Gmail.
- * Este módulo es el adaptador.
+ * Strategies en strategies/{telegram,gmail}.js. Cada strategy llama a
+ * `modulo._publicarEvento('factura.entrada', ...)` via `emitFacturaEntrada`.
  *
- * Añadir nueva fuente = crear strategies/nueva.js + registrar en constructor.
- *
- * @version 1.0.0
+ * trabajo_pendiente: renombrar `factura.entrada` -> `fuentes.factura.detectada`
+ * coordinado con migracion de `facturas/` (unico consumer).
  */
+
+'use strict';
 
 const ServiceExecutor = require('../../../core/service-executor');
 const TelegramStrategy = require('./strategies/telegram');
@@ -20,22 +22,22 @@ const GmailStrategy = require('./strategies/gmail');
 class FuentesModule {
   constructor() {
     this.name = 'fuentes';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
 
     this.logger = null;
+    this.metrics = null;
     this.eventBus = null;
     this.services = null;
+    this.config = null;
 
-    // Project configs: projectId → { fuentes: { telegram: {...}, gmail: {...} } }
     this.projectConfigs = new Map();
 
-    // Strategy registry
     this.strategies = {};
-    this.registerStrategy(new TelegramStrategy());
-    this.registerStrategy(new GmailStrategy());
+    this._registerStrategy(new TelegramStrategy());
+    this._registerStrategy(new GmailStrategy());
   }
 
-  registerStrategy(strategy) {
+  _registerStrategy(strategy) {
     this.strategies[strategy.tipo] = strategy;
   }
 
@@ -43,65 +45,143 @@ class FuentesModule {
   // Lifecycle
   // ==========================================
 
-  async onLoad(context) {
-    this.logger = context.logger;
-    this.eventBus = context.eventBus;
-    this.uiHandler = context.uiHandler;
+  async onLoad(core) {
+    this.logger = core.logger;
+    this.metrics = core.metrics || null;
+    this.eventBus = core.eventBus;
+    this.config = core.moduleConfig || {};
     this.services = new ServiceExecutor(this.eventBus, this.logger);
 
-    // Initialize strategies with reference to this module
     for (const strategy of Object.values(this.strategies)) {
       strategy.init(this);
     }
 
     this.logger.info('fuentes.loaded', {
+      module: this.name,
+      version: this.version,
       strategies: Object.keys(this.strategies)
     });
   }
 
   async onUnload() {
     for (const strategy of Object.values(this.strategies)) {
-      if (strategy.cleanup) strategy.cleanup();
+      if (typeof strategy.cleanup === 'function') strategy.cleanup();
     }
-    this.logger.info('fuentes.unloaded');
+    this.projectConfigs.clear();
+    this.logger?.info?.('fuentes.unloaded', { module: this.name });
   }
 
   // ==========================================
-  // Event handlers — dispatched to strategies
+  // Helpers POC2
   // ==========================================
 
-  /**
-   * telegram.photo.received → TelegramStrategy
-   */
+  _errorResponse(status, code, message, details) {
+    const error = { code, message };
+    if (details !== undefined) error.details = details;
+    return { status, error };
+  }
+
+  _classifyHandlerError(err) {
+    const msg = err?.message || String(err);
+    const code = err?.code;
+    if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
+    if (/not found|no encontrad|no disponible/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
+    if (/timeout|timed out/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
+    if (/dependency|service|unavailable/i.test(msg)) return { status: 503, code: 'DEPENDENCY_UNAVAILABLE' };
+    return { status: 500, code: 'INTERNAL_ERROR' };
+  }
+
+  _handleHandlerError(logEvent, err, kind = 'handler') {
+    const { status, code } = this._classifyHandlerError(err);
+    this.logger?.error?.(logEvent, {
+      kind,
+      error_code: code,
+      error_message: err?.message || String(err)
+    });
+    this.metrics?.increment?.('fuentes.errors', { code, kind });
+    return this._errorResponse(status, code, err?.message || 'Error interno');
+  }
+
+  _validateRequiredFields(data, fields) {
+    const missing = fields.filter(f => data?.[f] === undefined || data?.[f] === null || data?.[f] === '');
+    if (missing.length > 0) {
+      const err = new Error(`Campos requeridos faltantes: ${missing.join(', ')}`);
+      err._code = 'INVALID_INPUT';
+      throw err;
+    }
+  }
+
+  async _publicarEvento(name, payload, sourcePayload) {
+    const correlation_id =
+      payload?.correlation_id ||
+      sourcePayload?.correlation_id ||
+      sourcePayload?.metadata?.correlationId ||
+      null;
+    const project_id =
+      payload?.project_id ??
+      payload?.projectId ??
+      sourcePayload?.project_id ??
+      sourcePayload?.projectId ??
+      null;
+    const enriched = {
+      ...payload,
+      correlation_id,
+      timestamp: payload?.timestamp || new Date().toISOString()
+    };
+    if (project_id !== null && project_id !== undefined) enriched.project_id = project_id;
+    try {
+      await this.eventBus.publish(name, enriched);
+    } catch (err) {
+      this.logger?.warn?.('fuentes.publish.failed', {
+        event: name, error_message: err.message
+      });
+    }
+    return enriched;
+  }
+
+  // ==========================================
+  // Bus subscribers (telegram → strategies)
+  // ==========================================
+
   async onTelegramPhoto(event) {
-    const strategy = this.strategies.telegram;
-    if (strategy) await strategy.onPhotoReceived(event);
+    const data = event?.data || event?.payload || event;
+    try {
+      const strategy = this.strategies.telegram;
+      if (!strategy) return;
+      await strategy.onPhotoReceived({ data });
+    } catch (err) {
+      this._handleHandlerError('fuentes.telegram.photo.error', err, 'subscribe');
+    }
   }
 
-  /**
-   * telegram.document.received → TelegramStrategy
-   */
   async onTelegramDocument(event) {
-    const strategy = this.strategies.telegram;
-    if (strategy) await strategy.onDocumentReceived(event);
+    const data = event?.data || event?.payload || event;
+    try {
+      const strategy = this.strategies.telegram;
+      if (!strategy) return;
+      await strategy.onDocumentReceived({ data });
+    } catch (err) {
+      this._handleHandlerError('fuentes.telegram.document.error', err, 'subscribe');
+    }
   }
 
   // ==========================================
-  // Core: Emitir factura.entrada
+  // Punto unico de emision factura.entrada
   // ==========================================
 
-  /**
-   * Punto central — todas las strategies llaman aquí
-   * para emitir el evento que el módulo facturas escucha.
-   */
-  emitFacturaEntrada({ projectId, filePath, source, origen }) {
+  async emitFacturaEntrada({ projectId, filePath, source, origen, correlation_id }) {
+    this.metrics?.increment?.('fuentes.factura.entrada.emitida', { source });
     this.logger.info('fuentes.emitiendo-entrada', { projectId, filePath, source });
 
-    this.eventBus.publish('factura.entrada', {
+    return this._publicarEvento('factura.entrada', {
       projectId,
+      project_id: projectId,
       filePath,
       source,
-      origen
+      origen,
+      correlation_id
     });
   }
 
@@ -109,37 +189,25 @@ class FuentesModule {
   // Project config resolution
   // ==========================================
 
-  /**
-   * Obtiene la config de fuentes de un proyecto.
-   * Si no está cacheada, intenta cargarla del project config.
-   */
   async getProjectFuentesConfig(projectId) {
     if (this.projectConfigs.has(projectId)) {
       return this.projectConfigs.get(projectId);
     }
-
-    // Intentar cargar config del proyecto
     try {
       const result = await this.services.call('local.project-config', 'get', {
         project_id: projectId
       }, { timeout: 5000 });
-
-      const config = result.data || result;
+      const config = result?.data || result;
       if (config) {
         this.projectConfigs.set(projectId, config);
         return config;
       }
     } catch (e) {
-      this.logger.debug('fuentes.config.no-disponible', { projectId });
+      this.logger.debug('fuentes.config.no-disponible', { projectId, error: e.message });
     }
-
     return null;
   }
 
-  /**
-   * Registra la config de fuentes de un proyecto manualmente.
-   * Útil para cuando el proyecto se activa y pasa su config.
-   */
   setProjectConfig(projectId, config) {
     this.projectConfigs.set(projectId, config);
   }
@@ -148,115 +216,108 @@ class FuentesModule {
   // UI Handlers
   // ==========================================
 
-  /**
-   * Estado de todas las fuentes
-   * UI: mqttRequest('fuentes', 'status', { proyecto? })
-   */
-  async handleStatus(data) {
-    const status = {};
-    for (const [tipo, strategy] of Object.entries(this.strategies)) {
-      status[tipo] = {
-        tipo,
-        version: strategy.version || '1.0.0',
-        health: strategy.getHealth ? strategy.getHealth() : 'unknown'
-      };
-    }
-
-    return {
-      status: 200,
-      data: {
-        strategies: status,
-        projectConfigs: this.projectConfigs.size
-      }
-    };
-  }
-
-  /**
-   * Obtener config de fuentes de un proyecto
-   * UI: mqttRequest('fuentes', 'get-config', { proyecto })
-   */
-  async handleGetConfig(data) {
-    const { proyecto } = data;
-    if (!proyecto) {
-      return { status: 400, error: 'proyecto es requerido' };
-    }
-
-    // Load from project config
-    const config = await this.getProjectFuentesConfig(proyecto);
-    const fuentes = config?.fuentes || {};
-
-    // Get strategy health
-    const strategies = {};
-    for (const [tipo, strategy] of Object.entries(this.strategies)) {
-      strategies[tipo] = {
-        configured: !!fuentes[tipo]?.enabled,
-        health: strategy.getHealth ? strategy.getHealth() : 'unknown'
-      };
-    }
-
-    return {
-      status: 200,
-      data: {
-        proyecto,
-        fuentes,
-        strategies
-      }
-    };
-  }
-
-  /**
-   * Guardar config de fuentes de un proyecto
-   * UI: mqttRequest('fuentes', 'save-config', { proyecto, fuentes: { telegram: {...}, gmail: {...} } })
-   */
-  async handleSaveConfig(data) {
-    const { proyecto, fuentes } = data;
-    if (!proyecto || !fuentes) {
-      return { status: 400, error: 'proyecto y fuentes son requeridos' };
-    }
-
+  async handleStatus(_data) {
     try {
-      // Save to project config via filesystem service
+      const status = {};
+      for (const [tipo, strategy] of Object.entries(this.strategies)) {
+        status[tipo] = {
+          tipo,
+          version: strategy.version || '1.0.0',
+          health: typeof strategy.getHealth === 'function' ? strategy.getHealth() : 'unknown'
+        };
+      }
+      return {
+        status: 200,
+        data: {
+          strategies: status,
+          projectConfigs: this.projectConfigs.size
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('fuentes.status.error', err, 'ui_handler');
+    }
+  }
+
+  async handleGetConfig(data) {
+    try {
+      this._validateRequiredFields(data, ['proyecto']);
+      const { proyecto } = data;
+
+      const config = await this.getProjectFuentesConfig(proyecto);
+      const fuentes = config?.fuentes || {};
+
+      const strategies = {};
+      for (const [tipo, strategy] of Object.entries(this.strategies)) {
+        strategies[tipo] = {
+          configured: !!fuentes[tipo]?.enabled,
+          health: typeof strategy.getHealth === 'function' ? strategy.getHealth() : 'unknown'
+        };
+      }
+
+      return {
+        status: 200,
+        data: { proyecto, fuentes, strategies }
+      };
+    } catch (err) {
+      return this._handleHandlerError('fuentes.get-config.error', err, 'ui_handler');
+    }
+  }
+
+  async handleSaveConfig(data) {
+    try {
+      this._validateRequiredFields(data, ['proyecto', 'fuentes']);
+      const { proyecto, fuentes } = data;
+
       await this.services.call('local.project-config', 'set', {
         project_id: proyecto,
         key: 'fuentes',
         value: fuentes
       }, { timeout: 5000 });
 
-      // Update local cache
       const existing = this.projectConfigs.get(proyecto) || {};
       existing.fuentes = fuentes;
       this.projectConfigs.set(proyecto, existing);
 
+      this.metrics?.increment?.('fuentes.config.saved');
       this.logger.info('fuentes.config.saved', { proyecto, keys: Object.keys(fuentes) });
 
       return { status: 200, data: { saved: true, fuentes } };
-    } catch (e) {
-      this.logger.error('fuentes.config.save.error', { proyecto, error: e.message });
-      return { status: 500, error: e.message };
+    } catch (err) {
+      return this._handleHandlerError('fuentes.save-config.error', err, 'ui_handler');
     }
   }
 
-  /**
-   * Forzar check de Gmail para un proyecto
-   * UI: mqttRequest('fuentes', 'check-gmail', { proyecto })
-   */
   async handleCheckGmail(data) {
-    const { proyecto } = data;
-    if (!proyecto) {
-      return { status: 400, error: 'proyecto es requerido' };
-    }
-
-    const strategy = this.strategies.gmail;
-    if (!strategy) {
-      return { status: 404, error: 'Gmail strategy no disponible' };
-    }
-
     try {
-      const result = await strategy.checkAndProcess(proyecto);
+      this._validateRequiredFields(data, ['proyecto']);
+      const { proyecto, correlation_id } = data;
+
+      const strategy = this.strategies.gmail;
+      if (!strategy) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Gmail strategy no disponible');
+      }
+
+      const result = await strategy.checkAndProcess(proyecto, { correlation_id });
       return { status: 200, data: result };
-    } catch (e) {
-      return { status: 500, error: e.message };
+    } catch (err) {
+      return this._handleHandlerError('fuentes.check-gmail.error', err, 'ui_handler');
     }
+  }
+
+  async handleHealth(_data) {
+    const strategies = {};
+    for (const [tipo, strategy] of Object.entries(this.strategies)) {
+      strategies[tipo] = typeof strategy.getHealth === 'function' ? strategy.getHealth() : 'unknown';
+    }
+    return {
+      status: 200,
+      data: {
+        module: this.name,
+        version: this.version,
+        strategies,
+        projectConfigsCached: this.projectConfigs.size
+      }
+    };
   }
 }
 

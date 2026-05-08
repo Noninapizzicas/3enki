@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-08T12:28:33.877Z",
+  "generated_at": "2026-05-08T12:49:05.306Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 72,
@@ -10,8 +10,8 @@
       "dominio": 37,
       "tooling": 3
     },
-    "drifts_total": 2473,
-    "loc_total": 48652,
+    "drifts_total": 2474,
+    "loc_total": 48713,
     "tools_total": 150,
     "agents_total": 30
   },
@@ -970,23 +970,6 @@
       "orden_migracion": 61
     },
     {
-      "slug": "facturacion__fuentes",
-      "path": "modules/facturacion/fuentes",
-      "layer": "dominio",
-      "language": "es",
-      "version": "1.1.0",
-      "loc": 264,
-      "drifts": 20,
-      "events_publishes": 1,
-      "events_subscribes": 2,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [
-        "channel-manager"
-      ],
-      "orden_migracion": 62
-    },
-    {
       "slug": "pizzepos__variaciones",
       "path": "modules/pizzepos/variaciones",
       "layer": "dominio",
@@ -1001,7 +984,7 @@
       "dependencies": [
         "ingredientes"
       ],
-      "orden_migracion": 63
+      "orden_migracion": 62
     },
     {
       "slug": "pizzepos__cuentas-canales",
@@ -1018,7 +1001,7 @@
       "dependencies": [
         "cuentas"
       ],
-      "orden_migracion": 64
+      "orden_migracion": 63
     },
     {
       "slug": "text-editor",
@@ -1036,7 +1019,7 @@
         "file-browser",
         "project-manager"
       ],
-      "orden_migracion": 65
+      "orden_migracion": 64
     },
     {
       "slug": "viabilidad",
@@ -1054,7 +1037,7 @@
         "recetas",
         "escandallo"
       ],
-      "orden_migracion": 66
+      "orden_migracion": 65
     },
     {
       "slug": "bot-manager",
@@ -1072,7 +1055,7 @@
         "telegram-service",
         "credential-manager"
       ],
-      "orden_migracion": 67
+      "orden_migracion": 66
     },
     {
       "slug": "pizzepos__productos",
@@ -1089,6 +1072,24 @@
       "dependencies": [
         "project-manager",
         "ingredientes"
+      ],
+      "orden_migracion": 67
+    },
+    {
+      "slug": "facturacion__fuentes",
+      "path": "modules/facturacion/fuentes",
+      "layer": "dominio",
+      "language": "es",
+      "version": "2.0.0",
+      "loc": 325,
+      "drifts": 21,
+      "events_publishes": 1,
+      "events_subscribes": 2,
+      "tools": 0,
+      "agents": 0,
+      "dependencies": [
+        "channel-manager",
+        "telegram-service"
       ],
       "orden_migracion": 68
     },

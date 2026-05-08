@@ -92,6 +92,7 @@
     "test:bot-manager": "node tests/unit/bot-manager.test.js",
     "test:admin-panel": "node tests/unit/admin-panel.test.js",
     "test:text-editor": "node tests/unit/text-editor.test.js",
+    "test:facturacion__fuentes": "node tests/unit/facturacion__fuentes.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

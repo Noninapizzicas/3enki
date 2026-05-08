@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T12:28:34Z_
+_Última regeneración: 2026-05-08T12:49:06Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 72 (40%)
-- **Drifts cerrados**: 684 / 2473 (28%)
-- **Drifts restantes en baseline**: 1789
+- **Drifts cerrados**: 684 / 2474 (28%)
+- **Drifts restantes en baseline**: 1790
 
 ### Progreso por capa
 
@@ -94,13 +94,13 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 57 | dominio | `pizzepos__ingredientes` | 690 | 6 | 0 |
 | 59 | dominio | `notas-poc` | 642 | 0 | 0 |
 | 61 | dominio | `pizzepos__cobros` | 700 | 29 | 1 |
-| 62 | dominio | `facturacion__fuentes` | 264 | 20 | 1 |
-| 63 | dominio | `pizzepos__variaciones` | 497 | 17 | 1 |
-| 64 | dominio | `pizzepos__cuentas-canales` | 418 | 15 | 1 |
-| 65 | dominio | `text-editor` | 567 | 70 | 2 |
-| 66 | dominio | `viabilidad` | 789 | 48 | 2 |
-| 67 | dominio | `bot-manager` | 394 | 35 | 2 |
-| 68 | dominio | `pizzepos__productos` | 1265 | 26 | 2 |
+| 62 | dominio | `pizzepos__variaciones` | 497 | 17 | 1 |
+| 63 | dominio | `pizzepos__cuentas-canales` | 418 | 15 | 1 |
+| 64 | dominio | `text-editor` | 567 | 70 | 2 |
+| 65 | dominio | `viabilidad` | 789 | 48 | 2 |
+| 66 | dominio | `bot-manager` | 394 | 35 | 2 |
+| 67 | dominio | `pizzepos__productos` | 1265 | 26 | 2 |
+| 68 | dominio | `facturacion__fuentes` | 325 | 21 | 2 |
 | 69 | dominio | `pizzepos__menu-generator` | 375 | 41 | 3 |
 | 70 | tooling | `ui-designer` | 1281 | 120 | 0 |
 | 71 | tooling | `scratch-designer` | 413 | 31 | 0 |

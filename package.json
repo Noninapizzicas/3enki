@@ -89,6 +89,7 @@
     "test:certificate-authority": "node tests/unit/certificate-authority.test.js",
     "test:security-p2p": "node tests/unit/security-p2p.test.js",
     "test:dashboard": "node tests/unit/dashboard.test.js",
+    "test:bot-manager": "node tests/unit/bot-manager.test.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",
     "validate:naming:system": "node arquitectura/convenciones/_validators/naming.validate.js --check-system",
     "validate:glossary": "node arquitectura/convenciones/_validators/glossary.validate.js",

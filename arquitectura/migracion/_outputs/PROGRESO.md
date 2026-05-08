@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T11:25:51Z_
+_Última regeneración: 2026-05-08T12:04:20Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 682 / 2471 (28%)
-- **Drifts restantes en baseline**: 1789
+- **Drifts cerrados**: 682 / 2487 (27%)
+- **Drifts restantes en baseline**: 1805
 
 ### Progreso por capa
 
@@ -47,7 +47,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 28 | infra | `system-inspector` | 376 | 14 → 5 (-64%) | `422eb92` 2026-05-07 |
 | 30 | infra | `conversation-export` | 627 | 13 → 5 (-62%) | `fd86a7c` 2026-05-07 |
 | 44 | dominio | `pizzepos__cuentas` | 1016 | 32 → 11 (-66%) | `1f2733d` 2026-05-07 |
-| 45 | dominio | `dashboard` | 400 | 26 → 12 (-54%) | _n/a_ |
+| 45 | dominio | `dashboard` | 400 | 26 → 12 (-54%) | `1e94204` 2026-05-08 |
 | 51 | dominio | `pizzepos__carta-design` | 545 | 18 → 8 (-56%) | `56a566a` 2026-05-07 |
 | 52 | dominio | `staff-manager` | 494 | 18 → 2 (-89%) | `10739b7` 2026-05-07 |
 | 59 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
@@ -100,8 +100,8 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 65 | dominio | `pizzepos__cuentas-canales` | 418 | 15 | 1 |
 | 66 | dominio | `text-editor` | 580 | 54 | 2 |
 | 67 | dominio | `viabilidad` | 789 | 48 | 2 |
-| 68 | dominio | `pizzepos__productos` | 1265 | 26 | 2 |
-| 69 | dominio | `bot-manager` | 327 | 19 | 2 |
+| 68 | dominio | `bot-manager` | 394 | 35 | 2 |
+| 69 | dominio | `pizzepos__productos` | 1265 | 26 | 2 |
 | 70 | dominio | `pizzepos__menu-generator` | 375 | 41 | 3 |
 | 71 | tooling | `ui-designer` | 1281 | 120 | 0 |
 | 72 | tooling | `scratch-designer` | 413 | 31 | 0 |

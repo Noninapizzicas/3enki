@@ -1,50 +1,34 @@
 {
   "name": "fuentes",
-  "version": "1.1.0",
-  "description": "Adaptadores de fuentes de entrada para facturas: Telegram, Gmail, y extensible a más",
+  "version": "2.0.0",
+  "description": "Adaptador strategy-pattern de fuentes de entrada de facturas (Telegram push, Gmail pull, extensible). Subscribe a telegram.{photo,document}.received, dispatch a strategies, emite factura.entrada con shape canonico { projectId, filePath, source, origen, correlation_id, project_id, timestamp } consumido por el modulo facturas.",
   "author": "Event-Core Team",
   "language": "es",
   "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
+  },
   "dependencies": [
-    "channel-manager"
-  ],
-  "handlers": [
-    {
-      "domain": "fuentes",
-      "action": "status",
-      "method": "handleStatus"
-    },
-    {
-      "domain": "fuentes",
-      "action": "get-config",
-      "method": "handleGetConfig"
-    },
-    {
-      "domain": "fuentes",
-      "action": "save-config",
-      "method": "handleSaveConfig"
-    },
-    {
-      "domain": "fuentes",
-      "action": "check-gmail",
-      "method": "handleCheckGmail"
-    }
+    "channel-manager",
+    "telegram-service"
   ],
   "events": {
     "publishes": [
-      "factura.entrada"
+      { "event": "factura.entrada", "description": "Entrada de factura detectada por una fuente externa (telegram, gmail, ...). Payload: projectId + project_id + filePath + source + origen + correlation_id + timestamp. Consumido por el modulo facturas." }
     ],
     "subscribes": [
-      {
-        "event": "telegram.photo.received",
-        "handler": "onTelegramPhoto"
-      },
-      {
-        "event": "telegram.document.received",
-        "handler": "onTelegramDocument"
-      }
+      { "event": "telegram.photo.received",    "handler": "onTelegramPhoto",    "description": "Foto recibida en bot de Telegram — TelegramStrategy descarga y emite factura.entrada." },
+      { "event": "telegram.document.received", "handler": "onTelegramDocument", "description": "Documento recibido en bot de Telegram — TelegramStrategy descarga (filtrado por MIME) y emite factura.entrada." }
     ]
   },
+  "ui_handlers": [
+    { "domain": "fuentes", "action": "status",       "handler": "handleStatus",       "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "fuentes", "action": "get-config",   "handler": "handleGetConfig",    "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "fuentes", "action": "save-config",  "handler": "handleSaveConfig",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "fuentes", "action": "check-gmail",  "handler": "handleCheckGmail",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "fuentes", "action": "health",       "handler": "handleHealth",       "type": "workspace_module", "zone": "barra_modulos" }
+  ],
+  "tools": [],
   "config": {
     "telegram": {
       "tipos_permitidos": [
@@ -63,6 +47,44 @@
       ],
       "query_default": "has:attachment is:unread",
       "max_results": 20
+    },
+    "persistence": {
+      "type": "filesystem-per-project",
+      "owner": "FuentesModule (cache de project config en memoria + descargas atomicas a data/projects/<project_id>/storage/pendientes/)",
+      "paths": [
+        "data/projects/<project_id>/storage/pendientes/<filename> (write — descargas de telegram/gmail saneadas con regex [^a-zA-Z0-9._-])"
+      ],
+      "restart_resilient": true,
+      "concurrency": "single-writer-por-archivo (filename incluye timestamp ms para evitar colisiones)",
+      "lost_on_restart": [
+        "projectConfigs Map (cache lazy, se reconstruye on-demand via local.project-config)",
+        "pendingDownloads Set (dedup de fileId in-flight, irrelevante tras restart)"
+      ]
     }
-  }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "fuentes.factura.entrada.emitida",
+        "fuentes.config.saved",
+        "fuentes.telegram.descargado",
+        "fuentes.telegram.descarga-fallida",
+        "fuentes.telegram.descarga-error",
+        "fuentes.gmail.adjunto-descargado",
+        "fuentes.gmail.adjunto-error",
+        "fuentes.gmail.mensaje-error",
+        "fuentes.gmail.search-error",
+        "fuentes.errors"
+      ]
+    }
+  },
+  "trabajo_pendiente": [
+    "Renombrar evento factura.entrada -> fuentes.factura.detectada coordinado con migracion del modulo facturas/ (unico consumer). Se mantiene literal hasta que facturas/ se migre al canon POC2."
+  ]
 }

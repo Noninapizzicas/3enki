@@ -1,6 +1,6 @@
 {
   "name": "log-manager",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Sistema centralizado de logs por sesión. Cada arranque crea una nueva sesión con logs organizados por módulo. Configurable para trackear módulos específicos.",
   "language": "en",
   "provides": [
@@ -14,6 +14,25 @@
     "activity.logged",
     "activity.batch"
   ],
+  "observability": {
+    "tracing": {
+      "propaga_correlation_id": true
+    },
+    "metrics_emitidas": [
+      {
+        "name": "log-manager.handler_error",
+        "type": "counter",
+        "labels": ["code", "kind"],
+        "descripcion": "Errores capturados en handlers HTTP, etiquetados por error code canonico y kind (http)."
+      },
+      {
+        "name": "log-manager.sessions_cleaned",
+        "type": "counter",
+        "labels": ["count"],
+        "descripcion": "Sesiones antiguas borradas por el cleanup periodico (cada 24h)."
+      }
+    ]
+  },
   "apis": [
     {
       "method": "GET",

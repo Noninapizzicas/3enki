@@ -1,10 +1,13 @@
 {
   "name": "text-editor",
-  "version": "1.0.0",
-  "description": "Text editor for MD and JSON files with syntax highlighting and validation",
+  "version": "2.0.0",
+  "description": "Backend de editor de archivos invocado desde el frontend Svelte (frontend/src/lib/modules/files) via topics canonicos ui/request/editor/{open,save,validate,format}. Edita archivos .md, .json, .yaml, etc dentro del directorio de cada proyecto (data/projects/<project_id>/). Path traversal validado, save atomico (.tmp + rename), validacion JSON antes de persistir.",
   "author": "Aichat Team",
   "language": "en",
   "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
+  },
   "ui": {
     "enabled": true,
     "title": "Editor de Texto",
@@ -18,127 +21,59 @@
       }
     }
   },
-  "apis": [
-    {
-      "method": "GET",
-      "path": "/editor/open",
-      "handler": "openFile",
-      "description": "Open file for editing",
-      "query_params": {
-        "project_id": {
-          "type": "string",
-          "required": true
-        },
-        "file_path": {
-          "type": "string",
-          "required": true
-        }
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/editor/save",
-      "handler": "saveFile",
-      "description": "Save file content",
-      "request_schema": "schemas/save-file.json"
-    },
-    {
-      "method": "POST",
-      "path": "/editor/validate",
-      "handler": "validateContent",
-      "description": "Validate JSON content",
-      "request_schema": "schemas/validate-content.json"
-    },
-    {
-      "method": "POST",
-      "path": "/editor/format",
-      "handler": "formatContent",
-      "description": "Format JSON content",
-      "request_schema": "schemas/format-content.json"
-    }
-  ],
   "events": {
-    "subscribes": [
-      {
-        "event": "editor.open.request",
-        "handler": "handleOpenRequest"
-      },
-      {
-        "event": "editor.save.request",
-        "handler": "handleSaveRequest"
-      },
-      {
-        "event": "editor.validate.request",
-        "handler": "handleValidateRequest"
-      },
-      {
-        "event": "editor.format.request",
-        "handler": "handleFormatRequest"
-      }
-    ],
     "publishes": [
-      "editor.open.response",
-      "editor.saved",
-      "editor.validate.response",
-      "editor.format.response",
-      "editor.error"
+      { "event": "editor.open.response",     "description": "Response a editor.open.request correlacionada por request_id. project_id top-level + correlation_id + timestamp." },
+      { "event": "editor.saved",             "description": "Archivo guardado correctamente. project_id top-level + correlation_id + timestamp." },
+      { "event": "editor.validate.response", "description": "Response a editor.validate.request con resultado de validacion JSON/MD." },
+      { "event": "editor.format.response",   "description": "Response a editor.format.request con contenido formateado." },
+      { "event": "editor.error",             "description": "Error de save/escritura asincrono — fallback cuando no hay request_id correlacionable." }
+    ],
+    "subscribes": [
+      { "event": "editor.open.request",     "handler": "onOpenRequest",     "description": "Bus path para abrir un archivo. Publica editor.open.response correlacionada." },
+      { "event": "editor.save.request",     "handler": "onSaveRequest",     "description": "Bus path para guardar contenido. Publica editor.saved en exito o editor.error en fallo." },
+      { "event": "editor.validate.request", "handler": "onValidateRequest", "description": "Bus path para validar JSON/MD sin tocar disco." },
+      { "event": "editor.format.request",   "handler": "onFormatRequest",   "description": "Bus path para pretty-print JSON o trim trailing whitespace en MD." }
     ]
   },
   "ui_handlers": [
-    {
-      "domain": "editor",
-      "action": "open",
-      "handler": "handleUIOpen"
-    },
-    {
-      "domain": "editor",
-      "action": "save",
-      "handler": "handleUISave"
-    },
-    {
-      "domain": "editor",
-      "action": "validate",
-      "handler": "handleUIValidate"
-    },
-    {
-      "domain": "editor",
-      "action": "format",
-      "handler": "handleUIFormat"
-    }
+    { "domain": "editor", "action": "open",     "handler": "handleOpen",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "editor", "action": "save",     "handler": "handleSave",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "editor", "action": "validate", "handler": "handleValidate", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "editor", "action": "format",   "handler": "handleFormat",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "editor", "action": "health",   "handler": "handleHealth",   "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "dependencies": {
-    "modules": [
-      "file-browser",
-      "project-manager"
-    ]
-  },
+  "tools": [],
+  "dependencies": ["file-browser", "project-manager"],
   "config": {
-    "supported_formats": [
-      "md",
-      "json",
-      "txt",
-      "html",
-      "css",
-      "js",
-      "yaml",
-      "yml",
-      "xml"
-    ],
+    "supported_formats": ["md", "json", "txt", "html", "css", "js", "yaml", "yml", "xml"],
     "max_file_size": 5242880,
     "auto_save_interval": 30000,
-    "tab_size": 2
+    "tab_size": 2,
+    "persistence": {
+      "type": "filesystem-per-project",
+      "owner": "TextEditorModule (write atomico tmp+rename de archivos en data/projects/<project_id>/)",
+      "paths": [
+        "data/projects/<project_id>/<file_path> (read+write, validado contra path traversal)"
+      ],
+      "restart_resilient": true,
+      "concurrency": "single-writer-per-file",
+      "lost_on_restart": []
+    }
   },
   "observability": {
     "logging": {
       "level": "info",
-      "structured": true
+      "structured": true,
+      "correlation_id": true
     },
     "metrics": {
       "enabled": true,
-      "custom": [
-        "files_opened_total",
-        "files_saved_total",
-        "validation_errors_total"
+      "counters": [
+        "text-editor.files_opened",
+        "text-editor.files_saved",
+        "text-editor.validation_errors",
+        "text-editor.errors"
       ]
     }
   }

@@ -61,7 +61,6 @@
       "ai-gateway",
       "ai-agent-framework",
       "agent-manager",
-      "calling-generator",
       "bot-manager",
       "chat-ai-bridge",
       "chat-session",
@@ -112,10 +111,7 @@
     ],
     "disabled": [
       "conversation-manager",
-      "scratch-designer",
-      "ui-designer",
       "dashboard",
-      "notas",
       "metricas",
       "security-p2p",
       "certificate-authority",

@@ -1,21 +1,19 @@
 /**
- * GmailStrategy
+ * GmailStrategy v2.0.0 — POC2 canonico.
  *
- * Adapta Gmail (adjuntos de correos) a factura.entrada.
+ * Adapta Gmail (adjuntos de correos) a `factura.entrada`.
  *
  * Flujo bajo demanda:
- *   mqttRequest('fuentes', 'check-gmail', { proyecto })
- *     → buscar correos con adjuntos
- *     → descargar adjuntos (PDF/imágenes)
- *     → emitir factura.entrada por cada adjunto
- *
- * Flujo programado:
- *   Configurar job en scheduler con cron → emite evento
- *   → handler de proyecto escucha → llama check-gmail
+ *   handleCheckGmail({ proyecto }) -> checkAndProcess(proyecto)
+ *     -> local.gmail.search -> local.gmail.read -> local.gmail.attachments.download
+ *     -> modulo._publicarEvento('factura.entrada', ...) por adjunto
  *
  * Config por proyecto:
- *   { fuentes: { gmail: { enabled: true, account: "mi-cuenta", query: "has:attachment is:unread" } } }
+ *   { fuentes: { gmail: { enabled: true, account: "mi-cuenta",
+ *                         query: "has:attachment is:unread", maxResults: 20 } } }
  */
+
+'use strict';
 
 const fs = require('fs');
 const path = require('path');
@@ -25,7 +23,7 @@ const TIPOS_PERMITIDOS = ['application/pdf', 'image/jpeg', 'image/png', 'image/t
 class GmailStrategy {
   constructor() {
     this.tipo = 'gmail';
-    this.version = '1.0.0';
+    this.version = '2.0.0';
     this.modulo = null;
   }
 
@@ -37,14 +35,9 @@ class GmailStrategy {
   // Core: Check Gmail and process attachments
   // ==========================================
 
-  /**
-   * Busca correos con adjuntos y emite factura.entrada por cada uno.
-   * Llamado por handleCheckGmail del módulo fuentes.
-   *
-   * @param {string} projectId
-   * @returns {Object} { processed, errors, total_attachments }
-   */
-  async checkAndProcess(projectId) {
+  async checkAndProcess(projectId, opts = {}) {
+    const { correlation_id } = opts;
+
     const config = await this.modulo.getProjectFuentesConfig(projectId);
     const gmailConfig = config?.fuentes?.gmail;
 
@@ -62,22 +55,20 @@ class GmailStrategy {
     let totalAttachments = 0;
 
     try {
-      // 1. Buscar correos
       const searchResult = await this.modulo.services.call(
         'local.gmail', 'search',
         { account, query: searchQuery, maxResults: maxResults || 20 },
         { timeout: 30000 }
       );
 
-      const searchData = searchResult.data || searchResult;
-      const messages = searchData.messages || [];
+      const searchData = searchResult?.data || searchResult;
+      const messages = searchData?.messages || [];
 
       if (messages.length === 0) {
         this.modulo.logger.info('fuentes.gmail.sin-correos', { account });
         return { processed: 0, errors: 0, total_attachments: 0 };
       }
 
-      // 2. Leer cada mensaje y descargar adjuntos
       for (const msg of messages) {
         try {
           const readResult = await this.modulo.services.call(
@@ -86,11 +77,10 @@ class GmailStrategy {
             { timeout: 15000 }
           );
 
-          const emailData = readResult.data || readResult;
-          const attachments = emailData.attachments || [];
+          const emailData = readResult?.data || readResult;
+          const attachments = emailData?.attachments || [];
 
           for (const att of attachments) {
-            // Filtrar por tipo MIME
             if (att.mimeType && !TIPOS_PERMITIDOS.includes(att.mimeType)) {
               continue;
             }
@@ -98,42 +88,43 @@ class GmailStrategy {
             totalAttachments++;
 
             try {
-              const filePath = await this.downloadAttachment(
-                projectId, account, msg.id, att
-              );
-
+              const filePath = await this._downloadAttachment(projectId, account, msg.id, att);
               if (filePath) {
-                this.modulo.emitFacturaEntrada({
+                await this.modulo.emitFacturaEntrada({
                   projectId,
                   filePath,
                   source: 'gmail',
                   origen: {
                     account,
-                    de: emailData.from,
-                    asunto: emailData.subject,
+                    de: emailData?.from,
+                    asunto: emailData?.subject,
                     messageId: msg.id,
                     fileName: att.filename
-                  }
+                  },
+                  correlation_id
                 });
                 processed++;
               }
             } catch (e) {
               errors++;
+              this.modulo.metrics?.increment?.('fuentes.gmail.adjunto-error');
               this.modulo.logger.error('fuentes.gmail.adjunto-error', {
-                messageId: msg.id, filename: att.filename, error: e.message
+                messageId: msg.id, filename: att.filename, error_message: e.message
               });
             }
           }
         } catch (e) {
           errors++;
+          this.modulo.metrics?.increment?.('fuentes.gmail.mensaje-error');
           this.modulo.logger.error('fuentes.gmail.mensaje-error', {
-            messageId: msg.id, error: e.message
+            messageId: msg.id, error_message: e.message
           });
         }
       }
     } catch (e) {
+      this.modulo.metrics?.increment?.('fuentes.gmail.search-error');
       this.modulo.logger.error('fuentes.gmail.search-error', {
-        account, error: e.message
+        account, error_message: e.message
       });
       return { processed: 0, errors: 1, error: e.message };
     }
@@ -145,11 +136,7 @@ class GmailStrategy {
     return { processed, errors, total_attachments: totalAttachments };
   }
 
-  // ==========================================
-  // Download attachment
-  // ==========================================
-
-  async downloadAttachment(projectId, account, messageId, attachment) {
+  async _downloadAttachment(projectId, account, messageId, attachment) {
     const destDir = path.join(
       process.cwd(), 'data/projects', projectId, 'storage', 'pendientes'
     );
@@ -159,23 +146,22 @@ class GmailStrategy {
       .replace(/[^a-zA-Z0-9._-]/g, '_');
     const destPath = path.join(destDir, `${Date.now()}_${safeName}`);
 
-    // Descargar adjunto via local.gmail
     const result = await this.modulo.services.call(
       'local.gmail', 'attachments.download',
       { account, messageId, attachmentId: attachment.attachmentId },
       { timeout: 30000 }
     );
 
-    const data = result.data || result;
+    const data = result?.data || result;
 
-    if (!data.content) {
+    if (!data?.content) {
       throw new Error('Sin contenido en adjunto');
     }
 
-    // Guardar base64 a disco
     const buffer = Buffer.from(data.content, 'base64');
     fs.writeFileSync(destPath, buffer);
 
+    this.modulo.metrics?.increment?.('fuentes.gmail.adjunto-descargado');
     this.modulo.logger.info('fuentes.gmail.adjunto-descargado', {
       file: safeName, size: buffer.length, projectId
     });
@@ -183,16 +169,12 @@ class GmailStrategy {
     return destPath;
   }
 
-  // ==========================================
-  // Health
-  // ==========================================
-
   getHealth() {
     return { status: 'ok' };
   }
 
   cleanup() {
-    // Nothing to clean
+    /* nothing to clean */
   }
 }
 

@@ -1,70 +1,73 @@
 {
   "name": "bot-manager",
-  "version": "1.0.0",
-  "description": "Gestión de bots y almacenamiento. Descarga archivos, guarda en carpetas, publica eventos. NO sabe de agentes.",
+  "version": "2.0.0",
+  "description": "Gestion de bots y almacenamiento. Descarga archivos, guarda en carpetas con convencion de naming (status flags R/P/V/A/X/E/D), publica eventos de lifecycle (registered/unregistered/enabled/disabled) y de actividad (file.stored/message.received/command.received). Auto-registra bots desde credential.saved (TELEGRAM_API_KEY_BOT_*). Auto-respuestas configurables por comando. NO sabe de agentes — solo gestion de bots.",
   "author": "Event Core Team",
   "language": "en",
-  "provides": [
-    "bot-management",
-    "file-storage",
-    "auto-responses"
-  ],
+  "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
+  },
   "events": {
-    "subscribes": [
-      {
-        "event": "telegram.document.received",
-        "handler": "onFileReceived"
-      },
-      {
-        "event": "telegram.photo.received",
-        "handler": "onFileReceived"
-      },
-      {
-        "event": "telegram.video.received",
-        "handler": "onFileReceived"
-      },
-      {
-        "event": "telegram.audio.received",
-        "handler": "onFileReceived"
-      },
-      {
-        "event": "telegram.voice.received",
-        "handler": "onFileReceived"
-      },
-      {
-        "event": "telegram.text.received",
-        "handler": "onTextReceived"
-      },
-      {
-        "event": "telegram.command.received",
-        "handler": "onCommandReceived"
-      },
-      {
-        "event": "credential.saved",
-        "handler": "onCredentialSaved"
-      }
-    ],
     "publishes": [
-      "bot.file.stored",
-      "bot.message.received",
-      "bot.command.received",
-      "bot.registered",
-      "bot.unregistered",
-      "bot.enabled",
-      "bot.disabled"
+      { "event": "bot.file.stored",        "description": "Archivo recibido y persistido en disco con naming convention. project_id top-level + correlation_id + timestamp." },
+      { "event": "bot.message.received",   "description": "Mensaje de texto recibido (bot habilitado). project_id top-level + correlation_id + timestamp." },
+      { "event": "bot.command.received",   "description": "Comando /<cmd> recibido. autoResponded indica si auto-responder lo manejo. project_id top-level + correlation_id + timestamp." },
+      { "event": "bot.registered",         "description": "Bot registrado (manual o auto desde credential.saved). project_id top-level + correlation_id + timestamp." },
+      { "event": "bot.unregistered",       "description": "Bot desregistrado. project_id top-level + correlation_id + timestamp." },
+      { "event": "bot.enabled",            "description": "Bot habilitado. project_id top-level + correlation_id + timestamp." },
+      { "event": "bot.disabled",           "description": "Bot deshabilitado. project_id top-level + correlation_id + timestamp." }
+    ],
+    "subscribes": [
+      { "event": "telegram.document.received", "handler": "onFileReceived",       "description": "Archivo documento recibido en bot Telegram." },
+      { "event": "telegram.photo.received",    "handler": "onFileReceived",       "description": "Foto recibida en bot Telegram." },
+      { "event": "telegram.video.received",    "handler": "onFileReceived",       "description": "Video recibido en bot Telegram." },
+      { "event": "telegram.audio.received",    "handler": "onFileReceived",       "description": "Audio recibido en bot Telegram." },
+      { "event": "telegram.voice.received",    "handler": "onFileReceived",       "description": "Voice note recibido en bot Telegram." },
+      { "event": "telegram.text.received",     "handler": "onTextReceived",       "description": "Texto recibido en bot Telegram." },
+      { "event": "telegram.command.received",  "handler": "onCommandReceived",    "description": "Comando /<cmd> recibido en bot Telegram." },
+      { "event": "credential.saved",           "handler": "onCredentialSaved",    "description": "Credencial guardada — auto-registra bot si key es TELEGRAM_API_KEY_BOT_/CUSTOM_*." }
     ]
   },
-  "config": {
-    "storagePath": "./data/bots"
-  },
+  "ui_handlers": [
+    { "domain": "bot-manager", "action": "list",        "handler": "handleListBots",   "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "bot-manager", "action": "get",         "handler": "handleGetBot",     "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "bot-manager", "action": "set-enabled", "handler": "handleSetEnabled", "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "bot-manager", "action": "health",      "handler": "handleHealth",     "type": "system_panel", "zone": "lateral_derecha" }
+  ],
+  "tools": [],
   "dependencies": [
     "telegram-service",
     "credential-manager"
   ],
-  "tags": [
-    "bots",
-    "storage",
-    "telegram",
-    "files"
-  ]
+  "config": {
+    "storagePath": "./data/bots",
+    "persistence": {
+      "type": "filesystem",
+      "owner": "BotRegistry (registro de bots) + DownloadManager (archivos descargados con naming convention status flags)",
+      "paths": [
+        "{config.storagePath}/<botName>/<YYYYMMDD>_<HHMMSS>_<name>_<status>.<ext> (write atomico via DownloadManager)"
+      ],
+      "restart_resilient": true,
+      "concurrency": "single-instance",
+      "lost_on_restart": []
+    }
+  },
+  "tags": ["bots", "storage", "telegram", "files"],
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "bot-manager.file.stored",
+        "bot-manager.message.received",
+        "bot-manager.command.received",
+        "bot-manager.errors"
+      ]
+    }
+  }
 }

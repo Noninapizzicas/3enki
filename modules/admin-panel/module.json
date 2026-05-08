@@ -1,133 +1,70 @@
 {
   "name": "admin-panel",
-  "version": "1.0.0",
-  "description": "Web-based admin panel for managing Event Core system",
+  "version": "2.0.0",
+  "description": "Web-based admin panel para gestionar Event Core (modulos, plugins, agentes, prompts). Bus-driven via ui_handlers canonicos. Cache in-memory de 4 secciones (plugins/agents/prompts/modules) con refresh on-demand. Integra con plugin-manager + prompt-manager via HTTP loopback hasta que esos modulos canonicen su ui_handler API.",
+  "author": "Event Core Team",
   "language": "en",
-  "dependencies": [],
-  "apis": [
-    {
-      "method": "GET",
-      "path": "/",
-      "handler": "handleUi"
-    },
-    {
-      "method": "GET",
-      "path": "/api/dashboard",
-      "handler": "handleDashboardData"
-    },
-    {
-      "method": "GET",
-      "path": "/api/modules",
-      "handler": "handleListModules"
-    },
-    {
-      "method": "GET",
-      "path": "/api/plugins",
-      "handler": "handleListPlugins"
-    },
-    {
-      "method": "POST",
-      "path": "/api/plugins/:name/toggle",
-      "handler": "handleTogglePlugin"
-    },
-    {
-      "method": "GET",
-      "path": "/api/agents",
-      "handler": "handleListAgents"
-    },
-    {
-      "method": "POST",
-      "path": "/api/agents",
-      "handler": "handleCreateAgent"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/agents/:id",
-      "handler": "handleDeleteAgent"
-    },
-    {
-      "method": "GET",
-      "path": "/api/prompts",
-      "handler": "handleListPrompts"
-    },
-    {
-      "method": "GET",
-      "path": "/api/prompts/:name",
-      "handler": "handleGetPrompt"
-    },
-    {
-      "method": "POST",
-      "path": "/api/prompts",
-      "handler": "handleCreatePrompt"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/prompts/:name",
-      "handler": "handleUpdatePrompt"
-    }
-  ],
+  "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "dependencies": ["plugin-manager", "prompt-manager"],
   "events": {
     "publishes": [
-      "admin.action"
+      { "event": "admin.plugin.toggled",     "description": "Plugin toggled (enable/disable) desde el admin panel. project_id top-level + correlation_id + timestamp." },
+      { "event": "admin.agent.creado",       "description": "Agente creado desde el admin panel. project_id top-level + correlation_id + timestamp." },
+      { "event": "admin.agent.eliminado",    "description": "Agente eliminado desde el admin panel. project_id top-level + correlation_id + timestamp." },
+      { "event": "admin.prompt.creado",      "description": "Prompt creado desde el admin panel. project_id top-level + correlation_id + timestamp." },
+      { "event": "admin.prompt.actualizado", "description": "Prompt actualizado desde el admin panel. project_id top-level + correlation_id + timestamp." }
     ],
     "subscribes": [
-      {
-        "event": "plugin.loaded",
-        "handler": "onPluginLoaded"
-      }
+      { "event": "plugin.loaded", "handler": "onPluginLoaded", "description": "Plugin cargado por plugin-manager — refresca cache local." }
     ]
   },
+  "ui_handlers": [
+    { "domain": "admin-panel", "action": "dashboard",       "handler": "handleDashboard",     "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "modules",         "handler": "handleListModules",   "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "plugins",         "handler": "handleListPlugins",   "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "plugin-toggle",   "handler": "handleTogglePlugin",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "agents",          "handler": "handleListAgents",    "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "agent-create",    "handler": "handleCreateAgent",   "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "agent-delete",    "handler": "handleDeleteAgent",   "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "prompts",         "handler": "handleListPrompts",   "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "prompt-get",      "handler": "handleGetPrompt",     "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "prompt-create",   "handler": "handleCreatePrompt",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "prompt-update",   "handler": "handleUpdatePrompt",  "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "admin-panel", "action": "health",          "handler": "handleHealth",        "type": "system_panel", "zone": "lateral_derecha" }
+  ],
+  "tools": [],
   "ui": {
     "enabled": true,
     "title": "Admin Panel",
     "icon": "⚙️",
     "description": "System administration and monitoring"
   },
-  "schema": {
-    "id": {
-      "type": "string",
-      "label": "ID"
-    },
-    "module_name": {
-      "type": "string",
-      "label": "Module",
-      "required": true
-    },
-    "status": {
-      "type": "enum",
-      "label": "Status",
-      "enum": [
-        "active",
-        "inactive",
-        "error"
+  "config": {
+    "persistence": {
+      "type": "in-memory",
+      "owner": "AdminPanelModule (4 caches: plugins, agents, prompts, modules)",
+      "filesystem_read": [
+        "modules/<*>/module.json (lectura para cache de modulos)"
       ],
-      "required": true
+      "restart_resilient": false,
+      "concurrency": "single-instance",
+      "lost_on_restart": ["cache.plugins", "cache.agents", "cache.prompts", "cache.modules"]
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
     },
-    "version": {
-      "type": "string",
-      "label": "Version"
-    },
-    "type": {
-      "type": "enum",
-      "label": "Type",
-      "enum": [
-        "module",
-        "plugin",
-        "agent",
-        "prompt"
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "admin-panel.errors"
       ]
-    },
-    "description": {
-      "type": "text",
-      "label": "Description"
-    },
-    "created_at": {
-      "type": "datetime",
-      "label": "Created"
-    },
-    "updated_at": {
-      "type": "datetime",
-      "label": "Updated"
     }
   }
 }

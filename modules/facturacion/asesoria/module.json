@@ -1,84 +1,67 @@
 {
   "name": "asesoria",
-  "version": "1.0.0",
-  "description": "Generación de paquetes (CSV + originales) para asesoría contable",
+  "version": "2.0.0",
+  "description": "Genera paquetes fiscales (CSV formato espaniol + ZIP con originales) on-demand para asesoria contable. Lee facturas procesadas via local.facturas-db, empaqueta via local.zip. Topics MQTT canonicos invocados desde frontend Svelte (frontend/src/lib/stores/facturas.ts): asesoria.{generar-paquete,historial,descargar,preview}.",
   "author": "Event-Core Team",
   "language": "es",
   "main": "index.js",
-  "handlers": [
-    {
-      "domain": "asesoria",
-      "action": "generar-paquete",
-      "method": "handleGenerarPaquete"
-    },
-    {
-      "domain": "asesoria",
-      "action": "historial",
-      "method": "handleHistorial"
-    },
-    {
-      "domain": "asesoria",
-      "action": "descargar",
-      "method": "handleDescargar"
-    },
-    {
-      "domain": "asesoria",
-      "action": "preview",
-      "method": "handlePreview"
-    }
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "dependencies": [],
+  "events": {
+    "publishes": [
+      { "event": "asesoria.paquete.generado", "description": "Paquete fiscal generado correctamente. Payload: projectId + project_id top-level + archivo + facturas + periodo + totales + duration_ms + correlation_id + timestamp." },
+      { "event": "asesoria.paquete.error",    "description": "Error generando paquete (sin facturas, fallo zip, db down). Payload: projectId + project_id top-level + error + correlation_id + timestamp." }
+    ],
+    "subscribes": []
+  },
+  "ui_handlers": [
+    { "domain": "asesoria", "action": "generar-paquete", "handler": "handleGenerarPaquete", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "asesoria", "action": "historial",       "handler": "handleHistorial",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "asesoria", "action": "descargar",       "handler": "handleDescargar",      "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "asesoria", "action": "preview",         "handler": "handlePreview",        "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "asesoria", "action": "health",          "handler": "handleHealth",         "type": "workspace_module", "zone": "barra_modulos" }
   ],
   "tools": [
     {
       "name": "asesoria.generar-paquete",
-      "description": "Genera paquete CSV + ZIP con facturas procesadas para la asesoría contable",
+      "description": "Genera paquete CSV + ZIP con facturas procesadas para la asesoria contable",
       "handler": "handleToolGenerarPaquete",
       "parameters": {
         "type": "object",
         "properties": {
-          "projectId": {
-            "type": "string",
-            "description": "ID del proyecto"
-          },
-          "periodo": {
-            "type": "string",
-            "description": "Periodo YYYY-MM para filtrar"
-          },
-          "incluirOriginales": {
-            "type": "boolean",
-            "default": true,
-            "description": "Incluir archivos originales (PDF/IMG) en el ZIP"
-          }
+          "projectId":         { "type": "string",  "description": "ID del proyecto" },
+          "periodo":           { "type": "string",  "description": "Periodo YYYY-MM para filtrar (opcional)" },
+          "incluirOriginales": { "type": "boolean", "default": true, "description": "Incluir archivos originales (PDF/IMG) en el ZIP" }
         },
-        "required": [
-          "projectId"
-        ]
-      }
+        "required": ["projectId"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",          "cuando": "projectId ausente o vacio." },
+        { "code": "RESOURCE_NOT_FOUND",     "cuando": "no hay facturas procesadas para el periodo especificado." },
+        { "code": "DEPENDENCY_UNAVAILABLE", "cuando": "local.zip falla creando el ZIP." },
+        { "code": "TIMEOUT",                "cuando": "local.facturas-db.listar excede config.timeouts.db (default 30s) o local.zip excede config.timeouts.zip (default 60s)." },
+        { "code": "INTERNAL_ERROR",         "cuando": "error inesperado escribiendo CSV o resumen al filesystem." }
+      ]
     },
     {
       "name": "asesoria.historial",
-      "description": "Lista paquetes generados previamente para la asesoría",
+      "description": "Lista paquetes generados previamente para la asesoria",
       "handler": "handleToolHistorial",
       "parameters": {
         "type": "object",
         "properties": {
-          "projectId": {
-            "type": "string",
-            "description": "ID del proyecto"
-          }
+          "projectId": { "type": "string", "description": "ID del proyecto" }
         },
-        "required": [
-          "projectId"
-        ]
-      }
+        "required": ["projectId"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",  "cuando": "projectId ausente o vacio." },
+        { "code": "INTERNAL_ERROR", "cuando": "error leyendo el directorio de export." }
+      ]
     }
   ],
-  "events": {
-    "publishes": [
-      "asesoria.paquete.generado",
-      "asesoria.paquete.error"
-    ],
-    "subscribes": []
-  },
   "config": {
     "csv": {
       "separator": ";",
@@ -88,18 +71,32 @@
     "timeouts": {
       "db": 30000,
       "zip": 60000
+    },
+    "persistence": {
+      "type": "filesystem-per-project",
+      "owner": "AsesoriaModule (write CSV/resumen/ZIP en data/projects/<project_id>/storage/export/asesoria/, read via local.facturas-db).",
+      "paths": [
+        "data/projects/<project_id>/storage/export/asesoria/asesoria_<periodo>_<YYYY-MM-DD>.zip (write — paquete final)",
+        "data/projects/<project_id>/storage/export/asesoria/asesoria_<periodo>_<YYYY-MM-DD>.csv (write temporal — empaquetado en ZIP y borrado)",
+        "data/projects/<project_id>/storage/export/asesoria/asesoria_<periodo>_<YYYY-MM-DD>_resumen.txt (write temporal — empaquetado en ZIP y borrado)"
+      ],
+      "restart_resilient": true,
+      "concurrency": "single-writer-por-paquete (filename incluye periodo + fecha; colisiones cubiertas por overwrite del ZIP)",
+      "lost_on_restart": []
     }
   },
   "observability": {
     "logging": {
       "level": "info",
-      "structured": true
+      "structured": true,
+      "correlation_id": true
     },
     "metrics": {
       "enabled": true,
       "counters": [
         "asesoria.paquetes.generados.total",
-        "asesoria.paquetes.errores.total"
+        "asesoria.paquetes.errores.total",
+        "asesoria.errors"
       ],
       "histograms": [
         "asesoria.generacion.duration"

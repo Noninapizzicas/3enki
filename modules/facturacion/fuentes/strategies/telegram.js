@@ -1,16 +1,18 @@
 /**
- * TelegramStrategy
+ * TelegramStrategy v2.0.0 — POC2 canonico.
  *
- * Adapta eventos de Telegram (fotos y documentos) a factura.entrada.
+ * Adapta eventos de Telegram (fotos y documentos) a `factura.entrada`.
  *
  * Flujo:
- *   telegram.photo.received → detectar proyecto por botName
- *     → descargar archivo via telegram-service
- *     → emitir factura.entrada
+ *   telegram.{photo,document}.received -> resolver proyecto via channel-manager
+ *     -> descargar via telegram.get_file (service)
+ *     -> modulo._publicarEvento('factura.entrada', ...) canonico
  *
  * Config por proyecto:
  *   { fuentes: { telegram: { enabled: true, botName: "mi_bot" } } }
  */
+
+'use strict';
 
 const path = require('path');
 
@@ -21,10 +23,8 @@ const TIPOS_PERMITIDOS = [...TIPOS_IMAGEN, ...TIPOS_DOCUMENTO];
 class TelegramStrategy {
   constructor() {
     this.tipo = 'telegram';
-    this.version = '1.0.0';
-    this.modulo = null; // Set by init()
-
-    // Track pending downloads to avoid duplicates
+    this.version = '2.0.0';
+    this.modulo = null;
     this.pendingDownloads = new Set();
   }
 
@@ -36,33 +36,26 @@ class TelegramStrategy {
   // Event handlers (called by fuentes module)
   // ==========================================
 
-  /**
-   * telegram.photo.received
-   * Payload: { botName, chatId, from, fileId, mimeType, caption, ... }
-   */
   async onPhotoReceived(event) {
-    const data = event.data || event;
-    const { botName, chatId, from, fileId, caption } = data;
+    const data = event?.data || event;
+    const { botName, chatId, from, fileId, caption, correlation_id } = data;
 
     if (!botName || !fileId) return;
 
-    // Resolver proyecto via channel-manager
-    const resolved = await this.resolveProject(botName);
+    const resolved = await this._resolveProject(botName);
     if (!resolved) {
       this.modulo.logger.debug('fuentes.telegram.bot-sin-proyecto', { botName });
       return;
     }
     const projectId = resolved.project_id;
 
-    // Evitar duplicados
     if (this.pendingDownloads.has(fileId)) return;
     this.pendingDownloads.add(fileId);
 
     try {
-      const filePath = await this.downloadFile(botName, fileId, projectId, 'photo');
-
+      const filePath = await this._downloadFile(botName, fileId, projectId, 'photo');
       if (filePath) {
-        this.modulo.emitFacturaEntrada({
+        await this.modulo.emitFacturaEntrada({
           projectId,
           filePath,
           source: 'telegram',
@@ -72,7 +65,8 @@ class TelegramStrategy {
             userId: from?.id,
             userName: from?.username || from?.firstName,
             caption
-          }
+          },
+          correlation_id
         });
       }
     } finally {
@@ -80,39 +74,31 @@ class TelegramStrategy {
     }
   }
 
-  /**
-   * telegram.document.received
-   * Payload: { botName, chatId, from, fileId, fileName, mimeType, caption, ... }
-   */
   async onDocumentReceived(event) {
-    const data = event.data || event;
-    const { botName, chatId, from, fileId, fileName, mimeType, caption } = data;
+    const data = event?.data || event;
+    const { botName, chatId, from, fileId, fileName, mimeType, caption, correlation_id } = data;
 
     if (!botName || !fileId) return;
 
-    // Filtrar por tipo MIME
     if (mimeType && !TIPOS_PERMITIDOS.includes(mimeType)) {
       this.modulo.logger.debug('fuentes.telegram.tipo-no-soportado', { mimeType, fileName });
       return;
     }
 
-    // Resolver proyecto via channel-manager
-    const resolved = await this.resolveProject(botName);
+    const resolved = await this._resolveProject(botName);
     if (!resolved) {
       this.modulo.logger.debug('fuentes.telegram.bot-sin-proyecto', { botName });
       return;
     }
     const projectId = resolved.project_id;
 
-    // Evitar duplicados
     if (this.pendingDownloads.has(fileId)) return;
     this.pendingDownloads.add(fileId);
 
     try {
-      const filePath = await this.downloadFile(botName, fileId, projectId, 'document', fileName);
-
+      const filePath = await this._downloadFile(botName, fileId, projectId, 'document', fileName);
       if (filePath) {
-        this.modulo.emitFacturaEntrada({
+        await this.modulo.emitFacturaEntrada({
           projectId,
           filePath,
           source: 'telegram',
@@ -123,7 +109,8 @@ class TelegramStrategy {
             userName: from?.username || from?.firstName,
             caption,
             fileName
-          }
+          },
+          correlation_id
         });
       }
     } finally {
@@ -135,30 +122,26 @@ class TelegramStrategy {
   // Channel resolution via channel-manager
   // ==========================================
 
-  /**
-   * Resuelve botName → { project_id, purpose } via channel-manager.
-   * Patron ServiceExecutor: channel-manager.resolve.request → .response
-   */
-  async resolveProject(botName) {
+  async _resolveProject(botName) {
     try {
       const result = await this.modulo.services.call(
         'channel-manager', 'resolve',
         { channel_type: 'telegram', external_id: botName },
         { timeout: 3000 }
       );
-      const data = result.data || result;
-      return data.found ? data : null;
+      const data = result?.data || result;
+      return data?.found ? data : null;
     } catch (e) {
-      this.modulo.logger.debug('fuentes.telegram.resolve-error', { botName, error: e.message });
+      this.modulo.logger.debug('fuentes.telegram.resolve-error', { botName, error_message: e.message });
       return null;
     }
   }
 
   // ==========================================
-  // File download via telegram-service events
+  // File download via telegram service
   // ==========================================
 
-  async downloadFile(botName, fileId, projectId, type, originalFileName) {
+  async _downloadFile(botName, fileId, projectId, type, originalFileName) {
     const destDir = path.join(
       process.cwd(), 'data/projects', projectId, 'storage', 'pendientes'
     );
@@ -180,31 +163,29 @@ class TelegramStrategy {
         { timeout: 30000 }
       );
 
-      const data = result.data || result;
+      const data = result?.data || result;
 
-      if (data.success && data.localPath) {
+      if (data?.success && data?.localPath) {
+        this.modulo.metrics?.increment?.('fuentes.telegram.descargado');
         this.modulo.logger.info('fuentes.telegram.descargado', {
           projectId, file: safeName, localPath: data.localPath
         });
         return data.localPath;
       }
 
+      this.modulo.metrics?.increment?.('fuentes.telegram.descarga-fallida');
       this.modulo.logger.error('fuentes.telegram.descarga-fallida', {
-        botName, fileId, error: data.error || 'sin respuesta'
+        botName, fileId, error_message: data?.error || 'sin respuesta'
       });
       return null;
-
     } catch (e) {
+      this.modulo.metrics?.increment?.('fuentes.telegram.descarga-error');
       this.modulo.logger.error('fuentes.telegram.descarga-error', {
-        botName, fileId, error: e.message
+        botName, fileId, error_message: e.message
       });
       return null;
     }
   }
-
-  // ==========================================
-  // Health
-  // ==========================================
 
   getHealth() {
     return {

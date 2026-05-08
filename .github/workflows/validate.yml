@@ -244,3 +244,21 @@ jobs:
 
       - name: Run unit tests (dashboard — reescritura canonica)
         run: npm run test:dashboard
+
+      - name: Run unit tests (bot-manager — reescritura canonica)
+        run: npm run test:bot-manager
+
+      - name: Run unit tests (admin-panel — reescritura canonica)
+        run: npm run test:admin-panel
+
+      - name: Run unit tests (text-editor — reescritura canonica)
+        run: npm run test:text-editor
+
+      - name: Run unit tests (facturacion/fuentes — reescritura canonica)
+        run: npm run test:facturacion__fuentes
+
+      - name: Run unit tests (facturacion/asesoria — reescritura canonica)
+        run: npm run test:facturacion__asesoria
+
+      - name: Run unit tests (log-manager — reescritura canonica)
+        run: npm run test:log-manager

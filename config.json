@@ -111,10 +111,7 @@
     ],
     "disabled": [
       "conversation-manager",
-      "scratch-designer",
-      "ui-designer",
       "dashboard",
-      "notas",
       "metricas",
       "security-p2p",
       "certificate-authority",

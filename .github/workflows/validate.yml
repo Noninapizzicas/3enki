@@ -187,3 +187,6 @@ jobs:
 
       - name: Run unit tests (escandallo — reescritura canonica)
         run: npm run test:escandallo
+
+      - name: Run unit tests (pizzepos/cocina — reescritura canonica)
+        run: npm run test:pizzepos__cocina

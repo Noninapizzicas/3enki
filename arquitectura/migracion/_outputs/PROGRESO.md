@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-07T23:58:24Z_
+_Última regeneración: 2026-05-08T00:40:28Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 73 (40%)
-- **Drifts cerrados**: 682 / 2631 (26%)
-- **Drifts restantes en baseline**: 1949
+- **Drifts cerrados**: 685 / 2631 (26%)
+- **Drifts restantes en baseline**: 1946
 
 ### Progreso por capa
 
@@ -36,7 +36,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
 | 15 | core | `conversacion__memory-conversation-summary` | 288 | 0 → 0 (-0%) | `3e988d8` 2026-05-04 |
 | 16 | core | `conversacion__memory-rag` | 381 | 0 → 0 (-0%) | `d131ebc` 2026-05-04 |
-| 17 | infra | `filesystem` | 1075 | 186 → 66 (-65%) | `bb98306` 2026-05-06 |
+| 17 | infra | `filesystem` | 1075 | 189 → 66 (-65%) | `bb98306` 2026-05-06 |
 | 18 | infra | `certificate-authority` | 409 | 67 → 24 (-64%) | `bc7b712` 2026-04-20 |
 | 19 | infra | `firmware-manager` | 1084 | 67 → 31 (-54%) | `7e2eb66` 2026-05-06 |
 | 20 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
@@ -82,8 +82,8 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 43 | dominio | `pizzepos__tarifas` | 309 | 40 | 0 |
 | 44 | dominio | `pizzepos__carta-marketing` | 394 | 38 | 0 |
 | 45 | dominio | `facturacion__asesoria` | 520 | 36 | 0 |
-| 46 | dominio | `pizzepos__cocina` | 1233 | 36 | 0 |
-| 47 | dominio | `pizzepos__menu-generator` | 338 | 34 | 0 |
+| 46 | dominio | `pizzepos__menu-generator` | 338 | 34 | 0 |
+| 47 | dominio | `pizzepos__cocina` | 1206 | 33 | 0 |
 | 48 | dominio | `perifericos` | 856 | 32 | 0 |
 | 49 | dominio | `facturas` | 661 | 25 | 0 |
 | 50 | dominio | `pizzepos__carta-digital` | 401 | 25 | 0 |

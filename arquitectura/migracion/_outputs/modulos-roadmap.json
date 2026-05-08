@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-07T23:58:23.742Z",
+  "generated_at": "2026-05-08T00:40:27.892Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -11,7 +11,7 @@
       "tooling": 3
     },
     "drifts_total": 2631,
-    "loc_total": 48365,
+    "loc_total": 48338,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -287,7 +287,7 @@
       "language": "en",
       "version": "2.0.0",
       "loc": 1075,
-      "drifts": 186,
+      "drifts": 189,
       "events_publishes": 24,
       "events_subscribes": 18,
       "tools": 14,
@@ -726,21 +726,6 @@
       "orden_migracion": 45
     },
     {
-      "slug": "pizzepos__cocina",
-      "path": "modules/pizzepos/cocina",
-      "layer": "dominio",
-      "language": "es",
-      "version": "3.1.0",
-      "loc": 1233,
-      "drifts": 36,
-      "events_publishes": 5,
-      "events_subscribes": 7,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 46
-    },
-    {
       "slug": "pizzepos__menu-generator",
       "path": "modules/pizzepos/menu-generator",
       "layer": "dominio",
@@ -751,6 +736,21 @@
       "events_publishes": 5,
       "events_subscribes": 1,
       "tools": 1,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 46
+    },
+    {
+      "slug": "pizzepos__cocina",
+      "path": "modules/pizzepos/cocina",
+      "layer": "dominio",
+      "language": "es",
+      "version": "3.2.0",
+      "loc": 1206,
+      "drifts": 33,
+      "events_publishes": 9,
+      "events_subscribes": 7,
+      "tools": 0,
       "agents": 0,
       "dependencies": [],
       "orden_migracion": 47

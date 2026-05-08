@@ -199,3 +199,6 @@ jobs:
 
       - name: Run unit tests (conversacion/memory-conversation-summary — reescritura canonica)
         run: npm run test:conversacion__memory-conversation-summary
+
+      - name: Run unit tests (conversacion/memory-rag — reescritura canonica)
+        run: npm run test:conversacion__memory-rag

@@ -1,16 +1,24 @@
 /**
- * memory-rag v2.0.0 — POC2 canonico.
+ * memory-rag — Memoria semantica modular del compañero.
  *
- * Memoria semantica modular: indexa cada chat.message.saved (user) y cada
- * ai.chat.response (assistant) — solicita embedding via embedding.generate.request,
- * persiste vector como BLOB en SQLite via db.query.request.
+ * Cada chat.message.saved (user) y cada ai.chat.response (assistant) se
+ * INDEXA: el modulo publica embedding.generate.request (consumido por
+ * ai-gateway), recibe el vector, lo persiste en SQLite por proyecto en
+ * tabla rag_messages como BLOB binario.
  *
- * En cada chat.message.saved (user): genera embedding del mensaje, hace
- * busqueda cosine similarity en cache in-memory contra los vectores del
- * (project_id, user_id), y publica chat.context.enriched (priority 500) con
- * los top-K snippets para que prompt-builder los inyecte al system prompt.
+ * En cada chat.message.saved (user), tambien se CONSULTA: con el mismo
+ * vector recien obtenido, se calcula cosine similarity en memoria contra
+ * todos los vectores del proyecto+usuario, y se publica chat.context.enriched
+ * con los snippets top-K mas similares (filtrados por similaridad minima).
  *
- * Aislamiento estricto por (project_id, user_id).
+ * Diseno event-driven puro:
+ *   - No instancia DB propia (db.query.request a database-manager).
+ *   - No llama directo a APIs LLM/embedding (embedding.generate.request a ai-gateway).
+ *   - No conoce a prompt-builder (publica chat.context.enriched canonico).
+ *
+ * Cuando el FIFO recorta el principio del historial, esos mensajes siguen
+ * estando disponibles para retrieval semantico — el viaje preserva
+ * memoria contextual del pasado mas alla de la ventana FIFO.
  */
 
 'use strict';
@@ -34,22 +42,12 @@ CREATE INDEX IF NOT EXISTS idx_rag_messages_user ON rag_messages(user_id);
 CREATE INDEX IF NOT EXISTS idx_rag_messages_conv ON rag_messages(conversation_id);
 `;
 
-const DEFAULT_DB_TIMEOUT_MS = 10000;
-const DEFAULT_EMBEDDING_TIMEOUT_MS = 30000;
-const DEFAULT_PRIORITY = 500;
-const DEFAULT_TOP_K = 5;
-const DEFAULT_MIN_SIMILARITY = 0.6;
-const DEFAULT_SNIPPET_MAX_CHARS = 400;
-const DEFAULT_MIN_MSG_LEN = 8;
-const DEFAULT_MAX_INDEX_SIZE = 10000;
-
 class MemoryRagModule {
   constructor() {
     this.name = 'memory-rag';
-    this.version = '2.0.0';
+    this.version = '1.0.0';
     this.logger = null;
     this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.pendingDb = new Map();
     this.pendingEmbeddings = new Map();
@@ -60,97 +58,41 @@ class MemoryRagModule {
   async onLoad(context) {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
-    this.metrics = context.metrics || null;
-    this.config = context.moduleConfig || context.config || {};
+    this.config = context.moduleConfig || {};
     this.logger.info('memory-rag.loaded', {
-      enabled: this.config.enabled !== false,
-      priority: this.config.priority_in_prompt || DEFAULT_PRIORITY,
-      top_k: this.config.top_k || DEFAULT_TOP_K,
-      min_similarity: this.config.min_similarity || DEFAULT_MIN_SIMILARITY,
+      priority: this.config.priority_in_prompt || 500,
+      top_k: this.config.top_k || 5,
+      min_similarity: this.config.min_similarity || 0.6,
       provider: this.config.embedding_provider || 'gemini'
     });
   }
 
   async onUnload() {
-    for (const { timeout, reject } of this.pendingDb.values()) {
-      clearTimeout(timeout);
-      reject(new Error('module unloaded'));
-    }
+    for (const { timeout } of this.pendingDb.values()) clearTimeout(timeout);
     this.pendingDb.clear();
-    for (const { timeout, reject } of this.pendingEmbeddings.values()) {
-      clearTimeout(timeout);
-      reject(new Error('module unloaded'));
-    }
+    for (const { timeout } of this.pendingEmbeddings.values()) clearTimeout(timeout);
     this.pendingEmbeddings.clear();
     this.schemaReady.clear();
     this.vectorCache.clear();
-    this.logger?.info?.('memory-rag.unloaded', {});
   }
 
   // ============================================================
-  // Helpers POC2
-  // ============================================================
-
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details !== undefined) error.details = details;
-    return { status, error };
-  }
-
-  _classifyHandlerError(err) {
-    const msg = err?.message || String(err);
-    const code = err?.code;
-    if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
-    if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
-    if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
-  }
-
-  _handleHandlerError(logEvent, err, kind = 'subscribe') {
-    const { status, code } = this._classifyHandlerError(err);
-    this.logger?.error?.(logEvent, {
-      kind,
-      error_code: code,
-      error_message: err?.message || String(err)
-    });
-    this.metrics?.increment?.('memory-rag.errors', { code, kind });
-    return this._errorResponse(status, code, err?.message || 'Error interno');
-  }
-
-  async _publicarEvento(name, payload, sourcePayload) {
-    const correlation_id =
-      payload?.correlation_id ||
-      sourcePayload?.correlation_id ||
-      crypto.randomUUID();
-    const project_id =
-      payload?.project_id ??
-      sourcePayload?.project_id ??
-      null;
-    const enriched = {
-      ...payload,
-      correlation_id,
-      timestamp: payload?.timestamp || new Date().toISOString()
-    };
-    if (project_id !== null && project_id !== undefined) enriched.project_id = project_id;
-    await this.eventBus.publish(name, enriched);
-    return enriched;
-  }
-
-  // ============================================================
-  // Bus subscribers
+  // Handlers
   // ============================================================
 
   async onMessageSaved(event) {
+    if (this.config.enabled === false) return;
+    const data = event.data || event;
+    const {
+      project_id, user_id, conversation_id, message_id,
+      user_message, correlation_id
+    } = data;
+    if (!project_id || !user_id || !conversation_id || !message_id || !user_message) return;
+
+    const minLen = this.config.skip_messages_shorter_than || 8;
+    if (user_message.trim().length < minLen) return;
+
     try {
-      if (this.config.enabled === false) return;
-      const data = event?.data || event;
-      const { project_id, user_id, conversation_id, message_id, user_message, correlation_id } = data || {};
-      if (!project_id || !user_id || !conversation_id || !message_id || !user_message) return;
-
-      const minLen = this.config.skip_messages_shorter_than || DEFAULT_MIN_MSG_LEN;
-      if (user_message.trim().length < minLen) return;
-
       await this._ensureSchema(project_id);
       await this._ensureCacheLoaded(project_id);
 
@@ -159,14 +101,13 @@ class MemoryRagModule {
       });
       if (!embedding) return;
 
+      // Search ANTES de persistir el mensaje del turno actual — asi el
+      // propio mensaje no se devuelve a si mismo como match (similarity=1.0).
       const candidates = this._getCacheBucket(project_id, user_id);
-      const topK = this._search(
-        embedding.vector,
-        candidates,
-        this.config.top_k || DEFAULT_TOP_K,
-        this.config.min_similarity || DEFAULT_MIN_SIMILARITY
-      );
+      const topK = this._search(embedding.vector, candidates,
+        this.config.top_k || 5, this.config.min_similarity || 0.6);
 
+      // Persistir DESPUES del search.
       await this._persistMessage(project_id, {
         id: crypto.randomUUID(),
         conversation_id, user_id, role: 'user',
@@ -175,8 +116,6 @@ class MemoryRagModule {
         provider: embedding.provider, created_at: Date.now()
       });
 
-      this.metrics?.increment?.('memory-rag.indexed', { role: 'user' });
-
       if (topK.length === 0) {
         this.logger.debug('memory-rag.search.no_match', {
           conversation_id, candidates: candidates.length
@@ -184,31 +123,37 @@ class MemoryRagModule {
         return;
       }
 
-      this.metrics?.increment?.('memory-rag.context.enriched');
-      const snippet = this._formatSnippets(topK, this.config.snippet_max_chars || DEFAULT_SNIPPET_MAX_CHARS);
-      await this._publicarEvento('chat.context.enriched', {
+      const snippet = this._formatSnippets(topK, this.config.snippet_max_chars || 400);
+      await this.eventBus.publish('chat.context.enriched', {
+        correlation_id: correlation_id || crypto.randomUUID(),
         conversation_id,
         message_id,
         source: 'memory-rag',
         context_addition: `Mensajes previos relevantes (memoria semantica):\n${snippet}`,
-        priority: this.config.priority_in_prompt || DEFAULT_PRIORITY,
+        priority: this.config.priority_in_prompt || 500,
+        timestamp: new Date().toISOString(),
         metadata: { matches: topK.length, max_similarity: topK[0].similarity }
-      }, { correlation_id, project_id });
+      });
     } catch (err) {
-      this._handleHandlerError('memory-rag.message_saved.error', err);
+      this.logger.error('memory-rag.onMessageSaved.failed', {
+        error: err.message, conversation_id, message_id
+      });
     }
   }
 
   async onAiChatResponse(event) {
+    if (this.config.enabled === false) return;
+    const data = event.data || event;
+    const {
+      project_id, user_id, conversation_id, message_id_assistant,
+      assistant_message, correlation_id
+    } = data;
+    if (!project_id || !user_id || !conversation_id || !message_id_assistant || !assistant_message) return;
+
+    const minLen = this.config.skip_messages_shorter_than || 8;
+    if (assistant_message.trim().length < minLen) return;
+
     try {
-      if (this.config.enabled === false) return;
-      const data = event?.data || event;
-      const { project_id, user_id, conversation_id, message_id_assistant, assistant_message, correlation_id } = data || {};
-      if (!project_id || !user_id || !conversation_id || !message_id_assistant || !assistant_message) return;
-
-      const minLen = this.config.skip_messages_shorter_than || DEFAULT_MIN_MSG_LEN;
-      if (assistant_message.trim().length < minLen) return;
-
       await this._ensureSchema(project_id);
       await this._ensureCacheLoaded(project_id);
 
@@ -225,15 +170,16 @@ class MemoryRagModule {
         dimensions: embedding.dimensions, model: embedding.model,
         provider: embedding.provider, created_at: Date.now()
       });
-      this.metrics?.increment?.('memory-rag.indexed', { role: 'assistant' });
     } catch (err) {
-      this._handleHandlerError('memory-rag.ai_chat_response.error', err);
+      this.logger.error('memory-rag.onAiChatResponse.failed', {
+        error: err.message, conversation_id, message_id_assistant
+      });
     }
   }
 
   onEmbeddingResponse(event) {
-    const payload = event?.data || event;
-    const request_id = payload?.request_id;
+    const payload = event.data || event;
+    const { request_id } = payload;
     const pending = this.pendingEmbeddings.get(request_id);
     if (!pending) return;
     clearTimeout(pending.timeout);
@@ -242,23 +188,23 @@ class MemoryRagModule {
   }
 
   onEmbeddingFailed(event) {
-    const payload = event?.data || event;
-    const request_id = payload?.request_id;
+    const payload = event.data || event;
+    const { request_id, error } = payload;
     const pending = this.pendingEmbeddings.get(request_id);
     if (!pending) return;
     clearTimeout(pending.timeout);
     this.pendingEmbeddings.delete(request_id);
-    pending.reject(new Error(payload.error?.message || 'embedding.generate.failed'));
+    pending.reject(new Error(error?.message || 'embedding.generate.failed'));
   }
 
   onDbQueryResponse(event) {
-    const payload = event?.data || event;
-    const request_id = payload?.request_id;
+    const payload = event.data || event;
+    const { request_id, error } = payload;
     const pending = this.pendingDb.get(request_id);
     if (!pending) return;
     clearTimeout(pending.timeout);
     this.pendingDb.delete(request_id);
-    if (payload.error) pending.reject(new Error(payload.error));
+    if (error) pending.reject(new Error(error));
     else pending.resolve(payload.data ?? payload.rows ?? []);
   }
 
@@ -268,12 +214,11 @@ class MemoryRagModule {
 
   async _requestEmbedding({ correlation_id, project_id, user_id, content, source }) {
     const request_id = crypto.randomUUID();
-    const timeoutMs = this.config.embedding_timeout_ms || DEFAULT_EMBEDDING_TIMEOUT_MS;
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingEmbeddings.delete(request_id);
         reject(new Error('embedding request timeout'));
-      }, timeoutMs);
+      }, 30000);
       this.pendingEmbeddings.set(request_id, {
         resolve: (payload) => {
           if (!payload?.vector) {
@@ -305,9 +250,8 @@ class MemoryRagModule {
       });
     }).catch(err => {
       this.logger.warn('memory-rag.embedding.skipped', {
-        error_message: err.message, source
+        error: err.message, source
       });
-      this.metrics?.increment?.('memory-rag.errors', { code: 'EMBEDDING_FAILED', kind: 'embedding' });
       return null;
     });
   }
@@ -329,7 +273,7 @@ class MemoryRagModule {
       vector: row.vector,
       created_at: row.created_at
     });
-    const max = this.config.max_index_size_per_project || DEFAULT_MAX_INDEX_SIZE;
+    const max = this.config.max_index_size_per_project || 10000;
     if (bucket.length > max) bucket.splice(0, bucket.length - max);
   }
 
@@ -414,12 +358,11 @@ class MemoryRagModule {
 
   async _db(project_id, query, params = [], read_only = false) {
     const request_id = crypto.randomUUID();
-    const timeoutMs = this.config.db_timeout_ms || DEFAULT_DB_TIMEOUT_MS;
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingDb.delete(request_id);
         reject(new Error(`db timeout: ${query.slice(0, 40)}`));
-      }, timeoutMs);
+      }, 10000);
       this.pendingDb.set(request_id, { resolve, reject, timeout });
       this.eventBus.publish('db.query.request', { project_id, query, params, read_only, request_id });
     });

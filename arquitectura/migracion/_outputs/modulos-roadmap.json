@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-08T01:56:37.612Z",
+  "generated_at": "2026-05-08T01:59:52.164Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 73,
@@ -10,8 +10,8 @@
       "dominio": 38,
       "tooling": 3
     },
-    "drifts_total": 2588,
-    "loc_total": 48978,
+    "drifts_total": 2610,
+    "loc_total": 49028,
     "tools_total": 148,
     "agents_total": 30
   },
@@ -713,6 +713,21 @@
       "orden_migracion": 44
     },
     {
+      "slug": "pizzepos__cuentas",
+      "path": "modules/pizzepos/cuentas",
+      "layer": "dominio",
+      "language": "es",
+      "version": "3.0.0",
+      "loc": 1016,
+      "drifts": 32,
+      "events_publishes": 5,
+      "events_subscribes": 8,
+      "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 45
+    },
+    {
       "slug": "pizzepos__tarifas",
       "path": "modules/pizzepos/tarifas",
       "layer": "dominio",
@@ -725,7 +740,7 @@
       "tools": 5,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 45
+      "orden_migracion": 46
     },
     {
       "slug": "facturas",
@@ -740,7 +755,7 @@
       "tools": 3,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 46
+      "orden_migracion": 47
     },
     {
       "slug": "pizzepos__carta-digital",
@@ -755,7 +770,7 @@
       "tools": 4,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 47
+      "orden_migracion": 48
     },
     {
       "slug": "pizzepos__pedidos",
@@ -767,21 +782,6 @@
       "drifts": 25,
       "events_publishes": 7,
       "events_subscribes": 9,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 48
-    },
-    {
-      "slug": "pizzepos__cuentas",
-      "path": "modules/pizzepos/cuentas",
-      "layer": "dominio",
-      "language": "es",
-      "version": "3.0.0",
-      "loc": 1016,
-      "drifts": 21,
-      "events_publishes": 5,
-      "events_subscribes": 8,
       "tools": 0,
       "agents": 0,
       "dependencies": [],
@@ -938,21 +938,6 @@
       "orden_migracion": 59
     },
     {
-      "slug": "pizzepos__cuentas-canales",
-      "path": "modules/pizzepos/cuentas-canales",
-      "layer": "dominio",
-      "language": "es",
-      "version": "3.0.0",
-      "loc": 368,
-      "drifts": 4,
-      "events_publishes": 11,
-      "events_subscribes": 3,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 60
-    },
-    {
       "slug": "conversacion__ai-gateway-poc",
       "path": "modules/conversacion/ai-gateway-poc",
       "layer": "dominio",
@@ -965,7 +950,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 61
+      "orden_migracion": 60
     },
     {
       "slug": "notas-poc",
@@ -980,7 +965,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 62
+      "orden_migracion": 61
     },
     {
       "slug": "pizzepos__cocina-poc",
@@ -995,7 +980,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 63
+      "orden_migracion": 62
     },
     {
       "slug": "pizzepos__cobros",
@@ -1012,7 +997,7 @@
       "dependencies": [
         "perifericos"
       ],
-      "orden_migracion": 64
+      "orden_migracion": 63
     },
     {
       "slug": "facturacion__fuentes",
@@ -1029,7 +1014,7 @@
       "dependencies": [
         "channel-manager"
       ],
-      "orden_migracion": 65
+      "orden_migracion": 64
     },
     {
       "slug": "pizzepos__variaciones",
@@ -1045,6 +1030,23 @@
       "agents": 0,
       "dependencies": [
         "ingredientes"
+      ],
+      "orden_migracion": 65
+    },
+    {
+      "slug": "pizzepos__cuentas-canales",
+      "path": "modules/pizzepos/cuentas-canales",
+      "layer": "dominio",
+      "language": "es",
+      "version": "5.0.0",
+      "loc": 418,
+      "drifts": 15,
+      "events_publishes": 11,
+      "events_subscribes": 3,
+      "tools": 0,
+      "agents": 0,
+      "dependencies": [
+        "cuentas"
       ],
       "orden_migracion": 66
     },

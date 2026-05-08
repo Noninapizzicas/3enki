@@ -1,9 +1,13 @@
 {
   "name": "cuentas-canales",
-  "version": "3.0.0",
-  "description": "Sistema unificado de canales de venta con patrón Strategy: mesa, teléfono, llevar, glovo, whatsapp",
+  "version": "5.0.0",
+  "description": "Sistema unificado de canales de venta pizzepos con patron Strategy: mesa, telefono, llevar, glovo, whatsapp, llevadoo. Cada strategy registra ui_handlers especificos del canal y se subscribe a sus eventos. El modulo base orquesta cobro.procesado → detectarCanal → strategy.onCobroProcesado, gestiona reseteo diario de contadores y emite cuenta.{creada,cerrada} canonicos.",
   "author": "Pizzepos Team",
   "language": "es",
+  "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
+  },
   "replaces": [
     "cuentas-mesa",
     "cuentas-telefono",
@@ -265,6 +269,34 @@
     "reseteo_diario": true,
     "caller_id": {
       "enabled": false
+    },
+    "persistence": {
+      "type": "in-memory",
+      "owner": "CuentasCanalesModule (delegacion a 6 strategies, contadores in-memory + tracking de tiempos)",
+      "delegated_to": "cuentas (owner unico de cuentas via moduleRegistry.get('cuentas').instance)",
+      "restart_resilient": false,
+      "concurrency": "single-instance",
+      "lost_on_restart": ["_timeArrays", "fechaActual"]
+    }
+  },
+  "ui_handlers": [
+    { "domain": "canales", "action": "list",    "handler": "handleGetCanales",  "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "canales", "action": "health",  "handler": "handleHealthCheck", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "canales", "action": "metrics", "handler": "handleGetMetrics",  "type": "workspace_module", "zone": "barra_modulos" }
+  ],
+  "tools": [],
+  "dependencies": ["cuentas"],
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "cuentas-canales.errors"
+      ]
     }
   }
 }

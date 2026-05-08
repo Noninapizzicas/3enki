@@ -250,3 +250,6 @@ jobs:
 
       - name: Run unit tests (admin-panel — reescritura canonica)
         run: npm run test:admin-panel
+
+      - name: Run unit tests (text-editor — reescritura canonica)
+        run: npm run test:text-editor

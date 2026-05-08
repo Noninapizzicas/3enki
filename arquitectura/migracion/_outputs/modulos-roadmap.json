@@ -1,6 +1,6 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-08T13:08:04.521Z",
+  "generated_at": "2026-05-08T14:41:31.428Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
     "total_modulos": 72,
@@ -10,8 +10,8 @@
       "dominio": 37,
       "tooling": 3
     },
-    "drifts_total": 2496,
-    "loc_total": 48719,
+    "drifts_total": 2471,
+    "loc_total": 48650,
     "tools_total": 150,
     "agents_total": 30
   },
@@ -533,21 +533,6 @@
       "orden_migracion": 32
     },
     {
-      "slug": "log-manager",
-      "path": "modules/log-manager",
-      "layer": "dominio",
-      "language": "en",
-      "version": "2.0.0",
-      "loc": 598,
-      "drifts": 82,
-      "events_publishes": 0,
-      "events_subscribes": 3,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 33
-    },
-    {
       "slug": "esp32-flasher",
       "path": "modules/esp32-flasher",
       "layer": "dominio",
@@ -560,7 +545,7 @@
       "tools": 8,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 34
+      "orden_migracion": 33
     },
     {
       "slug": "pizzepos__carta-scheduler",
@@ -575,7 +560,7 @@
       "tools": 7,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 35
+      "orden_migracion": 34
     },
     {
       "slug": "notas",
@@ -587,6 +572,21 @@
       "drifts": 59,
       "events_publishes": 3,
       "events_subscribes": 0,
+      "tools": 0,
+      "agents": 0,
+      "dependencies": [],
+      "orden_migracion": 35
+    },
+    {
+      "slug": "log-manager",
+      "path": "modules/log-manager",
+      "layer": "dominio",
+      "language": "en",
+      "version": "2.1.0",
+      "loc": 529,
+      "drifts": 57,
+      "events_publishes": 0,
+      "events_subscribes": 3,
       "tools": 0,
       "agents": 0,
       "dependencies": [],

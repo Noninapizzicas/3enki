@@ -259,3 +259,6 @@ jobs:
 
       - name: Run unit tests (facturacion/asesoria — reescritura canonica)
         run: npm run test:facturacion__asesoria
+
+      - name: Run unit tests (log-manager — reescritura canonica)
+        run: npm run test:log-manager

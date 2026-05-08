@@ -1,14 +1,14 @@
 # Progreso de migración — 73 módulos al canon de 24 contratos
 
-_Última regeneración: 2026-05-08T13:08:05Z_
+_Última regeneración: 2026-05-08T14:41:32Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
 - **Migrados**: 29 / 72 (40%)
-- **Drifts cerrados**: 696 / 2496 (28%)
-- **Drifts restantes en baseline**: 1800
+- **Drifts cerrados**: 696 / 2471 (28%)
+- **Drifts restantes en baseline**: 1775
 
 ### Progreso por capa
 
@@ -66,15 +66,15 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 29 | infra | `prompt-manager` | 1236 | 69 | 1 | drifts 38/69 (55%) — esperado <50% |
 | 31 | infra | `pdf-viewer` | 634 | 54 | 2 | drifts 39/54 (72%) — esperado <50% |
 | 32 | infra | `telegram-service` | 573 | 32 | 2 | drifts 31/32 (97%) — esperado <50% |
-| 33 | dominio | `log-manager` | 598 | 82 | 0 | sin tests/unit/ |
+| 33 | dominio | `esp32-flasher` | 1155 | 68 | 0 | drifts 53/68 (78%) — esperado <50% |
 
 <details><summary>Resto de pendientes (33 módulos)</summary>
 
 | # | Capa | Slug | LOC | Drifts | Deps |
 |---|------|------|-----|--------|------|
-| 34 | dominio | `esp32-flasher` | 1155 | 68 | 0 |
-| 35 | dominio | `pizzepos__carta-scheduler` | 605 | 62 | 0 |
-| 36 | dominio | `notas` | 485 | 59 | 0 |
+| 34 | dominio | `pizzepos__carta-scheduler` | 605 | 62 | 0 |
+| 35 | dominio | `notas` | 485 | 59 | 0 |
+| 36 | dominio | `log-manager` | 529 | 57 | 0 |
 | 37 | dominio | `facturacion__asesoria` | 526 | 46 | 0 |
 | 38 | dominio | `recetas` | 897 | 43 | 0 |
 | 39 | dominio | `escandallo` | 1098 | 40 | 0 |

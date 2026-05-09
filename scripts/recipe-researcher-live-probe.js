@@ -151,43 +151,92 @@ function resolveProjectId() {
   });
 }
 
+const uiRequestId = crypto.randomUUID();
+const uiResponseTopic = 'ui/response/' + uiRequestId;
+const startedAtMs = Date.now();
+
 function startListening() {
   console.log('  conversation_id = ' + CONVERSATION_ID);
   console.log('  correlation_id  = ' + correlation_id);
+  console.log('  ui_request_id   = ' + uiRequestId);
   console.log('  user_id         = ' + USER_ID);
   console.log('  project_id      = ' + PROJECT_ID);
   console.log();
-  const subs = TOPICS_TO_LISTEN.map(subTopic);
+  const subs = [...TOPICS_TO_LISTEN.map(subTopic), uiResponseTopic];
   client.subscribe(subs, (err) => {
     if (err) { console.error('subscribe failed:', err.message); process.exit(1); }
-    console.log('[' + ms() + '] subscribed to ' + subs.length + ' topics');
+    console.log('[' + ms() + '] subscribed to ' + subs.length + ' topics (incl. ui/response)');
     publishMessage();
   });
 }
 
 function publishMessage() {
-  const data = {
-    correlation_id,
-    conversation_id: CONVERSATION_ID,
-    project_id: PROJECT_ID,
-    user_id: USER_ID,
-    channel: CHANNEL,
-    channel_context: { source: 'claude-live-probe' },
-    message_id,
-    user_message: USER_MESSAGE,
-    timestamp: new Date().toISOString()
+  // Topic real del UI handler: chat-io.handleSend persiste y luego publica chat.message.saved
+  const uiTopic = 'ui/request/conversation/send';
+  const uiPayload = {
+    request_id: uiRequestId,
+    data: {
+      project_id: PROJECT_ID,
+      conversation_id: CONVERSATION_ID,
+      message: USER_MESSAGE,
+      user_id: USER_ID,
+      channel: CHANNEL,
+      correlation_id
+    }
   };
-  const env = makeEnvelope('chat.message.saved', data);
-  console.log('[' + ms() + '] PUBLISH chat.message.saved → ' + buildTopic('chat.message.saved'));
-  console.log('  user_message: ' + USER_MESSAGE);
+  console.log('[' + ms() + '] PUBLISH ' + uiTopic);
+  console.log('  message: ' + USER_MESSAGE);
   console.log();
-  client.publish(buildTopic('chat.message.saved'), JSON.stringify(env), { qos: 1 });
+  client.publish(uiTopic, JSON.stringify(uiPayload), { qos: 1 });
   console.log('[' + ms() + '] listening ' + (WAIT_MS / 1000) + 's for downstream events…');
   console.log();
   setTimeout(finish, WAIT_MS);
 }
 
+function dbQueryNewMessages() {
+  return new Promise((resolve) => {
+    const reqId = crypto.randomUUID();
+    const respTopic = subTopic('db.query.response');
+    const handler = (topic, msg) => {
+      try {
+        const env = JSON.parse(msg.toString());
+        const d = env.data || env;
+        if (d.request_id !== reqId) return;
+        client.removeListener('message', handler);
+        client.unsubscribe(respTopic);
+        resolve(d.success ? (d.data || []) : []);
+      } catch { /* ignore */ }
+    };
+    client.on('message', handler);
+    client.subscribe(respTopic, () => {
+      const env = makeEnvelope('db.query.request', {
+        project_id: PROJECT_ID,
+        query: 'SELECT id, role, content, in_context, tokens, metadata, created_at FROM messages WHERE conversation_id = ? AND created_at >= ? ORDER BY created_at',
+        params: [CONVERSATION_ID, startedAtMs - 1000],
+        read_only: true,
+        request_id: reqId
+      });
+      client.publish(buildTopic('db.query.request'), JSON.stringify(env));
+      setTimeout(() => { client.removeListener('message', handler); resolve([]); }, 5000);
+    });
+  });
+}
+
 client.on('message', (topic, msg) => {
+  // ui/response/<request_id> is plain JSON, no envelope
+  if (topic === uiResponseTopic) {
+    try {
+      const r = JSON.parse(msg.toString());
+      console.log('[' + ms() + '] ← ui/response (success=' + r.success + ')');
+      if (r.error) console.log('    error: ' + JSON.stringify(r.error));
+      if (r.data) {
+        const keep = {};
+        for (const k of ['message_id', 'conversation_id', 'persisted', 'created_at']) if (r.data[k]) keep[k] = r.data[k];
+        if (Object.keys(keep).length) console.log('    data: ' + JSON.stringify(keep));
+      }
+    } catch {}
+    return;
+  }
   let env;
   try { env = JSON.parse(msg.toString()); } catch { return; }
   const eventType = env.event_type || topic.split('events/').pop().replace(/\//g, '.');
@@ -211,7 +260,7 @@ client.on('message', (topic, msg) => {
   }
 });
 
-function finish() {
+async function finish() {
   console.log();
   console.log('=== RESUMEN (' + trace.length + ' eventos en esta conversación) ===');
   const counts = {};
@@ -219,6 +268,29 @@ function finish() {
   for (const [t, n] of Object.entries(counts).sort((a, b) => b[1] - a[1])) {
     console.log('  ' + n + '\t' + t);
   }
+  console.log();
+
+  console.log('=== MENSAJES PERSISTIDOS EN BD durante este test ===');
+  try {
+    const rows = await dbQueryNewMessages();
+    console.log('  total: ' + rows.length);
+    rows.forEach((r, i) => {
+      const ts = new Date(parseInt(String(r.created_at).split('.')[0])).toISOString();
+      let preview = (r.content || '').slice(0, 200);
+      if ((r.content || '').length > 200) preview += '… (+' + (r.content.length - 200) + ' chars)';
+      console.log('  [' + i + '] ' + ts + ' role=' + r.role + ' tokens=' + (r.tokens || '-'));
+      console.log('      ' + preview);
+      if (r.metadata) {
+        try {
+          const md = typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata;
+          if (md && Object.keys(md).length) console.log('      metadata: ' + JSON.stringify(md).slice(0, 300));
+        } catch {}
+      }
+    });
+  } catch (err) {
+    console.log('  query failed:', err.message);
+  }
+
   console.log();
   const tieneAgente = trace.some(e => e.event === 'agent.execute.request' && e.summary?.agent_name === 'recipe-researcher');
   const tieneAssistant = trace.some(e => e.event === 'chat.assistant.saved' || e.event === 'ai.chat.response');
@@ -228,10 +300,7 @@ function finish() {
   console.log('  respuesta del LLM         : ' + (tieneAssistant ? 'SÍ' : 'NO'));
   console.log('  algún failed              : ' + (tieneError ? 'SÍ' : 'NO'));
   console.log();
-  console.log('Para verla en el frontend:  https://enki-ai.online');
-  console.log('  proyecto:           ' + (PROJECT_NAME || PROJECT_ID));
-  console.log('  conversation_id:    ' + CONVERSATION_ID);
-  console.log('  user_id:            ' + USER_ID);
+  console.log('Frontend:  https://enki-ai.online → ' + (PROJECT_NAME || PROJECT_ID) + ' → conv ' + CONVERSATION_ID);
   client.end(true);
   process.exit(0);
 }

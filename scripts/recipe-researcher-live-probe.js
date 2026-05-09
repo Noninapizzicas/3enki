@@ -3,38 +3,67 @@
  * el flujo de chat/agentes durante 90s.
  *
  * Uso:
- *   PROJECT_ID=... USER_ID=... CONVERSATION_ID=... \
+ *   PROJECT_NAME=Paco \
  *     node scripts/recipe-researcher-live-probe.js
  *
- * Variables opcionales:
- *   USER_MESSAGE          texto a enviar (default: prompt de receta)
- *   WAIT_MS               tiempo de escucha post-publish (default: 90000)
- *   BROKER_URL            wss del broker (default: wss://enki-ai.online/mqtt)
- *   CHANNEL               default "web"
+ *   # o con ID directo:
+ *   PROJECT_ID=<uuid> node scripts/recipe-researcher-live-probe.js
  *
- * Estrategia: solo flujo natural, no fuerza al agente. Si el LLM principal
- * no invoca al recipe-researcher, eso ya es señal util.
+ * Variables opcionales:
+ *   USER_ID               default: claude-probe-<short-uuid>
+ *   CONVERSATION_ID       default: uuid v4 nuevo
+ *   USER_MESSAGE          default: prompt de receta
+ *   WAIT_MS               default: 90000
+ *   BROKER_URL            default: wss://enki-ai.online/mqtt
+ *   CHANNEL               default: web
+ *
+ * Topics canonicos del bus event-core:
+ *   publicar (broadcast):  core/* /events/<domain>/<action>
+ *   suscribir (any core):  core/+/events/<domain>/<action>
+ *
+ * Payload va envuelto en envelope:
+ *   { event_id, event_type, timestamp, source:{core_id}, data:{...}, metadata }
  */
 
 const mqtt = require('mqtt');
 const crypto = require('crypto');
 
 const BROKER_URL = process.env.BROKER_URL || 'wss://enki-ai.online/mqtt';
-const PROJECT_ID = process.env.PROJECT_ID;
-const USER_ID = process.env.USER_ID;
+const PROJECT_NAME = process.env.PROJECT_NAME;
+let PROJECT_ID = process.env.PROJECT_ID;
+const USER_ID = process.env.USER_ID || ('claude-probe-' + crypto.randomUUID().slice(0, 8));
 const CONVERSATION_ID = process.env.CONVERSATION_ID || crypto.randomUUID();
 const CHANNEL = process.env.CHANNEL || 'web';
 const USER_MESSAGE = process.env.USER_MESSAGE
   || "Investiga la receta 'magra con tomate' y proponme 3 variantes diferentes con sus ingredientes y pasos.";
 const WAIT_MS = parseInt(process.env.WAIT_MS || '90000', 10);
+const PROBE_CORE_ID = 'claude-probe';
 
-if (!PROJECT_ID || !USER_ID) {
-  console.error('FALTAN: PROJECT_ID y USER_ID son obligatorios.');
-  console.error('Uso: PROJECT_ID=... USER_ID=... [CONVERSATION_ID=...] node scripts/recipe-researcher-live-probe.js');
+if (!PROJECT_NAME && !PROJECT_ID) {
+  console.error('FALTAN: PROJECT_NAME o PROJECT_ID.');
   process.exit(2);
 }
 
-const TOPICS = [
+function buildTopic(eventType) {
+  const parts = eventType.split('.');
+  return 'core/*/events/' + parts[0] + (parts.length > 1 ? '/' + parts.slice(1).join('/') : '');
+}
+function subTopic(eventType) {
+  const parts = eventType.split('.');
+  return 'core/+/events/' + parts[0] + (parts.length > 1 ? '/' + parts.slice(1).join('/') : '');
+}
+function makeEnvelope(eventType, data) {
+  return {
+    event_id: crypto.randomUUID(),
+    event_type: eventType,
+    timestamp: new Date().toISOString(),
+    source: { core_id: PROBE_CORE_ID },
+    data,
+    metadata: {}
+  };
+}
+
+const TOPICS_TO_LISTEN = [
   'chat.message.saved',
   'chat.context.enriched',
   'chat.prompt.ready',
@@ -56,28 +85,20 @@ const message_id = crypto.randomUUID();
 const t0 = Date.now();
 const ms = () => (Date.now() - t0).toString().padStart(6, ' ') + 'ms';
 
-function pickRelevant(topic, payload) {
-  // Filtra eventos del bus que no son de NUESTRA conversación
-  const cid = payload?.conversation_id;
-  const corr = payload?.correlation_id;
-  if (cid && cid !== CONVERSATION_ID) return false;
-  if (!cid && corr && corr !== correlation_id) return false;
-  return true;
-}
-
-function summarise(topic, payload) {
-  const keys = Object.keys(payload || {});
+function summarise(eventType, data) {
   const out = {};
   for (const k of ['conversation_id', 'correlation_id', 'message_id', 'request_id', 'agent_name']) {
-    if (payload?.[k]) out[k] = payload[k];
+    if (data?.[k]) out[k] = data[k];
   }
-  if (payload?.user_message) out.user_message = payload.user_message.slice(0, 100) + (payload.user_message.length > 100 ? '…' : '');
-  if (payload?.assistant_message) out.assistant_message = (payload.assistant_message || '').slice(0, 200) + ((payload.assistant_message || '').length > 200 ? '…' : '');
-  if (payload?.error?.code) out.error_code = payload.error.code;
-  if (payload?.tool_calls_executed) out.tools_executed = payload.tool_calls_executed.map(t => t.name || t.tool || '?').join(',');
-  if (payload?.task) out.task = (payload.task || '').slice(0, 80);
-  if (payload?.metadata?.author) out.author = payload.metadata.author;
-  out._all_keys = keys;
+  if (data?.user_message) out.user_message = data.user_message.slice(0, 100);
+  if (data?.assistant_message) out.assistant_message = (data.assistant_message || '').slice(0, 200) + ((data.assistant_message || '').length > 200 ? '…' : '');
+  if (data?.content) out.content_preview = (data.content || '').slice(0, 150);
+  if (data?.error?.code) out.error_code = data.error.code;
+  if (data?.error?.message) out.error_message = data.error.message;
+  if (data?.tool_calls_executed) out.tools_executed = data.tool_calls_executed.map(t => t.name || t.tool || '?').join(',');
+  if (data?.task) out.task = (data.task || '').slice(0, 80);
+  if (data?.metadata?.author) out.author = data.metadata.author;
+  if (data?.provider) out.provider = data.provider;
   return out;
 }
 
@@ -87,22 +108,65 @@ const client = mqtt.connect(BROKER_URL, {
   reconnectPeriod: 0
 });
 
+client.on('error', e => console.error('mqtt error:', e.message));
+
 client.on('connect', () => {
   console.log('[' + ms() + '] connected to ' + BROKER_URL);
+  if (PROJECT_NAME && !PROJECT_ID) {
+    resolveProjectId().then(startListening).catch(err => {
+      console.error('FATAL resolving project:', err.message);
+      process.exit(1);
+    });
+  } else {
+    startListening();
+  }
+});
+
+function resolveProjectId() {
+  return new Promise((resolve, reject) => {
+    const reqId = crypto.randomUUID();
+    const respTopic = subTopic('project.list.response');
+    const handler = (topic, msg) => {
+      try {
+        const env = JSON.parse(msg.toString());
+        const d = env.data || env;
+        if (d.request_id !== reqId) return;
+        const match = (d.projects || []).find(p =>
+          p.name === PROJECT_NAME || p.name?.toLowerCase() === PROJECT_NAME.toLowerCase());
+        client.removeListener('message', handler);
+        client.unsubscribe(respTopic);
+        if (!match) return reject(new Error('project "' + PROJECT_NAME + '" not found in ' + d.count + ' projects'));
+        PROJECT_ID = match.id;
+        console.log('[' + ms() + '] resolved PROJECT_NAME=' + PROJECT_NAME + ' → PROJECT_ID=' + PROJECT_ID);
+        resolve();
+      } catch (e) { /* ignore */ }
+    };
+    client.on('message', handler);
+    client.subscribe(respTopic, (err) => {
+      if (err) return reject(err);
+      const env = makeEnvelope('project.list.request', { request_id: reqId });
+      client.publish(buildTopic('project.list.request'), JSON.stringify(env));
+      setTimeout(() => reject(new Error('timeout resolving project_id')), 6000);
+    });
+  });
+}
+
+function startListening() {
   console.log('  conversation_id = ' + CONVERSATION_ID);
   console.log('  correlation_id  = ' + correlation_id);
   console.log('  user_id         = ' + USER_ID);
   console.log('  project_id      = ' + PROJECT_ID);
   console.log();
-  client.subscribe(TOPICS, (err) => {
+  const subs = TOPICS_TO_LISTEN.map(subTopic);
+  client.subscribe(subs, (err) => {
     if (err) { console.error('subscribe failed:', err.message); process.exit(1); }
-    console.log('[' + ms() + '] subscribed to ' + TOPICS.length + ' topics');
+    console.log('[' + ms() + '] subscribed to ' + subs.length + ' topics');
     publishMessage();
   });
-});
+}
 
 function publishMessage() {
-  const payload = {
+  const data = {
     correlation_id,
     conversation_id: CONVERSATION_ID,
     project_id: PROJECT_ID,
@@ -113,52 +177,61 @@ function publishMessage() {
     user_message: USER_MESSAGE,
     timestamp: new Date().toISOString()
   };
-  console.log('[' + ms() + '] PUBLISH chat.message.saved');
+  const env = makeEnvelope('chat.message.saved', data);
+  console.log('[' + ms() + '] PUBLISH chat.message.saved → ' + buildTopic('chat.message.saved'));
   console.log('  user_message: ' + USER_MESSAGE);
   console.log();
-  client.publish('chat.message.saved', JSON.stringify(payload), { qos: 0 }, (err) => {
-    if (err) console.error('publish err:', err.message);
-  });
+  client.publish(buildTopic('chat.message.saved'), JSON.stringify(env), { qos: 1 });
   console.log('[' + ms() + '] listening ' + (WAIT_MS / 1000) + 's for downstream events…');
   console.log();
   setTimeout(finish, WAIT_MS);
 }
 
 client.on('message', (topic, msg) => {
-  let payload;
-  try { payload = JSON.parse(msg.toString()); } catch { payload = { _raw: msg.toString().slice(0, 100) }; }
-  if (!pickRelevant(topic, payload)) return;
-  const entry = { t: ms(), topic, summary: summarise(topic, payload) };
+  let env;
+  try { env = JSON.parse(msg.toString()); } catch { return; }
+  const eventType = env.event_type || topic.split('events/').pop().replace(/\//g, '.');
+  const data = env.data || env;
+
+  // skip our own publish echo
+  if (env.source?.core_id === PROBE_CORE_ID && eventType === 'chat.message.saved') return;
+
+  // filter to our conversation only
+  const cid = data.conversation_id;
+  const corr = data.correlation_id;
+  if (cid && cid !== CONVERSATION_ID) return;
+  if (!cid && corr && corr !== correlation_id) return;
+
+  const entry = { t: ms(), event: eventType, summary: summarise(eventType, data) };
   trace.push(entry);
-  console.log('[' + entry.t + '] ← ' + topic);
+  console.log('[' + entry.t + '] ← ' + eventType);
   for (const [k, v] of Object.entries(entry.summary)) {
-    if (k === '_all_keys') continue;
     if (typeof v === 'object') console.log('    ' + k + ': ' + JSON.stringify(v));
     else console.log('    ' + k + ': ' + v);
   }
 });
 
-client.on('error', e => console.error('mqtt error:', e.message));
-
 function finish() {
   console.log();
-  console.log('=== RESUMEN (' + trace.length + ' eventos relevantes para esta conversación) ===');
+  console.log('=== RESUMEN (' + trace.length + ' eventos en esta conversación) ===');
   const counts = {};
-  for (const e of trace) counts[e.topic] = (counts[e.topic] || 0) + 1;
+  for (const e of trace) counts[e.event] = (counts[e.event] || 0) + 1;
   for (const [t, n] of Object.entries(counts).sort((a, b) => b[1] - a[1])) {
-    console.log('  ' + n + '\\t' + t);
+    console.log('  ' + n + '\t' + t);
   }
   console.log();
+  const tieneAgente = trace.some(e => e.event === 'agent.execute.request' && e.summary?.agent_name === 'recipe-researcher');
+  const tieneAssistant = trace.some(e => e.event === 'chat.assistant.saved' || e.event === 'ai.chat.response');
+  const tieneError = trace.some(e => e.event === 'ai.chat.failed' || e.event === 'agent.execute.failed' || e.event === 'llm.complete.failed');
   console.log('=== ANÁLISIS ===');
-  const tieneAgente = trace.some(e => e.topic === 'agent.execute.request' && e.summary?.agent_name === 'recipe-researcher');
-  const tieneAssistant = trace.some(e => e.topic === 'chat.assistant.saved' || e.topic === 'ai.chat.response');
-  const tieneError = trace.some(e => e.topic === 'ai.chat.failed' || e.topic === 'agent.execute.failed' || e.topic === 'llm.complete.failed');
   console.log('  recipe-researcher invocado: ' + (tieneAgente ? 'SÍ' : 'NO'));
   console.log('  respuesta del LLM         : ' + (tieneAssistant ? 'SÍ' : 'NO'));
   console.log('  algún failed              : ' + (tieneError ? 'SÍ' : 'NO'));
   console.log();
-  console.log('Para ver la conversación persistida:');
-  console.log('  https://enki-ai.online → abre conversation_id = ' + CONVERSATION_ID);
+  console.log('Para verla en el frontend:  https://enki-ai.online');
+  console.log('  proyecto:           ' + (PROJECT_NAME || PROJECT_ID));
+  console.log('  conversation_id:    ' + CONVERSATION_ID);
+  console.log('  user_id:            ' + USER_ID);
   client.end(true);
   process.exit(0);
 }

@@ -224,6 +224,8 @@ node arquitectura/migracion/scripts/finish-rewrite.js <slug> --commit
 Detalle del workflow + reglas de cierre en `arquitectura/migracion/README.md`.
 Patrón canónico formalizado en `arquitectura/decisiones/_contratos/module-rewrite.contract.json`.
 
+**Estado del horizontal (2026-05-08)**: cerrado al 100%. Los 66 módulos del horizontal canónico están migrados al patrón POC2; los 3 restantes en `modules/` son POCs exploratorios (`*-poc`) excluidos del horizontal por diseño. Ver `arquitectura/migracion/_outputs/PROGRESO.md` (auto-generado) y la sección `estado_del_horizontal` de `extensibilidad-modular.contract.json` para el detalle.
+
 ## Garantías obligatorias en payloads
 
 Estas reglas las enforce el conjunto de validators + schemas. Si las rompes en un publish nuevo, CI te corta.

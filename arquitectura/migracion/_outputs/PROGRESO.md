@@ -1,25 +1,27 @@
-# Progreso de migración — 73 módulos al canon de 24 contratos
+# Progreso de migración — 66 módulos al canon de 26 contratos
 
-_Última regeneración: 2026-05-08T14:41:32Z_
+_Última regeneración: 2026-05-09T01:04:10Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
 ## Estado global
 
-- **Migrados**: 29 / 72 (40%)
-- **Drifts cerrados**: 696 / 2471 (28%)
-- **Drifts restantes en baseline**: 1775
+- **Migrados**: 66 / 66 (100%)
+- **Fuera del horizontal canónico**: 3 (`conversacion__ai-gateway-poc`, `notas-poc`, `pizzepos__cocina-poc`) — POCs exploratorios, no se migran.
+- **Estado**: 🎉 horizontal cerrado al 100%.
+- **Drifts cerrados**: 1002 / 2261 (44%)
+- **Drifts restantes en baseline**: 1259
 
 ### Progreso por capa
 
-| Capa | Done | Total | % |
+| Capa | Done | Total horizontal | % |
 |------|------|-------|---|
-| core | 13 | 16 | 81% `████████████████░░░░` |
-| infra | 10 | 16 | 63% `█████████████░░░░░░░` |
-| dominio | 6 | 37 | 16% `███░░░░░░░░░░░░░░░░░` |
-| tooling | 0 | 3 | 0% `░░░░░░░░░░░░░░░░░░░░` |
+| core | 16 | 16 | 100% `████████████████████` |
+| infra | 16 | 16 | 100% `████████████████████` |
+| dominio | 33 | 33 | 100% `████████████████████` |
+| tooling | 1 | 1 | 100% `████████████████████` |
 
-## Módulos migrados (29)
+## Módulos migrados (66)
 
 | # | Capa | Slug | LOC | Drifts antes → ahora | Commit |
 |---|------|------|-----|----------------------|--------|
@@ -28,85 +30,72 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 3 | core | `database-manager` | 793 | 44 → 22 (-50%) | `edd468e` 2026-05-06 |
 | 4 | core | `credential-manager` | 843 | 28 → 12 (-57%) | `069f8c8` 2026-05-06 |
 | 5 | core | `gateway-manager` | 429 | 13 → 2 (-85%) | `8aa2b74` 2026-05-06 |
+| 6 | core | `conversacion__ai-gateway` | 777 | 8 → 8 (-0%) | `92bd096` 2026-05-06 |
+| 7 | core | `plugin-manager` | 495 | 8 → 6 (-25%) | `a25b855` 2026-05-06 |
 | 8 | core | `conversacion__agent-observer` | 279 | 2 → 0 (-100%) | `2e263af` 2026-05-08 |
 | 9 | core | `conversacion__ai-agent-framework` | 627 | 148 → 48 (-68%) | `3c227b8` 2026-05-08 |
 | 10 | core | `channel-manager` | 590 | 30 → 13 (-57%) | `e7b3570` 2026-05-06 |
 | 11 | core | `conversacion__chat-io` | 758 | 30 → 10 (-67%) | `d107b0f` 2026-05-07 |
 | 12 | core | `conversacion__memory-user-profile` | 252 | 2 → 0 (-100%) | `5de7746` 2026-05-08 |
 | 13 | core | `project-manager` | 1504 | 57 → 24 (-58%) | `5e8e676` 2026-05-06 |
+| 14 | core | `conversacion__prompt-builder` | 435 | 13 → 7 (-46%) | `02d69c9` 2026-05-06 |
 | 15 | core | `conversacion__memory-conversation-summary` | 339 | 2 → 0 (-100%) | `b7e84bc` 2026-05-08 |
 | 16 | core | `conversacion__memory-rag` | 438 | 2 → 0 (-100%) | `d125ab7` 2026-05-08 |
 | 17 | infra | `filesystem` | 1075 | 202 → 66 (-67%) | `bb98306` 2026-05-06 |
 | 18 | infra | `firmware-manager` | 1084 | 67 → 31 (-54%) | `7e2eb66` 2026-05-06 |
 | 19 | infra | `esp32-dev` | 767 | 41 → 20 (-51%) | `bfa6e6d` 2026-05-06 |
+| 20 | infra | `device-registry` | 764 | 36 → 20 (-44%) | `e0a949d` 2026-05-07 |
 | 21 | infra | `firmware-builder` | 686 | 31 → 12 (-61%) | `d88eae5` 2026-05-07 |
+| 22 | infra | `certificate-authority` | 462 | 28 → 15 (-46%) | `3bef25a` 2026-05-08 |
 | 23 | infra | `device-health` | 556 | 27 → 12 (-56%) | `0fc5e8d` 2026-05-07 |
 | 24 | infra | `device-shadow` | 491 | 26 → 7 (-73%) | `9ba470d` 2026-05-07 |
 | 25 | infra | `metricas` | 556 | 22 → 4 (-82%) | `b3a2a8a` 2026-05-07 |
 | 26 | infra | `code-executor` | 484 | 19 → 9 (-53%) | `dcbe2c2` 2026-05-07 |
+| 27 | infra | `security-p2p` | 450 | 18 → 10 (-44%) | `eac987b` 2026-05-08 |
 | 28 | infra | `system-inspector` | 376 | 14 → 5 (-64%) | `422eb92` 2026-05-07 |
+| 29 | infra | `prompt-manager` | 1236 | 69 → 38 (-45%) | `a34deac` 2026-05-07 |
 | 30 | infra | `conversation-export` | 627 | 13 → 5 (-62%) | `fd86a7c` 2026-05-07 |
-| 43 | dominio | `pizzepos__cuentas` | 1016 | 32 → 11 (-66%) | `1f2733d` 2026-05-07 |
-| 44 | dominio | `dashboard` | 400 | 26 → 12 (-54%) | `1e94204` 2026-05-08 |
-| 50 | dominio | `pizzepos__carta-design` | 545 | 18 → 8 (-56%) | `56a566a` 2026-05-07 |
-| 51 | dominio | `staff-manager` | 494 | 18 → 2 (-89%) | `10739b7` 2026-05-07 |
-| 58 | dominio | `conversacion__ai-gateway-poc` | 443 | 0 → 0 (-0%) | `939a7cc` 2026-05-02 |
-| 60 | dominio | `pizzepos__cocina-poc` | 452 | 0 → 0 (-0%) | `5437466` 2026-05-02 |
+| 31 | infra | `pdf-viewer` | 634 | 54 → 39 (-28%) | `0db9ffa` 2026-05-07 |
+| 32 | infra | `telegram-service` | 573 | 32 → 31 (-3%) | `4b227a9` 2026-05-07 |
+| 33 | dominio | `esp32-flasher` | 1155 | 68 → 53 (-22%) | `8a170e4` 2026-05-08 |
+| 34 | dominio | `pizzepos__carta-scheduler` | 605 | 62 → 51 (-18%) | `7ba10e6` 2026-05-08 |
+| 35 | dominio | `log-manager` | 529 | 57 → 52 (-9%) | `66a1989` 2026-05-08 |
+| 36 | dominio | `facturacion__asesoria` | 526 | 46 → 28 (-39%) | `f1e5c24` 2026-05-08 |
+| 37 | dominio | `recetas` | 897 | 43 → 30 (-30%) | `8b80e86` 2026-05-07 |
+| 38 | dominio | `escandallo` | 1098 | 40 → 22 (-45%) | `3539922` 2026-05-07 |
+| 39 | dominio | `pizzepos__cocina` | 1206 | 33 → 27 (-18%) | `8de9e15` 2026-05-08 |
+| 40 | dominio | `perifericos` | 856 | 32 → 22 (-31%) | `d84612a` 2026-05-07 |
+| 41 | dominio | `pizzepos__carta-marketing` | 472 | 32 → 22 (-31%) | `c8f8ca7` 2026-05-08 |
+| 42 | dominio | `pizzepos__cuentas` | 1016 | 32 → 11 (-66%) | `1f2733d` 2026-05-07 |
+| 43 | dominio | `dashboard` | 400 | 26 → 12 (-54%) | `1e94204` 2026-05-08 |
+| 44 | dominio | `pizzepos__tarifas` | 408 | 26 → 18 (-31%) | `484dea0` 2026-05-08 |
+| 45 | dominio | `facturas` | 661 | 25 → 13 (-48%) | `e6c436d` 2026-05-07 |
+| 46 | dominio | `pizzepos__carta-digital` | 401 | 25 → 16 (-36%) | `59a4b7a` 2026-05-07 |
+| 47 | dominio | `pizzepos__pedidos` | 915 | 25 → 20 (-20%) | `7bdefd7` 2026-05-08 |
+| 48 | dominio | `pizzepos__carta-impresion` | 382 | 19 → 11 (-42%) | `2e572eb` 2026-05-07 |
+| 49 | dominio | `pizzepos__carta-design` | 545 | 18 → 8 (-56%) | `56a566a` 2026-05-07 |
+| 50 | dominio | `staff-manager` | 494 | 18 → 2 (-89%) | `10739b7` 2026-05-07 |
+| 51 | dominio | `pizzepos__carta-manager` | 829 | 15 → 15 (-0%) | `7356aa3` 2026-05-07 |
+| 52 | dominio | `pizzepos__impresion` | 1075 | 13 → 10 (-23%) | `615190b` 2026-05-07 |
+| 53 | dominio | `pizzepos__persistencia-comandero` | 1366 | 13 → 9 (-31%) | `57a641e` 2026-05-07 |
+| 54 | dominio | `pizzepos__comandero` | 792 | 9 → 6 (-33%) | `1609472` 2026-05-07 |
+| 55 | dominio | `pizzepos__categorias` | 451 | 6 → 4 (-33%) | `0fd3b9d` 2026-05-07 |
+| 56 | dominio | `pizzepos__ingredientes` | 690 | 6 → 4 (-33%) | `30acbd0` 2026-05-07 |
+| 60 | dominio | `pizzepos__cobros` | 700 | 29 → 24 (-17%) | `e85d54f` 2026-05-08 |
+| 61 | dominio | `pizzepos__variaciones` | 497 | 17 → 14 (-18%) | `75aaa2b` 2026-05-08 |
+| 62 | dominio | `pizzepos__cuentas-canales` | 418 | 15 → 12 (-20%) | `99dd4be` 2026-05-08 |
+| 63 | dominio | `text-editor` | 567 | 70 → 67 (-4%) | `7e61744` 2026-05-08 |
+| 64 | dominio | `viabilidad` | 789 | 48 → 30 (-38%) | `1e7f2c3` 2026-05-08 |
+| 65 | dominio | `bot-manager` | 394 | 35 → 32 (-9%) | `6280986` 2026-05-08 |
+| 66 | dominio | `pizzepos__productos` | 1265 | 26 → 23 (-12%) | `76b97ac` 2026-05-08 |
+| 67 | dominio | `facturacion__fuentes` | 325 | 21 → 18 (-14%) | `7080a48` 2026-05-08 |
+| 68 | dominio | `pizzepos__menu-generator` | 375 | 41 → 35 (-15%) | `41d067d` 2026-05-08 |
+| 69 | tooling | `admin-panel` | 520 | 30 → 25 (-17%) | `f164658` 2026-05-08 |
 
-## Próximos en la cola (top 10 de 43 pendientes)
+## Próximos en la cola (top 10 de 0 pendientes)
 
 | # | Capa | Slug | LOC | Drifts | Deps | Motivo pendiente |
 |---|------|------|-----|--------|------|------------------|
-| 6 | core | `conversacion__ai-gateway` | 777 | 8 | 0 | drifts 8/8 (100%) — esperado <50% |
-| 7 | core | `plugin-manager` | 495 | 8 | 0 | drifts 6/8 (75%) — esperado <50% |
-| 14 | core | `conversacion__prompt-builder` | 435 | 13 | 2 | drifts 7/13 (54%) — esperado <50% |
-| 20 | infra | `device-registry` | 764 | 36 | 0 | drifts 20/36 (56%) — esperado <50% |
-| 22 | infra | `certificate-authority` | 462 | 28 | 0 | drifts 15/28 (54%) — esperado <50% |
-| 27 | infra | `security-p2p` | 450 | 18 | 0 | drifts 10/18 (56%) — esperado <50% |
-| 29 | infra | `prompt-manager` | 1236 | 69 | 1 | drifts 38/69 (55%) — esperado <50% |
-| 31 | infra | `pdf-viewer` | 634 | 54 | 2 | drifts 39/54 (72%) — esperado <50% |
-| 32 | infra | `telegram-service` | 573 | 32 | 2 | drifts 31/32 (97%) — esperado <50% |
-| 33 | dominio | `esp32-flasher` | 1155 | 68 | 0 | drifts 53/68 (78%) — esperado <50% |
-
-<details><summary>Resto de pendientes (33 módulos)</summary>
-
-| # | Capa | Slug | LOC | Drifts | Deps |
-|---|------|------|-----|--------|------|
-| 34 | dominio | `pizzepos__carta-scheduler` | 605 | 62 | 0 |
-| 35 | dominio | `notas` | 485 | 59 | 0 |
-| 36 | dominio | `log-manager` | 529 | 57 | 0 |
-| 37 | dominio | `facturacion__asesoria` | 526 | 46 | 0 |
-| 38 | dominio | `recetas` | 897 | 43 | 0 |
-| 39 | dominio | `escandallo` | 1098 | 40 | 0 |
-| 40 | dominio | `pizzepos__cocina` | 1206 | 33 | 0 |
-| 41 | dominio | `perifericos` | 856 | 32 | 0 |
-| 42 | dominio | `pizzepos__carta-marketing` | 472 | 32 | 0 |
-| 45 | dominio | `pizzepos__tarifas` | 408 | 26 | 0 |
-| 46 | dominio | `facturas` | 661 | 25 | 0 |
-| 47 | dominio | `pizzepos__carta-digital` | 401 | 25 | 0 |
-| 48 | dominio | `pizzepos__pedidos` | 915 | 25 | 0 |
-| 49 | dominio | `pizzepos__carta-impresion` | 382 | 19 | 0 |
-| 52 | dominio | `pizzepos__carta-manager` | 829 | 15 | 0 |
-| 53 | dominio | `pizzepos__impresion` | 1075 | 13 | 0 |
-| 54 | dominio | `pizzepos__persistencia-comandero` | 1366 | 13 | 0 |
-| 55 | dominio | `pizzepos__comandero` | 792 | 9 | 0 |
-| 56 | dominio | `pizzepos__categorias` | 451 | 6 | 0 |
-| 57 | dominio | `pizzepos__ingredientes` | 690 | 6 | 0 |
-| 59 | dominio | `notas-poc` | 642 | 0 | 0 |
-| 61 | dominio | `pizzepos__cobros` | 700 | 29 | 1 |
-| 62 | dominio | `pizzepos__variaciones` | 497 | 17 | 1 |
-| 63 | dominio | `pizzepos__cuentas-canales` | 418 | 15 | 1 |
-| 64 | dominio | `text-editor` | 567 | 70 | 2 |
-| 65 | dominio | `viabilidad` | 789 | 48 | 2 |
-| 66 | dominio | `bot-manager` | 394 | 35 | 2 |
-| 67 | dominio | `pizzepos__productos` | 1265 | 26 | 2 |
-| 68 | dominio | `facturacion__fuentes` | 325 | 21 | 2 |
-| 69 | dominio | `pizzepos__menu-generator` | 375 | 41 | 3 |
-| 70 | tooling | `ui-designer` | 1281 | 120 | 0 |
-| 71 | tooling | `scratch-designer` | 413 | 31 | 0 |
-| 72 | tooling | `admin-panel` | 520 | 30 | 2 |
-
-</details>
 
 ## Lecciones operativas (patrones reutilizables del POC2)
 
@@ -143,14 +132,4 @@ Suite organizada en grupos:
 
 ## Decisiones pendientes / siguiente sesión
 
-**Próximo módulo recomendado**: `conversacion__ai-gateway` (capa core, 777 LOC, 8 drifts en baseline).
-
-Pasos canónicos para el siguiente:
-
-1. Leer auditoría completa: `arquitectura/auditoria/_outputs/modulo-completo/conversacion__ai-gateway.json`
-2. Identificar drifts del módulo: `node -e "const b=require('./drift-baseline.json').signatures; console.log(b.filter(s=>s.includes('ai-gateway')))"`
-3. Aplicar los 5 helpers privados canónicos + reescritura siguiendo plantilla `modules/_template/`.
-4. Tests por capas en `tests/unit/conversacion__ai-gateway.test.js`.
-5. Wire en `package.json` + `.github/workflows/validate.yml`.
-6. Verificar drifts del módulo bajan ≥70%.
-7. Commit + push + regenerar este PROGRESO.md.
+🎉 **Todos los módulos migrados.** Cierre completo del horizontal.

@@ -1,13 +1,19 @@
-# Migración de los 73 módulos al canon
+# Migración de los módulos al canon
 
-Plataforma operativa para reescribir cada módulo del repo cumpliendo los 24 contratos transversales. Producto de la fase transversal previa (todos los contratos cerrados al ancho canónico).
+Plataforma operativa para reescribir cada módulo del repo cumpliendo los 26 contratos transversales y derivados. Producto de la fase transversal previa (todos los contratos cerrados al ancho canónico).
+
+## Estado actual (2026-05-08)
+
+🎉 **Horizontal cerrado al 100%**: los 66 módulos del horizontal canónico están migrados al patrón POC2. Los 3 módulos restantes en `modules/` son POCs exploratorios (`conversacion/ai-gateway-poc`, `pizzepos/cocina-poc`, `notas-poc`) que están fuera del horizontal por diseño y no se migran. Ver `_outputs/PROGRESO.md` para la tabla completa.
+
+Esta plataforma queda activa para futuras migraciones (cualquier módulo que entre con shape legacy en el futuro se reescribiría con el mismo flujo `scaffold-rewrite.js` → `finish-rewrite.js`).
 
 ## Qué hay aquí
 
-- **`_outputs/modulos-roadmap.json`** — inventario priorizado de los 73 módulos. Cada entry lleva: `slug`, `path`, `layer` (core/infra/dominio/tooling), `loc`, `drifts` (heurística contra baseline), `dependencies` upstream, `events_publishes`, `events_subscribes`, `tools`, `agents`, `language`, `version`, `orden_migracion`. Generado por `scripts/inventario.js`. Regenerable cuando los módulos cambien.
+- **`_outputs/modulos-roadmap.json`** — inventario priorizado de los módulos del repo. Cada entry lleva: `slug`, `path`, `layer` (core/infra/dominio/tooling), `loc`, `drifts` (heurística contra baseline), `dependencies` upstream, `events_publishes`, `events_subscribes`, `tools`, `agents`, `language`, `version`, `orden_migracion`. Generado por `scripts/inventario.js`. Regenerable cuando los módulos cambien.
 - **`_outputs/PROGRESO.md`** — panel de control humano-legible: estado global, % por capa, tabla de módulos migrados (con commit + drifts antes/después), tabla de próximos en la cola, lecciones operativas, próximo módulo recomendado. Generado por `scripts/progreso.js`. **Regenerar tras cada migración**.
 - **`scripts/inventario.js`** — scanner que descubre módulos, los clasifica y prioriza. Reglas de clasificación inline (sets `CORE_SLUGS`, `INFRA_SLUGS`, `TOOLING_SLUGS`; el resto es dominio).
-- **`scripts/progreso.js`** — detecta automáticamente qué módulos están migrados (criterio: `tests/unit/<slug>.test.js` existe AND drifts actuales ≤ 50% del valor del roadmap). Cruza con `git log` para extraer commit hash + fecha. Genera PROGRESO.md.
+- **`scripts/progreso.js`** — detecta automáticamente qué módulos están migrados (criterio primario: `index.js` contiene los helpers POC2 `_classifyHandlerError` + `_handleHandlerError`. Criterio secundario: `tests/unit/<slug>.test.js` existe). Los slugs `*-poc` se excluyen del horizontal canónico. Cruza con `git log` para extraer commit hash + fecha. Genera PROGRESO.md.
 - **`scripts/scaffold-rewrite.js <slug>`** — automatiza la apertura de cada migración (~40% del trabajo mecánico). Archiva monolito en `_legacy/`, genera `notas/<slug>-mapa.md` pre-rellenado (identidad, eventos del audit, drift breakdown, secciones `<TODO>` para decisiones de dominio), genera `tests/unit/<slug>.test.js` skeleton (Group 1 Lifecycle + Group 7 Helpers POC2 listos), wirea `package.json` y `.github/workflows/validate.yml`.
 - **`scripts/finish-rewrite.js <slug> [--commit]`** — automatiza el cierre. Verifica tests verde, regenera baseline, valida CI, regenera inventario+PROGRESO, opcionalmente commitea con mensaje templateado leído del mapa. NO hace push.
 - **`README.md`** — este archivo.

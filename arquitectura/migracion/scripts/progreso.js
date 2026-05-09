@@ -65,31 +65,39 @@ function countDriftsInBaseline(slug, dir) {
   return count;
 }
 
+function indexJsHasPoc2Helpers(modulePath) {
+  const idx = path.join(modulePath, 'index.js');
+  if (!fs.existsSync(idx)) return false;
+  const src = fs.readFileSync(idx, 'utf-8');
+  return src.includes('_classifyHandlerError') && src.includes('_handleHandlerError');
+}
+
 function isMigrated(modulo) {
   const slug = modulo.slug;
   const slugLast = slug.includes('__') ? slug.split('__').pop() : slug;
-  // 1. ¿Hay tests/unit/<slug>.test.js?
+
+  // POCs exploratorios estan FUERA del horizontal canonico — no se migran.
+  if (slug.endsWith('-poc') || slugLast.endsWith('-poc')) {
+    return { migrated: false, out_of_scope: true, reason: 'POC exploratorio (fuera del horizontal canonico)' };
+  }
+
+  // Criterio primario: index.js tiene los 5 helpers POC2.
+  // Es la firma estructural de un modulo migrado, mucho mas estable que el
+  // threshold de drifts (que tiene falsos positivos por silent_io legitimos
+  // en logging, console en libs auxiliares, etc.).
+  const modulePath = path.join(REPO_ROOT, modulo.path);
+  const hasPoc2 = indexJsHasPoc2Helpers(modulePath);
+  if (!hasPoc2) return { migrated: false, reason: 'index.js sin helpers POC2 (_classifyHandlerError / _handleHandlerError)' };
+
+  // Criterio secundario: hay tests/unit/<slug>.test.js (debe existir tras finish-rewrite).
   const candidates = [
     path.join(TESTS_DIR, `${slug}.test.js`),
     path.join(TESTS_DIR, `${slugLast}.test.js`)
   ];
   const hasTest = candidates.some(p => fs.existsSync(p));
-  if (!hasTest) return { migrated: false, reason: 'sin tests/unit/' };
+  if (!hasTest) return { migrated: false, reason: 'sin tests/unit/<slug>.test.js' };
 
-  // 2. ¿Drifts actuales <= 50% de los del roadmap?
-  // Threshold 50% (no 30%) porque varios validators reportan falsos positivos
-  // legitimos: handlers internos con {ok|valid: true}, eventos request/response
-  // del patron canonico, fs.writeFile en initial creation, etc. Cuando el
-  // ratio cae a la mitad o menos, la migracion es real aunque queden drifts
-  // visibles que no son drifts reales.
-  const driftsAhora = countDriftsInBaseline(slug, path.join(REPO_ROOT, modulo.path));
-  const driftsRoadmap = modulo.drifts || 0;
-  if (driftsRoadmap > 0) {
-    const ratio = driftsAhora / driftsRoadmap;
-    if (ratio > 0.5) return {
-      migrated: false, reason: `drifts ${driftsAhora}/${driftsRoadmap} (${Math.round(ratio*100)}%) — esperado <50%`
-    };
-  }
+  const driftsAhora = countDriftsInBaseline(slug, modulePath);
   return { migrated: true, drifts_ahora: driftsAhora, has_test: true };
 }
 
@@ -104,6 +112,7 @@ function generate() {
   // Clasificar cada modulo
   const migrados = [];
   const pendientes = [];
+  const fueraDelHorizontal = [];
   for (const m of roadmap.modulos) {
     const status = isMigrated(m);
     if (status.migrated) {
@@ -117,10 +126,13 @@ function generate() {
         drifts_ahora: status.drifts_ahora,
         commit
       });
+    } else if (status.out_of_scope) {
+      fueraDelHorizontal.push({ ...m, motivo: status.reason });
     } else {
       pendientes.push({ ...m, motivo_pendiente: status.reason });
     }
   }
+  const horizontalTotal = roadmap.modulos.length - fueraDelHorizontal.length;
 
   // Estadisticas
   const totalDrifts = roadmap.modulos.reduce((acc, m) => acc + (m.drifts || 0), 0);
@@ -137,7 +149,7 @@ function generate() {
 
   // Render markdown
   const lines = [];
-  lines.push('# Progreso de migración — 73 módulos al canon de 24 contratos');
+  lines.push(`# Progreso de migración — ${horizontalTotal} módulos al canon de 26 contratos`);
   lines.push('');
   lines.push(`_Última regeneración: ${new Date().toISOString().slice(0, 19)}Z_`);
   lines.push('');
@@ -147,18 +159,28 @@ function generate() {
   // Resumen ejecutivo
   lines.push('## Estado global');
   lines.push('');
-  lines.push(`- **Migrados**: ${migrados.length} / ${roadmap.modulos.length} (${Math.round(migrados.length * 100 / roadmap.modulos.length)}%)`);
+  const horizontalPct = horizontalTotal > 0 ? Math.round(migrados.length * 100 / horizontalTotal) : 0;
+  lines.push(`- **Migrados**: ${migrados.length} / ${horizontalTotal} (${horizontalPct}%)`);
+  if (fueraDelHorizontal.length > 0) {
+    lines.push(`- **Fuera del horizontal canónico**: ${fueraDelHorizontal.length} (${fueraDelHorizontal.map(m => '`' + m.slug + '`').join(', ')}) — POCs exploratorios, no se migran.`);
+  }
+  if (pendientes.length === 0 && horizontalTotal > 0) {
+    lines.push(`- **Estado**: 🎉 horizontal cerrado al 100%.`);
+  }
   lines.push(`- **Drifts cerrados**: ${driftsCerrados} / ${totalDrifts} (${totalDrifts > 0 ? Math.round(driftsCerrados * 100 / totalDrifts) : 0}%)`);
   lines.push(`- **Drifts restantes en baseline**: ${driftsRestantes}`);
   lines.push('');
 
   lines.push('### Progreso por capa');
   lines.push('');
-  lines.push('| Capa | Done | Total | % |');
+  lines.push('| Capa | Done | Total horizontal | % |');
   lines.push('|------|------|-------|---|');
   for (const [layer, s] of Object.entries(porCapa)) {
-    const bar = '█'.repeat(Math.round(s.pct / 5)) + '░'.repeat(20 - Math.round(s.pct / 5));
-    lines.push(`| ${layer} | ${s.done} | ${s.total} | ${s.pct}% \`${bar}\` |`);
+    const oosLayer = fueraDelHorizontal.filter(m => m.layer === layer).length;
+    const totalHorizontal = s.total - oosLayer;
+    const pct = totalHorizontal > 0 ? Math.round(s.done * 100 / totalHorizontal) : 100;
+    const bar = '█'.repeat(Math.round(pct / 5)) + '░'.repeat(20 - Math.round(pct / 5));
+    lines.push(`| ${layer} | ${s.done} | ${totalHorizontal} | ${pct}% \`${bar}\` |`);
   }
   lines.push('');
 

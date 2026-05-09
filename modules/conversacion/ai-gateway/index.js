@@ -572,6 +572,8 @@ class AiGatewayModule {
       code = 'UPSTREAM_UNREACHABLE';
     } else if (/invalid response|malformed|parse|unexpected token/.test(lower)) {
       code = 'UPSTREAM_INVALID_RESPONSE';
+    } else if (/context.{0,10}(length|window|too long|too large|exceed)|prompt.{0,5}(too long|too large)|maximum.{0,10}context|too many tokens|context_length_exceeded|413/i.test(lower)) {
+      code = 'UPSTREAM_PAYLOAD_TOO_LARGE';
     }
 
     return { code, message: raw, details: {} };

@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-08T15:14:24.376Z",
-  "total": 2376,
+  "generated_at": "2026-05-09T11:02:42.696Z",
+  "total": 2377,
   "by_validator": {
     "naming": 49,
     "glossary": 1,
@@ -20,14 +20,14 @@
     "security": 1,
     "testing": 45,
     "multi-tenancy": 230,
-    "documentation": 89,
+    "documentation": 90,
     "versionado": 1,
     "deployment": 4,
     "module-loading": 4,
     "scheduling": 1
   },
   "by_severity": {
-    "warning": 2141,
+    "warning": 2142,
     "info": 248,
     "error": 14
   },
@@ -221,6 +221,7 @@
     "documentation|drift_markdown_con_shape_estructurable|modules/conversacion/ai-agent-framework/prompts/menu-validator-system.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|modules/conversacion/ai-agent-framework/prompts/recipe-analyzer-system.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|modules/conversacion/ai-agent-framework/prompts/recipe-curator-system.md contiene patron estructurable — considerar absorber a contrato JSON",
+    "documentation|drift_markdown_con_shape_estructurable|modules/conversacion/ai-agent-framework/prompts/recipe-researcher-system.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|modules/conversacion/ai-agent-framework/prompts/recipe-structurer-system.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|modules/conversacion/ai-agent-framework/prompts/scheduler-dispatcher-system.md contiene patron estructurable — considerar absorber a contrato JSON",
     "documentation|drift_markdown_con_shape_estructurable|modules/conversacion/ai-agent-framework/prompts/scheduler-planner-system.md contiene patron estructurable — considerar absorber a contrato JSON",

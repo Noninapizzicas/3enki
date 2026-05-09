@@ -250,6 +250,25 @@ async function testAsync(description, fn) {
     assert.ok(/credenciales/i.test(insertCall.params[2]));
   });
 
+  await testAsync('onAiFailed con UPSTREAM_PAYLOAD_TOO_LARGE indica al usuario que la conversacion es demasiado larga', async () => {
+    const mocks = makeMocks();
+    const m = instantiateAndStub(mocks);
+    await m.onAiFailed({
+      project_id: uuid1,
+      conversation_id: uuid2,
+      message_id: 'm-user-1',
+      error: { code: 'UPSTREAM_PAYLOAD_TOO_LARGE', message: 'context_length_exceeded' },
+      channel: 'web',
+      channel_context: {}
+    });
+    const insertCall = mocks.dbCalls.find(c => /INSERT INTO messages/.test(c.sql));
+    assert.ok(insertCall);
+    assert.ok(/demasiado larga|conversaci[oó]n.*larga/i.test(insertCall.params[2]), 'mensaje indica longitud excesiva');
+    assert.ok(!/context_length_exceeded/.test(insertCall.params[2]), 'no expone mensaje tecnico interno');
+    const sent = JSON.parse(mocks.mqttPublished[0].msg);
+    assert.strictEqual(sent.metadata.error_code, 'UPSTREAM_PAYLOAD_TOO_LARGE');
+  });
+
   await testAsync('onAiFailed con codigo desconocido cae a fallback genérico', async () => {
     const mocks = makeMocks();
     const m = instantiateAndStub(mocks);

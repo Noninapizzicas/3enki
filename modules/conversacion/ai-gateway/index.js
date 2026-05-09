@@ -421,8 +421,10 @@ class AiGatewayModule {
       }
       allToolResults.push(...toolResults);
 
-      // Añadir el assistant turn con tool_calls + los tool results
-      workingMessages.push({ role: 'assistant', content: result.content || null, tool_calls: result._raw_tool_calls || result.tool_calls });
+      // Añadir el assistant turn con tool_calls + los tool results.
+      // content: '' (no null) — DeepSeek/OpenAI requieren el campo presente
+      // como string aunque sea vacío cuando el assistant solo hace tool_calls.
+      workingMessages.push({ role: 'assistant', content: result.content || '', tool_calls: result._raw_tool_calls || result.tool_calls });
       const toolMessages = provider.formatToolResults?.(toolResults) || toolResults.map(tr => ({
         role: 'tool',
         tool_call_id: tr.tool_call_id,

@@ -216,6 +216,9 @@ async function testAsync(description, fn) {
       ['Internal Server Error 500', 'UPSTREAM_5XX'],
       ['fetch failed: ECONNREFUSED', 'UPSTREAM_UNREACHABLE'],
       ['unexpected token < in JSON at position 0', 'UPSTREAM_INVALID_RESPONSE'],
+      ['context_length_exceeded: prompt too long', 'UPSTREAM_PAYLOAD_TOO_LARGE'],
+      ['Request entity too large (413)', 'UPSTREAM_PAYLOAD_TOO_LARGE'],
+      ['maximum context length is 128000 tokens', 'UPSTREAM_PAYLOAD_TOO_LARGE'],
       ['some weird unknown error', 'INTERNAL_ERROR']
     ];
     for (const [msg, expected] of cases) {

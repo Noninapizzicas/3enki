@@ -99,7 +99,9 @@ Vive en `arquitectura/decisiones/` como contratos JSON con schemas + validators.
 
 - **`_contratos/agents-config.contract.json`** + **`_schemas/agents-config/agent.config.schema.json`** — sub-contrato derivado de companero-viaje (tipo canónico "agente"): formaliza el shape de `agents/<name>.json` (id+name+filename coincidiendo, version semver, enabled boolean, prompt_file path relativo a `.md`, tools como subset acotado del catálogo del repo, provider del enum cerrado, temperature/max_tokens/timeout_ms/max_retries/context_enabled como parámetros del LLM). Reglas para `prompts/<name>-system.md`: markdown puro sin frontmatter YAML, h1 con nombre del agente, longitud mínima 200 chars. Stats runtime PROHIBIDOS en archivo declarativo.
 
-- **`_contratos/module-rewrite.contract.json`** — contrato transversal puro que formaliza el patrón POC2 de reescritura canónica de módulos. Define las 14 reglas de filosofía, 13 principios validables, 11 decisiones arquitectónicas, 10 prohibiciones y 13 cross-checks ejecutables. Cualquiera de los 73 módulos del horizontal (ver `arquitectura/migracion/_outputs/modulos-roadmap.json`) cuando se reescribe sigue este contrato. Validable por `module-rewrite.validate.js`: monolito archivado en `_legacy/`, 5 helpers POC2 obligatorios (`_errorResponse`, `_handleHandlerError`, `_classifyHandlerError`, `_publicarEvento` + auxiliar), tests organizados por capas, error.code del catálogo `errors.contract`, sin returns con error string suelto, eventos canónicos del bus preservados invariantes, drift count ≤30% del valor previo.
+- **`_contratos/module-rewrite.contract.json`** — contrato transversal puro que formaliza el patrón POC2 de reescritura canónica de módulos. Define las 14 reglas de filosofía, 13 principios validables, 11 decisiones arquitectónicas, 10 prohibiciones y 13 cross-checks ejecutables. Cualquiera de los 70 módulos del horizontal (ver `arquitectura/migracion/_outputs/modulos-roadmap.json`) cuando se reescribe sigue este contrato. Validable por `module-rewrite.validate.js`: monolito archivado en `_legacy/`, 5 helpers POC2 obligatorios (`_errorResponse`, `_handleHandlerError`, `_classifyHandlerError`, `_publicarEvento` + auxiliar), tests organizados por capas, error.code del catálogo `errors.contract`, sin returns con error string suelto, eventos canónicos del bus preservados invariantes, drift count ≤30% del valor previo.
+
+- **`_contratos/extensibilidad-modular.contract.json`** — documento maestro de la extensibilidad del sistema. Captura la garantía operativa del paradigma event-core: añadir, modificar o quitar un módulo no rompe el resto siempre que respete los 26 contratos. Lectura obligatoria antes de añadir un módulo nuevo. Contiene: las 4 afirmaciones de esencia (con `es` / `no_es` / `porque_importa`), núcleo invariante, modelo de extensión, los 6 tipos canónicos de módulo, las 8 garantías observables (con su enforcement por contrato), las 4 cosas que los contratos NO garantizan (logica del modulo, semantica vs spec, performance, coverage), el protocolo de 6 pasos para añadir un módulo (PASO 0 mapa eventos → declarar module.json → implementar index.js POC2 → tests por capas → persistencia si aplica → validate:ci → registrar en config), mapa de qué garantiza cada uno de los 26 contratos, las 10 prohibiciones absolutas y las 8 preguntas canónicas a hacerse antes de añadir el módulo. No tiene validator propio — su enforcement es colectivo via los 26 contratos transversales y derivados.
 
 - **Otros contratos transversales:** `events`, `lifecycle`, `observability`, `errors`, `persistence`, `http`. Cada uno con su validator en `_validators/<n>.validate.js` y su sección en `drift-baseline.json`.
 
@@ -194,7 +196,7 @@ Después de los pasos 1-3 main puede mergear sin migración (validator solo aña
 
 ## Migración POC2 con scripts (horizontal módulo a módulo)
 
-Cada uno de los 73 módulos del horizontal se migra al canon usando dos scripts (no se hace todo a mano):
+Cada uno de los 70 módulos del horizontal se migra al canon usando dos scripts (no se hace todo a mano):
 
 ```
 node arquitectura/migracion/scripts/scaffold-rewrite.js <slug>
@@ -221,6 +223,8 @@ node arquitectura/migracion/scripts/finish-rewrite.js <slug> --commit
 
 Detalle del workflow + reglas de cierre en `arquitectura/migracion/README.md`.
 Patrón canónico formalizado en `arquitectura/decisiones/_contratos/module-rewrite.contract.json`.
+
+**Estado del horizontal (2026-05-08)**: cerrado al 100%. Los 66 módulos del horizontal canónico están migrados al patrón POC2; los 3 restantes en `modules/` son POCs exploratorios (`*-poc`) excluidos del horizontal por diseño. Ver `arquitectura/migracion/_outputs/PROGRESO.md` (auto-generado) y la sección `estado_del_horizontal` de `extensibilidad-modular.contract.json` para el detalle.
 
 ## Garantías obligatorias en payloads
 

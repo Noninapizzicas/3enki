@@ -1,17 +1,17 @@
 {
   "_doc": "Inventario priorizado de los modulos del repo. Cada modulo lleva su capa (core/infra/dominio/tooling), drift count, dependencias upstream, y orden_migracion sugerido. La fase horizontal de reescritura sigue este orden — los mas profundos (core sin dependencies uphill) primero, los mas perifericos (tooling) al final. Regenerable con: node arquitectura/migracion/scripts/inventario.js",
-  "generated_at": "2026-05-08T14:41:31.428Z",
+  "generated_at": "2026-05-09T01:03:10.861Z",
   "contratos_transversales_aplicables": 24,
   "totals": {
-    "total_modulos": 72,
+    "total_modulos": 69,
     "por_capa": {
       "core": 16,
       "infra": 16,
-      "dominio": 37,
-      "tooling": 3
+      "dominio": 36,
+      "tooling": 1
     },
-    "drifts_total": 2471,
-    "loc_total": 48650,
+    "drifts_total": 2261,
+    "loc_total": 46471,
     "tools_total": 150,
     "agents_total": 30
   },
@@ -563,21 +563,6 @@
       "orden_migracion": 34
     },
     {
-      "slug": "notas",
-      "path": "modules/notas",
-      "layer": "dominio",
-      "language": "es",
-      "version": "1.0.0",
-      "loc": 485,
-      "drifts": 59,
-      "events_publishes": 3,
-      "events_subscribes": 0,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 35
-    },
-    {
       "slug": "log-manager",
       "path": "modules/log-manager",
       "layer": "dominio",
@@ -590,7 +575,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 36
+      "orden_migracion": 35
     },
     {
       "slug": "facturacion__asesoria",
@@ -605,7 +590,7 @@
       "tools": 2,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 37
+      "orden_migracion": 36
     },
     {
       "slug": "recetas",
@@ -620,7 +605,7 @@
       "tools": 13,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 38
+      "orden_migracion": 37
     },
     {
       "slug": "escandallo",
@@ -635,7 +620,7 @@
       "tools": 7,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 39
+      "orden_migracion": 38
     },
     {
       "slug": "pizzepos__cocina",
@@ -650,7 +635,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 40
+      "orden_migracion": 39
     },
     {
       "slug": "perifericos",
@@ -665,7 +650,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 41
+      "orden_migracion": 40
     },
     {
       "slug": "pizzepos__carta-marketing",
@@ -680,7 +665,7 @@
       "tools": 4,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 42
+      "orden_migracion": 41
     },
     {
       "slug": "pizzepos__cuentas",
@@ -695,7 +680,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 43
+      "orden_migracion": 42
     },
     {
       "slug": "dashboard",
@@ -710,7 +695,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 44
+      "orden_migracion": 43
     },
     {
       "slug": "pizzepos__tarifas",
@@ -725,7 +710,7 @@
       "tools": 5,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 45
+      "orden_migracion": 44
     },
     {
       "slug": "facturas",
@@ -740,7 +725,7 @@
       "tools": 3,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 46
+      "orden_migracion": 45
     },
     {
       "slug": "pizzepos__carta-digital",
@@ -755,7 +740,7 @@
       "tools": 4,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 47
+      "orden_migracion": 46
     },
     {
       "slug": "pizzepos__pedidos",
@@ -770,7 +755,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 48
+      "orden_migracion": 47
     },
     {
       "slug": "pizzepos__carta-impresion",
@@ -785,7 +770,7 @@
       "tools": 3,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 49
+      "orden_migracion": 48
     },
     {
       "slug": "pizzepos__carta-design",
@@ -800,7 +785,7 @@
       "tools": 6,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 50
+      "orden_migracion": 49
     },
     {
       "slug": "staff-manager",
@@ -815,7 +800,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 51
+      "orden_migracion": 50
     },
     {
       "slug": "pizzepos__carta-manager",
@@ -830,7 +815,7 @@
       "tools": 13,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 52
+      "orden_migracion": 51
     },
     {
       "slug": "pizzepos__impresion",
@@ -845,7 +830,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 53
+      "orden_migracion": 52
     },
     {
       "slug": "pizzepos__persistencia-comandero",
@@ -860,7 +845,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 54
+      "orden_migracion": 53
     },
     {
       "slug": "pizzepos__comandero",
@@ -875,7 +860,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 55
+      "orden_migracion": 54
     },
     {
       "slug": "pizzepos__categorias",
@@ -890,7 +875,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 56
+      "orden_migracion": 55
     },
     {
       "slug": "pizzepos__ingredientes",
@@ -905,7 +890,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 57
+      "orden_migracion": 56
     },
     {
       "slug": "conversacion__ai-gateway-poc",
@@ -920,7 +905,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 58
+      "orden_migracion": 57
     },
     {
       "slug": "notas-poc",
@@ -935,7 +920,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 59
+      "orden_migracion": 58
     },
     {
       "slug": "pizzepos__cocina-poc",
@@ -950,7 +935,7 @@
       "tools": 0,
       "agents": 0,
       "dependencies": [],
-      "orden_migracion": 60
+      "orden_migracion": 59
     },
     {
       "slug": "pizzepos__cobros",
@@ -967,7 +952,7 @@
       "dependencies": [
         "perifericos"
       ],
-      "orden_migracion": 61
+      "orden_migracion": 60
     },
     {
       "slug": "pizzepos__variaciones",
@@ -984,7 +969,7 @@
       "dependencies": [
         "ingredientes"
       ],
-      "orden_migracion": 62
+      "orden_migracion": 61
     },
     {
       "slug": "pizzepos__cuentas-canales",
@@ -1001,7 +986,7 @@
       "dependencies": [
         "cuentas"
       ],
-      "orden_migracion": 63
+      "orden_migracion": 62
     },
     {
       "slug": "text-editor",
@@ -1019,7 +1004,7 @@
         "file-browser",
         "project-manager"
       ],
-      "orden_migracion": 64
+      "orden_migracion": 63
     },
     {
       "slug": "viabilidad",
@@ -1037,7 +1022,7 @@
         "recetas",
         "escandallo"
       ],
-      "orden_migracion": 65
+      "orden_migracion": 64
     },
     {
       "slug": "bot-manager",
@@ -1055,7 +1040,7 @@
         "telegram-service",
         "credential-manager"
       ],
-      "orden_migracion": 66
+      "orden_migracion": 65
     },
     {
       "slug": "pizzepos__productos",
@@ -1073,7 +1058,7 @@
         "project-manager",
         "ingredientes"
       ],
-      "orden_migracion": 67
+      "orden_migracion": 66
     },
     {
       "slug": "facturacion__fuentes",
@@ -1091,7 +1076,7 @@
         "channel-manager",
         "telegram-service"
       ],
-      "orden_migracion": 68
+      "orden_migracion": 67
     },
     {
       "slug": "pizzepos__menu-generator",
@@ -1110,37 +1095,7 @@
         "sharp",
         "google-vision"
       ],
-      "orden_migracion": 69
-    },
-    {
-      "slug": "ui-designer",
-      "path": "modules/ui-designer",
-      "layer": "tooling",
-      "language": "en",
-      "version": "1.0.0",
-      "loc": 1281,
-      "drifts": 120,
-      "events_publishes": 6,
-      "events_subscribes": 0,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 70
-    },
-    {
-      "slug": "scratch-designer",
-      "path": "modules/scratch-designer",
-      "layer": "tooling",
-      "language": "en",
-      "version": "2.0.0",
-      "loc": 413,
-      "drifts": 31,
-      "events_publishes": 4,
-      "events_subscribes": 0,
-      "tools": 0,
-      "agents": 0,
-      "dependencies": [],
-      "orden_migracion": 71
+      "orden_migracion": 68
     },
     {
       "slug": "admin-panel",
@@ -1158,7 +1113,7 @@
         "plugin-manager",
         "prompt-manager"
       ],
-      "orden_migracion": 72
+      "orden_migracion": 69
     }
   ]
 }

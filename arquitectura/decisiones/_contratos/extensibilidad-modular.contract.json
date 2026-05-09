@@ -1,0 +1,275 @@
+{
+  "_doc": "Documento maestro de la extensibilidad del sistema. Captura la garantia operativa del paradigma event-core: anyadir, modificar o quitar un modulo no rompe el resto siempre que respete los 26 contratos. Es la respuesta canonica a la pregunta '¿se puede tocar el sistema sin romperlo?'. Si una decision tecnica contradice este documento, gana este documento.",
+  "id": "extensibilidad-modular",
+  "version": "1.0.0",
+  "creada": "2026-05-08",
+  "tipo_documento": "documento_maestro",
+  "supersedes_nota": "Primera version. Formaliza lo que ya estaba implicito en el conjunto de contratos: la suma de los 26 contratos transversales + sub-contratos derivados es lo que permite extender el sistema sin acoplamiento entre modulos. Cada contrato individual cubre un aspecto; en conjunto forman el carril que minimiza errores estructurales al anyadir codigo.",
+
+  "esencia": [
+    {
+      "afirmacion": "Anyadir un modulo nuevo no puede romper modulos existentes",
+      "es": "Un sistema en el que la frontera entre dominios es el bus de eventos, y cada cruce entre dominios pasa por un contrato con shape validable.",
+      "no_es": "Un sistema en el que basta con 'no llamar a otros modulos': sin contratos enforce, los eventos drift y los modulos terminan acoplados por payload polisemico.",
+      "porque_importa": "El paradigma event-core (emite evento; quien sabe, hace) sostiene la extensibilidad SOLO si los eventos tienen shape canonico. Sin contratos, dos modulos pueden 'comunicarse via eventos' y aun asi acoplarse en tiempo de payload."
+    },
+    {
+      "afirmacion": "Los 26 contratos son el carril; la logica del modulo es responsabilidad del modulo",
+      "es": "Los contratos garantizan que tu modulo nuevo no pueda romper SHAPE, NAMING, ERROR CODES, EVENT FLOWS, LIFECYCLE, OBSERVABILIDAD, PERSISTENCIA, HTTP. validate:ci falla antes de que merge entre nada incoherente.",
+      "no_es": "Los contratos NO verifican que tu modulo HAGA lo que dice. Si tu CRUD de notas pierde notas en disco, ningun validator lo va a detectar; eso es responsabilidad de los tests del modulo + de la auditoria de dominio.",
+      "porque_importa": "Saber que cubre y que no cubre el carril evita una falsa sensacion de seguridad. validate:ci verde no significa modulo correcto; significa modulo bien acoplado al sistema."
+    },
+    {
+      "afirmacion": "Un modulo NUNCA llama directamente a otro modulo",
+      "es": "Toda comunicacion entre modulos es via eventBus.publish/subscribe con payload validado contra schema. Persistencia compartida solo via db.query.* events. HTTP gateway solo a traves del core.",
+      "no_es": "Un modulo NO hace require('../otro-modulo'), NO accede al state interno de otro modulo, NO comparte conexiones SQLite directamente.",
+      "porque_importa": "El acoplamiento directo es lo que rompe sistemas: si A llama a B, cambiar B rompe A. Si A emite y B reacciona, cambiar B (o anyadir C que tambien reacciona) no afecta a A."
+    },
+    {
+      "afirmacion": "El sistema esta listo para crecer sin romper",
+      "es": "70 modulos vivos al canon POC2. Cada modulo declara sus eventos publicados/escuchados en module.json, expone helpers POC2 estandar, devuelve shape canonico, propaga correlation_id. Anyadir el modulo 71 sigue el mismo patron y entra sin friccion.",
+      "no_es": "Listo no significa 'todo automatico'. Hay que respetar el protocolo (PASO 0: mapa de eventos antes del codigo) y pasar validate:ci antes de merge.",
+      "porque_importa": "El estado actual del repo es el resultado del horizontal cerrado al canon. Cualquier modulo nuevo se beneficia de toda la disciplina acumulada en los 26 contratos."
+    }
+  ],
+
+  "nucleo_invariante": {
+    "regla_unica": "Emite evento. Quien sabe, hace. Tu no sabes como.",
+    "consecuencia": "Un modulo NUEVO declara su dominio (eventos que publica + eventos que escucha) y nada mas. No conoce a sus consumidores ni a sus emisores. Esto es lo que permite anyadirlo sin tocar otros modulos.",
+    "donde_se_enforce": [
+      "events.contract.json: shape canonico de cada evento del bus + validador",
+      "naming.contract.json: forma <module-prefix>.<entity>.<verb> obligatoria",
+      "persistence.contract.json: persistencia compartida solo via db.query.*",
+      "lifecycle.contract.json: onLoad/onUnload limpios, sin handlers que sobrevivan al unload"
+    ]
+  },
+
+  "modelo_de_extension": {
+    "axioma": "Extender = declarar dominio nuevo + respetar shape canonico de cruce. Todo lo demas (logica interna del modulo) es libre.",
+    "como_extender": [
+      "1. Declaras un nuevo modulo con su `module.json` (name, version, language, provides, subscribes, observability, etc.).",
+      "2. Tu modulo emite eventos con naming canonico (validados por naming.contract).",
+      "3. Tu modulo escucha eventos canonicos existentes (validados por events.contract).",
+      "4. Tu modulo expone APIs HTTP/UI con shape canonico (validados por http.contract + frontend.contract).",
+      "5. Tu modulo persiste solo lo suyo (validados por persistence.contract); si necesita compartir, via db.query.* events.",
+      "6. Tu modulo emite metricas con prefix `<modulo>.<accion>` (validados por observability.contract).",
+      "7. Tu modulo tiene tests por capas en `tests/unit/<modulo>.test.js` (validados por testing.contract)."
+    ],
+    "puntos_de_extension_existentes": [
+      "chat.context.enriched: cualquier modulo de memoria publica con priority -> prompt-builder agrega ordenado.",
+      "agent.execute.request: cualquier modulo del dominio invoca a un agente especialista.",
+      "channel-*: cada canal recibe del exterior y publica chat.message.saved con su channel.",
+      "Tools del LLM: declarar `tools[]` en module.json -> ai-gateway invoca directamente."
+    ]
+  },
+
+  "tipos_canonicos_de_modulo": [
+    {
+      "tipo": "modulo_de_dominio",
+      "descripcion": "Un dominio acotado del negocio (pizzepos__cocina, recetas, escandallo, etc.). Publica eventos de su dominio, escucha eventos canonicos cross-cutting (ej: chat.message.saved si responde al chat).",
+      "ejemplos": ["pizzepos/cocina", "recetas", "escandallo", "facturas"]
+    },
+    {
+      "tipo": "modulo_de_infra",
+      "descripcion": "Capacidad transversal usable por varios dominios (filesystem, log-manager, database-manager, gateway-manager).",
+      "ejemplos": ["filesystem", "log-manager", "database-manager"]
+    },
+    {
+      "tipo": "modulo_de_canal",
+      "descripcion": "Adaptador entre el exterior y el bus interno (channel-telegram, channel-voice). Recibe del canal, publica chat.message.saved.",
+      "ejemplos": ["channel-manager", "telegram-service"]
+    },
+    {
+      "tipo": "modulo_de_memoria",
+      "descripcion": "Modulo que escucha chat.message.saved y publica chat.context.enriched con priority. Pluggable: anyadir uno no toca prompt-builder.",
+      "ejemplos": ["conversacion/memory-conversation-summary", "conversacion/memory-rag", "conversacion/memory-user-profile"]
+    },
+    {
+      "tipo": "modulo_de_agente",
+      "descripcion": "Especialista del LLM. Reacciona a agent.execute.request, devuelve agent.execute.response. Configurado via agents-config.contract.",
+      "ejemplos": ["conversacion/ai-agent-framework"]
+    },
+    {
+      "tipo": "modulo_de_tooling",
+      "descripcion": "Herramienta de desarrollo/operacion (system-inspector, dashboard, admin-panel). Suele exponer HTTP + UI sin emitir eventos de dominio.",
+      "ejemplos": ["system-inspector", "dashboard", "admin-panel"]
+    }
+  ],
+
+  "garantias": [
+    {
+      "garantia": "Un modulo nuevo no puede leer/escribir el estado interno de otro modulo",
+      "enforcement": "persistence.contract enforce que cada modulo solo accede a sus tablas SQLite. Cruces de datos solo via db.query.* events.",
+      "nivel": "absoluta",
+      "como_se_detecta_violacion": "El validator de persistence flagea si un modulo abre conexion a tabla declarada como propietaria de otro modulo."
+    },
+    {
+      "garantia": "Un modulo nuevo no puede llamar funcionalmente a otro modulo (require directo)",
+      "enforcement": "module-loading.contract enforce que cada modulo se carga aislado por el core; no hay imports entre modulos.",
+      "nivel": "absoluta",
+      "como_se_detecta_violacion": "Validator de module-loading busca require/import paths que cruzan dos directorios bajo modules/."
+    },
+    {
+      "garantia": "Un modulo nuevo emite eventos con shape validable contra schema",
+      "enforcement": "events.contract + sub-contratos derivados (chat-flow, agent-flow, llm-flow, embedding-flow) tienen schemas AJV strict additionalProperties:false.",
+      "nivel": "absoluta_para_eventos_canonicos",
+      "como_se_detecta_violacion": "Tests por handler cargan el JSON Schema oficial con AJV y validan el payload publicado."
+    },
+    {
+      "garantia": "Un modulo nuevo respeta el catalogo de error codes; no inventa codigos por entidad",
+      "enforcement": "errors.contract.json define el catalogo cerrado (RESOURCE_NOT_FOUND, MISSING_FIELD, INVALID_INPUT, etc.). Validator flagea codigos fuera del catalogo.",
+      "nivel": "absoluta",
+      "como_se_detecta_violacion": "Validator de errors escanea returns con error.code que no este en el catalogo."
+    },
+    {
+      "garantia": "Un modulo nuevo propaga correlation_id desde el originador hasta el ultimo eslabon de la cadena",
+      "enforcement": "events.contract + observability.contract requieren correlation_id en payloads de eventos. Helper POC2 _publicarEvento lo propaga si se le pasa, lo genera si no.",
+      "nivel": "absoluta",
+      "como_se_detecta_violacion": "Validator flagea publishes sin correlation_id en payload."
+    },
+    {
+      "garantia": "Un modulo nuevo limpia su estado en onUnload (no leaks de timers, subscribers, conexiones)",
+      "enforcement": "lifecycle.contract requiere onUnload con clearInterval/clearTimeout y unsubscribe de todos los handlers.",
+      "nivel": "absoluta",
+      "como_se_detecta_violacion": "Tests de lifecycle verifican que tras onUnload no quedan timers/Maps con entries. Validator flagea onUnload vacios o ausentes."
+    },
+    {
+      "garantia": "Un modulo nuevo declara sus dependencias en module.json.requires (si las tiene)",
+      "enforcement": "module-loading.contract enforce que requires apunte a modulos cargados antes en el orden de inicializacion.",
+      "nivel": "estructural",
+      "como_se_detecta_violacion": "Validator flagea requires que apuntan a modulos inexistentes o circulares."
+    },
+    {
+      "garantia": "Anyadir un nuevo emisor de un evento canonico (ej: chat.context.enriched) no requiere tocar el consumidor",
+      "enforcement": "events.contract + el patron 'puntos de extension modulares' (ver CLAUDE.md). El consumidor agrega por priority y no conoce a sus emisores.",
+      "nivel": "operativa",
+      "como_se_detecta_violacion": "Test del consumidor con N emisores plug-and-play verifica que el orden por priority funciona sin codigo especifico por emisor."
+    }
+  ],
+
+  "lo_que_los_contratos_NO_garantizan": [
+    {
+      "no_garantia": "Que la logica interna del modulo sea correcta",
+      "ejemplo": "Si tu CRUD pierde datos en disco, validate:ci pasa y nadie se entera.",
+      "responsabilidad": "Tests unitarios del modulo + auditoria de dominio (manual o vibe-coded)."
+    },
+    {
+      "no_garantia": "Que el modulo haga lo que el usuario espera",
+      "ejemplo": "Si emites event.created cuando deberia ser event.updated, no es drift estructural; es bug semantico.",
+      "responsabilidad": "Validacion contra spec del producto / requirements."
+    },
+    {
+      "no_garantia": "Que el rendimiento sea aceptable",
+      "ejemplo": "Si tu handler tarda 30s, ningun contrato lo detecta. observability.contract pide metricas, pero no umbrales.",
+      "responsabilidad": "Tests de performance + alertas en metricas."
+    },
+    {
+      "no_garantia": "Que los tests del modulo cubran los edge cases reales",
+      "ejemplo": "testing.contract pide tests por capas, no exige coverage minimo por linea ni por rama.",
+      "responsabilidad": "Disciplina del autor + revision."
+    }
+  ],
+
+  "protocolo_para_anyadir_modulo_nuevo": {
+    "paso_0_mapa_eventos": {
+      "que_hacer": "Antes de tocar codigo, responder: ¿que eventos emite el modulo? ¿que eventos escucha? ¿a que reacciona cada subscribe? ¿que persiste?",
+      "donde_se_documenta": "arquitectura/auditoria/_outputs/modulo-completo/<modulo>.json (auditoria del modulo, despues de declararlo).",
+      "regla_dura": "Sin mapa, no se toca el modulo. Tres lineas similares es mejor que una abstraccion prematura."
+    },
+    "paso_1_declarar_module_json": {
+      "que_hacer": "Crear modules/<modulo>/module.json con name, version, description, language, provides, subscribes, apis (si aplica), tools (si aplica), observability.",
+      "contratos_aplicables": ["naming", "glossary", "events", "tools", "http", "observability"],
+      "validators_que_corren": ["naming.validate.js", "glossary.validate.js"]
+    },
+    "paso_2_implementar_index_js": {
+      "que_hacer": "Implementar index.js con onLoad/onUnload + 5 helpers POC2 (_errorResponse, _classifyHandlerError, _handleHandlerError, _publicarEvento, _buildCorrelationId) + handlers que devuelven shape canonico.",
+      "contratos_aplicables": ["module-rewrite", "errors", "lifecycle", "http"],
+      "plantilla": "modules/_template/ (si existe) + copia los helpers de cualquier modulo POC2 ya migrado (ej: conversation-export, dashboard, log-manager)."
+    },
+    "paso_3_tests_por_capas": {
+      "que_hacer": "Crear tests/unit/<modulo>.test.js con Group 1 (Lifecycle), Group 2 (Validacion canonica), Group 3+ (Domain), Group 7 (Helpers POC2).",
+      "contratos_aplicables": ["testing"],
+      "wirear": "Anyadir test:<modulo> en package.json + step en .github/workflows/validate.yml."
+    },
+    "paso_4_persistencia_si_aplica": {
+      "que_hacer": "Si persistes, declarar tablas en module.json + usar db.query.* events para cruces. NO abrir SQLite directamente a tablas de otros modulos.",
+      "contratos_aplicables": ["persistence", "database-manager"]
+    },
+    "paso_5_validar": {
+      "que_hacer": "Correr `npm run validate:ci`. Si falla, leer el output del validator que rompio y corregir. NO regenerar baseline para tapar drift nuevo.",
+      "regla_dura": "validate:ci PASS antes de commit. Sin excepciones."
+    },
+    "paso_6_registrar_en_config": {
+      "que_hacer": "Anyadir el slug del modulo a config.json.modules.enabled. Si no quieres cargarlo en runtime aun, ponlo en disabled.",
+      "regla_dura": "Si no esta en enabled ni disabled, no se carga (efectivamente: muerto)."
+    }
+  },
+
+  "mapa_al_sistema_actual": {
+    "contratos_que_protegen_la_extensibilidad": [
+      { "contrato": "events.contract.json", "que_garantiza": "Cada evento del bus tiene shape canonico validable. Anyadir un nuevo emisor no puede romper a los consumidores existentes." },
+      { "contrato": "naming.contract.json", "que_garantiza": "Forma <module-prefix>.<entity>.<verb> + verbos canonicos por idioma. Sin sinonimos cross-modulo." },
+      { "contrato": "glossary.contract.json", "que_garantiza": "Una sola forma canonica por concepto cross-modulo. No hay 'order' y 'pedido' refiriendose a lo mismo." },
+      { "contrato": "errors.contract.json", "que_garantiza": "Catalogo cerrado de error codes. RESOURCE_NOT_FOUND + entity_type, no RECIPE_NOT_FOUND ni PROJECT_NOT_FOUND." },
+      { "contrato": "lifecycle.contract.json", "que_garantiza": "onLoad/onUnload limpios. No hay timers ni subscribers que sobrevivan al unload." },
+      { "contrato": "observability.contract.json", "que_garantiza": "Logging estructurado, metricas con prefix canonico, tracing.propaga_correlation_id obligatorio." },
+      { "contrato": "persistence.contract.json", "que_garantiza": "Cada modulo solo accede a sus tablas. Cruces via db.query.* events." },
+      { "contrato": "http.contract.json", "que_garantiza": "Endpoints declarados en module.json, shape canonico {status, data | error}." },
+      { "contrato": "module-rewrite.contract.json", "que_garantiza": "Cualquier modulo (nuevo o reescrito) sigue el patron POC2: 5 helpers, error.code del catalogo, sin returns con error string suelto, drift count <= 30% del previo." },
+      { "contrato": "module-loading.contract.json", "que_garantiza": "El core carga modulos en orden, declara dependencias via requires, no permite imports cruzados." },
+      { "contrato": "tools.contract.json", "que_garantiza": "Tools declaradas en module.json.tools[] con parameters JSON Schema 2020-12 valido. Retorno {status, data | error}." },
+      { "contrato": "testing.contract.json", "que_garantiza": "Tests por capas con AJV validation. Wireado a package.json + workflow.yml." },
+      { "contrato": "frontend.contract.json", "que_garantiza": "ui_handlers con shape canonico, zone declarada." },
+      { "contrato": "security.contract.json", "que_garantiza": "Auth declarado en endpoints HTTP. No hay secretos en logs." },
+      { "contrato": "multi-tenancy.contract.json", "que_garantiza": "project_id/tenant_id propagado donde aplique." },
+      { "contrato": "documentation.contract.json", "que_garantiza": "Cada modulo tiene README.md con seccion minima documentada." },
+      { "contrato": "versionado.contract.json", "que_garantiza": "module.json.version semver. Bump en cada cambio que rompe shape." },
+      { "contrato": "deployment.contract.json", "que_garantiza": "Variables de entorno + paths declarados, no hardcoded." },
+      { "contrato": "bus-transport.contract.json", "que_garantiza": "Transporte del bus (in-memory + MQTT) homogeneo, mismo shape de eventos en local y distributed." },
+      { "contrato": "scheduling.contract.json", "que_garantiza": "setInterval/setTimeout legitimos, no subsegundo, clearados en onUnload." },
+      { "contrato": "resilience.contract.json", "que_garantiza": "Reintentos + backoffs + circuit breakers donde aplique." },
+      { "contrato": "agents-config.contract.json", "que_garantiza": "Agentes declarados con shape canonico (id, prompt_file, tools, provider, etc.)." },
+      { "contrato": "chat-flow.contract.json", "que_garantiza": "5 eventos canonicos del flujo del chat (chat.message.saved, chat.context.enriched, chat.prompt.ready, ai.chat.response, ai.chat.failed)." },
+      { "contrato": "agent-flow.contract.json", "que_garantiza": "4 eventos canonicos del flujo de agentes." },
+      { "contrato": "llm-flow.contract.json", "que_garantiza": "3 eventos para llamar al LLM sin contexto de chat (llm.complete.request/response/failed)." },
+      { "contrato": "companero-viaje.contract.json", "que_garantiza": "Vision arquitectonica del subsistema chat/LLM/agentes (de aqui derivan chat-flow, agent-flow, llm-flow)." }
+    ],
+    "validators_que_corren_juntos_en_ci": "node scripts/validate-all.js (via npm run validate:ci). Si CUALQUIERA falla con drift NUEVO no presente en baseline, CI bloquea el merge."
+  },
+
+  "prohibido": [
+    "Llamar directamente a otro modulo: NO hacer require('../otro-modulo') ni acceder a su instancia desde el core.",
+    "Compartir conexion SQLite: NO abrir conexion a tabla propietaria de otro modulo. Solo db.query.* events.",
+    "Inventar error codes por entidad: NO RECIPE_NOT_FOUND, NO PROJECT_NOT_FOUND. Solo RESOURCE_NOT_FOUND + details.entity_type.",
+    "Mezclar shape success/failure en un solo evento: NO {success: bool}. Par separado: <accion>.completed + <accion>.failed.",
+    "Saltarse el PASO 0: NO escribir codigo antes de mapear eventos publicados/escuchados.",
+    "Regenerar baseline para tapar drift nuevo: NO usar validate:baseline:update como parche. Solo cuando se cierra deuda legitima.",
+    "Crear modulos manager mega-amplios: NO un mega-device-manager si el sistema ya tiene device-registry + device-shadow + device-health. Granularidad acotada > ahorro de archivos.",
+    "Mezclar dominio con infraestructura: NO meter logica de impresora dentro del modulo de pedidos. Si necesitas imprimir, emite evento; el modulo de impresion lo escucha.",
+    "Persistir sin declararlo: NO escribir a SQLite/disco sin declarar la tabla/path en module.json.",
+    "Tests opcionales: NO mergear sin tests verde. testing.contract no tiene excepciones; cualquier modulo nuevo entra con su test:<modulo> wireado a CI."
+  ],
+
+  "preguntas_canonicas_antes_de_anyadir_modulo": [
+    "¿Existe ya un modulo con esta responsabilidad? (revisar manifest-completo/* + provides[])",
+    "¿Mi 'modulo nuevo' no es realmente UN evento + un consumer existente que ya hace eso?",
+    "¿Que eventos canonicos puedo escuchar en lugar de emitir uno nuevo?",
+    "¿Mi entidad esta en glossary.json? Si no, ¿deberia anyadirla antes?",
+    "¿Mi naming respeta naming.contract (forma + verbo + idioma)?",
+    "¿Persisto algo? Si si, ¿es estado de mi dominio o de otro? Si es de otro, refactor.",
+    "¿Tengo HTTP endpoints? Si si, ¿van detras del gateway o expongo nuevo path? El gateway es el default.",
+    "¿Mi modulo es punto de extension de algo existente? (memoria pluggable, agente especialista, canal, tool del LLM)"
+  ],
+
+  "estado_del_horizontal": {
+    "fecha_corte": "2026-05-08",
+    "modulos_totales_en_repo": 70,
+    "modulos_vivos_al_canon_poc2": 66,
+    "excluidos_del_canon": {
+      "_template": "Plantilla, no es modulo real",
+      "*-poc": "3 POCs exploratorios (ai-gateway-poc, cocina-poc, notas-poc)"
+    },
+    "horizontal_cerrado_porcentaje": 100,
+    "implicacion": "El sistema esta en un estado donde cualquier modulo 71 entra siguiendo el protocolo de este documento. La disciplina acumulada en los 26 contratos es heredada por el modulo nuevo sin friccion."
+  }
+}

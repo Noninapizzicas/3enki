@@ -36,8 +36,8 @@ class RecetasModule {
     this.eventBus = null;
     this.metrics = null;
 
-    // project_id → slug (cache)
-    this.projectSlugs = new Map();
+    // project_id → base_path absoluto (cache, poblado por project.activated)
+    this.projectBasePaths = new Map();
 
     // project_id → Promise (cola para serializar writes)
     this.writeQueues = new Map();
@@ -60,7 +60,7 @@ class RecetasModule {
     this.pendingFs.clear();
     this.pendingProject.clear();
     this.writeQueues.clear();
-    this.projectSlugs.clear();
+    this.projectBasePaths.clear();
   }
 
   // ============================================================
@@ -152,26 +152,30 @@ class RecetasModule {
   onProjectActivated(event) {
     const data = event.data || event;
     const id = data.project_id || data.id;
-    const project = data.project || null;
-    if (id && project?.slug) this.projectSlugs.set(id, project.slug);
+    // base_path canónico viene en el payload top-level (project-identity.contract P1/D1).
+    // Fallback a data.project.base_path por compat con publishers legacy.
+    const basePath = data.base_path || data.project?.base_path;
+    if (id && basePath) this.projectBasePaths.set(id, basePath);
   }
 
   onProjectDeactivated() { /* no-op; mantenemos cache */ }
 
   // ============================================================
-  // Resolver project_id → slug
+  // Resolver project_id → base_path absoluto
+  // Patrón canónico: cache poblado por project.activated. Fallback a
+  // project.get.request para proyectos no activos aún.
   // ============================================================
 
-  async _slugForProject(project_id) {
+  async _basePathForProject(project_id) {
     if (!project_id) {
       const err = new Error('proyecto_id requerido');
       err._code = 'INVALID_INPUT';
       throw err;
     }
-    if (this.projectSlugs.has(project_id)) return this.projectSlugs.get(project_id);
+    if (this.projectBasePaths.has(project_id)) return this.projectBasePaths.get(project_id);
 
     const request_id = crypto.randomUUID();
-    const slug = await new Promise((resolve, reject) => {
+    const basePath = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingProject.delete(request_id);
         const err = new Error(`project.get timeout para ${project_id}`);
@@ -181,8 +185,8 @@ class RecetasModule {
       this.pendingProject.set(request_id, { resolve, reject, timer });
       this.eventBus.publish('project.get.request', { request_id, project_id });
     });
-    this.projectSlugs.set(project_id, slug);
-    return slug;
+    this.projectBasePaths.set(project_id, basePath);
+    return basePath;
   }
 
   onProjectGetResponse(event) {
@@ -191,15 +195,16 @@ class RecetasModule {
     if (!p) return;
     clearTimeout(p.timer); this.pendingProject.delete(request_id);
     if (error || !project) return p.reject(new Error(error || 'Project not found'));
-    p.resolve(project.slug);
+    if (!project.base_path) return p.reject(new Error('project.base_path missing in response'));
+    p.resolve(project.base_path);
   }
 
   // ============================================================
   // Filesystem — leer/escribir archivo JSON del proyecto
   // ============================================================
 
-  _pathFor(slug) {
-    return `@/projects/${slug}/recetas.json`;
+  _pathFor(basePath) {
+    return `${basePath}/recetas.json`;
   }
 
   async _readFile(slug) {
@@ -286,7 +291,7 @@ class RecetasModule {
   }
 
   async _withStore(project_id, mutator) {
-    const slug = await this._slugForProject(project_id);
+    const slug = await this._basePathForProject(project_id);
     const prev = this.writeQueues.get(project_id) || Promise.resolve();
     const next = prev
       .catch(() => {})
@@ -304,7 +309,7 @@ class RecetasModule {
   }
 
   async _readOnly(project_id, reader) {
-    const slug = await this._slugForProject(project_id);
+    const slug = await this._basePathForProject(project_id);
     const store = await this._loadStore(slug);
     return reader(store);
   }

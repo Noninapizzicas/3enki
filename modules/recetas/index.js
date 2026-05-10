@@ -833,17 +833,15 @@ class RecetasModule {
     if (!handlerName) {
       this.logger.warn('recetas.tool.unknown', { tool: toolName });
       this.metrics?.increment('recetas.error', { kind: 'dispatch', code: 'INVALID_INPUT' });
-      const err = Object.assign(new Error(`unknown tool ${toolName}`), { _code: 'INVALID_INPUT' });
       await this.eventBus.publish(`${toolName}.response`, {
         request_id,
-        error: { code: 'INVALID_INPUT', message: err.message }
+        error: { code: 'INVALID_INPUT', message: `unknown tool ${toolName}` }
       });
-      throw err;
+      return;
     }
     try {
       const result = await this[handlerName](params);
       await this.eventBus.publish(`${toolName}.response`, { request_id, result });
-      return result;
     } catch (err) {
       const code = err._code || this._classifyHandlerError(err);
       this.logger.error('recetas.tool.failed', { tool: toolName, error: err.message, code });
@@ -852,7 +850,6 @@ class RecetasModule {
         request_id,
         error: { code, message: err.message }
       });
-      throw err;
     }
   }
 

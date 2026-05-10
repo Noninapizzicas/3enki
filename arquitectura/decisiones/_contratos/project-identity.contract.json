@@ -1,0 +1,197 @@
+{
+  "_doc": "Define cómo los módulos resuelven la identidad y el path físico de un proyecto. La fuente autoritativa es project.base_path; calcular slug localmente es antipatrón. Cierra un drift transversal no cubierto por module-rewrite.contract.json (POC2).",
+  "id": "project-identity",
+  "version": "1.0.0",
+  "creada": "2026-05-10",
+  "supersedes_nota": "Primera versión. Formaliza un drift detectado durante el análisis del subsistema chat/agentes: cartadigital y recetas resolvían el mismo problema (acceder al path físico del proyecto activo) con patrones distintos. El horizontal POC2 está al 100% pero su contrato no cubre identidad/paths de proyecto, por lo que el drift quedó invisible. Este contrato cierra ese gap.",
+
+  "objetivo": "Garantizar que todos los módulos que persisten o leen datos por proyecto resuelvan el path físico de forma idéntica, evitando recálculos locales de slug y dependencias de campos derivados en el bus.",
+
+  "inputs": {
+    "obligatorios": [
+      "modules/*/module.json",
+      "modules/*/index.js"
+    ],
+    "opcionales": [],
+    "prohibidos": []
+  },
+
+  "filosofia": [
+    "project_id es un UUID opaco. Ningún módulo asume su forma ni deriva significado de él.",
+    "slug es un valor derivado del name del proyecto, computado y poseído por project-manager. Ningún otro módulo lo recomputa.",
+    "base_path es la fuente autoritativa del path físico del proyecto. Está persistido en la columna projects.base_path y viaja explícito en project.activated.",
+    "Cuando un módulo necesita el path de un proyecto activo, lo consume del cache que mantiene escuchando project.activated. Para proyectos no activos, project.get.request devuelve base_path.",
+    "Calcular slug localmente o construir paths con `{name.toLowerCase()}` es antipatrón. Renombrar un proyecto no debe romper los datos persistidos."
+  ],
+
+  "principios": [
+    {
+      "id": "P1",
+      "regla": "Los módulos que persistan o lean datos por proyecto SE SUSCRIBEN a project.activated y mantienen un cache local Map<project_id, base_path>.",
+      "razon": "Evita roundtrip síncrono por el bus en cada operación. Coincide con el patrón establecido por cartadigital y otros módulos del subsistema pizzepos."
+    },
+    {
+      "id": "P2",
+      "regla": "El path físico de un proyecto SE LEE de project.base_path. No se construye con _slugify(name) ni con path.join(projectsBase, name.toLowerCase()).",
+      "razon": "base_path queda fijado al crear el proyecto y sobrevive a renames. _slugify(newName) diverge del path físico si name cambia."
+    },
+    {
+      "id": "P3",
+      "regla": "Para proyectos no activos, project.get.request devuelve base_path en la response. El consumidor lo usa directamente.",
+      "razon": "Centraliza el conocimiento del path en project-manager. Otros módulos solo consumen."
+    },
+    {
+      "id": "P4",
+      "regla": "project-manager NO expone slug en los payloads de eventos del bus (project.get.response, project.list.response, project.activated, project.created, etc.). slug es estrictamente interno (UI handlers, _createProjectDirectories).",
+      "razon": "Añadir un campo derivado al bus animaría a otros módulos a depender de él y perpetuaría el antipatrón. base_path ya cubre la necesidad real."
+    },
+    {
+      "id": "P5",
+      "regla": "Si un módulo necesita un identificador estable, usa project.id (UUID). Si necesita uno human-readable, usa project.name (presentational). Nunca un slug calculado localmente.",
+      "razon": "id es opaco y único. name es presentational. Ninguno requiere reglas de derivación que puedan divergir entre módulos."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "D1",
+      "decision": "project.activated es la vía CANÓNICA para que los módulos del subsistema reciban contexto del proyecto activo (incluye project_id + base_path + metadata).",
+      "alternativa_descartada": "Que cada módulo haga project.get.request en cada operación.",
+      "razon": "Genera latencia, acoplamiento síncrono a project-manager y un patrón outlier que el horizontal POC2 no detecta."
+    },
+    {
+      "id": "D2",
+      "decision": "base_path se persiste en la columna projects.base_path al crear el proyecto, calculado UNA vez en _createProjectDirectories (path.join(projectsBasePath, _slugify(name))).",
+      "alternativa_descartada": "Recalcularlo en cada lectura desde el name.",
+      "razon": "Inmutable tras la creación. Seguro frente a renames y a divergencias entre módulos."
+    },
+    {
+      "id": "D3",
+      "decision": "slug es estrictamente INTERNO a project-manager. Solo aparece en _createProjectDirectories y en UI handlers (handleList, handleUIState) que devuelven JSON al frontend.",
+      "alternativa_descartada": "Exponer slug en eventos del bus.",
+      "razon": "Reduce la superficie del contrato del bus. Si un consumidor necesita el slug, lo deriva del name con su propia copia de _slugify, asumiendo el riesgo."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "PROH1",
+      "patron": "_slugify(name) o equivalentes (name.toLowerCase().replace(...)) en cualquier módulo distinto de project-manager.",
+      "razon": "Duplica lógica que debe ser autoridad única. Si la regla de slug cambia en project-manager, los recalculadores quedan desincronizados."
+    },
+    {
+      "id": "PROH2",
+      "patron": "Cache de slug en estado local de módulo (this.projectSlugs, this.slugCache).",
+      "razon": "Cache de un valor derivado donde el sistema ya tiene una fuente autoritativa (base_path)."
+    },
+    {
+      "id": "PROH3",
+      "patron": "Construcción de paths con `@/projects/{slug}/...` o `${cwd}/projects/{slug}/...` en módulos que no son project-manager o filesystem.",
+      "razon": "Acopla módulos a la convención interna del root de proyectos. base_path absoluto desacopla."
+    },
+    {
+      "id": "PROH4",
+      "patron": "Añadir el campo slug a payloads de eventos del bus (project.get.response, project.list.response, project.activated, project.created).",
+      "razon": "Animaría a consumidores a depender del campo derivado. base_path ya cubre la necesidad real."
+    },
+    {
+      "id": "PROH5",
+      "patron": "Depender de project-manager respondiendo project.get.request durante operaciones de un proyecto activo.",
+      "razon": "Crea acoplamiento síncrono innecesario. project.activated entrega base_path al activar y eso debe bastar."
+    }
+  ],
+
+  "output_shape_resumen": "Contrato declarativo sin output mecánico. La conformidad se verifica grepeando los módulos contra los principios y prohibiciones.",
+
+  "reglas_de_extraccion": "No aplica: el contrato no extrae datos de los módulos; los normaliza.",
+
+  "derivaciones": [
+    {
+      "contrato": "companero-viaje.contract.json",
+      "relacion": "Refuerza la idea de multi-tenancy por proyecto definida en el documento maestro. Aquí se concreta cómo el path físico viaja entre módulos."
+    },
+    {
+      "contrato": "events.contract.json",
+      "relacion": "project.activated, project.get.response, project.list.response son eventos canónicos cuyo shape debe incluir base_path. Este contrato fija lo que NO debe incluir (slug) y lo que es obligatorio en project.activated (base_path explícito)."
+    },
+    {
+      "contrato": "module-rewrite.contract.json",
+      "relacion": "POC2 cubre la estructura del módulo (helpers, error codes, eventos canónicos). NO opina sobre cómo un módulo resuelve paths de proyecto. Este contrato cierra ese gap transversal sin contradecir POC2."
+    },
+    {
+      "contrato": "persistence.contract.json",
+      "relacion": "Cualquier módulo que persista archivos en disco usa base_path como prefijo. La autoridad del path la define este contrato."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "C1",
+      "regla": "Detectar módulos distintos de project-manager que llamen _slugify o tengan método con ese nombre.",
+      "como_detectar": "grep -rEn '_slugify|toLowerCase\\(\\).*replace' modules/ excluyendo modules/project-manager/. Reporta archivo y línea.",
+      "severidad": "warning"
+    },
+    {
+      "id": "C2",
+      "regla": "Detectar módulos con cache Map<project_id, slug> (this.projectSlugs, this.slugCache, this.slugs).",
+      "como_detectar": "grep -rEn 'projectSlugs|slugCache|this\\.slugs\\s*=' modules/ excluyendo project-manager/.",
+      "severidad": "warning"
+    },
+    {
+      "id": "C3",
+      "regla": "Módulos que persisten datos por proyecto (declaran tools de mutación o tabla SQL con project_id) deben suscribir a project.activated en su module.json.",
+      "como_detectar": "para cada module.json con tools .crear|.actualizar|.eliminar o esquema SQL con project_id, verificar evento 'project.activated' en subscribes.",
+      "severidad": "info"
+    },
+    {
+      "id": "C4",
+      "regla": "Los payloads publicados a project.get.response, project.list.response, project.activated, project.created NO deben incluir el campo slug.",
+      "como_detectar": "grep en los publishers de esos eventos buscando 'slug' como key del objeto. Reporta línea.",
+      "severidad": "error"
+    },
+    {
+      "id": "C5",
+      "regla": "Módulos no-project-manager no deben usar project.get.request para resolver el path de un proyecto activo en el camino caliente. Solo aceptable para proyectos no activos o consultas de metadata.",
+      "como_detectar": "grep -rn 'project.get.request' modules/ excluyendo project-manager/. Para cada hit, verificar si está dentro de un handler de operación frecuente.",
+      "severidad": "info"
+    }
+  ],
+
+  "salida_validador": "Pendiente. arquitectura/decisiones/_validators/project-identity.validate.js debe implementar C1-C5 con las severidades indicadas. Hasta que se implemente, la conformidad se verifica manualmente con los greps documentados en cada check.",
+
+  "convenciones_complementarias": {
+    "naming": "Eventos canónicos del dominio project: project.created, project.updated, project.deleted, project.activated, project.deactivated, project.state, project.get.request, project.get.response, project.list.request, project.list.response. Forma <domain>.<entity>.<verb> según naming.json.",
+    "glossary": "Términos canónicos: project (entidad raíz, identificada por UUID); project_id (UUID opaco); base_path (path absoluto al directorio físico del proyecto, fuente autoritativa); slug (derivado interno de project-manager, NO canónico en bus); name (presentational, mostrable al usuario)."
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "TP1",
+      "descripcion": "Migrar modules/recetas al patrón canónico definido en P1-P5. Cambios: (a) onProjectActivated debe cachear base_path en lugar de slug; (b) eliminar _slugForProject, projectSlugs (renombrar a basePaths), onProjectGetResponse, pendingProject; (c) reemplazar _pathFor(slug) por concatenación con base_path desde el cache local; (d) eliminar la dependencia de project.get.response en el camino caliente. Recetas ya tiene esqueleto de onProjectActivated (línea 152) pero recibe project.slug que llega undefined en el payload; tras esta migración deberá leer event.data.base_path.",
+      "impacto": "1 módulo afectado, ~30 líneas modificadas, sin cambios en API pública ni en eventos publicados por recetas. Requiere también que project-manager incluya base_path explícito en el payload de project.activated (verificar; ya debería estarlo según D1).",
+      "bloqueantes": [],
+      "prioridad": "media"
+    },
+    {
+      "id": "TP2",
+      "descripcion": "Implementar arquitectura/decisiones/_validators/project-identity.validate.js cubriendo C1-C5. Registrar en scripts/validate-all.js y npm script. Regenerar drift-baseline.json para incorporar el warning conocido de recetas (PROH1, PROH2) hasta cierre de TP1.",
+      "impacto": "1 archivo nuevo (validator), 2 archivos modificados (validate-all.js, drift-baseline.json), 1 entrada en package.json.",
+      "bloqueantes": [],
+      "prioridad": "baja"
+    },
+    {
+      "id": "TP3",
+      "descripcion": "Drift introducido y revertido durante el análisis: commit 3fbd651 (project-manager exponía slug en project.get/list.response, violando PROH4) y commit d03705a (recetas _toolDispatch retornable, generaba 13 warnings del validator tools por delegación). Ambos revertidos en la rama claude/analyze-system-HuWWA (commits 2f37639 y faecf29). Si reaparecieran, este contrato los identifica como prohibidos.",
+      "impacto": "0 archivos. Registro histórico.",
+      "bloqueantes": [],
+      "prioridad": "ninguna"
+    },
+    {
+      "id": "TP4",
+      "descripcion": "Auditar otros módulos del horizontal por aparición de los antipatrones PROH1-PROH3. Posibles candidatos: módulos pizzepos legacy no migrados al patrón cartadigital, facturas, escandallo. Resultado de la auditoría se añade aquí como TPs concretos por módulo.",
+      "impacto": "Auditoría manual. Sin cambios de código hasta detección.",
+      "bloqueantes": [],
+      "prioridad": "baja"
+    }
+  ]
+}

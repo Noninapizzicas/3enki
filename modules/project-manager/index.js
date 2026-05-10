@@ -661,7 +661,7 @@ class ProjectManagerModule {
     await this.eventBus.publish(EVENTS.PROJECT.GET_RESPONSE, {
       request_id,
       success: !!project,
-      project: project || null,
+      project: project ? { ...project, slug: this._slugify(project.name) } : null,
       error: project ? null : 'Project not found',
       timestamp: new Date().toISOString()
     });
@@ -669,7 +669,7 @@ class ProjectManagerModule {
 
   async onListProjectsRequest(event) {
     const { request_id } = event.data || event;
-    const projects = Array.from(this.projects.values());
+    const projects = Array.from(this.projects.values()).map(p => ({ ...p, slug: this._slugify(p.name) }));
     await this.eventBus.publish(EVENTS.PROJECT.LIST_RESPONSE, {
       request_id, success: true, projects, count: projects.length,
       active_project_ids: [...this.activeProjectIds],

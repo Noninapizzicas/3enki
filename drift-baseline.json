@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-11T12:26:57.028Z",
-  "total": 2380,
+  "generated_at": "2026-05-11T22:08:52.994Z",
+  "total": 2388,
   "by_validator": {
     "naming": 49,
     "glossary": 1,
@@ -13,7 +13,7 @@
     "chat-flow": 2,
     "agent-flow": 7,
     "llm-flow": 1,
-    "tools": 291,
+    "tools": 299,
     "agents-config": 94,
     "module-rewrite": 111,
     "frontend": 374,
@@ -27,8 +27,8 @@
     "scheduling": 1
   },
   "by_severity": {
-    "warning": 2145,
-    "info": 248,
+    "warning": 2149,
+    "info": 252,
     "error": 14
   },
   "signatures": [
@@ -2252,6 +2252,10 @@
     "tools|drift_tool_errores_conocidos_codigo_no_canonico|filesystem tool \"fs.write\" — codigo \"AUTHORIZATION_REQUIRED\" no esta en catalogo errors.json",
     "tools|drift_tool_errores_conocidos_codigo_no_canonico|filesystem tool \"fs.write\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
     "tools|drift_tool_errores_conocidos_codigo_no_canonico|filesystem tool \"fs.write\" — codigo \"VALIDATION_FAILED\" no esta en catalogo errors.json",
+    "tools|drift_tool_errores_conocidos_codigo_no_canonico|pizzepos__comandero tool \"comandero.agregar_item\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
+    "tools|drift_tool_errores_conocidos_codigo_no_canonico|pizzepos__comandero tool \"comandero.eliminar_item\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
+    "tools|drift_tool_errores_conocidos_codigo_no_canonico|pizzepos__comandero tool \"comandero.enviar_cocina\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
+    "tools|drift_tool_errores_conocidos_codigo_no_canonico|pizzepos__comandero tool \"comandero.obtener_pedido\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
     "tools|drift_tool_errores_conocidos_codigo_no_canonico|prompt-manager tool \"prompt.get\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
     "tools|drift_tool_errores_conocidos_codigo_no_canonico|prompt-manager tool \"prompt.get\" — codigo \"VALIDATION_FAILED\" no esta en catalogo errors.json",
     "tools|drift_tool_errores_conocidos_codigo_no_canonico|prompt-manager tool \"prompt.list\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
@@ -2372,6 +2376,10 @@
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__carta-scheduler tool \"carta-scheduler.listar_reglas\" en modules/pizzepos/carta-scheduler/index.js:236 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__carta-scheduler tool \"carta-scheduler.proximos_cambios\" en modules/pizzepos/carta-scheduler/index.js:295 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__carta-scheduler tool \"carta-scheduler.rechazar\" en modules/pizzepos/carta-scheduler/index.js:365 — algun return no parece shape canonico {status, data|error}",
+    "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__comandero tool \"comandero.agregar_item\" en modules/pizzepos/comandero/index.js:290 — algun return no parece shape canonico {status, data|error}",
+    "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__comandero tool \"comandero.eliminar_item\" en modules/pizzepos/comandero/index.js:383 — algun return no parece shape canonico {status, data|error}",
+    "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__comandero tool \"comandero.enviar_cocina\" en modules/pizzepos/comandero/index.js:520 — algun return no parece shape canonico {status, data|error}",
+    "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__comandero tool \"comandero.obtener_pedido\" en modules/pizzepos/comandero/index.js:271 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__menu-generator tool \"menu.generate\" en modules/pizzepos/menu-generator/index.js:110 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__tarifas tool \"tarifas.assign\" en modules/pizzepos/tarifas/index.js:274 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__tarifas tool \"tarifas.get\" en modules/pizzepos/tarifas/index.js:326 — algun return no parece shape canonico {status, data|error}",

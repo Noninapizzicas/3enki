@@ -53,7 +53,13 @@
         "event": "llm.complete.response",
         "handler": "onLlmCompleteResponse",
         "request_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.response.schema.json",
-        "description": "Response del LLM. Despacha al shape canonico (agent.execute.response/failed) o al legacy (invoke_agent.response) segun pending.shape."
+        "description": "Response exitosa del LLM (contrato llm-flow: par success/failure separados). Despacha a agent.execute.response (canonical) o invoke_agent.response con result (legacy) segun pending.shape."
+      },
+      {
+        "event": "llm.complete.failed",
+        "handler": "onLlmCompleteFailed",
+        "request_schema_ref": "arquitectura/decisiones/_schemas/llm-flow/llm.complete.failed.schema.json",
+        "description": "Response de error del LLM (contrato llm-flow: par success/failure separados). Despacha a agent.execute.failed (canonical) o invoke_agent.response con error (legacy) segun pending.shape."
       }
     ]
   },

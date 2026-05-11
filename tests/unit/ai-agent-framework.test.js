@@ -89,20 +89,24 @@ function instantiate(mocks, { agents, llmResult, llmError, mqttRequestImpl } = {
   mocks.eventBus.publish = async (event, payload) => {
     await originalPublish(event, payload);
     if (event === 'llm.complete.request') {
-      // Simular respuesta del LLM (success o error segun config del test)
+      // Simular respuesta del LLM. Contrato llm-flow: par success/failure
+      // separados, eventos distintos, sin flag mixto.
       setImmediate(() => {
-        const llmResp = llmError
-          ? { request_id: payload.request_id, success: false, error: llmError }
-          : {
-              request_id: payload.request_id,
-              success: true,
-              content: llmResult?.content ?? 'respuesta del agente',
-              tool_calls_executed: llmResult?.tool_calls_executed ?? [],
-              model: llmResult?.model ?? 'deepseek-chat',
-              provider: llmResult?.provider ?? 'deepseek',
-              usage: llmResult?.usage ?? { input_tokens: 10, output_tokens: 5, total_tokens: 15 }
-            };
-        m.onLlmCompleteResponse(llmResp);
+        if (llmError) {
+          m.onLlmCompleteFailed({
+            request_id: payload.request_id,
+            error: llmError
+          });
+        } else {
+          m.onLlmCompleteResponse({
+            request_id: payload.request_id,
+            content: llmResult?.content ?? 'respuesta del agente',
+            tool_calls_executed: llmResult?.tool_calls_executed ?? [],
+            model: llmResult?.model ?? 'deepseek-chat',
+            provider: llmResult?.provider ?? 'deepseek',
+            usage: llmResult?.usage ?? { input_tokens: 10, output_tokens: 5, total_tokens: 15 }
+          });
+        }
       });
     }
   };

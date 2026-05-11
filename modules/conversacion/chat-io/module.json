@@ -39,6 +39,11 @@
       "event": "project.activated",
       "handler": "onProjectActivated",
       "description": "Pre-inicializa schema en la DB del proyecto activado (no bloquea: best-effort)."
+    },
+    {
+      "event": "chat.assistant.saved",
+      "handler": "onChatAssistantSavedFromAgent",
+      "description": "Persiste tarjetas de agente (chat.assistant.saved publicado por agent-observer o ai-agent-framework) en la tabla messages. Ignora el self-echo (source.module_id === 'chat-io') que chat-io publica tras persistir desde ai.chat.response."
     }
   ],
   "ui_handlers": [

@@ -270,18 +270,17 @@
       "*-poc": "3 POCs exploratorios (ai-gateway-poc, cocina-poc, notas-poc)"
     },
     "estructura_poc2_cerrada_porcentaje": 100,
-    "paradigm_isolation_cerrado_porcentaje": 97,
+    "paradigm_isolation_cerrado_porcentaje": 100,
     "drift_de_paradigma_abierto": {
-      "descripcion": "Dos modulos violan la regla maestra de event-core 'ningun modulo llama directamente a otro' resolviendo otros modulos via moduleLoader.getModule() / moduleLoader.loadedModules.get() / moduleLoader.toolsRegistry.get() para invocar handlers o leer estado, en lugar de comunicarse por bus de eventos. La estructura POC2 estaba al 100% pero ese check no captura este axioma — se anyade en module-rewrite v1.1 como drift_modulo_acceso_directo_inter_modulo. Comandero cerro su violacion en 2026-05-11: ahora hidrata un cache local canal->carta_id via el evento tarifas.config.actualizada (snapshot inicial via tarifas.config.solicitada en onLoad).",
-      "violaciones_vivas": [
-        { "modulo": "ai-gateway",     "archivo": "modules/conversacion/ai-gateway/index.js", "linea": 311, "patron": "PATH 1: toolsRegistry.get(toolName).handler(args) directo" },
-        { "modulo": "staff-manager",  "archivo": "modules/staff-manager/index.js",            "linea": 465, "patron": "loadedModules.get('security-p2p').keyManager.getPublicKey() directo" }
-      ],
+      "descripcion": "CERO violaciones vivas. Las 3 violaciones identificadas en la auditoria 2026-05-08 estan cerradas. La regla maestra de event-core 'ningun modulo llama directamente a otro' se enforce mecanicamente via module-rewrite.validate.js (drift_modulo_acceso_directo_inter_modulo, severidad warning) Y tools.validate.js (drift_invocacion_directa_de_tool_fuera_del_framework, severidad ERROR — bloquea CI inmediatamente). El framework (core/modules/loader.js) auto-suscribe cada tool con handler al evento `<toolName>` en el bus de modo que la invocacion canonica esta SIEMPRE disponible sin que el modulo declare un subscribe manual.",
+      "violaciones_vivas": [],
       "violaciones_cerradas": [
-        { "modulo": "comandero", "fecha": "2026-05-11", "como": "Cache local hidratado por tarifas.config.actualizada; pub tarifas.config.solicitada en onLoad para snapshot inicial. La resolucion canal->carta_id ahora es 100% local, sin acceso al modulo tarifas." }
+        { "modulo": "staff-manager",  "fecha": "2026-05-08", "como": "Refactor a mqttRequest('security-p2p', 'get_public_key', ...) en lugar de loadedModules.get('security-p2p').keyManager.getPublicKey() directo. Commit 485ada3." },
+        { "modulo": "comandero",      "fecha": "2026-05-11", "como": "Cache local hidratado por tarifas.config.actualizada; pub tarifas.config.solicitada en onLoad para snapshot inicial. La resolucion canal->carta_id ahora es 100% local, sin acceso al modulo tarifas. Commit dc77c0d." },
+        { "modulo": "ai-gateway",     "fecha": "2026-05-11", "como": "Eliminacion del PATH 1 (toolsRegistry.get(name).handler directo). El loader auto-suscribe el handler al evento `<toolName>` en registerToolsForAI; ai-gateway invoca solo via bus publish/subscribe. tools.contract v1.1 canoniza la decision y nuevo cross-check del validator bloquea cualquier regresion futura." }
       ],
-      "enforcement": "module-rewrite.validate.js emite drift_modulo_acceso_directo_inter_modulo por cada violacion. Las 2 vivas estan en drift-baseline.json (congeladas). CI bloquea cualquier nueva.",
-      "pendiente": "Refactor de los 2 modulos restantes para emitir eventos en su lugar. No es bloqueante para la plataforma POC2."
+      "enforcement": "DOS validators independientes mantienen la disciplina: (1) module-rewrite.validate.js::drift_modulo_acceso_directo_inter_modulo flagea cualquier acceso a moduleLoader.getModule/loadedModules.get/toolsRegistry.get en codigo de modulos (warning); (2) tools.validate.js::drift_invocacion_directa_de_tool_fuera_del_framework flagea especificamente toolsRegistry.get(name).handler(...) y moduleLoader.executeTool(...) en codigo bajo modules/ (ERROR — bloquea CI). El framework (core/modules/loader.js) esta exento porque alli vive la primitiva canonica (_wireToolBusSubscription).",
+      "pendiente": "Ninguno. El sistema esta libre de violaciones del paradigma event-core."
     },
     "implicacion": "El sistema esta en un estado donde cualquier modulo 71 entra siguiendo el protocolo de este documento. La disciplina acumulada en los 26 contratos es heredada por el modulo nuevo sin friccion, INCLUYENDO la prohibicion de llamadas inter-modulo directas que ahora esta validada mecanicamente."
   }

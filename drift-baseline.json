@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-11T08:58:49.425Z",
-  "total": 2378,
+  "generated_at": "2026-05-11T09:25:10.434Z",
+  "total": 2377,
   "by_validator": {
     "naming": 49,
     "glossary": 1,
@@ -15,7 +15,7 @@
     "llm-flow": 1,
     "tools": 291,
     "agents-config": 94,
-    "module-rewrite": 112,
+    "module-rewrite": 111,
     "frontend": 374,
     "security": 1,
     "testing": 45,
@@ -27,7 +27,7 @@
     "scheduling": 1
   },
   "by_severity": {
-    "warning": 2143,
+    "warning": 2142,
     "info": 248,
     "error": 14
   },
@@ -1391,7 +1391,6 @@
     "module-loading|drift_dependency_referencia_inexistente|modules/pizzepos/menu-generator/module.json declara dependency \"pdfjs\" que no existe en modules/",
     "module-loading|drift_dependency_referencia_inexistente|modules/pizzepos/menu-generator/module.json declara dependency \"sharp\" que no existe en modules/",
     "module-loading|drift_dependency_referencia_inexistente|modules/text-editor/module.json declara dependency \"file-browser\" que no existe en modules/",
-    "module-rewrite|drift_modulo_acceso_directo_inter_modulo|conversacion__ai-gateway modules/conversacion/ai-gateway/index.js:311 — usa moduleLoader.toolsRegistry.get(...) para resolver/invocar otro modulo. Refactor: emitir evento canonico en vez de llamada directa.",
     "module-rewrite|drift_modulo_migrado_codes_fuera_catalogo|admin-panel — codes en source no presentes en errors.json: INTERNAL_ERROR",
     "module-rewrite|drift_modulo_migrado_codes_fuera_catalogo|bot-manager — codes en source no presentes en errors.json: INTERNAL_ERROR, DOWNLOAD_FAILED",
     "module-rewrite|drift_modulo_migrado_codes_fuera_catalogo|certificate-authority — codes en source no presentes en errors.json: INTERNAL_ERROR",

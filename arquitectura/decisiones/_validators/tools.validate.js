@@ -6,7 +6,7 @@
  *   node tools.validate.js                # valida los 2 JSON Schemas estructuralmente
  *   node tools.validate.js --check-system # adicional: cross-checks contra modulos del repo
  *
- * Cross-checks (13):
+ * Cross-checks (14):
  *   1. tools_schemas_compile_ok                            (error)   — los 2 schemas compilan AJV strict.
  *   2. drift_tool_name_sin_prefijo_de_modulo               (warning) — name fuera de patron <prefix>.<entity>.
  *   3. drift_tool_parameters_no_jsonschema_valido          (warning) — parameters no compila AJV.
@@ -20,6 +20,7 @@
  *  11. drift_tool_invoke_agent_declarada_en_module_json    (error)   — meta-tool del sistema declarada por modulo.
  *  12. drift_tool_declaration_no_cumple_schema             (warning) — entry de tools[] no valida contra declaration schema.
  *  13. drift_tool_handler_que_devuelve_valor_pelado        (info)    — handler con returns no canonicos.
+ *  14. drift_invocacion_directa_de_tool_fuera_del_framework (error) — toolsRegistry.handler(...) o moduleLoader.executeTool(...) fuera de core/ (v1.1).
  */
 
 'use strict';
@@ -305,6 +306,62 @@ function checkAll(findings) {
     const unique = [...new Set(slugs)];
     if (unique.length > 1) {
       findings.errors.push(`drift_dos_modulos_con_misma_tool_name: name "${name}" declarado por ${unique.length} modulos: ${unique.join(', ')}`);
+    }
+  }
+
+  // 14. drift_invocacion_directa_de_tool_fuera_del_framework (v1.1)
+  // Scan TODOS los *.js bajo modules/ buscando invocacion directa de tool handlers
+  // fuera del bus canonico. La unica home valida de estos patrones es
+  // core/modules/loader.js (framework). En modules/ es error.
+  scanDirectToolInvocation(findings);
+}
+
+function scanDirectToolInvocation(findings) {
+  // Recopila todos los *.js bajo modules/ (excluyendo _legacy, __tests__, node_modules).
+  const filesToScan = [];
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === '_legacy' || entry.name === '__tests__' ||
+            entry.name.startsWith('.')) continue;
+        walk(full);
+      } else if (entry.isFile() && entry.name.endsWith('.js')) {
+        filesToScan.push(full);
+      }
+    }
+  }
+  walk(MODULES_DIR);
+
+  // Patrones prohibidos. Cada match → drift error.
+  const PROHIBITED = [
+    {
+      label: 'toolsRegistry.get(...).handler(',
+      re: /\btoolsRegistry\s*\??\.\s*get\s*\([^)]*\)\s*\??\.\s*handler\s*\(/g
+    },
+    {
+      label: 'moduleLoader.executeTool(',
+      re: /\b_?moduleLoader\s*\??\.\s*executeTool\s*\(/g
+    }
+  ];
+
+  for (const file of filesToScan) {
+    let content;
+    try { content = fs.readFileSync(file, 'utf-8'); } catch (_) { continue; }
+    const rel = path.relative(REPO_ROOT, file);
+
+    for (const { label, re } of PROHIBITED) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(content)) !== null) {
+        const line = lineOfOffset(content, m.index);
+        findings.errors.push(
+          `drift_invocacion_directa_de_tool_fuera_del_framework: ${rel}:${line} — usa ${label}...) ` +
+          `para invocar tool fuera del bus canonico. Refactor: publicar evento <toolName> con {request_id, ...args} ` +
+          `y subscribir <toolName>.response correlacionado por request_id.`
+        );
+      }
     }
   }
 }

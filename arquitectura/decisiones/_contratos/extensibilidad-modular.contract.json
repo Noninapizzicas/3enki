@@ -262,7 +262,7 @@
   ],
 
   "estado_del_horizontal": {
-    "fecha_corte": "2026-05-08",
+    "fecha_corte": "2026-05-11",
     "modulos_totales_en_repo": 70,
     "modulos_vivos_al_canon_poc2": 66,
     "excluidos_del_canon": {
@@ -270,16 +270,18 @@
       "*-poc": "3 POCs exploratorios (ai-gateway-poc, cocina-poc, notas-poc)"
     },
     "estructura_poc2_cerrada_porcentaje": 100,
-    "paradigm_isolation_cerrado_porcentaje": 95,
+    "paradigm_isolation_cerrado_porcentaje": 97,
     "drift_de_paradigma_abierto": {
-      "descripcion": "Tres modulos violan la regla maestra de event-core 'ningun modulo llama directamente a otro' resolviendo otros modulos via moduleLoader.getModule() / moduleLoader.loadedModules.get() / moduleLoader.toolsRegistry.get() para invocar handlers o leer estado, en lugar de comunicarse por bus de eventos. La estructura POC2 estaba al 100% pero ese check no captura este axioma — se anyade en module-rewrite v1.1 como drift_modulo_acceso_directo_inter_modulo.",
+      "descripcion": "Dos modulos violan la regla maestra de event-core 'ningun modulo llama directamente a otro' resolviendo otros modulos via moduleLoader.getModule() / moduleLoader.loadedModules.get() / moduleLoader.toolsRegistry.get() para invocar handlers o leer estado, en lugar de comunicarse por bus de eventos. La estructura POC2 estaba al 100% pero ese check no captura este axioma — se anyade en module-rewrite v1.1 como drift_modulo_acceso_directo_inter_modulo. Comandero cerro su violacion en 2026-05-11: ahora hidrata un cache local canal->carta_id via el evento tarifas.config.actualizada (snapshot inicial via tarifas.config.solicitada en onLoad).",
       "violaciones_vivas": [
         { "modulo": "ai-gateway",     "archivo": "modules/conversacion/ai-gateway/index.js", "linea": 311, "patron": "PATH 1: toolsRegistry.get(toolName).handler(args) directo" },
-        { "modulo": "comandero",      "archivo": "modules/pizzepos/comandero/index.js",       "linea": 769, "patron": "moduleLoader.getModule('tarifas').resolverCarta(...) directo" },
         { "modulo": "staff-manager",  "archivo": "modules/staff-manager/index.js",            "linea": 465, "patron": "loadedModules.get('security-p2p').keyManager.getPublicKey() directo" }
       ],
-      "enforcement": "module-rewrite.validate.js emite drift_modulo_acceso_directo_inter_modulo por cada violacion. Las 3 vivas estan en drift-baseline.json (congeladas). CI bloquea cualquier nueva.",
-      "pendiente": "Refactor de los 3 modulos para emitir eventos en su lugar. No es bloqueante para la plataforma POC2."
+      "violaciones_cerradas": [
+        { "modulo": "comandero", "fecha": "2026-05-11", "como": "Cache local hidratado por tarifas.config.actualizada; pub tarifas.config.solicitada en onLoad para snapshot inicial. La resolucion canal->carta_id ahora es 100% local, sin acceso al modulo tarifas." }
+      ],
+      "enforcement": "module-rewrite.validate.js emite drift_modulo_acceso_directo_inter_modulo por cada violacion. Las 2 vivas estan en drift-baseline.json (congeladas). CI bloquea cualquier nueva.",
+      "pendiente": "Refactor de los 2 modulos restantes para emitir eventos en su lugar. No es bloqueante para la plataforma POC2."
     },
     "implicacion": "El sistema esta en un estado donde cualquier modulo 71 entra siguiendo el protocolo de este documento. La disciplina acumulada en los 26 contratos es heredada por el modulo nuevo sin friccion, INCLUYENDO la prohibicion de llamadas inter-modulo directas que ahora esta validada mecanicamente."
   }

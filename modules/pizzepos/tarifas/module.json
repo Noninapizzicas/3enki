@@ -1,7 +1,7 @@
 {
   "name": "tarifas",
-  "version": "3.0.0",
-  "description": "Asignacion carta+canal + registro de variantes pizzepos. Cada canal tiene su carta con precios finales escritos. Sin calculos en runtime, sin duplicacion (tarifas-creator y tarifas-sync agentes lo hacen). Comandero llama resolverCarta(canal) para obtener el carta_id efectivo.",
+  "version": "3.1.0",
+  "description": "Asignacion carta+canal + registro de variantes pizzepos. Cada canal tiene su carta con precios finales escritos. Sin calculos en runtime, sin duplicacion (tarifas-creator y tarifas-sync agentes lo hacen). Publica tarifas.config.actualizada con el snapshot completo del proyecto en cada cambio; suscribe tarifas.config.solicitada para que otros modulos hidraten su cache sin acoplamiento directo.",
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
@@ -9,12 +9,13 @@
     "publishes": [
       {
         "event": "tarifas.config.actualizada",
-        "description": "Config cambiada (asignacion canal, variante registrada, carta general). Lleva project_id top-level + correlation_id + timestamp."
+        "description": "Config cambiada o snapshot del estado actual. Lleva project_id top-level + correlation_id + timestamp + tipo (general|assign|variant_registered|snapshot) + config (estado completo: general, canales, variantes). Permite a otros modulos mantener cache local sin acceso directo."
       }
     ],
     "subscribes": [
-      { "event": "project.activated",   "handler": "onProjectActivated",   "description": "Cache base_path + carga config del proyecto." },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated", "description": "No-op multi-tenant: preserva config en memoria." }
+      { "event": "project.activated",        "handler": "onProjectActivated",   "description": "Cache base_path + carga config del proyecto." },
+      { "event": "project.deactivated",      "handler": "onProjectDeactivated", "description": "No-op multi-tenant: preserva config en memoria." },
+      { "event": "tarifas.config.solicitada", "handler": "onConfigSolicitada",   "description": "Otro modulo pide snapshot del estado actual. Re-publica tarifas.config.actualizada con tipo=snapshot para cada proyecto conocido (o uno especifico si trae project_id)." }
     ]
   },
   "ui_handlers": [

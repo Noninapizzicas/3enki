@@ -1,7 +1,7 @@
 {
   "name": "comandero",
-  "version": "3.0.0",
-  "description": "Buffer de pedido por cuenta del POS — items, variaciones, envio a cocina. Persistencia transitoria atomica.",
+  "version": "3.1.0",
+  "description": "Buffer de pedido por cuenta del POS — items, variaciones, envio a cocina. Persistencia transitoria atomica. Resolucion precio-por-canal via cache local hidratado por tarifas.config.actualizada (sin acceso directo a otros modulos).",
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
@@ -10,25 +10,28 @@
       "comandero.item_agregado",
       "comandero.item_eliminado",
       "comandero.item_actualizado",
-      "comandero.enviar_cocina"
+      "comandero.enviar_cocina",
+      "tarifas.config.solicitada"
     ]
   },
   "events": {
     "publishes": [
-      { "event": "comandero.item_agregado",    "description": "Item añadido al buffer (lleva project_id top-level + correlation_id + timestamp)." },
-      { "event": "comandero.item_eliminado",   "description": "Item eliminado del buffer (manual o por cantidad → 0)." },
-      { "event": "comandero.item_actualizado", "description": "Cantidad o notas de item actualizado (incluye diff_cantidad y diff_precio)." },
-      { "event": "comandero.enviar_cocina",    "description": "Pedido a cocina — pedidos crea pedido formal y cocina lo recibe." }
+      { "event": "comandero.item_agregado",     "description": "Item añadido al buffer (lleva project_id top-level + correlation_id + timestamp)." },
+      { "event": "comandero.item_eliminado",    "description": "Item eliminado del buffer (manual o por cantidad → 0)." },
+      { "event": "comandero.item_actualizado",  "description": "Cantidad o notas de item actualizado (incluye diff_cantidad y diff_precio)." },
+      { "event": "comandero.enviar_cocina",     "description": "Pedido a cocina — pedidos crea pedido formal y cocina lo recibe." },
+      { "event": "tarifas.config.solicitada",   "description": "Pide snapshot del estado de tarifas en onLoad para hidratar cache local sin acceso directo al modulo tarifas." }
     ],
     "subscribes": [
-      { "event": "cuenta.creada",        "handler": "onCuentaCreada",        "description": "Cachea ref_display canonico por cuenta." },
-      { "event": "cuenta.actualizada",   "handler": "onCuentaActualizada",   "description": "Actualiza ref_display cuando se renombra la cuenta." },
-      { "event": "caja.cerrada",         "handler": "onCajaCerrada",         "description": "Reset buffers al cerrar caja." },
-      { "event": "dia.iniciado",         "handler": "onDiaIniciado",         "description": "Reset buffers al iniciar nuevo dia." },
-      { "event": "catalogo.actualizado", "handler": "onCatalogoActualizado", "description": "Sincroniza cache general de productos (nombre, precio, categoria, estaciones)." },
-      { "event": "producto.creado",      "handler": "onProductoActualizado", "description": "Cachea producto nuevo." },
-      { "event": "producto.actualizado", "handler": "onProductoActualizado", "description": "Actualiza producto en cache." },
-      { "event": "carta.actualizada",    "handler": "onCartaActualizada",    "description": "Cachea productos por carta (para resolver precio por canal de venta)." }
+      { "event": "cuenta.creada",              "handler": "onCuentaCreada",              "description": "Cachea ref_display canonico por cuenta." },
+      { "event": "cuenta.actualizada",         "handler": "onCuentaActualizada",         "description": "Actualiza ref_display cuando se renombra la cuenta." },
+      { "event": "caja.cerrada",               "handler": "onCajaCerrada",               "description": "Reset buffers al cerrar caja." },
+      { "event": "dia.iniciado",               "handler": "onDiaIniciado",               "description": "Reset buffers al iniciar nuevo dia." },
+      { "event": "catalogo.actualizado",       "handler": "onCatalogoActualizado",       "description": "Sincroniza cache general de productos (nombre, precio, categoria, estaciones)." },
+      { "event": "producto.creado",            "handler": "onProductoActualizado",       "description": "Cachea producto nuevo." },
+      { "event": "producto.actualizado",       "handler": "onProductoActualizado",       "description": "Actualiza producto en cache." },
+      { "event": "carta.actualizada",          "handler": "onCartaActualizada",          "description": "Cachea productos por carta (para resolver precio por canal de venta)." },
+      { "event": "tarifas.config.actualizada", "handler": "onTarifasConfigActualizada", "description": "Hidrata cache local canal→carta_id (snapshot inicial + cambios). Full-replace por project_id." }
     ]
   },
   "ui_handlers": [

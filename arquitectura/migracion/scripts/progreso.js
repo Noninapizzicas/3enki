@@ -165,7 +165,8 @@ function generate() {
     lines.push(`- **Fuera del horizontal canónico**: ${fueraDelHorizontal.length} (${fueraDelHorizontal.map(m => '`' + m.slug + '`').join(', ')}) — POCs exploratorios, no se migran.`);
   }
   if (pendientes.length === 0 && horizontalTotal > 0) {
-    lines.push(`- **Estado**: 🎉 horizontal cerrado al 100%.`);
+    lines.push(`- **Estructura POC2**: 100% (helpers POC2 + tests por capas en cada módulo).`);
+    lines.push(`- **Drift de paradigma event-core**: 3 violaciones vivas conocidas (ver \`drift_modulo_acceso_directo_inter_modulo\` en \`drift-baseline.json\`). El POC2 cerró estructura, no aislamiento inter-módulo. Refactor pendiente para emitir eventos en lugar de \`moduleLoader.getModule()\` / \`loadedModules.get()\` / \`toolsRegistry.get()\` directo.`);
   }
   lines.push(`- **Drifts cerrados**: ${driftsCerrados} / ${totalDrifts} (${totalDrifts > 0 ? Math.round(driftsCerrados * 100 / totalDrifts) : 0}%)`);
   lines.push(`- **Drifts restantes en baseline**: ${driftsRestantes}`);

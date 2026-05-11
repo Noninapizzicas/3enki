@@ -4,9 +4,21 @@ Plataforma operativa para reescribir cada módulo del repo cumpliendo los 26 con
 
 ## Estado actual (2026-05-08)
 
-🎉 **Horizontal cerrado al 100%**: los 66 módulos del horizontal canónico están migrados al patrón POC2. Los 3 módulos restantes en `modules/` son POCs exploratorios (`conversacion/ai-gateway-poc`, `pizzepos/cocina-poc`, `notas-poc`) que están fuera del horizontal por diseño y no se migran. Ver `_outputs/PROGRESO.md` para la tabla completa.
+**Estructura POC2 cerrada al 100%**: los 66 módulos del horizontal canónico tienen los 5 helpers privados, shape canónico de errores, retornos canónicos y tests por capas. Los 3 restantes en `modules/` son POCs exploratorios (`conversacion/ai-gateway-poc`, `pizzepos/cocina-poc`, `notas-poc`) excluidos del horizontal por diseño.
 
-Esta plataforma queda activa para futuras migraciones (cualquier módulo que entre con shape legacy en el futuro se reescribiría con el mismo flujo `scaffold-rewrite.js` → `finish-rewrite.js`).
+⚠️ **Drift de paradigma abierto (3 violaciones vivas)**: el POC2 cerró la estructura pero NO valida la regla maestra de event-core "ningún módulo llama directamente a otro". Tres módulos resuelven otros módulos vía `moduleLoader.getModule()` / `moduleLoader.loadedModules.get()` / `moduleLoader.toolsRegistry.get()` para invocar handlers o leer estado directamente, en lugar de comunicarse por bus:
+
+| Módulo | Archivo | Patrón |
+|---|---|---|
+| `ai-gateway` | `modules/conversacion/ai-gateway/index.js:311` | "PATH 1": `toolsRegistry.get(toolName).handler(args)` directo |
+| `comandero` | `modules/pizzepos/comandero/index.js:769` | `moduleLoader.getModule('tarifas').resolverCarta(...)` directo |
+| `staff-manager` | `modules/staff-manager/index.js:465` | `loadedModules.get('security-p2p').keyManager.getPublicKey()` |
+
+La regla mecánica está formalizada como prohibición en `module-rewrite.contract.json` y enforced por `module-rewrite.validate.js` con el drift `drift_modulo_acceso_directo_inter_modulo`. Las 3 violaciones vivas están congeladas en `drift-baseline.json` — CI bloquea cualquier violación nueva. Pendiente: refactor para emitir eventos en su lugar (no es bloqueante para la plataforma POC2).
+
+Ver `_outputs/PROGRESO.md` para la tabla completa de los 66 módulos migrados.
+
+Esta plataforma queda activa para futuras migraciones (cualquier módulo que entre con shape legacy se reescribiría con el mismo flujo `scaffold-rewrite.js` → `finish-rewrite.js`).
 
 ## Qué hay aquí
 

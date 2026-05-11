@@ -224,7 +224,7 @@ node arquitectura/migracion/scripts/finish-rewrite.js <slug> --commit
 Detalle del workflow + reglas de cierre en `arquitectura/migracion/README.md`.
 Patrón canónico formalizado en `arquitectura/decisiones/_contratos/module-rewrite.contract.json`.
 
-**Estado del horizontal (2026-05-08)**: cerrado al 100%. Los 66 módulos del horizontal canónico están migrados al patrón POC2; los 3 restantes en `modules/` son POCs exploratorios (`*-poc`) excluidos del horizontal por diseño. Ver `arquitectura/migracion/_outputs/PROGRESO.md` (auto-generado) y la sección `estado_del_horizontal` de `extensibilidad-modular.contract.json` para el detalle.
+**Estado del horizontal (2026-05-08)**: estructura POC2 cerrada al 100% (66/66 módulos con helpers, error shape, retornos canónicos y tests por capas). PERO **3 módulos violan el paradigma event-core** llamando a otros módulos directamente vía `moduleLoader.getModule()` / `moduleLoader.loadedModules.get()` / `moduleLoader.toolsRegistry.get()` en lugar de comunicarse por bus de eventos: `ai-gateway` (PATH 1), `pizzepos/comandero` (resuelve `tarifas` directo), `staff-manager` (lee `keyManager` de `security-p2p` directo). Los 3 restantes en `modules/` son POCs exploratorios (`*-poc`) excluidos del horizontal por diseño. La regla mecánica que detecta estas violaciones la enforce `module-rewrite.validate.js` con el drift `drift_modulo_acceso_directo_inter_modulo`. Ver `arquitectura/migracion/_outputs/PROGRESO.md` y la sección `estado_del_horizontal` de `extensibilidad-modular.contract.json` para el detalle.
 
 ## Garantías obligatorias en payloads
 

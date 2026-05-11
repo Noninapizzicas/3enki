@@ -1,14 +1,21 @@
 /**
- * pizzepos/comandero v3.0.0 — Buffer de pedido por cuenta + envio a cocina (POC2 rewrite).
+ * pizzepos/comandero v3.1.0 — Buffer de pedido por cuenta + envio a cocina (POC2 rewrite).
  *
  * El camarero añade items al buffer, modifica cantidades/notas, y envia a cocina.
  * Mantiene caches de productos (catalogo + por carta) para resolver precio por canal.
  * Persiste buffers transitorios atomicamente (debounced 1s) para sobrevivir restart.
  *
+ * Aislamiento event-core: la resolucion canal→carta_id se mantiene como cache
+ * local hidratado por el evento tarifas.config.actualizada. En onLoad emite
+ * tarifas.config.solicitada para obtener el snapshot inicial. NO accede a tarifas
+ * directamente via moduleLoader (paradigma "emite evento, quien sabe hace").
+ *
  * Eventos del bus:
- *   subscribes (8): cuenta.{creada,actualizada}, caja.cerrada, dia.iniciado,
- *                   catalogo.actualizado, producto.{creado,actualizado}, carta.actualizada.
- *   publishes  (4): comandero.{item_agregado, item_eliminado, item_actualizado, enviar_cocina}.
+ *   subscribes (9): cuenta.{creada,actualizada}, caja.cerrada, dia.iniciado,
+ *                   catalogo.actualizado, producto.{creado,actualizado},
+ *                   carta.actualizada, tarifas.config.actualizada.
+ *   publishes  (5): comandero.{item_agregado, item_eliminado, item_actualizado, enviar_cocina},
+ *                   tarifas.config.solicitada.
  *
  * 7 ui_handlers (auto-wired desde module.json).
  */
@@ -25,7 +32,7 @@ const SAVE_DEBOUNCE_MS   = 1000;
 class ComanderoModule {
   constructor() {
     this.name    = 'comandero';
-    this.version = '3.0.0';
+    this.version = '3.1.0';
 
     this.eventBus  = null;
     this.logger    = null;
@@ -36,11 +43,12 @@ class ComanderoModule {
     this.refDisplayCache      = new Map();
     this.productosCache       = new Map();
     this.cartasProductosCache = new Map();
+    // Cache local de la config de tarifas hidratado via tarifas.config.actualizada.
+    // Map<project_id, { general:string|null, canales:{canal->carta_id} }>
+    this.tarifasConfigPorProject = new Map();
 
-    this._tarifasModule = null;
-    this._moduleLoader  = null;
-    this._bufferFile    = path.join('./data/current', 'comandero_buffers.json');
-    this._saveTimer     = null;
+    this._bufferFile = path.join('./data/current', 'comandero_buffers.json');
+    this._saveTimer  = null;
   }
 
   // ==========================================
@@ -55,10 +63,14 @@ class ComanderoModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    this._moduleLoader = core.moduleLoader || null;
-
     this._registerSchemas();
     await this._restaurarBuffers();
+
+    // Pide snapshot inicial a tarifas. La respuesta llega via
+    // tarifas.config.actualizada (tipo=snapshot) por cada proyecto conocido.
+    // Si tarifas aun no cargo, no hay respuesta inmediata: hidrata cuando
+    // tarifas active proyectos y emita su primer cambio.
+    await this._publicarEvento('tarifas.config.solicitada', {});
 
     this.logger.info('module.loaded', {
       module:           this.name,
@@ -77,6 +89,7 @@ class ComanderoModule {
     this.productosCache.clear();
     this.cartasProductosCache.clear();
     this.refDisplayCache.clear();
+    this.tarifasConfigPorProject.clear();
     this.logger.info('module.unloaded', { module: this.name });
   }
 
@@ -228,6 +241,27 @@ class ComanderoModule {
         estaciones: existing?.estaciones || null
       });
     }
+  }
+
+  /**
+   * Hidrata cache local de tarifas. Llega en dos sabores:
+   *   - tipo === 'snapshot' (respuesta a tarifas.config.solicitada): payload.config trae estado completo.
+   *   - tipo en {'general','assign','variant_registered'} (cambio real): tambien trae payload.config completo.
+   * En ambos casos hacemos full-replace del entry del project_id en el cache.
+   */
+  async onTarifasConfigActualizada(event) {
+    const data = this._unwrap(event);
+    const { project_id, config } = data;
+    if (!project_id || !config) return;
+    this.tarifasConfigPorProject.set(project_id, {
+      general: config.general ?? null,
+      canales: { ...(config.canales || {}) }
+    });
+    this.logger.info('comandero.tarifas.config.cached', {
+      project_id,
+      tipo: data.tipo || null,
+      canales_count: Object.keys(config.canales || {}).length
+    });
   }
 
   // ==========================================
@@ -756,35 +790,30 @@ class ComanderoModule {
   }
 
   /**
-   * Resuelve precio por canal con cascada:
-   *   1. Carta del canal (via tarifas.resolverCarta) → precio de esa carta.
-   *   2. Cache general de productos → precio base.
-   *   3. Precio pasado en la request → fallback.
+   * Resuelve precio por canal con cascada (sin acceso directo a otros modulos):
+   *   1. Cache local de tarifas (hidratado por tarifas.config.actualizada) →
+   *      mapea canal → carta_id; si no hay override, cae a general.
+   *   2. cartasProductosCache (hidratado por carta.actualizada) → precio del producto en esa carta.
+   *   3. precioBase pasado en la request o productosCache → fallback.
    */
+  _resolverCartaIdParaCanal(canal, projectId) {
+    const pid = projectId || DEFAULT_PROJECT_ID;
+    const cfg = this.tarifasConfigPorProject.get(pid);
+    if (!cfg) return null;
+    return cfg.canales?.[canal] || cfg.general || null;
+  }
+
   _resolverPrecioCanal(producto_id, precioBase, canal, projectId) {
     if (!canal || canal === 'mesa') return precioBase;
 
-    try {
-      if (!this._tarifasModule && this._moduleLoader) {
-        const mod = this._moduleLoader.getModule?.('tarifas');
-        this._tarifasModule = mod?.instance || null;
-      }
+    const cartaId = this._resolverCartaIdParaCanal(canal, projectId);
+    if (!cartaId) return precioBase;
 
-      if (this._tarifasModule?.resolverCarta) {
-        const cartaId = this._tarifasModule.resolverCarta(canal, projectId);
-        if (cartaId) {
-          const cartaCache = this.cartasProductosCache.get(cartaId);
-          if (cartaCache) {
-            const producto = cartaCache.get(producto_id);
-            if (producto) return producto.precio;
-          }
-        }
-      }
-    } catch (err) {
-      this.logger.debug('comandero.precio_canal.fallback', { error: err.message, canal });
-    }
+    const cartaCache = this.cartasProductosCache.get(cartaId);
+    if (!cartaCache) return precioBase;
 
-    return precioBase;
+    const producto = cartaCache.get(producto_id);
+    return producto?.precio !== undefined ? producto.precio : precioBase;
   }
 }
 

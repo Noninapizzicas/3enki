@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Validador del contrato transversal module-rewrite v1.0.0.
+ * Validador del contrato transversal module-rewrite v1.1.0.
  *
  * Uso:
  *   node module-rewrite.validate.js                # valida estructuralmente el contrato
@@ -8,7 +8,7 @@
  *
  * Lista de modulos migrados: detectada por presencia de tests/unit/<slug>.test.js.
  *
- * Cross-checks (13):
+ * Cross-checks (14):
  *   1. module_rewrite_contrato_existe                              (error)
  *   2. drift_modulo_migrado_sin_legacy_archivado                   (warning)
  *   3. drift_modulo_migrado_sin_5_helpers_poc2                     (warning)
@@ -22,6 +22,7 @@
  *  11. drift_horizontal_progreso_md_obsoleto                       (info)
  *  12. drift_modulo_migrado_sin_eventos_canonicos_preservados      (error)
  *  13. drift_modulo_migrado_drift_count_no_baja                    (warning)
+ *  14. drift_modulo_acceso_directo_inter_modulo                    (warning)  [v1.1]
  */
 
 'use strict';
@@ -211,6 +212,54 @@ function checkTestsAislamiento(slug, testFile, findings) {
   }
 }
 
+// Firma del drift de paradigma: los 3 patrones prohibidos (tolerante a
+// optional chaining `?.` y prefijo `_` en el field).
+// Legitimo y no detectado: toolsRegistry.set() (registracion propia),
+// getToolsForAI() (listado read-only), iteracion read-only de loadedModules.
+const PARADIGM_FORBIDDEN_PATTERNS = [
+  { label: 'moduleLoader.loadedModules.get', re: /\b_?moduleLoader\s*\??\.\s*loadedModules\s*\??\.\s*get\s*(\?\.)?\s*\(/ },
+  { label: 'moduleLoader.getModule',         re: /\b_?moduleLoader\s*\??\.\s*getModule\s*(\?\.)?\s*\(/ },
+  { label: 'moduleLoader.toolsRegistry.get', re: /\b_?moduleLoader\s*\??\.\s*toolsRegistry\s*\??\.\s*get\s*(\?\.)?\s*\(/ }
+];
+
+function walkJsFiles(dir, acc = []) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return acc; }
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      if (e.name === 'tests' || e.name === '_legacy' || e.name === 'node_modules' || e.name.startsWith('.')) continue;
+      walkJsFiles(full, acc);
+    } else if (e.isFile() && e.name.endsWith('.js')) {
+      acc.push(full);
+    }
+  }
+  return acc;
+}
+
+function checkParadigmIsolation(slug, moduleDir, findings) {
+  const files = walkJsFiles(moduleDir);
+  for (const f of files) {
+    let content;
+    try { content = fs.readFileSync(f, 'utf-8'); } catch (_) { continue; }
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Skip comentarios de linea / JSDoc.
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+      for (const { label, re } of PARADIGM_FORBIDDEN_PATTERNS) {
+        if (!re.test(line)) continue;
+        const relFile = path.relative(REPO_ROOT, f);
+        findings.warnings.push(
+          `drift_modulo_acceso_directo_inter_modulo: ${slug} ${relFile}:${i + 1} — usa ${label}(...) para resolver/invocar otro modulo. Refactor: emitir evento canonico en vez de llamada directa.`
+        );
+        break;
+      }
+    }
+  }
+}
+
 function checkDescomposicionSinNota(slug, moduleDir, findings) {
   // Si LOC del legacy >> LOC del rewrite (>50% reduccion), debe existir nota
   const indexPath = path.join(moduleDir, 'index.js');
@@ -289,6 +338,7 @@ function main() {
       checkErrorStringSuelto(slug, moduleDir, findings);
       checkTestsAislamiento(slug, testFile, findings);
       checkDescomposicionSinNota(slug, moduleDir, findings);
+      checkParadigmIsolation(slug, moduleDir, findings);
     }
 
     reportFindings(findings);

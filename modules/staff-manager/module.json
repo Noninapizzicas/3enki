@@ -1,6 +1,6 @@
 {
   "name": "staff-manager",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Control de personal con tarjetas NFC NTAG215 — jornadas (tap_in/tap_out con auto_timeout y manager_close) y onboarding de tablets via core-tag.",
   "author": "Event Core Team",
   "language": "en",
@@ -15,12 +15,15 @@
   },
   "events": {
     "publishes": [
-      { "event": "staff.session.tap_in",        "description": "Empleado inicia jornada (tap NFC entrada). Lleva project_id top-level + correlation_id + timestamp." },
-      { "event": "staff.session.tap_out",       "description": "Empleado finaliza jornada (tap NFC salida)." },
-      { "event": "staff.session.auto_timeout",  "description": "Jornada cerrada automaticamente por superar maxShiftHours sin tap_out." },
-      { "event": "staff.session.manager_close", "description": "Jornada cerrada manualmente por el manager via API." }
+      { "event": "staff.session.tap_in",         "description": "Empleado inicia jornada (tap NFC entrada). Lleva project_id top-level + correlation_id + timestamp." },
+      { "event": "staff.session.tap_out",        "description": "Empleado finaliza jornada (tap NFC salida)." },
+      { "event": "staff.session.auto_timeout",   "description": "Jornada cerrada automaticamente por superar maxShiftHours sin tap_out." },
+      { "event": "staff.session.manager_close",  "description": "Jornada cerrada manualmente por el manager via API." },
+      { "event": "security.public-key.request",  "description": "Pide a security-p2p la clave publica del core via bus (reemplaza el acceso directo a moduleLoader.loadedModules)." }
     ],
-    "subscribes": []
+    "subscribes": [
+      { "event": "security.public-key.response", "handler": "onPublicKeyResponse", "description": "Recibe la public key del core en respuesta al request publicado durante handleNfcCoreTag." }
+    ]
   },
   "ui_handlers": [
     { "domain": "staff-manager", "action": "status",                "handler": "handleStatus",            "type": "system_panel", "zone": "lateral_derecha" },

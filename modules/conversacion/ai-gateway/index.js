@@ -302,33 +302,18 @@ class AiGatewayModule {
       _chat_context:   ctx.context          ?? null
     };
 
-    // PATH 1 — invocación directa del handler si está registrado en toolsRegistry.
-    // Los módulos que declaran tools con handler (todos los que usan
-    // moduleLoader.registerToolsForAI) tienen el handler bindeado a su instance.
-    // Llamarlo directamente evita la dependencia de que el módulo haya declarado
-    // también un subscribe al evento <toolName>. Esto desbloquea menu-generator,
-    // carta-manager, etc. que tienen handler pero no subscribe explícito.
-    const tool = this.moduleLoader?.toolsRegistry?.get(toolName);
-    if (tool?.handler && typeof tool.handler === 'function') {
-      try {
-        const result = await tool.handler(enrichedArgs);
-        // Convención: si el handler devuelve { error } o { status: 4xx+, error }, propagamos como error.
-        if (result && typeof result === 'object') {
-          if (result.error && (result.status == null || result.status >= 400)) {
-            throw new Error(result.error);
-          }
-          // Si devuelve { status, data } estilo HTTP, devolvemos data; si no, el objeto entero.
-          if ('status' in result && 'data' in result && result.status >= 200 && result.status < 400) {
-            return result.data;
-          }
-        }
-        return result;
-      } catch (err) {
-        throw err;
-      }
-    }
-
-    // PATH 2 — fallback por evento (para tools que dependen estrictamente del bus).
+    // Invocacion canonica por bus (unico path permitido).
+    //
+    // El loader auto-suscribe `<toolName>` cuando registra una tool con handler
+    // (ver core/modules/loader.js::_wireToolBusSubscription). Para tools que
+    // viven puramente en el bus (sin handler en su modulo, ej. invoke_agent
+    // registrada por ai-agent-framework via su propio subscribe), el flujo es
+    // el mismo: alguien escucha `<toolName>`, publica `<toolName>.response`
+    // con `{request_id, result|error}`.
+    //
+    // Ver tools.contract.json:
+    //   - decisiones_arquitectonicas.tool_invocacion_canonica_por_bus
+    //   - prohibido.tool_invocacion_directa_via_toolsRegistry_handler
     const request_id = crypto.randomUUID();
     const timeoutMs = toolName === 'invoke_agent' ? 150000 : (this.config.tool_timeout_ms || 15000);
     return new Promise((resolve, reject) => {
@@ -338,12 +323,11 @@ class AiGatewayModule {
         reject(new Error(`tool timeout: ${toolName}`));
       }, timeoutMs);
       unsub = this.eventBus.subscribe(`${toolName}.response`, (event) => {
-        const data = event.data || event;
-        if (data.request_id !== request_id) return;
+        const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+        if (!data || data.request_id !== request_id) return;
         clearTimeout(timeout);
         if (unsub) unsub();
         if (data.error) {
-          // El error puede venir como string (legacy) o como { code, message } (canonico).
           const msg = (typeof data.error === 'object' && data.error !== null) ? data.error.message : data.error;
           reject(new Error(msg));
         } else resolve(data.result);

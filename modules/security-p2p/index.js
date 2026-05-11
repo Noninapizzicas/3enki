@@ -319,6 +319,39 @@ class SecurityP2PModule {
     }
   }
 
+  // Handler del par request/response del bus. Reemplaza el acceso directo
+  // moduleLoader.loadedModules.get('security-p2p').keyManager.getPublicKey()
+  // que cualquier modulo solia hacer para obtener la clave publica del core.
+  async onPublicKeyRequest(event) {
+    const source = event?.data || event || {};
+    const { request_id, correlation_id } = source;
+    try {
+      const public_key  = this.keyManager?.getPublicKey?.() || null;
+      const fingerprint = this.keyManager?.getFingerprint?.() || null;
+      await this._publicarEvento('security.public-key.response', {
+        request_id,
+        correlation_id,
+        public_key,
+        fingerprint,
+        has_keys: !!public_key
+      }, source);
+    } catch (err) {
+      this.logger?.error?.('security-p2p.public_key_request.failed', {
+        request_id,
+        error_message: err?.message || String(err)
+      });
+      this.metrics?.increment?.('security-p2p.errors', { code: 'INTERNAL_ERROR', kind: 'public_key_request' });
+      await this._publicarEvento('security.public-key.response', {
+        request_id,
+        correlation_id,
+        public_key: null,
+        fingerprint: null,
+        has_keys: false,
+        error: { code: 'INTERNAL_ERROR', message: err?.message || 'Error obteniendo clave publica' }
+      }, source);
+    }
+  }
+
   async handleTrustPeer(input) {
     try {
       const body = input?.body || input || {};

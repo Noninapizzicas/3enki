@@ -109,7 +109,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'comandero');
-    assert.strictEqual(m.version, '3.0.0');
+    assert.strictEqual(m.version, '3.1.0');
     assert.strictEqual(m.pedidos.size, 0);
     assert.strictEqual(m.productosCache.size, 0);
     await m.onUnload();
@@ -120,10 +120,12 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     m.pedidos.set('c1', { items: [], notas: '', total: 0 });
     m.productosCache.set('p1', { precio: 10 });
+    m.tarifasConfigPorProject.set('proj-x', { general: 'g', canales: { glovo: 'cg' } });
     m._saveTimer = setTimeout(() => {}, 60000);
     await m.onUnload();
     assert.strictEqual(m.pedidos.size, 0);
     assert.strictEqual(m.productosCache.size, 0);
+    assert.strictEqual(m.tarifasConfigPorProject.size, 0);
   });
 
   // ==========================================
@@ -194,6 +196,63 @@ function publishedOf(mocks, name) {
     const carta = m.cartasProductosCache.get('carta-glovo');
     assert.ok(carta);
     assert.strictEqual(carta.get('p1').precio, 13);
+    await m.onUnload();
+  });
+
+  await testAsync('onTarifasConfigActualizada hidrata cache local por project_id (snapshot)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.onTarifasConfigActualizada({ data: {
+      project_id: 'proj-X',
+      tipo: 'snapshot',
+      config: {
+        general: 'carta-base',
+        canales: { glovo: 'carta-glovo', llevadoo: 'carta-delivery' },
+        variantes: []
+      }
+    }});
+    const cached = m.tarifasConfigPorProject.get('proj-X');
+    assert.ok(cached);
+    assert.strictEqual(cached.general, 'carta-base');
+    assert.strictEqual(cached.canales.glovo, 'carta-glovo');
+    assert.strictEqual(cached.canales.llevadoo, 'carta-delivery');
+    await m.onUnload();
+  });
+
+  await testAsync('onTarifasConfigActualizada con cambio posterior hace full-replace', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.tarifasConfigPorProject.set('proj-X', {
+      general: 'old',
+      canales: { glovo: 'old-glovo', llevadoo: 'old-llev' }
+    });
+    await m.onTarifasConfigActualizada({ data: {
+      project_id: 'proj-X',
+      tipo: 'assign',
+      config: { general: 'new', canales: { glovo: 'new-glovo' }, variantes: [] }
+    }});
+    const cached = m.tarifasConfigPorProject.get('proj-X');
+    assert.strictEqual(cached.general, 'new');
+    assert.deepStrictEqual(cached.canales, { glovo: 'new-glovo' }, 'full-replace: llevadoo eliminado');
+    await m.onUnload();
+  });
+
+  await testAsync('onTarifasConfigActualizada sin project_id o sin config es no-op', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await m.onTarifasConfigActualizada({ data: { tipo: 'snapshot' }});
+    await m.onTarifasConfigActualizada({ data: { project_id: 'p1' }});
+    assert.strictEqual(m.tarifasConfigPorProject.size, 0);
+    await m.onUnload();
+  });
+
+  await testAsync('onLoad publica tarifas.config.solicitada para hidratar el cache', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const evs = publishedOf(mocks, 'tarifas.config.solicitada');
+    assert.strictEqual(evs.length, 1, 'debe pedir snapshot al cargar');
+    assert.ok(evs[0].correlation_id, 'lleva correlation_id');
+    assert.ok(evs[0].timestamp, 'lleva timestamp');
     await m.onUnload();
   });
 
@@ -378,16 +437,44 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('_resolverPrecioCanal usa carta del canal cuando existe', async () => {
+  await testAsync('_resolverPrecioCanal usa cache local de tarifas (sin acceso directo al modulo)', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    // Simular tarifas module + carta
-    m._tarifasModule = { resolverCarta: (canal) => canal === 'glovo' ? 'carta-glovo' : null };
+    // Hidratamos el cache local como lo haria el evento tarifas.config.actualizada
+    m.tarifasConfigPorProject.set('default', {
+      general: null,
+      canales: { glovo: 'carta-glovo' }
+    });
     m.cartasProductosCache.set('carta-glovo', new Map([['p1', { precio: 13 }]]));
 
     assert.strictEqual(m._resolverPrecioCanal('p1', 10, 'mesa'), 10, 'mesa usa precio base');
     assert.strictEqual(m._resolverPrecioCanal('p1', 10, 'glovo'), 13, 'glovo usa carta del canal');
-    assert.strictEqual(m._resolverPrecioCanal('p999', 10, 'glovo'), 10, 'fallback a base si no en carta');
+    assert.strictEqual(m._resolverPrecioCanal('p999', 10, 'glovo'), 10, 'fallback a base si producto no en carta');
+    assert.strictEqual(m._resolverPrecioCanal('p1', 10, 'whatsapp'), 10, 'canal sin override + sin general → base');
+    await m.onUnload();
+  });
+
+  await testAsync('_resolverPrecioCanal cae a general cuando canal sin override', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.tarifasConfigPorProject.set('default', {
+      general: 'carta-base',
+      canales: { glovo: 'carta-glovo' }
+    });
+    m.cartasProductosCache.set('carta-base',  new Map([['p1', { precio: 11 }]]));
+    m.cartasProductosCache.set('carta-glovo', new Map([['p1', { precio: 13 }]]));
+
+    assert.strictEqual(m._resolverPrecioCanal('p1', 10, 'glovo'),    13, 'override de canal');
+    assert.strictEqual(m._resolverPrecioCanal('p1', 10, 'whatsapp'), 11, 'sin override usa general');
+    await m.onUnload();
+  });
+
+  await testAsync('_resolverPrecioCanal sin cache de tarifas devuelve precio base (degrada gracioso)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.cartasProductosCache.set('carta-glovo', new Map([['p1', { precio: 13 }]]));
+    // tarifasConfigPorProject sigue vacio
+    assert.strictEqual(m._resolverPrecioCanal('p1', 10, 'glovo'), 10);
     await m.onUnload();
   });
 

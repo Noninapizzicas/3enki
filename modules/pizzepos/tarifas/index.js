@@ -19,7 +19,7 @@ const CANALES_VALIDOS = ['mesa', 'llevar', 'telefono', 'whatsapp', 'glovo', 'lle
 class TarifasModule {
   constructor() {
     this.name = 'tarifas';
-    this.version = '3.0.0';
+    this.version = '3.1.0';
     this.eventBus = null;
     this.logger = null;
     this.metrics = null;
@@ -128,6 +128,44 @@ class TarifasModule {
     // Multi-tenant: keep config en memoria
   }
 
+  /**
+   * Otro modulo (ej. comandero) pide snapshot del estado actual para hidratar
+   * su cache local. Re-publicamos tarifas.config.actualizada con tipo=snapshot
+   * para cada proyecto conocido. Si event.project_id viene seteado, solo ese.
+   */
+  async onConfigSolicitada(event) {
+    const source = this._unwrap(event);
+    const requestedProjectId = source?.project_id || null;
+    const projectIds = requestedProjectId
+      ? [requestedProjectId]
+      : Array.from(this.configPerProject.keys());
+
+    for (const pid of projectIds) {
+      await this._publicarSnapshot(pid, source);
+    }
+  }
+
+  _unwrap(event) {
+    return event?.data || event?.payload || event || {};
+  }
+
+  _snapshotConfig(projectId) {
+    const c = this.getConfig(projectId);
+    return {
+      general:   c.general ?? null,
+      canales:   { ...(c.canales || {}) },
+      variantes: Array.isArray(c.variantes) ? c.variantes.slice() : []
+    };
+  }
+
+  async _publicarSnapshot(projectId, sourcePayload) {
+    return this._publicarEvento('tarifas.config.actualizada', {
+      project_id: projectId,
+      tipo:       'snapshot',
+      config:     this._snapshotConfig(projectId)
+    }, sourcePayload);
+  }
+
   // ==========================================
   // Persistence
   // ==========================================
@@ -223,7 +261,8 @@ class TarifasModule {
       await this.saveConfig(pid);
 
       await this._publicarEvento('tarifas.config.actualizada', {
-        project_id: pid, tipo: 'general', carta_id
+        project_id: pid, tipo: 'general', carta_id,
+        config: this._snapshotConfig(pid)
       });
 
       return { status: 200, data: { general: carta_id, message: `Carta general establecida: ${carta_id}` } };
@@ -263,7 +302,8 @@ class TarifasModule {
       await this.saveConfig(pid);
 
       await this._publicarEvento('tarifas.config.actualizada', {
-        project_id: pid, tipo: 'assign', canal, carta_id: carta_id || config.general
+        project_id: pid, tipo: 'assign', canal, carta_id: carta_id || config.general,
+        config: this._snapshotConfig(pid)
       });
 
       this.metrics?.increment?.('tarifas.assign.updated');
@@ -350,7 +390,8 @@ class TarifasModule {
       await this.saveConfig(pid);
 
       await this._publicarEvento('tarifas.config.actualizada', {
-        project_id: pid, tipo: 'variant_registered', carta_id, canales
+        project_id: pid, tipo: 'variant_registered', carta_id, canales,
+        config: this._snapshotConfig(pid)
       });
 
       this.metrics?.increment?.('tarifas.variant.registered');

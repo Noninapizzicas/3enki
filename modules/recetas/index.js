@@ -242,8 +242,15 @@ class RecetasModule {
     const p = this.pendingFs.get(request_id);
     if (!p) return;
     clearTimeout(p.timer); this.pendingFs.delete(request_id);
-    if (status === 404) return p.resolve(null);
-    if (error || status >= 400) return p.reject(new Error(error || `fs.read status ${status}`));
+    // filesystem moderno usa { error: { code, message, details } } sin status numerico.
+    // RESOURCE_NOT_FOUND equivale a 404: archivo no existe → resolvemos null.
+    if (status === 404 || error?.code === 'RESOURCE_NOT_FOUND') return p.resolve(null);
+    if (error || status >= 400) {
+      const msg = typeof error === 'object' && error !== null
+        ? (error.message || JSON.stringify(error))
+        : (error || `fs.read status ${status}`);
+      return p.reject(new Error(msg));
+    }
     p.resolve(content);
   }
 
@@ -252,7 +259,12 @@ class RecetasModule {
     const p = this.pendingFs.get(request_id);
     if (!p) return;
     clearTimeout(p.timer); this.pendingFs.delete(request_id);
-    if (error || status >= 400) return p.reject(new Error(error || `fs.write status ${status}`));
+    if (error || status >= 400) {
+      const msg = typeof error === 'object' && error !== null
+        ? (error.message || JSON.stringify(error))
+        : (error || `fs.write status ${status}`);
+      return p.reject(new Error(msg));
+    }
     p.resolve(true);
   }
 

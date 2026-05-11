@@ -45,9 +45,9 @@ async function instantiateWithStore(mocks) {
   const m = new RecetasModule();
   await m.onLoad({ logger: mocks.logger, metrics: mocks.metrics, eventBus: mocks.eventBus, moduleConfig: {} });
 
-  m._slugForProject = async (pid) => {
+  m._basePathForProject = async (pid) => {
     if (!pid) { const e = new Error('proyecto_id requerido'); e._code = 'INVALID_INPUT'; throw e; }
-    return `slug-${pid}`;
+    return `/tmp/recetas-test/${pid}`;
   };
   m._loadStore = async (slug) => {
     const s = stores.get(slug);
@@ -103,7 +103,7 @@ function publishedOf(mocks, name) {
     assert.ok(m.pendingFs instanceof Map && m.pendingFs.size === 0);
     assert.ok(m.pendingProject instanceof Map && m.pendingProject.size === 0);
     assert.ok(m.writeQueues instanceof Map && m.writeQueues.size === 0);
-    assert.ok(m.projectSlugs instanceof Map && m.projectSlugs.size === 0);
+    assert.ok(m.projectBasePaths instanceof Map && m.projectBasePaths.size === 0);
     assert.strictEqual(m.logger, mocks.logger);
     assert.strictEqual(m.metrics, mocks.metrics);
     await m.onUnload();
@@ -115,13 +115,13 @@ function publishedOf(mocks, name) {
 
     m.pendingFs.set('leak-1', { resolve: () => {}, reject: () => {}, timer: setTimeout(() => {}, 60000) });
     m.pendingProject.set('leak-2', { resolve: () => {}, reject: () => {}, timer: setTimeout(() => {}, 60000) });
-    m.projectSlugs.set('pid', 'slug');
+    m.projectBasePaths.set('pid', 'slug');
 
     await m.onUnload();
     assert.strictEqual(m.pendingFs.size, 0);
     assert.strictEqual(m.pendingProject.size, 0);
     assert.strictEqual(m.writeQueues.size, 0);
-    assert.strictEqual(m.projectSlugs.size, 0);
+    assert.strictEqual(m.projectBasePaths.size, 0);
   });
 
   // ==========================================

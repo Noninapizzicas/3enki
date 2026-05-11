@@ -405,8 +405,10 @@ class AiGatewayModule {
       }
       allToolResults.push(...toolResults);
 
-      // Añadir el assistant turn con tool_calls + los tool results
-      workingMessages.push({ role: 'assistant', content: result.content || null, tool_calls: result._raw_tool_calls || result.tool_calls });
+      // Añadir el assistant turn con tool_calls + los tool results.
+      // content: '' (no null) — DeepSeek/OpenAI requieren el campo presente
+      // como string aunque sea vacío cuando el assistant solo hace tool_calls.
+      workingMessages.push({ role: 'assistant', content: result.content || '', tool_calls: result._raw_tool_calls || result.tool_calls });
       const toolMessages = provider.formatToolResults?.(toolResults) || toolResults.map(tr => ({
         role: 'tool',
         tool_call_id: tr.tool_call_id,
@@ -556,6 +558,8 @@ class AiGatewayModule {
       code = 'UPSTREAM_UNREACHABLE';
     } else if (/invalid response|malformed|parse|unexpected token/.test(lower)) {
       code = 'UPSTREAM_INVALID_RESPONSE';
+    } else if (/context.{0,10}(length|window|too long|too large|exceed)|prompt.{0,5}(too long|too large)|maximum.{0,10}context|too many tokens|context_length_exceeded|413/i.test(lower)) {
+      code = 'UPSTREAM_PAYLOAD_TOO_LARGE';
     }
 
     return { code, message: raw, details: {} };

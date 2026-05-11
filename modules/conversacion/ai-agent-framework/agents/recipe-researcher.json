@@ -1,0 +1,25 @@
+{
+  "id": "recipe-researcher",
+  "name": "recipe-researcher",
+  "description": "Recipe research specialist. Given a recipe name or concept, checks the project DB first via recetas.buscar; if not found, proposes 3 structured variants the user can compare and pick from, and saves the chosen one with recetas.crear after explicit user confirmation. Returns compact JSON to the calling LLM, never raw HTML or web extracts.",
+  "version": "1.0.0",
+  "enabled": true,
+  "scope": ["recetas"],
+  "prompt_file": "prompts/recipe-researcher-system.md",
+  "tools": [
+    "recetas.buscar",
+    "recetas.investigar_receta",
+    "recetas.crear"
+  ],
+  "provider": "deepseek",
+  "temperature": 0.4,
+  "max_tokens": 4000,
+  "timeout_ms": 120000,
+  "max_retries": 2,
+  "context_enabled": false,
+  "metadata": {
+    "type": "domain-agent",
+    "domain": "recetas",
+    "tags": ["recipes", "research", "compact-output"]
+  }
+}

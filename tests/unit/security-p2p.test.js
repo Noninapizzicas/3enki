@@ -414,6 +414,39 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('onPublicKeyRequest publica security.public-key.response con public_key + has_keys propagando request_id', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    mocks.published.length = 0;
+    await m.onPublicKeyRequest({ request_id: 'req-1', correlation_id: 'cid-1' });
+    const evs = mocks.published.filter(([n]) => n === 'security.public-key.response');
+    assert.strictEqual(evs.length, 1);
+    const payload = evs[0][1];
+    assert.strictEqual(payload.request_id, 'req-1');
+    assert.strictEqual(payload.correlation_id, 'cid-1');
+    assert.ok(payload.public_key.includes('PUBLIC KEY'));
+    assert.strictEqual(payload.has_keys, true);
+    assert.ok(payload.fingerprint);
+    assert.ok(payload.timestamp);
+    await m.onUnload();
+  });
+
+  await testAsync('onPublicKeyRequest captura errores del keyManager y publica response con error canonico', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.keyManager.getPublicKey = () => { throw new Error('crypto broken'); };
+    mocks.published.length = 0;
+    await m.onPublicKeyRequest({ request_id: 'req-2' });
+    const evs = mocks.published.filter(([n]) => n === 'security.public-key.response');
+    assert.strictEqual(evs.length, 1);
+    const payload = evs[0][1];
+    assert.strictEqual(payload.request_id, 'req-2');
+    assert.strictEqual(payload.public_key, null);
+    assert.strictEqual(payload.has_keys, false);
+    assert.strictEqual(payload.error.code, 'INTERNAL_ERROR');
+    await m.onUnload();
+  });
+
   // Group 7: Helpers POC2
   await testAsync('_errorResponse construye shape canonico', async () => {
     const mocks = makeMocks();

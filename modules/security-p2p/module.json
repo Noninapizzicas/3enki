@@ -1,6 +1,6 @@
 {
   "name": "security-p2p",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "P2P Zero Trust Security para Event Core. Cifra/descifra eventos entre cores usando X25519 + AES-256-GCM via hooks transparentes (beforeEventPublish, afterEventReceive). Cache de shared_secrets in-memory con eviction LRU (max_shared_secrets, default 100). Handshake P2P over MQTT (core/+/security/handshake/{request,response}/#).",
   "author": "Event Core Team",
   "language": "en",
@@ -10,12 +10,15 @@
   },
   "events": {
     "publishes": [
-      { "event": "security.peer.trusted",       "description": "Peer trusted (manual o tras handshake exitoso). project_id top-level + correlation_id + timestamp." },
-      { "event": "security.peer.revoked",       "description": "Trust revocado para un peer. project_id top-level + correlation_id + timestamp." },
-      { "event": "security.handshake.timeout",  "description": "Handshake timeout (no response del peer en handshake_timeout_ms)." },
-      { "event": "security.handshake.failed",   "description": "Handshake fallo (HMAC mismatch, clave invalida, etc.)." }
+      { "event": "security.peer.trusted",        "description": "Peer trusted (manual o tras handshake exitoso). project_id top-level + correlation_id + timestamp." },
+      { "event": "security.peer.revoked",        "description": "Trust revocado para un peer. project_id top-level + correlation_id + timestamp." },
+      { "event": "security.handshake.timeout",   "description": "Handshake timeout (no response del peer en handshake_timeout_ms)." },
+      { "event": "security.handshake.failed",    "description": "Handshake fallo (HMAC mismatch, clave invalida, etc.)." },
+      { "event": "security.public-key.response", "description": "Respuesta al request del par. Lleva public_key (PEM) + fingerprint + has_keys + request_id propagado. error: {code,message} si falla. Reemplaza el acceso directo a keyManager.getPublicKey() via moduleLoader." }
     ],
-    "subscribes": []
+    "subscribes": [
+      { "event": "security.public-key.request",  "handler": "onPublicKeyRequest", "description": "Cualquier modulo que necesite la public key del core la pide por bus en lugar de leer keyManager via moduleLoader." }
+    ]
   },
   "ui_handlers": [
     { "domain": "security-p2p", "action": "status",         "handler": "handleStatus",            "type": "system_panel", "zone": "lateral_derecha" },

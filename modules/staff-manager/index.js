@@ -1,5 +1,5 @@
 /**
- * staff-manager v2.0.0 — Control de personal con tarjetas NFC NTAG215 (POC2 rewrite).
+ * staff-manager v2.1.0 — Control de personal con tarjetas NFC NTAG215 (POC2 rewrite).
  *
  * Tres responsabilidades coordinadas (sub-libs en lib/):
  *   1. EmployeeRegistry — CRUD de empleados (SQLite via sql.js).
@@ -31,7 +31,7 @@ const NTAG215_CAPACITY   = 504;
 class StaffManagerModule {
   constructor() {
     this.name    = 'staff-manager';
-    this.version = '2.0.0';
+    this.version = '2.1.0';
 
     this.core     = null;
     this.logger   = null;
@@ -43,6 +43,10 @@ class StaffManagerModule {
 
     this.dataPath      = path.resolve('./data/staff');
     this.maxShiftHours = 16;
+
+    // request_id → { resolve, timer } para security.public-key.request/response
+    this.pendingPublicKey = new Map();
+    this.publicKeyTimeoutMs = 2000;
   }
 
   // ==========================================
@@ -85,6 +89,8 @@ class StaffManagerModule {
     this.logger?.info('module.unloading', { module: this.name });
     await this.registry?.close();
     await this.sessions?.close();
+    for (const { timer } of this.pendingPublicKey.values()) clearTimeout(timer);
+    this.pendingPublicKey.clear();
     this.registry = null;
     this.sessions = null;
     this.core     = null;
@@ -347,11 +353,11 @@ class StaffManagerModule {
 
   async handleNfcCoreTag() {
     try {
-      const publicKeyPEM = this._getSecurityP2PPublicKey();
+      const publicKeyPEM = await this._requestSecurityP2PPublicKey();
       if (!publicKeyPEM) {
         this._logError('staff-manager.ui.nfc_core_tag.dependency_unavailable', { dep: 'security-p2p' }, 'ui_nfc_core_tag', 'DEPENDENCY_UNAVAILABLE');
         return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE',
-          'security-p2p no disponible — carga ese modulo primero',
+          'security-p2p no disponible — no response a security.public-key.request en el timeout',
           { dep: 'security-p2p' });
       }
 
@@ -459,14 +465,36 @@ class StaffManagerModule {
     else if (type === 'manager_close') this.metrics?.increment('staff.manager_close.count');
   }
 
-  // 6o helper — acceso defensivo al KeyManager de security-p2p (preservado)
-  _getSecurityP2PPublicKey() {
-    try {
-      const data = this.core?.moduleLoader?.loadedModules?.get('security-p2p');
-      return data?.instance?.keyManager?.getPublicKey() || null;
-    } catch {
-      return null;
-    }
+  // 6o helper — request/response via bus para obtener la clave publica de security-p2p.
+  // Reemplaza el acceso directo moduleLoader.loadedModules.get('security-p2p') que violaba
+  // el axioma maestro de event-core. El handler onPublicKeyRequest en security-p2p responde
+  // publicando security.public-key.response con el mismo request_id.
+  _requestSecurityP2PPublicKey() {
+    if (!this.eventBus?.publish) return Promise.resolve(null);
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingPublicKey.delete(request_id);
+        resolve(null);
+      }, this.publicKeyTimeoutMs);
+      this.pendingPublicKey.set(request_id, { resolve, timer });
+      this.eventBus.publish('security.public-key.request', {
+        request_id,
+        correlation_id: crypto.randomUUID(),
+        timestamp:      new Date().toISOString()
+      });
+    });
+  }
+
+  // Handler subscribe — recibe security.public-key.response
+  onPublicKeyResponse(event) {
+    const source = event?.data || event || {};
+    const { request_id, public_key } = source;
+    const pending = this.pendingPublicKey.get(request_id);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingPublicKey.delete(request_id);
+    pending.resolve(public_key || null);
   }
 
   // ==========================================

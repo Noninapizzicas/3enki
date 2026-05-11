@@ -630,6 +630,56 @@ class ChatIoModule {
     }
   }
 
+  // Persistencia de chat.assistant.saved cuando el emisor es OTRO modulo
+  // (agent-observer, ai-agent-framework). Cierra el bug arquitectonico de
+  // tarjetas de agente que se publicaban al bus sin que nadie las persistiera.
+  // Self-echo (chat-io publica este evento tras persistir desde ai.chat.response)
+  // se ignora via source.module_id.
+  async onChatAssistantSavedFromAgent(event) {
+    if (event?.source?.module_id === 'chat-io') return;
+    const data = event?.data || event;
+    const { project_id, conversation_id, assistant_message, correlation_id, metadata } = data;
+    if (!project_id || !conversation_id || !assistant_message) {
+      this.logger.warn('chat-io.agent_assistant_saved.invalid_payload', {
+        has_project: !!project_id, has_conv: !!conversation_id, has_message: !!assistant_message,
+        source_module: event?.source?.module_id, correlation_id
+      });
+      this.metrics?.increment('chat-io.errors', { kind: 'invalid_payload', source: 'agent_assistant_saved' });
+      return;
+    }
+    await this._ensureSchema(project_id);
+    if (!(await this._validateConversation(project_id, conversation_id))) {
+      this.logger.warn('chat-io.agent_assistant_saved.conv_unknown', {
+        conversation_id, source_module: event?.source?.module_id, correlation_id
+      });
+      this.metrics?.increment('chat-io.errors', { kind: 'unknown_conv', source: 'agent_assistant_saved' });
+      return;
+    }
+    const message_id = data.message_id || crypto.randomUUID();
+    const now = Date.now();
+    const metadataStr = metadata
+      ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata))
+      : null;
+    try {
+      await this._db(project_id,
+        `INSERT INTO messages (id, conversation_id, role, content, metadata, created_at)
+         VALUES (?, ?, 'assistant', ?, ?, ?)`,
+        [message_id, conversation_id, assistant_message, metadataStr, now]
+      );
+      await this._db(project_id,
+        'UPDATE conversations SET updated_at = ? WHERE id = ?',
+        [now, conversation_id]
+      );
+      this.metrics?.increment('chat-io.message.agent_assistant_saved');
+    } catch (err) {
+      this.logger.error('chat-io.agent_assistant_saved.failed', {
+        error: err.message, correlation_id, conversation_id,
+        source_module: event?.source?.module_id
+      });
+      this.metrics?.increment('chat-io.errors', { kind: 'save_agent_assistant' });
+    }
+  }
+
   async onAiFailed(event) {
     const data = event.data || event;
     const {

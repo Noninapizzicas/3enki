@@ -210,7 +210,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { maxShiftHours: 12 });
     assert.strictEqual(m.name, 'staff-manager');
-    assert.strictEqual(m.version, '2.0.0');
+    assert.strictEqual(m.version, '2.1.0');
     assert.ok(m.registry);
     assert.ok(m.sessions);
     assert.strictEqual(m.maxShiftHours, 12);
@@ -390,22 +390,36 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleNfcCoreTag sin security-p2p → 503 DEPENDENCY_UNAVAILABLE', async () => {
+  await testAsync('handleNfcCoreTag sin response a security.public-key.request → 503 DEPENDENCY_UNAVAILABLE', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
+    m.publicKeyTimeoutMs = 30; // acelera el timeout para el test
     const r = await m.handleNfcCoreTag();
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 503);
     assert.strictEqual(r.error.code, 'DEPENDENCY_UNAVAILABLE');
+    // Confirma que el request salio por bus
+    const reqs = publishedOf(mocks, 'security.public-key.request');
+    assert.strictEqual(reqs.length, 1);
+    assert.ok(reqs[0].request_id, 'el request lleva request_id');
     await m.onUnload();
   });
 
-  await testAsync('handleNfcCoreTag con security-p2p disponible → 200 con publicKeyPEM', async () => {
+  await testAsync('handleNfcCoreTag recibe security.public-key.response → 200 con publicKeyPEM', async () => {
     const mocks = makeMocks();
-    const moduleLoader = {
-      loadedModules: new Map([['security-p2p', { instance: { keyManager: { getPublicKey: () => '-----PEM-----' } } }]])
+    const { module: m } = await instantiate(mocks);
+    // Auto-responde como lo haria security-p2p ante el request del bus
+    mocks.eventBus.publish = async (event, payload) => {
+      mocks.published.push([event, payload]);
+      if (event === 'security.public-key.request') {
+        setImmediate(() => m.onPublicKeyResponse({
+          request_id: payload.request_id,
+          public_key: '-----PEM-----',
+          fingerprint: 'fp_dummy',
+          has_keys: true
+        }));
+      }
     };
-    const { module: m } = await instantiate(mocks, { moduleLoader });
     const r = await m.handleNfcCoreTag();
     assert.ok(isCanonicalSuccess(r));
     assert.strictEqual(r.data.payload.publicKeyPEM, '-----PEM-----');
@@ -508,10 +522,34 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('_getSecurityP2PPublicKey devuelve null defensivo', async () => {
+  await testAsync('_requestSecurityP2PPublicKey publica security.public-key.request y resuelve con la public_key cuando llega onPublicKeyResponse', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    assert.strictEqual(m._getSecurityP2PPublicKey(), null);
+    mocks.eventBus.publish = async (event, payload) => {
+      mocks.published.push([event, payload]);
+      if (event === 'security.public-key.request') {
+        setImmediate(() => m.onPublicKeyResponse({ request_id: payload.request_id, public_key: '-----PEM-X-----', has_keys: true }));
+      }
+    };
+    const pk = await m._requestSecurityP2PPublicKey();
+    assert.strictEqual(pk, '-----PEM-X-----');
+    await m.onUnload();
+  });
+
+  await testAsync('_requestSecurityP2PPublicKey resuelve a null cuando expira el timeout', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.publicKeyTimeoutMs = 20;
+    const pk = await m._requestSecurityP2PPublicKey();
+    assert.strictEqual(pk, null);
+    await m.onUnload();
+  });
+
+  await testAsync('onPublicKeyResponse con request_id desconocido es noop', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.onPublicKeyResponse({ request_id: 'no-existe', public_key: 'x' }); // no throw
+    assert.strictEqual(m.pendingPublicKey.size, 0);
     await m.onUnload();
   });
 

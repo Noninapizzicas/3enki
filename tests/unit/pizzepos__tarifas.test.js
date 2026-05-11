@@ -84,7 +84,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'tarifas');
-    assert.strictEqual(m.version, '3.0.0');
+    assert.strictEqual(m.version, '3.1.0');
     assert.strictEqual(m.configPerProject.size, 0);
     await m.onUnload();
   });
@@ -150,7 +150,7 @@ function publishedOf(mocks, name) {
   });
 
   // Group 3: Set general + assign + resolverCarta flow
-  await testAsync('toolSetGeneral persiste + publica tarifas.config.actualizada con project_id top-level', async () => {
+  await testAsync('toolSetGeneral persiste + publica tarifas.config.actualizada con project_id top-level y config snapshot', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     await activateProject(m, 'proj-1', path.join(TMP_ROOT, 'proj-1'));
@@ -162,6 +162,11 @@ function publishedOf(mocks, name) {
     assert.strictEqual(evs[0].project_id, 'proj-1');
     assert.strictEqual(evs[0].tipo, 'general');
     assert.ok(evs[0].timestamp);
+    // snapshot completo en el payload
+    assert.ok(evs[0].config, 'payload debe traer config snapshot');
+    assert.strictEqual(evs[0].config.general, 'carta-base');
+    assert.deepStrictEqual(evs[0].config.canales, {});
+    assert.deepStrictEqual(evs[0].config.variantes, []);
 
     // Verifica persistencia atomica
     const filePath = m.configPathFor('proj-1');
@@ -356,6 +361,59 @@ function publishedOf(mocks, name) {
     assert.strictEqual(r.status, 404);
     const errMetric = mocks.metricsCalls.find(c => c[1] === 'tarifas.errors');
     assert.ok(errMetric);
+    await m.onUnload();
+  });
+
+  // Group 8: onConfigSolicitada — snapshot a peticion de otros modulos
+  await testAsync('onConfigSolicitada sin project_id re-publica snapshot de TODOS los proyectos cargados', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await activateProject(m, 'proj-A', path.join(TMP_ROOT, 'sol-A'));
+    await activateProject(m, 'proj-B', path.join(TMP_ROOT, 'sol-B'));
+    await m.toolSetGeneral({ carta_id: 'gA', project_id: 'proj-A' });
+    await m.toolSetGeneral({ carta_id: 'gB', project_id: 'proj-B' });
+
+    mocks.published.length = 0;
+    await m.onConfigSolicitada({ data: { correlation_id: 'cid-S' } });
+
+    const evs = publishedOf(mocks, 'tarifas.config.actualizada');
+    assert.strictEqual(evs.length, 2);
+    for (const ev of evs) {
+      assert.strictEqual(ev.tipo, 'snapshot');
+      assert.strictEqual(ev.correlation_id, 'cid-S');
+      assert.ok(ev.config);
+      assert.ok(typeof ev.config.general === 'string');
+    }
+    const projects = evs.map(e => e.project_id).sort();
+    assert.deepStrictEqual(projects, ['proj-A', 'proj-B']);
+    await m.onUnload();
+  });
+
+  await testAsync('onConfigSolicitada con project_id especifico solo re-publica ese proyecto', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    await activateProject(m, 'proj-A', path.join(TMP_ROOT, 'sol2-A'));
+    await activateProject(m, 'proj-B', path.join(TMP_ROOT, 'sol2-B'));
+    await m.toolSetGeneral({ carta_id: 'gA', project_id: 'proj-A' });
+    await m.toolSetGeneral({ carta_id: 'gB', project_id: 'proj-B' });
+
+    mocks.published.length = 0;
+    await m.onConfigSolicitada({ data: { project_id: 'proj-B' } });
+
+    const evs = publishedOf(mocks, 'tarifas.config.actualizada');
+    assert.strictEqual(evs.length, 1);
+    assert.strictEqual(evs[0].project_id, 'proj-B');
+    assert.strictEqual(evs[0].tipo, 'snapshot');
+    assert.strictEqual(evs[0].config.general, 'gB');
+    await m.onUnload();
+  });
+
+  await testAsync('onConfigSolicitada sin proyectos cargados no publica nada (no-op silencioso)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    mocks.published.length = 0;
+    await m.onConfigSolicitada({ data: {} });
+    assert.strictEqual(publishedOf(mocks, 'tarifas.config.actualizada').length, 0);
     await m.onUnload();
   });
 

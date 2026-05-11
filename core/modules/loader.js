@@ -919,34 +919,57 @@ class ModuleLoader {
   // ==========================================
 
   /**
-   * Register tools from a module for AI use
+   * Register tools from a module for AI use.
+   *
+   * Cada tool con handler queda auto-suscrita al evento `<toolName>` en el bus.
+   * Esa suscripcion recibe `{request_id, ...args}`, invoca al handler con los
+   * args (request_id stripped) y publica `<toolName>.response` con shape
+   * canonico `{request_id, result|error}`. El unwrapping `{status,data}` → `data`
+   * y `{status>=400, error}` → `error` se hace aqui para que cualquier caller
+   * (ai-gateway u otro modulo) reciba siempre la misma forma.
+   *
+   * Consecuencia arquitectonica: NINGUN modulo invoca tool handlers via
+   * `toolsRegistry.get(name).handler(...)` — todas las invocaciones van por
+   * bus. Ver tools.contract.json: decisiones_arquitectonicas.tool_invocacion_canonica_por_bus
+   * y prohibido.tool_invocacion_directa_via_toolsRegistry_handler.
    *
    * @param {string} moduleName - Module name
    * @param {Array} tools - Tools definitions from module.json
    * @param {Object} instance - Module instance
    */
   registerToolsForAI(moduleName, tools, instance) {
+    const bus = this.core?.eventBus || null;
+
     for (const tool of tools) {
       // Registrar siempre el schema para que el LLM conozca la tool.
       // La ejecución va por eventos — el handler es opcional.
       const handlerName = tool.handler || tool.name.split('.')[1];
       const handler = instance?.[handlerName];
+      const boundHandler = typeof handler === 'function' ? handler.bind(instance) : null;
 
-      this.toolsRegistry.set(tool.name, {
+      const entry = {
         name: tool.name,
         description: tool.description || `${moduleName} ${tool.name}`,
         parameters: tool.parameters || {},
-        handler: typeof handler === 'function' ? handler.bind(instance) : null,
+        handler: boundHandler,
         module: moduleName,
         confirmation: tool.confirmation || false,
-        event_based: true  // ejecución siempre via evento
-      });
+        event_based: true,
+        _busUnsub: null
+      };
+
+      if (boundHandler && bus) {
+        entry._busUnsub = this._wireToolBusSubscription(tool.name, boundHandler, bus);
+      }
+
+      this.toolsRegistry.set(tool.name, entry);
 
       if (this.logger) {
         this.logger.debug('module.tool.registered', {
           module: moduleName,
           tool: tool.name,
-          confirmation: tool.confirmation || false
+          confirmation: tool.confirmation || false,
+          bus_wired: entry._busUnsub != null
         });
       }
     }
@@ -960,6 +983,51 @@ class ModuleLoader {
   }
 
   /**
+   * Wire la suscripcion bus de una tool. Devuelve la funcion unsubscribe.
+   *
+   * Shape de invocacion canonica:
+   *   - Caller publica  `<toolName>`           con `{request_id, ...args}`.
+   *   - Wrapper publica `<toolName>.response`  con `{request_id, result}` o `{request_id, error: {code, message}}`.
+   *
+   * Unwrapping al publicar `result`:
+   *   - handler devuelve `{status, data}` con 200-399 → `result = data`.
+   *   - handler devuelve `{status>=400, error}` o `{error, ...}` sin status → publica error canonico.
+   *   - handler lanza excepcion → publica `error: { code: 'INTERNAL_ERROR', message }`.
+   *   - cualquier otro shape → `result = raw return`.
+   *
+   * @private
+   */
+  _wireToolBusSubscription(toolName, boundHandler, bus) {
+    const responseEvent = `${toolName}.response`;
+    const wrapper = async (event) => {
+      const payload = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+      const { request_id, ...args } = payload || {};
+      try {
+        let result = await boundHandler(args);
+        if (result && typeof result === 'object') {
+          if (result.error && (result.status == null || result.status >= 400)) {
+            const errObj = (typeof result.error === 'object' && result.error !== null)
+              ? result.error
+              : { code: 'INTERNAL_ERROR', message: String(result.error) };
+            await bus.publish(responseEvent, { request_id, error: errObj });
+            return;
+          }
+          if ('status' in result && 'data' in result && result.status >= 200 && result.status < 400) {
+            result = result.data;
+          }
+        }
+        await bus.publish(responseEvent, { request_id, result });
+      } catch (err) {
+        await bus.publish(responseEvent, {
+          request_id,
+          error: { code: 'INTERNAL_ERROR', message: err?.message || String(err) }
+        });
+      }
+    };
+    return bus.subscribe(toolName, wrapper);
+  }
+
+  /**
    * Unregister tools from a module
    *
    * @param {string} moduleName - Module name
@@ -969,6 +1037,9 @@ class ModuleLoader {
 
     for (const [toolName, tool] of this.toolsRegistry) {
       if (tool.module === moduleName) {
+        if (typeof tool._busUnsub === 'function') {
+          try { tool._busUnsub(); } catch (_) { /* ignore */ }
+        }
         toDelete.push(toolName);
       }
     }

@@ -1,9 +1,9 @@
 {
   "_doc": "Contrato transversal puro que formaliza el PATRÓN POC2 de reescritura canónica de módulos. Cuando un módulo del repo se migra al canon de los 24 contratos transversales, sigue las reglas, principios y prohibiciones definidos aquí. El contrato emerge de los 3 primeros POC2 ejecutados con éxito (scheduler #1, credential-manager #2, project-manager #3) y captura las lecciones operativas en forma validable mecánicamente. Aplicable a cualquiera de los 73 módulos del repo durante la fase horizontal del refactor.\n\nLA REGLA QUE NO SE ROMPE: una reescritura canónica es un MÓDULO NUEVO nacido cumpliendo los 24 contratos transversales — NO un parche al monolito existente. Si la migración deja drifts del monolito, no es reescritura — es refactor parcial.",
   "id": "module-rewrite",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-05-04",
-  "supersedes_nota": "Primera versión. Captura el patrón POC2 demostrado en 3 módulos del horizontal (scheduler, credential-manager, project-manager). Lecciones aprendidas: (1) los 5 helpers privados son transferibles (no reinventar por módulo), (2) el PASO 0 de mapeo exhaustivo es CRÍTICO (sin él, descubres funciones del monolito a posteriori — caso real: 3 funciones de blueprints olvidadas en project-manager v4.0.0 inicial, restauradas en commit retroactivo 5e8e676), (3) cuando un módulo mezcla 5+ responsabilidades mejor descomponer en N módulos (caso credential-manager: 2835 LOC monolito → core 842 LOC + 3 módulos pendientes documentados en notas/), (4) eventos canónicos del bus se preservan invariantes (los consumers NO se enteran de la reescritura), (5) drift count del módulo cae ≥70% en una migración real (≤50% para considerar 'migrado' en panel de progreso debido a falsos positivos legítimos del validator). Habilita auditoria mecánica del progreso y bloquea regresiones — un commit que reintroduzca patrones legacy en un módulo migrado falla en CI.",
+  "supersedes_nota": "v1.1.0 (2026-05-11): añade la prohibicion 'acceso_directo_inter_modulo' (regla maestra de event-core: ningun modulo llama directamente a otro). Detectada como gap retroactivo: el POC2 cerro estructura al 100% pero 3 modulos (ai-gateway, comandero, staff-manager) seguian resolviendo otros modulos via moduleLoader.loadedModules.get() / moduleLoader.getModule() / moduleLoader.toolsRegistry.get() para invocar handlers o leer estado. Enforcement: nuevo cross-check 'drift_modulo_acceso_directo_inter_modulo' en module-rewrite.validate.js que escanea modules/**/*.js (excluyendo _legacy/ y tests/) por los 3 simbolos prohibidos. Las 3 violaciones vivas estan congeladas en drift-baseline.json. CI bloquea cualquier nueva. Ver tambien estado_del_horizontal.drift_de_paradigma_abierto en extensibilidad-modular.contract.json.\n\nv1.0.0 (2026-05-04): primera versión. Captura el patrón POC2 demostrado en 3 módulos del horizontal (scheduler, credential-manager, project-manager). Lecciones aprendidas: (1) los 5 helpers privados son transferibles (no reinventar por módulo), (2) el PASO 0 de mapeo exhaustivo es CRÍTICO (sin él, descubres funciones del monolito a posteriori — caso real: 3 funciones de blueprints olvidadas en project-manager v4.0.0 inicial, restauradas en commit retroactivo 5e8e676), (3) cuando un módulo mezcla 5+ responsabilidades mejor descomponer en N módulos (caso credential-manager: 2835 LOC monolito → core 842 LOC + 3 módulos pendientes documentados en notas/), (4) eventos canónicos del bus se preservan invariantes (los consumers NO se enteran de la reescritura), (5) drift count del módulo cae ≥70% en una migración real (≤50% para considerar 'migrado' en panel de progreso debido a falsos positivos legítimos del validator). Habilita auditoria mecánica del progreso y bloquea regresiones — un commit que reintroduzca patrones legacy en un módulo migrado falla en CI.",
 
   "objetivo": "Producir UN JSON output (_outputs/module-rewrite.json) que define: el shape canónico de un módulo migrado (estructura de index.js, module.json, tests), los 5 helpers privados transferibles obligatorios, el flujo operativo de migración (paso 0 mapeo + 9 pasos canónicos), los criterios de cierre (drift count ≤30% original, tests verdes, validate:ci PASS), los anti-patrones prohibidos (returns con error string, codes inventados, monolito sin archivar, tests sin aislamiento). Validable mecánicamente cruzando contra los módulos migrados (lista detectada por scripts/progreso.js): cada módulo en la tabla de migrados pasa los cross-checks; cada uno pendiente queda exento.",
 
@@ -260,6 +260,13 @@
       "viola_garantias": ["modularidad_real_no_solo_declarada"],
       "como_detectar": "Auditoria del rewrite: leer responsabilidades del index.js. Si hay 5+ dominios distintos en el archivo nuevo, drift.",
       "alternativa_correcta": "Crear notas/<modulo>-descomposicion.md con plan multi-sesion. Reescribir core en sesion 1, subdominios en siguientes."
+    },
+    {
+      "id": "acceso_directo_inter_modulo",
+      "regla": "NO resolver instancias de otros modulos via moduleLoader.loadedModules.get(), moduleLoader.getModule() ni moduleLoader.toolsRegistry.get() para invocar handlers o leer estado de otro modulo. La regla maestra de event-core (CLAUDE.md) es 'ningun modulo llama directamente a otro' — TODO cruce inter-modulo fluye por eventBus.publish / eventBus.subscribe. Esta prohibicion captura el drift de paradigma que el cierre POC2 estructural NO detecta.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada", "extensibilidad_sin_reescritura"],
+      "como_detectar": "Regex en source de modules/**/*.js (excluyendo _legacy/ y tests/) buscando los simbolos: 'moduleLoader.loadedModules.get(', 'moduleLoader.getModule(', 'moduleLoader.toolsRegistry.get('. Cada hit es una violacion semantica. Legitimo y NO violacion: 'toolsRegistry.set(...)' (un modulo registrando sus PROPIAS tools), 'moduleLoader.getToolsForAI()' (listado read-only sin invocacion), iteracion de loadedModules para meta-introspeccion read-only que no extrae ni invoca metodos.",
+      "alternativa_correcta": "En vez de llamada directa, definir un evento canonico (ej: 'tarifas.carta.resolve.request' -> 'tarifas.carta.resolve.response') y publicar/escuchar. Si el llamante necesita response sincrona, usar el patron request-response del bus con request_id + correlation_id."
     }
   ],
 
@@ -368,6 +375,12 @@
       "id": "drift_modulo_migrado_drift_count_no_baja",
       "regla": "Tras la migracion, el drift count del modulo en drift-baseline.json esta al 30% o menos del valor previo a la migracion (snapshot del baseline pre-migracion).",
       "como_detectar": "Cruzar baseline actual vs snapshot pre-migracion (git history de drift-baseline.json o commit message). Ratio >50% = drift critico — la migracion no logro reduccion.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_acceso_directo_inter_modulo",
+      "regla": "Ningun archivo .js bajo modules/**/ (excluyendo _legacy/ y tests/) contiene los simbolos 'moduleLoader.loadedModules.get(', 'moduleLoader.getModule(' o 'moduleLoader.toolsRegistry.get(' para resolver/invocar otro modulo. Estos simbolos rompen la regla maestra de event-core: ningun modulo llama directamente a otro.",
+      "como_detectar": "Por cada modulo migrado (criterio: tests/unit/<slug>.test.js existe), escanear todos sus .js bajo el moduleDir (excluyendo subcarpetas tests/, _legacy/) con grep multi-linea por los 3 patterns. Cada match emite el finding con archivo:linea + slug + simbolo detectado.",
       "severidad": "warning"
     }
   ],

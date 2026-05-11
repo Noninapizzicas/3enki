@@ -1,6 +1,6 @@
 # Progreso de migración — 66 módulos al canon de 26 contratos
 
-_Última regeneración: 2026-05-09T01:04:10Z_
+_Última regeneración: 2026-05-11T01:28:48Z_
 
 Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras cada migración para refrescar.
 
@@ -8,9 +8,10 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 
 - **Migrados**: 66 / 66 (100%)
 - **Fuera del horizontal canónico**: 3 (`conversacion__ai-gateway-poc`, `notas-poc`, `pizzepos__cocina-poc`) — POCs exploratorios, no se migran.
-- **Estado**: 🎉 horizontal cerrado al 100%.
-- **Drifts cerrados**: 1002 / 2261 (44%)
-- **Drifts restantes en baseline**: 1259
+- **Estructura POC2**: 100% (helpers POC2 + tests por capas en cada módulo).
+- **Drift de paradigma event-core**: 3 violaciones vivas conocidas (ver `drift_modulo_acceso_directo_inter_modulo` en `drift-baseline.json`). El POC2 cerró estructura, no aislamiento inter-módulo. Refactor pendiente para emitir eventos en lugar de `moduleLoader.getModule()` / `loadedModules.get()` / `toolsRegistry.get()` directo.
+- **Drifts cerrados**: 999 / 2261 (44%)
+- **Drifts restantes en baseline**: 1262
 
 ### Progreso por capa
 
@@ -30,7 +31,7 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 3 | core | `database-manager` | 793 | 44 → 22 (-50%) | `edd468e` 2026-05-06 |
 | 4 | core | `credential-manager` | 843 | 28 → 12 (-57%) | `069f8c8` 2026-05-06 |
 | 5 | core | `gateway-manager` | 429 | 13 → 2 (-85%) | `8aa2b74` 2026-05-06 |
-| 6 | core | `conversacion__ai-gateway` | 777 | 8 → 8 (-0%) | `92bd096` 2026-05-06 |
+| 6 | core | `conversacion__ai-gateway` | 777 | 8 → 9 (--12%) | `92bd096` 2026-05-06 |
 | 7 | core | `plugin-manager` | 495 | 8 → 6 (-25%) | `a25b855` 2026-05-06 |
 | 8 | core | `conversacion__agent-observer` | 279 | 2 → 0 (-100%) | `2e263af` 2026-05-08 |
 | 9 | core | `conversacion__ai-agent-framework` | 627 | 148 → 48 (-68%) | `3c227b8` 2026-05-08 |
@@ -74,11 +75,11 @@ Generado por `node arquitectura/migracion/scripts/progreso.js`. Ejecutar tras ca
 | 47 | dominio | `pizzepos__pedidos` | 915 | 25 → 20 (-20%) | `7bdefd7` 2026-05-08 |
 | 48 | dominio | `pizzepos__carta-impresion` | 382 | 19 → 11 (-42%) | `2e572eb` 2026-05-07 |
 | 49 | dominio | `pizzepos__carta-design` | 545 | 18 → 8 (-56%) | `56a566a` 2026-05-07 |
-| 50 | dominio | `staff-manager` | 494 | 18 → 2 (-89%) | `10739b7` 2026-05-07 |
+| 50 | dominio | `staff-manager` | 494 | 18 → 3 (-83%) | `10739b7` 2026-05-07 |
 | 51 | dominio | `pizzepos__carta-manager` | 829 | 15 → 15 (-0%) | `7356aa3` 2026-05-07 |
 | 52 | dominio | `pizzepos__impresion` | 1075 | 13 → 10 (-23%) | `615190b` 2026-05-07 |
 | 53 | dominio | `pizzepos__persistencia-comandero` | 1366 | 13 → 9 (-31%) | `57a641e` 2026-05-07 |
-| 54 | dominio | `pizzepos__comandero` | 792 | 9 → 6 (-33%) | `1609472` 2026-05-07 |
+| 54 | dominio | `pizzepos__comandero` | 792 | 9 → 7 (-22%) | `1609472` 2026-05-07 |
 | 55 | dominio | `pizzepos__categorias` | 451 | 6 → 4 (-33%) | `0fd3b9d` 2026-05-07 |
 | 56 | dominio | `pizzepos__ingredientes` | 690 | 6 → 4 (-33%) | `30acbd0` 2026-05-07 |
 | 60 | dominio | `pizzepos__cobros` | 700 | 29 → 24 (-17%) | `e85d54f` 2026-05-08 |

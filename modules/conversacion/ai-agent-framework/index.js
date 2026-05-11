@@ -447,7 +447,9 @@ class AiAgentFrameworkModule {
   async onLlmCompleteResponse(event) {
     try {
       const data = event?.data || event;
-      const { request_id, success, error, content, tool_calls_executed, model, provider, usage } = data;
+      const { request_id, content, tool_calls_executed, model, provider, usage } = data;
+      // Por contrato llm-flow: llm.complete.response cierra exito (sin flag success).
+      // Los fallos vienen por evento separado llm.complete.failed, handler distinto.
 
       const pending = this.pendingLlm.get(request_id);
       if (!pending) return;
@@ -459,17 +461,8 @@ class AiAgentFrameworkModule {
         this._publishProgress({
           ...pending,
           step: 'finalizing',
-          message: success ? `Agente ${pending.agent_name} terminando` : `Agente ${pending.agent_name} fallando`
+          message: `Agente ${pending.agent_name} terminando`
         });
-        if (!success) {
-          return this._publishAgentExecuteFailed({
-            ...pending,
-            error: this._classifyLlmError(error || 'agent execution failed'),
-            duration_ms,
-            iterations_completed: 0,
-            provider_attempted: provider || null
-          });
-        }
         return this._publishAgentExecuteResponse({
           ...pending,
           content,
@@ -479,18 +472,7 @@ class AiAgentFrameworkModule {
         });
       }
 
-      // Legacy invoke_agent.response
-      if (!success) {
-        const errObj = (typeof error === 'object' && error !== null)
-          ? error
-          : this._classifyLlmError(error || 'agent execution failed');
-        return this.eventBus.publish('invoke_agent.response', {
-          request_id: pending.original_request_id,
-          session_id: pending.session_id,
-          next_state: null, should_continue: false,
-          error: errObj
-        });
-      }
+      // Legacy invoke_agent.response — exito
       return this.eventBus.publish('invoke_agent.response', {
         request_id: pending.original_request_id,
         session_id: pending.session_id,
@@ -499,6 +481,47 @@ class AiAgentFrameworkModule {
       });
     } catch (err) {
       this._handleHandlerError('ai-agent-framework.llm_complete_response.error', err);
+    }
+  }
+
+  async onLlmCompleteFailed(event) {
+    try {
+      const data = event?.data || event;
+      const { request_id, error, provider, usage } = data;
+
+      const pending = this.pendingLlm.get(request_id);
+      if (!pending) return;
+      clearTimeout(pending.timeout);
+      this.pendingLlm.delete(request_id);
+
+      if (pending.shape === 'canonical') {
+        const duration_ms = Date.now() - pending.startedAt;
+        this._publishProgress({
+          ...pending,
+          step: 'finalizing',
+          message: `Agente ${pending.agent_name} fallando`
+        });
+        return this._publishAgentExecuteFailed({
+          ...pending,
+          error: this._classifyLlmError(error || 'agent execution failed'),
+          duration_ms,
+          iterations_completed: 0,
+          provider_attempted: provider || null
+        });
+      }
+
+      // Legacy invoke_agent.response — error
+      const errObj = (typeof error === 'object' && error !== null)
+        ? error
+        : this._classifyLlmError(error || 'agent execution failed');
+      return this.eventBus.publish('invoke_agent.response', {
+        request_id: pending.original_request_id,
+        session_id: pending.session_id,
+        next_state: null, should_continue: false,
+        error: errObj
+      });
+    } catch (err) {
+      this._handleHandlerError('ai-agent-framework.llm_complete_failed.error', err);
     }
   }
 

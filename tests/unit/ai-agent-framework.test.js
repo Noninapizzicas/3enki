@@ -255,7 +255,12 @@ async function testAsync(description, fn) {
 
   // Group 4 — Chat multi-participante
 
-  await testAsync('SUCCESS con conversation_id → publica chat.assistant.saved canonico chat-flow', async () => {
+  await testAsync('SUCCESS con conversation_id NO publica chat.assistant.saved (delegado a agent-observer)', async () => {
+    // Antes ai-agent-framework publicaba chat.assistant.saved adicional al
+    // agent.execute.response. agent-observer (adaptador canonico agent-flow
+    // → chat-flow) ya escucha agent.execute.response y traduce a
+    // chat.assistant.saved. La doble emision causaba doble persistencia en
+    // chat-io. Ahora ai-agent-framework solo publica agent.execute.response.
     const mocks = makeMocks();
     const m = instantiate(mocks);
     await m.onAgentExecuteRequest({
@@ -267,20 +272,11 @@ async function testAsync(description, fn) {
     });
     await nextTick(); await nextTick();
     const chatEv = mocks.published.find(p => p[0] === 'chat.assistant.saved');
-    assert.ok(chatEv, 'chat.assistant.saved publicado');
-    const payload = chatEv[1];
-    assert.strictEqual(payload.correlation_id, 'corr-chat');
-    assert.strictEqual(payload.conversation_id, 'conv-99');
-    assert.strictEqual(payload.project_id, 'proj-1');
-    assert.ok(payload.message_id, 'message_id presente');
-    assert.strictEqual(payload.assistant_message, 'respuesta del agente');
-    assert.strictEqual(typeof payload.metadata, 'string', 'metadata serializada como string');
-    const meta = JSON.parse(payload.metadata);
-    assert.strictEqual(meta.author.kind, 'agent');
-    assert.strictEqual(meta.author.id, 'recipe-analyzer');
-    // Sin role legacy — el shape canonico no lo tiene
-    assert.strictEqual(payload.role, undefined, 'no debe tener campo role legacy');
-    assert.strictEqual(payload.content, undefined, 'no debe tener campo content legacy');
+    assert.strictEqual(chatEv, undefined, 'chat.assistant.saved NO debe ser publicado desde ai-agent-framework');
+    const agentResp = mocks.published.find(p => p[0] === 'agent.execute.response');
+    assert.ok(agentResp, 'agent.execute.response sigue publicandose');
+    assert.strictEqual(agentResp[1].conversation_id, 'conv-99');
+    assert.strictEqual(agentResp[1].project_id, 'proj-1');
   });
 
   // Group 5 — Legacy invoke_agent path sigue funcionando

@@ -556,24 +556,11 @@ class AiAgentFrameworkModule {
       total: ctx.usage.total_tokens || ((ctx.usage.input_tokens || 0) + (ctx.usage.output_tokens || 0))
     };
 
-    if (ctx.conversation_id) {
-      try {
-        await this._publicarEvento('chat.assistant.saved', {
-          conversation_id: ctx.conversation_id,
-          message_id: crypto.randomUUID(),
-          assistant_message: ctx.content || '',
-          metadata: JSON.stringify({
-            author: { kind: 'agent', id: ctx.agent_name, name: ctx.agent_name },
-            block: { type: 'agent_intervention', title: ctx.agent_name, status: 'closed' },
-            tool_calls: tool_calls
-          })
-        }, { correlation_id: ctx.correlation_id, project_id: ctx.project_id });
-      } catch (err) {
-        this.logger?.warn?.('ai-agent-framework.chat_assistant_saved.publish.failed', {
-          error_message: err.message, agent: ctx.agent_name
-        });
-      }
-    }
+    // chat.assistant.saved se delega a agent-observer (adaptador canonico
+    // agent-flow → chat-flow). agent-observer escucha agent.execute.response/
+    // failed/progress y traduce a chat.assistant.saved con metadata.author +
+    // metadata.block. Si ai-agent-framework lo publicara aqui tambien,
+    // chat-io persistiria la tarjeta dos veces (mismo contenido, dos rows).
 
     return this._publicarEvento('agent.execute.response', payload, {
       correlation_id: ctx.correlation_id, project_id: ctx.project_id

@@ -1,7 +1,7 @@
 {
   "name": "ai-agent-framework",
   "version": "2.0.0",
-  "description": "Carga agentes desde agents/*.json + prompts/*.{json,md}. Registra la tool invoke_agent (LLM tool flow legacy) en moduleLoader.toolsRegistry y escucha agent.execute.request (entry point canonico agent-flow v1.0.0+) desde modulos del dominio / cron / channels. Publishes canonicos: agent.execute.response (success), agent.execute.failed (no_silent_failures), agent.execute.progress (chat_inline_rendering). Cuando se incluye conversation_id tambien publica chat.assistant.saved con metadata.author del agente para chat multi-participante.",
+  "description": "Carga agentes desde agents/*.json + prompts/*.{json,md}. Registra la tool invoke_agent (LLM tool flow legacy) en moduleLoader.toolsRegistry y escucha agent.execute.request (entry point canonico agent-flow v1.0.0+) desde modulos del dominio / cron / channels. Publishes canonicos: agent.execute.response (success), agent.execute.failed (no_silent_failures), agent.execute.progress (chat_inline_rendering). La traduccion a chat.assistant.saved la hace agent-observer (adaptador canonico agent-flow → chat-flow) para evitar doble persistencia.",
   "author": "Event Core Team",
   "language": "en",
   "main": "index.js",
@@ -25,11 +25,6 @@
       {
         "event": "invoke_agent.response",
         "description": "Response del LLM tool flow legacy. Shape propio (no es agent_flow canonico)."
-      },
-      {
-        "event": "chat.assistant.saved",
-        "response_schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.assistant.saved.schema.json",
-        "description": "Inyecta el resultado del agente como mensaje del companero con metadata.author={kind:'agent'} para chat multi-participante (cuando hay conversation_id)."
       },
       {
         "event": "llm.complete.request",

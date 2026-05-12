@@ -13,7 +13,7 @@
  * arquitectura/decisiones/_validators/tools.validate.js (drift error).
  */
 
-const Mod = require('/home/user/2enki/modules/conversacion/ai-gateway/index.js');
+const Mod = require('../index.js');
 
 // ---------- Mock moduleLoader (solo metadata: filtrado por page_id) ----------
 const fakeModules = new Map([

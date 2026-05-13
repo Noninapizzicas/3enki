@@ -24,6 +24,7 @@ const GroqProvider      = require('./providers/groq-provider');
 const GeminiProvider    = require('./providers/gemini-provider');
 const OllamaProvider    = require('./providers/ollama-provider');
 const ClaudeCliProvider = require('./providers/claude-cli-provider');
+const KimiProvider      = require('./providers/kimi-provider');
 
 class AiGatewayModule {
   constructor() {
@@ -71,7 +72,8 @@ class AiGatewayModule {
       groq: GroqProvider,
       gemini: GeminiProvider,
       ollama: OllamaProvider,
-      'claude-cli': ClaudeCliProvider
+      'claude-cli': ClaudeCliProvider,
+      kimi: KimiProvider
     };
     const credentialResolver = (provider, projectId) => this._resolveCredential(provider, projectId);
 

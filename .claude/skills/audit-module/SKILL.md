@@ -1,85 +1,147 @@
 ---
 name: audit-module
-description: Auditoría operativa end-to-end de un módulo del sistema event-core. Genera ficha, guión heurístico, ejecuta como usuario contra el VPS, exporta la conversación y produce reporte con cobertura, routing del LLM (TP/FP/FN), latencias por tool, checks contra rules del prompt, detección de patología y sugerencias accionables clasificadas por severidad. Compara con audits anteriores si existen.
-when-to-use: Cuando se quiere validar el funcionamiento operativo de un módulo (recetas, escandallo, viabilidad, cartadigital, etc.) tal como lo experimenta un usuario real. Útil para detectar regresiones tras cambios, medir rendimiento del LLM al rutear hacia los tools del módulo, identificar tools rotos y proponer mejoras concretas al prompt o al código.
+description: Auditoría operativa completa de un módulo del sistema (recetas, escandallo, viabilidad, cartadigital, etc.) en 3 tiradas separadas — exhaustiva de tools, exhaustiva de agentes con triangulación, y mixta natural de uso real — más una recapitulación que cruza los hallazgos de las 3. Cada tirada mide una dimensión del subsistema. La recapitulación clasifica findings según dónde aparecen (solo aislada, solo mixta, o ambas) y eso indica si el problema es del componente o de la orquestación.
+when-to-use: Validar un módulo end-to-end de forma exhaustiva y sin sesgos. Útil tras cambios de prompt/código/agentes, antes de mergear, para localizar si un problema es del componente (tool/agente) o de la orquestación (LLM principal eligiendo mal), o para comparar baseline antes/después de optimizaciones.
 ---
 
 # audit-module
 
-Auditoría operativa de un módulo. **NO es un test unitario** — es una prueba end-to-end como usuario humano, contra el VPS de producción/staging, y posterior análisis estructurado del resultado.
+3 tiradas separadas + recapitulación. Claude conduce cada tirada con un propósito acotado, evita mezclar dimensiones, y al final cruza los hallazgos para distinguir entre problemas de componente y problemas de orquestación.
 
-## Cómo invocar
+## Filosofía
+
+- **Cada tirada mide UNA dimensión.** No mezclar tools, agentes y comportamiento natural en una sola pasada — confunde el diagnóstico.
+- **Triangulación dentro de cada tirada** (especialmente agentes): 2-3 ejecuciones distintas para distinguir bug real de variabilidad.
+- **La mixta es el banco de pruebas integral.** Refleja el uso real. Lo que falla SOLO en mixta es problema de orquestación; lo que falla en ambas es problema del componente.
+- **La recapitulación es donde se generan los findings.** Las 3 tiradas son insumos; el reporte final cruza los datos y clasifica por tipo de problema.
+
+## Las 3 tiradas
+
+### Tirada A — Tools del módulo
+**Propósito**: verificar que cada tool del módulo funciona y que el LLM principal lo invoca correctamente desde el chat.
+
+- 1 conversación de chat con `page_id=<modulo>`.
+- 5-8 mensajes diseñados para ejercitar **todos los tools del módulo** (lectura → mutación → análisis → reversión).
+- Cobertura objetivo: ≥80% de los tools.
+- Salida: `audit/<modulo>-<TS>/tirada-A-tools/chat-export.json` + análisis por tool.
+
+### Tirada B — Agentes del scope
+**Propósito**: verificar que cada agente con `scope:[<modulo>]` funciona aisladamente y de forma consistente.
+
+- 1 conversación POR AGENTE del scope (no obsoleto).
+- 2-3 tasks distintas por agente (triangulación).
+- Invocación forzada vía `agent.execute.request` (no chat).
+- Salida: `audit/<modulo>-<TS>/tirada-B-agentes/<agente>-t{1,2,3}.json`.
+- Comparativa T1/T2/T3 por agente: ¿tools consistentes? ¿latencias estables? ¿comportamiento adaptativo o errático?
+
+### Tirada C — Mixta (uso real)
+**Propósito**: verificar la orquestación del LLM principal en una sesión natural. El LLM decide solo qué tool/agente usar para cada tarea.
+
+- 1 conversación de chat **larga** (10-15 mensajes) con `page_id=<modulo>`.
+- Mensajes en lenguaje natural de un usuario que **no sabe** qué tools/agentes existen. Solo pide cosas del dominio.
+- Encadenamiento realista: explora estado → crea algo → modifica → analiza → consulta especialista → decide.
+- Salida: `audit/<modulo>-<TS>/tirada-C-mixta/chat-export.json` + análisis del flujo.
+
+## Fase final — Recapitulación
+
+Cruza las 3 tiradas y clasifica findings:
+
+| Aparece en | Tipo de problema | Acción |
+|---|---|---|
+| Solo Tirada A | Tool del módulo | Revisar handler del tool |
+| Solo Tirada B | Agente | Revisar prompt/scope del agente |
+| Solo Tirada C | Orquestación del LLM principal | Revisar base prompt / context del módulo / catálogo |
+| A + C | Tool roto, confirmado en uso real | Fix urgente |
+| B + C | Agente roto, confirmado en uso real | Fix urgente |
+| A + B + C | Problema sistémico | Revisar contrato/arquitectura |
+
+La recapitulación produce `audit/<modulo>-<TS>/recapitulacion.md` con:
+- Tabla cruzada de findings
+- Patrones que **solo emergen** al ver las 3 tiradas juntas
+- Decisiones recomendadas con su nivel de confianza
+
+## Flujo
+
+### Fase 1 — Comprender el módulo (sin cambios)
+
+Leo `module.json`, `prompt.json`, `context.json`. Identifico agentes con `scope:[<modulo>]` no obsoletos.
+
+### Fase 2 — Las 3 tiradas (en este orden)
+
+**Orden importa**: A primero (cobertura básica), B después (componentes aislados), C al final (integración). La mixta puede revelar interacciones que no se ven en las aisladas.
 
 ```bash
-# Audit completo de un módulo (default project: Paco)
-node scripts/audit-module.js recetas
+# Tirada A
+CONV_A=$(node scripts/audit-helpers/create-conversation.js Paco "audit-<modulo>-tools")
+node scripts/audit-helpers/send-message.js ... # 5-8 mensajes
+node scripts/audit-helpers/fetch-export.js "$CONV_A" ... audit/<modulo>-<TS>/tirada-A-tools/chat-export.json
 
-# Otro proyecto, por nombre o UUID
-node scripts/audit-module.js escandallo --project=Pancito
+# Tirada B (por cada agente del scope, 2-3 tasks)
+for AGENT in agente1 agente2 ...; do
+  for T in T1 T2 T3; do
+    CONV=$(node scripts/audit-helpers/create-conversation.js Paco "audit-<modulo>-<agente>-<T>")
+    node scripts/audit-helpers/force-agent.js ... "task de la perspectiva T"
+    node scripts/audit-helpers/fetch-export.js "$CONV" ... audit/<modulo>-<TS>/tirada-B-agentes/$AGENT-$T.json
+  done
+done
 
-# Generar solo ficha + guion sin ejecutar contra el VPS
-node scripts/audit-module.js viabilidad --dry-run
-
-# Cambiar espera entre mensajes (default: 60s — agentes y operaciones largas necesitan tiempo)
-node scripts/audit-module.js recetas --wait=90000
+# Tirada C
+CONV_C=$(node scripts/audit-helpers/create-conversation.js Paco "audit-<modulo>-mixta")
+node scripts/audit-helpers/send-message.js ... # 10-15 mensajes naturales
+node scripts/audit-helpers/fetch-export.js "$CONV_C" ... audit/<modulo>-<TS>/tirada-C-mixta/chat-export.json
 ```
 
-## Fases (todas automatizadas)
+### Fase 3 — Recapitulación
 
-1. **analyze** — lee `module.json` + `prompt.json` + `context.json` del módulo. Extrae role, intent, tools, rules, dependencias (otros módulos cuyo prefijo aparezca en `subscribes`).
-2. **script** — genera un guión heurístico de 1 mensaje natural por tool, en orden lógico (setup → lectura → mutación → análisis → reversión).
-3. **execute** — crea conversación nueva contra el VPS con `page_id=<modulo>`, envía cada mensaje como un usuario real (`ui/request/conversation/send`), captura los eventos del bus (`<modulo>.*.response`, `chat.assistant.saved`, `ai.chat.failed`) con sus latencias.
-4. **export** — descarga la conversación entera via API `conversation-export` (mensajes persistidos en BD + activity buffer).
-5. **report** — produce dos artefactos:
-   - `reporte.md` — humano leíble, con secciones de métricas, latencias, detalle por paso, errores, sugerencias y comparativa con audit anterior si existe.
-   - `reporte.json` — estructurado, para procesamiento posterior.
+Leo los exports de las 3 tiradas y produzco `recapitulacion.md`:
+
+1. **Matriz de findings**: para cada problema detectado, en qué tiradas aparece.
+2. **Patrones de orquestación**: ¿el LLM en C usa los mismos tools/agentes que funcionaron en A/B? ¿Delega cuando debe? ¿Se queda con tools cuando tiene un agente especialista a mano?
+3. **Sugerencias clasificadas** por tipo de problema (componente vs orquestación).
+4. **Decisiones recomendadas** con nivel de confianza (basado en triangulación y consistencia entre tiradas).
+
+## Helpers atómicos
+
+| Archivo | Función |
+|---|---|
+| `list-conversations.js <project> [limit]` | Lista conv recientes |
+| `create-conversation.js <project> [title]` | Crea conv, imprime id |
+| `send-message.js <proj> <conv> <page> "msg"` | Envía + espera + META |
+| `force-agent.js <proj> <conv> <agent> "task"` | Fuerza agent.execute.request |
+| `fetch-export.js <conv> <proj> [out.json]` | Descarga export |
 
 ## Output
 
 ```
-audit/<modulo>-<timestamp>/
-  ficha.json     ficha del módulo
-  guion.json     guión de pruebas generado
-  trace.json     eventos del bus capturados en vivo + latencias por tool
-  export.json    export completo via conversation-export API
-  reporte.md     reporte humano-leíble (índice + secciones)
-  reporte.json   reporte estructurado
+audit/<modulo>-<TS>/
+  ficha.md
+  tirada-A-tools/
+    guion.md
+    chat-export.json
+    analisis.md
+  tirada-B-agentes/
+    guion.md
+    <agente-1>-t1.json
+    <agente-1>-t2.json
+    <agente-2>-t1.json
+    ...
+    analisis.md
+  tirada-C-mixta/
+    guion.md
+    chat-export.json
+    analisis.md
+  recapitulacion.md
 ```
 
-## Cómo se interpreta el reporte
+## Cuándo usar
 
-**Cobertura tools**: % de tools del módulo que se ejecutaron al menos una vez durante el audit. Si baja, el guión no cubre el catálogo del módulo o el LLM ignoró tools.
+- Tras cambios en prompt/context/código/agentes del módulo.
+- Antes de mergear PR que toca el subsistema chat/agentes.
+- Para baseline antes/después de optimizaciones.
+- Cuando un usuario reporta "no funciona bien": localiza si es del LLM (mixta), del tool (A), del agente (B), o de todos.
 
-**Routing TP/FP/FN**:
-- **TP** (true positive): el LLM usó el tool esperado para el mensaje del paso.
-- **FN** (false negative): el LLM NO usó el tool esperado.
-- **FP** (false positive): el LLM usó tools adicionales no esperados.
+## Lo que NO es
 
-Hit rate alto (>80%) indica que el LLM rutea bien con el prompt actual. Bajo indica que `prompt.json` o `context.json.tools_disponibles` necesitan más claridad.
-
-**Latencias**: p50/p95/max por tool. Permite detectar tools lentas que degradan UX.
-
-**Findings de calidad**: heurísticas sobre cada respuesta del LLM detectan:
-- `antipattern`: presencia de `[object Object]` en el chat.
-- `system_error_message`: la respuesta es el fallback genérico de chat-io.
-- `token_degeneration`: degeneración del LLM (alta proporción de tokens cortos al final).
-- `format`: la respuesta no respeta rules del prompt (e.g. listas markdown).
-- `too_short`: respuesta muy corta (posible fallo silencioso).
-
-**Sugerencias clasificadas** por severidad (high/medium/low) con acción accionable.
-
-**Comparativa con audit anterior** muestra el delta de cobertura y routing — útil para detectar regresiones tras commits.
-
-## Cuándo usar este skill
-
-- Tras tocar el código de un módulo, antes de mergear.
-- Cuando un usuario reporta que algo "no funciona bien" — el reporte localiza si es del LLM (routing/calidad) o del módulo (tools fallando).
-- Para comparar rendimiento del prompt antes/después de cambios en `prompt.json`.
-- Para descubrir tools no documentadas o degradadas.
-
-## Limitaciones conocidas (v1)
-
-- El guión es heurístico — un mensaje por tool basado en el sufijo. No cubre casos edge (datos inválidos, dependencias entre tools). Las heurísticas se pueden mejorar editando `toolToMessage()` en `scripts/audit-module.js`.
-- Asume que el módulo ya está cargado en el VPS y que el proyecto tiene datos mínimos. No crea fixtures automáticamente.
-- Espera fija entre pasos (default 60s). Si un step tarda más, se pierde su respuesta. Aumentar con `--wait`.
-- La detección de patología es heurística (regex). No usa LLM-as-judge.
+- **NO es test unitario.**
+- **NO es benchmark de performance.**
+- **NO es auto-pilot.** Claude conduce con criterio adaptado al módulo.

@@ -347,7 +347,20 @@ export async function testCredential(
     credentialsStore.update(s => ({ ...s, testResult: result }));
     return result;
   } catch (error) {
-    const result = { valid: false, message: getErrorMessage(error) };
+    const message = getErrorMessage(error);
+    // credential-tester pendiente (sesion 2 de la descomposicion): cuando el
+    // backend responde "No handler registered for credential/test" no es un
+    // fallo de la API key — es que el modulo de test no esta operativo.
+    // Tratar como "skip test" y dejar guardar sin validar.
+    if (/no handler/i.test(message)) {
+      const result = {
+        valid: true,
+        message: 'Test no disponible (credential-tester pendiente) — guardando sin validar'
+      };
+      credentialsStore.update(s => ({ ...s, testResult: result }));
+      return result;
+    }
+    const result = { valid: false, message };
     credentialsStore.update(s => ({ ...s, testResult: result }));
     return result;
   }

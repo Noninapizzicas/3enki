@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-13T21:15:35.779Z",
+  "generated_at": "2026-05-13T22:15:50.431Z",
   "total": 2380,
   "by_validator": {
     "naming": 49,
@@ -951,7 +951,7 @@
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/menu-prepare/PreparePanel.svelte:128 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/project/ProjectPanel.svelte:357 — #0d0d0d fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/prompts/PromptsPanel.svelte:797 — #1a1d24 fuera de paleta canonica",
-    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/provider/ProviderPanel.svelte:124 — #a3a3a3 fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/provider/ProviderPanel.svelte:125 — #a3a3a3 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/recetas/RecetasPanel.svelte:83 — #f59e0b fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/viabilidad/ViabilidadBrowser.svelte:83 — #059669 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/viabilidad/ViabilidadCard.svelte:113 — #e5e7eb fuera de paleta canonica",

@@ -227,6 +227,7 @@ export const PROVIDER_ICONS: Record<string, string> = {
   anthropic: '🧠',
   deepseek:  '🔮',
   ollama:    '🦙',
+  kimi:      '🌙',
 };
 
 export const PANEL_SIZES = {

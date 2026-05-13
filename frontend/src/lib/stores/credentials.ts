@@ -158,6 +158,7 @@ const DEFAULT_PROVIDERS: ProviderOption[] = [
   { id: 'GROQ', name: 'Groq', icon: '⚡' },
   { id: 'GEMINI', name: 'Google Gemini', icon: '💎' },
   { id: 'OLLAMA', name: 'Ollama', icon: '🦙' },
+  { id: 'KIMI', name: 'Kimi (Moonshot)', icon: '🌙' },
   { id: 'GOOGLE', name: 'Google Cloud', icon: '☁️' },
   { id: 'GMAIL', name: 'Gmail', icon: '📧' },
   { id: 'GLOVO', name: 'Glovo', icon: '🛵' }

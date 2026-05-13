@@ -128,6 +128,14 @@ export async function sendMessage(content: string): Promise<void> {
   // Marcar como streaming
   isStreaming.set(true);
 
+  // Provider+model activos del workspace. Si el usuario no eligio nada
+  // explicito, settings va vacio y el backend cae al fallback por priority.
+  const provider = get(activeProvider);
+  const model = get(activeModel);
+  const settings: Record<string, unknown> = {};
+  if (provider?.id) settings.provider = provider.id;
+  if (model) settings.model = model;
+
   // Enviar via mqttRequest (patrón ui/request/conversation/send)
   // currentProjectId y convId ya validados arriba
   try {
@@ -140,7 +148,7 @@ export async function sendMessage(content: string): Promise<void> {
       page_id: getPageRoute(),
       conversation_id: convId,
       context: {},
-      settings: {},
+      settings,
       prompt: null,
       attachments: currentAttachments.map(a => a.path),
       intencion: null,

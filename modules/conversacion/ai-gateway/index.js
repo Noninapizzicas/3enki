@@ -371,7 +371,8 @@ class AiGatewayModule {
   // ============================================================
 
   async _executeLLM({ system, messages, tools, settings, attachments, project_id, conversation_id, page_id, context, prompt, intencion, providerName }) {
-    const { name: providerNameUsed, provider } = await this._selectProvider(providerName, project_id);
+    const desiredProvider = providerName ?? settings?.provider ?? null;
+    const { name: providerNameUsed, provider } = await this._selectProvider(desiredProvider, project_id);
 
     // Resolver attachments y mezclarlos con el último mensaje user
     const resolvedAtt = await this._resolveAttachments(project_id, attachments);

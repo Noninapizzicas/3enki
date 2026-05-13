@@ -44,11 +44,15 @@ El skill es **un patrón que Claude aplica** combinando 4 capas concéntricas de
 **Qué prueba**: cada agente del scope del módulo funciona aisladamente.
 
 Para cada agent.json con `scope: [<modulo>]`:
-1. Lanzo `agent.execute.request` directo con task relevante al agente.
-2. Capturo `agent.execute.response` o `agent.execute.failed`.
+1. Lanzo `agent.execute.request` directo con **2-3 tasks distintas** (principio de triangulación).
+2. Capturo `agent.execute.response` o `agent.execute.failed` por cada task.
 3. Verifico que las tarjetas (`chat.assistant.saved`) se persisten correctamente.
+4. **Comparo el comportamiento entre las 2-3 ejecuciones**: ¿usa las mismas tools? ¿latencias estables? ¿calidad consistente?
 
-Es el equivalente a "smoke test" del subsistema agente para este módulo.
+Es el equivalente a "smoke test" del subsistema agente para este módulo. La triangulación distingue:
+- **Finding confirmado** (el comportamiento se repite en 2+ ejecuciones): vale la pena accionar.
+- **Observación** (solo aparece en 1 ejecución de 3): puede ser transitorio, no concluyente.
+- **Comportamiento adaptativo** (cambia según task): el agente ajusta su estrategia — no es bug.
 
 ### Tier D — Coherencia con propósito declarado
 **Qué prueba**: que el LLM razona dentro del dominio del módulo (no se sale al hacer una pregunta ambigua).

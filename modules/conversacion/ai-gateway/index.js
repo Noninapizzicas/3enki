@@ -164,13 +164,41 @@ class AiGatewayModule {
     // menu-generator (tools 'menu.*') matcheen aunque el name del módulo y el
     // prefijo de la tool no coincidan literalmente — sin renombrar nada.
     const allowedPrefixes = this.pagePrefixes?.get(page_id);
-    return all.filter(t => {
+    const filtered = all.filter(t => {
       const name = t.name || '';
       if (GLOBAL_TOOLS.has(name)) return true;
       if (allowedPrefixes && name.includes('.') && allowedPrefixes.has(name.split('.')[0])) return true;
       // Fallback: tool name empieza por page_id (caso recetas — name del módulo coincide con prefijo)
       if (name.startsWith(page_id + '.')) return true;
       return false;
+    });
+    // Filtrado adicional: la tool invoke_agent enumera todos los agentes en su
+    // description. Reducimos esa enumeracion a los agentes cuyo scope incluye
+    // el page actual (o '*' = global). Reduce ~1000 tokens de ruido cuando el
+    // catalogo de agentes crece, y mejora el routing del LLM al no presentarle
+    // opciones irrelevantes para el dominio en el que esta.
+    return filtered.map(t => {
+      if (t.name !== 'invoke_agent' || !Array.isArray(t._agents)) return t;
+      const relevant = t._agents.filter(a => {
+        const scope = Array.isArray(a.scope) ? a.scope : [];
+        return scope.includes('*') || scope.includes(page_id);
+      });
+      if (relevant.length === 0 || relevant.length === t._agents.length) return t;
+      const lines = relevant.map(a => `  - ${a.name}: ${a.description || ''}`).join('\n');
+      return {
+        ...t,
+        description: `Invoca un agente especialista para una tarea concreta. Cada agente sabe su dominio.\n\nAgentes disponibles para esta página (${page_id}):\n${lines}\n\nDevuelve cuando el agente termina con el resultado.`,
+        parameters: {
+          ...t.parameters,
+          properties: {
+            ...(t.parameters?.properties || {}),
+            agent_name: {
+              ...(t.parameters?.properties?.agent_name || {}),
+              enum: relevant.map(a => a.name)
+            }
+          }
+        }
+      };
     });
   }
 

@@ -94,3 +94,4 @@ data/projects/system/
 # Business-specific projects (not part of installation)
 data/projects/pizzepos/
 data/projects/facturas-nonina/
+audit/

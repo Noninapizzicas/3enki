@@ -81,7 +81,7 @@
   "config": {
     "providers": {
       "deepseek": {
-        "enabled": false,
+        "enabled": true,
         "priority": 1,
         "api_base": "https://api.deepseek.com/v1",
         "default_model": "deepseek-chat",

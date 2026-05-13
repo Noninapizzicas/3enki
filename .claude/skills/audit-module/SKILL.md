@@ -1,85 +1,146 @@
 ---
 name: audit-module
-description: Auditoría operativa end-to-end de un módulo del sistema event-core. Genera ficha, guión heurístico, ejecuta como usuario contra el VPS, exporta la conversación y produce reporte con cobertura, routing del LLM (TP/FP/FN), latencias por tool, checks contra rules del prompt, detección de patología y sugerencias accionables clasificadas por severidad. Compara con audits anteriores si existen.
-when-to-use: Cuando se quiere validar el funcionamiento operativo de un módulo (recetas, escandallo, viabilidad, cartadigital, etc.) tal como lo experimenta un usuario real. Útil para detectar regresiones tras cambios, medir rendimiento del LLM al rutear hacia los tools del módulo, identificar tools rotos y proponer mejoras concretas al prompt o al código.
+description: Auditar el funcionamiento operativo de un módulo del sistema (recetas, escandallo, viabilidad, cartadigital, etc.) tal como lo experimenta un usuario real. NO es un test unitario — es una sesión de chat reactiva contra el VPS donde Claude conduce la conversación, analiza qué tools usa el LLM, detecta alucinaciones/regresiones/oportunidades de mejora, y produce un reporte cualitativo.
+when-to-use: Cuando se quiere validar un módulo end-to-end (tras un cambio de prompt, código o agentes), entender por qué el LLM rutea mal a ciertos tools, comparar el comportamiento entre dos instancias paralelas, o sacar findings accionables para mejorar el prompt/contexto/agentes. Útil sobre todo cuando una prueba automatizada no aplica porque el sistema involucra decisiones del LLM.
 ---
 
 # audit-module
 
-Auditoría operativa de un módulo. **NO es un test unitario** — es una prueba end-to-end como usuario humano, contra el VPS de producción/staging, y posterior análisis estructurado del resultado.
+El skill es **un patrón que Claude aplica**, no un script que ejecuta. Claude conduce la conversación contra el VPS, lee el resultado, y produce un reporte cualitativo.
 
-## Cómo invocar
+## Filosofía
+
+- **Yo (Claude) soy el cerebro del audit.** El sistema ya guarda los datos (mensajes, tool_calls en metadata, activity buffer); yo conduzco el flujo y aporto el juicio.
+- **Conversación reactiva, no script rígido.** Decido cada mensaje según la respuesta anterior. Si el LLM dice "no hay X", reacciono creando X.
+- **Cubrir tools y agentes con mensajes ricos**, no "1 mensaje por tool". Un buen audit son 5-10 turnos que estresan rutas distintas (lectura → mutación → análisis → modificación con verificación).
+- **A/B opcional pero valioso**: si el usuario puede pasar los mismos mensajes en su chat web en paralelo, comparar revela variabilidad del LLM y comportamiento inteligente vs mecánico.
+- **Reporte narrativo, no métricas mecánicas.** "El LLM detectó receta existente y actualizó en vez de duplicar" vale más que "hit_rate=80%".
+
+## Flujo de pensamiento
+
+### Fase 1 — Comprender el módulo
+
+Leo `module.json` (tools, subscribes/publishes), `prompt.json` (role, intent) y `context.json` (capabilities, rules, tools_disponibles). De ahí infiero:
+- Qué hace el módulo (en una frase)
+- Qué dependencias tiene (otros módulos)
+- Qué agentes del catálogo lo pueden ayudar (filtrar `agents/*.json` por scope)
+- Qué tools son lecturas, mutaciones, análisis
+
+### Fase 2 — Diseñar el guión
+
+Escribo **5-10 mensajes en lenguaje natural** que un usuario haría. Encadenados lógicamente:
+- 1-2 mensajes de **lectura** (listar, estadísticas, ver detalle)
+- 1-2 de **investigación/proposición** (busca/investiga + propón si no existe)
+- 1 de **creación rica** (con datos completos, no mínimos)
+- 1 de **análisis cruzado** (combina catálogo + recetas, escandallo + viabilidad, etc.)
+- 1 de **modificación + verificación** (actualizar Y mostrar historial para confirmar)
+
+Lo guardo en `audit/<modulo>-<TS>/guion.md` como markdown legible (no JSON).
+
+### Fase 3 — Conducir la conversación
+
+Uso los helpers atómicos:
 
 ```bash
-# Audit completo de un módulo (default project: Paco)
-node scripts/audit-module.js recetas
+# Crear conversación nueva
+CONV=$(node scripts/audit-helpers/create-conversation.js Paco "audit-recetas")
 
-# Otro proyecto, por nombre o UUID
-node scripts/audit-module.js escandallo --project=Pancito
-
-# Generar solo ficha + guion sin ejecutar contra el VPS
-node scripts/audit-module.js viabilidad --dry-run
-
-# Cambiar espera entre mensajes (default: 60s — agentes y operaciones largas necesitan tiempo)
-node scripts/audit-module.js recetas --wait=90000
+# Por cada mensaje del guión:
+node scripts/audit-helpers/send-message.js "$PROJECT" "$CONV" "recetas" "mi mensaje aquí"
+# → imprime respuesta + última línea: --META {"tools":[...],"duration_ms":...}
 ```
 
-## Fases (todas automatizadas)
+**Después de cada respuesta**, leo y decido:
+- ¿Llamó al tool esperado? ¿O usó otro?
+- ¿La respuesta es coherente con los datos del tool?
+- ¿Hay señales de alucinación (afirma sin tool call)?
+- ¿El siguiente mensaje del guión sigue siendo válido o lo adapto?
 
-1. **analyze** — lee `module.json` + `prompt.json` + `context.json` del módulo. Extrae role, intent, tools, rules, dependencias (otros módulos cuyo prefijo aparezca en `subscribes`).
-2. **script** — genera un guión heurístico de 1 mensaje natural por tool, en orden lógico (setup → lectura → mutación → análisis → reversión).
-3. **execute** — crea conversación nueva contra el VPS con `page_id=<modulo>`, envía cada mensaje como un usuario real (`ui/request/conversation/send`), captura los eventos del bus (`<modulo>.*.response`, `chat.assistant.saved`, `ai.chat.failed`) con sus latencias.
-4. **export** — descarga la conversación entera via API `conversation-export` (mensajes persistidos en BD + activity buffer).
-5. **report** — produce dos artefactos:
-   - `reporte.md` — humano leíble, con secciones de métricas, latencias, detalle por paso, errores, sugerencias y comparativa con audit anterior si existe.
-   - `reporte.json` — estructurado, para procesamiento posterior.
+Si el LLM falla (`ai.chat.failed`) o se desvía, no aborto — observo y sigo adaptando.
 
-## Output
+### Fase 4 — Comparación A/B (opcional)
+
+Si quiero comparar variabilidad o detectar comportamiento inteligente:
+1. Genero el guión y lo paso al usuario para que lo ejecute en su chat web en paralelo.
+2. Espero a que termine.
+3. Exporto ambas conversaciones (B1=mía, B2=suya).
+4. Comparo turno a turno: mismas tools, distintas tools, distintas decisiones, ¿por qué?
+
+Las diferencias pueden ser **comportamiento inteligente** (el LLM en B2 detectó algo que en B1 no aplicaba) o **inconsistencia patológica** (mismo input, distinta respuesta sin razón visible). El juicio es mío.
+
+### Fase 5 — Exportar y analizar
+
+```bash
+node scripts/audit-helpers/fetch-export.js "$CONV" "$PROJECT" audit/<modulo>-<TS>/export.json
+```
+
+Leo el export. Para cada mensaje assistant veo:
+- `metadata.tool_calls` — qué tools usó
+- `content` — qué respondió
+- `tokens` — peso del turno
+
+Y cruzo con lo que esperaba del guión.
+
+### Fase 6 — Reporte narrativo
+
+Escribo `audit/<modulo>-<TS>/reporte.md`:
+
+```markdown
+# Audit `<modulo>` — <fecha>
+
+## Resumen
+- N mensajes, M tools distintas ejercitadas, K agentes invocados
+- Conv id: ...
+- Comparativa A/B: sí/no, con qué conversación
+
+## Findings
+- **F1 (severidad)**: qué pasó, evidencia, hipótesis de causa.
+- **F2 (severidad)**: ...
+
+## Patrones observados
+Cosas no-obvias que noté leyendo: e.g. el LLM detectó receta existente
+y actualizó en vez de crear; el LLM ignoró un tool específico; el LLM
+tardó X en un mensaje vs Y en otro similar.
+
+## Sugerencias accionables
+- Cambios concretos al prompt / context / código, no parches puntuales.
+
+## Estado del proyecto tras el audit
+Recetas/escandallos/escenarios creados o modificados, por si hay que
+limpiar.
+```
+
+## Helpers atómicos (`scripts/audit-helpers/`)
+
+| Archivo | Función |
+|---|---|
+| `list-conversations.js <project> [limit]` | Lista conv de un proyecto |
+| `create-conversation.js <project> [title]` | Crea conv, imprime id |
+| `send-message.js <proj> <conv> <page> "msg"` | Envía + espera respuesta + meta |
+| `fetch-export.js <conv> <project> [out.json]` | Descarga export |
+
+Cada uno es ~30-50 líneas. Yo los uso paso a paso, no hay orquestador.
+
+## Output de un audit típico
 
 ```
-audit/<modulo>-<timestamp>/
-  ficha.json     ficha del módulo
-  guion.json     guión de pruebas generado
-  trace.json     eventos del bus capturados en vivo + latencias por tool
-  export.json    export completo via conversation-export API
-  reporte.md     reporte humano-leíble (índice + secciones)
-  reporte.json   reporte estructurado
+audit/<modulo>-<TS>/
+  guion.md          el guión que diseñé
+  b1-export.json    mi conversación (mía)
+  b2-export.json    la del usuario (si A/B)
+  reporte.md        análisis cualitativo
 ```
-
-## Cómo se interpreta el reporte
-
-**Cobertura tools**: % de tools del módulo que se ejecutaron al menos una vez durante el audit. Si baja, el guión no cubre el catálogo del módulo o el LLM ignoró tools.
-
-**Routing TP/FP/FN**:
-- **TP** (true positive): el LLM usó el tool esperado para el mensaje del paso.
-- **FN** (false negative): el LLM NO usó el tool esperado.
-- **FP** (false positive): el LLM usó tools adicionales no esperados.
-
-Hit rate alto (>80%) indica que el LLM rutea bien con el prompt actual. Bajo indica que `prompt.json` o `context.json.tools_disponibles` necesitan más claridad.
-
-**Latencias**: p50/p95/max por tool. Permite detectar tools lentas que degradan UX.
-
-**Findings de calidad**: heurísticas sobre cada respuesta del LLM detectan:
-- `antipattern`: presencia de `[object Object]` en el chat.
-- `system_error_message`: la respuesta es el fallback genérico de chat-io.
-- `token_degeneration`: degeneración del LLM (alta proporción de tokens cortos al final).
-- `format`: la respuesta no respeta rules del prompt (e.g. listas markdown).
-- `too_short`: respuesta muy corta (posible fallo silencioso).
-
-**Sugerencias clasificadas** por severidad (high/medium/low) con acción accionable.
-
-**Comparativa con audit anterior** muestra el delta de cobertura y routing — útil para detectar regresiones tras commits.
 
 ## Cuándo usar este skill
 
-- Tras tocar el código de un módulo, antes de mergear.
-- Cuando un usuario reporta que algo "no funciona bien" — el reporte localiza si es del LLM (routing/calidad) o del módulo (tools fallando).
-- Para comparar rendimiento del prompt antes/después de cambios en `prompt.json`.
-- Para descubrir tools no documentadas o degradadas.
+- Validar un módulo tras cambiar su prompt/context.
+- Investigar por qué el LLM tarda o falla con ciertos mensajes.
+- Comparar dos providers (cuando ambos tengan credencial).
+- Antes de mergear un cambio que toque el subsistema chat/agentes.
+- Cuando un usuario reporta "esto no funciona bien": el audit reproduce su flujo y localiza si el problema es del LLM (routing/calidad) o del módulo (tools rotos).
 
-## Limitaciones conocidas (v1)
+## Lo que este skill NO es
 
-- El guión es heurístico — un mensaje por tool basado en el sufijo. No cubre casos edge (datos inválidos, dependencias entre tools). Las heurísticas se pueden mejorar editando `toolToMessage()` en `scripts/audit-module.js`.
-- Asume que el módulo ya está cargado en el VPS y que el proyecto tiene datos mínimos. No crea fixtures automáticamente.
-- Espera fija entre pasos (default 60s). Si un step tarda más, se pierde su respuesta. Aumentar con `--wait`.
-- La detección de patología es heurística (regex). No usa LLM-as-judge.
+- **NO es test unitario** — los módulos ya tienen `tests/unit/<modulo>.test.js`.
+- **NO es benchmark de performance** — no mide ops/seg ni stress test.
+- **NO es auto-pilot ciego** — el guión y el análisis los hago yo (Claude), con criterio adaptado al módulo.

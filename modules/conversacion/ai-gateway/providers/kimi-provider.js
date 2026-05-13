@@ -79,7 +79,7 @@ class KimiProvider extends BaseProvider {
     });
 
     const response = await this.withRetry(
-      () => this.makeRequest('POST', '/chat/completions', requestData, headers),
+      () => this.makeRequest('POST', '/v1/chat/completions', requestData, headers),
       options.retryConfig || {}
     );
 
@@ -216,7 +216,7 @@ class KimiProvider extends BaseProvider {
 
       this.makeStreamRequest(
         'POST',
-        '/chat/completions',
+        '/v1/chat/completions',
         requestData,
         headers,
         (chunk) => {

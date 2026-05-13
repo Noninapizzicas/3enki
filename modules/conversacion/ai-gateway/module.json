@@ -160,7 +160,7 @@
       "kimi": {
         "enabled": true,
         "priority": 8,
-        "api_base": "https://api.moonshot.ai/v1",
+        "api_base": "https://api.moonshot.ai",
         "default_model": "kimi-k2.6",
         "models": [
           "kimi-k2.6",

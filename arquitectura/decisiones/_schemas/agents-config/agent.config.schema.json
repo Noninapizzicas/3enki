@@ -57,7 +57,7 @@
     },
     "provider": {
       "type": "string",
-      "enum": ["auto", "deepseek", "anthropic", "openai", "groq", "gemini", "ollama", "claude-cli"],
+      "enum": ["auto", "deepseek", "anthropic", "openai", "groq", "gemini", "ollama", "claude-cli", "kimi"],
       "description": "Provider LLM. 'auto' para que ai-gateway seleccione segun priority. Override solo cuando hay razon real (ej: agente multimodal requiere gemini o openai)."
     },
     "temperature": {

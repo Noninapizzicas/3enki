@@ -44,6 +44,7 @@ const PROVIDER_ICONS = {
   GOOGLE: '☁️',
   GEMINI: '☁️',
   GROQ: '⚡',
+  KIMI: '🌙',
   GMAIL: '📧',
   GLOVO: '🛵',
   CLOUDFLARE: '🟧',

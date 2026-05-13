@@ -1,187 +1,104 @@
 ---
 name: audit-module
-description: Auditoría operativa completa de un módulo del sistema (recetas, escandallo, viabilidad, cartadigital, etc.) cubriendo 4 dimensiones — tools directos del módulo via chat, delegación natural a agentes del scope del módulo, invocación forzada de cada agente individualmente, y coherencia del LLM con el propósito declarado del módulo. Claude conduce la conversación, fuerza los agentes, lee los exports y produce reporte cualitativo con findings, patrones y sugerencias accionables.
-when-to-use: Validar un módulo end-to-end tras un cambio de prompt/código/agentes, comparar comportamiento entre dos sesiones, detectar regresiones (alucinación, routing subóptimo, agentes caídos), o medir alineación del LLM con el dominio declarado del módulo. Es la herramienta canónica antes de mergear cambios que tocan el subsistema chat/agentes.
+description: Auditoría operativa completa de un módulo del sistema (recetas, escandallo, viabilidad, cartadigital, etc.) en 3 tiradas separadas — exhaustiva de tools, exhaustiva de agentes con triangulación, y mixta natural de uso real — más una recapitulación que cruza los hallazgos de las 3. Cada tirada mide una dimensión del subsistema. La recapitulación clasifica findings según dónde aparecen (solo aislada, solo mixta, o ambas) y eso indica si el problema es del componente o de la orquestación.
+when-to-use: Validar un módulo end-to-end de forma exhaustiva y sin sesgos. Útil tras cambios de prompt/código/agentes, antes de mergear, para localizar si un problema es del componente (tool/agente) o de la orquestación (LLM principal eligiendo mal), o para comparar baseline antes/después de optimizaciones.
 ---
 
 # audit-module
 
-El skill es **un patrón que Claude aplica** combinando 4 capas concéntricas de comprobación. Claude conduce, los helpers son atómicos, el reporte es narrativo con juicio.
+3 tiradas separadas + recapitulación. Claude conduce cada tirada con un propósito acotado, evita mezclar dimensiones, y al final cruza los hallazgos para distinguir entre problemas de componente y problemas de orquestación.
 
 ## Filosofía
 
-- **Yo (Claude) soy el cerebro.** El sistema ya guarda los datos (mensajes, `metadata.tool_calls`, activity buffer, agent.execute.*); yo conduzco el flujo y aporto el análisis cualitativo.
-- **Conversación reactiva, no script rígido.** Decido cada mensaje según la respuesta anterior. Si el LLM resuelve sin tools cuando esperaba que delegara, lo registro como finding.
-- **4 capas de comprobación** que cubren tools + agentes + propósito.
-- **Reporte narrativo, no métricas mecánicas.** Findings con severidad, patrones observados, sugerencias accionables.
+- **Cada tirada mide UNA dimensión.** No mezclar tools, agentes y comportamiento natural en una sola pasada — confunde el diagnóstico.
+- **Triangulación dentro de cada tirada** (especialmente agentes): 2-3 ejecuciones distintas para distinguir bug real de variabilidad.
+- **La mixta es el banco de pruebas integral.** Refleja el uso real. Lo que falla SOLO en mixta es problema de orquestación; lo que falla en ambas es problema del componente.
+- **La recapitulación es donde se generan los findings.** Las 3 tiradas son insumos; el reporte final cruza los datos y clasifica por tipo de problema.
 
-## Las 4 capas del audit
+## Las 3 tiradas
 
-### Tier A — Tools directos via chat
-**Qué prueba**: que el LLM principal en `page=<modulo>` rutea correctamente a los tools nativos del módulo.
+### Tirada A — Tools del módulo
+**Propósito**: verificar que cada tool del módulo funciona y que el LLM principal lo invoca correctamente desde el chat.
 
-4-5 mensajes en lenguaje natural que un usuario haría, encadenados lógicamente:
-- 1 de lectura combinada (estadísticas + listado + estado)
-- 1 de investigación/proposición (`investigar*` + propuesta del LLM)
-- 1 de creación rica (datos completos, no mínimos)
-- 1 de análisis cruzado (combinar lecturas para análisis)
-- 1 de modificación con verificación (mutación + leer historial)
+- 1 conversación de chat con `page_id=<modulo>`.
+- 5-8 mensajes diseñados para ejercitar **todos los tools del módulo** (lectura → mutación → análisis → reversión).
+- Cobertura objetivo: ≥80% de los tools.
+- Salida: `audit/<modulo>-<TS>/tirada-A-tools/chat-export.json` + análisis por tool.
 
-### Tier B — Delegación natural a agentes
-**Qué prueba**: que el LLM, cuando le pides algo complejo o especializado, **delega al agente apropiado** vía `invoke_agent` en lugar de resolver con tools propios.
+### Tirada B — Agentes del scope
+**Propósito**: verificar que cada agente con `scope:[<modulo>]` funciona aisladamente y de forma consistente.
 
-2-3 mensajes deliberadamente complejos que invitan a delegar:
-- "Investiga 3 variantes auténticas de [receta] con técnica distintiva" → debería ir a `recipe-researcher`
-- "Completa los datos faltantes de [receta incompleta]" → `recipe-completer`
-- "Dame un análisis profesional de costes y márgenes" → cadena `escandallo-*` / `recipe-chef-advisor`
+- 1 conversación POR AGENTE del scope (no obsoleto).
+- 2-3 tasks distintas por agente (triangulación).
+- Invocación forzada vía `agent.execute.request` (no chat).
+- Salida: `audit/<modulo>-<TS>/tirada-B-agentes/<agente>-t{1,2,3}.json`.
+- Comparativa T1/T2/T3 por agente: ¿tools consistentes? ¿latencias estables? ¿comportamiento adaptativo o errático?
 
-**Finding clave**: si el LLM resuelve con tools propios en lugar de delegar, es routing subóptimo. Puede ser:
-- Descripción del agente poco visible al LLM
-- LLM optimizando coste de tokens (no delega para ahorrar roundtrip)
-- Agente innecesario (el tool propio basta)
+### Tirada C — Mixta (uso real)
+**Propósito**: verificar la orquestación del LLM principal en una sesión natural. El LLM decide solo qué tool/agente usar para cada tarea.
 
-### Tier C — Invocación forzada de cada agente del scope
-**Qué prueba**: cada agente del scope del módulo funciona aisladamente.
+- 1 conversación de chat **larga** (10-15 mensajes) con `page_id=<modulo>`.
+- Mensajes en lenguaje natural de un usuario que **no sabe** qué tools/agentes existen. Solo pide cosas del dominio.
+- Encadenamiento realista: explora estado → crea algo → modifica → analiza → consulta especialista → decide.
+- Salida: `audit/<modulo>-<TS>/tirada-C-mixta/chat-export.json` + análisis del flujo.
 
-Para cada agent.json con `scope: [<modulo>]`:
-1. Lanzo `agent.execute.request` directo con **2-3 tasks distintas** (principio de triangulación).
-2. Capturo `agent.execute.response` o `agent.execute.failed` por cada task.
-3. Verifico que las tarjetas (`chat.assistant.saved`) se persisten correctamente.
-4. **Comparo el comportamiento entre las 2-3 ejecuciones**: ¿usa las mismas tools? ¿latencias estables? ¿calidad consistente?
+## Fase final — Recapitulación
 
-Es el equivalente a "smoke test" del subsistema agente para este módulo. La triangulación distingue:
-- **Finding confirmado** (el comportamiento se repite en 2+ ejecuciones): vale la pena accionar.
-- **Observación** (solo aparece en 1 ejecución de 3): puede ser transitorio, no concluyente.
-- **Comportamiento adaptativo** (cambia según task): el agente ajusta su estrategia — no es bug.
+Cruza las 3 tiradas y clasifica findings:
 
-### Tier D — Coherencia con propósito declarado
-**Qué prueba**: que el LLM razona dentro del dominio del módulo (no se sale al hacer una pregunta ambigua).
+| Aparece en | Tipo de problema | Acción |
+|---|---|---|
+| Solo Tirada A | Tool del módulo | Revisar handler del tool |
+| Solo Tirada B | Agente | Revisar prompt/scope del agente |
+| Solo Tirada C | Orquestación del LLM principal | Revisar base prompt / context del módulo / catálogo |
+| A + C | Tool roto, confirmado en uso real | Fix urgente |
+| B + C | Agente roto, confirmado en uso real | Fix urgente |
+| A + B + C | Problema sistémico | Revisar contrato/arquitectura |
 
-1-2 mensajes abiertos que evalúan alineación con el `intent`/`role` del `prompt.json` del módulo:
-- "Ayúdame a mejorar mi negocio" en `page=recetas` → debería responder con vocabulario del dominio (costes, food cost, recetas), no marketing genérico.
-- "¿Qué me recomiendas hacer ahora?" → debería proponer acciones del dominio (catalogar ingredientes, analizar costes), no acciones genéricas.
+La recapitulación produce `audit/<modulo>-<TS>/recapitulacion.md` con:
+- Tabla cruzada de findings
+- Patrones que **solo emergen** al ver las 3 tiradas juntas
+- Decisiones recomendadas con su nivel de confianza
 
-## Flujo paso a paso
+## Flujo
 
-### 1. Comprender el módulo
+### Fase 1 — Comprender el módulo (sin cambios)
 
-```bash
-# Yo leo:
-cat modules/<modulo>/module.json | python3 -m json.tool
-cat modules/<modulo>/prompt.json
-cat modules/<modulo>/context.json
-```
+Leo `module.json`, `prompt.json`, `context.json`. Identifico agentes con `scope:[<modulo>]` no obsoletos.
 
-Extraigo:
-- Tools (qué hace cada uno)
-- Role + Intent (propósito declarado)
-- Reglas del context
-- Dependencias con otros módulos (subscribes a prefijos ajenos)
+### Fase 2 — Las 3 tiradas (en este orden)
+
+**Orden importa**: A primero (cobertura básica), B después (componentes aislados), C al final (integración). La mixta puede revelar interacciones que no se ven en las aisladas.
 
 ```bash
-# Agentes del scope del módulo:
-python3 -c "
-import os, json
-for f in sorted(os.listdir('modules/conversacion/ai-agent-framework/agents')):
-    if not f.endswith('.json'): continue
-    a = json.load(open('modules/conversacion/ai-agent-framework/agents/'+f))
-    if '<modulo>' in (a.get('scope') or []): print(a.get('name'), '-', (a.get('description','') or '')[:80])
-"
-```
+# Tirada A
+CONV_A=$(node scripts/audit-helpers/create-conversation.js Paco "audit-<modulo>-tools")
+node scripts/audit-helpers/send-message.js ... # 5-8 mensajes
+node scripts/audit-helpers/fetch-export.js "$CONV_A" ... audit/<modulo>-<TS>/tirada-A-tools/chat-export.json
 
-### 2. Diseñar guión multi-tier
-
-Lo guardo en `audit/<modulo>-<TS>/guion.md`:
-
-```markdown
-# Guión audit <modulo>
-
-## Tier A — Tools directos (5 mensajes)
-1. ...
-2. ...
-
-## Tier B — Delegación natural a agentes (2-3 mensajes)
-1. ... (esperado: invoke_agent → <nombre_agente>)
-2. ...
-
-## Tier C — Agentes forzados (uno por cada del scope)
-- <agente-1>: task = "..."
-- <agente-2>: task = "..."
-
-## Tier D — Coherencia con propósito (1-2 mensajes)
-1. ...
-```
-
-### 3. Ejecutar Tier A + B + D en una conversación de chat
-
-```bash
-PROJECT=$(echo Paco)  # o UUID
-CONV=$(node scripts/audit-helpers/create-conversation.js "$PROJECT" "audit-<modulo>")
-
-# Por cada mensaje del guion A/B/D:
-node scripts/audit-helpers/send-message.js "$PROJECT" "$CONV" "<modulo>" "mensaje aquí"
-# Leo respuesta, decido siguiente
-```
-
-### 4. Ejecutar Tier C — cada agente forzado
-
-```bash
-# Para cada agente del scope, una conversación nueva (limpia):
-CONV_AGENT=$(node scripts/audit-helpers/create-conversation.js "$PROJECT" "audit-agent-<nombre>")
-node scripts/audit-helpers/force-agent.js "$PROJECT" "$CONV_AGENT" "<nombre-agente>" "task de prueba"
-```
-
-### 5. Exportar todas las conversaciones
-
-```bash
-node scripts/audit-helpers/fetch-export.js "$CONV" "$PROJECT" audit/<modulo>-<TS>/chat-export.json
-mkdir audit/<modulo>-<TS>/agents
-for agent in ...; do
-  node scripts/audit-helpers/fetch-export.js "$CONV_$agent" "$PROJECT" audit/<modulo>-<TS>/agents/$agent.json
+# Tirada B (por cada agente del scope, 2-3 tasks)
+for AGENT in agente1 agente2 ...; do
+  for T in T1 T2 T3; do
+    CONV=$(node scripts/audit-helpers/create-conversation.js Paco "audit-<modulo>-<agente>-<T>")
+    node scripts/audit-helpers/force-agent.js ... "task de la perspectiva T"
+    node scripts/audit-helpers/fetch-export.js "$CONV" ... audit/<modulo>-<TS>/tirada-B-agentes/$AGENT-$T.json
+  done
 done
+
+# Tirada C
+CONV_C=$(node scripts/audit-helpers/create-conversation.js Paco "audit-<modulo>-mixta")
+node scripts/audit-helpers/send-message.js ... # 10-15 mensajes naturales
+node scripts/audit-helpers/fetch-export.js "$CONV_C" ... audit/<modulo>-<TS>/tirada-C-mixta/chat-export.json
 ```
 
-### 6. Reporte cualitativo
+### Fase 3 — Recapitulación
 
-Escribo `audit/<modulo>-<TS>/reporte.md` con secciones:
+Leo los exports de las 3 tiradas y produzco `recapitulacion.md`:
 
-```markdown
-# Audit <modulo> — <fecha>
-
-## Resumen ejecutivo
-Veredicto en 2 líneas + métricas clave.
-
-## Tier A — Tools directos
-- Cobertura tools: M/N
-- Hit rate routing: X/M (¿el LLM usó el tool esperado?)
-- Findings
-
-## Tier B — Delegación natural a agentes
-- Mensajes que invitaban a delegar: M
-- Mensajes donde el LLM delegó: K
-- Donde NO delegó pero resolvió con tools propios: M-K (analizar por qué)
-
-## Tier C — Salud de agentes del scope
-Por cada agente:
-- ¿Completa o falla?
-- Tools internos usados
-- Latencia
-- Tarjetas persistidas (open + closed)
-
-## Tier D — Coherencia con propósito
-- Vocabulario del dominio sí/no, ejemplos
-- Pasos próximos propuestos pertenecen al dominio sí/no
-- ¿Confunde con dominios ajenos?
-
-## Patrones observados
-Cosas no-obvias detectadas al leer los exports.
-
-## Sugerencias accionables
-Cambios concretos al prompt / context / código / agentes.
-
-## Estado del proyecto tras el audit
-Limpiezas necesarias, datos persistidos.
-```
+1. **Matriz de findings**: para cada problema detectado, en qué tiradas aparece.
+2. **Patrones de orquestación**: ¿el LLM en C usa los mismos tools/agentes que funcionaron en A/B? ¿Delega cuando debe? ¿Se queda con tools cuando tiene un agente especialista a mano?
+3. **Sugerencias clasificadas** por tipo de problema (componente vs orquestación).
+4. **Decisiones recomendadas** con nivel de confianza (basado en triangulación y consistencia entre tiradas).
 
 ## Helpers atómicos
 
@@ -189,35 +106,42 @@ Limpiezas necesarias, datos persistidos.
 |---|---|
 | `list-conversations.js <project> [limit]` | Lista conv recientes |
 | `create-conversation.js <project> [title]` | Crea conv, imprime id |
-| `send-message.js <proj> <conv> <page> "msg"` | Envía msg + espera respuesta + META |
-| `force-agent.js <proj> <conv> <agent> "task"` | Fuerza `agent.execute.request` + espera response |
+| `send-message.js <proj> <conv> <page> "msg"` | Envía + espera + META |
+| `force-agent.js <proj> <conv> <agent> "task"` | Fuerza agent.execute.request |
 | `fetch-export.js <conv> <proj> [out.json]` | Descarga export |
 
-Cada helper < 70 líneas. Yo los compongo paso a paso.
-
-## Output típico
+## Output
 
 ```
 audit/<modulo>-<TS>/
-  guion.md                  guión multi-tier diseñado
-  chat-export.json          conv del chat (tier A + B + D)
-  agents/
-    <agente-1>.json         conv forzada del agente 1 (tier C)
-    <agente-2>.json
+  ficha.md
+  tirada-A-tools/
+    guion.md
+    chat-export.json
+    analisis.md
+  tirada-B-agentes/
+    guion.md
+    <agente-1>-t1.json
+    <agente-1>-t2.json
+    <agente-2>-t1.json
     ...
-  reporte.md                análisis cualitativo
+    analisis.md
+  tirada-C-mixta/
+    guion.md
+    chat-export.json
+    analisis.md
+  recapitulacion.md
 ```
 
-## Cuándo usar este skill
+## Cuándo usar
 
-- **Tras cambiar prompt/context/código** de un módulo o de sus agentes asociados.
-- **Antes de mergear** un cambio que toca el subsistema chat/agentes.
-- **Cuando un usuario reporta "no funciona bien"** — localiza si es del LLM (routing/calidad), del módulo (tools rotos), de los agentes (falla individual), o del prompt (sale del dominio).
-- **Para medir efecto de un cambio**: dos audits antes/después, comparar findings.
+- Tras cambios en prompt/context/código/agentes del módulo.
+- Antes de mergear PR que toca el subsistema chat/agentes.
+- Para baseline antes/después de optimizaciones.
+- Cuando un usuario reporta "no funciona bien": localiza si es del LLM (mixta), del tool (A), del agente (B), o de todos.
 
 ## Lo que NO es
 
-- **NO es test unitario** — los módulos ya tienen `tests/unit/`.
-- **NO es benchmark** — no mide ops/seg.
-- **NO es auto-pilot** — guión y análisis los hace Claude con criterio.
-- **NO sustituye al observador humano** — el reporte se LEE, no se ejecuta.
+- **NO es test unitario.**
+- **NO es benchmark de performance.**
+- **NO es auto-pilot.** Claude conduce con criterio adaptado al módulo.

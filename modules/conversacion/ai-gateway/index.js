@@ -398,9 +398,11 @@ class AiGatewayModule {
       max_tokens: settings?.max_tokens ?? 2000,
       tools: translatedTools,
       projectId: project_id,
+      conversationId: conversation_id,
       retryConfig: this.config.retry
     };
     if (settings?.model) chatOptions.model = settings.model;
+    if (settings?.thinking) chatOptions.thinking = settings.thinking;
 
     // Contexto completo del chat (9 campos del contrato chat-io) que se propaga
     // a cada tool call. Cualquier handler de tool de un módulo lo recibe en sus

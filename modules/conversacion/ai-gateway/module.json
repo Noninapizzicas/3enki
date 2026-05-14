@@ -95,11 +95,11 @@
         "enabled": true,
         "priority": 2,
         "api_base": "https://api.anthropic.com/v1",
-        "default_model": "claude-3-5-sonnet-20241022",
+        "default_model": "claude-sonnet-4-6",
         "models": [
-          "claude-3-5-sonnet-20241022",
-          "claude-3-opus-20240229",
-          "claude-3-haiku-20240307"
+          "claude-opus-4-7",
+          "claude-sonnet-4-6",
+          "claude-haiku-4-5"
         ]
       },
       "openai": {

@@ -188,7 +188,7 @@ class AnthropicProvider extends BaseProvider {
 
     // Make request with retry
     const response = await this.withRetry(
-      () => this.makeRequest('POST', '/messages', requestData, headers),
+      () => this.makeRequest('POST', '/v1/messages', requestData, headers),
       options.retryConfig || {}
     );
 
@@ -278,7 +278,7 @@ class AnthropicProvider extends BaseProvider {
 
       this.makeStreamRequest(
         'POST',
-        '/messages',
+        '/v1/messages',
         requestData,
         headers,
         (chunk) => {

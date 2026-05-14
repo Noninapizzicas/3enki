@@ -321,7 +321,11 @@ class ChatIoModule {
         'SELECT context_window, temperature, max_tokens FROM conversations WHERE id = ?',
         [conversation_id], true
       );
-      const settings = convRows[0] || defaultSettings();
+      const dbSettings = convRows[0] || defaultSettings();
+      // Override per-mensaje: el caller (UI / helper de audit) puede pasar
+      // provider/model/temperature/etc en data.settings y gana sobre los
+      // valores almacenados en la conversacion.
+      const settings = { ...dbSettings, ...(data?.settings || {}) };
 
       const message_id = crypto.randomUUID();
       const now = Date.now();

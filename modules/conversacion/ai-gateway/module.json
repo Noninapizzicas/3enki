@@ -94,7 +94,7 @@
       "anthropic": {
         "enabled": true,
         "priority": 2,
-        "api_base": "https://api.anthropic.com/v1",
+        "api_base": "https://api.anthropic.com",
         "default_model": "claude-sonnet-4-6",
         "models": [
           "claude-opus-4-7",

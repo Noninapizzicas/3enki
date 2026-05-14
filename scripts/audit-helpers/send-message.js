@@ -22,7 +22,7 @@ const flags = {};
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
-  if (a === '--provider' || a === '--model') flags[a.slice(2)] = argv[++i];
+  if (a === '--provider' || a === '--model' || a === '--thinking') flags[a.slice(2)] = argv[++i];
   else positional.push(a);
 }
 const [projectId, convId, pageId, message, waitArg] = positional;
@@ -42,6 +42,7 @@ const BROKER = process.env.AUDIT_BROKER || 'wss://enki-ai.online/mqtt';
   const settings = {};
   if (flags.provider) settings.provider = flags.provider;
   if (flags.model) settings.model = flags.model;
+  if (flags.thinking) settings.thinking = { type: flags.thinking };
   c.publish('ui/request/conversation/send', JSON.stringify({
     request_id: crypto.randomUUID(),
     data: { project_id: projectId, conversation_id: convId, message, user_id: 'default', channel: 'web', page_id: pageId, settings }

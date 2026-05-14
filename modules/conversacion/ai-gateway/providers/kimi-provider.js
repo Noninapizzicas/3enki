@@ -54,10 +54,16 @@ class KimiProvider extends BaseProvider {
     const estimatedTokens = this.countTokens(messagesText);
 
     // Moonshot enforce: la familia kimi-k2.* (k2.6, k2.5, k2-thinking) solo
-    // acepta temperature=1 y top_p=0.95. Los modelos legacy moonshot-v1-*
-    // aceptan el rango 0-1 en ambos.
+    // acepta valores fijados cuando thinking esta enabled (default):
+    //   temperature=1, top_p=0.95
+    // Con thinking explicito en disabled:
+    //   temperature=0.6, top_p=0.95 (sin reasoning_content overhead)
+    // Los modelos legacy moonshot-v1-* aceptan el rango 0-1 en ambos.
     const isK2Family = /^kimi-k2/i.test(model);
-    const temperature = isK2Family ? 1 : (options.temperature ?? 0.7);
+    const thinkingDisabled = options.thinking?.type === 'disabled';
+    const temperature = isK2Family
+      ? (thinkingDisabled ? 0.6 : 1)
+      : (options.temperature ?? 0.7);
     const top_p = isK2Family ? 0.95 : (options.top_p ?? 1);
 
     const requestData = {
@@ -68,6 +74,21 @@ class KimiProvider extends BaseProvider {
       top_p,
       stream: false
     };
+
+    // Thinking control — kimi-k2.6 acepta {type:'enabled'|'disabled'}.
+    // Cuando disabled, no genera reasoning_content y el output solo cuenta
+    // el contenido visible — reduce coste de output ~10x.
+    if (options.thinking) {
+      requestData.thinking = options.thinking;
+    }
+
+    // Prompt caching de Moonshot: server-side via prompt_cache_key.
+    // Pasamos el conversation_id como bucket — todas las llamadas dentro
+    // de la misma conversacion comparten cache de prefijo (system+tools+
+    // history estable). Cache hit cuesta ~0.16x del miss para k2.6.
+    if (options.conversationId) {
+      requestData.prompt_cache_key = options.conversationId;
+    }
 
     if (options.tools && options.tools.length > 0) {
       requestData.tools = this.translateToolNames(options.tools);
@@ -96,7 +117,23 @@ class KimiProvider extends BaseProvider {
     const toolCalls = message.tool_calls || null;
     const inputTokens = response.usage?.prompt_tokens || estimatedTokens;
     const outputTokens = response.usage?.completion_tokens || this.countTokens(content);
+    // Moonshot expone hit/miss tokens en usage cuando prompt_cache_key se
+    // ha pasado. Los campos varian segun version del API; capturamos los
+    // habituales para reportar en el log y dejar registro.
+    const cacheHit = response.usage?.cached_tokens
+      ?? response.usage?.prompt_cache_hit_tokens
+      ?? response.usage?.cache_read_input_tokens
+      ?? 0;
     const totalTokens = inputTokens + outputTokens;
+
+    if (cacheHit > 0) {
+      this.logger.info('kimi.cache.hit', {
+        model,
+        cached_tokens: cacheHit,
+        input_tokens: inputTokens,
+        hit_rate: cacheHit / Math.max(inputTokens, 1)
+      });
+    }
 
     const result = {
       provider: this.name,
@@ -105,6 +142,7 @@ class KimiProvider extends BaseProvider {
       usage: {
         input_tokens: inputTokens,
         output_tokens: outputTokens,
+        cached_tokens: cacheHit,
         total_tokens: totalTokens
       },
       cost: 0,

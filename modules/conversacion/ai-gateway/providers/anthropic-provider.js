@@ -61,39 +61,64 @@ class AnthropicProvider extends BaseProvider {
    *
    * Produce shape Anthropic: { name, description, input_schema }
    *
-   * Anthropic acepta dots, dashes y underscores en name — no requiere
-   * sanitizacion (a diferencia de DeepSeek/Kimi/OpenAI).
+   * Sanitiza dots → underscores: Anthropic exige `^[a-zA-Z0-9_-]{1,128}$`
+   * para tool.name (igual que DeepSeek/OpenAI). Mantiene un mapa inverso
+   * para restaurar los nombres reales al recibir tool_use blocks.
    */
   translateTools(tools) {
     if (!Array.isArray(tools)) return tools;
-    return tools
-      .map(t => {
-        let name, description, parameters;
-        if (t.type === 'function' && t.function?.name) {
-          name = t.function.name;
-          description = t.function.description || '';
-          parameters = t.function.parameters;
-        } else if (t.function?.name) {
-          name = t.function.name;
-          description = t.function.description || '';
-          parameters = t.function.parameters;
-        } else if (t.name) {
-          name = t.name;
-          description = t.description || '';
-          parameters = t.parameters || t.input_schema;
-        } else {
-          if (this.logger) {
-            this.logger.warn('anthropic.tools.skipped_no_name', { tool: JSON.stringify(t).slice(0, 200) });
-          }
-          return null;
+    this._toolNameMap = new Map();
+    const seen = new Set();
+    const result = [];
+
+    for (const t of tools) {
+      let name, description, parameters;
+      if (t.type === 'function' && t.function?.name) {
+        name = t.function.name;
+        description = t.function.description || '';
+        parameters = t.function.parameters;
+      } else if (t.function?.name) {
+        name = t.function.name;
+        description = t.function.description || '';
+        parameters = t.function.parameters;
+      } else if (t.name) {
+        name = t.name;
+        description = t.description || '';
+        parameters = t.parameters || t.input_schema;
+      } else {
+        if (this.logger) {
+          this.logger.warn('anthropic.tools.skipped_no_name', { tool: JSON.stringify(t).slice(0, 200) });
         }
-        return {
-          name,
-          description,
-          input_schema: parameters || { type: 'object', properties: {}, required: [] }
-        };
-      })
-      .filter(Boolean);
+        continue;
+      }
+
+      const sanitized = name.replace(/\./g, '_');
+      if (seen.has(sanitized)) {
+        if (this.logger) {
+          this.logger.warn('anthropic.tools.duplicate_after_sanitize', {
+            original: name, sanitized, kept: this._toolNameMap.get(sanitized) || sanitized
+          });
+        }
+        continue;
+      }
+      seen.add(sanitized);
+      if (sanitized !== name) this._toolNameMap.set(sanitized, name);
+
+      result.push({
+        name: sanitized,
+        description,
+        input_schema: parameters || { type: 'object', properties: {}, required: [] }
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Restaura los nombres originales en los tool_calls de la respuesta.
+   * Solo modifica los que hayan sido sanitizados via translateTools.
+   */
+  _restoreToolName(name) {
+    return this._toolNameMap?.get(name) || name;
   }
 
   /**
@@ -310,7 +335,7 @@ class AnthropicProvider extends BaseProvider {
           id: b.id,
           type: 'function',
           function: {
-            name: b.name,
+            name: this._restoreToolName(b.name),
             arguments: JSON.stringify(b.input || {})
           }
         }));
@@ -336,11 +361,19 @@ class AnthropicProvider extends BaseProvider {
 
     if (toolCalls && toolCalls.length > 0) {
       result.tool_calls = toolCalls;
-      // Para preservar thinking blocks en el siguiente turno multi-turno con
-      // tools (requisito de extended thinking), exponemos los bloques nativos
-      // a traves de _raw_assistant_content. El agentic loop del gateway puede
-      // anteponerlos al construir el siguiente assistant message si decide
-      // soportar thinking explicito.
+      // _raw_tool_calls preserva los nombres SANITIZADOS (los que Anthropic
+      // acepta) para que el agentic loop del gateway envie el siguiente turno
+      // con esos mismos nombres. Sin esto, el segundo request fallaria con
+      // `name: 'recetas.listar'` (no matchea ^[a-zA-Z0-9_-]+$).
+      result._raw_tool_calls = toolUseBlocks.map(b => ({
+        id: b.id,
+        type: 'function',
+        function: {
+          name: b.name,
+          arguments: JSON.stringify(b.input || {})
+        }
+      }));
+      // Preservar thinking blocks para extended thinking multi-turno (futuro)
       if (thinkingBlocks) result._anthropic_thinking_blocks = thinkingBlocks;
     }
 

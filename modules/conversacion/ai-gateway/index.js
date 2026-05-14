@@ -179,7 +179,7 @@ class AiGatewayModule {
     // el page actual (o '*' = global). Reduce ~1000 tokens de ruido cuando el
     // catalogo de agentes crece, y mejora el routing del LLM al no presentarle
     // opciones irrelevantes para el dominio en el que esta.
-    return filtered.map(t => {
+    const mapped = filtered.map(t => {
       if (t.name !== 'invoke_agent' || !Array.isArray(t._agents)) return t;
       const relevant = t._agents.filter(a => {
         const scope = Array.isArray(a.scope) ? a.scope : [];
@@ -189,7 +189,7 @@ class AiGatewayModule {
       const lines = relevant.map(a => `  - ${a.name}: ${a.description || ''}`).join('\n');
       return {
         ...t,
-        description: `Invoca un agente especialista para una tarea concreta. Cada agente sabe su dominio.\n\nAgentes disponibles para esta página (${page_id}):\n${lines}\n\nDevuelve cuando el agente termina con el resultado.`,
+        description: `PREFERENTE: invoca a un agente especialista para CUALQUIER tarea que entre en su dominio. Es la norma del sistema — los agentes saben hacer su trabajo mejor que tu encadenando tools basicos. Solo cae a tools directas si NINGUN agente cubre el caso.\n\nAgentes disponibles para esta pagina (${page_id}):\n${lines}\n\nDevuelve cuando el agente termina con el resultado.`,
         parameters: {
           ...t.parameters,
           properties: {
@@ -201,6 +201,16 @@ class AiGatewayModule {
           }
         }
       };
+    });
+
+    // Reordenar para que invoke_agent aparezca PRIMERO en el catalogo que el
+    // LLM ve. Los LLMs ponderan posicion al elegir tool — exponer agentes
+    // antes que tools basicas refuerza la norma "prefer agente cuando exista"
+    // sin depender solo de descripciones textuales.
+    return mapped.sort((a, b) => {
+      if (a.name === 'invoke_agent') return -1;
+      if (b.name === 'invoke_agent') return 1;
+      return 0;
     });
   }
 

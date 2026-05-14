@@ -54,16 +54,18 @@ class KimiProvider extends BaseProvider {
     const estimatedTokens = this.countTokens(messagesText);
 
     // Moonshot enforce: la familia kimi-k2.* (k2.6, k2.5, k2-thinking) solo
-    // acepta temperature=1. Los modelos legacy moonshot-v1-* aceptan 0-1.
+    // acepta temperature=1 y top_p=0.95. Los modelos legacy moonshot-v1-*
+    // aceptan el rango 0-1 en ambos.
     const isK2Family = /^kimi-k2/i.test(model);
     const temperature = isK2Family ? 1 : (options.temperature ?? 0.7);
+    const top_p = isK2Family ? 0.95 : (options.top_p ?? 1);
 
     const requestData = {
       model,
       messages,
       max_tokens: options.max_tokens || 2000,
       temperature,
-      top_p: options.top_p ?? 1,
+      top_p,
       stream: false
     };
 
@@ -204,13 +206,14 @@ class KimiProvider extends BaseProvider {
 
     const isK2Family = /^kimi-k2/i.test(model);
     const temperature = isK2Family ? 1 : (options.temperature ?? 0.7);
+    const top_p = isK2Family ? 0.95 : (options.top_p ?? 1);
 
     const requestData = {
       model,
       messages,
       temperature,
       max_tokens: options.max_tokens || 2000,
-      top_p: options.top_p ?? 1,
+      top_p,
       stream: true
     };
 

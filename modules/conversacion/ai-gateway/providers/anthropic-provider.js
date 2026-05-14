@@ -160,15 +160,21 @@ class AnthropicProvider extends BaseProvider {
     const messagesText = messages.map(m => m.content).join(' ');
     const estimatedTokens = this.countTokens(messagesText);
 
-    // Build request
+    // Build request — Anthropic rechaza si temperature y top_p van juntos
+    // ("`temperature` and `top_p` cannot both be specified for this model").
+    // Preferimos temperature como knob principal y solo enviamos top_p si el
+    // caller lo ha pasado explicito en options.
     const requestData = {
       model,
       messages: anthropicMessages,
       max_tokens: options.max_tokens || 2000,
-      temperature: options.temperature || 0.7,
-      top_p: options.top_p || 1,
+      temperature: options.temperature ?? 0.7,
       stream: false
     };
+    if (options.top_p !== undefined && options.temperature === undefined) {
+      requestData.top_p = options.top_p;
+      delete requestData.temperature;
+    }
 
     if (system) {
       requestData.system = system;
@@ -253,13 +259,12 @@ class AnthropicProvider extends BaseProvider {
     const messagesText = messages.map(m => m.content).join(' ');
     const estimatedTokens = this.countTokens(messagesText);
 
-    // Build request
+    // Build request — ver nota sobre temperature vs top_p en chatCompletion
     const requestData = {
       model,
       messages: anthropicMessages,
       max_tokens: options.max_tokens || 2000,
-      temperature: options.temperature || 0.7,
-      top_p: options.top_p || 1,
+      temperature: options.temperature ?? 0.7,
       stream: true
     };
 

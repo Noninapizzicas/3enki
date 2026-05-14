@@ -319,10 +319,10 @@ class AnthropicProvider extends BaseProvider {
     let content = '';
     let toolCalls = null;
     let thinkingBlocks = null;
+    let toolUseBlocks = [];
 
     if (Array.isArray(response.content)) {
       const textBlocks = [];
-      const toolUseBlocks = [];
       const thinks = [];
       for (const b of response.content) {
         if (b.type === 'text') textBlocks.push(b.text);

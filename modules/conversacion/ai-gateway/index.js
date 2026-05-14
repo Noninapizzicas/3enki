@@ -400,6 +400,7 @@ class AiGatewayModule {
       projectId: project_id,
       retryConfig: this.config.retry
     };
+    if (settings?.model) chatOptions.model = settings.model;
 
     // Contexto completo del chat (9 campos del contrato chat-io) que se propaga
     // a cada tool call. Cualquier handler de tool de un módulo lo recibe en sus

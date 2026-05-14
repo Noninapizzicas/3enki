@@ -236,6 +236,11 @@ class AnthropicProvider extends BaseProvider {
    * - temperature y top_p mutuamente excluyentes (preferimos temperature)
    * - thinking opcional con budget_tokens < max_tokens
    * - tool_choice debe ser 'auto' o 'none' cuando thinking esta enabled
+   * - prompt caching automatico: cache_control ephemeral en system y en el
+   *   ultimo tool. Reduce coste de input ~10x en lecturas (hit). Requiere
+   *   >=1024 tokens para Sonnet/Opus 4.5, >=4096 para Haiku 4.5 y Opus 4.6+.
+   *   Solo el LLM mide el threshold — si el prefijo es menor el cache no
+   *   se crea pero tampoco da error (silent no-op).
    */
   _buildRequestBody(model, anthropicMessages, system, options) {
     const body = {
@@ -244,7 +249,15 @@ class AnthropicProvider extends BaseProvider {
       max_tokens: options.max_tokens || 2000
     };
 
-    if (system) body.system = system;
+    // System como array de bloques con cache_control en el ultimo.
+    // Anthropic cachea TODO lo anterior + ese bloque inclusive.
+    if (system) {
+      body.system = [{
+        type: 'text',
+        text: system,
+        cache_control: { type: 'ephemeral' }
+      }];
+    }
 
     if (options.top_p !== undefined && options.temperature === undefined) {
       body.top_p = options.top_p;
@@ -268,7 +281,16 @@ class AnthropicProvider extends BaseProvider {
     }
 
     if (options.tools && Array.isArray(options.tools) && options.tools.length > 0) {
-      body.tools = options.tools;
+      // Clonamos para no mutar el array compartido entre requests y marcamos
+      // el ultimo tool con cache_control. Anthropic cachea toda la lista hasta
+      // ese punto.
+      const cachedTools = options.tools.map((t, i, arr) => {
+        if (i === arr.length - 1) {
+          return { ...t, cache_control: { type: 'ephemeral' } };
+        }
+        return t;
+      });
+      body.tools = cachedTools;
       const userChoice = options.tool_choice;
       if (body.thinking) {
         body.tool_choice = userChoice && (userChoice.type === 'auto' || userChoice.type === 'none')
@@ -345,6 +367,18 @@ class AnthropicProvider extends BaseProvider {
 
     const inputTokens = response.usage?.input_tokens || estimatedTokens;
     const outputTokens = response.usage?.output_tokens || this.countTokens(content);
+    const cacheCreation = response.usage?.cache_creation_input_tokens || 0;
+    const cacheRead = response.usage?.cache_read_input_tokens || 0;
+
+    if (cacheCreation || cacheRead) {
+      this.logger.info('anthropic.cache.usage', {
+        model,
+        cache_creation_input_tokens: cacheCreation,
+        cache_read_input_tokens: cacheRead,
+        input_tokens: inputTokens,
+        hit_rate: cacheRead > 0 ? cacheRead / (cacheRead + inputTokens) : 0
+      });
+    }
 
     const result = {
       provider: this.name,
@@ -353,7 +387,9 @@ class AnthropicProvider extends BaseProvider {
       usage: {
         input_tokens: inputTokens,
         output_tokens: outputTokens,
-        total_tokens: inputTokens + outputTokens
+        cache_creation_input_tokens: cacheCreation,
+        cache_read_input_tokens: cacheRead,
+        total_tokens: inputTokens + outputTokens + cacheCreation + cacheRead
       },
       cost: 0,
       finish_reason: response.stop_reason || 'stop'

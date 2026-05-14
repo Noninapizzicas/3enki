@@ -439,7 +439,12 @@ class AiGatewayModule {
       // Añadir el assistant turn con tool_calls + los tool results.
       // content: '' (no null) — DeepSeek/OpenAI requieren el campo presente
       // como string aunque sea vacío cuando el assistant solo hace tool_calls.
-      workingMessages.push({ role: 'assistant', content: result.content || '', tool_calls: result._raw_tool_calls || result.tool_calls });
+      // reasoning_content: si el provider lo expone (Kimi en thinking mode),
+      // preservarlo — Moonshot rechaza con HTTP 400 el siguiente turno si
+      // el assistant con tool_calls anterior no lo lleva.
+      const assistantTurn = { role: 'assistant', content: result.content || '', tool_calls: result._raw_tool_calls || result.tool_calls };
+      if (result.reasoning_content) assistantTurn.reasoning_content = result.reasoning_content;
+      workingMessages.push(assistantTurn);
       const toolMessages = provider.formatToolResults?.(toolResults) || toolResults.map(tr => ({
         role: 'tool',
         tool_call_id: tr.tool_call_id,

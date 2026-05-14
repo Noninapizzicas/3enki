@@ -92,6 +92,7 @@ class KimiProvider extends BaseProvider {
 
     const message = response.choices[0]?.message || {};
     const content = message.content || '';
+    const reasoningContent = message.reasoning_content || null;
     const toolCalls = message.tool_calls || null;
     const inputTokens = response.usage?.prompt_tokens || estimatedTokens;
     const outputTokens = response.usage?.completion_tokens || this.countTokens(content);
@@ -109,6 +110,14 @@ class KimiProvider extends BaseProvider {
       cost: 0,
       finish_reason: response.choices[0]?.finish_reason || 'stop'
     };
+
+    // Thinking mode: Moonshot exige que el reasoning_content del assistant
+    // anterior se conserve en el contexto del siguiente turno cuando hay
+    // tool_calls. Lo exponemos para que el agentic loop del gateway lo
+    // re-inyecte en workingMessages al construir el siguiente assistant.
+    if (reasoningContent) {
+      result.reasoning_content = reasoningContent;
+    }
 
     if (toolCalls && toolCalls.length > 0) {
       result.tool_calls = this.restoreToolNames(toolCalls);

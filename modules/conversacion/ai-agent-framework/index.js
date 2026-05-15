@@ -420,39 +420,14 @@ class AiAgentFrameworkModule {
     const session_id = data.session_id ?? null;
     const prev_state = data.prev_state ?? null;
     const conversation_id = data.conversation_id ?? context.conversation_id ?? null;
-    const project_id = data.project_id ?? context.project_id ?? null;
-    const user_id = data.user_id || context.user_id || 'default';
-    const correlation_id = data.correlation_id || context.correlation_id || crypto.randomUUID();
 
     const agent = this.agents.get(agent_name);
     if (!agent) {
-      // Dual-publish: legacy + canonical agent.execute.failed para
-      // observabilidad de invoke_agent flow (conversation-export persiste
-      // agent_executions del path canonico).
-      const failedAt = Date.now();
-      const errorPayload = { code: 'AGENT_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` };
-      this._publicarEvento('agent.execute.failed', {
-        correlation_id, request_id, user_id, agent_name,
-        ...(conversation_id ? { conversation_id } : {}),
-        ...(project_id ? { project_id } : {}),
-        error: errorPayload,
-        timestamp: new Date(failedAt).toISOString()
-      }, { correlation_id, project_id }).catch(() => {});
       return this.eventBus.publish('invoke_agent.response', {
         request_id, session_id,
-        error: errorPayload
+        error: { code: 'AGENT_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` }
       });
     }
-
-    // Dual-publish: canonical agent.execute.request para observabilidad
-    // del invoke_agent flow. Sin esto, conversation-export no captura
-    // la task original cuando el agente se invoca desde el chat LLM.
-    this._publicarEvento('agent.execute.request', {
-      correlation_id, request_id, user_id, agent_name, task,
-      ...(conversation_id ? { conversation_id } : {}),
-      ...(project_id ? { project_id } : {}),
-      timestamp: new Date().toISOString()
-    }, { correlation_id, project_id }).catch(() => {});
 
     return this._dispatchToLlm({
       shape: 'legacy',
@@ -464,9 +439,7 @@ class AiAgentFrameworkModule {
       task, context,
       session_id, prev_state,
       conversation_id,
-      project_id,
-      user_id,
-      correlation_id,
+      project_id: context.project_id || null,
       settings: {}
     });
   }
@@ -483,29 +456,23 @@ class AiAgentFrameworkModule {
       clearTimeout(pending.timeout);
       this.pendingLlm.delete(request_id);
 
-      const duration_ms = Date.now() - pending.startedAt;
-      this._publishProgress({
-        ...pending,
-        step: 'finalizing',
-        message: `Agente ${pending.agent_name} terminando`
-      });
+      if (pending.shape === 'canonical') {
+        const duration_ms = Date.now() - pending.startedAt;
+        this._publishProgress({
+          ...pending,
+          step: 'finalizing',
+          message: `Agente ${pending.agent_name} terminando`
+        });
+        return this._publishAgentExecuteResponse({
+          ...pending,
+          content,
+          tool_calls_executed: tool_calls_executed || [],
+          model, provider, usage,
+          duration_ms
+        });
+      }
 
-      // Canonical agent.execute.response SIEMPRE (legacy y canonical).
-      // En legacy es observabilidad — conversation-export persiste a
-      // agent_executions sin importar si la entrada fue invoke_agent
-      // tool o agent.execute.request directo.
-      await this._publishAgentExecuteResponse({
-        ...pending,
-        content,
-        tool_calls_executed: tool_calls_executed || [],
-        model, provider, usage,
-        duration_ms
-      });
-
-      if (pending.shape === 'canonical') return;
-
-      // Legacy invoke_agent.response — adicionalmente, para que el
-      // agentic loop de ai-gateway reciba el result en el shape que espera.
+      // Legacy invoke_agent.response — exito
       return this.eventBus.publish('invoke_agent.response', {
         request_id: pending.original_request_id,
         session_id: pending.session_id,
@@ -527,27 +494,23 @@ class AiAgentFrameworkModule {
       clearTimeout(pending.timeout);
       this.pendingLlm.delete(request_id);
 
-      const duration_ms = Date.now() - pending.startedAt;
-      this._publishProgress({
-        ...pending,
-        step: 'finalizing',
-        message: `Agente ${pending.agent_name} fallando`
-      });
+      if (pending.shape === 'canonical') {
+        const duration_ms = Date.now() - pending.startedAt;
+        this._publishProgress({
+          ...pending,
+          step: 'finalizing',
+          message: `Agente ${pending.agent_name} fallando`
+        });
+        return this._publishAgentExecuteFailed({
+          ...pending,
+          error: this._classifyLlmError(error || 'agent execution failed'),
+          duration_ms,
+          iterations_completed: 0,
+          provider_attempted: provider || null
+        });
+      }
 
-      // Canonical agent.execute.failed SIEMPRE — observabilidad uniforme
-      // del agent flow independientemente del entry point.
-      await this._publishAgentExecuteFailed({
-        ...pending,
-        error: this._classifyLlmError(error || 'agent execution failed'),
-        duration_ms,
-        iterations_completed: 0,
-        provider_attempted: provider || null
-      });
-
-      if (pending.shape === 'canonical') return;
-
-      // Legacy invoke_agent.response — adicionalmente, para el agentic
-      // loop del LLM que espera el shape legacy.
+      // Legacy invoke_agent.response — error
       const errObj = (typeof error === 'object' && error !== null)
         ? error
         : this._classifyLlmError(error || 'agent execution failed');

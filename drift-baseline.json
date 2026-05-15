@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-13T22:15:50.431Z",
+  "generated_at": "2026-05-15T00:40:12.570Z",
   "total": 2380,
   "by_validator": {
     "naming": 49,
@@ -646,7 +646,7 @@
     "errors|drift_respuesta_no_canonica|pizzepos/menu-generator modules/pizzepos/menu-generator/index.js:316 — return con clave \"success\" (no canónica)",
     "errors|drift_swallow_error_silently|bot-manager modules/bot-manager/services/download-manager.js:331 — catch que devuelve default sin log",
     "errors|drift_swallow_error_silently|code-executor modules/code-executor/index.js:43 — catch vacío",
-    "errors|drift_swallow_error_silently|conversation-export modules/conversation-export/index.js:404 — catch vacío",
+    "errors|drift_swallow_error_silently|conversation-export modules/conversation-export/index.js:636 — catch vacío",
     "errors|drift_swallow_error_silently|database-manager modules/database-manager/index.js:416 — catch vacío",
     "errors|drift_swallow_error_silently|esp32-dev modules/esp32-dev/index.js:285 — catch vacío",
     "errors|drift_swallow_error_silently|esp32-dev modules/esp32-dev/index.js:325 — catch vacío",
@@ -1946,7 +1946,7 @@
     "persistence|drift_schema_drift_undeclared|conversacion/chat-io modules/conversacion/chat-io/index.js:77 — CREATE INDEX idx_messages_conv sin declarar en module.json.config.persistence.tables",
     "persistence|drift_schema_drift_undeclared|conversacion/chat-io modules/conversacion/chat-io/index.js:78 — CREATE INDEX idx_messages_context sin declarar en module.json.config.persistence.tables",
     "persistence|drift_silent_io_failure|code-executor modules/code-executor/index.js:228 — catch sin this.logger en bloque que envuelve I/O",
-    "persistence|drift_silent_io_failure|conversation-export modules/conversation-export/index.js:404 — catch vacío alrededor de I/O",
+    "persistence|drift_silent_io_failure|conversation-export modules/conversation-export/index.js:636 — catch vacío alrededor de I/O",
     "persistence|drift_silent_io_failure|database-manager modules/database-manager/index.js:334 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|database-manager modules/database-manager/index.js:378 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|database-manager modules/database-manager/index.js:453 — catch sin this.logger en bloque que envuelve I/O",
@@ -2074,7 +2074,7 @@
     "persistence|drift_undeclared_persistence_pattern|ui-designer — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "persistence|drift_undeclared_persistence_pattern|viabilidad — persiste estado (archivos/tablas/memoria) pero NO declara config.persistence.pattern en module.json",
     "scheduling|drift_setinterval_subsegundo|modules/pizzepos/cuentas-canales/index.js:374 — setInterval cada 60ms (limite 100ms). Repensar el patron.",
-    "security|drift_secret_en_log|modules/conversation-export/index.js:86 — variable sospechosa (apiKey/token/password/authorization) en objeto de logger; verificar manualmente que no expone valor",
+    "security|drift_secret_en_log|modules/conversation-export/index.js:105 — variable sospechosa (apiKey/token/password/authorization) en objeto de logger; verificar manualmente que no expone valor",
     "testing|drift_test_filesystem_persistente|tests/unit/admin-panel.test.js:25 — fs.mkdirSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/admin-panel.test.js:26 — fs.writeFileSync fuera de os.tmpdir()",
     "testing|drift_test_filesystem_persistente|tests/unit/cocina-poc.test.js:160 — fs.mkdirSync fuera de os.tmpdir()",

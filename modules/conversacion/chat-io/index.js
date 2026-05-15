@@ -575,7 +575,9 @@ class ChatIoModule {
       project_id, conversation_id,
       assistant_message,
       message_id_assistant,
-      tokens, cost, tool_calls_executed,
+      provider, model,
+      tokens, cost, duration_ms, finish_reason, iterations,
+      tool_calls_executed,
       settings,
       channel, channel_context, correlation_id
     } = data;
@@ -592,9 +594,25 @@ class ChatIoModule {
     const message_id = message_id_assistant || crypto.randomUUID();
     const now = Date.now();
     const tokens_total = tokens?.total ?? null;
-    const metadata = tool_calls_executed?.length
-      ? JSON.stringify({ tool_calls: tool_calls_executed.map(t => ({ name: t.name, status: t.result_status || t.status })) })
-      : null;
+    // Persistencia COMPLETA del payload canonico chat-flow.contract v1.1.0:
+    //   ai.chat.response.{provider, model, tokens, duration_ms, finish_reason,
+    //   iterations, cost, tool_calls_executed}
+    // Hasta ahora chat-io descartaba todo excepto tokens.total + nombres de
+    // tools — drift con el contrato. Sin esta info los audits y debugging
+    // post-hoc trabajan a ciegas (no se sabe que provider/model respondio,
+    // ni cuanto costo, ni que args paso al tool).
+    const metadataObj = {};
+    if (provider) metadataObj.provider = provider;
+    if (model) metadataObj.model = model;
+    if (tokens && typeof tokens === 'object') metadataObj.tokens = tokens;
+    if (typeof duration_ms === 'number') metadataObj.duration_ms = duration_ms;
+    if (finish_reason) metadataObj.finish_reason = finish_reason;
+    if (typeof iterations === 'number') metadataObj.iterations = iterations;
+    if (cost && typeof cost === 'object') metadataObj.cost = cost;
+    if (Array.isArray(tool_calls_executed) && tool_calls_executed.length > 0) {
+      metadataObj.tool_calls = tool_calls_executed;
+    }
+    const metadata = Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : null;
 
     try {
       await this._db(project_id,

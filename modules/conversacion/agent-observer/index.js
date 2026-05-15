@@ -183,6 +183,15 @@ class AgentObserverModule {
         assistant_message: summary || `🤖 ${data.agent_name}: completado`,
         duration_ms: data.duration_ms,
         tool_calls_executed: data.tool_calls_executed,
+        // Persistir TODA la info del agent.execute.response canonica
+        // (agent-flow.contract): provider, model, tokens, cost, iterations,
+        // finish_reason. Sin esto se pierde la traza del flow del agente.
+        provider: data.provider,
+        model: data.model,
+        tokens: data.tokens,
+        cost: data.cost,
+        iterations: data.iterations,
+        finish_reason: data.finish_reason,
         detail_voluminoso: content.length > summaryMax
       });
     } catch (err) {
@@ -220,7 +229,7 @@ class AgentObserverModule {
   // Internals
   // ============================================================
 
-  async _publishCard({ data, status, assistant_message, step, tool_invoked, duration_ms, tool_calls_executed, detail_voluminoso, error, provider_attempted }) {
+  async _publishCard({ data, status, assistant_message, step, tool_invoked, duration_ms, tool_calls_executed, detail_voluminoso, error, provider_attempted, provider, model, tokens, cost, iterations, finish_reason }) {
     const block = {
       type: 'agent_intervention',
       title: data.agent_name,
@@ -240,6 +249,14 @@ class AgentObserverModule {
     if (detail_voluminoso) block.detail_url = `/agent/intervention/${data.request_id}/detail`;
     if (error) block.error = error;
     if (provider_attempted) block.provider_attempted = provider_attempted;
+    // Campos canonicos del agent.execute.response (agent-flow.contract).
+    // Conservar para auditabilidad y debugging post-hoc.
+    if (provider) block.provider = provider;
+    if (model) block.model = model;
+    if (tokens) block.tokens = tokens;
+    if (cost) block.cost = cost;
+    if (typeof iterations === 'number') block.iterations = iterations;
+    if (finish_reason) block.finish_reason = finish_reason;
 
     const metadata = JSON.stringify({
       author: { kind: 'agent', id: data.agent_name, name: data.agent_name },

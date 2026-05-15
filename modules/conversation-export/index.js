@@ -18,6 +18,13 @@ class ConversationExportModule {
     this.MAX_BUFFER = 1000;
 
     this.pendingDbRequests = new Map();
+    // request_id → { agent_name, task, conversation_id, project_id, user_id,
+    //                correlation_id, started_at }
+    // Buffer in-memory de agent.execute.request para correlacionar con
+    // response/failed posterior y persistir fila completa en agent_executions.
+    this.pendingAgentRequests = new Map();
+    // Set de project_ids donde ya creamos la tabla agent_executions on-demand.
+    this._agentExecTableEnsured = new Set();
 
     this._activityUnsub = null;
     this._agentFailedUnsub = null;
@@ -83,6 +90,18 @@ class ConversationExportModule {
       this._onDbQueryResponse(event);
     });
 
+    // agent-flow.contract: persistir agent_executions (cierra writer
+    // huérfano que el endpoint de export ya consultaba).
+    this._agentReqUnsub = await this.eventBus.subscribe('agent.execute.request', (event) => {
+      this.onAgentExecuteRequest(event);
+    });
+    this._agentResUnsub = await this.eventBus.subscribe('agent.execute.response', (event) => {
+      this.onAgentExecuteResponse(event);
+    });
+    this._agentFailUnsub = await this.eventBus.subscribe('agent.execute.failed', (event) => {
+      this.onAgentExecuteFailed(event);
+    });
+
     this.logger.info('module.loaded', {
       module: this.name,
       version: this.version,
@@ -95,12 +114,17 @@ class ConversationExportModule {
     if (this._agentFailedUnsub) { await this._agentFailedUnsub(); this._agentFailedUnsub = null; }
     if (this._agentCompletedUnsub) { await this._agentCompletedUnsub(); this._agentCompletedUnsub = null; }
     if (this._dbResponseUnsub) { await this._dbResponseUnsub(); this._dbResponseUnsub = null; }
+    if (this._agentReqUnsub) { await this._agentReqUnsub(); this._agentReqUnsub = null; }
+    if (this._agentResUnsub) { await this._agentResUnsub(); this._agentResUnsub = null; }
+    if (this._agentFailUnsub) { await this._agentFailUnsub(); this._agentFailUnsub = null; }
 
     for (const [, req] of this.pendingDbRequests.entries()) {
       clearTimeout(req.timeout);
       req.reject(new Error('Module unloaded'));
     }
     this.pendingDbRequests.clear();
+    this.pendingAgentRequests.clear();
+    this._agentExecTableEnsured.clear();
     this.activityBuffer = [];
 
     this.logger.info('module.unloaded', { module: this.name });
@@ -354,6 +378,214 @@ class ConversationExportModule {
     return promise;
   }
 
+  /**
+   * Variante write: usa db.query.request con read_only:false. database-manager
+   * persiste el cambio (autoSave) tras ejecutar.
+   */
+  async _writeDB(projectId, query, params = [], correlationId) {
+    const requestId = crypto.randomUUID();
+    const timeout = this.config.db_timeout_ms || 8000;
+
+    const promise = new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingDbRequests.delete(requestId);
+        reject(Object.assign(new Error('DB write timeout'), { _code: 'TIMEOUT' }));
+      }, timeout);
+      this.pendingDbRequests.set(requestId, { resolve, reject, timeout: timeoutId });
+    });
+
+    await this.eventBus.publish('db.query.request', {
+      project_id: projectId,
+      query,
+      params,
+      read_only: false,
+      request_id: requestId,
+      correlation_id: correlationId || this._buildCorrelationId()
+    });
+
+    return promise;
+  }
+
+  // ==========================================
+  // Agent executions persistence (agent-flow.contract)
+  // ==========================================
+
+  /**
+   * Crea la tabla agent_executions on-demand para un proyecto. Idempotente
+   * via _agentExecTableEnsured set. Schema cubre los campos canonicos del
+   * agent.execute.{request,response,failed} sin truncar nada.
+   */
+  async _ensureAgentExecutionsTable(projectId, correlationId) {
+    if (this._agentExecTableEnsured.has(projectId)) return;
+    try {
+      await this._writeDB(projectId, `
+        CREATE TABLE IF NOT EXISTS agent_executions (
+          id TEXT PRIMARY KEY,
+          request_id TEXT,
+          correlation_id TEXT,
+          conversation_id TEXT,
+          project_id TEXT,
+          user_id TEXT,
+          agent_name TEXT NOT NULL,
+          task TEXT,
+          status TEXT NOT NULL,
+          provider TEXT,
+          model TEXT,
+          tokens TEXT,
+          cost TEXT,
+          duration_ms INTEGER,
+          iterations INTEGER,
+          finish_reason TEXT,
+          result TEXT,
+          error TEXT,
+          started_at INTEGER NOT NULL,
+          completed_at INTEGER
+        )
+      `, [], correlationId);
+      // Índices útiles para el SELECT por conversation_id ASC started_at
+      await this._writeDB(projectId,
+        `CREATE INDEX IF NOT EXISTS idx_agent_exec_conv ON agent_executions(conversation_id, started_at)`,
+        [], correlationId);
+      this._agentExecTableEnsured.add(projectId);
+    } catch (err) {
+      this.logger.warn('conversation-export.agent_executions.table_create.failed', {
+        project_id: projectId, error: err.message
+      });
+    }
+  }
+
+  /**
+   * agent.execute.request → buffer in-memory para correlacionar con la
+   * response/failed posterior. No escribe a DB todavía: la fila completa
+   * se persiste cuando el ciclo se cierra.
+   */
+  async onAgentExecuteRequest(event) {
+    try {
+      const data = event?.data || event;
+      if (!data?.request_id || !data?.agent_name) return;
+      this.pendingAgentRequests.set(data.request_id, {
+        agent_name: data.agent_name,
+        task: typeof data.task === 'string' ? data.task : JSON.stringify(data.task ?? null),
+        conversation_id: data.conversation_id || null,
+        project_id: data.project_id || null,
+        user_id: data.user_id || 'default',
+        correlation_id: data.correlation_id || null,
+        started_at: Date.now()
+      });
+    } catch (err) {
+      this.logger.warn('conversation-export.agent_request.error', { error: err.message });
+    }
+  }
+
+  async onAgentExecuteResponse(event) {
+    try {
+      const data = event?.data || event;
+      if (!data?.request_id) return;
+      const projectId = data.project_id || this.pendingAgentRequests.get(data.request_id)?.project_id;
+      if (!projectId) return;
+      await this._ensureAgentExecutionsTable(projectId, data.correlation_id);
+
+      const buffered = this.pendingAgentRequests.get(data.request_id) || {};
+      this.pendingAgentRequests.delete(data.request_id);
+
+      const completedAt = Date.now();
+      const startedAt = buffered.started_at || (completedAt - (data.duration_ms || 0));
+
+      const result = data.result;
+      const resultStr = typeof result === 'string'
+        ? result
+        : (result == null ? null : JSON.stringify(result));
+
+      await this._writeDB(projectId, `
+        INSERT OR REPLACE INTO agent_executions (
+          id, request_id, correlation_id, conversation_id, project_id, user_id,
+          agent_name, task, status, provider, model, tokens, cost,
+          duration_ms, iterations, finish_reason, result, error,
+          started_at, completed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        crypto.randomUUID(),
+        data.request_id,
+        data.correlation_id || buffered.correlation_id || null,
+        data.conversation_id || buffered.conversation_id || null,
+        projectId,
+        data.user_id || buffered.user_id || 'default',
+        data.agent_name || buffered.agent_name,
+        buffered.task || null,
+        'success',
+        data.provider || null,
+        data.model || null,
+        data.tokens ? JSON.stringify(data.tokens) : null,
+        data.cost ? JSON.stringify(data.cost) : null,
+        typeof data.duration_ms === 'number' ? data.duration_ms : null,
+        typeof data.iterations === 'number' ? data.iterations : null,
+        data.finish_reason || null,
+        resultStr,
+        null,
+        startedAt,
+        completedAt
+      ], data.correlation_id);
+      this.metrics?.increment('conversation-export.agent_executions.persisted', { status: 'success' });
+    } catch (err) {
+      this.logger.warn('conversation-export.agent_response.persist.failed', {
+        request_id: event?.data?.request_id, error: err.message
+      });
+      this.metrics?.increment('conversation-export.agent_executions.persist_failed');
+    }
+  }
+
+  async onAgentExecuteFailed(event) {
+    try {
+      const data = event?.data || event;
+      if (!data?.request_id) return;
+      const projectId = data.project_id || this.pendingAgentRequests.get(data.request_id)?.project_id;
+      if (!projectId) return;
+      await this._ensureAgentExecutionsTable(projectId, data.correlation_id);
+
+      const buffered = this.pendingAgentRequests.get(data.request_id) || {};
+      this.pendingAgentRequests.delete(data.request_id);
+
+      const completedAt = Date.now();
+      const startedAt = buffered.started_at || (completedAt - (data.duration_ms || 0));
+
+      await this._writeDB(projectId, `
+        INSERT OR REPLACE INTO agent_executions (
+          id, request_id, correlation_id, conversation_id, project_id, user_id,
+          agent_name, task, status, provider, model, tokens, cost,
+          duration_ms, iterations, finish_reason, result, error,
+          started_at, completed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        crypto.randomUUID(),
+        data.request_id,
+        data.correlation_id || buffered.correlation_id || null,
+        data.conversation_id || buffered.conversation_id || null,
+        projectId,
+        data.user_id || buffered.user_id || 'default',
+        data.agent_name || buffered.agent_name,
+        buffered.task || null,
+        'failed',
+        data.provider_attempted || null,
+        null,
+        null,
+        null,
+        typeof data.duration_ms === 'number' ? data.duration_ms : null,
+        typeof data.iterations_completed === 'number' ? data.iterations_completed : null,
+        null,
+        null,
+        data.error ? JSON.stringify(data.error) : null,
+        startedAt,
+        completedAt
+      ], data.correlation_id);
+      this.metrics?.increment('conversation-export.agent_executions.persisted', { status: 'failed' });
+    } catch (err) {
+      this.logger.warn('conversation-export.agent_failed.persist.failed', {
+        request_id: event?.data?.request_id, error: err.message
+      });
+      this.metrics?.increment('conversation-export.agent_executions.persist_failed');
+    }
+  }
+
   // ==========================================
   // Data loaders
   // ==========================================
@@ -423,18 +655,25 @@ class ConversationExportModule {
     try {
       const rows = await this._queryDB(
         projectId,
-        `SELECT id, agent_name, task, status, started_at, completed_at, result, error
+        `SELECT id, request_id, correlation_id, agent_name, task, status,
+                provider, model, tokens, cost, duration_ms, iterations,
+                finish_reason, result, error, started_at, completed_at
          FROM agent_executions
          WHERE conversation_id = ?
          ORDER BY started_at ASC`,
         [sessionId],
         correlationId
       );
+      const parseJson = v => {
+        if (v == null || v === '') return null;
+        try { return JSON.parse(v); } catch { return v; }
+      };
       return (rows || []).map(row => ({
         ...row,
-        result: row.result
-          ? (() => { try { return JSON.parse(row.result); } catch (_) { return row.result; } })()
-          : null
+        result: parseJson(row.result),
+        tokens: parseJson(row.tokens),
+        cost: parseJson(row.cost),
+        error: parseJson(row.error)
       }));
     } catch (err) {
       this.logger.debug('conversation-export.agent_executions.not_available', {

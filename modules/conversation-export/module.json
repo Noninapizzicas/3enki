@@ -21,6 +21,24 @@
     {
       "event": "agent.completed",
       "handler": "_bufferActivity"
+    },
+    {
+      "event": "agent.execute.request",
+      "handler": "onAgentExecuteRequest",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
+      "description": "Captura task + contexto del request para escribir agent_executions cuando llegue response/failed correlacionado por request_id."
+    },
+    {
+      "event": "agent.execute.response",
+      "handler": "onAgentExecuteResponse",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.response.schema.json",
+      "description": "Persiste fila en agent_executions con result + tokens + provider + model + cost + duration_ms del agente. Cierra el ciclo iniciado en request."
+    },
+    {
+      "event": "agent.execute.failed",
+      "handler": "onAgentExecuteFailed",
+      "request_schema_ref": "arquitectura/decisiones/_schemas/agent-flow/agent.execute.failed.schema.json",
+      "description": "Persiste fila en agent_executions con status=failed y error canonico {code, message, details}."
     }
   ],
   "config": {

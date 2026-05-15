@@ -102,6 +102,20 @@ class ConversationExportModule {
       this.onAgentExecuteFailed(event);
     });
 
+    // Observabilidad del flow LEGACY invoke_agent (tool del LLM en
+    // ai-gateway agentic loop). Por decision documentada en
+    // ai-agent-framework/module.json, ese flow NO emite eventos
+    // agent.execute.* canonicos — mantiene su propio shape. Aqui lo
+    // capturamos y normalizamos al mismo shape para persistir en la
+    // tabla agent_executions, asi observabilidad uniforme con
+    // independencia del entry point.
+    this._invokeAgentUnsub = await this.eventBus.subscribe('invoke_agent', (event) => {
+      this.onInvokeAgentRequest(event);
+    });
+    this._invokeAgentResUnsub = await this.eventBus.subscribe('invoke_agent.response', (event) => {
+      this.onInvokeAgentResponse(event);
+    });
+
     this.logger.info('module.loaded', {
       module: this.name,
       version: this.version,
@@ -117,6 +131,8 @@ class ConversationExportModule {
     if (this._agentReqUnsub) { await this._agentReqUnsub(); this._agentReqUnsub = null; }
     if (this._agentResUnsub) { await this._agentResUnsub(); this._agentResUnsub = null; }
     if (this._agentFailUnsub) { await this._agentFailUnsub(); this._agentFailUnsub = null; }
+    if (this._invokeAgentUnsub) { await this._invokeAgentUnsub(); this._invokeAgentUnsub = null; }
+    if (this._invokeAgentResUnsub) { await this._invokeAgentResUnsub(); this._invokeAgentResUnsub = null; }
 
     for (const [, req] of this.pendingDbRequests.entries()) {
       clearTimeout(req.timeout);
@@ -528,6 +544,105 @@ class ConversationExportModule {
       this.metrics?.increment('conversation-export.agent_executions.persisted', { status: 'success' });
     } catch (err) {
       this.logger.warn('conversation-export.agent_response.persist.failed', {
+        request_id: event?.data?.request_id, error: err.message
+      });
+      this.metrics?.increment('conversation-export.agent_executions.persist_failed');
+    }
+  }
+
+  /**
+   * LEGACY invoke_agent flow: ai-gateway emite el evento `invoke_agent`
+   * (tool del LLM) con data: { request_id, agent_name, task, ... }.
+   * Bufferamos igual que agent.execute.request — la response llegara como
+   * `invoke_agent.response` con shape distinto.
+   */
+  async onInvokeAgentRequest(event) {
+    try {
+      const data = event?.data || event;
+      if (!data?.request_id || !data?.agent_name) return;
+      // No duplicar si ya hay una entry canonica
+      if (this.pendingAgentRequests.has(data.request_id)) return;
+      this.pendingAgentRequests.set(data.request_id, {
+        agent_name: data.agent_name,
+        task: typeof data.task === 'string' ? data.task : JSON.stringify(data.task ?? null),
+        conversation_id: data.conversation_id || null,
+        project_id: data.project_id || data.context?.project_id || null,
+        user_id: data.user_id || 'default',
+        correlation_id: data.correlation_id || null,
+        started_at: Date.now(),
+        shape: 'legacy'
+      });
+    } catch (err) {
+      this.logger.warn('conversation-export.invoke_agent_request.error', { error: err.message });
+    }
+  }
+
+  /**
+   * LEGACY invoke_agent.response shape:
+   *   { request_id, session_id, result: { agent, content, tool_calls_executed } }
+   *   o { request_id, session_id, error: { code, message } } cuando falla.
+   * Lo normalizamos al row de agent_executions con los datos disponibles
+   * (el flow legacy no lleva provider/model/tokens — quedan nulos).
+   */
+  async onInvokeAgentResponse(event) {
+    try {
+      const data = event?.data || event;
+      if (!data?.request_id) return;
+      const buffered = this.pendingAgentRequests.get(data.request_id);
+      if (!buffered) return;
+      const projectId = buffered.project_id;
+      if (!projectId) return;
+      this.pendingAgentRequests.delete(data.request_id);
+      await this._ensureAgentExecutionsTable(projectId, buffered.correlation_id);
+
+      const completedAt = Date.now();
+      const startedAt = buffered.started_at || completedAt;
+      const hasError = !!data.error;
+      const content = data.result?.content;
+      const toolCalls = data.result?.tool_calls_executed || [];
+
+      const resultStr = hasError ? null : (
+        content == null ? null
+          : (typeof content === 'string' ? content : JSON.stringify(content))
+      );
+
+      // Si vienen tool_calls los serializamos junto al result para no perder
+      // el rastro de orquestacion interna del agente.
+      const resultPayload = hasError ? null : JSON.stringify({
+        content: content ?? null,
+        tool_calls_executed: toolCalls
+      });
+
+      await this._writeDB(projectId, `
+        INSERT OR REPLACE INTO agent_executions (
+          id, request_id, correlation_id, conversation_id, project_id, user_id,
+          agent_name, task, status, provider, model, tokens, cost,
+          duration_ms, iterations, finish_reason, result, error,
+          started_at, completed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        crypto.randomUUID(),
+        data.request_id,
+        buffered.correlation_id || null,
+        buffered.conversation_id || null,
+        projectId,
+        buffered.user_id || 'default',
+        buffered.agent_name,
+        buffered.task || null,
+        hasError ? 'failed' : 'success',
+        null, null, null, null,
+        completedAt - startedAt,
+        null, null,
+        resultPayload || resultStr,
+        hasError ? JSON.stringify(data.error) : null,
+        startedAt,
+        completedAt
+      ], buffered.correlation_id);
+      this.metrics?.increment('conversation-export.agent_executions.persisted', {
+        status: hasError ? 'failed' : 'success', shape: 'legacy'
+      });
+    } catch (err) {
+      this.logger.warn('conversation-export.invoke_agent_response.persist.failed', {
         request_id: event?.data?.request_id, error: err.message
       });
       this.metrics?.increment('conversation-export.agent_executions.persist_failed');

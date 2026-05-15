@@ -439,12 +439,19 @@ class AiGatewayModule {
       // Ejecutar todas las tool calls
       const toolResults = [];
       for (const tc of toolCalls) {
+        // args parseado se preserva en el resultado para que ai.chat.response
+        // y la persistencia de chat-io reciban el shape canonico completo
+        // (chat-flow.contract: tool_calls_executed[].args). Sin esto el LLM
+        // que audita post-hoc no sabe con que parametros se llamo al tool.
+        let args = {};
         try {
-          const args = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments;
+          args = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : (tc.arguments || {});
+        } catch { args = {}; }
+        try {
           const result = await this._executeToolCall(tc.name, args, chatContext);
-          toolResults.push({ tool_call_id: tc.id, name: tc.name, status: 'success', result });
+          toolResults.push({ tool_call_id: tc.id, name: tc.name, args, status: 'success', result });
         } catch (err) {
-          toolResults.push({ tool_call_id: tc.id, name: tc.name, status: 'error', error: err.message });
+          toolResults.push({ tool_call_id: tc.id, name: tc.name, args, status: 'error', error: err.message });
         }
       }
       allToolResults.push(...toolResults);

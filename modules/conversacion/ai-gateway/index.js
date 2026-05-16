@@ -816,34 +816,6 @@ class AiGatewayModule extends BaseModule {
   // Helpers POC2 (transferibles) + auxiliares del dominio
   // ============================================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'INVALID_INPUT'      ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'PERMISSION_DENIED' ? 403 :
-                    code === 'CONFLICT_STATE'               ? 409 :
-                    code === 'UPSTREAM_UNREACHABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'INVALID_INPUT';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
-    if (msg.includes('unavailable') || msg.includes('not available')) return 'UPSTREAM_UNREACHABLE';
-    return 'UNKNOWN_ERROR';
-  }
-
   // Helper auxiliar especifico del dominio LLM:
   // mapea errores de providers/HTTP/CLI a codigos canonicos del agentic loop.
   // Renombrado de _classifyError para alinear con el contrato POC2
@@ -851,16 +823,6 @@ class AiGatewayModule extends BaseModule {
   // y embedding paths.
   _classifyExecutionError(err) {
     return this._classifyError(err);
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
   }
 }
 

@@ -569,7 +569,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m._classifyHandlerError(new Error('not found')), 'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
     assert.strictEqual(m._classifyHandlerError(new Error('unauthorized request')), 'PERMISSION_DENIED');
-    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'ALREADY_EXISTS');
     assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });

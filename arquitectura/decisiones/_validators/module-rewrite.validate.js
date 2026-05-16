@@ -133,9 +133,14 @@ function checkHelpers(slug, moduleDir, findings) {
   const indexPath = path.join(moduleDir, 'index.js');
   if (!fs.existsSync(indexPath)) return;
   const content = fs.readFileSync(indexPath, 'utf-8');
-  const missing = HELPERS_OBLIGATORIOS.filter(h => !content.includes(h));
-  if (missing.length > 0) {
-    findings.warnings.push(`drift_modulo_migrado_sin_5_helpers_poc2: ${slug} — faltan helpers obligatorios: ${missing.join(', ')}`);
+  // Si el modulo hereda de BaseModule, los helpers vienen del padre y no
+  // necesitan estar duplicados localmente. BaseModule es source-of-truth.
+  const extendsBaseModule = /class\s+\w+\s+extends\s+BaseModule/.test(content);
+  if (!extendsBaseModule) {
+    const missing = HELPERS_OBLIGATORIOS.filter(h => !content.includes(h));
+    if (missing.length > 0) {
+      findings.warnings.push(`drift_modulo_migrado_sin_5_helpers_poc2: ${slug} — faltan helpers obligatorios: ${missing.join(', ')}`);
+    }
   }
   const hasAuxiliar = HELPERS_AUXILIARES.some(h => content.includes(h));
   if (!hasAuxiliar) {

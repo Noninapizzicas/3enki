@@ -529,9 +529,9 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('Channel not found')), 'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
-    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'ALREADY_EXISTS');
     assert.strictEqual(m._classifyHandlerError(new Error('Unauthorized')), 'PERMISSION_DENIED');
-    assert.strictEqual(m._classifyHandlerError(new Error('upstream timeout')), 'UPSTREAM_UNREACHABLE');
+    assert.strictEqual(m._classifyHandlerError(new Error('upstream timeout')), 'UPSTREAM_TIMEOUT');
     assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });

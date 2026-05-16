@@ -98,6 +98,12 @@ function checkRequireDirectoEntreModulos(findings) {
       // Determinar si apunta a otro modulo del repo
       const resolved = path.resolve(dir, requiredPath);
       if (resolved.startsWith(MODULES_DIR) && !resolved.startsWith(dir)) {
+        // Excepcion: modules/_shared/* y modules/_template/* (carpetas con prefijo
+        // `_` por convencion del loader — NO son modulos runtime, son codigo
+        // compartido. El loader las salta. Cualquier modulo puede require de aqui).
+        const rel = path.relative(MODULES_DIR, resolved);
+        const firstSegment = rel.split(path.sep)[0];
+        if (firstSegment.startsWith('_')) continue;
         const ln = lineOfOffset(content, m.index);
         findings.errors.push(`drift_require_directo_entre_modulos: ${path.relative(REPO_ROOT, idxFile)}:${ln} — require('${requiredPath}') apunta a otro modulo del repo`);
       }

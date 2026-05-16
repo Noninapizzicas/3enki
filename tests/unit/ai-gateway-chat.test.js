@@ -9,8 +9,8 @@
  *      preserva correlation_id, conversation_id, project_id, user_id, channel, channel_context, message_id.
  *  - Payload ai.chat.response VALIDA contra schema oficial.
  *  - On error publica ai.chat.failed (NO ai.chat.response con error inyectado).
- *  - Mapeo canonico de errores: CREDENTIAL_NOT_FOUND, UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED,
- *    UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, UNKNOWN_ERROR.
+ *  - Mapeo canonico de errores: RESOURCE_NOT_FOUND, UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE,
+ *    UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_UNREACHABLE, UNKNOWN_ERROR.
  *  - Payload ai.chat.failed VALIDA contra schema oficial.
  *
  * Ejecutar: node tests/unit/ai-gateway-chat.test.js
@@ -176,7 +176,7 @@ async function testAsync(description, fn) {
     assert.ok(ev, 'ai.chat.failed publicado');
     const payload = ev[1];
     assert.strictEqual(payload.correlation_id, 'corr-err');
-    assert.strictEqual(payload.error.code, 'CREDENTIAL_NOT_FOUND');
+    assert.strictEqual(payload.error.code, 'RESOURCE_NOT_FOUND');
     assert.ok(/credential/i.test(payload.error.message));
     assert.strictEqual(payload.message_id, 'm-err');
     assert.strictEqual(payload.user_id, 'u');
@@ -208,17 +208,17 @@ async function testAsync(description, fn) {
   await testAsync('clasificacion canonica de errores cubre los codigos esperados', async () => {
     const m = instantiate(makeMocks());
     const cases = [
-      ['credential resolve timeout: deepseek', 'CREDENTIAL_NOT_FOUND'],
-      ['No hay providers disponibles. Verifica las API keys', 'CREDENTIAL_NOT_FOUND'],
+      ['credential resolve timeout: deepseek', 'RESOURCE_NOT_FOUND'],
+      ['No hay providers disponibles. Verifica las API keys', 'RESOURCE_NOT_FOUND'],
       ['ETIMEDOUT', 'UPSTREAM_TIMEOUT'],
-      ['Request failed with 429 rate limit exceeded', 'UPSTREAM_RATE_LIMITED'],
-      ['401 unauthorized: invalid api key', 'UPSTREAM_AUTH_FAILED'],
-      ['Internal Server Error 500', 'UPSTREAM_5XX'],
+      ['Request failed with 429 rate limit exceeded', 'UPSTREAM_INVALID_RESPONSE'],
+      ['401 unauthorized: invalid api key', 'UPSTREAM_INVALID_RESPONSE'],
+      ['Internal Server Error 500', 'UPSTREAM_INVALID_RESPONSE'],
       ['fetch failed: ECONNREFUSED', 'UPSTREAM_UNREACHABLE'],
       ['unexpected token < in JSON at position 0', 'UPSTREAM_INVALID_RESPONSE'],
-      ['context_length_exceeded: prompt too long', 'UPSTREAM_PAYLOAD_TOO_LARGE'],
-      ['Request entity too large (413)', 'UPSTREAM_PAYLOAD_TOO_LARGE'],
-      ['maximum context length is 128000 tokens', 'UPSTREAM_PAYLOAD_TOO_LARGE'],
+      ['context_length_exceeded: prompt too long', 'UPSTREAM_INVALID_RESPONSE'],
+      ['Request entity too large (413)', 'UPSTREAM_INVALID_RESPONSE'],
+      ['maximum context length is 128000 tokens', 'UPSTREAM_INVALID_RESPONSE'],
       ['some weird unknown error', 'UNKNOWN_ERROR']
     ];
     for (const [msg, expected] of cases) {

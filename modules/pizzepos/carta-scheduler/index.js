@@ -5,6 +5,7 @@ const crypto   = require('crypto');
 const ProjectStorage   = require('./project-storage');
 const PendientesTimer  = require('./pendientes-timer');
 
+const BaseModule = require('../../_shared/base-module');
 /**
  * carta-scheduler POC v2.0.0 — Programacion de cambios de carta multi-tenant.
  *
@@ -19,15 +20,13 @@ const PendientesTimer  = require('./pendientes-timer');
  *  - naming:        language=es, tools con prefix carta-scheduler.* (drift cerrado).
  *  - glossary:      terminos cross-modulo (project_id, regla, pendiente, cambio, canal, carta).
  */
-class CartaSchedulerModule {
+class CartaSchedulerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'carta-scheduler';
     this.version = '3.0.0';
 
     // Inyectados en onLoad
-    this.eventBus    = null;
-    this.logger      = null;
-    this.metrics     = null;
     this.config      = null;
     this.mqttRequest = null;
 
@@ -441,7 +440,7 @@ class CartaSchedulerModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/conflict|estado|already/i.test(msg)) return { status: 409, code: 'CONFLICT_STATE' };
@@ -500,7 +499,7 @@ class CartaSchedulerModule {
     } catch (err) {
       const dur = Date.now() - t0;
       const isTimeout = /timeout/i.test(err.message);
-      const code   = isTimeout ? 'UPSTREAM_TIMEOUT' : 'DEPENDENCY_UNAVAILABLE';
+      const code   = isTimeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_UNREACHABLE';
       const status = isTimeout ? 504 : 503;
       this.logger.warn(`${this.name}.mqttRequest.failed`, {
         domain, action, dur_ms: dur, error_message: err.message, code

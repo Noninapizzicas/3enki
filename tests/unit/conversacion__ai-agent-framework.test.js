@@ -148,35 +148,35 @@ function makeRequest(overrides = {}) {
     await m.onUnload();
   });
 
-  await testAsync('request sin agent_name publica agent.execute.failed AGENT_INPUT_INVALID', async () => {
+  await testAsync('request sin agent_name publica agent.execute.failed INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     await m.onAgentExecuteRequest({ data: { request_id: 'r1', task: 'do' } });
     const failures = publishedOf(mocks, 'agent.execute.failed');
     assert.strictEqual(failures.length, 1);
-    assert.strictEqual(failures[0].error.code, 'AGENT_INPUT_INVALID');
+    assert.strictEqual(failures[0].error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('agent_name desconocido publica agent.execute.failed AGENT_NOT_FOUND', async () => {
+  await testAsync('agent_name desconocido publica agent.execute.failed RESOURCE_NOT_FOUND', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     await m.onAgentExecuteRequest(makeRequest({ agent_name: 'no-existe' }));
     const failures = publishedOf(mocks, 'agent.execute.failed');
     assert.strictEqual(failures.length, 1);
-    assert.strictEqual(failures[0].error.code, 'AGENT_NOT_FOUND');
+    assert.strictEqual(failures[0].error.code, 'RESOURCE_NOT_FOUND');
     assert.strictEqual(failures[0].correlation_id, 'cid-1');
     assert.strictEqual(failures[0].project_id, 'p1');
     await m.onUnload();
   });
 
-  await testAsync('request sin task ni context publica AGENT_INPUT_INVALID', async () => {
+  await testAsync('request sin task ni context publica INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { agents: [{ name: 'tester' }] });
     await m.onAgentExecuteRequest(makeRequest({ task: undefined, context: {} }));
     const failures = publishedOf(mocks, 'agent.execute.failed');
     assert.strictEqual(failures.length, 1);
-    assert.strictEqual(failures[0].error.code, 'AGENT_INPUT_INVALID');
+    assert.strictEqual(failures[0].error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -280,7 +280,7 @@ function makeRequest(overrides = {}) {
     await m.onInvokeAgent({ data: { request_id: 'leg-2', agent_name: 'no-existe', task: 'x' } });
     const responses = publishedOf(mocks, 'invoke_agent.response');
     assert.strictEqual(responses.length, 1);
-    assert.strictEqual(responses[0].error.code, 'AGENT_NOT_FOUND');
+    assert.strictEqual(responses[0].error.code, 'RESOURCE_NOT_FOUND');
     await m.onUnload();
   });
 
@@ -298,7 +298,7 @@ function makeRequest(overrides = {}) {
     const { module: m } = await instantiate(mocks);
     assert.deepStrictEqual(m._classifyHandlerError(new Error('field is required')), { status: 400, code: 'INVALID_INPUT' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('not found')), { status: 404, code: 'RESOURCE_NOT_FOUND' });
-    assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout')), { status: 504, code: 'TIMEOUT' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout')), { status: 504, code: 'UPSTREAM_TIMEOUT' });
     await m.onUnload();
   });
 
@@ -326,9 +326,9 @@ function makeRequest(overrides = {}) {
   await testAsync('_classifyLlmError clasifica errores LLM canonicamente', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    assert.strictEqual(m._classifyLlmError('429 rate limit').code, 'UPSTREAM_RATE_LIMITED');
-    assert.strictEqual(m._classifyLlmError('401 unauthorized').code, 'UPSTREAM_AUTH_FAILED');
-    assert.strictEqual(m._classifyLlmError('credential not found').code, 'CREDENTIAL_NOT_FOUND');
+    assert.strictEqual(m._classifyLlmError('429 rate limit').code, 'UPSTREAM_INVALID_RESPONSE');
+    assert.strictEqual(m._classifyLlmError('401 unauthorized').code, 'UPSTREAM_INVALID_RESPONSE');
+    assert.strictEqual(m._classifyLlmError('credential not found').code, 'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyLlmError('boom').code, 'UNKNOWN_ERROR');
     await m.onUnload();
   });

@@ -47,7 +47,7 @@
 
     "MESSAGES OBLIGATORIO. La conversacion (sea single-turn o multi-turn synthetic) viaja en messages[]. system_prompt es campo separado para que el provider lo coloque correctamente (en SystemInstruction de Gemini, system message de OpenAI, etc.).",
 
-    "ERROR.CODE CANONICO. llm.complete.failed.error.code DEBE ser uno del catalogo errors.contract.json (UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR). Sin codigos inventados.",
+    "ERROR.CODE CANONICO. llm.complete.failed.error.code DEBE ser uno del catalogo errors.contract.json (UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_UNREACHABLE, UPSTREAM_INVALID_RESPONSE, RESOURCE_NOT_FOUND, UNKNOWN_ERROR). Sin codigos inventados.",
 
     "DURATION_MS PARA OBSERVABILIDAD. Tanto en response como en failed: tiempo total del processo (resolucion de credencial + llamada al provider + parsing). Permite SLOs/alerting.",
 
@@ -192,7 +192,7 @@
     },
     {
       "id": "inventar_error_code",
-      "regla": "llm.complete.failed.error.code NO puede ser un codigo fuera del catalogo errors.contract.json. NO 'GEMINI_FAILED' ni 'OPENAI_DOWN' — usar UPSTREAM_5XX, UPSTREAM_RATE_LIMITED, etc.",
+      "regla": "llm.complete.failed.error.code NO puede ser un codigo fuera del catalogo errors.contract.json. NO 'GEMINI_FAILED' ni 'OPENAI_DOWN' — usar UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, etc.",
       "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm"],
       "como_detectar": "schema enforce: error.code es enum cerrado. AJV strict rechaza.",
       "alternativa_correcta": "ai-gateway._classifyError mapea cualquier error del provider al codigo canonico. Si aparece un caso nuevo no cubierto, AÑADIR al catalogo errors.contract.json (decision arquitectonica), NO inventar localmente."
@@ -364,9 +364,9 @@
     "documentation.contract: cualquier modulo que use llm.complete.* declara en su module.json un comentario en el subscribe/publish describiendo el caso de uso. Ej: ai-agent-framework declara 'usado dentro del agentic loop del agente — system prompt y tools del agente especifico'. memory-conversation-summary declara 'genera resumen de conversacion tras N mensajes'.",
     "frontend.contract: el frontend (canal web) NO publica llm.complete.* directamente — siempre via chat_flow (chat.message.saved → prompt-builder → chat.prompt.ready → ai-gateway). Si el frontend necesitara invocar un razonamiento del LLM sin contexto de chat (ej: 'genera 3 ideas para titulo'), seria via tool del compañero (el LLM lo decide) o via agente especialista — nunca via llm.complete.* directo desde el frontend.",
     "bus-transport.contract: llm.complete.* viaja por el bus principal MQTT. NO se enruta por subbuses ni canales privados. La latencia tipica del bus para estos eventos es <50ms en local; el cuello de botella real es la API del provider (200-5000ms). El bus NO es el problema de performance.",
-    "resilience.contract: ai-gateway tiene retry interno con backoff exponencial para upstream errors transitorios (UPSTREAM_5XX, UPSTREAM_TIMEOUT, UPSTREAM_RATE_LIMITED). Si todos los retries fallan, publica llm.complete.failed con el codigo del ultimo intento. NO se reintenta en CREDENTIAL_NOT_FOUND ni UPSTREAM_AUTH_FAILED (errores no transitorios — fallarian igual al reintentar).",
+    "resilience.contract: ai-gateway tiene retry interno con backoff exponencial para upstream errors transitorios (UPSTREAM_INVALID_RESPONSE, UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE). Si todos los retries fallan, publica llm.complete.failed con el codigo del ultimo intento. NO se reintenta en RESOURCE_NOT_FOUND ni UPSTREAM_INVALID_RESPONSE (errores no transitorios — fallarian igual al reintentar).",
     "scheduling.contract: agentes que se disparan por cron (scheduling.contract) tambien usan llm.complete.* via ai-agent-framework. El correlation_id lo genera el cron job al disparar el agente y se propaga sin modificar a traves de toda la cadena causal (chat-scheduler → agent.execute.request → ai-agent-framework → llm.complete.request → ai-gateway). Sin esta propagacion, observabilidad rompe.",
-    "module-loading.contract: ai-gateway es de los primeros modulos en cargar (priority alta) — si no esta disponible, agentes y memorias quedan colgados sin LLM. Sus dependencias (credential-manager para resolver keys) cargan antes. Si ai-gateway falla en onLoad (todos los providers sin credenciales), publica un evento descriptivo y los modulos que dependen de el manejan la degradacion graceful (memory-conversation-summary y memory-rag son ejemplos: si llm.complete.failed llega con CREDENTIAL_NOT_FOUND, NO publican chat.context.enriched pero NO rompen el flujo del chat).",
+    "module-loading.contract: ai-gateway es de los primeros modulos en cargar (priority alta) — si no esta disponible, agentes y memorias quedan colgados sin LLM. Sus dependencias (credential-manager para resolver keys) cargan antes. Si ai-gateway falla en onLoad (todos los providers sin credenciales), publica un evento descriptivo y los modulos que dependen de el manejan la degradacion graceful (memory-conversation-summary y memory-rag son ejemplos: si llm.complete.failed llega con RESOURCE_NOT_FOUND, NO publican chat.context.enriched pero NO rompen el flujo del chat).",
     "deployment.contract: el sub-contrato llm-flow es independiente del modo de despliegue. Funciona igual en local single-process (un proceso Node con todos los modulos), en multi-process via PM2, o en futuro split entre nodos via MQTT remoto — el shape del payload no cambia. La unica diferencia operativa es la latencia del bus."
   ],
 

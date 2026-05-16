@@ -41,7 +41,7 @@ const OUTCOMES = {
   SUCCESS: 'success',
   FAILURE: 'failure',
   PENDING: 'pending',
-  TIMEOUT: 'timeout'
+  UPSTREAM_TIMEOUT: 'timeout'
 };
 
 class ActivityLogger {

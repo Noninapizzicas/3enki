@@ -21,7 +21,7 @@ El timer envuelve el callback en try/catch: si el callback lanza, log warn + met
 
 ### 3. `_mqttRequestSafe` traduce timeouts a códigos canónicos
 
-Wrapper canónico de `mqttRequest`: aplica timeout, emite log + metric, mapea network/timeout a `UPSTREAM_TIMEOUT` / `DEPENDENCY_UNAVAILABLE`. El handler que lo usa (toolConfirmar) recibe shape interno `{ ok, data | error }` limpio. Drift cerrado vs original que llamaba directamente y propagaba `err.message` al user.
+Wrapper canónico de `mqttRequest`: aplica timeout, emite log + metric, mapea network/timeout a `UPSTREAM_TIMEOUT` / `UPSTREAM_UNREACHABLE`. El handler que lo usa (toolConfirmar) recibe shape interno `{ ok, data | error }` limpio. Drift cerrado vs original que llamaba directamente y propagaba `err.message` al user.
 
 ### 4. Tools con prefix correcto = naming consistente
 
@@ -36,7 +36,7 @@ El cambio es trivial pero el efecto es enorme: la auditoría sabe a qué módulo
 
 ### 6. Shape canónico `{status, data | error}` con códigos reusables
 
-Toda salida de tools es ahora `{status, data | error: { code, message, details }}`. Cierra el drift del original que mezclaba `error: 'string'` con `data` arbitrario. Con `errors v1.4.0` (POC2 F3) los códigos `RESOURCE_NOT_FOUND`, `INVALID_INPUT`, `CONFLICT_STATE`, `UPSTREAM_TIMEOUT`, `DEPENDENCY_UNAVAILABLE` ya son canónicos del catálogo.
+Toda salida de tools es ahora `{status, data | error: { code, message, details }}`. Cierra el drift del original que mezclaba `error: 'string'` con `data` arbitrario. Con `errors v1.4.0` (POC2 F3) los códigos `RESOURCE_NOT_FOUND`, `INVALID_INPUT`, `CONFLICT_STATE`, `UPSTREAM_TIMEOUT`, `UPSTREAM_UNREACHABLE` ya son canónicos del catálogo.
 
 ---
 

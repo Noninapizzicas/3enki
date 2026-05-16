@@ -27,15 +27,14 @@ const GlovoStrategy = require('./strategies/glovo');
 const WhatsAppStrategy = require('./strategies/whatsapp');
 const LlevadooStrategy = require('./strategies/llevadoo');
 
-class CuentasCanalesModule {
+const BaseModule = require('../../_shared/base-module');
+class CuentasCanalesModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'cuentas-canales';
     this.version = '5.0.0';
 
     // Dependencias (inyectadas en onLoad)
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
     this.config = {};
 

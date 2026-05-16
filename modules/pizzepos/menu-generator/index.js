@@ -18,6 +18,7 @@ const path = require('path');
 const crypto = require('crypto');
 const ServiceExecutor = require('../../../core/service-executor');
 
+const BaseModule = require('../../_shared/base-module');
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif'];
 const PDF_EXTENSIONS = ['.pdf'];
 
@@ -29,13 +30,11 @@ const TIMEOUTS = {
   structurer: 90000
 };
 
-class MenuGeneratorModule {
+class MenuGeneratorModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'menu-generator';
     this.version = '7.0.0';
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.services = null;
   }
 
@@ -66,7 +65,7 @@ class MenuGeneratorModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado|no soportado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     return { status: 500, code: 'UNKNOWN_ERROR' };

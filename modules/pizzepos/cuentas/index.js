@@ -25,6 +25,7 @@ const path   = require('path');
 const fs     = require('fs').promises;
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID  = 'default';
 const ALERTA_PENDIENTE_MS = 30 * 60 * 1000;
 const POST_COBRADO_MS     = 5 * 60 * 1000;
@@ -44,8 +45,9 @@ const TRANSICIONES_VALIDAS = {
   cobrado:        []
 };
 
-class CuentasModule {
+class CuentasModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'cuentas';
     this.version = '3.0.0';
 
@@ -59,10 +61,6 @@ class CuentasModule {
     this._turnoSaveTimer = null;
 
     this._metricsInterval = null;
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
   }
 
   static SIMBOLOS = {
@@ -782,10 +780,10 @@ class CuentasModule {
                    code === 'AUTHENTICATION_REQUIRED' ? 401 :
                    code === 'ALREADY_EXISTS'          ? 409 :
                    code === 'CONFLICT_STATE'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'EXTERNAL_API_FAILED'     ? 502 :
-                   code === 'TIMEOUT'                 ? 504 :
-                   code === 'FILESYSTEM_ERROR'        ? 500 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'     ? 502 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 :
+                   code === 'UNKNOWN_ERROR'        ? 500 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment?.('pizzepos-cuentas.errors', { kind, code });
@@ -799,7 +797,7 @@ class CuentasModule {
     if (ecod === 'EACCES' || msg.includes('permission') || msg.includes('forbidden'))    return 'PERMISSION_DENIED';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (msg.includes('conflict') || msg.includes('already exists'))                       return 'ALREADY_EXISTS';
-    if (ecod && ecod.startsWith('E'))                                                     return 'FILESYSTEM_ERROR';
+    if (ecod && ecod.startsWith('E'))                                                     return 'UNKNOWN_ERROR';
     return 'UNKNOWN_ERROR';
   }
 
@@ -877,7 +875,7 @@ class CuentasModule {
       );
     } catch (err) {
       this.logger.warn('cuentas.turno.save_error', { error: err.message });
-      this.metrics?.increment?.('pizzepos-cuentas.errors', { kind: 'turno_save', code: 'FILESYSTEM_ERROR' });
+      this.metrics?.increment?.('pizzepos-cuentas.errors', { kind: 'turno_save', code: 'UNKNOWN_ERROR' });
     }
   }
 

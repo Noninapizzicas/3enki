@@ -53,8 +53,8 @@
       "errores_conocidos": [
         { "code": "INVALID_INPUT",      "cuando": "projectId o filePath ausentes" },
         { "code": "RESOURCE_NOT_FOUND", "cuando": "el archivo no existe en la ruta dada" },
-        { "code": "TIMEOUT",            "cuando": "alguno de los pasos del pipeline supera su timeout" },
-        { "code": "EXTERNAL_API_FAILED","cuando": "fallo de OCR o de la IA estructuradora" }
+        { "code": "UPSTREAM_TIMEOUT",            "cuando": "alguno de los pasos del pipeline supera su timeout" },
+        { "code": "UPSTREAM_INVALID_RESPONSE","cuando": "fallo de OCR o de la IA estructuradora" }
       ]
     },
     {
@@ -72,7 +72,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",         "cuando": "projectId ausente" },
-        { "code": "DEPENDENCY_UNAVAILABLE","cuando": "el provider local.facturas-db no responde" }
+        { "code": "UPSTREAM_UNREACHABLE","cuando": "el provider local.facturas-db no responde" }
       ]
     },
     {
@@ -88,7 +88,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",         "cuando": "projectId ausente" },
-        { "code": "DEPENDENCY_UNAVAILABLE","cuando": "el provider local.facturas-db no responde" }
+        { "code": "UPSTREAM_UNREACHABLE","cuando": "el provider local.facturas-db no responde" }
       ]
     }
   ],

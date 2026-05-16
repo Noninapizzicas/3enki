@@ -17,6 +17,7 @@
 'use strict';
 
 const path = require('path');
+const BaseModule = require('../_shared/base-module');
 const fs = require('fs').promises;
 
 const DEFAULT_DIAS_OPERACION = 25;
@@ -25,14 +26,11 @@ const DEFAULT_TICKET_MEDIO = 15;
 const DEFAULT_FOOD_COST_PCT = 33;
 const FOOD_COST_ALTO_PCT = 35;
 
-class ViabilidadModule {
+class ViabilidadModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'viabilidad';
     this.version = '2.0.0';
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     this.configs = new Map();
     this.recetasCache = new Map();
     this.projectPaths = new Map();
@@ -68,7 +66,7 @@ class ViabilidadModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
     if (/required|invalid|missing|requerido|necesitan/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     return { status: 500, code: 'UNKNOWN_ERROR' };

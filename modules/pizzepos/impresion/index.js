@@ -19,6 +19,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 
 // ==========================================
@@ -58,15 +59,11 @@ const CANAL_ICON = {
   just_eat:  '.', default:   '*'
 };
 
-class ImpresionModule {
+class ImpresionModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'impresion';
     this.version = '4.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.config = {
       ancho:           '58mm',
       destino_default: ''
@@ -920,19 +917,19 @@ class ImpresionModule {
 
     if (!deviceId) {
       const err = new Error('No hay destino configurado ni impresoras descubiertas online');
-      err._code = 'DEPENDENCY_UNAVAILABLE';
+      err._code = 'UPSTREAM_UNREACHABLE';
       throw err;
     }
     if (!pid) {
       const err = new Error('No hay project_id configurado ni inferible de impresoras descubiertas');
-      err._code = 'DEPENDENCY_UNAVAILABLE';
+      err._code = 'UPSTREAM_UNREACHABLE';
       throw err;
     }
 
     const mqtt = this.eventBus?.mqtt;
     if (!mqtt || !mqtt.isConnected) {
       const err = new Error('MQTT no disponible — no se puede enviar a impresora');
-      err._code = 'MQTT_NOT_AVAILABLE';
+      err._code = 'UPSTREAM_UNREACHABLE';
       throw err;
     }
 
@@ -988,10 +985,10 @@ class ImpresionModule {
                    code === 'RESOURCE_NOT_FOUND'      ? 404 :
                    code === 'PERMISSION_DENIED'       ? 403 :
                    code === 'CONFLICT_STATE'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'MQTT_NOT_AVAILABLE'      ? 503 :
-                   code === 'EXTERNAL_API_FAILED'     ? 502 :
-                   code === 'TIMEOUT'                 ? 504 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_UNREACHABLE'      ? 503 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'     ? 502 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('impresion.errors', { kind, code });
@@ -1003,8 +1000,8 @@ class ImpresionModule {
     if (msg.includes('not found') || msg.includes('no encontrad'))                         return 'RESOURCE_NOT_FOUND';
     if (msg.includes('permission') || msg.includes('forbidden'))                            return 'PERMISSION_DENIED';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation'))  return 'INVALID_INPUT';
-    if (msg.includes('mqtt') || msg.includes('no disponible'))                              return 'DEPENDENCY_UNAVAILABLE';
-    if (msg.includes('timeout'))                                                            return 'TIMEOUT';
+    if (msg.includes('mqtt') || msg.includes('no disponible'))                              return 'UPSTREAM_UNREACHABLE';
+    if (msg.includes('timeout'))                                                            return 'UPSTREAM_TIMEOUT';
     return 'UNKNOWN_ERROR';
   }
 

@@ -25,19 +25,17 @@ const EmployeeRegistry = require('./lib/employee-registry');
 const SessionManager   = require('./lib/session-manager');
 const NFCCard          = require('./lib/nfc-card');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 const NTAG215_CAPACITY   = 504;
 
-class StaffManagerModule {
+class StaffManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'staff-manager';
     this.version = '2.1.0';
 
     this.core     = null;
-    this.logger   = null;
-    this.metrics  = null;
-    this.eventBus = null;
-
     this.registry = null;
     this.sessions = null;
 
@@ -94,7 +92,6 @@ class StaffManagerModule {
     this.registry = null;
     this.sessions = null;
     this.core     = null;
-    this.metrics  = null;
     this.logger?.info('module.unloaded', { module: this.name });
   }
 
@@ -355,8 +352,8 @@ class StaffManagerModule {
     try {
       const publicKeyPEM = await this._requestSecurityP2PPublicKey();
       if (!publicKeyPEM) {
-        this._logError('staff-manager.ui.nfc_core_tag.dependency_unavailable', { dep: 'security-p2p' }, 'ui_nfc_core_tag', 'DEPENDENCY_UNAVAILABLE');
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE',
+        this._logError('staff-manager.ui.nfc_core_tag.dependency_unavailable', { dep: 'security-p2p' }, 'ui_nfc_core_tag', 'UPSTREAM_UNREACHABLE');
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE',
           'security-p2p no disponible — no response a security.public-key.request en el timeout',
           { dep: 'security-p2p' });
       }
@@ -418,9 +415,9 @@ class StaffManagerModule {
                    code === 'AUTHENTICATION_REQUIRED' ? 401 :
                    code === 'ALREADY_EXISTS'          ? 409 :
                    code === 'CONFLICT_STATE'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'EXTERNAL_API_FAILED'     ? 502 :
-                   code === 'TIMEOUT'                 ? 504 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'     ? 502 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 : 500;
     const message = err.message || String(err);
     this.logger?.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('staff-manager.errors', { kind, code });

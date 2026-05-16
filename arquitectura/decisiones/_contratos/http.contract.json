@@ -46,7 +46,7 @@
 
     "REDACCIÓN DE SECRETOS EN URLS Y HEADERS. Tokens, claves, passwords NUNCA aparecen en URL query params (van en headers). En logs y métricas, los headers Authorization, X-API-Key, Cookie y similares se redactan ANTES de loguear. Coherente con no_secrets_in_logs y no_plain_secrets_on_disk: HTTP es otro canal donde el secreto puede fugarse y la disciplina es la misma.",
 
-    "ERRORES HTTP EXTERNOS SE MAPEAN A CÓDIGOS CANÓNICOS. Cuando un módulo llama a OpenAI y devuelve 429, el error que el módulo propaga al caller del bus NO es 'OpenAI dijo 429' — es { status: 503, code: 'UPSTREAM_RATE_LIMITED' } o equivalente del catálogo de errors.codes_infrastructure. La realidad del externo se traduce al vocabulario canónico del repo. El módulo es el adaptador, no un proxy transparente.",
+    "ERRORES HTTP EXTERNOS SE MAPEAN A CÓDIGOS CANÓNICOS. Cuando un módulo llama a OpenAI y devuelve 429, el error que el módulo propaga al caller del bus NO es 'OpenAI dijo 429' — es { status: 503, code: 'UPSTREAM_INVALID_RESPONSE' } o equivalente del catálogo de errors.codes_infrastructure. La realidad del externo se traduce al vocabulario canónico del repo. El módulo es el adaptador, no un proxy transparente.",
 
     "AUTH ES OPCIONAL Y EXPLÍCITA. El gateway HTTP soporta mTLS (via certificate-authority), tokens, basic auth — pero la decisión de exigir auth es explícita por endpoint en module.json (config.apis[*].auth_required). Sin declaración, se asume público. Sin sorpresas, sin endpoints accidentalmente expuestos.",
 
@@ -103,8 +103,8 @@
     },
     {
       "id": "external_errors_mapped_to_canonical_codes",
-      "regla": "Cuando un módulo HTTP-client recibe un error de un externo (4xx, 5xx, timeout, network error), NO propaga 'OpenAI dijo X' al caller del bus. Lo traduce al vocabulario canónico de errors.codes_infrastructure: UPSTREAM_TIMEOUT, UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, UPSTREAM_AUTH_FAILED, etc. El módulo es adaptador, no proxy transparente.",
-      "razon": "Si cada módulo propaga el error tal cual lo recibe, el caller (otro módulo en el bus, el CLI, una UI) tiene que conocer la idiosincrasia de cada upstream. Con mapeo canónico, el caller maneja UPSTREAM_RATE_LIMITED igual venga de OpenAI, Anthropic o Twilio. La diversidad de externos se aplana en la frontera, no se propaga al sistema."
+      "regla": "Cuando un módulo HTTP-client recibe un error de un externo (4xx, 5xx, timeout, network error), NO propaga 'OpenAI dijo X' al caller del bus. Lo traduce al vocabulario canónico de errors.codes_infrastructure: UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, etc. El módulo es adaptador, no proxy transparente.",
+      "razon": "Si cada módulo propaga el error tal cual lo recibe, el caller (otro módulo en el bus, el CLI, una UI) tiene que conocer la idiosincrasia de cada upstream. Con mapeo canónico, el caller maneja UPSTREAM_INVALID_RESPONSE igual venga de OpenAI, Anthropic o Twilio. La diversidad de externos se aplana en la frontera, no se propaga al sistema."
     },
     {
       "id": "auth_explicitly_declared_per_endpoint",
@@ -166,14 +166,14 @@
         "Retry policy declarada en config (config.http_clients[*].retry: { max_attempts, backoff_ms, retryable_status }). Por defecto 0 reintentos. Sólo idempotentes pueden tener retry > 0.",
         "Telemetría obligatoria por call: log + métrica de duración con labels {host, status, modulo}. Errores upstream emiten métrica adicional con label 'kind=upstream'.",
         "Redacción de secretos: tokens en headers Authorization / X-API-Key / Cookie. NUNCA en URL query params. Logs y métricas redactan estos headers ANTES de loguear.",
-        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_AUTH_FAILED, 429→UPSTREAM_RATE_LIMITED, 5xx→UPSTREAM_5XX, network/DNS→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT. Lista completa en errors.codes_infrastructure.",
-        "Body limit en respuesta: configurable. Respuestas excediendo se descartan con UPSTREAM_PAYLOAD_TOO_LARGE.",
+        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_INVALID_RESPONSE, 429→UPSTREAM_INVALID_RESPONSE, 5xx→UPSTREAM_INVALID_RESPONSE, network/DNS→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT. Lista completa en errors.codes_infrastructure.",
+        "Body limit en respuesta: configurable. Respuestas excediendo se descartan con UPSTREAM_INVALID_RESPONSE.",
         "TLS: validación de certificado activa por defecto. Saltarla (rejectUnauthorized:false) requiere justificación documentada en module.json (config.http_clients[*].tls_verify=false con motivo).",
         "Cache opcional: si el módulo cachea respuestas, debe declarar TTL y política de invalidación en config (similar a eviction_strategy de persistence)."
       ],
       "ejemplo_request": "const resp = await fetch(url, {\\n  method:'POST',\\n  headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },\\n  body: JSON.stringify(payload),\\n  signal: AbortSignal.timeout(this.config.http_clients.openai.timeout_ms)\\n});",
       "ejemplo_response_ok": "Si externo devuelve 200: parsea, valida shape esperado, devuelve { status: 200, data: parsed } al caller del bus.",
-      "ejemplo_response_error": "Si externo devuelve 429: devuelve { status: 503, error: { code: 'UPSTREAM_RATE_LIMITED', message: 'Upstream rate limit', details: { kind: 'infrastructure', retryable: true, retry_after_ms: 60000 } } }",
+      "ejemplo_response_error": "Si externo devuelve 429: devuelve { status: 503, error: { code: 'UPSTREAM_INVALID_RESPONSE', message: 'Upstream rate limit', details: { kind: 'infrastructure', retryable: true, retry_after_ms: 60000 } } }",
       "ejemplo_modulos_audit": [
         "conversacion/ai-gateway (providers/* — OpenAI, Anthropic, etc.)",
         "telegram-service (probable, llama a Telegram Bot API)",
@@ -257,7 +257,7 @@
       "viola_principios": ["external_errors_mapped_to_canonical_codes"],
       "como_detectar": "Regex: en catch alrededor de fetch/http.request, presencia de 'error.message' o 'response.text()' propagado directamente al return sin mapeo a codes_infrastructure (UPSTREAM_*).",
       "ejemplo_drift_actual": null,
-      "alternativa_correcta": "switch (status) { case 401: case 403: return { status: 503, error: { code: 'UPSTREAM_AUTH_FAILED', ... } }; case 429: return { status: 503, error: { code: 'UPSTREAM_RATE_LIMITED', ... } }; case status >= 500: return { status: 503, error: { code: 'UPSTREAM_5XX', ... } }; }"
+      "alternativa_correcta": "switch (status) { case 401: case 403: return { status: 503, error: { code: 'UPSTREAM_INVALID_RESPONSE', ... } }; case 429: return { status: 503, error: { code: 'UPSTREAM_INVALID_RESPONSE', ... } }; case status >= 500: return { status: 503, error: { code: 'UPSTREAM_INVALID_RESPONSE', ... } }; }"
     },
     {
       "id": "http_substitutes_bus_for_cross_module_action",
@@ -284,7 +284,7 @@
 
     "Definir module_declaration_shape como objeto con dos sub-shapes: apis_shape (cómo declarar endpoints expuestos por el módulo en module.json — name, ruta, method, auth_required, request_schema_ref, response_schema_ref, descripcion) y http_clients_shape (cómo declarar dependencias HTTP salientes — host, base_url, timeout_ms, retry, tls_verify, auth_method, descripcion).",
 
-    "Definir status_code_mapping_to_canonical como objeto: { from_http_to_errors_json (mapeo de status HTTP recibido del externo a entrada en errors.codes_infrastructure: 401→UPSTREAM_AUTH_FAILED, 429→UPSTREAM_RATE_LIMITED, 5xx→UPSTREAM_5XX, etc.), local_status_codes_used (lista de status que el HTTP-server del core usa, todos ⊆ errors.status_codes) }.",
+    "Definir status_code_mapping_to_canonical como objeto: { from_http_to_errors_json (mapeo de status HTTP recibido del externo a entrada en errors.codes_infrastructure: 401→UPSTREAM_INVALID_RESPONSE, 429→UPSTREAM_INVALID_RESPONSE, 5xx→UPSTREAM_INVALID_RESPONSE, etc.), local_status_codes_used (lista de status que el HTTP-server del core usa, todos ⊆ errors.status_codes) }.",
 
     "Definir detection_patterns como objeto con las heurísticas del validator. Claves: localhost_target_regex (regex que detecta llamadas HTTP a localhost / 127.0.0.1 / 0.0.0.0 — drift potencial intra-core), module_owns_listener_regex (createServer / express() / fastify( fuera de core/), non_canonical_response_keys (['ok','success','result'] heredado de errors), fetch_without_timeout_regex (fetch( sin signal/timeout/AbortSignal cerca), secret_in_query_param_regex (URLs con keys sensibles en query string), authorization_header_log_regex (logger con headers sin redactar), unmapped_upstream_error_indicators (return error con .message del upstream), bus_replaced_by_http_indicators (handler HTTP que hace fetch a /modules/<otro>)."
   ],

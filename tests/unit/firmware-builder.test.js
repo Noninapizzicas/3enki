@@ -232,7 +232,7 @@ function makePioDriverDir(tmpDir, driverName, opts = {}) {
     rmDir(tmpDir);
   });
 
-  await testAsync('handleBuild con max concurrent alcanzado → 429 QUOTA_EXCEEDED', async () => {
+  await testAsync('handleBuild con max concurrent alcanzado → 429 RATE_LIMITED', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks, { max_concurrent_builds: 1 });
     makePioDriverDir(tmpDir, 'd1');
@@ -242,7 +242,7 @@ function makePioDriverDir(tmpDir, driverName, opts = {}) {
     const r = await m.handleBuild({ driver: 'd2' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 429);
-    assert.strictEqual(r.error.code, 'QUOTA_EXCEEDED');
+    assert.strictEqual(r.error.code, 'RATE_LIMITED');
     assert.strictEqual(r.error.details.max, 1);
     m.activeBuilds.clear();
     await m.onUnload();
@@ -492,7 +492,7 @@ function makePioDriverDir(tmpDir, driverName, opts = {}) {
     assert.strictEqual(m._classifyHandlerError(new Error('Driver no encontrado')), 'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
     assert.strictEqual(m._classifyHandlerError(new Error('ya está compilando')), 'CONFLICT_STATE');
-    assert.strictEqual(m._classifyHandlerError(new Error('máximo de builds')), 'QUOTA_EXCEEDED');
+    assert.strictEqual(m._classifyHandlerError(new Error('máximo de builds')), 'RATE_LIMITED');
     assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
     rmDir(tmpDir);

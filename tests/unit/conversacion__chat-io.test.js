@@ -567,7 +567,7 @@ async function createConversation(m, opts = {}) {
     assert.strictEqual(m._classifyHandlerError(new Error('Conversation not found')), 'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
     assert.strictEqual(m._classifyHandlerError(new Error('must be UUID')), 'INVALID_INPUT');
-    assert.strictEqual(m._classifyHandlerError(new Error('upstream timeout')), 'UPSTREAM_UNREACHABLE');
+    assert.strictEqual(m._classifyHandlerError(new Error('upstream timeout')), 'UPSTREAM_TIMEOUT');
     assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
@@ -603,7 +603,7 @@ async function createConversation(m, opts = {}) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.ok(/Tardé más de la cuenta/.test(m._userMessageForErrorCode('UPSTREAM_TIMEOUT')));
-    assert.ok(/credenciales/.test(m._userMessageForErrorCode('CREDENTIAL_NOT_FOUND')));
+    assert.ok(/credenciales/.test(m._userMessageForErrorCode('RESOURCE_NOT_FOUND')));
     assert.ok(/desconocido|completar/.test(m._userMessageForErrorCode('NOT_IN_MAP', 'msg')));
     await m.onUnload();
   });

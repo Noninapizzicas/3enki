@@ -38,20 +38,18 @@ const fs       = require('fs').promises;
 const fsSync   = require('fs');
 const path     = require('path');
 const crypto   = require('crypto');
+const BaseModule = require('../_shared/base-module');
 const sqlite3  = require('sqlite3').verbose();
 
 const { EVENTS } = require('../../core/constants');
 
 const SYSTEM_PROJECTS = new Set(['system', '_prompts']);
 
-class DatabaseManagerModule {
+class DatabaseManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'database-manager';
     this.version = '3.0.0';
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
     this.config    = null;
 
     // State runtime (NO persistido en archivos declarativos)
@@ -742,43 +740,6 @@ class DatabaseManagerModule {
   // Helpers POC2 (transferibles)
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'INVALID_INPUT' ? 400 :
-                   code === 'RESOURCE_NOT_FOUND' ? 404 :
-                   code === 'PERMISSION_DENIED' ? 403 :
-                   code === 'CONFLICT_STATE' ? 409 : 500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('database-manager.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found') || msg.includes('no such table')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('syntax error')) return 'INVALID_INPUT';
-    if (msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('not allowed')) return 'PERMISSION_DENIED';
-    if (msg.includes('unique') || msg.includes('constraint') || msg.includes('already exists')) return 'CONFLICT_STATE';
-    return 'UNKNOWN_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
-
   _slugify(name) {
     return String(name || '').toLowerCase().trim()
       .replace(/[áàäâã]/g, 'a').replace(/[éèëê]/g, 'e')
@@ -786,6 +747,16 @@ class DatabaseManagerModule {
       .replace(/[úùüû]/g, 'u').replace(/ñ/g, 'n')
       .replace(/[^a-z0-9\s-]/g, '').replace(/[\s_]+/g, '-')
       .replace(/-+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  // Reglas especificas del dominio del modulo. BaseModule cubre los keywords genericos.
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('not found') || msg.includes('no such table')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('syntax error')) return 'INVALID_INPUT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('not allowed')) return 'PERMISSION_DENIED';
+    if (msg.includes('unique') || msg.includes('constraint') || msg.includes('already exists')) return 'CONFLICT_STATE';
+    return super._classifyHandlerError(err);
   }
 }
 

@@ -30,19 +30,17 @@
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
+const BaseModule = require('../_shared/base-module');
 const { EVENTS } = require('../../core/constants');
 
 const DEFAULT_DB_TIMEOUT_MS = 10000;
 const DEFAULT_COMPOSITION_TIMEOUT_MS = 10000;
 
-class ProjectManagerModule {
+class ProjectManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'project-manager';
     this.version = '4.0.0';
-
-    this.logger      = null;
-    this.metrics     = null;
-    this.eventBus    = null;
     this.uiHandler   = null;
     this.mqttRequest = null;
     this.config      = null;
@@ -1463,40 +1461,11 @@ class ProjectManagerModule {
   // Helpers canonicos POC2 (5 transferibles)
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'INVALID_INPUT' ? 400 :
-                   code === 'RESOURCE_NOT_FOUND' ? 404 :
-                   code === 'PERMISSION_DENIED' ? 403 :
-                   code === 'CONFLICT_STATE' ? 409 : 500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('project-manager.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
+  // Reglas especificas del dominio del modulo. BaseModule cubre los keywords genericos.
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
     if (msg.includes('cannot delete active') || msg.includes('already exists') || msg.includes('depend')) return 'CONFLICT_STATE';
-    return 'UNKNOWN_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    await this.eventBus.publish(name, enriched);
+    return super._classifyHandlerError(err);
   }
 }
 

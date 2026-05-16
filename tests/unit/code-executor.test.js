@@ -246,7 +246,7 @@ function makeFakeProcess(opts = {}) {
   // Group 4: Background — quota y procesos
   // ==========================================
 
-  await testAsync('handleToolBackground con quota llena devuelve QUOTA_EXCEEDED 429', async () => {
+  await testAsync('handleToolBackground con quota llena devuelve RATE_LIMITED 429', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, {
       config: { maxProcesses: 2 }
@@ -256,7 +256,7 @@ function makeFakeProcess(opts = {}) {
     const r = await m.handleToolBackground({ command: 'echo hi' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 429);
-    assert.strictEqual(r.error.code, 'QUOTA_EXCEEDED');
+    assert.strictEqual(r.error.code, 'RATE_LIMITED');
     assert.strictEqual(r.error.details?.limit, 2);
     assert.strictEqual(r.error.details?.active, 2);
     await m.onUnload();

@@ -23,17 +23,14 @@ const path   = require('path');
 const fs     = require('fs').promises;
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 
-class CartaDesignModule {
+class CartaDesignModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'carta-design';
     this.version = '4.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.projectPaths    = new Map();
     this.builtinProfiles = new Map();
   }
@@ -349,7 +346,7 @@ class CartaDesignModule {
       } catch (err) {
         if (err.code !== 'ENOENT') {
           this.logger.warn('carta-design.gallery.readdir_error', { dir, error: err.message });
-          this.metrics?.increment('carta-design.errors', { kind: 'gallery_readdir', code: 'FILESYSTEM_ERROR' });
+          this.metrics?.increment('carta-design.errors', { kind: 'gallery_readdir', code: 'UNKNOWN_ERROR' });
         }
       }
 
@@ -396,9 +393,9 @@ class CartaDesignModule {
                    code === 'AUTHENTICATION_REQUIRED' ? 401 :
                    code === 'ALREADY_EXISTS'          ? 409 :
                    code === 'CONFLICT_STATE'          ? 409 :
-                   code === 'FILESYSTEM_ERROR'        ? 500 :
-                   code === 'EXTERNAL_API_FAILED'     ? 502 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 : 500;
+                   code === 'UNKNOWN_ERROR'        ? 500 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'     ? 502 :
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('carta-design.errors', { kind, code });
@@ -412,7 +409,7 @@ class CartaDesignModule {
     if (ecod === 'EACCES' || msg.includes('permission') || msg.includes('forbidden'))    return 'PERMISSION_DENIED';
     if (ecod === 'EEXIST' || msg.includes('already exists'))                             return 'ALREADY_EXISTS';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    if (ecod && ecod.startsWith('E'))                                                     return 'FILESYSTEM_ERROR';
+    if (ecod && ecod.startsWith('E'))                                                     return 'UNKNOWN_ERROR';
     return 'UNKNOWN_ERROR';
   }
 
@@ -489,7 +486,7 @@ class CartaDesignModule {
     } catch (err) {
       if (err.code !== 'ENOENT') {
         this.logger.warn('carta-design.builtin_profiles.readdir_error', { dir, error: err.message });
-        this.metrics?.increment('carta-design.errors', { kind: 'builtin_profiles_readdir', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment('carta-design.errors', { kind: 'builtin_profiles_readdir', code: 'UNKNOWN_ERROR' });
       }
       this.logger.info('carta-design.profiles.loaded', { count: 0 });
       return;
@@ -527,7 +524,7 @@ class CartaDesignModule {
     } catch (err) {
       if (err.code !== 'ENOENT') {
         this.logger.warn('carta-design.profiles_custom.readdir_error', { dir, error: err.message });
-        this.metrics?.increment('carta-design.errors', { kind: 'profiles_custom_readdir', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment('carta-design.errors', { kind: 'profiles_custom_readdir', code: 'UNKNOWN_ERROR' });
       }
       return [];
     }

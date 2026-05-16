@@ -322,7 +322,7 @@
     "naming": "project_id y user_id son nombres canónicos definidos en glossary.json (cuando se añadan al glossary global). Naming no introduce reglas adicionales.",
     "glossary": "project_id, user_id, tenancy son términos cross-módulo — su forma canónica vive en glossary.json (a actualizar como derivación de este contrato).",
     "events": "Hereda los principios generales. Este contrato concreta que el shape de los eventos de dominio incluye project_id + user_id como campos canónicos del payload.",
-    "errors": "PERMISSION_DENIED es el código canónico cuando una operación se rechaza por falta de scope. CREDENTIAL_NOT_FOUND aplica si la sesión del usuario no resuelve.",
+    "errors": "PERMISSION_DENIED es el código canónico cuando una operación se rechaza por falta de scope. RESOURCE_NOT_FOUND aplica si la sesión del usuario no resuelve.",
     "observability": "Cada log y métrica con scope incluye labels project_id + user_id. observability.contract aplica el patrón general; este contrato lo concreta para tenancy.",
     "lifecycle": "Los módulos cargan sin scope concreto (a nivel de proceso). El scope se aplica por evento — no se cargan N instancias del módulo, una por proyecto. Esto preserva la simplicidad del lifecycle.",
     "persistence": "El aislamiento absoluto entre módulos (persistence.contract) se complementa con aislamiento por project_id dentro del storage de cada módulo. Coherente con persistence.patrones_canonicos: sqlite-per-project, json-file-per-project.",

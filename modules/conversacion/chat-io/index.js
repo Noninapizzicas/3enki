@@ -48,6 +48,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY,
@@ -83,14 +84,11 @@ const isUUID = (s) => typeof s === 'string' && UUID_REGEX.test(s);
 const defaultSettings = () => ({ context_window: 20, temperature: 0.7, max_tokens: 2000 });
 const DB_TIMEOUT_MS = 10000;
 
-class ChatIoModule {
+class ChatIoModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'chat-io';
     this.version = '2.0.0';
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
     this.mqtt      = null;
 
     this.pendingDb           = new Map();
@@ -758,55 +756,18 @@ class ChatIoModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'INVALID_INPUT'      ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'PERMISSION_DENIED' ? 403 :
-                    code === 'CONFLICT_STATE'               ? 409 :
-                    code === 'UPSTREAM_UNREACHABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('chat-io.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found') || msg.includes('does not exist')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('uuid')) return 'INVALID_INPUT';
-    if (msg.includes('already') || msg.includes('conflict')) return 'CONFLICT_STATE';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
-    if (msg.includes('timeout') || msg.includes('unavailable')) return 'UPSTREAM_UNREACHABLE';
-    return 'UNKNOWN_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = { timestamp: new Date().toISOString(), ...payload };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
-
   // Auxiliar: traduce error.code canonico a mensaje legible al usuario
   // (en su idioma, sin tecnicismos). NO expone detalles internos del sistema.
   _userMessageForErrorCode(code, raw_message) {
     const M = {
       'UPSTREAM_TIMEOUT':         'Tardé más de la cuenta en responder. Inténtalo de nuevo en un momento.',
-      'UPSTREAM_RATE_LIMITED':    'Estoy recibiendo muchas peticiones. Inténtalo en unos minutos.',
-      'UPSTREAM_AUTH_FAILED':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
-      'UPSTREAM_5XX':             'El motor del lenguaje tiene un fallo temporal. Inténtalo en un momento.',
+      'UPSTREAM_INVALID_RESPONSE':    'Estoy recibiendo muchas peticiones. Inténtalo en unos minutos.',
+      'UPSTREAM_INVALID_RESPONSE':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
+      'UPSTREAM_INVALID_RESPONSE':             'El motor del lenguaje tiene un fallo temporal. Inténtalo en un momento.',
       'UPSTREAM_UNREACHABLE':     'No puedo conectar con el motor del lenguaje ahora mismo. Inténtalo más tarde.',
       'UPSTREAM_INVALID_RESPONSE':'El motor del lenguaje devolvió algo que no entiendo. Inténtalo de nuevo.',
-      'UPSTREAM_PAYLOAD_TOO_LARGE':'La conversación se ha hecho demasiado larga para procesarla. Empieza una nueva y te ayudo igual.',
-      'CREDENTIAL_NOT_FOUND':     'No tengo credenciales configuradas para responder. Avisa al administrador.',
+      'UPSTREAM_INVALID_RESPONSE':'La conversación se ha hecho demasiado larga para procesarla. Empieza una nueva y te ayudo igual.',
+      'RESOURCE_NOT_FOUND':     'No tengo credenciales configuradas para responder. Avisa al administrador.',
       'UNKNOWN_ERROR':           'Algo se rompió por mi parte. Inténtalo de nuevo o avisa si persiste.'
     };
     return M[code] || `No pude completar la respuesta (${code || 'error desconocido'}). Inténtalo de nuevo.`;

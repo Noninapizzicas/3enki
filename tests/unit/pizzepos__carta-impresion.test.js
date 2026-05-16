@@ -202,13 +202,13 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('toolSaveHtml sin proyecto activado → 503 DEPENDENCY_UNAVAILABLE', async () => {
+  await testAsync('toolSaveHtml sin proyecto activado → 503 UPSTREAM_UNREACHABLE', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.toolSaveHtml({ project_id: 'p1', carta_id: 'c1', html: '<x/>' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 503);
-    assert.strictEqual(r.error.code, 'DEPENDENCY_UNAVAILABLE');
+    assert.strictEqual(r.error.code, 'UPSTREAM_UNREACHABLE');
     await m.onUnload();
   });
 
@@ -396,9 +396,9 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'ENOENT' })), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('No path for project')), 'DEPENDENCY_UNAVAILABLE');
+    assert.strictEqual(m._classifyHandlerError(new Error('No path for project')), 'UPSTREAM_UNREACHABLE');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
-    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EIO' })), 'FILESYSTEM_ERROR');
+    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EIO' })), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 
@@ -420,7 +420,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     mocks.metricsCalls.length = 0;
-    const err = Object.assign(new Error('boom'), { _code: 'FILESYSTEM_ERROR' });
+    const err = Object.assign(new Error('boom'), { _code: 'UNKNOWN_ERROR' });
     const r = m._handleHandlerError('t.failed', err, 'kind');
     assert.strictEqual(r.status, 500);
     const metric = mocks.metricsCalls.find(c => c[1] === 'carta-impresion.errors');

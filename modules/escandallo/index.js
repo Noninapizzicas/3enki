@@ -30,18 +30,16 @@ const crypto = require('crypto');
 const EscandalloManager              = require('./core/escandallo-manager');
 const EscandalloToolResultFormatter = require('./core/tool-result-formatter');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_PROJECT_ID         = 'default';
 const FOOD_COST_UMBRAL_ALERTA    = 35; // %
 const FOOD_COST_UMBRAL_BAJO      = 25; // %
 
-class EscandalloModule {
+class EscandalloModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'escandallo';
     this.version = '3.0.0';
-
-    this.eventBus     = null;
-    this.logger       = null;
-    this.metrics      = null;
     this.moduleLoader = null;
 
     this.cache        = new Map();
@@ -1028,10 +1026,10 @@ class EscandalloModule {
                    code === 'RESOURCE_NOT_FOUND'      ? 404 :
                    code === 'PERMISSION_DENIED'       ? 403 :
                    code === 'CONFLICT_STATE'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'EXTERNAL_API_FAILED'     ? 502 :
-                   code === 'TIMEOUT'                 ? 504 :
-                   code === 'FILESYSTEM_ERROR'        ? 500 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'     ? 502 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 :
+                   code === 'UNKNOWN_ERROR'        ? 500 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('escandallo.errors', { kind, code });
@@ -1043,7 +1041,7 @@ class EscandalloModule {
     const ecod = err?.code || '';
     if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    if (ecod && ecod.startsWith('E'))                                                    return 'FILESYSTEM_ERROR';
+    if (ecod && ecod.startsWith('E'))                                                    return 'UNKNOWN_ERROR';
     return 'UNKNOWN_ERROR';
   }
 

@@ -294,7 +294,7 @@ async function runTests() {
     });
 
     assert(result.status === 400, 'status 400');
-    assert(result.error.code === 'INVALID_FORMAT', 'code INVALID_FORMAT');
+    assert(result.error.code === 'INVALID_INPUT', 'code INVALID_INPUT');
 
     await mod.onUnload();
     cleanup();
@@ -786,20 +786,20 @@ async function runTests() {
     assert(r.error.details.entity_type === 'project', 'details.entity_type');
     assert(!r.data, 'sin data');
 
-    const r2 = mod._errorResponse(400, 'MISSING_FIELD', 'campo requerido');
+    const r2 = mod._errorResponse(400, 'INVALID_INPUT', 'campo requerido');
     assert(!r2.error.details, 'sin details cuando no se pasan');
 
     await mod.onUnload();
     cleanup();
   });
 
-  await test('_classifyHandlerError mapea ENOENT a FILESYSTEM_ERROR', async () => {
+  await test('_classifyHandlerError mapea ENOENT a UNKNOWN_ERROR', async () => {
     cleanup();
     const mod = new ESP32DevModule();
     await mod.onLoad(createMockCore());
 
-    assert(mod._classifyHandlerError(new Error('ENOENT: no such file')) === 'FILESYSTEM_ERROR', 'ENOENT → FILESYSTEM_ERROR');
-    assert(mod._classifyHandlerError(new Error('timeout expired')) === 'TIMEOUT', 'timeout → TIMEOUT');
+    assert(mod._classifyHandlerError(new Error('ENOENT: no such file')) === 'UNKNOWN_ERROR', 'ENOENT → UNKNOWN_ERROR');
+    assert(mod._classifyHandlerError(new Error('timeout expired')) === 'UPSTREAM_TIMEOUT', 'timeout → UPSTREAM_TIMEOUT');
     assert(mod._classifyHandlerError(new Error('unexpected')) === 'UNKNOWN_ERROR', 'genérico → UNKNOWN_ERROR');
 
     await mod.onUnload();

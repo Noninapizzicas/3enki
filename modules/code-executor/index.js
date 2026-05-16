@@ -6,13 +6,12 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const crypto = require('crypto');
 
-class CodeExecutorModule {
+const BaseModule = require('../_shared/base-module');
+class CodeExecutorModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'code-executor';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.blockedPatterns = [];
     this.processes = new Map();
@@ -112,10 +111,10 @@ class CodeExecutorModule {
           this.metrics?.increment('code-executor.exec.timeout', 1, { kind: 'infrastructure' });
           await this._publicarEvento('shell.error', {
             command: command.substring(0, 100),
-            error_code: 'TIMEOUT',
+            error_code: 'UPSTREAM_TIMEOUT',
             timeout: execTimeout
           }, opts);
-          resolve(this._errorResponse(504, 'TIMEOUT', 'Command timed out', {
+          resolve(this._errorResponse(504, 'UPSTREAM_TIMEOUT', 'Command timed out', {
             timeout: execTimeout,
             stdout: stdout?.toString() || '',
             stderr: stderr?.toString() || ''
@@ -239,8 +238,8 @@ class CodeExecutorModule {
 
     const maxProcesses = this.config.maxProcesses || 10;
     if (this.processes.size >= maxProcesses) {
-      this.metrics?.increment('code-executor.background.errors', 1, { code: 'QUOTA_EXCEEDED', kind: 'domain' });
-      return this._errorResponse(429, 'QUOTA_EXCEEDED', 'Maximum background processes reached', {
+      this.metrics?.increment('code-executor.background.errors', 1, { code: 'RATE_LIMITED', kind: 'domain' });
+      return this._errorResponse(429, 'RATE_LIMITED', 'Maximum background processes reached', {
         limit: maxProcesses,
         active: this.processes.size
       });
@@ -439,45 +438,6 @@ class CodeExecutorModule {
   // ==========================================
   // Helpers POC2 canonicos (5)
   // ==========================================
-
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'INVALID_INPUT' ? 400
-      : code === 'RESOURCE_NOT_FOUND' ? 404
-      : code === 'PERMISSION_DENIED' ? 403
-      : code === 'TIMEOUT' ? 504
-      : code === 'QUOTA_EXCEEDED' ? 429
-      : 500;
-    const message = err.message || String(err);
-    const isInfra = status >= 500;
-    this.logger[isInfra ? 'error' : 'warn'](logEvent, { error: message, code });
-    this.metrics?.increment('code-executor.errors', 1, { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    if (msg.includes('permission') || msg.includes('blocked') || msg.includes('traversal')) return 'PERMISSION_DENIED';
-    if (msg.includes('timeout') || msg.includes('timed out')) return 'TIMEOUT';
-    return 'UNKNOWN_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    await this.eventBus?.publish(name, enriched);
-  }
 }
 
 module.exports = CodeExecutorModule;

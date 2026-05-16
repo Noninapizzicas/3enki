@@ -15,23 +15,21 @@ const crypto = require('crypto');
 const fs = require('fs').promises;
 const path = require('path');
 
+const BaseModule = require('../../_shared/base-module');
 const UI_ACTIONS = [
   'list', 'get', 'create', 'add-item', 'update-item', 'delete-item',
   'send-kitchen', 'complete', 'cancel', 'total', 'health'
 ];
 
-class PedidosModule {
+class PedidosModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'pedidos';
     this.version = '3.0.0';
 
     this.pedidos = new Map();
     this.pedidosPorCuenta = new Map();
     this.productosCache = new Map();
-
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.uiHandler = null;
     this.config = null;
   }

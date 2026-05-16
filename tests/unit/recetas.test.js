@@ -610,7 +610,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m._classifyHandlerError(new Error('no encontrado')), 'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
     assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
-    assert.strictEqual(m._classifyHandlerError(new Error('request timeout')), 'TIMEOUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('request timeout')), 'UPSTREAM_TIMEOUT');
     await m.onUnload();
   });
 

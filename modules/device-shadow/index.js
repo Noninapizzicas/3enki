@@ -4,15 +4,12 @@ const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 
-class DeviceShadowModule {
+const BaseModule = require('../_shared/base-module');
+class DeviceShadowModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'device-shadow';
     this.version = '2.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.config = {
       persist_interval_ms: 30000,
       data_path: './data/devices'
@@ -449,42 +446,6 @@ class DeviceShadowModule {
   // ==========================================
   // Helpers POC2
   // ==========================================
-
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code   = err._code || this._classifyHandlerError(err);
-    const status = code === 'INVALID_INPUT'     ? 400 :
-                   code === 'RESOURCE_NOT_FOUND'    ? 404 :
-                   code === 'PERMISSION_DENIED'? 403 :
-                   code === 'CONFLICT_STATE'              ? 409 : 500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('device-shadow.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found'))                                                    return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    if (msg.includes('unauthorized') || msg.includes('forbidden'))                   return 'PERMISSION_DENIED';
-    if (msg.includes('conflict') || msg.includes('already exists'))                  return 'CONFLICT_STATE';
-    return 'UNKNOWN_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    await this.eventBus.publish(name, enriched);
-  }
 }
 
 module.exports = DeviceShadowModule;

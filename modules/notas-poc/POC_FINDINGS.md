@@ -135,7 +135,7 @@ Aplicando los validators sobre el original `modules/notas/index.js`:
 |---|---|---|
 | Líneas de código | ~484 | ~480 |
 | Handlers | 8 (incluye /health, /metrics) | 6 (foco dominio) |
-| Códigos de error canónicos | 0 | 5 (RESOURCE_NOT_FOUND, MISSING_FIELD, FIELD_TOO_LONG, INVALID_INPUT, UNKNOWN_ERROR) |
+| Códigos de error canónicos | 0 | 5 (RESOURCE_NOT_FOUND, INVALID_INPUT, INVALID_INPUT, INVALID_INPUT, UNKNOWN_ERROR) |
 | Persistencia | in-memory | JSON file con write atómico |
 | Drift validators | múltiples | cero (esperado) |
 | correlation_id propagado | parcial | 100% |

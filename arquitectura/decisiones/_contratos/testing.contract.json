@@ -371,7 +371,7 @@
     "naming": "Los archivos de test siguen el naming pattern `<modulo>.test.js` donde <modulo> coincide con el nombre del módulo (chat-io.test.js, prompt-builder.test.js). naming.contract.json aplica para los nombres de los módulos; este contrato lo extiende para sus tests.",
     "glossary": "No aplica directamente — los tests no introducen entidades cross-módulo nuevas.",
     "events": "Los tests verifican que el patrón publish-subscribe del events.contract se cumple (mocks de eventBus capturan publishes; tests inspeccionan el payload).",
-    "errors": "Los tests cubren edge cases de error con códigos canónicos de errors.json (UPSTREAM_TIMEOUT, AGENT_NOT_FOUND, etc.). Validan que error.code está en la lista canónica.",
+    "errors": "Los tests cubren edge cases de error con códigos canónicos de errors.json (UPSTREAM_TIMEOUT, RESOURCE_NOT_FOUND, etc.). Validan que error.code está en la lista canónica.",
     "observability": "Los tests pueden capturar logs (mock logger) y verificar que el handler loguea con metadata correcta (correlation_id presente, no se loguea secreto, etc.).",
     "lifecycle": "Tests no exigen lifecycle real del módulo — instancian la clase y llaman a handlers directamente saltándose onLoad/onUnload (a menos que el test sea específicamente del lifecycle).",
     "persistence": "Tests mockean el bus de db.query.request (los módulos que persisten via event-driven). Tests NO escriben en SQLite real ni filesystem persistente.",

@@ -390,14 +390,14 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleNfcCoreTag sin response a security.public-key.request → 503 DEPENDENCY_UNAVAILABLE', async () => {
+  await testAsync('handleNfcCoreTag sin response a security.public-key.request → 503 UPSTREAM_UNREACHABLE', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     m.publicKeyTimeoutMs = 30; // acelera el timeout para el test
     const r = await m.handleNfcCoreTag();
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 503);
-    assert.strictEqual(r.error.code, 'DEPENDENCY_UNAVAILABLE');
+    assert.strictEqual(r.error.code, 'UPSTREAM_UNREACHABLE');
     // Confirma que el request salio por bus
     const reqs = publishedOf(mocks, 'security.public-key.request');
     assert.strictEqual(reqs.length, 1);

@@ -23,19 +23,16 @@ const fs     = require('fs').promises;
 const path   = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 const ARCHITECT_AGENT    = 'impresion-architect';
 const DEBOUNCE_MS        = 5000;
 
-class CartaImpresionModule {
+class CartaImpresionModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'carta-impresion';
     this.version = '3.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.projectPaths   = new Map();
     this.htmlCache      = new Map();
     this.debounceTimers = new Map();
@@ -225,10 +222,10 @@ class CartaImpresionModule {
                    code === 'RESOURCE_NOT_FOUND'      ? 404 :
                    code === 'PERMISSION_DENIED'       ? 403 :
                    code === 'CONFLICT_STATE'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'EXTERNAL_API_FAILED'     ? 502 :
-                   code === 'TIMEOUT'                 ? 504 :
-                   code === 'FILESYSTEM_ERROR'        ? 500 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'     ? 502 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 :
+                   code === 'UNKNOWN_ERROR'        ? 500 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('carta-impresion.errors', { kind, code });
@@ -241,8 +238,8 @@ class CartaImpresionModule {
     if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
     if (ecod === 'EACCES' || msg.includes('permission'))                                 return 'PERMISSION_DENIED';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    if (msg.includes('no path for project'))                                              return 'DEPENDENCY_UNAVAILABLE';
-    if (ecod && ecod.startsWith('E'))                                                    return 'FILESYSTEM_ERROR';
+    if (msg.includes('no path for project'))                                              return 'UPSTREAM_UNREACHABLE';
+    if (ecod && ecod.startsWith('E'))                                                    return 'UNKNOWN_ERROR';
     return 'UNKNOWN_ERROR';
   }
 
@@ -321,7 +318,7 @@ class CartaImpresionModule {
     const dir = this._cartasImpresionDirFor(projectId);
     if (!dir) {
       const err = new Error('No path for project');
-      err._code = 'DEPENDENCY_UNAVAILABLE';
+      err._code = 'UPSTREAM_UNREACHABLE';
       throw err;
     }
 

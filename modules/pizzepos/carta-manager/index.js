@@ -4,14 +4,12 @@ const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 
-class CartaManagerModule {
+const BaseModule = require('../../_shared/base-module');
+class CartaManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'carta-manager';
     this.version = '1.1.0';
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     // Multi-tenant: project_id → Map<carta_id, carta>
     this.cartasPerProject = new Map();
     // project_id → { featurePath, storagePath }
@@ -51,7 +49,7 @@ class CartaManagerModule {
 
   _handleHandlerError(logKey, err, kind) {
     const code = err._code || this._classifyHandlerError(err);
-    const statusMap = { RESOURCE_NOT_FOUND: 404, INVALID_INPUT: 400, ALREADY_EXISTS: 409, FILESYSTEM_ERROR: 500 };
+    const statusMap = { RESOURCE_NOT_FOUND: 404, INVALID_INPUT: 400, ALREADY_EXISTS: 409, UNKNOWN_ERROR: 500 };
     const status = statusMap[code] || 500;
     this.logger.error('carta-manager.handler_error', { handler: logKey, error: err.message, code });
     this.metrics?.increment('carta-manager.error', { kind: kind || logKey, code });
@@ -305,7 +303,7 @@ class CartaManagerModule {
     try {
       await this.saveCartaToDisk(cartaObj, project_id);
     } catch (err) {
-      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      const e = Object.assign(err, { _code: 'UNKNOWN_ERROR' });
       return this._handleHandlerError('save.disk_error', e, 'save');
     }
     await this._emitCartaActualizada(cartaObj, project_id);
@@ -438,7 +436,7 @@ class CartaManagerModule {
     try {
       await this.saveCartaToDisk(carta, project_id);
     } catch (err) {
-      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      const e = Object.assign(err, { _code: 'UNKNOWN_ERROR' });
       return this._handleHandlerError('add_product.disk_error', e, 'add_product');
     }
     await this._emitCartaActualizada(carta, project_id);
@@ -470,7 +468,7 @@ class CartaManagerModule {
     try {
       await this.saveCartaToDisk(carta, project_id);
     } catch (err) {
-      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      const e = Object.assign(err, { _code: 'UNKNOWN_ERROR' });
       return this._handleHandlerError('remove_product.disk_error', e, 'remove_product');
     }
     await this._emitCartaActualizada(carta, project_id);
@@ -513,7 +511,7 @@ class CartaManagerModule {
     try {
       await this.saveCartaToDisk(carta, project_id);
     } catch (err) {
-      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      const e = Object.assign(err, { _code: 'UNKNOWN_ERROR' });
       return this._handleHandlerError('update_product.disk_error', e, 'update_product');
     }
     await this._emitCartaActualizada(carta, project_id);
@@ -547,7 +545,7 @@ class CartaManagerModule {
     try {
       await this.saveCartaToDisk(carta, project_id);
     } catch (err) {
-      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      const e = Object.assign(err, { _code: 'UNKNOWN_ERROR' });
       return this._handleHandlerError('add_category.disk_error', e, 'add_category');
     }
     await this._emitCartaActualizada(carta, project_id);
@@ -597,7 +595,7 @@ class CartaManagerModule {
     try {
       await this.saveCartaToDisk(carta, project_id);
     } catch (err) {
-      const e = Object.assign(err, { _code: 'FILESYSTEM_ERROR' });
+      const e = Object.assign(err, { _code: 'UNKNOWN_ERROR' });
       return this._handleHandlerError('update_prices.disk_error', e, 'update_prices');
     }
     await this._emitCartaActualizada(carta, project_id);
@@ -735,8 +733,8 @@ class CartaManagerModule {
       await fs.writeFile(path.join(dir, `${carta_id}.json`), JSON.stringify(carta, null, 2), 'utf-8');
     } catch (err) {
       this.logger.error('carta-manager.restore.disk_error', { carta_id, error: err.message });
-      this.metrics?.increment('carta-manager.error', { kind: 'restore', code: 'FILESYSTEM_ERROR' });
-      return this._errorResponse(500, 'FILESYSTEM_ERROR', err.message);
+      this.metrics?.increment('carta-manager.error', { kind: 'restore', code: 'UNKNOWN_ERROR' });
+      return this._errorResponse(500, 'UNKNOWN_ERROR', err.message);
     }
 
     this.getCartas(project_id).set(carta_id, carta);

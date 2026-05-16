@@ -211,7 +211,7 @@ class AiGateway {
         request_id: requestId, reason
       });
       this._emitMetric(`${this.name}.credential.errors`, 1, {
-        code: 'CREDENTIAL_NOT_FOUND', kind: 'rejected'
+        code: 'RESOURCE_NOT_FOUND', kind: 'rejected'
       });
       pending.reject(new Error(reason));
     }
@@ -300,7 +300,7 @@ class AiGateway {
    *
    * Devuelve la api key como string. Throws si timeout / credential-manager
    * rechaza / desconectado (manejado por el caller — DeepSeekClient lo traduce
-   * a CREDENTIAL_NOT_FOUND).
+   * a RESOURCE_NOT_FOUND).
    */
   _resolveCredential(credentialRef, projectId) {
     return new Promise((resolve, reject) => {
@@ -319,7 +319,7 @@ class AiGateway {
           request_id: requestId, provider: credentialRef, project_id: projectId, timeout_ms: timeoutMs
         });
         this._emitMetric(`${this.name}.credential.errors`, 1, {
-          provider: credentialRef, code: 'CREDENTIAL_NOT_FOUND', kind: 'timeout'
+          provider: credentialRef, code: 'RESOURCE_NOT_FOUND', kind: 'timeout'
         });
         reject(new Error(`credential resolve timeout (${timeoutMs}ms) for ${credentialRef}`));
       }, timeoutMs);

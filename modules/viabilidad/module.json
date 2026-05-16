@@ -57,7 +57,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT", "cuando": "gastos_fijos_mensuales o project_id ausentes" },
-        { "code": "FILESYSTEM_ERROR", "cuando": "fallo de escritura del estudio" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo de escritura del estudio" }
       ]
     },
     {
@@ -98,7 +98,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT", "cuando": "nombre, gastos_fijos_mensuales o project_id ausentes" },
-        { "code": "FILESYSTEM_ERROR", "cuando": "fallo de escritura de escenarios.json" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo de escritura de escenarios.json" }
       ]
     },
     {
@@ -176,7 +176,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",     "cuando": "project_id ausente" },
-        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura de config.json" }
+        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura de config.json" }
       ]
     }
   ],

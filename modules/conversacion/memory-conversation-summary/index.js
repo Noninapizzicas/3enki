@@ -11,6 +11,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversation_summaries (
   conversation_id TEXT PRIMARY KEY,
@@ -29,13 +30,11 @@ const DEFAULT_PRIORITY = 200;
 const DEFAULT_THRESHOLD = 20;
 const DEFAULT_SUMMARY_MAX_CHARS = 800;
 
-class MemoryConversationSummaryModule {
+class MemoryConversationSummaryModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'memory-conversation-summary';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.pendingDb = new Map();
     this.pendingLlm = new Map();
@@ -87,7 +86,7 @@ class MemoryConversationSummaryModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     return { status: 500, code: 'UNKNOWN_ERROR' };

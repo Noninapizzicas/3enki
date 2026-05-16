@@ -36,15 +36,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-class FirmwareManagerModule {
+const BaseModule = require('../_shared/base-module');
+class FirmwareManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'firmware-manager';
     this.version = '3.0.0';
-
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     this.config = {
       data_path: './data/firmware',
       auto_check_on_register: true,
@@ -1032,51 +1029,24 @@ class FirmwareManagerModule {
   // 5 Helpers POC2
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'INVALID_INPUT'      ? 400 :
-                   code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                   code === 'PERMISSION_DENIED' ? 403 :
-                   code === 'CONFLICT_STATE'               ? 409 :
-                   code === 'UPSTREAM_UNREACHABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('firmware-manager.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    if (err.code === 'ENOENT') return 'RESOURCE_NOT_FOUND';
-    if (err.code === 'EACCES' || err.code === 'EPERM') return 'PERMISSION_DENIED';
-    if (err.code === 'EEXIST') return 'CONFLICT_STATE';
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'INVALID_INPUT';
-    if (msg.includes('access denied') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
-    if (msg.includes('already')) return 'CONFLICT_STATE';
-    return 'UNKNOWN_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = { timestamp: new Date().toISOString(), ...payload };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else if (!enriched.correlation_id) enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
-
   // Auxiliar de dominio: sanitiza nombres de archivo para prevenir path traversal.
   _sanitizeFile(file) {
     if (!file || typeof file !== 'string') return null;
     const basename = path.basename(file);
     if (basename !== file || file.includes('..') || file.includes('\0')) return null;
     return basename;
+  }
+
+  // Reglas especificas del dominio del modulo. BaseModule cubre los keywords genericos.
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (err.code === 'ENOENT') return 'RESOURCE_NOT_FOUND';
+    if (err.code === 'EACCES' || err.code === 'EPERM') return 'PERMISSION_DENIED';
+    if (err.code === 'EEXIST') return 'CONFLICT_STATE';
+    if (err.code === 'ENOENT') return 'RESOURCE_NOT_FOUND';
+    if (err.code === 'EACCES' || err.code === 'EPERM') return 'PERMISSION_DENIED';
+    if (err.code === 'EEXIST') return 'CONFLICT_STATE';
+    return super._classifyHandlerError(err);
   }
 }
 

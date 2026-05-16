@@ -19,11 +19,13 @@ const KeyManager = require('./key-manager');
 const SecureEnvelope = require('./secure-envelope');
 const CryptoHandshake = require('./crypto-handshake');
 
+const BaseModule = require('../_shared/base-module');
 const MAX_SHARED_SECRETS_DEFAULT = 100;
 const UI_ACTIONS = ['status', 'public-key', 'trust-peer', 'revoke-peer', 'trusted-peers', 'health'];
 
-class SecurityP2PModule {
+class SecurityP2PModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'security-p2p';
     this.version = '2.0.0';
 
@@ -41,9 +43,6 @@ class SecurityP2PModule {
     };
 
     this.core = null;
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.cryptoHandshake = null;
 
     this._coreHooks = null;

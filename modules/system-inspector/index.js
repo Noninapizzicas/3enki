@@ -36,16 +36,15 @@ const ErrorInterceptor = require('./lib/error-interceptor');
 const MqttInterceptor  = require('./lib/mqtt-interceptor');
 const FileWriter       = require('./lib/file-writer');
 
-class SystemInspectorModule {
+const BaseModule = require('../_shared/base-module');
+class SystemInspectorModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'system-inspector';
     this.version = '2.0.0';
 
     // Inyectados en onLoad
     this.core      = null;
-    this.logger    = null;
-    this.eventBus  = null;
-    this.metrics   = null;
     this.config    = null;
     this.startTime = null;
 

@@ -18,6 +18,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 
+const BaseModule = require('../../_shared/base-module');
 const TIPOS_ESTACION = {
   general: {
     id: 'general',
@@ -50,14 +51,11 @@ const UI_ACTIONS = [
   'list-devices', 'list-station-types', 'list-displays'
 ];
 
-class CocinaModule {
+class CocinaModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'cocina';
     this.version = '3.2.0';
-
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
     this.validator = null;
     this.config = null;
@@ -137,7 +135,7 @@ class CocinaModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/conflict|estado|already/i.test(msg)) return { status: 409, code: 'CONFLICT_STATE' };

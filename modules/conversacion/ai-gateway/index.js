@@ -26,12 +26,12 @@ const OllamaProvider    = require('./providers/ollama-provider');
 const ClaudeCliProvider = require('./providers/claude-cli-provider');
 const KimiProvider      = require('./providers/kimi-provider');
 
-class AiGatewayModule {
+const BaseModule = require('../../_shared/base-module');
+class AiGatewayModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'ai-gateway';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
     this.config = null;
     this.moduleLoader = null;
 
@@ -585,7 +585,7 @@ class AiGatewayModule {
       if (Array.isArray(llmResult.tool_calls_executed) && llmResult.tool_calls_executed.length > 0) {
         // Propagar el shape canonico de error errors.contract en lugar de
         // hardcodear UNKNOWN_ERROR (drift anterior que invisibilizaba
-        // RESOURCE_NOT_FOUND, INVALID_INPUT, AGENT_NOT_FOUND, etc).
+        // RESOURCE_NOT_FOUND, INVALID_INPUT, RESOURCE_NOT_FOUND, etc).
         payload.tool_calls_executed = llmResult.tool_calls_executed
           .map(t => {
             const entry = {
@@ -646,23 +646,23 @@ class AiGatewayModule {
 
     let code = 'UNKNOWN_ERROR';
     if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) {
-      code = 'CREDENTIAL_NOT_FOUND';
+      code = 'RESOURCE_NOT_FOUND';
     } else if (/no hay providers?.*disponibles?|no providers? available/i.test(raw)) {
-      code = 'CREDENTIAL_NOT_FOUND';
+      code = 'RESOURCE_NOT_FOUND';
     } else if (lower.includes('timeout') || lower.includes('etimedout')) {
       code = 'UPSTREAM_TIMEOUT';
     } else if (/429|rate.?limit/.test(lower)) {
-      code = 'UPSTREAM_RATE_LIMITED';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/401|403|unauthorized|forbidden|invalid api key/.test(lower)) {
-      code = 'UPSTREAM_AUTH_FAILED';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/5\d\d|internal server error|bad gateway|service unavailable/.test(lower)) {
-      code = 'UPSTREAM_5XX';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/econnrefused|enotfound|network|unreachable|fetch failed/.test(lower)) {
       code = 'UPSTREAM_UNREACHABLE';
     } else if (/invalid response|malformed|parse|unexpected token/.test(lower)) {
       code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/context.{0,10}(length|window|too long|too large|exceed)|prompt.{0,5}(too long|too large)|maximum.{0,10}context|too many tokens|context_length_exceeded|413/i.test(lower)) {
-      code = 'UPSTREAM_PAYLOAD_TOO_LARGE';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     }
 
     return { code, message: raw, details: {} };
@@ -816,34 +816,6 @@ class AiGatewayModule {
   // Helpers POC2 (transferibles) + auxiliares del dominio
   // ============================================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'INVALID_INPUT'      ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'PERMISSION_DENIED' ? 403 :
-                    code === 'CONFLICT_STATE'               ? 409 :
-                    code === 'UPSTREAM_UNREACHABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'INVALID_INPUT';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
-    if (msg.includes('unavailable') || msg.includes('not available')) return 'UPSTREAM_UNREACHABLE';
-    return 'UNKNOWN_ERROR';
-  }
-
   // Helper auxiliar especifico del dominio LLM:
   // mapea errores de providers/HTTP/CLI a codigos canonicos del agentic loop.
   // Renombrado de _classifyError para alinear con el contrato POC2
@@ -851,16 +823,6 @@ class AiGatewayModule {
   // y embedding paths.
   _classifyExecutionError(err) {
     return this._classifyError(err);
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
   }
 }
 

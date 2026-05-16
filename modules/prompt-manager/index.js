@@ -20,20 +20,18 @@ const fs     = require('fs').promises;
 const path   = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const SLOT_TYPES  = ['system', 'context', 'prefix', 'suffix', 'format'];
 const SLOT_ICONS  = { system: 'system', context: 'context', prefix: 'prefix', suffix: 'suffix', format: 'format' };
 const GLOBAL_PROJECT_ID = '_prompts';
 const DB_TIMEOUT_MS     = 10000;
 const SCHEMA_TIMEOUT_MS = 5000;
 
-class PromptManagerModule {
+class PromptManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'prompt-manager';
     this.version = '3.0.0';
-
-    this.logger    = null;
-    this.eventBus  = null;
-    this.metrics   = null;
     this.config    = null;
     this.uiHandler = null;
 
@@ -1186,7 +1184,7 @@ class PromptManagerModule {
     if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('must be')) return 'INVALID_INPUT';
     if (msg.includes('already exists') || msg.includes('unique')) return 'ALREADY_EXISTS';
-    if (msg.includes('timeout')) return 'TIMEOUT';
+    if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';
     return 'UNKNOWN_ERROR';
   }
 
@@ -1196,7 +1194,7 @@ class PromptManagerModule {
       RESOURCE_NOT_FOUND: 404,
       INVALID_INPUT:  400,
       ALREADY_EXISTS:     409,
-      TIMEOUT:            504,
+      UPSTREAM_TIMEOUT:            504,
       UNKNOWN_ERROR:     500
     })[code] || 500;
     const message = err && err.message ? err.message : String(err || 'unknown error');

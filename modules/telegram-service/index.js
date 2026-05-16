@@ -5,6 +5,7 @@ const fs = require('fs').promises;
 const crypto = require('crypto');
 const TelegramClient = require('./services/telegram-client');
 
+const BaseModule = require('../_shared/base-module');
 const EVENTS = {
   TEXT_RECEIVED:     'telegram.text.received',
   PHOTO_RECEIVED:    'telegram.photo.received',
@@ -27,14 +28,11 @@ const EVENTS = {
 // Credential pattern: TELEGRAM_API_KEY_{BOT|CUSTOM}_{botName}
 const CREDENTIAL_PATTERN = /^TELEGRAM_API_KEY_(?:BOT|CUSTOM)_(.+)$/;
 
-class TelegramServiceModule {
+class TelegramServiceModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'telegram-service';
     this.version = '3.1.0';
-
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.config = null;
 
     this.bots = new Map();
@@ -55,7 +53,7 @@ class TelegramServiceModule {
     const msg = (error.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('no encontrado')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('requerido') || msg.includes('validation')) return 'INVALID_INPUT';
-    return 'EXTERNAL_API_FAILED';
+    return 'UPSTREAM_INVALID_RESPONSE';
   }
 
   _handleHandlerError(metricName, error, kind) {

@@ -4,13 +4,12 @@ const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 
-class ConversationExportModule {
+const BaseModule = require('../_shared/base-module');
+class ConversationExportModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'conversation-export';
     this.version = '2.0.0';
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.config = null;
     this.token = null;
 
@@ -159,9 +158,9 @@ class ConversationExportModule {
   _classifyHandlerError(error) {
     const msg = (error.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('sin sesiones')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('requerido') || msg.includes('missing field')) return 'MISSING_FIELD';
+    if (msg.includes('required') || msg.includes('requerido') || msg.includes('missing field')) return 'INVALID_INPUT';
     if (msg.includes('invalid') || msg.includes('invalido')) return 'INVALID_INPUT';
-    if (msg.includes('timeout')) return 'TIMEOUT';
+    if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';
     return 'UNKNOWN_ERROR';
   }
 
@@ -170,12 +169,12 @@ class ConversationExportModule {
     const details = error._details;
     const statusMap = {
       RESOURCE_NOT_FOUND: 404,
-      MISSING_FIELD: 400,
+      INVALID_INPUT: 400,
       INVALID_INPUT: 400,
       AUTHENTICATION_REQUIRED: 401,
       PERMISSION_DENIED: 403,
-      DEPENDENCY_UNAVAILABLE: 503,
-      TIMEOUT: 504,
+      UPSTREAM_UNREACHABLE: 503,
+      UPSTREAM_TIMEOUT: 504,
       UNKNOWN_ERROR: 500
     };
     const status = statusMap[code] || 500;
@@ -205,7 +204,7 @@ class ConversationExportModule {
   _checkAuth(req) {
     if (!this.token) {
       return Object.assign(new Error('Auth token not configured on server'), {
-        _code: 'DEPENDENCY_UNAVAILABLE'
+        _code: 'UPSTREAM_UNREACHABLE'
       });
     }
     const provided = req.query?.token
@@ -238,7 +237,7 @@ class ConversationExportModule {
       if (!projectId) {
         return this._handleHandlerError(
           'conversation-export.list_sessions.validation',
-          Object.assign(new Error('project_id required'), { _code: 'MISSING_FIELD' }),
+          Object.assign(new Error('project_id required'), { _code: 'INVALID_INPUT' }),
           'validation'
         );
       }
@@ -264,14 +263,14 @@ class ConversationExportModule {
       if (!sessionId) {
         return this._handleHandlerError(
           'conversation-export.get_session.validation',
-          Object.assign(new Error('session_id required'), { _code: 'MISSING_FIELD' }),
+          Object.assign(new Error('session_id required'), { _code: 'INVALID_INPUT' }),
           'validation'
         );
       }
       if (!projectId) {
         return this._handleHandlerError(
           'conversation-export.get_session.validation',
-          Object.assign(new Error('project_id required (query param)'), { _code: 'MISSING_FIELD' }),
+          Object.assign(new Error('project_id required (query param)'), { _code: 'INVALID_INPUT' }),
           'validation'
         );
       }
@@ -295,7 +294,7 @@ class ConversationExportModule {
       if (!projectId) {
         return this._handleHandlerError(
           'conversation-export.get_latest.validation',
-          Object.assign(new Error('project_id required'), { _code: 'MISSING_FIELD' }),
+          Object.assign(new Error('project_id required'), { _code: 'INVALID_INPUT' }),
           'validation'
         );
       }
@@ -377,7 +376,7 @@ class ConversationExportModule {
           module: this.name, requestId, projectId
         });
         this.metrics?.increment(`${this.name}.db_query_timeout`);
-        reject(Object.assign(new Error('DB query timeout'), { _code: 'TIMEOUT' }));
+        reject(Object.assign(new Error('DB query timeout'), { _code: 'UPSTREAM_TIMEOUT' }));
       }, timeout);
       this.pendingDbRequests.set(requestId, { resolve, reject, timeout: timeoutId });
     });
@@ -405,7 +404,7 @@ class ConversationExportModule {
     const promise = new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.pendingDbRequests.delete(requestId);
-        reject(Object.assign(new Error('DB write timeout'), { _code: 'TIMEOUT' }));
+        reject(Object.assign(new Error('DB write timeout'), { _code: 'UPSTREAM_TIMEOUT' }));
       }, timeout);
       this.pendingDbRequests.set(requestId, { resolve, reject, timeout: timeoutId });
     });

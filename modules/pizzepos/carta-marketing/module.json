@@ -60,7 +60,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",     "cuando": "project_id ausente" },
-        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del perfil" }
+        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura del perfil" }
       ]
     },
     {
@@ -74,7 +74,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",     "cuando": "project_id ausente" },
-        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del perfil" }
+        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura del perfil" }
       ]
     },
     {

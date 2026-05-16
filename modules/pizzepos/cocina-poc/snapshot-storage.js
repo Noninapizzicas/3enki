@@ -160,7 +160,7 @@ class SnapshotStorage {
       return {
         ok: false,
         error: {
-          code:    err.code === 'ENOSPC' ? 'DISK_FULL' : 'FILESYSTEM_ERROR',
+          code:    err.code === 'ENOSPC' ? 'SYSTEM_RESOURCE_EXHAUSTED' : 'UNKNOWN_ERROR',
           status:  500,
           message: `Snapshot write failed: ${err.message}`,
           details: { kind: 'infrastructure', retryable: err.code !== 'EACCES', error_code: err.code || null }

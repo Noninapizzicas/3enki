@@ -6,7 +6,7 @@
  *  - CRUD via UI handlers + HTTP handlers + bus events.
  *  - Resolucion cascada CUSTOM → CLIENT → PROJECT → GLOBAL → legacy.
  *  - Shape canonico de respuestas: { status, data | error: { code, message, details? } }.
- *  - error.code del catalogo (INVALID_INPUT, RESOURCE_NOT_FOUND, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR).
+ *  - error.code del catalogo (INVALID_INPUT, RESOURCE_NOT_FOUND, RESOURCE_NOT_FOUND, UNKNOWN_ERROR).
  *  - correlation_id propagado en publishes.
  *  - Persistencia .env atomica (tempfile + rename).
  *  - maskApiKey nunca expone valor completo.
@@ -370,12 +370,12 @@ function isCanonicalError(result) {
     await cleanup(envFile);
   });
 
-  await testAsync('handleResolveCredential HTTP devuelve 404 CREDENTIAL_NOT_FOUND si no hay', async () => {
+  await testAsync('handleResolveCredential HTTP devuelve 404 RESOURCE_NOT_FOUND si no hay', async () => {
     const mocks = makeMocks();
     const { module: m, envFile } = await instantiate(mocks);
     const result = await m.handleResolveCredential({ body: { provider: 'GHOST' } });
     assert.strictEqual(result.status, 404);
-    assert.strictEqual(result.error.code, 'CREDENTIAL_NOT_FOUND');
+    assert.strictEqual(result.error.code, 'RESOURCE_NOT_FOUND');
     await m.onUnload();
     await cleanup(envFile);
   });

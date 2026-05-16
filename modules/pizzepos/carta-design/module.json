@@ -47,7 +47,7 @@
       "errores_conocidos": [
         { "code": "INVALID_INPUT",      "cuando": "carta_id ausente" },
         { "code": "RESOURCE_NOT_FOUND", "cuando": "no existe carta con ese carta_id en el proyecto" },
-        { "code": "FILESYSTEM_ERROR",   "cuando": "fallo de lectura del archivo de carta" }
+        { "code": "UNKNOWN_ERROR",   "cuando": "fallo de lectura del archivo de carta" }
       ]
     },
     {
@@ -66,7 +66,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",    "cuando": "carta_id ausente o html con menos de 100 caracteres" },
-        { "code": "FILESYSTEM_ERROR", "cuando": "fallo al escribir el archivo HTML o su meta" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo al escribir el archivo HTML o su meta" }
       ]
     },
     {
@@ -80,7 +80,7 @@
         }
       },
       "errores_conocidos": [
-        { "code": "FILESYSTEM_ERROR", "cuando": "fallo al leer perfiles custom del proyecto" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo al leer perfiles custom del proyecto" }
       ]
     },
     {
@@ -102,7 +102,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",    "cuando": "nombre ausente" },
-        { "code": "FILESYSTEM_ERROR", "cuando": "fallo al persistir el perfil" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo al persistir el perfil" }
       ]
     },
     {
@@ -137,7 +137,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",    "cuando": "carta_id ausente" },
-        { "code": "FILESYSTEM_ERROR", "cuando": "fallo al leer los archivos meta del directorio de diseños" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo al leer los archivos meta del directorio de diseños" }
       ]
     }
   ],

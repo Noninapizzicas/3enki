@@ -4,9 +4,9 @@
  * Foco:
  *  - onAgentExecuteRequest acepta shape canonico → publica agent.execute.response canonico.
  *  - (alias agentName retirado en paso 6 de agent-flow tras migracion completa de pizzepos consumers)
- *  - Validacion: sin agent_name → publica agent.execute.failed AGENT_INPUT_INVALID.
- *  - Validacion: agent no existe → publica agent.execute.failed AGENT_NOT_FOUND.
- *  - Validacion: sin task ni context → publica agent.execute.failed AGENT_INPUT_INVALID.
+ *  - Validacion: sin agent_name → publica agent.execute.failed INVALID_INPUT.
+ *  - Validacion: agent no existe → publica agent.execute.failed RESOURCE_NOT_FOUND.
+ *  - Validacion: sin task ni context → publica agent.execute.failed INVALID_INPUT.
  *  - Payload de agent.execute.response VALIDA contra schema oficial.
  *  - Payload de agent.execute.failed VALIDA contra schema oficial.
  *  - SUCCESS: chat.assistant.saved se publica con shape canonico chat-flow cuando conversation_id presente.
@@ -178,7 +178,7 @@ async function testAsync(description, fn) {
 
   // Group 2 — Validaciones de input
 
-  await testAsync('sin agent_name → agent.execute.failed AGENT_INPUT_INVALID', async () => {
+  await testAsync('sin agent_name → agent.execute.failed INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const m = instantiate(mocks);
     await m.onAgentExecuteRequest({
@@ -189,11 +189,11 @@ async function testAsync(description, fn) {
     });
     const ev = mocks.published.find(p => p[0] === 'agent.execute.failed');
     assert.ok(ev);
-    assert.strictEqual(ev[1].error.code, 'AGENT_INPUT_INVALID');
+    assert.strictEqual(ev[1].error.code, 'INVALID_INPUT');
     assert.ok(!mocks.published.find(p => p[0] === 'llm.complete.request'), 'no debe llamar al LLM');
   });
 
-  await testAsync('agent no existe → agent.execute.failed AGENT_NOT_FOUND', async () => {
+  await testAsync('agent no existe → agent.execute.failed RESOURCE_NOT_FOUND', async () => {
     const mocks = makeMocks();
     const m = instantiate(mocks);
     await m.onAgentExecuteRequest({
@@ -204,10 +204,10 @@ async function testAsync(description, fn) {
     });
     const ev = mocks.published.find(p => p[0] === 'agent.execute.failed');
     assert.ok(ev);
-    assert.strictEqual(ev[1].error.code, 'AGENT_NOT_FOUND');
+    assert.strictEqual(ev[1].error.code, 'RESOURCE_NOT_FOUND');
   });
 
-  await testAsync('sin task ni context → agent.execute.failed AGENT_INPUT_INVALID', async () => {
+  await testAsync('sin task ni context → agent.execute.failed INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const m = instantiate(mocks);
     await m.onAgentExecuteRequest({
@@ -218,7 +218,7 @@ async function testAsync(description, fn) {
     });
     const ev = mocks.published.find(p => p[0] === 'agent.execute.failed');
     assert.ok(ev);
-    assert.strictEqual(ev[1].error.code, 'AGENT_INPUT_INVALID');
+    assert.strictEqual(ev[1].error.code, 'INVALID_INPUT');
     assert.ok(/task o context/i.test(ev[1].error.message));
   });
 
@@ -250,7 +250,7 @@ async function testAsync(description, fn) {
     await nextTick(); await nextTick();
     const ev = mocks.published.find(p => p[0] === 'agent.execute.failed');
     assert.ok(ev);
-    assert.strictEqual(ev[1].error.code, 'CREDENTIAL_NOT_FOUND');
+    assert.strictEqual(ev[1].error.code, 'RESOURCE_NOT_FOUND');
   });
 
   // Group 4 — Chat multi-participante
@@ -292,7 +292,7 @@ async function testAsync(description, fn) {
     const ev = mocks.published.find(p => p[0] === 'invoke_agent.response');
     assert.ok(ev);
     assert.strictEqual(typeof ev[1].error, 'object', 'error es objeto, no string');
-    assert.strictEqual(ev[1].error.code, 'AGENT_NOT_FOUND');
+    assert.strictEqual(ev[1].error.code, 'RESOURCE_NOT_FOUND');
     assert.ok(!mocks.published.find(p => p[0] === 'agent.execute.response'), 'no debe publicar el evento canonico');
     assert.ok(!mocks.published.find(p => p[0] === 'agent.execute.failed'), 'no debe publicar el evento canonico failed');
   });
@@ -302,11 +302,11 @@ async function testAsync(description, fn) {
   await testAsync('clasificacion canonica de errores LLM cubre codigos esperados', async () => {
     const m = instantiate(makeMocks());
     const cases = [
-      ['credential resolve timeout: deepseek', 'CREDENTIAL_NOT_FOUND'],
-      ['No hay providers disponibles', 'CREDENTIAL_NOT_FOUND'],
+      ['credential resolve timeout: deepseek', 'RESOURCE_NOT_FOUND'],
+      ['No hay providers disponibles', 'RESOURCE_NOT_FOUND'],
       ['ETIMEDOUT', 'UPSTREAM_TIMEOUT'],
-      ['429 rate limit', 'UPSTREAM_RATE_LIMITED'],
-      ['401 unauthorized', 'UPSTREAM_AUTH_FAILED'],
+      ['429 rate limit', 'UPSTREAM_INVALID_RESPONSE'],
+      ['401 unauthorized', 'UPSTREAM_INVALID_RESPONSE'],
       ['500 Internal Server Error', 'UPSTREAM_5XX'],
       ['ECONNREFUSED', 'UPSTREAM_UNREACHABLE'],
       ['unexpected token < in JSON', 'UPSTREAM_INVALID_RESPONSE'],

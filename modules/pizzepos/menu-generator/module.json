@@ -44,7 +44,7 @@
         { "code": "INVALID_INPUT",       "cuando": "nombre, project_id o (texto|filePath) ausentes" },
         { "code": "RESOURCE_NOT_FOUND",  "cuando": "filePath con extension no soportada (no PDF/JPG/PNG/WebP/TIFF)" },
         { "code": "EXTRACTION_FAILED",   "cuando": "fallo del pipeline OCR (pdfjs/sharp/google-vision)" },
-        { "code": "TIMEOUT",             "cuando": "timeout en cualquier paso del pipeline" }
+        { "code": "UPSTREAM_TIMEOUT",             "cuando": "timeout en cualquier paso del pipeline" }
       ]
     }
   ],

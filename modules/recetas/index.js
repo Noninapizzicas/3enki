@@ -75,14 +75,14 @@ class RecetasModule extends BaseModule {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('no encontrad') || msg.includes('no existe')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('requerido') || msg.includes('inválid') || msg.includes('invalid')) return 'INVALID_INPUT';
-    if (msg.includes('timeout')) return 'TIMEOUT';
-    if (msg.includes('corrupto') || msg.includes('parse') || msg.includes('json')) return 'FILESYSTEM_ERROR';
+    if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';
+    if (msg.includes('corrupto') || msg.includes('parse') || msg.includes('json')) return 'UNKNOWN_ERROR';
     return 'UNKNOWN_ERROR';
   }
 
   _handleHandlerError(logKey, err, kind) {
     const code = err._code || this._classifyHandlerError(err);
-    const statusMap = { RESOURCE_NOT_FOUND: 404, INVALID_INPUT: 400, ALREADY_EXISTS: 409, TIMEOUT: 503, FILESYSTEM_ERROR: 500 };
+    const statusMap = { RESOURCE_NOT_FOUND: 404, INVALID_INPUT: 400, ALREADY_EXISTS: 409, UPSTREAM_TIMEOUT: 503, UNKNOWN_ERROR: 500 };
     const status = statusMap[code] || 500;
     this.logger.error('recetas.handler_error', { handler: logKey, error: err.message, code });
     this.metrics?.increment('recetas.error', { kind: kind || logKey, code });
@@ -119,7 +119,7 @@ class RecetasModule extends BaseModule {
       return JSON.parse(raw);
     } catch (err) {
       this.logger.warn('recetas.read_json_error', { slug, error: err.message });
-      this.metrics?.increment('recetas.error', { kind: 'read_json', code: 'FILESYSTEM_ERROR' });
+      this.metrics?.increment('recetas.error', { kind: 'read_json', code: 'UNKNOWN_ERROR' });
       return null;
     }
   }
@@ -177,7 +177,7 @@ class RecetasModule extends BaseModule {
       const timer = setTimeout(() => {
         this.pendingProject.delete(request_id);
         const err = new Error(`project.get timeout para ${project_id}`);
-        err._code = 'TIMEOUT';
+        err._code = 'UPSTREAM_TIMEOUT';
         reject(err);
       }, 5000);
       this.pendingProject.set(request_id, { resolve, reject, timer });
@@ -211,7 +211,7 @@ class RecetasModule extends BaseModule {
       const timer = setTimeout(() => {
         this.pendingFs.delete(request_id);
         const err = new Error(`fs.read timeout: ${slug}`);
-        err._code = 'TIMEOUT';
+        err._code = 'UPSTREAM_TIMEOUT';
         reject(err);
       }, 8000);
       this.pendingFs.set(request_id, { resolve, reject, timer, op: 'read' });
@@ -225,7 +225,7 @@ class RecetasModule extends BaseModule {
       const timer = setTimeout(() => {
         this.pendingFs.delete(request_id);
         const err = new Error(`fs.write timeout: ${slug}`);
-        err._code = 'TIMEOUT';
+        err._code = 'UPSTREAM_TIMEOUT';
         reject(err);
       }, 8000);
       this.pendingFs.set(request_id, { resolve, reject, timer, op: 'write' });
@@ -290,7 +290,7 @@ class RecetasModule extends BaseModule {
     } catch (err) {
       this.logger.error('recetas.store.parse.failed', { slug, error: err.message });
       const e = new Error('recetas.json corrupto: ' + err.message);
-      e._code = 'FILESYSTEM_ERROR';
+      e._code = 'UNKNOWN_ERROR';
       throw e;
     }
   }

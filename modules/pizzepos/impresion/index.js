@@ -917,19 +917,19 @@ class ImpresionModule extends BaseModule {
 
     if (!deviceId) {
       const err = new Error('No hay destino configurado ni impresoras descubiertas online');
-      err._code = 'DEPENDENCY_UNAVAILABLE';
+      err._code = 'UPSTREAM_UNREACHABLE';
       throw err;
     }
     if (!pid) {
       const err = new Error('No hay project_id configurado ni inferible de impresoras descubiertas');
-      err._code = 'DEPENDENCY_UNAVAILABLE';
+      err._code = 'UPSTREAM_UNREACHABLE';
       throw err;
     }
 
     const mqtt = this.eventBus?.mqtt;
     if (!mqtt || !mqtt.isConnected) {
       const err = new Error('MQTT no disponible — no se puede enviar a impresora');
-      err._code = 'MQTT_NOT_AVAILABLE';
+      err._code = 'UPSTREAM_UNREACHABLE';
       throw err;
     }
 
@@ -985,10 +985,10 @@ class ImpresionModule extends BaseModule {
                    code === 'RESOURCE_NOT_FOUND'      ? 404 :
                    code === 'PERMISSION_DENIED'       ? 403 :
                    code === 'CONFLICT_STATE'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'MQTT_NOT_AVAILABLE'      ? 503 :
-                   code === 'EXTERNAL_API_FAILED'     ? 502 :
-                   code === 'TIMEOUT'                 ? 504 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_UNREACHABLE'      ? 503 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'     ? 502 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('impresion.errors', { kind, code });
@@ -1000,8 +1000,8 @@ class ImpresionModule extends BaseModule {
     if (msg.includes('not found') || msg.includes('no encontrad'))                         return 'RESOURCE_NOT_FOUND';
     if (msg.includes('permission') || msg.includes('forbidden'))                            return 'PERMISSION_DENIED';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation'))  return 'INVALID_INPUT';
-    if (msg.includes('mqtt') || msg.includes('no disponible'))                              return 'DEPENDENCY_UNAVAILABLE';
-    if (msg.includes('timeout'))                                                            return 'TIMEOUT';
+    if (msg.includes('mqtt') || msg.includes('no disponible'))                              return 'UPSTREAM_UNREACHABLE';
+    if (msg.includes('timeout'))                                                            return 'UPSTREAM_TIMEOUT';
     return 'UNKNOWN_ERROR';
   }
 

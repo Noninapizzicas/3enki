@@ -773,8 +773,8 @@ class SchedulerModule extends BaseModule {
   _classifyExecutionError(err) {
     if (err?._timeout) return 'UPSTREAM_TIMEOUT';
     if (err?._upstream_status) {
-      if (err._upstream_status === 401 || err._upstream_status === 403) return 'UPSTREAM_AUTH_FAILED';
-      if (err._upstream_status === 429) return 'UPSTREAM_RATE_LIMITED';
+      if (err._upstream_status === 401 || err._upstream_status === 403) return 'UPSTREAM_INVALID_RESPONSE';
+      if (err._upstream_status === 429) return 'UPSTREAM_INVALID_RESPONSE';
       if (err._upstream_status >= 500) return 'UPSTREAM_5XX';
     }
     const msg = (err?.message || '').toLowerCase();

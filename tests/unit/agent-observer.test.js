@@ -175,16 +175,16 @@ async function testAsync(description, fn) {
     await m.onAgentExecuteFailed({
       correlation_id: 'c', request_id: 'req-f', user_id: 'u', agent_name: 'broken-agent',
       timestamp: '2026-05-03T10:00:01.000Z', conversation_id: 'conv-f',
-      error: { code: 'AGENT_TIMEOUT', message: 'Timeout esperando agente broken-agent' },
+      error: { code: 'UPSTREAM_TIMEOUT', message: 'Timeout esperando agente broken-agent' },
       duration_ms: 30000, provider_attempted: 'deepseek'
     });
     const ev = mocks.published.find(p => p[0] === 'chat.assistant.saved');
     assert.ok(ev);
     const meta = JSON.parse(ev[1].metadata);
     assert.strictEqual(meta.block.status, 'failed');
-    assert.strictEqual(meta.block.error.code, 'AGENT_TIMEOUT');
+    assert.strictEqual(meta.block.error.code, 'UPSTREAM_TIMEOUT');
     assert.strictEqual(meta.block.provider_attempted, 'deepseek');
-    assert.ok(/⚠️ broken-agent fall[oó] \(AGENT_TIMEOUT\)/.test(ev[1].assistant_message));
+    assert.ok(/⚠️ broken-agent fall[oó] \(UPSTREAM_TIMEOUT\)/.test(ev[1].assistant_message));
     assert.strictEqual(m.openCards.size, 0, 'card limpiada tras failed');
   });
 

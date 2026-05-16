@@ -48,7 +48,7 @@
       "permissions": [
         "execute"
       ],
-      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -82,7 +82,7 @@
       "permissions": [
         "execute"
       ],
-      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "RESOURCE_NOT_FOUND", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -120,7 +120,7 @@
       "permissions": [
         "execute"
       ],
-      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "QUOTA_EXCEEDED"],
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "RATE_LIMITED"],
       "parameters": {
         "type": "object",
         "properties": {

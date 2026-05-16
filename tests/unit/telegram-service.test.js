@@ -355,7 +355,7 @@ function makeClient(overrides = {}) {
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('Bot not found: foo')), 'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'EXTERNAL_API_FAILED');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UPSTREAM_INVALID_RESPONSE');
     await m.onUnload();
   });
 

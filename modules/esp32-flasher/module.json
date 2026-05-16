@@ -65,7 +65,7 @@
         { "code": "INVALID_INPUT",          "cuando": "port o binary_path ausentes, o port con formato invalido" },
         { "code": "RESOURCE_NOT_FOUND",     "cuando": "binary_path no existe o port no accesible o no se encuentra platformio.ini" },
         { "code": "CONFLICT_STATE",         "cuando": "puerto ya en uso por otro flash activo" },
-        { "code": "DEPENDENCY_UNAVAILABLE", "cuando": "esptool/platformio no estan en PATH" }
+        { "code": "UPSTREAM_UNREACHABLE", "cuando": "esptool/platformio no estan en PATH" }
       ]
     },
     {
@@ -154,7 +154,7 @@
       "errores_conocidos": [
         { "code": "INVALID_INPUT",      "cuando": "port o data ausentes" },
         { "code": "RESOURCE_NOT_FOUND", "cuando": "no hay monitor activo en ese puerto" },
-        { "code": "FILESYSTEM_ERROR",   "cuando": "fallo de escritura al puerto" }
+        { "code": "UNKNOWN_ERROR",   "cuando": "fallo de escritura al puerto" }
       ]
     }
   ],

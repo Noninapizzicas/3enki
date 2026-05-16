@@ -1184,7 +1184,7 @@ class PromptManagerModule extends BaseModule {
     if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('must be')) return 'INVALID_INPUT';
     if (msg.includes('already exists') || msg.includes('unique')) return 'ALREADY_EXISTS';
-    if (msg.includes('timeout')) return 'TIMEOUT';
+    if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';
     return 'UNKNOWN_ERROR';
   }
 
@@ -1194,7 +1194,7 @@ class PromptManagerModule extends BaseModule {
       RESOURCE_NOT_FOUND: 404,
       INVALID_INPUT:  400,
       ALREADY_EXISTS:     409,
-      TIMEOUT:            504,
+      UPSTREAM_TIMEOUT:            504,
       UNKNOWN_ERROR:     500
     })[code] || 500;
     const message = err && err.message ? err.message : String(err || 'unknown error');

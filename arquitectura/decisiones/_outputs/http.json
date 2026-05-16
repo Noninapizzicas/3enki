@@ -57,15 +57,15 @@
         "Retry policy declarada en config (max_attempts, backoff_ms, retryable_status). Por defecto 0 reintentos. Solo idempotentes pueden retry > 0.",
         "Telemetría obligatoria por call: log + métrica de duración con labels {host, status, modulo}.",
         "Redacción de secretos: tokens en headers (Authorization, X-API-Key, Cookie). NUNCA en URL query params. Logs y métricas redactan headers ANTES de loguear.",
-        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_AUTH_FAILED, 429→UPSTREAM_RATE_LIMITED, 5xx→UPSTREAM_5XX, network→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT.",
-        "Body limit en respuesta: configurable. Excediendo → UPSTREAM_PAYLOAD_TOO_LARGE.",
+        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_INVALID_RESPONSE, 429→UPSTREAM_INVALID_RESPONSE, 5xx→UPSTREAM_5XX, network→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT.",
+        "Body limit en respuesta: configurable. Excediendo → UPSTREAM_INVALID_RESPONSE.",
         "TLS validation activa por defecto. rejectUnauthorized:false requiere justificación documentada en module.json.",
         "Cache opcional con TTL e invalidación declarada (similar a eviction_strategy de persistence).",
         "fetch (o equivalente HTTP) ACEPTADO como inyeccion opcional en el constructor del cliente para tests reproducibles. Por defecto el cliente usa global.fetch; en tests se inyecta un mock. Sin contaminar global.fetch. Patron canonico: new HttpClient({ ...config, fetch: customFetchOrUndefined })."
       ],
       "ejemplo_request": "const resp = await fetch(url, {\n  method:'POST',\n  headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },\n  body: JSON.stringify(payload),\n  signal: AbortSignal.timeout(this.config.http_clients.openai.timeout_ms)\n});",
       "ejemplo_response_ok": "Si externo devuelve 200: parsea, valida shape esperado, devuelve { status: 200, data: parsed } al caller del bus.",
-      "ejemplo_response_error": "Si externo devuelve 429: devuelve { status: 503, error: { code: 'UPSTREAM_RATE_LIMITED', message: 'Upstream rate limit', details: { kind: 'infrastructure', retryable: true, retry_after_ms: 60000 } } }",
+      "ejemplo_response_error": "Si externo devuelve 429: devuelve { status: 503, error: { code: 'UPSTREAM_INVALID_RESPONSE', message: 'Upstream rate limit', details: { kind: 'infrastructure', retryable: true, retry_after_ms: 60000 } } }",
       "ejemplo_modulos_audit": [
         "conversacion/ai-gateway (providers/* — OpenAI, Anthropic, etc.)",
         "telegram-service (probable, llama a Telegram Bot API)",
@@ -282,19 +282,19 @@
     "from_http_to_errors_json": [
       {
         "upstream_status_or_kind": "401 / 403",
-        "canonical_code": "UPSTREAM_AUTH_FAILED",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
         "canonical_status": 503,
         "descripcion": "Upstream rechazó nuestra credencial. El módulo es indisponible hasta que se renueve el token."
       },
       {
         "upstream_status_or_kind": "404",
-        "canonical_code": "UPSTREAM_NOT_FOUND",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
         "canonical_status": 502,
         "descripcion": "Upstream devuelve 404 para un recurso esperado. Drift de configuración o externo cambió su API."
       },
       {
         "upstream_status_or_kind": "429",
-        "canonical_code": "UPSTREAM_RATE_LIMITED",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
         "canonical_status": 503,
         "descripcion": "Upstream rate limit excedido. retry_after_ms en details si el upstream lo provee (header Retry-After)."
       },
@@ -324,7 +324,7 @@
       },
       {
         "upstream_status_or_kind": "respuesta excede body limit",
-        "canonical_code": "UPSTREAM_PAYLOAD_TOO_LARGE",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
         "canonical_status": 502,
         "descripcion": "Respuesta del upstream supera el body limit configurado en el cliente."
       }

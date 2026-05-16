@@ -139,7 +139,7 @@ class ProjectStorage {
       this._increment(`${this.moduleName}.storage.errors`, 1, {
         file: fileName, op: 'write', kind: 'no_path'
       });
-      return { ok: false, error: { code: 'FILESYSTEM_ERROR', status: 500, message: err.message, details: { kind: 'infrastructure', retryable: false, project_id: projectId, file: fileName } } };
+      return { ok: false, error: { code: 'UNKNOWN_ERROR', status: 500, message: err.message, details: { kind: 'infrastructure', retryable: false, project_id: projectId, file: fileName } } };
     }
 
     const t0 = Date.now();
@@ -171,7 +171,7 @@ class ProjectStorage {
       return {
         ok: false,
         error: {
-          code:    err.code === 'ENOSPC' ? 'DISK_FULL' : 'FILESYSTEM_ERROR',
+          code:    err.code === 'ENOSPC' ? 'SYSTEM_RESOURCE_EXHAUSTED' : 'UNKNOWN_ERROR',
           status:  500,
           message: `Write to ${fileName} failed: ${err.message}`,
           details: { kind: 'infrastructure', retryable: err.code !== 'EACCES', project_id: projectId, file: fileName, error_code: err.code || null }

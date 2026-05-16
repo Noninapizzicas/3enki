@@ -76,7 +76,7 @@
     },
     {
       "id": "errores_canonicos_en_ai_chat_failed",
-      "regla": "ai.chat.failed.error.code DEBE ser uno de los codigos canonicos de errors.json (UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR, etc.). Sin codigos inventados.",
+      "regla": "ai.chat.failed.error.code DEBE ser uno de los codigos canonicos de errors.json (UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_5XX, RESOURCE_NOT_FOUND, UNKNOWN_ERROR, etc.). Sin codigos inventados.",
       "razon": "El consumidor (chat-io) maneja errores de forma uniforme. Si cada modulo inventa codigos, chat-io tiene que conocerlos todos. Con codigos canonicos, hay una sola tabla de mapeo error → mensaje al usuario."
     },
     {
@@ -259,7 +259,7 @@
       "notas_de_drift_a_cerrar": [
         "Evento NUEVO formalmente. Hoy ai-gateway captura errores pero los inyecta en ai.chat.response como mensaje de error — eso es drift. Aqui se separa: success → ai.chat.response, failure → ai.chat.failed.",
         "error sigue shape canonico de errors.contract: { code, message, details? }.",
-        "code DEBE ser canonico de errors.codes_infrastructure (UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_5XX, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR, etc.)."
+        "code DEBE ser canonico de errors.codes_infrastructure (UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_5XX, RESOURCE_NOT_FOUND, UNKNOWN_ERROR, etc.)."
       ]
     }
   ],
@@ -384,7 +384,7 @@
     },
     {
       "id": "drift_ai_chat_failed_sin_codigo_canonico",
-      "regla": "ai.chat.failed.error.code es uno de los codes_infrastructure de errors.json (UPSTREAM_*, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR, etc.).",
+      "regla": "ai.chat.failed.error.code es uno de los codes_infrastructure de errors.json (UPSTREAM_*, RESOURCE_NOT_FOUND, UNKNOWN_ERROR, etc.).",
       "como_detectar": "Inspeccionar publishes de ai.chat.failed: error.code debe estar en lista canonica.",
       "severidad": "error"
     },
@@ -402,7 +402,7 @@
     "naming": "Los nombres de los 5 eventos cumplen la forma <module-prefix>.<entity>.<verb> definida en naming.contract.json. Verbos canonicos del idioma del modulo emisor (saved, ready, response, failed, enriched). El validador de naming aplica esta regla globalmente; este sub-contrato la asume.",
     "glossary": "Las entidades cross-modulo del payload (conversacion, mensaje, prompt, contexto) usan la forma canonica del glossary.json del idioma del modulo. 'message' como nombre fue retirado por polisemico, no por divergencia con glossary.",
     "events": "Hereda los principios generales: publish-subscribe asincrono, no esperar respuesta del propio publish, payloads serializables JSON. Este sub-contrato concreta el shape para los 5 eventos del subsistema chat sin contradecir events.contract.",
-    "errors": "ai.chat.failed.error sigue shape canonico {code, message, details?} de errors.contract. error.code esta en codes_infrastructure (UPSTREAM_*, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR). No se admiten codes_dominio en ai.chat.failed (los errores del flujo chat son de infraestructura, no de dominio).",
+    "errors": "ai.chat.failed.error sigue shape canonico {code, message, details?} de errors.contract. error.code esta en codes_infrastructure (UPSTREAM_*, RESOURCE_NOT_FOUND, UNKNOWN_ERROR). No se admiten codes_dominio en ai.chat.failed (los errores del flujo chat son de infraestructura, no de dominio).",
     "observability": "Cada publish de chat_flow loguea con metadata correlation_id + conversation_id + (channel cuando aplique). El handler emisor cumple observability.contract con event_name = '<modulo>.<accion>'.",
     "lifecycle": "Modulos del subsistema declaran sus subscribes en module.json para auto-wire en onLoad. Cumplen el patron onLoad/onUnload con limpieza de pendings (timeouts de DB, timeouts de credencial, etc.) sin instanciar servicios propios.",
     "persistence": "chat-io persiste mensajes via db.query.request a database-manager (event-driven). NO instancia DB propia. prompt-builder no persiste estado de conversacion — solo arma el system prompt en memoria. Memorias modulares pueden tener su propio storage local (in-memory para indices, json-file-per-project para datasets) declarado en config.persistence.pattern.",

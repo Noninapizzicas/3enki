@@ -117,7 +117,7 @@
     },
     {
       "garantia": "Un modulo nuevo respeta el catalogo de error codes; no inventa codigos por entidad",
-      "enforcement": "errors.contract.json define el catalogo cerrado (RESOURCE_NOT_FOUND, MISSING_FIELD, INVALID_INPUT, etc.). Validator flagea codigos fuera del catalogo.",
+      "enforcement": "errors.contract.json define el catalogo cerrado (RESOURCE_NOT_FOUND, INVALID_INPUT, INVALID_INPUT, etc.). Validator flagea codigos fuera del catalogo.",
       "nivel": "absoluta",
       "como_se_detecta_violacion": "Validator de errors escanea returns con error.code que no este en el catalogo."
     },

@@ -678,7 +678,7 @@ class ComanderoModule extends BaseModule {
         );
       } catch (err) {
         this.logger.warn('comandero.guardar_buffers.error', { error: err.message });
-        this.metrics?.increment('comandero.errors', { kind: 'guardar_buffers', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment('comandero.errors', { kind: 'guardar_buffers', code: 'UNKNOWN_ERROR' });
       }
     }, SAVE_DEBOUNCE_MS);
   }
@@ -700,9 +700,9 @@ class ComanderoModule extends BaseModule {
                    code === 'PERMISSION_DENIED'       ? 403 :
                    code === 'CONFLICT_STATE'          ? 409 :
                    code === 'ALREADY_EXISTS'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'TIMEOUT'                 ? 504 :
-                   code === 'FILESYSTEM_ERROR'        ? 500 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 :
+                   code === 'UNKNOWN_ERROR'        ? 500 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('comandero.errors', { kind, code });
@@ -715,7 +715,7 @@ class ComanderoModule extends BaseModule {
     if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (msg.includes('conflict') || msg.includes('already')) return 'CONFLICT_STATE';
-    if (ecod && ecod.startsWith('E')) return 'FILESYSTEM_ERROR';
+    if (ecod && ecod.startsWith('E')) return 'UNKNOWN_ERROR';
     return 'UNKNOWN_ERROR';
   }
 

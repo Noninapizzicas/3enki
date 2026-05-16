@@ -111,10 +111,10 @@ class CodeExecutorModule extends BaseModule {
           this.metrics?.increment('code-executor.exec.timeout', 1, { kind: 'infrastructure' });
           await this._publicarEvento('shell.error', {
             command: command.substring(0, 100),
-            error_code: 'TIMEOUT',
+            error_code: 'UPSTREAM_TIMEOUT',
             timeout: execTimeout
           }, opts);
-          resolve(this._errorResponse(504, 'TIMEOUT', 'Command timed out', {
+          resolve(this._errorResponse(504, 'UPSTREAM_TIMEOUT', 'Command timed out', {
             timeout: execTimeout,
             stdout: stdout?.toString() || '',
             stderr: stderr?.toString() || ''
@@ -238,8 +238,8 @@ class CodeExecutorModule extends BaseModule {
 
     const maxProcesses = this.config.maxProcesses || 10;
     if (this.processes.size >= maxProcesses) {
-      this.metrics?.increment('code-executor.background.errors', 1, { code: 'QUOTA_EXCEEDED', kind: 'domain' });
-      return this._errorResponse(429, 'QUOTA_EXCEEDED', 'Maximum background processes reached', {
+      this.metrics?.increment('code-executor.background.errors', 1, { code: 'RATE_LIMITED', kind: 'domain' });
+      return this._errorResponse(429, 'RATE_LIMITED', 'Maximum background processes reached', {
         limit: maxProcesses,
         active: this.processes.size
       });
@@ -450,8 +450,8 @@ class CodeExecutorModule extends BaseModule {
     const status = code === 'INVALID_INPUT' ? 400
       : code === 'RESOURCE_NOT_FOUND' ? 404
       : code === 'PERMISSION_DENIED' ? 403
-      : code === 'TIMEOUT' ? 504
-      : code === 'QUOTA_EXCEEDED' ? 429
+      : code === 'UPSTREAM_TIMEOUT' ? 504
+      : code === 'RATE_LIMITED' ? 429
       : 500;
     const message = err.message || String(err);
     const isInfra = status >= 500;
@@ -465,7 +465,7 @@ class CodeExecutorModule extends BaseModule {
     if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (msg.includes('permission') || msg.includes('blocked') || msg.includes('traversal')) return 'PERMISSION_DENIED';
-    if (msg.includes('timeout') || msg.includes('timed out')) return 'TIMEOUT';
+    if (msg.includes('timeout') || msg.includes('timed out')) return 'UPSTREAM_TIMEOUT';
     return 'UNKNOWN_ERROR';
   }
 

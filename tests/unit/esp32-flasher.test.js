@@ -305,12 +305,12 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleDebugControl sin MQTT devuelve 503 DEPENDENCY_UNAVAILABLE', async () => {
+  await testAsync('handleDebugControl sin MQTT devuelve 503 UPSTREAM_UNREACHABLE', async () => {
     const mocks = makeMocks({ mqttConnected: false });
     const { module: m } = await instantiate(mocks);
     const r = await m.handleDebugControl({ device: 'd', project: 'p', enable: true });
     assert.strictEqual(r.status, 503);
-    assert.strictEqual(r.error.code, 'DEPENDENCY_UNAVAILABLE');
+    assert.strictEqual(r.error.code, 'UPSTREAM_UNREACHABLE');
     await m.onUnload();
   });
 
@@ -404,9 +404,9 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     assert.deepStrictEqual(m._classifyHandlerError(new Error('field is required')), { status: 400, code: 'INVALID_INPUT' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('not found')), { status: 404, code: 'RESOURCE_NOT_FOUND' });
-    assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout')), { status: 504, code: 'TIMEOUT' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout')), { status: 504, code: 'UPSTREAM_TIMEOUT' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('already in use')), { status: 409, code: 'CONFLICT_STATE' });
-    assert.deepStrictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EACCES' })), { status: 500, code: 'FILESYSTEM_ERROR' });
+    assert.deepStrictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EACCES' })), { status: 500, code: 'UNKNOWN_ERROR' });
     await m.onUnload();
   });
 

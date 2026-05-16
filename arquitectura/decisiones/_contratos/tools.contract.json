@@ -51,7 +51,7 @@
 
     "ASINCRONIA OBLIGATORIA. Toda tool es async. Aun si la operacion es CPU-bound (calculo numerico), el handler es async. Esto permite a ai-gateway gestionar timeouts, paralelismo, cancelacion uniformemente.",
 
-    "TIMEOUT POR TOOL HEREDA DEL MODULO. Cada modulo declara su tool_timeout_ms en config (default 30000ms). Si la tool excede, ai-gateway corta y la trata como error UPSTREAM_TIMEOUT o UNKNOWN_ERROR (segun naturaleza). El handler NO es responsable del timeout — el caller (ai-gateway) lo es.",
+    "UPSTREAM_TIMEOUT POR TOOL HEREDA DEL MODULO. Cada modulo declara su tool_timeout_ms en config (default 30000ms). Si la tool excede, ai-gateway corta y la trata como error UPSTREAM_TIMEOUT o UNKNOWN_ERROR (segun naturaleza). El handler NO es responsable del timeout — el caller (ai-gateway) lo es.",
 
     "OBSERVABILIDAD ES OBLIGATORIA. Cada invocacion de tool emite metric con labels { tool_name, modulo, project_id?, status_class }. Sin esto, no se puede saber qué tools se usan, cuanto tardan, cuantas fallan. observability.contract aplica."
   ],

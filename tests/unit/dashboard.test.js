@@ -136,13 +136,13 @@ function isCanonicalSuccess(r) {
   });
 
   // Group 2: Validacion canonica
-  await testAsync('handleCores sin discovery devuelve 503 DEPENDENCY_UNAVAILABLE', async () => {
+  await testAsync('handleCores sin discovery devuelve 503 UPSTREAM_UNREACHABLE', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { discovery: false });
     const r = await m.handleCores();
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 503);
-    assert.strictEqual(r.error.code, 'DEPENDENCY_UNAVAILABLE');
+    assert.strictEqual(r.error.code, 'UPSTREAM_UNREACHABLE');
     await m.onUnload();
   });
 
@@ -354,7 +354,7 @@ function isCanonicalSuccess(r) {
     const { module: m } = await instantiate(mocks);
     assert.deepStrictEqual(m._classifyHandlerError(new Error('field is required')), { status: 400, code: 'INVALID_INPUT' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('not found')), { status: 404, code: 'RESOURCE_NOT_FOUND' });
-    assert.deepStrictEqual(m._classifyHandlerError(new Error('not available')), { status: 503, code: 'DEPENDENCY_UNAVAILABLE' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('not available')), { status: 503, code: 'UPSTREAM_UNREACHABLE' });
     await m.onUnload();
   });
 

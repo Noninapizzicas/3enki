@@ -359,7 +359,7 @@
     "naming.contract: agent.id, name, filename son kebab-case. agent.description y prompt_file en idioma de module.language del modulo cargador (ai-agent-framework declara 'es'/'en' y todos sus agentes lo respetan).",
     "glossary.contract: las entidades en agent.metadata.domain (ej: 'carta-digital', 'escandallo') usan la forma canonica del glossary del idioma del modulo.",
     "events.contract: agentes son invocados via agent.execute.request (agent-flow). NO via require ni acceso directo. agents-config no introduce eventos nuevos — usa el catalogo de agent-flow.",
-    "errors.contract: cuando un agente falla, el error.code que ai-agent-framework publica en agent.execute.failed es del catalogo cerrado (AGENT_NOT_FOUND, AGENT_TOOL_NOT_FOUND, AGENT_TOOL_FAILED, AGENT_INPUT_INVALID, UPSTREAM_*, UNKNOWN_ERROR).",
+    "errors.contract: cuando un agente falla, el error.code que ai-agent-framework publica en agent.execute.failed es del catalogo cerrado (RESOURCE_NOT_FOUND, AGENT_TOOL_NOT_FOUND, UPSTREAM_INVALID_RESPONSE, INVALID_INPUT, UPSTREAM_*, UNKNOWN_ERROR).",
     "lifecycle.contract: agentes se cargan en ai-agent-framework.onLoad (escaneo de agents/*.json). En onUnload se descartan. agents-config NO declara lifecycle propio.",
     "observability.contract: cada invocacion de agente emite metric con labels {agent_name, project_id?, tools_used_count, status, duration_ms, tokens_total}. Sin esto, costes_auditables y triaje por agente se rompen.",
     "persistence.contract: agents/*.json y prompts/*.md son ARCHIVOS persistidos en repo (VCS). Stats runtime viven en memoria o en DB del modulo cargador, NO en estos archivos.",

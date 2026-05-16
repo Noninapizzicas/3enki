@@ -798,13 +798,13 @@ class ChatIoModule extends BaseModule {
   _userMessageForErrorCode(code, raw_message) {
     const M = {
       'UPSTREAM_TIMEOUT':         'Tardé más de la cuenta en responder. Inténtalo de nuevo en un momento.',
-      'UPSTREAM_RATE_LIMITED':    'Estoy recibiendo muchas peticiones. Inténtalo en unos minutos.',
-      'UPSTREAM_AUTH_FAILED':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
+      'UPSTREAM_INVALID_RESPONSE':    'Estoy recibiendo muchas peticiones. Inténtalo en unos minutos.',
+      'UPSTREAM_INVALID_RESPONSE':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
       'UPSTREAM_5XX':             'El motor del lenguaje tiene un fallo temporal. Inténtalo en un momento.',
       'UPSTREAM_UNREACHABLE':     'No puedo conectar con el motor del lenguaje ahora mismo. Inténtalo más tarde.',
       'UPSTREAM_INVALID_RESPONSE':'El motor del lenguaje devolvió algo que no entiendo. Inténtalo de nuevo.',
-      'UPSTREAM_PAYLOAD_TOO_LARGE':'La conversación se ha hecho demasiado larga para procesarla. Empieza una nueva y te ayudo igual.',
-      'CREDENTIAL_NOT_FOUND':     'No tengo credenciales configuradas para responder. Avisa al administrador.',
+      'UPSTREAM_INVALID_RESPONSE':'La conversación se ha hecho demasiado larga para procesarla. Empieza una nueva y te ayudo igual.',
+      'RESOURCE_NOT_FOUND':     'No tengo credenciales configuradas para responder. Avisa al administrador.',
       'UNKNOWN_ERROR':           'Algo se rompió por mi parte. Inténtalo de nuevo o avisa si persiste.'
     };
     return M[code] || `No pude completar la respuesta (${code || 'error desconocido'}). Inténtalo de nuevo.`;

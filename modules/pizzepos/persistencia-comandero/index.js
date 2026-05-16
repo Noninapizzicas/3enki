@@ -681,7 +681,7 @@ class PersistenciaComanderoModule extends BaseModule {
           try { await fs.copyFile(path.join(dirs.current, 'ventas.json'),  path.join(projBackup, 'ventas.json')); }  catch (_) { /* opcional */ }
         } catch (err) {
           this.logger.warn('persistencia.backup.proyecto.error', { project_id: projectId, error: err.message });
-          this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'backup_proyecto', code: 'FILESYSTEM_ERROR' });
+          this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'backup_proyecto', code: 'UNKNOWN_ERROR' });
         }
       }
 
@@ -781,7 +781,7 @@ class PersistenciaComanderoModule extends BaseModule {
         }, null, 2));
       } catch (err) {
         this.logger.warn('persistencia.proyecto.eventos.error', { project_id: projectId, error: err.message });
-        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'eventos_proyecto', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'eventos_proyecto', code: 'UNKNOWN_ERROR' });
       }
     }
   }
@@ -823,7 +823,7 @@ class PersistenciaComanderoModule extends BaseModule {
         }, null, 2));
       } catch (err) {
         this.logger.warn('persistencia.proyecto.ventas.error', { project_id: projectId, error: err.message });
-        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'ventas_proyecto', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'ventas_proyecto', code: 'UNKNOWN_ERROR' });
       }
     }
   }
@@ -871,7 +871,7 @@ class PersistenciaComanderoModule extends BaseModule {
         }, null, 2));
       } catch (err) {
         this.logger.warn('persistencia.proyecto.cuentas.error', { project_id: projectId, error: err.message });
-        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'cuentas_proyecto', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'cuentas_proyecto', code: 'UNKNOWN_ERROR' });
       }
     }
   }
@@ -910,7 +910,7 @@ class PersistenciaComanderoModule extends BaseModule {
           await this._atomicWriteFile(path.join(dirs.current, 'jornada.json'), JSON.stringify(data, null, 2));
         } catch (err) {
           this.logger.warn('persistencia.proyecto.jornada.error', { project_id: projectId, error: err.message });
-          this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'jornada_proyecto', code: 'FILESYSTEM_ERROR' });
+          this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'jornada_proyecto', code: 'UNKNOWN_ERROR' });
         }
       }
     });
@@ -946,7 +946,7 @@ class PersistenciaComanderoModule extends BaseModule {
       try { await fs.mkdir(dir, { recursive: true }); }
       catch (err) {
         this.logger.error('persistencia.dir.error', { dir, error: err.message });
-        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'mkdir', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'mkdir', code: 'UNKNOWN_ERROR' });
       }
     }
   }
@@ -958,7 +958,7 @@ class PersistenciaComanderoModule extends BaseModule {
       try { await fs.copyFile(eventosActual, eventosArchivo); }
       catch (err) {
         this.logger.warn('persistencia.archivar.eventos_skip', { error: err.message });
-        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'archivar_eventos', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'archivar_eventos', code: 'UNKNOWN_ERROR' });
       }
 
       const ventasActual = path.join(this.currentDir, 'ventas.json');
@@ -966,7 +966,7 @@ class PersistenciaComanderoModule extends BaseModule {
       try { await fs.copyFile(ventasActual, ventasArchivo); }
       catch (err) {
         this.logger.warn('persistencia.archivar.ventas_skip', { error: err.message });
-        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'archivar_ventas', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'archivar_ventas', code: 'UNKNOWN_ERROR' });
       }
 
       this.logger.info('persistencia.dia_archivado', { fecha: this.fechaJornada });
@@ -985,7 +985,7 @@ class PersistenciaComanderoModule extends BaseModule {
           try { await fs.copyFile(vtCurrent, vtArchivo); } catch (_) { /* opcional */ }
         } catch (err) {
           this.logger.warn('persistencia.proyecto.archivar.error', { project_id: pid, error: err.message });
-          this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'archivar_proyecto', code: 'FILESYSTEM_ERROR' });
+          this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'archivar_proyecto', code: 'UNKNOWN_ERROR' });
         }
       }
       this.logger.info('persistencia.dia_archivado.proyectos', {
@@ -1016,7 +1016,7 @@ class PersistenciaComanderoModule extends BaseModule {
       try { await fs.mkdir(dir, { recursive: true }); }
       catch (err) {
         this.logger.warn('persistencia.proyecto.mkdir.error', { dir, error: err.message });
-        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'mkdir_proyecto', code: 'FILESYSTEM_ERROR' });
+        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'mkdir_proyecto', code: 'UNKNOWN_ERROR' });
       }
     }
     return dirs;
@@ -1292,10 +1292,10 @@ class PersistenciaComanderoModule extends BaseModule {
                    code === 'RESOURCE_NOT_FOUND'      ? 404 :
                    code === 'PERMISSION_DENIED'       ? 403 :
                    code === 'CONFLICT_STATE'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'EXTERNAL_API_FAILED'     ? 502 :
-                   code === 'TIMEOUT'                 ? 504 :
-                   code === 'FILESYSTEM_ERROR'        ? 500 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'     ? 502 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 :
+                   code === 'UNKNOWN_ERROR'        ? 500 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment?.('persistencia-comandero.errors', { kind, code });
@@ -1308,7 +1308,7 @@ class PersistenciaComanderoModule extends BaseModule {
     if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
     if (ecod === 'EACCES' || msg.includes('permission'))                                 return 'PERMISSION_DENIED';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    if (ecod && ecod.startsWith('E'))                                                    return 'FILESYSTEM_ERROR';
+    if (ecod && ecod.startsWith('E'))                                                    return 'UNKNOWN_ERROR';
     return 'UNKNOWN_ERROR';
   }
 

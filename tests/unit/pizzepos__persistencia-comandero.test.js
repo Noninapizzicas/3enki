@@ -500,7 +500,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'ENOENT' })), 'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EACCES' })), 'PERMISSION_DENIED');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
-    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EIO' })), 'FILESYSTEM_ERROR');
+    assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EIO' })), 'UNKNOWN_ERROR');
     assert.strictEqual(m._classifyHandlerError(new Error('weird')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
@@ -523,12 +523,12 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     mocks.metricsCalls.length = 0;
-    const err = Object.assign(new Error('x'), { _code: 'FILESYSTEM_ERROR' });
+    const err = Object.assign(new Error('x'), { _code: 'UNKNOWN_ERROR' });
     const r = m._handleHandlerError('t.failed', err, 'kind');
     assert.strictEqual(r.status, 500);
     const metric = mocks.metricsCalls.find(c => c[1] === 'persistencia-comandero.errors');
     assert.ok(metric);
-    assert.deepStrictEqual(metric[2], { kind: 'kind', code: 'FILESYSTEM_ERROR' });
+    assert.deepStrictEqual(metric[2], { kind: 'kind', code: 'UNKNOWN_ERROR' });
     await m.onUnload();
   });
 

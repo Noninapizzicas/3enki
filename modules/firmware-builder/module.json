@@ -99,7 +99,7 @@
         { "code": "INVALID_INPUT",  "cuando": "driver ausente o board no soportado" },
         { "code": "RESOURCE_NOT_FOUND", "cuando": "driver no encontrado en firmware/drivers/" },
         { "code": "CONFLICT_STATE",     "cuando": "driver ya está compilando" },
-        { "code": "QUOTA_EXCEEDED",     "cuando": "max_concurrent_builds alcanzado" }
+        { "code": "RATE_LIMITED",     "cuando": "max_concurrent_builds alcanzado" }
       ]
     },
     {

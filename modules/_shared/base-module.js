@@ -69,8 +69,8 @@ class BaseModule {
    * Patrón POC2: catch genérico → _classifyHandlerError → código + status.
    *
    * Códigos devueltos son SIEMPRE canónicos del catalogo errors.contract.
-   * Si el módulo necesita un código específico (e.g. RATE_LIMITED, MQTT_NOT_AVAILABLE,
-   * AGENT_NOT_FOUND), debe asignarlo a `err._code` antes del throw — _handleHandlerError
+   * Si el módulo necesita un código específico (e.g. RATE_LIMITED, UPSTREAM_UNREACHABLE,
+   * RESOURCE_NOT_FOUND), debe asignarlo a `err._code` antes del throw — _handleHandlerError
    * lo respeta como precedencia sobre la heurística.
    */
   _classifyHandlerError(err) {
@@ -92,34 +92,46 @@ class BaseModule {
    */
   _statusFromCode(code) {
     switch (code) {
-      case 'INVALID_INPUT':
-      case 'MISSING_FIELD':
-      case 'FIELD_TOO_LONG':
-      case 'INVALID_FORMAT':
-      case 'INVALID_VERSION':
-      case 'MIN_VERSION_NOT_MET':       return 400;
-      case 'AUTHENTICATION_REQUIRED':   return 401;
-      case 'PERMISSION_DENIED':         return 403;
-      case 'RESOURCE_NOT_FOUND':
-      case 'CREDENTIAL_NOT_FOUND':
-      case 'AGENT_NOT_FOUND':           return 404;
+      case 'INVALID_INPUT':              return 400;
+      case 'AUTHENTICATION_REQUIRED':    return 401;
+      case 'PERMISSION_DENIED':          return 403;
+      case 'RESOURCE_NOT_FOUND':         return 404;
       case 'CONFLICT_STATE':
-      case 'ALREADY_EXISTS':
-      case 'VERSION_CONFLICT':          return 409;
-      case 'RATE_LIMITED':
-      case 'QUOTA_EXCEEDED':            return 429;
-      case 'UPSTREAM_INVALID_RESPONSE':
-      case 'UPSTREAM_PAYLOAD_TOO_LARGE': return 502;
+      case 'ALREADY_EXISTS':             return 409;
+      case 'PRECONDITION_FAILED':        return 422;
+      case 'RATE_LIMITED':               return 429;
+      case 'UPSTREAM_INVALID_RESPONSE':  return 502;
       case 'UPSTREAM_UNREACHABLE':
-      case 'BROKER_DISCONNECTED':
-      case 'DEPENDENCY_UNAVAILABLE':
-      case 'MQTT_NOT_AVAILABLE':
-      case 'DATABASE_DOWN':             return 503;
-      case 'UPSTREAM_TIMEOUT':
-      case 'TIMEOUT':
-      case 'AGENT_TIMEOUT':             return 504;
-      default:                          return 500;
+      case 'SYSTEM_RESOURCE_EXHAUSTED':  return 503;
+      case 'UPSTREAM_TIMEOUT':           return 504;
+      case 'UNKNOWN_ERROR':
+      default:                           return 500;
     }
+  }
+
+  /**
+   * Enriquece un error con contexto del modulo SIN sobreescribir lo que ya
+   * tuviera. El payload de enrichment se acumula en err._enrichment y
+   * _handleHandlerError lo propaga a `details` de la respuesta canonica.
+   *
+   * Patron: "el modulo habla sobre si mismo". BaseModule manda en la forma
+   * (status, code, message). El modulo aporta contexto del dominio:
+   * entity_type, entity_id, operation, cualquier dato que ayude a entender
+   * que estaba intentando hacer.
+   *
+   * Si el error pasa por varios modulos, cada uno enriquece sin perder lo
+   * anterior — el payload final lleva la cadena causal completa.
+   *
+   * @example
+   *   throw this._enrich(new Error('Credencial no encontrada'), {
+   *     entity_type: 'credential',
+   *     entity_id: credentialId,
+   *     operation: 'lookup'
+   *   });
+   */
+  _enrich(err, data) {
+    err._enrichment = { ...(err._enrichment || {}), ...data };
+    return err;
   }
 
   /**
@@ -127,18 +139,23 @@ class BaseModule {
    *   1. respeta err._code si la subclase lo asigno antes de throw
    *   2. si no, clasifica el error con _classifyHandlerError
    *   3. mapea código a status HTTP (via _statusFromCode)
-   *   4. emite logger.error con código
+   *   4. emite logger.error con código + contexto enriquecido
    *   5. emite metrics.increment del namespace del módulo
    *   6. retorna shape canónico { status, error: { code, message, details? } }
-   *      propagando err._details si existe
+   *      donde details acumula err._enrichment (lo que el modulo añadió) +
+   *      lo que el handler reporta en su llamada (kind, module).
    */
   _handleHandlerError(logEvent, err, kind) {
     const code = err?._code || this._classifyHandlerError(err);
     const status = this._statusFromCode(code);
     const message = err?.message || String(err);
-    this.logger?.error(logEvent, { error: message, code });
+    const enrichment = err?._enrichment || {};
+    const details = Object.keys(enrichment).length > 0
+      ? { ...enrichment, module: this.name, kind }
+      : (err?._details || undefined);
+    this.logger?.error(logEvent, { error: message, code, ...enrichment, kind });
     this.metrics?.increment(`${this.name}.errors`, { kind, code });
-    return this._errorResponse(status, code, message, err?._details);
+    return this._errorResponse(status, code, message, details);
   }
 
   /**

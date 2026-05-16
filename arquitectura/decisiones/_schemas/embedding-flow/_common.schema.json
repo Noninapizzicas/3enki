@@ -87,10 +87,10 @@
         "code": {
           "type": "string",
           "enum": [
-            "CREDENTIAL_NOT_FOUND",
+            "RESOURCE_NOT_FOUND",
             "UPSTREAM_TIMEOUT",
-            "UPSTREAM_AUTH_FAILED",
-            "UPSTREAM_RATE_LIMITED",
+            "UPSTREAM_INVALID_RESPONSE",
+            "UPSTREAM_INVALID_RESPONSE",
             "UPSTREAM_5XX",
             "UPSTREAM_UNREACHABLE",
             "UPSTREAM_INVALID_RESPONSE",

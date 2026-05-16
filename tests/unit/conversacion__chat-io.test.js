@@ -603,7 +603,7 @@ async function createConversation(m, opts = {}) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.ok(/Tardé más de la cuenta/.test(m._userMessageForErrorCode('UPSTREAM_TIMEOUT')));
-    assert.ok(/credenciales/.test(m._userMessageForErrorCode('CREDENTIAL_NOT_FOUND')));
+    assert.ok(/credenciales/.test(m._userMessageForErrorCode('RESOURCE_NOT_FOUND')));
     assert.ok(/desconocido|completar/.test(m._userMessageForErrorCode('NOT_IN_MAP', 'msg')));
     await m.onUnload();
   });

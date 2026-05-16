@@ -224,7 +224,7 @@ class FacturasModule extends BaseModule {
       });
     } catch (err) {
       this.logger.warn('facturas.telegram.notify.error', { error: err.message });
-      this.metrics?.increment('facturas.errors', { kind: 'telegram_notify', code: 'EXTERNAL_API_FAILED' });
+      this.metrics?.increment('facturas.errors', { kind: 'telegram_notify', code: 'UPSTREAM_INVALID_RESPONSE' });
     }
   }
 
@@ -589,10 +589,10 @@ class FacturasModule extends BaseModule {
                    code === 'AUTHENTICATION_REQUIRED' ? 401 :
                    code === 'ALREADY_EXISTS'          ? 409 :
                    code === 'CONFLICT_STATE'          ? 409 :
-                   code === 'TIMEOUT'                 ? 504 :
-                   code === 'EXTERNAL_API_FAILED'     ? 502 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'FILESYSTEM_ERROR'        ? 500 : 500;
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 :
+                   code === 'UPSTREAM_INVALID_RESPONSE'     ? 502 :
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UNKNOWN_ERROR'        ? 500 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('facturas.errors', { kind, code });
@@ -605,9 +605,9 @@ class FacturasModule extends BaseModule {
     if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
     if (ecod === 'EACCES' || msg.includes('permission') || msg.includes('forbidden'))    return 'PERMISSION_DENIED';
     if (ecod === 'EEXIST' || msg.includes('already exists'))                             return 'ALREADY_EXISTS';
-    if (msg.includes('timeout'))                                                         return 'TIMEOUT';
+    if (msg.includes('timeout'))                                                         return 'UPSTREAM_TIMEOUT';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    if (ecod && ecod.startsWith('E'))                                                     return 'FILESYSTEM_ERROR';
+    if (ecod && ecod.startsWith('E'))                                                     return 'UNKNOWN_ERROR';
     return 'UNKNOWN_ERROR';
   }
 

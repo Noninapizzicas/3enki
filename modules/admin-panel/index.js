@@ -93,11 +93,11 @@ class AdminPanelModule extends BaseModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/unavailable|ECONNREFUSED|ENOTFOUND/i.test(msg)) return { status: 503, code: 'DEPENDENCY_UNAVAILABLE' };
+    if (/unavailable|ECONNREFUSED|ENOTFOUND/i.test(msg)) return { status: 503, code: 'UPSTREAM_UNREACHABLE' };
     return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 

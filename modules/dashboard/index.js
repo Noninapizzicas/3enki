@@ -116,7 +116,7 @@ class DashboardModule extends BaseModule {
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/unavailable|no disponible|not available/i.test(msg)) return { status: 503, code: 'DEPENDENCY_UNAVAILABLE' };
+    if (/unavailable|no disponible|not available/i.test(msg)) return { status: 503, code: 'UPSTREAM_UNREACHABLE' };
     return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
@@ -215,9 +215,9 @@ class DashboardModule extends BaseModule {
   async handleCores() {
     try {
       if (!this.discovery) {
-        this.metrics?.increment?.('dashboard.errors', { code: 'DEPENDENCY_UNAVAILABLE', kind: 'cores' });
+        this.metrics?.increment?.('dashboard.errors', { code: 'UPSTREAM_UNREACHABLE', kind: 'cores' });
         this.logger?.warn?.('dashboard.cores.no_discovery', {});
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE',
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE',
           'Discovery system not available', { dependency: 'discovery' });
       }
 
@@ -257,8 +257,8 @@ class DashboardModule extends BaseModule {
       }
 
       if (!this.discovery) {
-        this.metrics?.increment?.('dashboard.errors', { code: 'DEPENDENCY_UNAVAILABLE', kind: 'core-detail' });
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE',
+        this.metrics?.increment?.('dashboard.errors', { code: 'UPSTREAM_UNREACHABLE', kind: 'core-detail' });
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE',
           'Discovery system not available', { dependency: 'discovery' });
       }
 

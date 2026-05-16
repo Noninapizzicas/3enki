@@ -9,10 +9,10 @@ const { execSync } = require('child_process');
 const { EVENTS } = require('../../core/constants');
 
 const CODE_TO_STATUS = {
-  MISSING_FIELD: 400, INVALID_INPUT: 400, QUOTA_EXCEEDED: 413,
+  INVALID_INPUT: 400, INVALID_INPUT: 400, RATE_LIMITED: 413,
   PERMISSION_DENIED: 403, RESOURCE_NOT_FOUND: 404,
-  TIMEOUT: 504, DEPENDENCY_UNAVAILABLE: 503,
-  FILESYSTEM_ERROR: 500, UNKNOWN_ERROR: 500,
+  UPSTREAM_TIMEOUT: 504, UPSTREAM_UNREACHABLE: 503,
+  UNKNOWN_ERROR: 500, UNKNOWN_ERROR: 500,
 };
 
 class PdfViewerModule extends BaseModule {
@@ -41,11 +41,11 @@ class PdfViewerModule extends BaseModule {
     const nodeCode = err.code;
     if (nodeCode === 'ENOENT' || msg.includes('not found') || msg.includes('no such file')) return 'RESOURCE_NOT_FOUND';
     if (nodeCode === 'EACCES' || msg.includes('access denied') || msg.includes('outside') || msg.includes('permission')) return 'PERMISSION_DENIED';
-    if (msg.includes('required') || msg.includes('missing')) return 'MISSING_FIELD';
+    if (msg.includes('required') || msg.includes('missing')) return 'INVALID_INPUT';
     if (msg.includes('must be a pdf') || msg.includes('not a pdf')) return 'INVALID_INPUT';
-    if (msg.includes('too large') || msg.includes('quota')) return 'QUOTA_EXCEEDED';
-    if (msg.includes('timeout')) return 'TIMEOUT';
-    if (nodeCode === 'EIO' || nodeCode === 'EBUSY') return 'FILESYSTEM_ERROR';
+    if (msg.includes('too large') || msg.includes('quota')) return 'RATE_LIMITED';
+    if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';
+    if (nodeCode === 'EIO' || nodeCode === 'EBUSY') return 'UNKNOWN_ERROR';
     return 'UNKNOWN_ERROR';
   }
 
@@ -194,7 +194,7 @@ class PdfViewerModule extends BaseModule {
   async viewPdf(req, res) {
     const { project_id, file_path } = req.query;
     if (!project_id || !file_path) {
-      return res.status(400).json({ status: 400, error: { code: 'MISSING_FIELD', message: 'project_id and file_path are required' } });
+      return res.status(400).json({ status: 400, error: { code: 'INVALID_INPUT', message: 'project_id and file_path are required' } });
     }
     try {
       const projectPath = await this.getProjectPath(project_id);
@@ -204,7 +204,7 @@ class PdfViewerModule extends BaseModule {
       }
       const stats = await fs.stat(fullPath);
       if (this.config.max_pdf_size && stats.size > this.config.max_pdf_size) {
-        return res.status(413).json({ status: 413, error: { code: 'QUOTA_EXCEEDED', message: `PDF too large. Maximum: ${this.config.max_pdf_size} bytes` } });
+        return res.status(413).json({ status: 413, error: { code: 'RATE_LIMITED', message: `PDF too large. Maximum: ${this.config.max_pdf_size} bytes` } });
       }
       const buffer = await fs.readFile(fullPath);
       this.metrics?.increment('pdf-viewer.http.view.success');
@@ -221,7 +221,7 @@ class PdfViewerModule extends BaseModule {
   async extractText(req, res) {
     const { project_id, file_path } = req.query;
     if (!project_id || !file_path) {
-      return res.status(400).json({ status: 400, error: { code: 'MISSING_FIELD', message: 'project_id and file_path are required' } });
+      return res.status(400).json({ status: 400, error: { code: 'INVALID_INPUT', message: 'project_id and file_path are required' } });
     }
     try {
       const projectPath = await this.getProjectPath(project_id);
@@ -240,7 +240,7 @@ class PdfViewerModule extends BaseModule {
   async getMetadata(req, res) {
     const { project_id, file_path } = req.query;
     if (!project_id || !file_path) {
-      return res.status(400).json({ status: 400, error: { code: 'MISSING_FIELD', message: 'project_id and file_path are required' } });
+      return res.status(400).json({ status: 400, error: { code: 'INVALID_INPUT', message: 'project_id and file_path are required' } });
     }
     try {
       const projectPath = await this.getProjectPath(project_id);
@@ -264,7 +264,7 @@ class PdfViewerModule extends BaseModule {
   async listPdfs(req, res) {
     const { project_id } = req.query;
     if (!project_id) {
-      return res.status(400).json({ status: 400, error: { code: 'MISSING_FIELD', message: 'project_id is required' } });
+      return res.status(400).json({ status: 400, error: { code: 'INVALID_INPUT', message: 'project_id is required' } });
     }
     try {
       const projectPath = await this.getProjectPath(project_id);
@@ -284,7 +284,7 @@ class PdfViewerModule extends BaseModule {
 
   async handleUIView(data) {
     const { project_id, file_path } = data || {};
-    if (!file_path) return this._errorResponse(400, 'MISSING_FIELD', 'file_path is required');
+    if (!file_path) return this._errorResponse(400, 'INVALID_INPUT', 'file_path is required');
     try {
       const basePath = await this.getBasePath(project_id);
       const fullPath = this._validatePathSafe(basePath, file_path);
@@ -293,7 +293,7 @@ class PdfViewerModule extends BaseModule {
       }
       const stats = await fs.stat(fullPath);
       if (this.config.max_pdf_size && stats.size > this.config.max_pdf_size) {
-        return this._errorResponse(413, 'QUOTA_EXCEEDED', `PDF too large. Maximum: ${this.config.max_pdf_size} bytes`);
+        return this._errorResponse(413, 'RATE_LIMITED', `PDF too large. Maximum: ${this.config.max_pdf_size} bytes`);
       }
       const buffer = await fs.readFile(fullPath);
       this.metrics?.increment('pdf-viewer.ui.view.success');
@@ -310,7 +310,7 @@ class PdfViewerModule extends BaseModule {
 
   async handleUIMetadata(data) {
     const { project_id, file_path } = data || {};
-    if (!file_path) return this._errorResponse(400, 'MISSING_FIELD', 'file_path is required');
+    if (!file_path) return this._errorResponse(400, 'INVALID_INPUT', 'file_path is required');
     try {
       const basePath = await this.getBasePath(project_id);
       const fullPath = this._validatePathSafe(basePath, file_path);
@@ -345,8 +345,8 @@ class PdfViewerModule extends BaseModule {
       project_id, filename, title, content,
       type = 'from_text', orientation = 'portrait', format = 'A4', margin = 50
     } = args || {};
-    if (!filename) return this._errorResponse(400, 'MISSING_FIELD', 'filename is required');
-    if (!content) return this._errorResponse(400, 'MISSING_FIELD', 'content is required');
+    if (!filename) return this._errorResponse(400, 'INVALID_INPUT', 'filename is required');
+    if (!content) return this._errorResponse(400, 'INVALID_INPUT', 'content is required');
     const safeName = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
     this.logger.info('pdf-viewer.tool.create.start', {
       project_id, filename: safeName, type,
@@ -370,7 +370,7 @@ class PdfViewerModule extends BaseModule {
 
   async handleToolList(args) {
     const { projectId } = args || {};
-    if (!projectId) return this._errorResponse(400, 'MISSING_FIELD', 'projectId is required');
+    if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required');
     this.logger.info('pdf-viewer.tool.list.start', { project_id: projectId });
     try {
       const basePath = await this.getBasePath(projectId);
@@ -385,8 +385,8 @@ class PdfViewerModule extends BaseModule {
 
   async handleToolMetadata(args) {
     const { projectId, filePath } = args || {};
-    if (!projectId) return this._errorResponse(400, 'MISSING_FIELD', 'projectId is required');
-    if (!filePath) return this._errorResponse(400, 'MISSING_FIELD', 'filePath is required');
+    if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required');
+    if (!filePath) return this._errorResponse(400, 'INVALID_INPUT', 'filePath is required');
     this.logger.info('pdf-viewer.tool.metadata.start', { project_id: projectId, file_path: filePath });
     try {
       const basePath = await this.getBasePath(projectId);
@@ -409,8 +409,8 @@ class PdfViewerModule extends BaseModule {
 
   async handleToolExtract(args) {
     const { projectId, filePath, page } = args || {};
-    if (!projectId) return this._errorResponse(400, 'MISSING_FIELD', 'projectId is required');
-    if (!filePath) return this._errorResponse(400, 'MISSING_FIELD', 'filePath is required');
+    if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required');
+    if (!filePath) return this._errorResponse(400, 'INVALID_INPUT', 'filePath is required');
     this.logger.info('pdf-viewer.tool.extract.start', { project_id: projectId, file_path: filePath, page: page || 'all' });
     try {
       const basePath = await this.getBasePath(projectId);
@@ -494,7 +494,7 @@ class PdfViewerModule extends BaseModule {
       const requestId = `pdf_path_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const timeout = setTimeout(() => {
         const err = new Error('Timeout querying project path');
-        err._code = 'TIMEOUT';
+        err._code = 'UPSTREAM_TIMEOUT';
         reject(err);
       }, 5000);
       this.eventBus.subscribe('db.query.response', (event) => {
@@ -593,7 +593,7 @@ class PdfViewerModule extends BaseModule {
   async createDirectPdf({ type, content, title, filename, orientation, format, margin }) {
     let PDFDocument;
     try { PDFDocument = require('pdfkit'); } catch {
-      return this._errorResponse(500, 'DEPENDENCY_UNAVAILABLE', 'pdfkit not installed. Run: npm install pdfkit');
+      return this._errorResponse(500, 'UPSTREAM_UNREACHABLE', 'pdfkit not installed. Run: npm install pdfkit');
     }
     const outputDir = path.join(process.cwd(), 'data', 'generated', 'pdf');
     await fs.mkdir(outputDir, { recursive: true });

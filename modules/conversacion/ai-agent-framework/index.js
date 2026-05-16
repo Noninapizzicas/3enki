@@ -91,7 +91,7 @@ class AiAgentFrameworkModule extends BaseModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     return { status: 500, code: 'UNKNOWN_ERROR' };
@@ -267,7 +267,7 @@ class AiAgentFrameworkModule extends BaseModule {
       if (!agent_name) {
         return this._publishAgentExecuteFailed({
           ...baseEnvelope,
-          error: { code: 'AGENT_INPUT_INVALID', message: 'agent_name obligatorio' },
+          error: { code: 'INVALID_INPUT', message: 'agent_name obligatorio' },
           iterations_completed: 0,
           provider_attempted: null
         });
@@ -277,7 +277,7 @@ class AiAgentFrameworkModule extends BaseModule {
       if (!agent) {
         return this._publishAgentExecuteFailed({
           ...baseEnvelope,
-          error: { code: 'AGENT_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` },
+          error: { code: 'RESOURCE_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` },
           iterations_completed: 0,
           provider_attempted: null
         });
@@ -286,7 +286,7 @@ class AiAgentFrameworkModule extends BaseModule {
       if (!task && (!context || Object.keys(context).length === 0)) {
         return this._publishAgentExecuteFailed({
           ...baseEnvelope,
-          error: { code: 'AGENT_INPUT_INVALID', message: 'Debe proporcionar task o context' },
+          error: { code: 'INVALID_INPUT', message: 'Debe proporcionar task o context' },
           iterations_completed: 0,
           provider_attempted: null
         });
@@ -364,14 +364,14 @@ class AiAgentFrameworkModule extends BaseModule {
       if (pending.shape === 'canonical') {
         this._publishAgentExecuteFailed({
           ...pending,
-          error: { code: 'AGENT_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` },
+          error: { code: 'UPSTREAM_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` },
           iterations_completed: 0,
           provider_attempted: null
         });
       } else {
         this.eventBus.publish(pending.response_event, {
           request_id: pending.original_request_id, session_id: pending.session_id,
-          error: { code: 'AGENT_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` }
+          error: { code: 'UPSTREAM_TIMEOUT', message: `Timeout esperando agente ${pending.agent_name} (${timeout_ms}ms)` }
         });
       }
     }, timeout_ms);
@@ -424,7 +424,7 @@ class AiAgentFrameworkModule extends BaseModule {
     if (!agent) {
       return this.eventBus.publish('invoke_agent.response', {
         request_id, session_id,
-        error: { code: 'AGENT_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` }
+        error: { code: 'RESOURCE_NOT_FOUND', message: `Agente '${agent_name}' no encontrado` }
       });
     }
 
@@ -619,11 +619,11 @@ class AiAgentFrameworkModule extends BaseModule {
     const lower = raw.toLowerCase();
 
     let code = 'UNKNOWN_ERROR';
-    if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) code = 'CREDENTIAL_NOT_FOUND';
-    else if (/no hay providers? disponibles?|no providers available/i.test(raw)) code = 'CREDENTIAL_NOT_FOUND';
+    if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) code = 'RESOURCE_NOT_FOUND';
+    else if (/no hay providers? disponibles?|no providers available/i.test(raw)) code = 'RESOURCE_NOT_FOUND';
     else if (lower.includes('timeout') || lower.includes('etimedout')) code = 'UPSTREAM_TIMEOUT';
-    else if (/429|rate.?limit/.test(lower)) code = 'UPSTREAM_RATE_LIMITED';
-    else if (/401|403|unauthorized|forbidden|invalid api key/.test(lower)) code = 'UPSTREAM_AUTH_FAILED';
+    else if (/429|rate.?limit/.test(lower)) code = 'UPSTREAM_INVALID_RESPONSE';
+    else if (/401|403|unauthorized|forbidden|invalid api key/.test(lower)) code = 'UPSTREAM_INVALID_RESPONSE';
     else if (/5\d\d|internal server error|bad gateway|service unavailable/.test(lower)) code = 'UPSTREAM_5XX';
     else if (/econnrefused|enotfound|network|unreachable|fetch failed/.test(lower)) code = 'UPSTREAM_UNREACHABLE';
     else if (/invalid response|malformed|parse|unexpected token/.test(lower)) code = 'UPSTREAM_INVALID_RESPONSE';

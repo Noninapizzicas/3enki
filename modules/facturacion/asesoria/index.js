@@ -67,13 +67,13 @@ class AsesoriaModule extends BaseModule {
     const msg = err?.message || String(err);
     const code = err?._code || err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
     if (code === 'INVALID_INPUT') return { status: 400, code: 'INVALID_INPUT' };
     if (code === 'RESOURCE_NOT_FOUND') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrad|no hay/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (/timeout|timed out/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
-    if (/dependency|service|unavailable/i.test(msg)) return { status: 503, code: 'DEPENDENCY_UNAVAILABLE' };
+    if (/timeout|timed out/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
+    if (/dependency|service|unavailable/i.test(msg)) return { status: 503, code: 'UPSTREAM_UNREACHABLE' };
     return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
@@ -446,7 +446,7 @@ class AsesoriaModule extends BaseModule {
     const data = result?.data || result;
     if (!data?.success) {
       const err = new Error(`Error creando ZIP: ${data?.error || 'desconocido'}`);
-      err._code = 'DEPENDENCY_UNAVAILABLE';
+      err._code = 'UPSTREAM_UNREACHABLE';
       throw err;
     }
 

@@ -54,7 +54,7 @@ class CartaMarketingModule extends BaseModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     return { status: 500, code: 'UNKNOWN_ERROR' };
@@ -185,7 +185,7 @@ class CartaMarketingModule extends BaseModule {
         error_code: err.code || 'IO_ERROR',
         error_message: err.message
       });
-      this.metrics?.increment?.('carta-marketing.errors', { code: 'FILESYSTEM_ERROR', kind: 'save' });
+      this.metrics?.increment?.('carta-marketing.errors', { code: 'UNKNOWN_ERROR', kind: 'save' });
     }
   }
 

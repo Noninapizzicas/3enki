@@ -53,7 +53,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",     "cuando": "project_id o regla ausentes" },
-        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del archivo de reglas" }
+        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura del archivo de reglas" }
       ]
     },
     {
@@ -84,7 +84,7 @@
       "errores_conocidos": [
         { "code": "INVALID_INPUT",      "cuando": "project_id o regla_id ausentes" },
         { "code": "RESOURCE_NOT_FOUND", "cuando": "regla_id no existe" },
-        { "code": "FILESYSTEM_ERROR",   "cuando": "fallo de escritura tras eliminar" }
+        { "code": "UNKNOWN_ERROR",   "cuando": "fallo de escritura tras eliminar" }
       ]
     },
     {
@@ -132,8 +132,8 @@
         { "code": "INVALID_INPUT",         "cuando": "project_id o pendiente_id ausentes" },
         { "code": "RESOURCE_NOT_FOUND",    "cuando": "pendiente_id no existe" },
         { "code": "CONFLICT_STATE",        "cuando": "pendiente no esta esperando_confirmacion" },
-        { "code": "DEPENDENCY_UNAVAILABLE","cuando": "tarifas.assign no disponible" },
-        { "code": "TIMEOUT",               "cuando": "mqttRequest a tarifas timeout" }
+        { "code": "UPSTREAM_UNREACHABLE","cuando": "tarifas.assign no disponible" },
+        { "code": "UPSTREAM_TIMEOUT",               "cuando": "mqttRequest a tarifas timeout" }
       ]
     },
     {
@@ -152,7 +152,7 @@
       "errores_conocidos": [
         { "code": "INVALID_INPUT",      "cuando": "project_id o pendiente_id ausentes" },
         { "code": "RESOURCE_NOT_FOUND", "cuando": "pendiente_id no existe" },
-        { "code": "FILESYSTEM_ERROR",   "cuando": "fallo de escritura del archivo de pendientes" }
+        { "code": "UNKNOWN_ERROR",   "cuando": "fallo de escritura del archivo de pendientes" }
       ]
     }
   ],

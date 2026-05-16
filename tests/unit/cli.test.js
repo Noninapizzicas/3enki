@@ -136,9 +136,9 @@ async function runTests() {
       await slowClient.get('/health');
       assert(false, 'Debería lanzar error de timeout');
     } catch (error) {
-      // El error puede ser ECONNREFUSED o TIMEOUT dependiendo del timing
+      // El error puede ser ECONNREFUSED o UPSTREAM_TIMEOUT dependiendo del timing
       assert(
-        error.code === 'TIMEOUT' || error.code === 'ECONNREFUSED',
+        error.code === 'UPSTREAM_TIMEOUT' || error.code === 'ECONNREFUSED',
         'Error de timeout o conexión rechazada'
       );
     }

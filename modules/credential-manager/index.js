@@ -406,7 +406,7 @@ class CredentialManagerModule extends BaseModule {
 
       const result = this._resolveCredential(provider, { customId, clientId: client_id, projectId: project_id });
       if (!result.found) {
-        return this._errorResponse(404, 'CREDENTIAL_NOT_FOUND', `No credentials found for provider "${provider}"`, { provider, attempts: result.attempts });
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `No credentials found for provider "${provider}"`, { provider, attempts: result.attempts });
       }
       return { status: 200, data: { provider, api_key: result.apiKey, resolved_from: result.resolvedFrom } };
     } catch (err) {
@@ -779,7 +779,7 @@ class CredentialManagerModule extends BaseModule {
     const code = err._code || this._classifyHandlerError(err);
     const status = code === 'INVALID_INPUT' ? 400 :
                    code === 'RESOURCE_NOT_FOUND' ? 404 :
-                   code === 'CREDENTIAL_NOT_FOUND' ? 404 :
+                   code === 'RESOURCE_NOT_FOUND' ? 404 :
                    code === 'PERMISSION_DENIED' ? 403 :
                    code === 'CONFLICT_STATE' ? 409 : 500;
     const message = err.message || String(err);
@@ -794,7 +794,7 @@ class CredentialManagerModule extends BaseModule {
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
     if (msg.includes('conflict') || msg.includes('already')) return 'CONFLICT_STATE';
-    if (msg.includes('credential')) return 'CREDENTIAL_NOT_FOUND';
+    if (msg.includes('credential')) return 'RESOURCE_NOT_FOUND';
     return 'UNKNOWN_ERROR';
   }
 

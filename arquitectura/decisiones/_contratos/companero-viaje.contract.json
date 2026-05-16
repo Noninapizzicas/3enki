@@ -392,7 +392,7 @@
               "publicado_por": "ai-gateway (cuando algo fallo: timeout LLM, todos los providers caidos, error de credencial, etc.)",
               "consumido_por": "chat-io (para informar al usuario); observabilidad; alerting",
               "proposito": "Cierra el flujo iniciado en chat.message.saved con resultado de error. Sin esto, los flujos quedan colgados sin respuesta.",
-              "campos_minimos": ["correlation_id", "conversation_id", "user_id", "channel", "channel_context", "message_id_user", "error: { code (UPSTREAM_TIMEOUT, CREDENTIAL_NOT_FOUND, etc.), message, details }", "timestamp"]
+              "campos_minimos": ["correlation_id", "conversation_id", "user_id", "channel", "channel_context", "message_id_user", "error: { code (UPSTREAM_TIMEOUT, RESOURCE_NOT_FOUND, etc.), message, details }", "timestamp"]
             }
           ]
         },
@@ -446,7 +446,7 @@
               "publicado_por": "ai-gateway",
               "consumido_por": "el modulo que origino el request",
               "proposito": "Cierra el ciclo en error.",
-              "campos_minimos": ["correlation_id", "request_id", "error: { code (UPSTREAM_*, CREDENTIAL_NOT_FOUND), message, details }", "duration_ms", "timestamp"]
+              "campos_minimos": ["correlation_id", "request_id", "error: { code (UPSTREAM_*, RESOURCE_NOT_FOUND), message, details }", "duration_ms", "timestamp"]
             }
           ]
         }

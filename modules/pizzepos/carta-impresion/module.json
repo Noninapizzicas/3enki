@@ -80,8 +80,8 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",          "cuando": "project_id, carta_id o html ausentes" },
-        { "code": "DEPENDENCY_UNAVAILABLE", "cuando": "no se ha activado proyecto (no hay path)" },
-        { "code": "FILESYSTEM_ERROR",       "cuando": "fallo al persistir el archivo" }
+        { "code": "UPSTREAM_UNREACHABLE", "cuando": "no se ha activado proyecto (no hay path)" },
+        { "code": "UNKNOWN_ERROR",       "cuando": "fallo al persistir el archivo" }
       ]
     }
   ],

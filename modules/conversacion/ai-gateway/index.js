@@ -585,7 +585,7 @@ class AiGatewayModule extends BaseModule {
       if (Array.isArray(llmResult.tool_calls_executed) && llmResult.tool_calls_executed.length > 0) {
         // Propagar el shape canonico de error errors.contract en lugar de
         // hardcodear UNKNOWN_ERROR (drift anterior que invisibilizaba
-        // RESOURCE_NOT_FOUND, INVALID_INPUT, AGENT_NOT_FOUND, etc).
+        // RESOURCE_NOT_FOUND, INVALID_INPUT, RESOURCE_NOT_FOUND, etc).
         payload.tool_calls_executed = llmResult.tool_calls_executed
           .map(t => {
             const entry = {
@@ -646,15 +646,15 @@ class AiGatewayModule extends BaseModule {
 
     let code = 'UNKNOWN_ERROR';
     if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) {
-      code = 'CREDENTIAL_NOT_FOUND';
+      code = 'RESOURCE_NOT_FOUND';
     } else if (/no hay providers?.*disponibles?|no providers? available/i.test(raw)) {
-      code = 'CREDENTIAL_NOT_FOUND';
+      code = 'RESOURCE_NOT_FOUND';
     } else if (lower.includes('timeout') || lower.includes('etimedout')) {
       code = 'UPSTREAM_TIMEOUT';
     } else if (/429|rate.?limit/.test(lower)) {
-      code = 'UPSTREAM_RATE_LIMITED';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/401|403|unauthorized|forbidden|invalid api key/.test(lower)) {
-      code = 'UPSTREAM_AUTH_FAILED';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/5\d\d|internal server error|bad gateway|service unavailable/.test(lower)) {
       code = 'UPSTREAM_5XX';
     } else if (/econnrefused|enotfound|network|unreachable|fetch failed/.test(lower)) {
@@ -662,7 +662,7 @@ class AiGatewayModule extends BaseModule {
     } else if (/invalid response|malformed|parse|unexpected token/.test(lower)) {
       code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/context.{0,10}(length|window|too long|too large|exceed)|prompt.{0,5}(too long|too large)|maximum.{0,10}context|too many tokens|context_length_exceeded|413/i.test(lower)) {
-      code = 'UPSTREAM_PAYLOAD_TOO_LARGE';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     }
 
     return { code, message: raw, details: {} };

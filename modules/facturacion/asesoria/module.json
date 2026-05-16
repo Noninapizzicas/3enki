@@ -40,8 +40,8 @@
       "errores_conocidos": [
         { "code": "INVALID_INPUT",          "cuando": "projectId ausente o vacio." },
         { "code": "RESOURCE_NOT_FOUND",     "cuando": "no hay facturas procesadas para el periodo especificado." },
-        { "code": "DEPENDENCY_UNAVAILABLE", "cuando": "local.zip falla creando el ZIP." },
-        { "code": "TIMEOUT",                "cuando": "local.facturas-db.listar excede config.timeouts.db (default 30s) o local.zip excede config.timeouts.zip (default 60s)." },
+        { "code": "UPSTREAM_UNREACHABLE", "cuando": "local.zip falla creando el ZIP." },
+        { "code": "UPSTREAM_TIMEOUT",                "cuando": "local.facturas-db.listar excede config.timeouts.db (default 30s) o local.zip excede config.timeouts.zip (default 60s)." },
         { "code": "UNKNOWN_ERROR",         "cuando": "error inesperado escribiendo CSV o resumen al filesystem." }
       ]
     },

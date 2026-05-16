@@ -53,7 +53,7 @@ class TelegramServiceModule extends BaseModule {
     const msg = (error.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('no encontrado')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('requerido') || msg.includes('validation')) return 'INVALID_INPUT';
-    return 'EXTERNAL_API_FAILED';
+    return 'UPSTREAM_INVALID_RESPONSE';
   }
 
   _handleHandlerError(metricName, error, kind) {

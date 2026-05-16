@@ -147,14 +147,14 @@ function publishedOf(mocks, name) {
   // Group 2: Auth
   // ==========================================
 
-  await testAsync('handleListSessions devuelve DEPENDENCY_UNAVAILABLE si no hay token configurado', async () => {
+  await testAsync('handleListSessions devuelve UPSTREAM_UNREACHABLE si no hay token configurado', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { config: {} });
     const req = { params: { project_id: 'proj1' }, query: {}, headers: {} };
     const r = await m.handleListSessions(req, {});
     assert.ok(isCanonicalError(r), 'debe ser canonical error');
     assert.strictEqual(r.status, 503);
-    assert.strictEqual(r.error.code, 'DEPENDENCY_UNAVAILABLE');
+    assert.strictEqual(r.error.code, 'UPSTREAM_UNREACHABLE');
     await m.onUnload();
   });
 
@@ -202,47 +202,47 @@ function publishedOf(mocks, name) {
   // Group 3: Validacion de campos requeridos
   // ==========================================
 
-  await testAsync('handleListSessions devuelve MISSING_FIELD si falta project_id', async () => {
+  await testAsync('handleListSessions devuelve INVALID_INPUT si falta project_id', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { config: { token: 'tok' } });
     const req = { params: {}, query: { token: 'tok' }, headers: {} };
     const r = await m.handleListSessions(req, {});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleGetSession devuelve MISSING_FIELD si falta session_id', async () => {
+  await testAsync('handleGetSession devuelve INVALID_INPUT si falta session_id', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { config: { token: 'tok' } });
     const req = { params: {}, query: { token: 'tok', project_id: 'p1' }, headers: {} };
     const r = await m.handleGetSession(req, {});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleGetSession devuelve MISSING_FIELD si falta project_id', async () => {
+  await testAsync('handleGetSession devuelve INVALID_INPUT si falta project_id', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { config: { token: 'tok' } });
     const req = { params: { session_id: 'sess1' }, query: { token: 'tok' }, headers: {} };
     const r = await m.handleGetSession(req, {});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleGetLatest devuelve MISSING_FIELD si falta project_id', async () => {
+  await testAsync('handleGetLatest devuelve INVALID_INPUT si falta project_id', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { config: { token: 'tok' } });
     const req = { params: {}, query: { token: 'tok' }, headers: {} };
     const r = await m.handleGetLatest(req, {});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -369,8 +369,8 @@ function publishedOf(mocks, name) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'MISSING_FIELD', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'MISSING_FIELD', message: 'msg', details: { field: 'x' } } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
     const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
     assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
@@ -380,8 +380,8 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'MISSING_FIELD');
-    assert.strictEqual(m._classifyHandlerError(new Error('query timeout')), 'TIMEOUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('query timeout')), 'UPSTREAM_TIMEOUT');
     assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });

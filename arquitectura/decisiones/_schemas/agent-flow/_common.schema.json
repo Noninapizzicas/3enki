@@ -100,7 +100,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["code", "message"],
-      "description": "Error canonico segun errors.contract. code en lista canonica del subsistema agentes (AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED) o codes_infrastructure heredados (UPSTREAM_*, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR).",
+      "description": "Error canonico segun errors.contract. code en lista canonica del subsistema agentes (RESOURCE_NOT_FOUND, UPSTREAM_TIMEOUT, INVALID_INPUT, UPSTREAM_INVALID_RESPONSE) o codes_infrastructure heredados (UPSTREAM_*, RESOURCE_NOT_FOUND, UNKNOWN_ERROR).",
       "properties": {
         "code":    { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*[A-Z0-9]$" },
         "message": { "type": "string", "minLength": 1 },

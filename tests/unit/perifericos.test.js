@@ -139,7 +139,7 @@ async function instantiate(mocks, opts = {}) {
     // monkeypatch _loadProvider para simular fallo de require del provider
     m._loadProvider = function () {
       this.logger.error('perifericos.provider.load_error', { error: 'forced' });
-      this.metrics?.increment('perifericos.errors', { kind: 'provider_load', code: 'DEPENDENCY_UNAVAILABLE' });
+      this.metrics?.increment('perifericos.errors', { kind: 'provider_load', code: 'UPSTREAM_UNREACHABLE' });
       return null;
     };
   }
@@ -206,14 +206,14 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m._onMqttMessage, null);
   });
 
-  await testAsync('onLoad sin provider sigue arrancando con warn (DEPENDENCY_UNAVAILABLE)', async () => {
+  await testAsync('onLoad sin provider sigue arrancando con warn (UPSTREAM_UNREACHABLE)', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks, { noProvider: true });
     assert.strictEqual(m.provider, null);
     const r = await m.handleListar({});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 503);
-    assert.strictEqual(r.error.code, 'DEPENDENCY_UNAVAILABLE');
+    assert.strictEqual(r.error.code, 'UPSTREAM_UNREACHABLE');
     await m.onUnload();
   });
 
@@ -402,7 +402,7 @@ function publishedOf(mocks, name) {
 
     const errs = publishedOf(mocks, 'periferico.error');
     assert.strictEqual(errs.length, 1);
-    assert.strictEqual(errs[0].code, 'EXTERNAL_API_FAILED');
+    assert.strictEqual(errs[0].code, 'UPSTREAM_INVALID_RESPONSE');
     assert.strictEqual(errs[0].message, 'connection refused');
     assert.strictEqual(m.internalMetrics.envios_error, 1);
     const errorMetric = mocks.metricsCalls.find(c => c[0] === 'increment' && c[1] === 'perifericos.envios.error');
@@ -476,7 +476,7 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleTestDispositivo cuando provider.send falla devuelve 502 EXTERNAL_API_FAILED', async () => {
+  await testAsync('handleTestDispositivo cuando provider.send falla devuelve 502 UPSTREAM_INVALID_RESPONSE', async () => {
     const mocks = makeMocks();
     const { module: m, provider } = await instantiate(mocks);
     await provider.register({ nombre: 'caja', tipo: 'impresora', transporte: { tipo: 'tcp' } });
@@ -484,7 +484,7 @@ function publishedOf(mocks, name) {
     const r = await m.handleTestDispositivo({ nombre: 'caja' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 502);
-    assert.strictEqual(r.error.code, 'EXTERNAL_API_FAILED');
+    assert.strictEqual(r.error.code, 'UPSTREAM_INVALID_RESPONSE');
     await m.onUnload();
   });
 
@@ -618,9 +618,9 @@ function publishedOf(mocks, name) {
     // Nuevos codes mapeados
     const r502 = m._handleHandlerError('t', new Error('x'), 'k');
     void r502;
-    const r503 = m._handleHandlerError('t', Object.assign(new Error('x'), { _code: 'DEPENDENCY_UNAVAILABLE' }), 'k');
+    const r503 = m._handleHandlerError('t', Object.assign(new Error('x'), { _code: 'UPSTREAM_UNREACHABLE' }), 'k');
     assert.strictEqual(r503.status, 503);
-    const rExt = m._handleHandlerError('t', Object.assign(new Error('x'), { _code: 'EXTERNAL_API_FAILED' }), 'k');
+    const rExt = m._handleHandlerError('t', Object.assign(new Error('x'), { _code: 'UPSTREAM_INVALID_RESPONSE' }), 'k');
     assert.strictEqual(rExt.status, 502);
     await m.onUnload();
   });

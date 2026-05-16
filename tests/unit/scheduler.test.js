@@ -406,7 +406,7 @@ function isCanonicalError(result) {
     const e1 = new Error('timeout!'); e1._timeout = true;
     assert.strictEqual(m._classifyExecutionError(e1), 'UPSTREAM_TIMEOUT');
     const e2 = new Error('http 401'); e2._upstream_status = 401;
-    assert.strictEqual(m._classifyExecutionError(e2), 'UPSTREAM_AUTH_FAILED');
+    assert.strictEqual(m._classifyExecutionError(e2), 'UPSTREAM_INVALID_RESPONSE');
     const e3 = new Error('http 503'); e3._upstream_status = 503;
     assert.strictEqual(m._classifyExecutionError(e3), 'UPSTREAM_5XX');
     const e4 = new Error('ECONNREFUSED');

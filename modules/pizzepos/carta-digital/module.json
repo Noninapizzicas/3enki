@@ -61,7 +61,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",    "cuando": "project_id ausente" },
-        { "code": "FILESYSTEM_ERROR", "cuando": "fallo al persistir config" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo al persistir config" }
       ]
     },
     {

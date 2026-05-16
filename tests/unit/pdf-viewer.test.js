@@ -109,73 +109,73 @@ function publishedOf(mocks, name) {
   // Group 2: Validacion canonica de handlers
   // ==========================================
 
-  await testAsync('handleUIView: missing file_path devuelve 400 MISSING_FIELD', async () => {
+  await testAsync('handleUIView: missing file_path devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleUIView({});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleUIMetadata: missing file_path devuelve 400 MISSING_FIELD', async () => {
+  await testAsync('handleUIMetadata: missing file_path devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleUIMetadata({});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleToolCreate: missing filename devuelve 400 MISSING_FIELD', async () => {
+  await testAsync('handleToolCreate: missing filename devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleToolCreate({ content: 'test' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleToolCreate: missing content devuelve 400 MISSING_FIELD', async () => {
+  await testAsync('handleToolCreate: missing content devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleToolCreate({ filename: 'doc.pdf' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleToolList: missing projectId devuelve 400 MISSING_FIELD', async () => {
+  await testAsync('handleToolList: missing projectId devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleToolList({});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleToolMetadata: missing projectId devuelve 400 MISSING_FIELD', async () => {
+  await testAsync('handleToolMetadata: missing projectId devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleToolMetadata({ filePath: 'x.pdf' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleToolExtract: missing filePath devuelve 400 MISSING_FIELD', async () => {
+  await testAsync('handleToolExtract: missing filePath devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleToolExtract({ projectId: 'p1' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'MISSING_FIELD');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -336,7 +336,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'MISSING_FIELD');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
     assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     const enoent = new Error('ENOENT'); enoent.code = 'ENOENT';
     assert.strictEqual(m._classifyHandlerError(enoent), 'RESOURCE_NOT_FOUND');

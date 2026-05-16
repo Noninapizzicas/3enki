@@ -175,12 +175,12 @@ class ESP32DevModule extends BaseModule {
   async handleCreateProject(data) {
     const { project_name, template, board, framework, vars } = data;
 
-    if (!project_name) return this._errorResponse(400, 'MISSING_FIELD', 'project_name es obligatorio', { field: 'project_name' });
-    if (!template) return this._errorResponse(400, 'MISSING_FIELD', 'template es obligatorio', { field: 'template' });
+    if (!project_name) return this._errorResponse(400, 'INVALID_INPUT', 'project_name es obligatorio', { field: 'project_name' });
+    if (!template) return this._errorResponse(400, 'INVALID_INPUT', 'template es obligatorio', { field: 'template' });
 
     // Validar nombre
     if (!/^[a-z0-9][a-z0-9-]*$/.test(project_name)) {
-      return this._errorResponse(400, 'INVALID_FORMAT', 'project_name debe ser slug: lowercase, hyphens, empieza con alfanumérico', { field: 'project_name' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'project_name debe ser slug: lowercase, hyphens, empieza con alfanumérico', { field: 'project_name' });
     }
 
     // Verificar que no existe
@@ -310,7 +310,7 @@ class ESP32DevModule extends BaseModule {
    */
   async handleGetProject(data) {
     const { project_name } = data;
-    if (!project_name) return this._errorResponse(400, 'MISSING_FIELD', 'project_name es obligatorio', { field: 'project_name' });
+    if (!project_name) return this._errorResponse(400, 'INVALID_INPUT', 'project_name es obligatorio', { field: 'project_name' });
 
     const project = this.projects[project_name];
     if (!project) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_name}' no encontrado`, { entity_type: 'project', entity_id: project_name });
@@ -346,7 +346,7 @@ class ESP32DevModule extends BaseModule {
    */
   async handleBuild(data) {
     const { project_name, clean } = data;
-    if (!project_name) return this._errorResponse(400, 'MISSING_FIELD', 'project_name es obligatorio', { field: 'project_name' });
+    if (!project_name) return this._errorResponse(400, 'INVALID_INPUT', 'project_name es obligatorio', { field: 'project_name' });
 
     const project = this.projects[project_name];
     if (!project) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_name}' no encontrado`, { entity_type: 'project', entity_id: project_name });
@@ -358,7 +358,7 @@ class ESP32DevModule extends BaseModule {
 
     // Verificar límite de builds concurrentes
     if (this.activeBuilds.size >= this.config.max_concurrent_builds) {
-      return this._errorResponse(429, 'QUOTA_EXCEEDED', 'Máximo de builds concurrentes alcanzado', { limit: this.config.max_concurrent_builds });
+      return this._errorResponse(429, 'RATE_LIMITED', 'Máximo de builds concurrentes alcanzado', { limit: this.config.max_concurrent_builds });
     }
 
     const projectDir = project.path;
@@ -469,8 +469,8 @@ class ESP32DevModule extends BaseModule {
    */
   async handleDeleteProject(data) {
     const { project_name, confirm } = data;
-    if (!project_name) return this._errorResponse(400, 'MISSING_FIELD', 'project_name es obligatorio', { field: 'project_name' });
-    if (!confirm) return this._errorResponse(400, 'MISSING_FIELD', 'confirm: true requerido para eliminar', { field: 'confirm' });
+    if (!project_name) return this._errorResponse(400, 'INVALID_INPUT', 'project_name es obligatorio', { field: 'project_name' });
+    if (!confirm) return this._errorResponse(400, 'INVALID_INPUT', 'confirm: true requerido para eliminar', { field: 'confirm' });
 
     const project = this.projects[project_name];
     if (!project) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_name}' no encontrado`, { entity_type: 'project', entity_id: project_name });
@@ -714,7 +714,7 @@ class ESP32DevModule extends BaseModule {
 
   _handleHandlerError(handlerName, err) {
     const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'FILESYSTEM_ERROR' ? 500 : 500;
+    const status  = code === 'UNKNOWN_ERROR' ? 500 : 500;
     const message = err.message || String(err);
     this.logger.error(`esp32-dev.${handlerName}.failed`, { error_code: code, error_message: message });
     this.metrics?.increment('esp32-dev.handler.errors', 1, { code, kind: 'infrastructure' });
@@ -723,8 +723,8 @@ class ESP32DevModule extends BaseModule {
 
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('enoent') || msg.includes('eacces') || msg.includes('eio')) return 'FILESYSTEM_ERROR';
-    if (msg.includes('timeout') || msg.includes('etimedout')) return 'TIMEOUT';
+    if (msg.includes('enoent') || msg.includes('eacces') || msg.includes('eio')) return 'UNKNOWN_ERROR';
+    if (msg.includes('timeout') || msg.includes('etimedout')) return 'UPSTREAM_TIMEOUT';
     return 'UNKNOWN_ERROR';
   }
 

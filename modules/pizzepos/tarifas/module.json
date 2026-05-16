@@ -38,7 +38,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",     "cuando": "carta_id o project_id ausentes" },
-        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del archivo de config" }
+        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura del archivo de config" }
       ]
     },
     {
@@ -56,7 +56,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",     "cuando": "canal ausente o no esta en la lista de canales validos" },
-        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del archivo de config" }
+        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura del archivo de config" }
       ]
     },
     {
@@ -89,7 +89,7 @@
       },
       "errores_conocidos": [
         { "code": "INVALID_INPUT",     "cuando": "carta_id o base_carta_id ausentes" },
-        { "code": "FILESYSTEM_ERROR",  "cuando": "fallo de escritura del archivo de config" }
+        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura del archivo de config" }
       ]
     },
     {

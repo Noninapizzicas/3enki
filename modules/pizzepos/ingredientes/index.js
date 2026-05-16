@@ -544,9 +544,9 @@ class IngredientesModule extends BaseModule {
                    code === 'PERMISSION_DENIED'       ? 403 :
                    code === 'CONFLICT_STATE'          ? 409 :
                    code === 'ALREADY_EXISTS'          ? 409 :
-                   code === 'DEPENDENCY_UNAVAILABLE'  ? 503 :
-                   code === 'TIMEOUT'                 ? 504 :
-                   code === 'FILESYSTEM_ERROR'        ? 500 : 500;
+                   code === 'UPSTREAM_UNREACHABLE'  ? 503 :
+                   code === 'UPSTREAM_TIMEOUT'                 ? 504 :
+                   code === 'UNKNOWN_ERROR'        ? 500 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code, kind });
     this.metrics?.increment('ingredientes.errors', { kind, code });
@@ -558,7 +558,7 @@ class IngredientesModule extends BaseModule {
     const ecod = err?.code || '';
     if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('invalid'))                            return 'INVALID_INPUT';
-    if (ecod && ecod.startsWith('E'))                                                    return 'FILESYSTEM_ERROR';
+    if (ecod && ecod.startsWith('E'))                                                    return 'UNKNOWN_ERROR';
     return 'UNKNOWN_ERROR';
   }
 
@@ -622,7 +622,7 @@ class IngredientesModule extends BaseModule {
       await this._atomicWriteFile(filePath, JSON.stringify(data, null, 2));
     } catch (err) {
       this.logger.warn('ingredientes.disk.save_failed', { error: err.message });
-      this.metrics?.increment('ingredientes.errors', { kind: 'save_to_disk', code: 'FILESYSTEM_ERROR' });
+      this.metrics?.increment('ingredientes.errors', { kind: 'save_to_disk', code: 'UNKNOWN_ERROR' });
     }
   }
 

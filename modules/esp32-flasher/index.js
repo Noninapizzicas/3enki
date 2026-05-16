@@ -129,8 +129,8 @@ class ESP32FlasherModule extends BaseModule {
     const msg = err?.message || String(err);
     const code = err?.code;
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'FILESYSTEM_ERROR' };
-    if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
+    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
+    if (/timeout/i.test(msg)) return { status: 504, code: 'UPSTREAM_TIMEOUT' };
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado|not accessible/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/conflict|already|in use/i.test(msg)) return { status: 409, code: 'CONFLICT_STATE' };
@@ -264,9 +264,9 @@ class ESP32FlasherModule extends BaseModule {
 
       const toolCheck = await this._checkFlashTool(flashMethod);
       if (!toolCheck.available) {
-        this.metrics?.increment?.('esp32-flasher.errors', { code: 'DEPENDENCY_UNAVAILABLE', kind: 'start' });
+        this.metrics?.increment?.('esp32-flasher.errors', { code: 'UPSTREAM_UNREACHABLE', kind: 'start' });
         this.logger.warn('flash.start.tool_unavailable', { method: flashMethod, error: toolCheck.error });
-        return this._errorResponse(400, 'DEPENDENCY_UNAVAILABLE', toolCheck.error,
+        return this._errorResponse(400, 'UPSTREAM_UNREACHABLE', toolCheck.error,
           { method: flashMethod });
       }
 
@@ -559,11 +559,11 @@ class ESP32FlasherModule extends BaseModule {
         await fs.promises.writeFile(port, text + '\n');
         return { status: 200, data: { port, sent: text } };
       } catch (err) {
-        this.metrics?.increment?.('esp32-flasher.errors', { code: 'FILESYSTEM_ERROR', kind: 'monitor-send' });
+        this.metrics?.increment?.('esp32-flasher.errors', { code: 'UNKNOWN_ERROR', kind: 'monitor-send' });
         this.logger.error('flash.monitor_send.io_error', {
           port, error_code: err.code, error_message: err.message
         });
-        return this._errorResponse(500, 'FILESYSTEM_ERROR',
+        return this._errorResponse(500, 'UNKNOWN_ERROR',
           `Error enviando datos al puerto ${port}: ${err.message}`,
           { port });
       }
@@ -617,9 +617,9 @@ class ESP32FlasherModule extends BaseModule {
       }
       const mqtt = this.eventBus?.mqtt;
       if (!mqtt || !mqtt.isConnected) {
-        this.metrics?.increment?.('esp32-flasher.errors', { code: 'DEPENDENCY_UNAVAILABLE', kind: 'debug-control' });
+        this.metrics?.increment?.('esp32-flasher.errors', { code: 'UPSTREAM_UNREACHABLE', kind: 'debug-control' });
         this.logger.warn('flash.debug_control.no_mqtt', { device, project });
-        return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'MQTT no disponible',
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'MQTT no disponible',
           { mqtt: 'disconnected' });
       }
       const topic = `enki/${project}/debug/${device}/control`;

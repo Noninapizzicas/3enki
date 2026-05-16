@@ -131,7 +131,7 @@
       "name": "recetas.crear",
       "description": "Guarda una receta nueva en el proyecto. Llámala en cuanto tengas nombre + ingredientes — aunque sean texto libre del usuario y falten otros campos, GUÁRDALA igualmente. Los campos que falten se marcarán como pendientes y se completarán después. NO PIDAS al usuario datos que no haya dado.",
       "handler": "onToolCrear",
-      "errores_conocidos": ["INVALID_INPUT", "ALREADY_EXISTS", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "ALREADY_EXISTS", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -199,7 +199,7 @@
       "name": "recetas.listar",
       "description": "Lista las recetas del proyecto. Por defecto solo activas (no archivadas). Filtros opcionales por estado o solo_incompletas.",
       "handler": "onToolListar",
-      "errores_conocidos": ["INVALID_INPUT", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -232,7 +232,7 @@
       "name": "recetas.obtener",
       "description": "Devuelve una receta completa con ingredientes, instrucciones, todos los campos. Acepta receta_id (UUID) o nombre.",
       "handler": "onToolObtener",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -257,7 +257,7 @@
       "name": "recetas.buscar",
       "description": "Busca recetas activas por criterios combinables: texto libre, ingrediente, categoría, etiqueta, dificultad, tiempo, porciones.",
       "handler": "onToolBuscar",
-      "errores_conocidos": ["INVALID_INPUT", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -305,7 +305,7 @@
       "name": "recetas.actualizar",
       "description": "Modifica campos de una receta. Crea automáticamente snapshot de la versión anterior en history. Devuelve diff de cambios aplicados.",
       "handler": "onToolActualizar",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -332,7 +332,7 @@
       "name": "recetas.historial",
       "description": "Devuelve las versiones anteriores de una receta (cada versión es un snapshot completo). Incluye version_actual y array historial con resúmenes.",
       "handler": "onToolHistorial",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -354,7 +354,7 @@
       "name": "recetas.revertir",
       "description": "Restaura una versión anterior de la receta (desde history). El estado actual se archiva primero como nueva entrada en history (audit trail). target_version es el número de versión a restaurar.",
       "handler": "onToolRevertir",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -381,7 +381,7 @@
       "name": "recetas.eliminar",
       "description": "Archiva una receta (estado='archivada'). NO la borra del archivo — sigue accesible vía recetas.listar con estado='archivada'. Para borrado definitivo no hay tool aún.",
       "handler": "onToolEliminar",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -403,7 +403,7 @@
       "name": "recetas.estadisticas",
       "description": "Resumen del proyecto: total recetas, distribución por estado, número de incompletas, tamaño del catálogo de ingredientes y cuántos tienen precio.",
       "handler": "onToolEstadisticas",
-      "errores_conocidos": ["INVALID_INPUT", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -420,7 +420,7 @@
       "name": "recetas.ingredientes",
       "description": "Lista el catálogo de ingredientes del proyecto (independiente de las recetas). Incluye precio_mercado, unidad, fuente.",
       "handler": "onToolIngredientes",
-      "errores_conocidos": ["INVALID_INPUT", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -441,7 +441,7 @@
       "name": "recetas.actualizar_precio",
       "description": "Actualiza (o crea si no existe) el precio de mercado de un ingrediente en el catálogo. Identifica por nombre.",
       "handler": "onToolActualizarPrecio",
-      "errores_conocidos": ["INVALID_INPUT", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -483,7 +483,7 @@
       "name": "recetas.analizar",
       "description": "Análisis de coste de una receta: cruza sus ingredientes con el catálogo de precios. Devuelve coste_total, coste_por_porcion, y coste_es_real (true si todos los ingredientes están en catálogo). Si la receta está incompleta (faltan ingredientes/porciones) devuelve error.",
       "handler": "onToolAnalizar",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -505,7 +505,7 @@
       "name": "recetas.investigar_receta",
       "description": "Comprueba si una receta existe en el proyecto. Si existe, la devuelve. Si no, devuelve instrucción para que el LLM proponga una receta nueva (que después se guardará vía recetas.crear con confirmación del usuario).",
       "handler": "onToolInvestigarReceta",
-      "errores_conocidos": ["INVALID_INPUT", "FILESYSTEM_ERROR", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {

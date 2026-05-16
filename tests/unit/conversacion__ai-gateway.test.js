@@ -286,15 +286,15 @@ function publishedOf(mocks, name) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
     assert.deepStrictEqual(r1, {
       status: 400,
-      error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } }
+      error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } }
     });
-    const r2 = m._errorResponse(503, 'UPSTREAM_UNAVAILABLE', 'mqtt down');
+    const r2 = m._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'mqtt down');
     assert.deepStrictEqual(r2, {
       status: 503,
-      error: { code: 'UPSTREAM_UNAVAILABLE', message: 'mqtt down' }
+      error: { code: 'UPSTREAM_UNREACHABLE', message: 'mqtt down' }
     });
     await m.onUnload();
   });
@@ -303,9 +303,9 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('Provider not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('Unauthorized')), 'AUTHORIZATION_REQUIRED');
-    assert.strictEqual(m._classifyHandlerError(new Error('upstream not available')), 'UPSTREAM_UNAVAILABLE');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('Unauthorized')), 'PERMISSION_DENIED');
+    assert.strictEqual(m._classifyHandlerError(new Error('upstream not available')), 'UPSTREAM_UNREACHABLE');
     assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });

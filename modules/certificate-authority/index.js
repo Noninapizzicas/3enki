@@ -124,7 +124,7 @@ class CertificateAuthorityModule {
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado|revoked|expired/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/already|conflict/i.test(msg)) return { status: 409, code: 'CONFLICT_STATE' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {

@@ -103,7 +103,7 @@ class RecetasModule {
       await this.eventBus.publish(name, enriched);
     } catch (err) {
       this.logger.error('recetas.publish_error', { event: name, error: err.message });
-      this.metrics?.increment('recetas.error', { kind: 'publish', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('recetas.error', { kind: 'publish', code: 'UNKNOWN_ERROR' });
     }
   }
 

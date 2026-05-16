@@ -190,16 +190,16 @@ function makePioDriverDir(tmpDir, driverName, opts = {}) {
   // Group 2: Validacion canonica de handlers
   // ==========================================
 
-  await testAsync('handleBuild sin driver → 400 VALIDATION_FAILED canonico', async () => {
+  await testAsync('handleBuild sin driver → 400 INVALID_INPUT canonico', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     const r = await m.handleBuild({});
     assert.ok(isCanonicalError(r), `expected canonical error, got ${JSON.stringify(r)}`);
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.strictEqual(r.error.details.field, 'driver');
     const incs = mocks.metricsCalls.filter(c => c[1] === 'firmware-builder.errors');
-    assert.ok(incs.some(i => i[2].code === 'VALIDATION_FAILED'));
+    assert.ok(incs.some(i => i[2].code === 'INVALID_INPUT'));
     await m.onUnload();
     rmDir(tmpDir);
   });
@@ -249,7 +249,7 @@ function makePioDriverDir(tmpDir, driverName, opts = {}) {
     rmDir(tmpDir);
   });
 
-  await testAsync('handleBuild con board no soportado → 400 VALIDATION_FAILED + valid list', async () => {
+  await testAsync('handleBuild con board no soportado → 400 INVALID_INPUT + valid list', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     makePioDriverDir(tmpDir, 'sample');
@@ -257,7 +257,7 @@ function makePioDriverDir(tmpDir, driverName, opts = {}) {
     const r = await m.handleBuild({ driver: 'sample', board: 'pic18' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.strictEqual(r.error.details.field, 'board');
     assert.ok(Array.isArray(r.error.details.valid));
     assert.ok(r.error.details.valid.includes('esp32dev'));
@@ -475,10 +475,10 @@ function makePioDriverDir(tmpDir, driverName, opts = {}) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
     rmDir(tmpDir);
   });
@@ -490,10 +490,10 @@ function makePioDriverDir(tmpDir, driverName, opts = {}) {
     assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EACCES' })), 'AUTHENTICATION_REQUIRED');
     assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EEXIST' })), 'CONFLICT_STATE');
     assert.strictEqual(m._classifyHandlerError(new Error('Driver no encontrado')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
     assert.strictEqual(m._classifyHandlerError(new Error('ya está compilando')), 'CONFLICT_STATE');
     assert.strictEqual(m._classifyHandlerError(new Error('máximo de builds')), 'QUOTA_EXCEEDED');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
     rmDir(tmpDir);
   });

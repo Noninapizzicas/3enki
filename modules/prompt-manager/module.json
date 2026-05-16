@@ -99,7 +99,7 @@
         },
         "required": []
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
     },
     {
       "name": "prompt.get",
@@ -114,7 +114,7 @@
         },
         "required": []
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
     },
     {
       "name": "prompt.render",
@@ -130,7 +130,7 @@
         },
         "required": []
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
     }
   ],
 

@@ -12,6 +12,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const BaseModule = require('../../_shared/base-module');
 
 const STEP_LABELS = {
   started:    'iniciando',
@@ -25,13 +26,11 @@ const STEP_LABELS = {
 const DEFAULT_SUMMARY_MAX_CHARS = 280;
 const DEFAULT_MIN_PROGRESS_STEP = 'thinking';
 
-class AgentObserverModule {
+class AgentObserverModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'agent-observer';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.openCards = new Map();
   }
@@ -57,11 +56,7 @@ class AgentObserverModule {
   // Helpers POC2
   // ============================================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details !== undefined) error.details = details;
-    return { status, error };
-  }
+  // _errorResponse heredado de BaseModule
 
   _classifyHandlerError(err) {
     const msg = err?.message || String(err);
@@ -70,7 +65,7 @@ class AgentObserverModule {
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'subscribe') {
@@ -208,7 +203,7 @@ class AgentObserverModule {
       if (!card) return;
       this.openCards.delete(data.request_id);
 
-      const code = data.error?.code || 'INTERNAL_ERROR';
+      const code = data.error?.code || 'UNKNOWN_ERROR';
       const msg = data.error?.message || 'Falló sin mensaje';
 
       this.metrics?.increment?.('agent-observer.card.closed', { status: 'failed' });

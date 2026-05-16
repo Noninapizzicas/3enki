@@ -534,8 +534,8 @@ class CuentasModule {
 
       const ok = await this._transicionarEstado(id, 'entregado', data);
       if (!ok) {
-        this._logError('cuenta.marcar_entregado.transicion_fallida', { id }, 'ui_marcar_entregado', 'INTERNAL_ERROR');
-        return this._errorResponse(500, 'INTERNAL_ERROR', 'No se pudo transicionar a entregado');
+        this._logError('cuenta.marcar_entregado.transicion_fallida', { id }, 'ui_marcar_entregado', 'UNKNOWN_ERROR');
+        return this._errorResponse(500, 'UNKNOWN_ERROR', 'No se pudo transicionar a entregado');
       }
 
       this.logger.info('cuenta.marcada_entregado', { cuenta_id: id, pagado: cuenta.pagado });
@@ -800,7 +800,7 @@ class CuentasModule {
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (msg.includes('conflict') || msg.includes('already exists'))                       return 'ALREADY_EXISTS';
     if (ecod && ecod.startsWith('E'))                                                     return 'FILESYSTEM_ERROR';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -815,7 +815,7 @@ class CuentasModule {
       await this.eventBus.publish(name, enriched);
     } catch (err) {
       this.logger.error('pizzepos-cuentas.publish_error', { event: name, error: err.message });
-      this.metrics?.increment?.('pizzepos-cuentas.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment?.('pizzepos-cuentas.errors', { kind: 'publish', code: 'UNKNOWN_ERROR' });
     }
   }
 

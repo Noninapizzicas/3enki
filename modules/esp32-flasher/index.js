@@ -137,7 +137,7 @@ class ESP32FlasherModule {
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado|not accessible/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/conflict|already|in use/i.test(msg)) return { status: 409, code: 'CONFLICT_STATE' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -495,9 +495,9 @@ class ESP32FlasherModule {
       try {
         await this._startMonitor(port, monitorBaud, project_id);
       } catch (err) {
-        this.metrics?.increment?.('esp32-flasher.errors', { code: 'INTERNAL_ERROR', kind: 'monitor-start' });
+        this.metrics?.increment?.('esp32-flasher.errors', { code: 'UNKNOWN_ERROR', kind: 'monitor-start' });
         this.logger.error('flash.monitor_start.failed', { port, error_message: err.message });
-        return this._errorResponse(500, 'INTERNAL_ERROR',
+        return this._errorResponse(500, 'UNKNOWN_ERROR',
           `Error iniciando monitor: ${err.message}`, { port });
       }
 

@@ -190,7 +190,7 @@ class ChannelManagerModule {
         error: err.message, correlation_id
       });
       this.metrics?.increment('channel-manager.errors', { kind: 'schema_init' });
-      throw Object.assign(err, { _code: 'INTERNAL_ERROR', _details: { stage: 'schema_init' } });
+      throw Object.assign(err, { _code: 'UNKNOWN_ERROR', _details: { stage: 'schema_init' } });
     }
   }
 
@@ -237,12 +237,12 @@ class ChannelManagerModule {
     const { channel_type, external_id, project_id, purpose, label, metadata } = input || {};
     if (!channel_type || !external_id || !project_id) {
       throw Object.assign(new Error('channel_type, external_id and project_id are required'),
-        { _code: 'VALIDATION_FAILED',
+        { _code: 'INVALID_INPUT',
           _details: { kind: 'domain', missing: ['channel_type','external_id','project_id'].filter(k => !input?.[k]) } });
     }
     if (!VALID_CHANNEL_TYPES.includes(channel_type)) {
       throw Object.assign(new Error(`Invalid channel_type: ${channel_type}`),
-        { _code: 'VALIDATION_FAILED',
+        { _code: 'INVALID_INPUT',
           _details: { kind: 'domain', field: 'channel_type', allowed: VALID_CHANNEL_TYPES } });
     }
 
@@ -289,7 +289,7 @@ class ChannelManagerModule {
   async _update(channelType, externalId, updates, correlation_id) {
     if (!channelType || !externalId) {
       throw Object.assign(new Error('channel_type and external_id are required'),
-        { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'channel_type|external_id' } });
+        { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'channel_type|external_id' } });
     }
     const key = this._cacheKey(channelType, externalId);
     const existing = this.cache.get(key);
@@ -334,7 +334,7 @@ class ChannelManagerModule {
   async _remove(channelType, externalId, correlation_id) {
     if (!channelType || !externalId) {
       throw Object.assign(new Error('channel_type and external_id are required'),
-        { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'channel_type|external_id' } });
+        { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'channel_type|external_id' } });
     }
     const key = this._cacheKey(channelType, externalId);
     const existing = this.cache.get(key);
@@ -444,7 +444,7 @@ class ChannelManagerModule {
   async handleResolve(data) {
     try {
       if (!data?.channel_type || !data?.external_id) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'channel_type and external_id are required',
           { kind: 'domain', field: 'channel_type|external_id' });
       }
@@ -472,7 +472,7 @@ class ChannelManagerModule {
   async handleListByProject(data) {
     try {
       if (!data?.project_id) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'project_id is required',
           { kind: 'domain', field: 'project_id' });
       }
@@ -491,7 +491,7 @@ class ChannelManagerModule {
     try {
       const { channel_type, external_id } = params || {};
       if (!channel_type || !external_id) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'channel_type and external_id are required',
           { kind: 'domain', field: 'channel_type|external_id' });
       }
@@ -545,11 +545,11 @@ class ChannelManagerModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'      ? 400 :
+    const status  = code === 'INVALID_INPUT'      ? 400 :
                     code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                    code === 'CONFLICT'               ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
+                    code === 'PERMISSION_DENIED' ? 403 :
+                    code === 'CONFLICT_STATE'               ? 409 :
+                    code === 'UPSTREAM_UNREACHABLE'   ? 503 :
                                                         500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code });
@@ -560,11 +560,11 @@ class ChannelManagerModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
-    if (msg.includes('already') || msg.includes('conflict')) return 'CONFLICT';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('timeout') || msg.includes('unavailable')) return 'UPSTREAM_UNAVAILABLE';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('required') || msg.includes('invalid')) return 'INVALID_INPUT';
+    if (msg.includes('already') || msg.includes('conflict')) return 'CONFLICT_STATE';
+    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
+    if (msg.includes('timeout') || msg.includes('unavailable')) return 'UPSTREAM_UNREACHABLE';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

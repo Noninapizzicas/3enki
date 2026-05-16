@@ -165,7 +165,7 @@ class FacturasModule {
           project_id: projectKey,
           file_path:  filePath,
           source,
-          code:       'INTERNAL_ERROR',
+          code:       'UNKNOWN_ERROR',
           message:    result?.error || 'Procesamiento fallido sin error explicito'
         }, data);
       }
@@ -175,13 +175,13 @@ class FacturasModule {
       }
     } catch (err) {
       this.logger.error('facturas.entrada.error', { error: err.message, filePath, projectId });
-      this.metrics?.increment('facturas.errors', { kind: 'entrada', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('facturas.errors', { kind: 'entrada', code: 'UNKNOWN_ERROR' });
 
       await this._publicarEvento('factura.error', {
         project_id: projectKey,
         file_path:  filePath,
         source,
-        code:       'INTERNAL_ERROR',
+        code:       'UNKNOWN_ERROR',
         message:    err.message
       }, data);
 
@@ -611,7 +611,7 @@ class FacturasModule {
     if (msg.includes('timeout'))                                                         return 'TIMEOUT';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (ecod && ecod.startsWith('E'))                                                     return 'FILESYSTEM_ERROR';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

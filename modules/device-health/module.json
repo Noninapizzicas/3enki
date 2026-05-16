@@ -70,7 +70,7 @@
         "properties": {}
       },
       "errores_conocidos": [
-        { "code": "INTERNAL_ERROR", "cuando": "fallo inesperado al iterar deviceStates" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo inesperado al iterar deviceStates" }
       ]
     },
     {
@@ -85,7 +85,7 @@
         "required": ["device_id"]
       },
       "errores_conocidos": [
-        { "code": "VALIDATION_FAILED",  "cuando": "device_id ausente" },
+        { "code": "INVALID_INPUT",  "cuando": "device_id ausente" },
         { "code": "RESOURCE_NOT_FOUND", "cuando": "no hay state registrado para ese device_id" }
       ]
     },
@@ -103,7 +103,7 @@
         }
       },
       "errores_conocidos": [
-        { "code": "INTERNAL_ERROR", "cuando": "fallo inesperado al filtrar el catálogo de alertas" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo inesperado al filtrar el catálogo de alertas" }
       ]
     }
   ],

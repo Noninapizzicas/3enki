@@ -21,7 +21,7 @@
  *
  * Cumple los 24 contratos transversales:
  *  - errors: handlers UI devuelven { status, data | error: { code, message,
- *    details? } }. Codes canonicos (VALIDATION_FAILED, RESOURCE_NOT_FOUND).
+ *    details? } }. Codes canonicos (INVALID_INPUT, RESOURCE_NOT_FOUND).
  *    Los codes legacy (PROJECT_REQUIRED, CONVERSATION_REQUIRED,
  *    MESSAGE_ID_REQUIRED) van a error.details.kind para disambiguacion UI.
  *  - observability: log + metric en cada error path. Prefix chat-io.*.
@@ -270,7 +270,7 @@ class ChatIoModule {
   _requireProject(project_id) {
     if (!project_id || !isUUID(project_id)) {
       throw Object.assign(new Error('project_id is required and must be a UUID'),
-        { _code: 'VALIDATION_FAILED',
+        { _code: 'INVALID_INPUT',
           _details: { kind: 'PROJECT_REQUIRED', field: 'project_id', user_message: 'Selecciona un proyecto para chatear' } });
     }
   }
@@ -278,7 +278,7 @@ class ChatIoModule {
   _requireConversation(conversation_id) {
     if (!conversation_id || !isUUID(conversation_id)) {
       throw Object.assign(new Error('conversation_id is required and must be a UUID'),
-        { _code: 'VALIDATION_FAILED',
+        { _code: 'INVALID_INPUT',
           _details: { kind: 'CONVERSATION_REQUIRED', field: 'conversation_id', user_message: 'Selecciona o crea una conversacion' } });
     }
   }
@@ -514,7 +514,7 @@ class ChatIoModule {
       this._requireProject(project_id);
       if (!message_id) {
         throw Object.assign(new Error('message_id is required'),
-          { _code: 'VALIDATION_FAILED',
+          { _code: 'INVALID_INPUT',
             _details: { kind: 'MESSAGE_ID_REQUIRED', field: 'message_id' } });
       }
       await this._db(project_id,
@@ -766,11 +766,11 @@ class ChatIoModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'      ? 400 :
+    const status  = code === 'INVALID_INPUT'      ? 400 :
                     code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                    code === 'CONFLICT'               ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
+                    code === 'PERMISSION_DENIED' ? 403 :
+                    code === 'CONFLICT_STATE'               ? 409 :
+                    code === 'UPSTREAM_UNREACHABLE'   ? 503 :
                                                         500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code });
@@ -781,11 +781,11 @@ class ChatIoModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('does not exist')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('uuid')) return 'VALIDATION_FAILED';
-    if (msg.includes('already') || msg.includes('conflict')) return 'CONFLICT';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('timeout') || msg.includes('unavailable')) return 'UPSTREAM_UNAVAILABLE';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('uuid')) return 'INVALID_INPUT';
+    if (msg.includes('already') || msg.includes('conflict')) return 'CONFLICT_STATE';
+    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
+    if (msg.includes('timeout') || msg.includes('unavailable')) return 'UPSTREAM_UNREACHABLE';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -807,7 +807,7 @@ class ChatIoModule {
       'UPSTREAM_INVALID_RESPONSE':'El motor del lenguaje devolvió algo que no entiendo. Inténtalo de nuevo.',
       'UPSTREAM_PAYLOAD_TOO_LARGE':'La conversación se ha hecho demasiado larga para procesarla. Empieza una nueva y te ayudo igual.',
       'CREDENTIAL_NOT_FOUND':     'No tengo credenciales configuradas para responder. Avisa al administrador.',
-      'INTERNAL_ERROR':           'Algo se rompió por mi parte. Inténtalo de nuevo o avisa si persiste.'
+      'UNKNOWN_ERROR':           'Algo se rompió por mi parte. Inténtalo de nuevo o avisa si persiste.'
     };
     return M[code] || `No pude completar la respuesta (${code || 'error desconocido'}). Inténtalo de nuevo.`;
   }

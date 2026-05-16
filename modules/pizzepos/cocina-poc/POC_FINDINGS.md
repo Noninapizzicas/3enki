@@ -24,7 +24,7 @@ El test "onUnload flushea snapshot pendiente sincronicamente" valida que mutacio
 
 ### 3. Códigos de error canónicos en handlers HTTP
 
-`VALIDATION_FAILED`, `RESOURCE_NOT_FOUND` (con `entity_type` y `entity_id` en details), `CONFLICT`. El cliente del endpoint ve siempre el mismo lenguaje. Mismo patrón que ai-gateway-poc y carta-scheduler-poc — los códigos del catálogo de `errors v1.4.0` cubren todos los casos del módulo sin tener que inventar nuevos.
+`INVALID_INPUT`, `RESOURCE_NOT_FOUND` (con `entity_type` y `entity_id` en details), `CONFLICT_STATE`. El cliente del endpoint ve siempre el mismo lenguaje. Mismo patrón que ai-gateway-poc y carta-scheduler-poc — los códigos del catálogo de `errors v1.4.0` cubren todos los casos del módulo sin tener que inventar nuevos.
 
 ### 4. Telemetría obligatoria en cada handler
 
@@ -75,7 +75,7 @@ El POC valida payloads manualmente con `_validate(payload, requiredFields)`. Fun
 }
 ```
 
-Si el body no valida → gateway responde 400 `VALIDATION_FAILED` automáticamente, el handler nunca se invoca.
+Si el body no valida → gateway responde 400 `INVALID_INPUT` automáticamente, el handler nunca se invoca.
 
 Esto cierra el círculo: POC2-F5 (validación de eventos) + POC4-F2 (validación de HTTP requests) = misma disciplina aplicada a los dos canales de entrada.
 

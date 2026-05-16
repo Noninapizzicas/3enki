@@ -70,7 +70,7 @@
         "properties": {}
       },
       "errores_conocidos": [
-        { "code": "INTERNAL_ERROR", "cuando": "fallo inesperado escaneando firmware_path (filesystem inaccesible)" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo inesperado escaneando firmware_path (filesystem inaccesible)" }
       ]
     },
     {
@@ -96,7 +96,7 @@
         "required": ["driver"]
       },
       "errores_conocidos": [
-        { "code": "VALIDATION_FAILED",  "cuando": "driver ausente o board no soportado" },
+        { "code": "INVALID_INPUT",  "cuando": "driver ausente o board no soportado" },
         { "code": "RESOURCE_NOT_FOUND", "cuando": "driver no encontrado en firmware/drivers/" },
         { "code": "CONFLICT_STATE",     "cuando": "driver ya está compilando" },
         { "code": "QUOTA_EXCEEDED",     "cuando": "max_concurrent_builds alcanzado" }

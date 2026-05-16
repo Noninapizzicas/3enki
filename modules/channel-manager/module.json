@@ -46,7 +46,7 @@
         },
         "required": ["channel_type", "external_id"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
     },
     {
       "name": "channel.list",
@@ -61,7 +61,7 @@
         },
         "required": []
       },
-      "errores_conocidos": ["INTERNAL_ERROR"]
+      "errores_conocidos": ["UNKNOWN_ERROR"]
     }
   ],
   "config": {

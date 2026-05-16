@@ -287,7 +287,7 @@ function makeRequest(overrides = {}) {
     assert.deepStrictEqual(m._classifyHandlerError(new Error('field is required')), { status: 400, code: 'INVALID_INPUT' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('not found')), { status: 404, code: 'RESOURCE_NOT_FOUND' });
     assert.deepStrictEqual(m._classifyHandlerError(new Error('timeout fired')), { status: 504, code: 'TIMEOUT' });
-    assert.deepStrictEqual(m._classifyHandlerError(new Error('boom')), { status: 500, code: 'INTERNAL_ERROR' });
+    assert.deepStrictEqual(m._classifyHandlerError(new Error('boom')), { status: 500, code: 'UNKNOWN_ERROR' });
     await m.onUnload();
   });
 

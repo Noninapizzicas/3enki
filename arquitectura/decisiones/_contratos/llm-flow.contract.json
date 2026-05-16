@@ -47,7 +47,7 @@
 
     "MESSAGES OBLIGATORIO. La conversacion (sea single-turn o multi-turn synthetic) viaja en messages[]. system_prompt es campo separado para que el provider lo coloque correctamente (en SystemInstruction de Gemini, system message de OpenAI, etc.).",
 
-    "ERROR.CODE CANONICO. llm.complete.failed.error.code DEBE ser uno del catalogo errors.contract.json (UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR). Sin codigos inventados.",
+    "ERROR.CODE CANONICO. llm.complete.failed.error.code DEBE ser uno del catalogo errors.contract.json (UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR). Sin codigos inventados.",
 
     "DURATION_MS PARA OBSERVABILIDAD. Tanto en response como en failed: tiempo total del processo (resolucion de credencial + llamada al provider + parsing). Permite SLOs/alerting.",
 

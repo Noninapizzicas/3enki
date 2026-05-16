@@ -61,7 +61,7 @@
         },
         "required": ["projectId", "query"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "db.tables",
@@ -75,7 +75,7 @@
         },
         "required": ["projectId"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
     },
     {
       "name": "db.schema",
@@ -90,7 +90,7 @@
         },
         "required": ["projectId", "tableName"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
     },
     {
       "name": "db.execute",
@@ -106,7 +106,7 @@
         },
         "required": ["projectId", "query"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
     }
   ],
 

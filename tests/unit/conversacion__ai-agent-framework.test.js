@@ -329,7 +329,7 @@ function makeRequest(overrides = {}) {
     assert.strictEqual(m._classifyLlmError('429 rate limit').code, 'UPSTREAM_RATE_LIMITED');
     assert.strictEqual(m._classifyLlmError('401 unauthorized').code, 'UPSTREAM_AUTH_FAILED');
     assert.strictEqual(m._classifyLlmError('credential not found').code, 'CREDENTIAL_NOT_FOUND');
-    assert.strictEqual(m._classifyLlmError('boom').code, 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyLlmError('boom').code, 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

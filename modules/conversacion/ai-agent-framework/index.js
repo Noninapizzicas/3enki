@@ -95,7 +95,7 @@ class AiAgentFrameworkModule {
     if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'subscribe') {
@@ -619,7 +619,7 @@ class AiAgentFrameworkModule {
     const raw = (rawMessage && typeof rawMessage === 'string') ? rawMessage : 'unknown error';
     const lower = raw.toLowerCase();
 
-    let code = 'INTERNAL_ERROR';
+    let code = 'UNKNOWN_ERROR';
     if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) code = 'CREDENTIAL_NOT_FOUND';
     else if (/no hay providers? disponibles?|no providers available/i.test(raw)) code = 'CREDENTIAL_NOT_FOUND';
     else if (lower.includes('timeout') || lower.includes('etimedout')) code = 'UPSTREAM_TIMEOUT';

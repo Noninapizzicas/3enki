@@ -150,7 +150,7 @@ class DeviceRegistryModule {
       this.logger.info('device-registry.mqtt.subscribed', { topics });
     } catch (err) {
       this.logger.error('device-registry.mqtt.subscribe_error', { error: err.message });
-      this.metrics?.increment('device-registry.errors', { kind: 'mqtt_subscribe', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('device-registry.errors', { kind: 'mqtt_subscribe', code: 'UNKNOWN_ERROR' });
     }
   }
 
@@ -177,7 +177,7 @@ class DeviceRegistryModule {
       if (impresionMatch) { this._handleStatus(impresionMatch[1], impresionMatch[2], payload, 'mqtt-native'); return; }
     } catch (err) {
       this.logger.error('device-registry.mqtt.message_error', { topic, error: err.message });
-      this.metrics?.increment('device-registry.errors', { kind: 'mqtt_message', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('device-registry.errors', { kind: 'mqtt_message', code: 'UNKNOWN_ERROR' });
     }
   }
 
@@ -410,7 +410,7 @@ class DeviceRegistryModule {
 
     if (!device_id) {
       this.logger.warn('device-registry.register.missing_device_id');
-      this.metrics?.increment('device-registry.errors', { kind: 'register', code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('device-registry.errors', { kind: 'register', code: 'INVALID_INPUT' });
       return;
     }
 
@@ -458,7 +458,7 @@ class DeviceRegistryModule {
 
     if (!device_id) {
       this.logger.warn('device-registry.unregister.missing_device_id');
-      this.metrics?.increment('device-registry.errors', { kind: 'unregister', code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('device-registry.errors', { kind: 'unregister', code: 'INVALID_INPUT' });
       return;
     }
 
@@ -511,7 +511,7 @@ class DeviceRegistryModule {
   async handleGet(data) {
     try {
       if (!data?.device_id) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'device_id requerido', { field: 'device_id' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'device_id requerido', { field: 'device_id' });
       }
       const device = this.devices.get(data.device_id);
       if (!device) {
@@ -528,7 +528,7 @@ class DeviceRegistryModule {
   async handleRegister(data) {
     try {
       if (!data?.device_id) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'device_id requerido', { field: 'device_id' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'device_id requerido', { field: 'device_id' });
       }
       await this.onDeviceRegister({ data });
       const device = this.devices.get(data.device_id);
@@ -541,7 +541,7 @@ class DeviceRegistryModule {
   async handleUnregister(data) {
     try {
       if (!data?.device_id) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'device_id requerido', { field: 'device_id' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'device_id requerido', { field: 'device_id' });
       }
       const existed = this.devices.has(data.device_id);
       await this.onDeviceUnregister({ data });
@@ -643,7 +643,7 @@ class DeviceRegistryModule {
       this._dirty = false;
     } catch (err) {
       this.logger.error('device-registry.persist_error', { error: err.message });
-      this.metrics?.increment('device-registry.errors', { kind: 'persist', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('device-registry.errors', { kind: 'persist', code: 'UNKNOWN_ERROR' });
     }
   }
 
@@ -663,10 +663,10 @@ class DeviceRegistryModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code   = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED'      ? 400 :
+    const status = code === 'INVALID_INPUT'      ? 400 :
                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT'               ? 409 : 500;
+                   code === 'PERMISSION_DENIED' ? 403 :
+                   code === 'CONFLICT_STATE'               ? 409 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code });
     this.metrics?.increment('device-registry.errors', { kind, code });
@@ -676,10 +676,10 @@ class DeviceRegistryModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found'))                                                          return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden'))                          return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('conflict') || msg.includes('already exists'))                         return 'CONFLICT';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden'))                          return 'PERMISSION_DENIED';
+    if (msg.includes('conflict') || msg.includes('already exists'))                         return 'CONFLICT_STATE';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -699,7 +699,7 @@ class DeviceRegistryModule {
       return payload;
     } catch {
       this.logger.warn('device-registry.mqtt.parse_error', { source });
-      this.metrics?.increment('device-registry.errors', { kind: 'mqtt_parse', code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('device-registry.errors', { kind: 'mqtt_parse', code: 'INVALID_INPUT' });
       return null;
     }
   }

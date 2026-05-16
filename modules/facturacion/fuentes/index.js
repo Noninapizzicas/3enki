@@ -90,7 +90,7 @@ class FuentesModule {
     if (/not found|no encontrad|no disponible/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/timeout|timed out/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
     if (/dependency|service|unavailable/i.test(msg)) return { status: 503, code: 'DEPENDENCY_UNAVAILABLE' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {

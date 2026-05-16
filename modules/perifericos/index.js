@@ -117,10 +117,10 @@ class PerifericosModule {
 
     if (!destino || !contenido) {
       const missing = !destino ? 'destino' : 'data';
-      this._logError('perifericos.imprimir.validation_failed', { missing }, 'imprimir', 'VALIDATION_FAILED');
+      this._logError('perifericos.imprimir.validation_failed', { missing }, 'imprimir', 'INVALID_INPUT');
       await this._publicarEvento('periferico.error', {
         kind:    'imprimir',
-        code:    'VALIDATION_FAILED',
+        code:    'INVALID_INPUT',
         message: `${missing} es requerido`,
         contexto: { destino: destino || null }
       }, data);
@@ -176,9 +176,9 @@ class PerifericosModule {
 
     if (!destino || !contenido) {
       const missing = !destino ? 'destino' : 'data';
-      this._logError('perifericos.display.validation_failed', { missing }, 'display', 'VALIDATION_FAILED');
+      this._logError('perifericos.display.validation_failed', { missing }, 'display', 'INVALID_INPUT');
       await this._publicarEvento('periferico.error', {
-        kind: 'display', code: 'VALIDATION_FAILED', message: `${missing} es requerido`,
+        kind: 'display', code: 'INVALID_INPUT', message: `${missing} es requerido`,
         contexto: { destino: destino || null }
       }, data);
       return;
@@ -229,9 +229,9 @@ class PerifericosModule {
     const { destino, pin } = data;
 
     if (!destino) {
-      this._logError('perifericos.cajon.validation_failed', { missing: 'destino' }, 'abrir-cajon', 'VALIDATION_FAILED');
+      this._logError('perifericos.cajon.validation_failed', { missing: 'destino' }, 'abrir-cajon', 'INVALID_INPUT');
       await this._publicarEvento('periferico.error', {
-        kind: 'abrir-cajon', code: 'VALIDATION_FAILED', message: 'destino es requerido', contexto: {}
+        kind: 'abrir-cajon', code: 'INVALID_INPUT', message: 'destino es requerido', contexto: {}
       }, data);
       return;
     }
@@ -282,10 +282,10 @@ class PerifericosModule {
     const { nombre } = data;
 
     if (!nombre) {
-      this._logError('perifericos.estado.validation_failed', { missing: 'nombre' }, 'estado', 'VALIDATION_FAILED');
+      this._logError('perifericos.estado.validation_failed', { missing: 'nombre' }, 'estado', 'INVALID_INPUT');
       await this._publicarEvento('periferico.estado.respuesta', {
         nombre: null,
-        error: { code: 'VALIDATION_FAILED', message: 'nombre es requerido' }
+        error: { code: 'INVALID_INPUT', message: 'nombre es requerido' }
       }, data);
       return;
     }
@@ -371,9 +371,9 @@ class PerifericosModule {
     const { nombre } = data;
 
     if (!nombre) {
-      this._logError('perifericos.desregistrar.validation_failed', { missing: 'nombre' }, 'desregistrar', 'VALIDATION_FAILED');
+      this._logError('perifericos.desregistrar.validation_failed', { missing: 'nombre' }, 'desregistrar', 'INVALID_INPUT');
       await this._publicarEvento('periferico.error', {
-        kind: 'desregistrar', code: 'VALIDATION_FAILED', message: 'nombre es requerido', contexto: {}
+        kind: 'desregistrar', code: 'INVALID_INPUT', message: 'nombre es requerido', contexto: {}
       }, data);
       return;
     }
@@ -420,8 +420,8 @@ class PerifericosModule {
   async handleGet(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.get.validation_failed', { missing: 'nombre' }, 'ui_get', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.get.validation_failed', { missing: 'nombre' }, 'ui_get', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!this.provider) {
         return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
@@ -444,12 +444,12 @@ class PerifericosModule {
   async handleRegistrar(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.register.validation_failed', { missing: 'nombre' }, 'ui_register', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.register.validation_failed', { missing: 'nombre' }, 'ui_register', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!data?.transporte?.tipo) {
-        this._logError('perifericos.ui.register.validation_failed', { missing: 'transporte.tipo' }, 'ui_register', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'transporte.tipo es requerido', { field: 'transporte.tipo' });
+        this._logError('perifericos.ui.register.validation_failed', { missing: 'transporte.tipo' }, 'ui_register', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'transporte.tipo es requerido', { field: 'transporte.tipo' });
       }
       if (!this.provider) {
         return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
@@ -479,8 +479,8 @@ class PerifericosModule {
   async handleActualizar(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.update.validation_failed', { missing: 'nombre' }, 'ui_update', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.update.validation_failed', { missing: 'nombre' }, 'ui_update', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!this.provider) {
         return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
@@ -501,8 +501,8 @@ class PerifericosModule {
   async handleDesregistrar(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.delete.validation_failed', { missing: 'nombre' }, 'ui_delete', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.delete.validation_failed', { missing: 'nombre' }, 'ui_delete', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!this.provider) {
         return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
@@ -527,8 +527,8 @@ class PerifericosModule {
   async handleTestDispositivo(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.test.validation_failed', { missing: 'nombre' }, 'ui_test', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.test.validation_failed', { missing: 'nombre' }, 'ui_test', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!this.provider) {
         return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
@@ -556,8 +556,8 @@ class PerifericosModule {
   async handleEstado(data) {
     try {
       if (!data?.nombre) {
-        this._logError('perifericos.ui.status.validation_failed', { missing: 'nombre' }, 'ui_status', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'nombre es requerido', { field: 'nombre' });
+        this._logError('perifericos.ui.status.validation_failed', { missing: 'nombre' }, 'ui_status', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       if (!this.provider) {
         return this._errorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'Provider de perifericos no disponible');
@@ -627,8 +627,8 @@ class PerifericosModule {
   async handleListarPorCapacidad(data) {
     try {
       if (!data?.capacidad) {
-        this._logError('perifericos.ui.list_by_cap.validation_failed', { missing: 'capacidad' }, 'ui_list_by_capacidad', 'VALIDATION_FAILED');
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        this._logError('perifericos.ui.list_by_cap.validation_failed', { missing: 'capacidad' }, 'ui_list_by_capacidad', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT',
           'capacidad es requerida (imprimir, display, abrir-cajon, etc.)',
           { field: 'capacidad' });
       }
@@ -640,8 +640,8 @@ class PerifericosModule {
         capacidad: data.capacidad, _context: { logger: this.logger }
       });
       if (!result.success) {
-        this._logError('perifericos.ui.list_by_cap.failed', { capacidad: data.capacidad, error: result.error }, 'ui_list_by_capacidad', 'INTERNAL_ERROR');
-        return this._errorResponse(500, 'INTERNAL_ERROR', result.error);
+        this._logError('perifericos.ui.list_by_cap.failed', { capacidad: data.capacidad, error: result.error }, 'ui_list_by_capacidad', 'UNKNOWN_ERROR');
+        return this._errorResponse(500, 'UNKNOWN_ERROR', result.error);
       }
 
       const dispositivos = [];
@@ -689,7 +689,7 @@ class PerifericosModule {
       this.logger.info('perifericos.autodiscovery.iniciado', { topics });
     } catch (err) {
       this.logger.error('perifericos.autodiscovery.subscribe_error', { error: err.message });
-      this.metrics?.increment('perifericos.errors', { kind: 'mqtt_subscribe', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('perifericos.errors', { kind: 'mqtt_subscribe', code: 'UNKNOWN_ERROR' });
     }
   }
 
@@ -767,7 +767,7 @@ class PerifericosModule {
       this.logger.error('perifericos.autodiscovery.registro_error', {
         device_id: deviceId, error: err.message
       });
-      this.metrics?.increment('perifericos.errors', { kind: 'autodiscovery', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('perifericos.errors', { kind: 'autodiscovery', code: 'UNKNOWN_ERROR' });
     }
   }
 
@@ -783,10 +783,10 @@ class PerifericosModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code   = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED'      ? 400 :
+    const status = code === 'INVALID_INPUT'      ? 400 :
                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT'               ? 409 :
+                   code === 'PERMISSION_DENIED' ? 403 :
+                   code === 'CONFLICT_STATE'               ? 409 :
                    code === 'EXTERNAL_API_FAILED'    ? 502 :
                    code === 'DEPENDENCY_UNAVAILABLE' ? 503 : 500;
     const message = err.message || String(err);
@@ -798,11 +798,11 @@ class PerifericosModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('no encontrado'))                     return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden'))                      return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('conflict') || msg.includes('already exists'))                     return 'CONFLICT';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden'))                      return 'PERMISSION_DENIED';
+    if (msg.includes('conflict') || msg.includes('already exists'))                     return 'CONFLICT_STATE';
     if (msg.includes('timeout'))                                                        return 'TIMEOUT';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -823,7 +823,7 @@ class PerifericosModule {
       return payload;
     } catch {
       this.logger.warn('perifericos.mqtt.parse_error', { source });
-      this.metrics?.increment('perifericos.errors', { kind: 'mqtt_parse', code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('perifericos.errors', { kind: 'mqtt_parse', code: 'INVALID_INPUT' });
       return null;
     }
   }

@@ -129,7 +129,7 @@ Y deprecar `observe` como genérico. Esto elimina los helpers defensivos en cada
 
 ### F5 — Validación de payload de eventos de bus es manual
 
-`_validateRequest` valida el payload de `llm.complete.request` a mano (request_id string, messages array no vacío, longitudes máximas). Si llega malformado, devuelve `VALIDATION_FAILED`.
+`_validateRequest` valida el payload de `llm.complete.request` a mano (request_id string, messages array no vacío, longitudes máximas). Si llega malformado, devuelve `INVALID_INPUT`.
 
 Pero `subscribes` en `module.json` NO admite `request_schema_ref` — no hay forma declarativa de pedir al bus que valide ANTES de invocar el handler.
 

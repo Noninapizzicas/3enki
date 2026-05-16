@@ -171,7 +171,7 @@
   "prohibido": [
     {
       "id": "operacion_de_dominio_sin_project_id",
-      "regla": "Ningún handler de operación de dominio se ejecuta si project_id falta del payload (en multi-tenant real; en single-tenant null permitido). Rechaza con AUTHORIZATION_REQUIRED si falta cuando es obligatorio.",
+      "regla": "Ningún handler de operación de dominio se ejecuta si project_id falta del payload (en multi-tenant real; en single-tenant null permitido). Rechaza con PERMISSION_DENIED si falta cuando es obligatorio.",
       "enforce": "Auditoría de cada handler que toca datos de dominio: si lee/escribe sin validar project_id presente, drift. Severidad warning durante single-tenant; ERROR cuando se active multi-tenant."
     },
     {
@@ -322,7 +322,7 @@
     "naming": "project_id y user_id son nombres canónicos definidos en glossary.json (cuando se añadan al glossary global). Naming no introduce reglas adicionales.",
     "glossary": "project_id, user_id, tenancy son términos cross-módulo — su forma canónica vive en glossary.json (a actualizar como derivación de este contrato).",
     "events": "Hereda los principios generales. Este contrato concreta que el shape de los eventos de dominio incluye project_id + user_id como campos canónicos del payload.",
-    "errors": "AUTHORIZATION_REQUIRED es el código canónico cuando una operación se rechaza por falta de scope. CREDENTIAL_NOT_FOUND aplica si la sesión del usuario no resuelve.",
+    "errors": "PERMISSION_DENIED es el código canónico cuando una operación se rechaza por falta de scope. CREDENTIAL_NOT_FOUND aplica si la sesión del usuario no resuelve.",
     "observability": "Cada log y métrica con scope incluye labels project_id + user_id. observability.contract aplica el patrón general; este contrato lo concreta para tenancy.",
     "lifecycle": "Los módulos cargan sin scope concreto (a nivel de proceso). El scope se aplica por evento — no se cargan N instancias del módulo, una por proyecto. Esto preserva la simplicidad del lifecycle.",
     "persistence": "El aislamiento absoluto entre módulos (persistence.contract) se complementa con aislamiento por project_id dentro del storage de cada módulo. Coherente con persistence.patrones_canonicos: sqlite-per-project, json-file-per-project.",
@@ -342,7 +342,7 @@
       "fases_de_implementacion": [
         "1. Migrar schemas chat-flow/_common.schema.json y agent-flow/_common.schema.json: project_id type 'string' minLength 1 (retirar 'null'). Validators detectaran payloads viejos como drift hasta que se actualicen.",
         "2. Bootstrap: al primer arranque del repo, crear proyecto 'default' y una conversacion inicial. Single-user usa esos por defecto hasta que el usuario cree algo distinto.",
-        "3. Migrar chat-io.handleSend para rechazar publish si project_id o conversation_id faltan (responde con AUTHORIZATION_REQUIRED al frontend). El frontend NO debe permitir llegar a ese caso — esto es defensa en profundidad.",
+        "3. Migrar chat-io.handleSend para rechazar publish si project_id o conversation_id faltan (responde con PERMISSION_DENIED al frontend). El frontend NO debe permitir llegar a ese caso — esto es defensa en profundidad.",
         "4. Frontend implementa system_panel emergente 'setup_required': si el usuario abre el frame sin proyecto/conversacion activos, panel <33vh con UI para crear o seleccionar. Input del chat deshabilitado hasta resolverlo.",
         "5. agent-observer: retirar el if(!data.conversation_id) return — siempre habra conversation_id, las cards agent_intervention siempre se renderizan.",
         "6. Pizzepos consumers (carta-digital, etc.): propagar project_id y conversation_id desde el evento que dispara el publish de agent.execute.request. Cuando el disparador es cron sin conversation, usar la conversation 'system' canonica del proyecto."

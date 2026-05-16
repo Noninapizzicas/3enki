@@ -310,7 +310,7 @@ async function testAsync(description, fn) {
       ['500 Internal Server Error', 'UPSTREAM_5XX'],
       ['ECONNREFUSED', 'UPSTREAM_UNREACHABLE'],
       ['unexpected token < in JSON', 'UPSTREAM_INVALID_RESPONSE'],
-      ['weird unknown', 'INTERNAL_ERROR']
+      ['weird unknown', 'UNKNOWN_ERROR']
     ];
     for (const [msg, expected] of cases) {
       const got = m._classifyLlmError(msg).code;

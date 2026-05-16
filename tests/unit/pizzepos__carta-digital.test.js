@@ -415,7 +415,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EACCES' })), 'PERMISSION_DENIED');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
     assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EIO' })), 'FILESYSTEM_ERROR');
-    assert.strictEqual(m._classifyHandlerError(new Error('weird')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('weird')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

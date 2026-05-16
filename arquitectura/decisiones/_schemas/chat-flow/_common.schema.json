@@ -108,7 +108,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["code", "message"],
-      "description": "Error canonico segun errors.contract. code en codes_infrastructure (UPSTREAM_*, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR, etc.).",
+      "description": "Error canonico segun errors.contract. code en codes_infrastructure (UPSTREAM_*, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR, etc.).",
       "properties": {
         "code":    { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*[A-Z0-9]$" },
         "message": { "type": "string", "minLength": 1 },

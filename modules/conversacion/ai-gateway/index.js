@@ -369,7 +369,7 @@ class AiGatewayModule {
         if (unsub) unsub();
         if (data.error) {
           // Preservar el shape canonico errors.contract { code, message, details? }.
-          // Si solo viene message string, envolver con INTERNAL_ERROR.
+          // Si solo viene message string, envolver con UNKNOWN_ERROR.
           const raw = data.error;
           const errObj = (typeof raw === 'object' && raw !== null)
             ? { code: raw.code || 'UNKNOWN_ERROR', message: raw.message || String(raw), details: raw.details }
@@ -462,7 +462,7 @@ class AiGatewayModule {
           // Preservar el shape canonico errors.contract { code, message, details? }
           // — antes solo se preservaba message, lo que falseaba TODO el diagnostico
           // (errores semanticos como RESOURCE_NOT_FOUND quedaban indistinguibles
-          // de bugs INTERNAL_ERROR genericos).
+          // de bugs UNKNOWN_ERROR genericos).
           toolResults.push({
             tool_call_id: tc.id, name: tc.name, args,
             status: 'error',
@@ -487,7 +487,7 @@ class AiGatewayModule {
       workingMessages.push(assistantTurn);
       // Formato del tool_result visible al LLM. Incluir el error.code es
       // critico para que el LLM distinga errores semanticos (RESOURCE_NOT_FOUND,
-      // INVALID_INPUT) de bugs internos (INTERNAL_ERROR) y decida si reintentar
+      // INVALID_INPUT) de bugs internos (UNKNOWN_ERROR) y decida si reintentar
       // con args distintos, mencionarlo al usuario o cambiar de via.
       const formatErr = (e) => {
         if (e == null) return 'Error: (sin detalle)';
@@ -584,7 +584,7 @@ class AiGatewayModule {
       };
       if (Array.isArray(llmResult.tool_calls_executed) && llmResult.tool_calls_executed.length > 0) {
         // Propagar el shape canonico de error errors.contract en lugar de
-        // hardcodear INTERNAL_ERROR (drift anterior que invisibilizaba
+        // hardcodear UNKNOWN_ERROR (drift anterior que invisibilizaba
         // RESOURCE_NOT_FOUND, INVALID_INPUT, AGENT_NOT_FOUND, etc).
         payload.tool_calls_executed = llmResult.tool_calls_executed
           .map(t => {
@@ -824,11 +824,11 @@ class AiGatewayModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'      ? 400 :
+    const status  = code === 'INVALID_INPUT'      ? 400 :
                     code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                    code === 'CONFLICT'               ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
+                    code === 'PERMISSION_DENIED' ? 403 :
+                    code === 'CONFLICT_STATE'               ? 409 :
+                    code === 'UPSTREAM_UNREACHABLE'   ? 503 :
                                                         500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code });
@@ -838,9 +838,9 @@ class AiGatewayModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('unavailable') || msg.includes('not available')) return 'UPSTREAM_UNAVAILABLE';
+    if (msg.includes('required') || msg.includes('invalid')) return 'INVALID_INPUT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
+    if (msg.includes('unavailable') || msg.includes('not available')) return 'UPSTREAM_UNREACHABLE';
     return 'UNKNOWN_ERROR';
   }
 

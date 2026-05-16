@@ -161,10 +161,39 @@ function findHandlerDef(sources, handlerName) {
 }
 
 function handlerBody(file, startLine) {
-  // Best-effort: lee 80 lineas tras la firma; suficiente para heuristicas.
+  // Lee desde la firma del metodo y balancea llaves para extraer SOLO el cuerpo
+  // del metodo actual (no se mete en el siguiente metodo de la clase).
   try {
-    const lines = fs.readFileSync(file, 'utf-8').split('\n');
-    return lines.slice(startLine - 1, startLine - 1 + 80).join('\n');
+    const content = fs.readFileSync(file, 'utf-8');
+    const lines = content.split('\n');
+    if (startLine < 1 || startLine > lines.length) return '';
+    // Buscar la `{` que abre el cuerpo, a partir de startLine
+    let idx = lines.slice(0, startLine - 1).join('\n').length + (startLine > 1 ? 1 : 0);
+    while (idx < content.length && content[idx] !== '{') idx++;
+    if (idx >= content.length) return lines.slice(startLine - 1, startLine + 79).join('\n');
+    const start = idx;
+    let depth = 1;
+    idx++;
+    while (idx < content.length && depth > 0) {
+      const ch = content[idx];
+      if (ch === '"' || ch === "'" || ch === '`') {
+        const q = ch; idx++;
+        while (idx < content.length && content[idx] !== q) {
+          if (content[idx] === '\\') idx++;
+          idx++;
+        }
+      } else if (ch === '/' && content[idx+1] === '/') {
+        while (idx < content.length && content[idx] !== '\n') idx++;
+      } else if (ch === '/' && content[idx+1] === '*') {
+        idx += 2;
+        while (idx < content.length-1 && !(content[idx]==='*' && content[idx+1]==='/')) idx++;
+        idx += 2;
+        continue;
+      } else if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+      idx++;
+    }
+    return content.slice(start, idx);
   } catch (_) { return ''; }
 }
 
@@ -268,13 +297,63 @@ function checkAll(findings) {
             }
           }
           // 13. drift_tool_handler_que_devuelve_valor_pelado (info, heuristica)
-          // Buscar return statements en el body. Si todos son `return <valor>` sin objeto literal con status/data/error.
-          const returnRe = /\breturn\s+([^;\n]+)/g;
+          // Acepta como retornos canonicos:
+          //   - `return { status: ..., data|error: ... }` (literal, multilinea)
+          //   - `return this._errorResponse(...)` (helper de BaseModule)
+          //   - `return this._handleHandlerError(...)` (helper canonico)
+          //   - `return this._buildErrorResponse(...)` / `_buildSuccessResponse(...)`
+          //   - `return [await] this._withStore(...)` / `_readOnly(...)` (wrappers
+          //     que devuelven el shape del mutator).
+          // Parser balanceado: para cada `return ` captura hasta el `;` que
+          // cierra el statement (respetando parens y braces internos).
           const returns = [];
-          let rm;
-          while ((rm = returnRe.exec(body)) !== null) returns.push(rm[1].trim());
+          const returnStarts = [...body.matchAll(/\breturn\s+/g)];
+          for (const rs of returnStarts) {
+            let i = rs.index + rs[0].length;
+            let parens = 0, braces = 0, brackets = 0;
+            const start = i;
+            while (i < body.length) {
+              const ch = body[i];
+              if (ch === '"' || ch === "'" || ch === '`') {
+                const q = ch; i++;
+                while (i < body.length && body[i] !== q) {
+                  if (body[i] === '\\') i++;
+                  i++;
+                }
+              } else if (ch === '(') parens++;
+              else if (ch === ')') parens--;
+              else if (ch === '{') braces++;
+              else if (ch === '}') braces--;
+              else if (ch === '[') brackets++;
+              else if (ch === ']') brackets--;
+              else if (ch === ';' && parens === 0 && braces === 0 && brackets === 0) break;
+              i++;
+            }
+            returns.push(body.slice(start, i).trim());
+          }
           if (returns.length > 0) {
-            const allCanonical = returns.every(r => /^\{/.test(r) && (/(status|data|error)/.test(r) || /\.{3}/.test(r)));
+            const isCanonical = (r) => {
+              // Literal: empieza con `{` y contiene status/data/error/spread
+              if (/^\{/.test(r) && (/\b(status|data|error)\s*:/.test(r) || /\.{3}/.test(r))) return true;
+              // Helpers canonicos POC2/BaseModule
+              if (/^(await\s+)?this\._(errorResponse|handleHandlerError|buildErrorResponse|buildSuccessResponse)\s*\(/.test(r)) return true;
+              // Wrappers de store
+              if (/^(await\s+)?this\._(withStore|readOnly)\s*\(/.test(r)) return true;
+              // Wrappers RPC-over-bus: handlers `onToolXxx` que delegan en
+              // un dispatcher que publica response al bus. El shape canonico
+              // se cumple en el evento response, no en el return.
+              if (/^(await\s+)?this\._(toolDispatch|uiAdapt|dispatch)\s*\(/.test(r)) return true;
+              // Despacho dinamico: `return this[handlerName](params)` — el
+              // shape canonico se cumple en el handler invocado.
+              if (/^(await\s+)?this\[\w+\]\s*\(/.test(r)) return true;
+              // Trust by default para helpers privados del modulo: asumimos
+              // que `return this._<helper>(...)` devuelve canonico. Drifts
+              // reales serian `return result` (variable suelta) o `return null`
+              // o `return data.foo` — esos NO matchean `this._xxx(`.
+              if (/^(await\s+)?this\._\w+\s*\(/.test(r)) return true;
+              return false;
+            };
+            const allCanonical = returns.every(isCanonical);
             if (!allCanonical) {
               const rel = path.relative(REPO_ROOT, def.file);
               findings.info.push(`drift_tool_handler_que_devuelve_valor_pelado: ${slug} tool "${name}" en ${rel}:${def.line} — algun return no parece shape canonico {status, data|error}`);

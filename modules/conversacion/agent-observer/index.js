@@ -12,6 +12,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const BaseModule = require('../../_shared/base-module');
 
 const STEP_LABELS = {
   started:    'iniciando',
@@ -25,13 +26,11 @@ const STEP_LABELS = {
 const DEFAULT_SUMMARY_MAX_CHARS = 280;
 const DEFAULT_MIN_PROGRESS_STEP = 'thinking';
 
-class AgentObserverModule {
+class AgentObserverModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'agent-observer';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.openCards = new Map();
   }
@@ -57,11 +56,7 @@ class AgentObserverModule {
   // Helpers POC2
   // ============================================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details !== undefined) error.details = details;
-    return { status, error };
-  }
+  // _errorResponse heredado de BaseModule
 
   _classifyHandlerError(err) {
     const msg = err?.message || String(err);

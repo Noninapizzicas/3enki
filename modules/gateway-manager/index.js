@@ -38,6 +38,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const BaseModule = require('../_shared/base-module');
 
 const GatewayTCP = require('./gateways/tcp');
 const GatewayBLE = require('./gateways/ble');
@@ -60,14 +61,11 @@ const DEFAULT_CONFIG = {
   cmd: { enabled: false, autodiscovery: false, manual_devices: [] }
 };
 
-class GatewayManagerModule {
+class GatewayManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'gateway-manager';
     this.version = '2.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
 
     this.config = { gateways: { ...DEFAULT_CONFIG } };
 
@@ -377,11 +375,7 @@ class GatewayManagerModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
+  // _errorResponse heredado de BaseModule
 
   _handleHandlerError(logEvent, err, kind) {
     const code    = err._code || this._classifyHandlerError(err);
@@ -406,15 +400,7 @@ class GatewayManagerModule {
     return 'INTERNAL_ERROR';
   }
 
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
+  // _publicarEvento heredado de BaseModule
 
   async _instantiateGateway(GatewayClass, gatewayConfig, mqtt) {
     return new GatewayClass(gatewayConfig, {

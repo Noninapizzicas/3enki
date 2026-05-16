@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-16T10:41:24.709Z",
+  "generated_at": "2026-05-16T12:21:26.685Z",
   "total": 2377,
   "by_validator": {
     "naming": 49,
@@ -1375,8 +1375,8 @@
     "lifecycle|drift_signature_no_canonica|certificate-authority modules/certificate-authority/index.js:66 — método prohibido \"initialize\" (usar onLoad/onUnload)",
     "lifecycle|drift_signature_no_canonica|escandallo modules/escandallo/index.js:94 — método prohibido \"initialize\" (usar onLoad/onUnload)",
     "lifecycle|drift_signature_no_canonica|facturacion/fuentes modules/facturacion/fuentes/index.js:56 — método prohibido \"init\" (usar onLoad/onUnload)",
-    "lifecycle|drift_signature_no_canonica|gateway-manager modules/gateway-manager/index.js:136 — método prohibido \"stop\" (usar onLoad/onUnload)",
-    "lifecycle|drift_signature_no_canonica|gateway-manager modules/gateway-manager/index.js:178 — método prohibido \"start\" (usar onLoad/onUnload)",
+    "lifecycle|drift_signature_no_canonica|gateway-manager modules/gateway-manager/index.js:134 — método prohibido \"stop\" (usar onLoad/onUnload)",
+    "lifecycle|drift_signature_no_canonica|gateway-manager modules/gateway-manager/index.js:176 — método prohibido \"start\" (usar onLoad/onUnload)",
     "lifecycle|drift_signature_no_canonica|log-manager modules/log-manager/index.js:100 — método prohibido \"stop\" (usar onLoad/onUnload)",
     "lifecycle|drift_signature_no_canonica|log-manager modules/log-manager/index.js:47 — método prohibido \"init\" (usar onLoad/onUnload)",
     "lifecycle|drift_signature_no_canonica|log-manager modules/log-manager/index.js:64 — método prohibido \"start\" (usar onLoad/onUnload)",
@@ -1851,7 +1851,7 @@
     "observability|drift_log_spam_en_bucle|channel-manager modules/channel-manager/index.js:203 — bucle con this.logger en línea 207",
     "observability|drift_log_spam_en_bucle|code-executor modules/code-executor/index.js:42 — bucle con this.logger en línea 46",
     "observability|drift_log_spam_en_bucle|conversacion/ai-agent-framework modules/conversacion/ai-agent-framework/index.js:218 — bucle con this.logger en línea 222",
-    "observability|drift_log_spam_en_bucle|conversacion/prompt-builder modules/conversacion/prompt-builder/index.js:180 — bucle con this.logger en línea 183",
+    "observability|drift_log_spam_en_bucle|conversacion/prompt-builder modules/conversacion/prompt-builder/index.js:179 — bucle con this.logger en línea 182",
     "observability|drift_log_spam_en_bucle|database-manager modules/database-manager/index.js:87 — bucle con this.logger en línea 91",
     "observability|drift_log_spam_en_bucle|device-registry modules/device-registry/index.js:149 — bucle con this.logger en línea 150",
     "observability|drift_log_spam_en_bucle|device-registry modules/device-registry/index.js:617 — bucle con this.logger en línea 621",

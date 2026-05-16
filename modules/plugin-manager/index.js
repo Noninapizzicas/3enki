@@ -37,9 +37,11 @@
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
+const BaseModule = require('../_shared/base-module');
 
-class PluginManagerModule {
+class PluginManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'plugin-manager';
     this.version = '2.1.0';
 
@@ -47,9 +49,6 @@ class PluginManagerModule {
     this.pluginsPath   = null;
     this.watchInterval = null;
 
-    this.logger   = null;
-    this.metrics  = null;
-    this.eventBus = null;
     this.config   = null;
 
     this.internalCounters = {
@@ -437,11 +436,7 @@ class PluginManagerModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
+  // _errorResponse heredado de BaseModule
 
   _handleHandlerError(logEvent, err, kind) {
     const code    = err._code || this._classifyHandlerError(err);
@@ -458,23 +453,8 @@ class PluginManagerModule {
     return this._errorResponse(status, code, message, err._details);
   }
 
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
-    if (msg.includes('already')) return 'CONFLICT';
-    return 'INTERNAL_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
+  // _classifyHandlerError heredado de BaseModule (superset estricto del local)
+  // _publicarEvento heredado de BaseModule
 
   _readPluginFile(filePath) {
     const content = fs.readFileSync(filePath, 'utf-8');

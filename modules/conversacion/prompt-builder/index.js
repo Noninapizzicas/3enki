@@ -40,14 +40,13 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const BaseModule = require('../../_shared/base-module');
 
-class PromptBuilderModule {
+class PromptBuilderModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'prompt-builder';
     this.version = '2.0.0';
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
 
     this._modulesDir = null;
     this._base = null;                  // base.prompt.json
@@ -394,11 +393,7 @@ class PromptBuilderModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
+  // _errorResponse heredado de BaseModule
 
   _handleHandlerError(logEvent, err, kind) {
     const code    = err._code || this._classifyHandlerError(err);
@@ -422,12 +417,7 @@ class PromptBuilderModule {
     return 'INTERNAL_ERROR';
   }
 
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = { timestamp: new Date().toISOString(), ...payload };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
+  // _publicarEvento heredado de BaseModule (equivalente: payload spread sobre timestamp+correlation_id)
 }
 
 module.exports = PromptBuilderModule;

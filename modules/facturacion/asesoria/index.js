@@ -16,19 +16,17 @@ const path = require('path');
 const fs = require('fs');
 const ServiceExecutor = require('../../../core/service-executor');
 
+const BaseModule = require('../../_shared/base-module');
 const CSV_COLUMNS = [
   'Fecha', 'Num_Factura', 'NIF_Emisor', 'Nombre_Emisor', 'Concepto',
   'Base_Imponible', 'Tipo_IVA', 'Cuota_IVA', 'Total', 'Forma_Pago', 'Archivo_Origen'
 ];
 
-class AsesoriaModule {
+class AsesoriaModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'asesoria';
     this.version = '2.0.0';
-
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.services = null;
     this.config = {
       csv: { separator: ';', decimal: ',', bom: true },

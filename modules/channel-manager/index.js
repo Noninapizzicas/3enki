@@ -43,17 +43,15 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const VALID_CHANNEL_TYPES = ['telegram', 'gmail', 'whatsapp', 'glovo', 'web'];
 const DEFAULT_DB_TIMEOUT_MS = 10000;
 
-class ChannelManagerModule {
+class ChannelManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'channel-manager';
     this.version = '2.0.0';
-
-    this.logger   = null;
-    this.metrics  = null;
-    this.eventBus = null;
     this.config   = null;
 
     this.cache = new Map();

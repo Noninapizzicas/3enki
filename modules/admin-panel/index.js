@@ -17,14 +17,16 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
+const BaseModule = require('../_shared/base-module');
 const UI_ACTIONS = [
   'dashboard', 'modules', 'plugins', 'plugin-toggle',
   'agents', 'agent-create', 'agent-delete',
   'prompts', 'prompt-get', 'prompt-create', 'prompt-update', 'health'
 ];
 
-class AdminPanelModule {
+class AdminPanelModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'admin-panel';
     this.version = '2.0.0';
 
@@ -37,9 +39,6 @@ class AdminPanelModule {
     };
 
     this.core = null;
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.config = {};
     this.coreConfig = {};
   }

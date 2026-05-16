@@ -14,16 +14,14 @@
 const fs = require('fs').promises;
 const path = require('path');
 
+const BaseModule = require('../../_shared/base-module');
 const CANALES_VALIDOS = ['mesa', 'llevar', 'telefono', 'whatsapp', 'glovo', 'llevadoo'];
 
-class TarifasModule {
+class TarifasModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'tarifas';
     this.version = '3.1.0';
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     this.configPerProject = new Map();
     this.projectPaths = new Map();
     this._lastActiveProjectId = null;

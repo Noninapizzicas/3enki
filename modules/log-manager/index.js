@@ -7,18 +7,17 @@ const crypto = require('crypto');
 const LogStorage = require('./lib/storage');
 const LogCollector = require('./lib/collector');
 const SessionLogger = require('./lib/session');
+const BaseModule = require('../_shared/base-module');
 const { listSessions, readSessionLogs } = require('./lib/session');
 
-class LogManagerModule {
+class LogManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'log-manager';
     this.version = '2.1.0';
     this.storage = null;
     this.collector = null;
     this.session = null;
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.config = null;
     this.cleanupInterval = null;
   }

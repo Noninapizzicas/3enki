@@ -5,6 +5,7 @@ const fs = require('fs').promises;
 const crypto = require('crypto');
 const TelegramClient = require('./services/telegram-client');
 
+const BaseModule = require('../_shared/base-module');
 const EVENTS = {
   TEXT_RECEIVED:     'telegram.text.received',
   PHOTO_RECEIVED:    'telegram.photo.received',
@@ -27,14 +28,11 @@ const EVENTS = {
 // Credential pattern: TELEGRAM_API_KEY_{BOT|CUSTOM}_{botName}
 const CREDENTIAL_PATTERN = /^TELEGRAM_API_KEY_(?:BOT|CUSTOM)_(.+)$/;
 
-class TelegramServiceModule {
+class TelegramServiceModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'telegram-service';
     this.version = '3.1.0';
-
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.config = null;
 
     this.bots = new Map();

@@ -27,18 +27,15 @@ const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const KNOWN_ALERT_TYPES = ['offline', 'reconnect_loop', 'ota_failed'];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-class DeviceHealthModule {
+class DeviceHealthModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'device-health';
     this.version = '2.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.config = {
       offline_threshold_min:     5,
       reconnect_loop_threshold:  5,

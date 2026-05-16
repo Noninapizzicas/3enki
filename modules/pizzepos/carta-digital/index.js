@@ -18,18 +18,15 @@ const fs     = require('fs').promises;
 const path   = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 const COMPOSER_AGENT     = 'cartadigital-composer';
 
-class CartaDigitalModule {
+class CartaDigitalModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'carta-digital';
     this.version = '3.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.configPerProject     = new Map();
     this.projectPaths         = new Map();
     this.cartaCompuestaCache  = new Map();

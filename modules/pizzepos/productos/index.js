@@ -13,15 +13,14 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 
-class ProductosModule {
+const BaseModule = require('../../_shared/base-module');
+class ProductosModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'productos';
     this.version = '3.0.0';
 
     // Dependencias (inyectadas en onLoad)
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
     this.config = {};
 

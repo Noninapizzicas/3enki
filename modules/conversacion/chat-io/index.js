@@ -48,6 +48,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY,
@@ -83,14 +84,11 @@ const isUUID = (s) => typeof s === 'string' && UUID_REGEX.test(s);
 const defaultSettings = () => ({ context_window: 20, temperature: 0.7, max_tokens: 2000 });
 const DB_TIMEOUT_MS = 10000;
 
-class ChatIoModule {
+class ChatIoModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'chat-io';
     this.version = '2.0.0';
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
     this.mqtt      = null;
 
     this.pendingDb           = new Map();

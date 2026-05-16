@@ -30,16 +30,14 @@ const fs     = require('fs').promises;
 const path   = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 
-class PersistenciaComanderoModule {
+class PersistenciaComanderoModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'persistencia-comandero';
     this.version = '4.0.0';
-
-    this.eventBus  = null;
-    this.logger    = null;
-    this.metrics   = null;
     this.uiHandler = null;
     this.config    = {};
 

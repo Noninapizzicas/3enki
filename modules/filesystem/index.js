@@ -53,20 +53,18 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const TEXT_EXTS = ['.txt', '.md', '.json', '.js', '.ts', '.html', '.css', '.yaml', '.yml', '.xml', '.csv', '.log'];
 const BINARY_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.zip', '.tar', '.gz'];
 const MAX_READ_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_SEARCH_RESULTS = 100;
 
-class FilesystemModule {
+class FilesystemModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'filesystem';
     this.version = '2.0.0';
     this.basePath = path.join(process.cwd(), 'data');
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
     this.uiHandler = null;
 
     this.activeProjectId = null;

@@ -11,19 +11,19 @@
 
 'use strict';
 
+const BaseModule = require('../_shared/base-module');
+
 const DEFAULT_BUFFER_SIZE = 1000;
 const DEFAULT_LOGS_INITIAL = 50;
 const DEFAULT_EVENTS_INITIAL = 20;
 
-class DashboardModule {
+class DashboardModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'dashboard';
     this.version = '3.0.0';
 
     this.core = null;
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.discovery = null;
 
     this.logBuffer = [];

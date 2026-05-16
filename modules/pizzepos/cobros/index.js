@@ -11,15 +11,14 @@ const addFormats = require('ajv-formats');
 const cobroSchema = require('./schemas/cobro.json');
 const eventsSchema = require('./schemas/events.json');
 
-class CobrosModule {
+const BaseModule = require('../../_shared/base-module');
+class CobrosModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'cobros';
     this.version = '3.0.0';
 
     // Dependencias (inyectadas en onLoad)
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
     this.config = {};
 

@@ -20,20 +20,18 @@ const fs     = require('fs').promises;
 const path   = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const SLOT_TYPES  = ['system', 'context', 'prefix', 'suffix', 'format'];
 const SLOT_ICONS  = { system: 'system', context: 'context', prefix: 'prefix', suffix: 'suffix', format: 'format' };
 const GLOBAL_PROJECT_ID = '_prompts';
 const DB_TIMEOUT_MS     = 10000;
 const SCHEMA_TIMEOUT_MS = 5000;
 
-class PromptManagerModule {
+class PromptManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'prompt-manager';
     this.version = '3.0.0';
-
-    this.logger    = null;
-    this.eventBus  = null;
-    this.metrics   = null;
     this.config    = null;
     this.uiHandler = null;
 

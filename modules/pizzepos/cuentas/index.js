@@ -25,6 +25,7 @@ const path   = require('path');
 const fs     = require('fs').promises;
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID  = 'default';
 const ALERTA_PENDIENTE_MS = 30 * 60 * 1000;
 const POST_COBRADO_MS     = 5 * 60 * 1000;
@@ -44,8 +45,9 @@ const TRANSICIONES_VALIDAS = {
   cobrado:        []
 };
 
-class CuentasModule {
+class CuentasModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'cuentas';
     this.version = '3.0.0';
 
@@ -59,10 +61,6 @@ class CuentasModule {
     this._turnoSaveTimer = null;
 
     this._metricsInterval = null;
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
   }
 
   static SIMBOLOS = {

@@ -3,6 +3,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const BaseModule = require('../_shared/base-module');
 const { execSync } = require('child_process');
 
 const { EVENTS } = require('../../core/constants');
@@ -14,13 +15,11 @@ const CODE_TO_STATUS = {
   FILESYSTEM_ERROR: 500, UNKNOWN_ERROR: 500,
 };
 
-class PdfViewerModule {
+class PdfViewerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'pdf-viewer';
     this.version = '2.0.0';
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.config = null;
     this.cache = new Map();
     this.projectPaths = new Map();

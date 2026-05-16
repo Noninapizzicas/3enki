@@ -26,17 +26,15 @@ const crypto = require('crypto');
 const fs     = require('fs').promises;
 const path   = require('path');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 const SAVE_DEBOUNCE_MS   = 1000;
 
-class ComanderoModule {
+class ComanderoModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'comandero';
     this.version = '3.1.0';
-
-    this.eventBus  = null;
-    this.logger    = null;
-    this.metrics   = null;
     this.validator = null;
 
     this.pedidos              = new Map();

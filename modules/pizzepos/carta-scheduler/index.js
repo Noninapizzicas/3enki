@@ -5,6 +5,7 @@ const crypto   = require('crypto');
 const ProjectStorage   = require('./project-storage');
 const PendientesTimer  = require('./pendientes-timer');
 
+const BaseModule = require('../../_shared/base-module');
 /**
  * carta-scheduler POC v2.0.0 — Programacion de cambios de carta multi-tenant.
  *
@@ -19,15 +20,13 @@ const PendientesTimer  = require('./pendientes-timer');
  *  - naming:        language=es, tools con prefix carta-scheduler.* (drift cerrado).
  *  - glossary:      terminos cross-modulo (project_id, regla, pendiente, cambio, canal, carta).
  */
-class CartaSchedulerModule {
+class CartaSchedulerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'carta-scheduler';
     this.version = '3.0.0';
 
     // Inyectados en onLoad
-    this.eventBus    = null;
-    this.logger      = null;
-    this.metrics     = null;
     this.config      = null;
     this.mqttRequest = null;
 

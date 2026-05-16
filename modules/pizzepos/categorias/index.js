@@ -12,17 +12,14 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 
-class CategoriasModule {
+class CategoriasModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'categorias';
     this.version = '3.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.categoriasPerProject = new Map();
   }
 

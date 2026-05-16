@@ -12,6 +12,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const BaseModule = require('../_shared/base-module');
 const { spawn } = require('child_process');
 
 // Boards soportados con sus defaults
@@ -60,16 +61,13 @@ const BOARDS = {
   }
 };
 
-class ESP32DevModule {
+class ESP32DevModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'esp32-dev';
     this.version = '2.0.0';
 
     // Dependencias inyectadas en onLoad
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     // Config
     this.config = {
       data_path: './data/esp32-dev',

@@ -23,19 +23,16 @@ const fs     = require('fs').promises;
 const path   = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 const ARCHITECT_AGENT    = 'impresion-architect';
 const DEBOUNCE_MS        = 5000;
 
-class CartaImpresionModule {
+class CartaImpresionModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'carta-impresion';
     this.version = '3.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.projectPaths   = new Map();
     this.htmlCache      = new Map();
     this.debounceTimers = new Map();

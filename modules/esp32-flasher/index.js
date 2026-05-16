@@ -18,6 +18,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const VALID_FLASH_MODES = ['qio', 'qout', 'dio', 'dout'];
 const VALID_FLASH_FREQS = ['20m', '26m', '40m', '80m'];
 const VALID_PORT_REGEX = /^(\/dev\/tty(USB|ACM|S|AMA)\d+|COM\d+)$/;
@@ -25,15 +26,11 @@ const DEBUG_STREAM_TIMEOUT_MS = 30000;
 const DEBUG_BUFFER_MAX_LINES = 500;
 const DEFAULT_HISTORY_MAX = 200;
 
-class ESP32FlasherModule {
+class ESP32FlasherModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'esp32-flasher';
     this.version = '2.0.0';
-
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     this.config = {
       esptool_path: 'esptool',
       platformio_path: 'platformio',

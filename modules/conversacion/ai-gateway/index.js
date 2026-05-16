@@ -26,12 +26,12 @@ const OllamaProvider    = require('./providers/ollama-provider');
 const ClaudeCliProvider = require('./providers/claude-cli-provider');
 const KimiProvider      = require('./providers/kimi-provider');
 
-class AiGatewayModule {
+const BaseModule = require('../../_shared/base-module');
+class AiGatewayModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'ai-gateway';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
     this.config = null;
     this.moduleLoader = null;
 

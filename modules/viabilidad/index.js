@@ -17,6 +17,7 @@
 'use strict';
 
 const path = require('path');
+const BaseModule = require('../_shared/base-module');
 const fs = require('fs').promises;
 
 const DEFAULT_DIAS_OPERACION = 25;
@@ -25,14 +26,11 @@ const DEFAULT_TICKET_MEDIO = 15;
 const DEFAULT_FOOD_COST_PCT = 33;
 const FOOD_COST_ALTO_PCT = 35;
 
-class ViabilidadModule {
+class ViabilidadModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'viabilidad';
     this.version = '2.0.0';
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     this.configs = new Map();
     this.recetasCache = new Map();
     this.projectPaths = new Map();

@@ -13,6 +13,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS user_profile_facts (
   id TEXT PRIMARY KEY,
@@ -48,13 +49,11 @@ const DEFAULT_PRIORITY = 100;
 const DEFAULT_MAX_FACTS = 200;
 const DEFAULT_MIN_FACT_LENGTH = 4;
 
-class MemoryUserProfileModule {
+class MemoryUserProfileModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'memory-user-profile';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.pendingDb = new Map();
     this.schemaReady = new Set();

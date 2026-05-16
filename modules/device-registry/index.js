@@ -28,15 +28,12 @@ const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 
-class DeviceRegistryModule {
+const BaseModule = require('../_shared/base-module');
+class DeviceRegistryModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'device-registry';
     this.version = '2.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.config = {
       heartbeat_timeout_ms: 90000,
       persist_interval_ms:  30000,

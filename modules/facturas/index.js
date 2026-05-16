@@ -25,18 +25,15 @@ const ServiceExecutor = require('../../core/service-executor');
 const InvoicePipeline = require('./pipeline/invoice-pipeline');
 const PipelineMetrics = require('./pipeline/pipeline-metrics');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 
-class FacturasModule {
+class FacturasModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'facturas';
     this.version = '3.0.0';
-
-    this.logger    = null;
-    this.eventBus  = null;
     this.uiHandler = null;
-    this.metrics   = null;
-
     this.services        = null;
     this.pipeline        = null;
     this.pipelineMetrics = null;

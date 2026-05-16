@@ -15,18 +15,16 @@
 const fs = require('fs').promises;
 const path = require('path');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_SUPPORTED_FORMATS = ['md', 'json', 'txt', 'html', 'css', 'js', 'yaml', 'yml', 'xml'];
 const DEFAULT_MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const DEFAULT_TAB_SIZE = 2;
 
-class TextEditorModule {
+class TextEditorModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'text-editor';
     this.version = '2.0.0';
-
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.config = null;
   }
 

@@ -26,8 +26,10 @@ const fs     = require('fs').promises;
 const path   = require('path');
 const crypto = require('crypto');
 
-class MetricasModule {
+const BaseModule = require('../_shared/base-module');
+class MetricasModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'metricas';
     this.version = '2.0.0';
 
@@ -52,9 +54,6 @@ class MetricasModule {
     this.startTime     = Date.now();
 
     // Inyectados en onLoad
-    this.logger   = null;
-    this.eventBus = null;
-    this.metrics  = null;
   }
 
   // ==========================================

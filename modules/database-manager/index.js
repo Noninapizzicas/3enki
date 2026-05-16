@@ -38,20 +38,18 @@ const fs       = require('fs').promises;
 const fsSync   = require('fs');
 const path     = require('path');
 const crypto   = require('crypto');
+const BaseModule = require('../_shared/base-module');
 const sqlite3  = require('sqlite3').verbose();
 
 const { EVENTS } = require('../../core/constants');
 
 const SYSTEM_PROJECTS = new Set(['system', '_prompts']);
 
-class DatabaseManagerModule {
+class DatabaseManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'database-manager';
     this.version = '3.0.0';
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
     this.config    = null;
 
     // State runtime (NO persistido en archivos declarativos)

@@ -30,19 +30,17 @@
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
+const BaseModule = require('../_shared/base-module');
 const { EVENTS } = require('../../core/constants');
 
 const DEFAULT_DB_TIMEOUT_MS = 10000;
 const DEFAULT_COMPOSITION_TIMEOUT_MS = 10000;
 
-class ProjectManagerModule {
+class ProjectManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'project-manager';
     this.version = '4.0.0';
-
-    this.logger      = null;
-    this.metrics     = null;
-    this.eventBus    = null;
     this.uiHandler   = null;
     this.mqttRequest = null;
     this.config      = null;

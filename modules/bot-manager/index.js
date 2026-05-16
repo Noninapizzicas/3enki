@@ -14,14 +14,12 @@ const BotRegistry = require('./services/bot-registry');
 const DownloadManager = require('./services/download-manager');
 const AutoResponder = require('./services/auto-responder');
 
-class BotManagerModule {
+const BaseModule = require('../_shared/base-module');
+class BotManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'bot-manager';
     this.version = '2.0.0';
-
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
 
     this.registry = null;

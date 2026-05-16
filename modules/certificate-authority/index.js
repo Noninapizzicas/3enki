@@ -19,8 +19,10 @@
 const CAManager = require('./ca-manager');
 const MTLSMiddleware = require('./mtls-middleware');
 
-class CertificateAuthorityModule {
+const BaseModule = require('../_shared/base-module');
+class CertificateAuthorityModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'certificate-authority';
     this.version = '2.0.0';
 
@@ -37,9 +39,6 @@ class CertificateAuthorityModule {
     };
 
     this.core = null;
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
   }
 
   // ==========================================

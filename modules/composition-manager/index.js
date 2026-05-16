@@ -40,19 +40,17 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_DB_TIMEOUT_MS = 10000;
 
 const VALID_LINK_TYPES = ['inspired_by', 'related_to', 'evolved_from'];
 const VALID_DEP_TYPES = ['data', 'code', 'api', 'context'];
 
-class CompositionManagerModule {
+class CompositionManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'composition-manager';
     this.version = '2.0.0';
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
     this.uiHandler = null;
     this.config    = null;
 

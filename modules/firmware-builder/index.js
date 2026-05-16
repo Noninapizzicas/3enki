@@ -42,6 +42,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const BaseModule = require('../_shared/base-module');
 const { spawn } = require('child_process');
 
 const BOARDS = {
@@ -55,15 +56,11 @@ const BOARDS = {
 const MAX_LOG_LINES = 500;
 const CLEAN_TIMEOUT_MS = 60 * 1000;
 
-class FirmwareBuilderModule {
+class FirmwareBuilderModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'firmware-builder';
     this.version = '2.0.0';
-
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     this.config = {
       firmware_path: './firmware/drivers',
       platformio_path: 'platformio',

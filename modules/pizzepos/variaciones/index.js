@@ -8,15 +8,15 @@
  * Consume: producto.creado, comandero.item_agregado
  */
 
-class VariacionesModule {
+const BaseModule = require('../../_shared/base-module');
+
+class VariacionesModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'variaciones';
     this.version = '4.0.0';
 
     // Dependencias (inyectadas en onLoad)
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
 
     // Estado en memoria — solo reglas por producto, NO precios de ingredientes

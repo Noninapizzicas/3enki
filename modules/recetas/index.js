@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 // ============================================================
 // Tools que el LLM puede invocar
 // ============================================================
@@ -28,14 +29,11 @@ const CAMPOS_REQUERIDOS_PARA_COMPLETA = ['ingredientes', 'porciones', 'instrucci
 
 const DEFAULT_PROJECT_ID = 'default';
 
-class RecetasModule {
+class RecetasModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'recetas';
     this.version = '3.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
-
     // project_id → base_path absoluto (cache, poblado por project.activated)
     this.projectBasePaths = new Map();
 

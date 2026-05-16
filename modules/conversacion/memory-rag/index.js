@@ -17,6 +17,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS rag_messages (
   id TEXT PRIMARY KEY,
@@ -43,13 +44,11 @@ const DEFAULT_SNIPPET_MAX_CHARS = 400;
 const DEFAULT_MIN_MSG_LEN = 8;
 const DEFAULT_MAX_INDEX_SIZE = 10000;
 
-class MemoryRagModule {
+class MemoryRagModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'memory-rag';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.pendingDb = new Map();
     this.pendingEmbeddings = new Map();

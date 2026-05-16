@@ -6,13 +6,12 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const crypto = require('crypto');
 
-class CodeExecutorModule {
+const BaseModule = require('../_shared/base-module');
+class CodeExecutorModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'code-executor';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.blockedPatterns = [];
     this.processes = new Map();

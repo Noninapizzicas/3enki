@@ -19,6 +19,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 
 // ==========================================
@@ -58,15 +59,11 @@ const CANAL_ICON = {
   just_eat:  '.', default:   '*'
 };
 
-class ImpresionModule {
+class ImpresionModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'impresion';
     this.version = '4.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
-
     this.config = {
       ancho:           '58mm',
       destino_default: ''

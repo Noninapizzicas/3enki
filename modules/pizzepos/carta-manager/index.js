@@ -4,14 +4,12 @@ const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 
-class CartaManagerModule {
+const BaseModule = require('../../_shared/base-module');
+class CartaManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'carta-manager';
     this.version = '1.1.0';
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     // Multi-tenant: project_id → Map<carta_id, carta>
     this.cartasPerProject = new Map();
     // project_id → { featurePath, storagePath }

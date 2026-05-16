@@ -20,16 +20,14 @@
 const path   = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 
-class PerifericosModule {
+class PerifericosModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'perifericos';
     this.version = '2.0.0';
-
-    this.eventBus = null;
-    this.logger   = null;
-    this.metrics  = null;
     this.provider = null;
 
     this.config = {

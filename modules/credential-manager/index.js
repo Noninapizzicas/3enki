@@ -36,6 +36,7 @@ const fsSync   = require('fs');
 const path     = require('path');
 const crypto   = require('crypto');
 
+const BaseModule = require('../_shared/base-module');
 const PROVIDER_ICONS = {
   OPENAI: '🤖',
   DEEPSEEK: '🔮',
@@ -53,14 +54,11 @@ const PROVIDER_ICONS = {
 
 const VALID_LEVELS = ['GLOBAL', 'PROJECT', 'CLIENT', 'CUSTOM', 'BOT'];
 
-class CredentialManagerModule {
+class CredentialManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'credential-manager';
     this.version = '2.0.0';
-
-    this.logger    = null;
-    this.metrics   = null;
-    this.eventBus  = null;
     this.uiHandler = null;
     this.config    = null;
 

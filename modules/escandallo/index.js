@@ -30,18 +30,16 @@ const crypto = require('crypto');
 const EscandalloManager              = require('./core/escandallo-manager');
 const EscandalloToolResultFormatter = require('./core/tool-result-formatter');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_PROJECT_ID         = 'default';
 const FOOD_COST_UMBRAL_ALERTA    = 35; // %
 const FOOD_COST_UMBRAL_BAJO      = 25; // %
 
-class EscandalloModule {
+class EscandalloModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'escandallo';
     this.version = '3.0.0';
-
-    this.eventBus     = null;
-    this.logger       = null;
-    this.metrics      = null;
     this.moduleLoader = null;
 
     this.cache        = new Map();

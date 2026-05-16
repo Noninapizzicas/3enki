@@ -36,15 +36,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-class FirmwareManagerModule {
+const BaseModule = require('../_shared/base-module');
+class FirmwareManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'firmware-manager';
     this.version = '3.0.0';
-
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     this.config = {
       data_path: './data/firmware',
       auto_check_on_register: true,

@@ -21,19 +21,18 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const DEFAULT_CONVERSATION_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_AGENT_TIMEOUT_MS = 120000;
 const DEFAULT_AGENT_TEMPERATURE = 0.7;
 const DEFAULT_AGENT_MAX_TOKENS = 2000;
 const DEFAULT_RESOLVE_TIMEOUT_MS = 5000;
 
-class AiAgentFrameworkModule {
+class AiAgentFrameworkModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'ai-agent-framework';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.moduleLoader = null;
     this.mqttRequest = null;
     this.config = null;

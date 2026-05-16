@@ -15,14 +15,12 @@ const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 
-class CartaMarketingModule {
+const BaseModule = require('../../_shared/base-module');
+class CartaMarketingModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'carta-marketing';
     this.version = '2.0.0';
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
-
     this.perfilesPerProject = new Map();
     this.projectPaths = new Map();
     this.processedHashes = new Map();

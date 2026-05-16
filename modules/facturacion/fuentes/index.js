@@ -19,14 +19,12 @@ const ServiceExecutor = require('../../../core/service-executor');
 const TelegramStrategy = require('./strategies/telegram');
 const GmailStrategy = require('./strategies/gmail');
 
-class FuentesModule {
+const BaseModule = require('../../_shared/base-module');
+class FuentesModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'fuentes';
     this.version = '2.0.0';
-
-    this.logger = null;
-    this.metrics = null;
-    this.eventBus = null;
     this.services = null;
     this.config = null;
 

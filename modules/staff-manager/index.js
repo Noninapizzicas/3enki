@@ -25,19 +25,17 @@ const EmployeeRegistry = require('./lib/employee-registry');
 const SessionManager   = require('./lib/session-manager');
 const NFCCard          = require('./lib/nfc-card');
 
+const BaseModule = require('../_shared/base-module');
 const DEFAULT_PROJECT_ID = 'default';
 const NTAG215_CAPACITY   = 504;
 
-class StaffManagerModule {
+class StaffManagerModule extends BaseModule {
   constructor() {
+    super();
     this.name    = 'staff-manager';
     this.version = '2.1.0';
 
     this.core     = null;
-    this.logger   = null;
-    this.metrics  = null;
-    this.eventBus = null;
-
     this.registry = null;
     this.sessions = null;
 
@@ -94,7 +92,6 @@ class StaffManagerModule {
     this.registry = null;
     this.sessions = null;
     this.core     = null;
-    this.metrics  = null;
     this.logger?.info('module.unloaded', { module: this.name });
   }
 

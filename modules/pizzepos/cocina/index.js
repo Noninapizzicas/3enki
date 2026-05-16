@@ -18,6 +18,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 
+const BaseModule = require('../../_shared/base-module');
 const TIPOS_ESTACION = {
   general: {
     id: 'general',
@@ -50,14 +51,11 @@ const UI_ACTIONS = [
   'list-devices', 'list-station-types', 'list-displays'
 ];
 
-class CocinaModule {
+class CocinaModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'cocina';
     this.version = '3.2.0';
-
-    this.eventBus = null;
-    this.logger = null;
-    this.metrics = null;
     this.uiHandler = null;
     this.validator = null;
     this.config = null;

@@ -11,6 +11,7 @@
 
 const crypto = require('crypto');
 
+const BaseModule = require('../../_shared/base-module');
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversation_summaries (
   conversation_id TEXT PRIMARY KEY,
@@ -29,13 +30,11 @@ const DEFAULT_PRIORITY = 200;
 const DEFAULT_THRESHOLD = 20;
 const DEFAULT_SUMMARY_MAX_CHARS = 800;
 
-class MemoryConversationSummaryModule {
+class MemoryConversationSummaryModule extends BaseModule {
   constructor() {
+    super();
     this.name = 'memory-conversation-summary';
     this.version = '2.0.0';
-    this.logger = null;
-    this.eventBus = null;
-    this.metrics = null;
     this.config = null;
     this.pendingDb = new Map();
     this.pendingLlm = new Map();

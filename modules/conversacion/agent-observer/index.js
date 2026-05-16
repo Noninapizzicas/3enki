@@ -53,11 +53,28 @@ class AgentObserverModule extends BaseModule {
   }
 
   // ============================================================
-  // Helpers POC2
+  // Bus API — handlers wireados por module.json.events.subscribes
+  // (_publishCard es helper protegido invocado por estos)
   // ============================================================
 
-  // _errorResponse heredado de BaseModule
+  // Bus subscribers definidos abajo (onAgentExecute*). Los helpers de
+  // dominio (_publishCard, _truncate, _stepLabel) y los overrides de
+  // BaseModule estan en las secciones Dominio (protegido) y abajo.
 
+  // ============================================================
+  // HTTP / UI API — sin endpoints (modulo observer puro del bus)
+  // ============================================================
+
+  // ============================================================
+  // Dominio (protegido) — overrides de helpers heredados con identidad
+  // propia + utilidades del observer.
+  // ============================================================
+
+  /**
+   * Override de BaseModule: firma local `{status, code}` (objeto) en vez
+   * de string canonica. No llama super: la firma de retorno es distinta.
+   * Reconoce ENOENT (errno) ademas de keywords genericos.
+   */
   _classifyHandlerError(err) {
     const msg = err?.message || String(err);
     const code = err?.code;
@@ -100,7 +117,7 @@ class AgentObserverModule extends BaseModule {
   }
 
   // ============================================================
-  // Bus subscribers (auto-wired)
+  // Bus subscribers (handlers de los 4 eventos de agent-flow)
   // ============================================================
 
   async onAgentExecuteRequest(event) {
@@ -221,7 +238,8 @@ class AgentObserverModule extends BaseModule {
   }
 
   // ============================================================
-  // Internals
+  // Privados — construccion de payloads del observer y utilidades de
+  // formateo de texto. Sin side effects observables fuera del modulo.
   // ============================================================
 
   async _publishCard({ data, status, assistant_message, step, tool_invoked, duration_ms, tool_calls_executed, detail_voluminoso, error, provider_attempted, provider, model, tokens, cost, iterations, finish_reason }) {

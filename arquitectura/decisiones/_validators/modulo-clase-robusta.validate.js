@@ -49,10 +49,10 @@ const BASE_INHERITED = new Set([
 
 const SECCION_KEYWORDS = {
   lifecycle: /\b(lifecycle|ciclo de vida)\b/i,
-  busApi:    /\bbus\s*api\b/i,
-  httpApi:   /\b(http|ui)\s*(\/\s*ui\s*)?\s*api\b/i,
-  dominio:   /\bdominio|protegid/i,
-  privados:  /\bprivados|privates\b/i
+  busApi:    /\b(bus\s*(api|subscribers?|handlers?|listeners?)|event\s*subscribers?)\b/i,
+  httpApi:   /\b((http|ui)\s*(api|handlers?|endpoints?)|api\s*http)\b/i,
+  dominio:   /\b(dominio|protegid|helpers?\s*poc|domain\s*helpers?)\b/i,
+  privados:  /\b(privados|privates?|internals?|utilidades|util\s*helpers?)\b/i
 };
 
 // =========================================================================
@@ -287,12 +287,24 @@ function checkSeccionesCanonicas(modules, findings) {
     const slug = path.relative(MODULES_DIR, dir);
     if (isPoc(slug)) continue;
     const content = fs.readFileSync(indexPath, 'utf-8');
-    // Look at block comments only
-    const banners = [...content.matchAll(/\/\/\s*=+[^=\n]+=+|\/\*[\s\S]*?\*\//g)].map(m => m[0]);
+    // Formato 1 (single-line): `// ==== Texto ====`
+    // Formato 2 (3-line block): `// ====+`\n`// Texto`\n`// ====+` (canonico)
+    // Formato 3 (block comment): /* ... */ con keyword dentro
+    const candidates = [];
+    // single-line: `// ==== Texto ====`
+    for (const m of content.matchAll(/\/\/\s*=+[^=\n]+=+/g)) candidates.push(m[0]);
+    // block ===...=== ... ===...=== — captura todo el texto entre los dos
+    // banners de ====. Acepta cualquier numero de lineas con `// ...`.
+    for (const m of content.matchAll(/\/\/\s*=+\n([\s\S]*?)\/\/\s*=+/g)) {
+      candidates.push(m[1]);
+    }
+    // block comments /* ... */
+    for (const m of content.matchAll(/\/\*[\s\S]*?\*\//g)) candidates.push(m[0]);
+
     const found = { lifecycle: false, busApi: false, httpApi: false, dominio: false, privados: false };
-    for (const b of banners) {
+    for (const c of candidates) {
       for (const key of Object.keys(SECCION_KEYWORDS)) {
-        if (SECCION_KEYWORDS[key].test(b)) found[key] = true;
+        if (SECCION_KEYWORDS[key].test(c)) found[key] = true;
       }
     }
     const missing = Object.keys(found).filter(k => !found[k]);

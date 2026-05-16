@@ -57,7 +57,7 @@
         "Retry policy declarada en config (max_attempts, backoff_ms, retryable_status). Por defecto 0 reintentos. Solo idempotentes pueden retry > 0.",
         "Telemetría obligatoria por call: log + métrica de duración con labels {host, status, modulo}.",
         "Redacción de secretos: tokens en headers (Authorization, X-API-Key, Cookie). NUNCA en URL query params. Logs y métricas redactan headers ANTES de loguear.",
-        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_INVALID_RESPONSE, 429→UPSTREAM_INVALID_RESPONSE, 5xx→UPSTREAM_5XX, network→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT.",
+        "Mapeo de errores externos a códigos canónicos: 401/403→UPSTREAM_INVALID_RESPONSE, 429→UPSTREAM_INVALID_RESPONSE, 5xx→UPSTREAM_INVALID_RESPONSE, network→UPSTREAM_UNREACHABLE, timeout→UPSTREAM_TIMEOUT.",
         "Body limit en respuesta: configurable. Excediendo → UPSTREAM_INVALID_RESPONSE.",
         "TLS validation activa por defecto. rejectUnauthorized:false requiere justificación documentada en module.json.",
         "Cache opcional con TTL e invalidación declarada (similar a eviction_strategy de persistence).",
@@ -300,7 +300,7 @@
       },
       {
         "upstream_status_or_kind": "500-599",
-        "canonical_code": "UPSTREAM_5XX",
+        "canonical_code": "UPSTREAM_INVALID_RESPONSE",
         "canonical_status": 503,
         "descripcion": "Upstream falla internamente. retryable=true por convención (suele ser transitorio)."
       },

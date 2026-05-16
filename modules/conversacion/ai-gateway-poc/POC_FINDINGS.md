@@ -46,7 +46,7 @@ El validador `persistence` puede leer esto sin abrir el código. Cierra el drift
 ```js
 if (s === 401 || s === 403) return 'UPSTREAM_INVALID_RESPONSE';
 if (s === 429)              return 'UPSTREAM_INVALID_RESPONSE';
-if (s >= 500)               return 'UPSTREAM_5XX';
+if (s >= 500)               return 'UPSTREAM_INVALID_RESPONSE';
 ```
 
 Centralizado en `_mapUpstreamStatus`. El handler superior nunca ve "OpenAI dijo 429" — solo ve `code: 'UPSTREAM_INVALID_RESPONSE'`. La regla `external_errors_mapped_to_canonical_codes` del contrato `http` se cumple por construcción.
@@ -167,7 +167,7 @@ Por defecto usa el global. En tests inyectas el mock. Más limpio, sin contamina
 |---|---|
 | onUnload vacío (timeouts no clearados) | ✓ onUnload itera pendingCredentials con clearTimeout |
 | `metricas_emitidas: []` (cero metrics) | ✓ histogram(duration), increment(errors) en cada operación |
-| Errores upstream propagados como `'Error: <msg>'` | ✓ Mapeo a UPSTREAM_INVALID_RESPONSE / UPSTREAM_INVALID_RESPONSE / UPSTREAM_5XX / ... |
+| Errores upstream propagados como `'Error: <msg>'` | ✓ Mapeo a UPSTREAM_INVALID_RESPONSE / UPSTREAM_INVALID_RESPONSE / UPSTREAM_INVALID_RESPONSE / ... |
 | No declara `config.persistence` | ✓ Declaración completa con eviction_strategy TTL+LRU |
 | No declara `config.http_clients` | ✓ deepseek con host, base_url, timeout, retry, tls_verify, auth_method, credential_ref |
 | `correlation_id` no se propaga | ✓ `_publicarEvento(event, payload, sourcePayload)` lo propaga |

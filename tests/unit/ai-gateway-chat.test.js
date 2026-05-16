@@ -10,7 +10,7 @@
  *  - Payload ai.chat.response VALIDA contra schema oficial.
  *  - On error publica ai.chat.failed (NO ai.chat.response con error inyectado).
  *  - Mapeo canonico de errores: RESOURCE_NOT_FOUND, UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE,
- *    UPSTREAM_INVALID_RESPONSE, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, UNKNOWN_ERROR.
+ *    UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_UNREACHABLE, UNKNOWN_ERROR.
  *  - Payload ai.chat.failed VALIDA contra schema oficial.
  *
  * Ejecutar: node tests/unit/ai-gateway-chat.test.js
@@ -213,7 +213,7 @@ async function testAsync(description, fn) {
       ['ETIMEDOUT', 'UPSTREAM_TIMEOUT'],
       ['Request failed with 429 rate limit exceeded', 'UPSTREAM_INVALID_RESPONSE'],
       ['401 unauthorized: invalid api key', 'UPSTREAM_INVALID_RESPONSE'],
-      ['Internal Server Error 500', 'UPSTREAM_5XX'],
+      ['Internal Server Error 500', 'UPSTREAM_INVALID_RESPONSE'],
       ['fetch failed: ECONNREFUSED', 'UPSTREAM_UNREACHABLE'],
       ['unexpected token < in JSON at position 0', 'UPSTREAM_INVALID_RESPONSE'],
       ['context_length_exceeded: prompt too long', 'UPSTREAM_INVALID_RESPONSE'],

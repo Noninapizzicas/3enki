@@ -408,7 +408,7 @@ function isCanonicalError(result) {
     const e2 = new Error('http 401'); e2._upstream_status = 401;
     assert.strictEqual(m._classifyExecutionError(e2), 'UPSTREAM_INVALID_RESPONSE');
     const e3 = new Error('http 503'); e3._upstream_status = 503;
-    assert.strictEqual(m._classifyExecutionError(e3), 'UPSTREAM_5XX');
+    assert.strictEqual(m._classifyExecutionError(e3), 'UPSTREAM_INVALID_RESPONSE');
     const e4 = new Error('ECONNREFUSED');
     assert.strictEqual(m._classifyExecutionError(e4), 'UPSTREAM_UNREACHABLE');
     const e5 = new Error('weird');

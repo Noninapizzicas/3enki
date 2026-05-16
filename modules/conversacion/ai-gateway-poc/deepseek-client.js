@@ -248,8 +248,8 @@ class DeepSeekClient {
     if (s === 401 || s === 403) return 'UPSTREAM_INVALID_RESPONSE';
     if (s === 404)              return 'UPSTREAM_INVALID_RESPONSE';
     if (s === 429)              return 'UPSTREAM_INVALID_RESPONSE';
-    if (s >= 500)               return 'UPSTREAM_5XX';
-    return 'UPSTREAM_5XX';
+    if (s >= 500)               return 'UPSTREAM_INVALID_RESPONSE';
+    return 'UPSTREAM_INVALID_RESPONSE';
   }
 
   _redactHeaders(headers) {

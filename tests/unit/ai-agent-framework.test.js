@@ -307,7 +307,7 @@ async function testAsync(description, fn) {
       ['ETIMEDOUT', 'UPSTREAM_TIMEOUT'],
       ['429 rate limit', 'UPSTREAM_INVALID_RESPONSE'],
       ['401 unauthorized', 'UPSTREAM_INVALID_RESPONSE'],
-      ['500 Internal Server Error', 'UPSTREAM_5XX'],
+      ['500 Internal Server Error', 'UPSTREAM_INVALID_RESPONSE'],
       ['ECONNREFUSED', 'UPSTREAM_UNREACHABLE'],
       ['unexpected token < in JSON', 'UPSTREAM_INVALID_RESPONSE'],
       ['weird unknown', 'UNKNOWN_ERROR']

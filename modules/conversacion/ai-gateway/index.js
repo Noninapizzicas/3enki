@@ -656,7 +656,7 @@ class AiGatewayModule extends BaseModule {
     } else if (/401|403|unauthorized|forbidden|invalid api key/.test(lower)) {
       code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/5\d\d|internal server error|bad gateway|service unavailable/.test(lower)) {
-      code = 'UPSTREAM_5XX';
+      code = 'UPSTREAM_INVALID_RESPONSE';
     } else if (/econnrefused|enotfound|network|unreachable|fetch failed/.test(lower)) {
       code = 'UPSTREAM_UNREACHABLE';
     } else if (/invalid response|malformed|parse|unexpected token/.test(lower)) {

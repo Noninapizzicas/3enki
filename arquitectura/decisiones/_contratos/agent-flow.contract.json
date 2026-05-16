@@ -238,7 +238,7 @@
       "notas_de_drift_a_cerrar": [
         "Evento NUEVO formalmente. Hoy ai-agent-framework captura errores pero los inyecta en agent.execute.response como campo 'error' — eso es drift. Aqui se separa.",
         "error sigue shape canonico de errors.contract: { code, message, details? }.",
-        "code DEBE ser canonico: RESOURCE_NOT_FOUND, UPSTREAM_TIMEOUT, INVALID_INPUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_5XX, UNKNOWN_ERROR.",
+        "code DEBE ser canonico: RESOURCE_NOT_FOUND, UPSTREAM_TIMEOUT, INVALID_INPUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UNKNOWN_ERROR.",
         "iterations_completed util para diagnostico: ¿el agente fallo en la primera iteracion (problema de input) o tras varias (problema en el agentic loop)?"
       ]
     },
@@ -440,7 +440,7 @@
     },
     {
       "id": "drift_agent_execute_failed_sin_codigo_canonico",
-      "regla": "agent.execute.failed.error.code es uno de los codigos canonicos: RESOURCE_NOT_FOUND, UPSTREAM_TIMEOUT, INVALID_INPUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, UPSTREAM_INVALID_RESPONSE, RESOURCE_NOT_FOUND, UNKNOWN_ERROR.",
+      "regla": "agent.execute.failed.error.code es uno de los codigos canonicos: RESOURCE_NOT_FOUND, UPSTREAM_TIMEOUT, INVALID_INPUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_UNREACHABLE, UPSTREAM_INVALID_RESPONSE, RESOURCE_NOT_FOUND, UNKNOWN_ERROR.",
       "como_detectar": "Inspeccionar publishes de agent.execute.failed: error.code debe estar en lista canonica.",
       "severidad": "error"
     },

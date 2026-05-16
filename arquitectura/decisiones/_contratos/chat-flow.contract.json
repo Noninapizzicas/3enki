@@ -76,7 +76,7 @@
     },
     {
       "id": "errores_canonicos_en_ai_chat_failed",
-      "regla": "ai.chat.failed.error.code DEBE ser uno de los codigos canonicos de errors.json (UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_5XX, RESOURCE_NOT_FOUND, UNKNOWN_ERROR, etc.). Sin codigos inventados.",
+      "regla": "ai.chat.failed.error.code DEBE ser uno de los codigos canonicos de errors.json (UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, RESOURCE_NOT_FOUND, UNKNOWN_ERROR, etc.). Sin codigos inventados.",
       "razon": "El consumidor (chat-io) maneja errores de forma uniforme. Si cada modulo inventa codigos, chat-io tiene que conocerlos todos. Con codigos canonicos, hay una sola tabla de mapeo error → mensaje al usuario."
     },
     {
@@ -259,7 +259,7 @@
       "notas_de_drift_a_cerrar": [
         "Evento NUEVO formalmente. Hoy ai-gateway captura errores pero los inyecta en ai.chat.response como mensaje de error — eso es drift. Aqui se separa: success → ai.chat.response, failure → ai.chat.failed.",
         "error sigue shape canonico de errors.contract: { code, message, details? }.",
-        "code DEBE ser canonico de errors.codes_infrastructure (UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_5XX, RESOURCE_NOT_FOUND, UNKNOWN_ERROR, etc.)."
+        "code DEBE ser canonico de errors.codes_infrastructure (UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, RESOURCE_NOT_FOUND, UNKNOWN_ERROR, etc.)."
       ]
     }
   ],

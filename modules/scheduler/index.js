@@ -775,7 +775,7 @@ class SchedulerModule extends BaseModule {
     if (err?._upstream_status) {
       if (err._upstream_status === 401 || err._upstream_status === 403) return 'UPSTREAM_INVALID_RESPONSE';
       if (err._upstream_status === 429) return 'UPSTREAM_INVALID_RESPONSE';
-      if (err._upstream_status >= 500) return 'UPSTREAM_5XX';
+      if (err._upstream_status >= 500) return 'UPSTREAM_INVALID_RESPONSE';
     }
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';

@@ -141,16 +141,20 @@
           "type": "string",
           "enum": [
             "RESOURCE_NOT_FOUND",
+            "INVALID_INPUT",
+            "ALREADY_EXISTS",
+            "CONFLICT_STATE",
+            "PERMISSION_DENIED",
+            "AUTHENTICATION_REQUIRED",
+            "RATE_LIMITED",
+            "PRECONDITION_FAILED",
+            "UPSTREAM_UNREACHABLE",
             "UPSTREAM_TIMEOUT",
             "UPSTREAM_INVALID_RESPONSE",
-            "UPSTREAM_INVALID_RESPONSE",
-            "UPSTREAM_5XX",
-            "UPSTREAM_UNREACHABLE",
-            "UPSTREAM_INVALID_RESPONSE",
-            "INVALID_INPUT",
+            "SYSTEM_RESOURCE_EXHAUSTED",
             "UNKNOWN_ERROR"
           ],
-          "description": "Codigo canonico del catalogo errors.contract.json. Sin codigos inventados."
+          "description": "Codigo canonico del catalogo simplificado (errors.contract v1.5.0): 13 codigos genericos. La especificidad del dominio (entity_type, kind, upstream_status) va en details, no en codigos nuevos."
         },
         "message": { "type": "string", "minLength": 1 },
         "details": {

@@ -5,7 +5,7 @@
   "creada": "2026-05-03",
   "supersedes_nota": "Primera versión. Recoge las prácticas que ya existen implementadas en ai-gateway/providers/base-provider.js (withRetry con backoff exponencial), facturas/pipeline (retry policy), escandallo/core/precio-finder (retry sobre upstream APIs). Eleva a contrato transversal autónomo con criterios canónicos (max_attempts, initial_delay_ms, max_delay_ms, backoff_multiplier, jitter), distinción entre errores retryables y no retryables (heredada de errors.contract codes_infrastructure), y patterns de degradación gradual.",
 
-  "objetivo": "Producir UN JSON output (_outputs/resilience.json) que define: política canónica de retry (max_attempts default 3, initial_delay_ms 1000, max_delay_ms 10000, backoff_multiplier 2, jitter ±10%), clasificación de errores (retryable vs no retryable cruzando con errors.json codes_infrastructure: UPSTREAM_TIMEOUT/UPSTREAM_5XX/UPSTREAM_INVALID_RESPONSE/UPSTREAM_UNREACHABLE retryables; UPSTREAM_INVALID_RESPONSE/UPSTREAM_INVALID_RESPONSE/RESOURCE_NOT_FOUND no retryables), patterns aceptados (withRetry helper que cada módulo use, no loops infinitos), patterns prohibidos (retry sin límite, retry sobre 4xx, retry sin jitter), graceful degradation (timeout cortos, fallback a defaults, publish de .failed cuando se agota el retry). Validable mecánicamente cruzando contra implementaciones de retry en módulos.",
+  "objetivo": "Producir UN JSON output (_outputs/resilience.json) que define: política canónica de retry (max_attempts default 3, initial_delay_ms 1000, max_delay_ms 10000, backoff_multiplier 2, jitter ±10%), clasificación de errores (retryable vs no retryable cruzando con errors.json codes_infrastructure: UPSTREAM_TIMEOUT/UPSTREAM_INVALID_RESPONSE/UPSTREAM_INVALID_RESPONSE/UPSTREAM_UNREACHABLE retryables; UPSTREAM_INVALID_RESPONSE/UPSTREAM_INVALID_RESPONSE/RESOURCE_NOT_FOUND no retryables), patterns aceptados (withRetry helper que cada módulo use, no loops infinitos), patterns prohibidos (retry sin límite, retry sobre 4xx, retry sin jitter), graceful degradation (timeout cortos, fallback a defaults, publish de .failed cuando se agota el retry). Validable mecánicamente cruzando contra implementaciones de retry en módulos.",
 
   "inputs": {
     "obligatorios": [
@@ -52,7 +52,7 @@
   "principios": [
     {
       "id": "retry_solo_errores_retryables",
-      "regla": "Solo errores en lista retryable (UPSTREAM_TIMEOUT, UPSTREAM_5XX, UPSTREAM_INVALID_RESPONSE, UPSTREAM_UNREACHABLE, UPSTREAM_UNREACHABLE) se reintentan. Errores no retryables (UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, RESOURCE_NOT_FOUND, RESOURCE_NOT_FOUND, PERMISSION_DENIED) van directo a .failed.",
+      "regla": "Solo errores en lista retryable (UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_UNREACHABLE, UPSTREAM_UNREACHABLE) se reintentan. Errores no retryables (UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, RESOURCE_NOT_FOUND, RESOURCE_NOT_FOUND, PERMISSION_DENIED) van directo a .failed.",
       "razon": "Reintentar errores permanentes desperdicia recursos y puede empeorar (rate limits, lockouts)."
     },
     {
@@ -105,7 +105,7 @@
   "decisiones_arquitectonicas": [
     {
       "id": "lista_canonica_retryable_vs_permanente",
-      "decision": "Errores retryables: UPSTREAM_TIMEOUT, UPSTREAM_5XX, UPSTREAM_INVALID_RESPONSE, UPSTREAM_UNREACHABLE, UPSTREAM_UNREACHABLE. Permanentes: UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, RESOURCE_NOT_FOUND, RESOURCE_NOT_FOUND, PERMISSION_DENIED, UPSTREAM_TIMEOUT (de operación interna).",
+      "decision": "Errores retryables: UPSTREAM_TIMEOUT, UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, UPSTREAM_UNREACHABLE, UPSTREAM_UNREACHABLE. Permanentes: UPSTREAM_INVALID_RESPONSE, UPSTREAM_INVALID_RESPONSE, RESOURCE_NOT_FOUND, RESOURCE_NOT_FOUND, PERMISSION_DENIED, UPSTREAM_TIMEOUT (de operación interna).",
       "alternativa_descartada": "Decisión por módulo (cada uno decide qué reintenta).",
       "razon": "Lista canónica elimina drift. Cada módulo respeta la misma clasificación heredada de errors.contract.codes_infrastructure."
     },

@@ -800,7 +800,7 @@ class ChatIoModule extends BaseModule {
       'UPSTREAM_TIMEOUT':         'Tardé más de la cuenta en responder. Inténtalo de nuevo en un momento.',
       'UPSTREAM_INVALID_RESPONSE':    'Estoy recibiendo muchas peticiones. Inténtalo en unos minutos.',
       'UPSTREAM_INVALID_RESPONSE':     'Hay un problema con mis credenciales para el motor del lenguaje. Avisa al administrador.',
-      'UPSTREAM_5XX':             'El motor del lenguaje tiene un fallo temporal. Inténtalo en un momento.',
+      'UPSTREAM_INVALID_RESPONSE':             'El motor del lenguaje tiene un fallo temporal. Inténtalo en un momento.',
       'UPSTREAM_UNREACHABLE':     'No puedo conectar con el motor del lenguaje ahora mismo. Inténtalo más tarde.',
       'UPSTREAM_INVALID_RESPONSE':'El motor del lenguaje devolvió algo que no entiendo. Inténtalo de nuevo.',
       'UPSTREAM_INVALID_RESPONSE':'La conversación se ha hecho demasiado larga para procesarla. Empieza una nueva y te ayudo igual.',

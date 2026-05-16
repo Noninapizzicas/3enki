@@ -270,7 +270,7 @@ async function testAsync(description, fn) {
     await m.onUnload();
   });
 
-  await testAsync('Upstream 500 → UPSTREAM_5XX', async () => {
+  await testAsync('Upstream 500 → UPSTREAM_INVALID_RESPONSE', async () => {
     setFetch(async () => errResponse(500, { error: { message: 'oops' } }));
     const mocks = makeMocks();
     const m = new AiGateway();
@@ -279,7 +279,7 @@ async function testAsync(description, fn) {
     moduleConfig.http_clients[0].retry = { max_attempts: 1, backoff_ms: 0, retryable_status: [] };
     await m.onLlmCompleteRequest({ request_id: 'r8', messages: [{ role: 'user', content: 'x' }] });
     const r = findResponse(mocks.published, 'r8');
-    assert.strictEqual(r.error.code, 'UPSTREAM_5XX');
+    assert.strictEqual(r.error.code, 'UPSTREAM_INVALID_RESPONSE');
     assert.strictEqual(r.error.details.upstream_status, 500);
     await m.onUnload();
   });

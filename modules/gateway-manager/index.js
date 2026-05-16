@@ -375,32 +375,15 @@ class GatewayManagerModule extends BaseModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  // _errorResponse heredado de BaseModule
+  // Helpers POC2 (_errorResponse, _classifyHandlerError, _publicarEvento)
+  // heredados de BaseModule. Override de _handleHandlerError solo para
+  // incrementar el contador interno operacional propio.
 
   _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'        ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'       ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED'   ? 403 :
-                    code === 'CONFLICT'                 ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'     ? 503 :
-                                                          500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('gateway-manager.errors', { kind, code });
+    const result = super._handleHandlerError(logEvent, err, kind);
     this.internalMetrics.errors_total++;
-    return this._errorResponse(status, code, message, err._details);
+    return result;
   }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found') || msg.includes('not configured')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('not supported') || msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
-    if (msg.includes('not available') || msg.includes('unavailable') || msg.includes('disconnected')) return 'UPSTREAM_UNAVAILABLE';
-    return 'INTERNAL_ERROR';
-  }
-
-  // _publicarEvento heredado de BaseModule
 
   async _instantiateGateway(GatewayClass, gatewayConfig, mqtt) {
     return new GatewayClass(gatewayConfig, {

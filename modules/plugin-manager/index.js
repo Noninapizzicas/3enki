@@ -436,25 +436,15 @@ class PluginManagerModule extends BaseModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  // _errorResponse heredado de BaseModule
+  // Helpers POC2 (_errorResponse, _classifyHandlerError, _publicarEvento)
+  // heredados de BaseModule. Override de _handleHandlerError solo para
+  // incrementar el contador interno operacional propio.
 
   _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'      ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                    code === 'CONFLICT'               ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('plugin-manager.errors', { kind, code });
+    const result = super._handleHandlerError(logEvent, err, kind);
     this.internalCounters.error_total++;
-    return this._errorResponse(status, code, message, err._details);
+    return result;
   }
-
-  // _classifyHandlerError heredado de BaseModule (superset estricto del local)
-  // _publicarEvento heredado de BaseModule
 
   _readPluginFile(filePath) {
     const content = fs.readFileSync(filePath, 'utf-8');

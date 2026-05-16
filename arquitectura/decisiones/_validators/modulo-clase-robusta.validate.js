@@ -48,11 +48,11 @@ const BASE_INHERITED = new Set([
 ]);
 
 const SECCION_KEYWORDS = {
-  lifecycle: /\b(lifecycle|ciclo de vida)\b/i,
-  busApi:    /\b(bus\s*(api|subscribers?|handlers?|listeners?)|event\s*subscribers?)\b/i,
-  httpApi:   /\b((http|ui)\s*(api|handlers?|endpoints?)|api\s*http)\b/i,
-  dominio:   /\b(dominio|protegid|helpers?\s*poc|domain\s*helpers?)\b/i,
-  privados:  /\b(privados|privates?|internals?|utilidades|util\s*helpers?)\b/i
+  lifecycle: /\b(lifecycle|ciclo de vida|project\s+lifecycle)\b/i,
+  busApi:    /\b(bus\s*(api|subscribers?|handlers?|listeners?|subscriptions?)|event\s*(subscribers?|handlers?|subscriptions?|listeners?)|domain\s*event\s*handlers?|bus\s+subscription|subscribe\s+to|mqtt\s+listeners?|request\s+event\s+handlers?)\b/i,
+  httpApi:   /\b((http|ui)\s*(api|handlers?|endpoints?)|api\s*http|tool\s*handlers?|tools?(\s*$|\s*\(|\b\s*[—:-])|tool[s]?\s+desde)\b/i,
+  dominio:   /\b(dominio|protegid|helpers?\s+poc\d*|domain\s*(helpers?|event)|poc2?\s*helpers?|ai\s*tool|publishers?\s*canonic|core\s*:|persistence|persistencia|version\s+control|build\s+execution|pipeline)\b/i,
+  privados:  /\b(privados|privates?|internals?|utilidades|util\s*helpers?|helpers?\s*internos?|helpers?\s*de\s*uso|helpers?\s*compartidos?|path\s+security|config\s+validation)\b/i
 };
 
 // =========================================================================
@@ -291,11 +291,15 @@ function checkSeccionesCanonicas(modules, findings) {
     // Formato 2 (3-line block): `// ====+`\n`// Texto`\n`// ====+` (canonico)
     // Formato 3 (block comment): /* ... */ con keyword dentro
     const candidates = [];
-    // single-line: `// ==== Texto ====`
-    for (const m of content.matchAll(/\/\/\s*=+[^=\n]+=+/g)) candidates.push(m[0]);
-    // block ===...=== ... ===...=== — captura todo el texto entre los dos
-    // banners de ====. Acepta cualquier numero de lineas con `// ...`.
-    for (const m of content.matchAll(/\/\/\s*=+\n([\s\S]*?)\/\/\s*=+/g)) {
+    // Delimitadores aceptados: =, -, ─ (Unicode U+2500 box-drawing)
+    const DELIM = '[=\\-\\u2500]';
+    const NONDELIM = '[^=\\-\\u2500\\n]';
+    // single-line con delimitadores a ambos lados: `// ==== Texto ====`
+    for (const m of content.matchAll(new RegExp(`//\\s*${DELIM}+${NONDELIM}+${DELIM}+`, 'g'))) candidates.push(m[0]);
+    // single-line con delimitador solo a la izquierda: `// ---- Texto`
+    for (const m of content.matchAll(new RegExp(`//\\s*${DELIM}{3,}\\s+([A-Za-z][^\\n]*)`, 'g'))) candidates.push(m[1]);
+    // block delim...delim ... delim...delim
+    for (const m of content.matchAll(new RegExp(`//\\s*${DELIM}+\\n([\\s\\S]*?)//\\s*${DELIM}+`, 'g'))) {
       candidates.push(m[1]);
     }
     // block comments /* ... */

@@ -41,6 +41,10 @@ class AiGatewayModule extends BaseModule {
     this.pendingFsReads = new Map();     // request_id → { resolve, reject, timeout }
   }
 
+  // ============================================================
+  // Lifecycle
+  // ============================================================
+
   async onLoad(context) {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
@@ -385,7 +389,7 @@ class AiGatewayModule extends BaseModule {
   }
 
   // ============================================================
-  // Núcleo: _executeLLM (agentic loop compartido)
+  // Privados — Nucleo: _executeLLM (agentic loop compartido)
   // ============================================================
 
   async _executeLLM({ system, messages, tools, settings, attachments, project_id, conversation_id, page_id, context, prompt, intencion, providerName }) {
@@ -518,6 +522,7 @@ class AiGatewayModule extends BaseModule {
   }
 
   // ============================================================
+  // Bus API — entry points wireados por module.json.events.subscribes.
   // Entry 1: chat.prompt.ready → ai.chat.response
   // ============================================================
 

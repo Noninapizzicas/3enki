@@ -44,6 +44,10 @@ class AiAgentFrameworkModule extends BaseModule {
     this._conversationCacheTTL = DEFAULT_CONVERSATION_CACHE_TTL_MS;
   }
 
+  // ============================================================
+  // Lifecycle
+  // ============================================================
+
   async onLoad(context) {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
@@ -128,7 +132,11 @@ class AiAgentFrameworkModule extends BaseModule {
   }
 
   // ============================================================
-  // Carga de base prompt + agentes
+  // HTTP / UI API — sin endpoints HTTP (modulo solo bus + LLM)
+  // ============================================================
+
+  // ============================================================
+  // Privados — Carga de base prompt + agentes desde FS
   // ============================================================
 
   _loadBasePrompt() {

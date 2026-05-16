@@ -34,6 +34,10 @@ class AsesoriaModule extends BaseModule {
     };
   }
 
+  // ==========================================
+  // Lifecycle
+  // ==========================================
+
   async onLoad(core) {
     this.logger = core.logger;
     this.metrics = core.metrics || null;
@@ -332,7 +336,7 @@ class AsesoriaModule extends BaseModule {
   }
 
   // ==========================================
-  // Data: Leer facturas de facturas-db
+  // Privados — Data: Leer facturas de facturas-db y helpers CSV/ZIP
   // ==========================================
 
   async _obtenerFacturasProcesadas(projectId, periodo) {

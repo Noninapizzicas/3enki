@@ -306,7 +306,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
     assert.strictEqual(m._classifyHandlerError(new Error('Unauthorized')), 'AUTHORIZATION_REQUIRED');
     assert.strictEqual(m._classifyHandlerError(new Error('upstream not available')), 'UPSTREAM_UNAVAILABLE');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

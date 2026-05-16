@@ -368,8 +368,16 @@ class AiGatewayModule {
         clearTimeout(timeout);
         if (unsub) unsub();
         if (data.error) {
-          const msg = (typeof data.error === 'object' && data.error !== null) ? data.error.message : data.error;
-          reject(new Error(msg));
+          // Preservar el shape canonico errors.contract { code, message, details? }.
+          // Si solo viene message string, envolver con INTERNAL_ERROR.
+          const raw = data.error;
+          const errObj = (typeof raw === 'object' && raw !== null)
+            ? { code: raw.code || 'UNKNOWN_ERROR', message: raw.message || String(raw), details: raw.details }
+            : { code: 'UNKNOWN_ERROR', message: String(raw) };
+          const err = new Error(errObj.message);
+          err.code = errObj.code;
+          if (errObj.details !== undefined) err.details = errObj.details;
+          reject(err);
         } else resolve(data.result);
       });
       this.eventBus.publish(toolName, { request_id, ...enrichedArgs });
@@ -451,7 +459,19 @@ class AiGatewayModule {
           const result = await this._executeToolCall(tc.name, args, chatContext);
           toolResults.push({ tool_call_id: tc.id, name: tc.name, args, status: 'success', result });
         } catch (err) {
-          toolResults.push({ tool_call_id: tc.id, name: tc.name, args, status: 'error', error: err.message });
+          // Preservar el shape canonico errors.contract { code, message, details? }
+          // — antes solo se preservaba message, lo que falseaba TODO el diagnostico
+          // (errores semanticos como RESOURCE_NOT_FOUND quedaban indistinguibles
+          // de bugs INTERNAL_ERROR genericos).
+          toolResults.push({
+            tool_call_id: tc.id, name: tc.name, args,
+            status: 'error',
+            error: {
+              code: err.code || 'UNKNOWN_ERROR',
+              message: err.message || String(err),
+              ...(err.details !== undefined ? { details: err.details } : {})
+            }
+          });
         }
       }
       allToolResults.push(...toolResults);
@@ -465,10 +485,22 @@ class AiGatewayModule {
       const assistantTurn = { role: 'assistant', content: result.content || '', tool_calls: result._raw_tool_calls || result.tool_calls };
       if (result.reasoning_content) assistantTurn.reasoning_content = result.reasoning_content;
       workingMessages.push(assistantTurn);
+      // Formato del tool_result visible al LLM. Incluir el error.code es
+      // critico para que el LLM distinga errores semanticos (RESOURCE_NOT_FOUND,
+      // INVALID_INPUT) de bugs internos (INTERNAL_ERROR) y decida si reintentar
+      // con args distintos, mencionarlo al usuario o cambiar de via.
+      const formatErr = (e) => {
+        if (e == null) return 'Error: (sin detalle)';
+        if (typeof e === 'string') return `Error: ${e}`;
+        const code = e.code || 'UNKNOWN_ERROR';
+        const msg  = e.message || '(sin mensaje)';
+        const det  = e.details ? ` — ${JSON.stringify(e.details)}` : '';
+        return `Error [${code}]: ${msg}${det}`;
+      };
       const toolMessages = provider.formatToolResults?.(toolResults) || toolResults.map(tr => ({
         role: 'tool',
         tool_call_id: tr.tool_call_id,
-        content: tr.status === 'error' ? `Error: ${tr.error}` : JSON.stringify(tr.result)
+        content: tr.status === 'error' ? formatErr(tr.error) : JSON.stringify(tr.result)
       }));
       workingMessages.push(...toolMessages);
     }
@@ -551,14 +583,29 @@ class AiGatewayModule {
         timestamp:            new Date().toISOString()
       };
       if (Array.isArray(llmResult.tool_calls_executed) && llmResult.tool_calls_executed.length > 0) {
+        // Propagar el shape canonico de error errors.contract en lugar de
+        // hardcodear INTERNAL_ERROR (drift anterior que invisibilizaba
+        // RESOURCE_NOT_FOUND, INVALID_INPUT, AGENT_NOT_FOUND, etc).
         payload.tool_calls_executed = llmResult.tool_calls_executed
-          .map(t => ({
-            name:          t.name,
-            args:          (typeof t.args === 'object' && t.args !== null) ? t.args : {},
-            result_status: t.status === 'success' ? 'ok' : (t.status === 'timeout' ? 'timeout' : 'error'),
-            ...(t.duration_ms !== undefined ? { duration_ms: t.duration_ms } : {}),
-            ...(t.error ? { error_code: 'INTERNAL_ERROR' } : {})
-          }));
+          .map(t => {
+            const entry = {
+              name:          t.name,
+              args:          (typeof t.args === 'object' && t.args !== null) ? t.args : {},
+              result_status: t.status === 'success' ? 'ok' : (t.status === 'timeout' ? 'timeout' : 'error')
+            };
+            if (t.duration_ms !== undefined) entry.duration_ms = t.duration_ms;
+            if (t.error) {
+              if (typeof t.error === 'object') {
+                entry.error_code = t.error.code || 'UNKNOWN_ERROR';
+                if (t.error.message) entry.error_message = t.error.message;
+                if (t.error.details !== undefined) entry.error_details = t.error.details;
+              } else {
+                entry.error_code = 'UNKNOWN_ERROR';
+                entry.error_message = String(t.error);
+              }
+            }
+            return entry;
+          });
       }
       if (typeof llmResult.iterations === 'number' && llmResult.iterations >= 1) {
         payload.iterations = llmResult.iterations;
@@ -597,7 +644,7 @@ class AiGatewayModule {
     const raw = (err && err.message) ? String(err.message) : 'unknown error';
     const lower = raw.toLowerCase();
 
-    let code = 'INTERNAL_ERROR';
+    let code = 'UNKNOWN_ERROR';
     if (/credential .*timeout|sin credencial|no api key|api key not|credential not found/i.test(raw)) {
       code = 'CREDENTIAL_NOT_FOUND';
     } else if (/no hay providers?.*disponibles?|no providers? available/i.test(raw)) {
@@ -794,7 +841,7 @@ class AiGatewayModule {
     if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
     if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
     if (msg.includes('unavailable') || msg.includes('not available')) return 'UPSTREAM_UNAVAILABLE';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   // Helper auxiliar especifico del dominio LLM:

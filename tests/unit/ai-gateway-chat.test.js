@@ -219,7 +219,7 @@ async function testAsync(description, fn) {
       ['context_length_exceeded: prompt too long', 'UPSTREAM_PAYLOAD_TOO_LARGE'],
       ['Request entity too large (413)', 'UPSTREAM_PAYLOAD_TOO_LARGE'],
       ['maximum context length is 128000 tokens', 'UPSTREAM_PAYLOAD_TOO_LARGE'],
-      ['some weird unknown error', 'INTERNAL_ERROR']
+      ['some weird unknown error', 'UNKNOWN_ERROR']
     ];
     for (const [msg, expected] of cases) {
       const got = m._classifyError(new Error(msg)).code;

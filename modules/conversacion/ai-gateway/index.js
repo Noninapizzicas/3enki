@@ -39,6 +39,8 @@ class AiGatewayModule extends BaseModule {
     this.credentialCache = new Map();    // provider → { apiKey, resolvedAt, projectId }
     this.pendingCredentials = new Map(); // request_id → { resolve, reject, timeout }
     this.pendingFsReads = new Map();     // request_id → { resolve, reject, timeout }
+    // Cache de prefijos por page_id, poblado lazy por _buildPagePrefixes()
+    this.pagePrefixes = null;            // Map<page_id, Set<prefix>>
   }
 
   // ============================================================
@@ -161,7 +163,7 @@ class AiGatewayModule extends BaseModule {
     if (!page_id) return all;
     // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
     // se invoca, se escanean todos los módulos cargados y se cachea.
-    if (this.pagePrefixes === undefined) this._buildPagePrefixes();
+    if (this.pagePrefixes === null) this._buildPagePrefixes();
     // Tools globales que SIEMPRE se exponen al LLM principal aunque haya page_id activo.
     // Necesarias para que el LLM pueda delegar a agentes (invoke_agent), leer ficheros
     // del proyecto (fs.read), etc., independientemente de en qué módulo esté.

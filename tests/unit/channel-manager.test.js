@@ -81,11 +81,11 @@ async function makeBusBackedBySqlJs(moduleRef, published) {
         const { correlation_id, query, params } = payload;
         try {
           const rows = runQuery(query, params);
-          setImmediate(() => moduleRef.value._onDbResponse({
+          setImmediate(() => moduleRef.value.onDbResponse({
             data: { correlation_id, data: rows }
           }));
         } catch (err) {
-          setImmediate(() => moduleRef.value._onDbResponse({
+          setImmediate(() => moduleRef.value.onDbResponse({
             data: { correlation_id, error: err.message }
           }));
         }
@@ -93,11 +93,11 @@ async function makeBusBackedBySqlJs(moduleRef, published) {
         const { correlation_id, schema } = payload;
         try {
           db.exec(schema);
-          setImmediate(() => moduleRef.value._onDbResponse({
+          setImmediate(() => moduleRef.value.onDbResponse({
             data: { correlation_id, data: [] }
           }));
         } catch (err) {
-          setImmediate(() => moduleRef.value._onDbResponse({
+          setImmediate(() => moduleRef.value.onDbResponse({
             data: { correlation_id, error: err.message }
           }));
         }

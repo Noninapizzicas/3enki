@@ -76,8 +76,8 @@ class ChannelManagerModule extends BaseModule {
     });
 
     // Subscribe to db responses (pendingDbRequests Map pattern)
-    this.eventBus.subscribe?.('db.query.response',       this._onDbResponse.bind(this));
-    this.eventBus.subscribe?.('db.schema.init.response', this._onDbResponse.bind(this));
+    this.eventBus.subscribe?.('db.query.response',       this.onDbResponse.bind(this));
+    this.eventBus.subscribe?.('db.schema.init.response', this.onDbResponse.bind(this));
 
     await this._initSchema(correlation_id);
     await this._loadCache(correlation_id);
@@ -109,7 +109,7 @@ class ChannelManagerModule extends BaseModule {
   // DB access (via database-manager bus events)
   // ==========================================
 
-  _onDbResponse(event) {
+  onDbResponse(event) {
     const data = event?.data || event;
     if (!data?.correlation_id) return;
     const pending = this.pendingDbRequests.get(data.correlation_id);

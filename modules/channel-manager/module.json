@@ -20,8 +20,8 @@
     ],
     "subscribes": [
       { "event": "channel-manager.resolve.request", "handler": "onResolveRequest", "description": "Otro modulo pide resolver un identificador externo. Publica channel-manager.resolve.response con request_id correlacionado." },
-      { "event": "db.query.response",       "handler": "_onDbResponse", "description": "Response de database-manager para queries (resuelve pendingDbRequests por correlation_id)." },
-      { "event": "db.schema.init.response", "handler": "_onDbResponse", "description": "Response de database-manager para schema init (resuelve pendingDbRequests por correlation_id)." }
+      { "event": "db.query.response",       "handler": "onDbResponse", "description": "Response de database-manager para queries (resuelve pendingDbRequests por correlation_id)." },
+      { "event": "db.schema.init.response", "handler": "onDbResponse", "description": "Response de database-manager para schema init (resuelve pendingDbRequests por correlation_id)." }
     ]
   },
   "ui_handlers": [

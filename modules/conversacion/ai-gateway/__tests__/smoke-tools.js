@@ -127,7 +127,7 @@ async function main() {
   // ============================================================
   console.log('\n[1] Auto-derivado de prefijos al llamar _getTools');
 
-  assert(mod.pagePrefixes === undefined, 'pagePrefixes empieza undefined');
+  assert(mod.pagePrefixes === null, 'pagePrefixes empieza null (declarativo en constructor)');
 
   const tRecetas = mod._getTools('recetas');
   const namesRecetas = tRecetas.map(t => t.name).sort();

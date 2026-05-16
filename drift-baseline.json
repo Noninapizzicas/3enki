@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-16T18:45:13.522Z",
-  "total": 2198,
+  "generated_at": "2026-05-16T19:06:12.017Z",
+  "total": 2193,
   "by_validator": {
     "naming": 49,
     "glossary": 1,
@@ -24,13 +24,13 @@
     "versionado": 1,
     "deployment": 4,
     "module-loading": 4,
-    "modulo-clase-robusta": 24,
+    "modulo-clase-robusta": 20,
     "scheduling": 1
   },
   "by_severity": {
     "warning": 1964,
-    "info": 247,
-    "error": 15
+    "info": 244,
+    "error": 14
   },
   "signatures": [
     "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-digital publica agent.execute.request en modules/pizzepos/carta-digital/index.js:120 — payload.campos_visibles no incluye correlation_id",
@@ -1369,8 +1369,8 @@
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|viabilidad — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_legacy_archivado|scheduler — no se encontró archivo en arquitectura/migracion/_legacy/ con prefijo \"scheduler\". Si la reescritura es del POC2, archivar monolito.",
     "module-rewrite|drift_modulo_migrado_tests_sin_capas|esp32-dev — tests/unit/esp32-dev.test.js tiene 0 'Group N:' banners (recomendado >=3)",
-    "modulo-clase-robusta|drift_campo_no_declarado_en_constructor|conversacion/ai-gateway — campos asignados fuera de constructor/onLoad: pagePrefixes",
-    "modulo-clase-robusta|drift_metodo_bus_sin_naming_canonico|channel-manager/module.json — subscribe handler \"_onDbResponse\" no empieza con \"on\"",
+    "modulo-clase-robusta|drift_metodo_bus_sin_naming_canonico|conversation-export/module.json — subscribe handler \"_bufferActivity\" no empieza con \"on\"",
+    "modulo-clase-robusta|drift_metodo_bus_sin_naming_canonico|conversation-export/module.json — subscribe handler \"_onDbQueryResponse\" no empieza con \"on\"",
     "modulo-clase-robusta|drift_metodo_bus_sin_naming_canonico|pdf-viewer/module.json — subscribe handler \"handleExtractRequest\" no empieza con \"on\"",
     "modulo-clase-robusta|drift_metodo_bus_sin_naming_canonico|pdf-viewer/module.json — subscribe handler \"handleListRequest\" no empieza con \"on\"",
     "modulo-clase-robusta|drift_metodo_bus_sin_naming_canonico|pdf-viewer/module.json — subscribe handler \"handleMetadataRequest\" no empieza con \"on\"",
@@ -1386,12 +1386,7 @@
     "modulo-clase-robusta|drift_metodo_http_sin_naming_canonico|log-manager/module.json — api handler \"getSessionModuleLogs\" no empieza con \"handle\"",
     "modulo-clase-robusta|drift_metodo_http_sin_naming_canonico|log-manager/module.json — api handler \"getSessionModules\" no empieza con \"handle\"",
     "modulo-clase-robusta|drift_metodo_http_sin_naming_canonico|log-manager/module.json — api handler \"getSessions\" no empieza con \"handle\"",
-    "modulo-clase-robusta|drift_metodo_http_sin_naming_canonico|log-manager/module.json — api handler \"getStats\" no empieza con \"handle\"",
     "modulo-clase-robusta|drift_metodo_http_sin_naming_canonico|log-manager/module.json — api handler \"setTrackedModules\" no empieza con \"handle\"",
-    "modulo-clase-robusta|drift_modulo_publica_estado_interno|conversacion/memory-conversation-summary modules/conversacion/memory-conversation-summary/index.js:305 — payload contiene this.config (estado interno)",
-    "modulo-clase-robusta|drift_modulo_publica_estado_interno|conversacion/memory-user-profile modules/conversacion/memory-user-profile/index.js:137 — payload contiene this.config (estado interno)",
-    "modulo-clase-robusta|drift_modulo_publica_estado_interno|firmware-builder modules/firmware-builder/index.js:429 — payload contiene this.config (estado interno)",
-    "modulo-clase-robusta|drift_subscribe_sin_handler_implementado|scheduler — subscribe declara handler \"onTriggerCheck\" pero el metodo no existe en index.js",
     "multi-tenancy|drift_publish_atribuible_sin_user_id|conversacion/chat-io publica chat.message.saved en modules/conversacion/chat-io/index.js:263 — sin user_id en campos_visibles",
     "multi-tenancy|drift_publish_atribuible_sin_user_id|pizzepos/carta-digital publica agent.execute.request en modules/pizzepos/carta-digital/index.js:120 — sin user_id en campos_visibles",
     "multi-tenancy|drift_publish_atribuible_sin_user_id|pizzepos/carta-digital publica agent.execute.request en modules/pizzepos/carta-digital/index.js:147 — sin user_id en campos_visibles",

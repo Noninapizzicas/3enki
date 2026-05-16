@@ -1024,49 +1024,23 @@ class FilesystemModule extends BaseModule {
   // Helpers POC2 (transferibles) + auxiliares
   // ==========================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
+  // Auxiliar: alias privado de validatePath (compat con el contrato POC2 que
+  // pide auxiliares con prefijo _, sin renombrar la api publica).
+  _validatePath(userPath, options) { return this.validatePath(userPath, options); }
 
-  _handleHandlerError(logEvent, err, kind) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'INVALID_INPUT'      ? 400 :
-                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'PERMISSION_DENIED' ? 403 :
-                    code === 'CONFLICT_STATE'               ? 409 :
-                    code === 'UPSTREAM_UNREACHABLE'   ? 503 :
-                                                        500;
-    const message = err.message || String(err);
-    this.logger.error(logEvent, { error: message, code });
-    this.metrics?.increment('filesystem.errors', { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
+  // Reglas especificas del dominio del modulo. BaseModule cubre los keywords genericos.
   _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
     if (err.code === 'ENOENT') return 'RESOURCE_NOT_FOUND';
     if (err.code === 'EACCES' || err.code === 'EPERM') return 'PERMISSION_DENIED';
     if (err.code === 'EEXIST') return 'CONFLICT_STATE';
     if (err.code === 'EISDIR' || err.code === 'ENOTDIR') return 'INVALID_INPUT';
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'INVALID_INPUT';
-    if (msg.includes('access denied') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
-    if (msg.includes('already')) return 'CONFLICT_STATE';
-    return 'UNKNOWN_ERROR';
+    if (err.code === 'ENOENT') return 'RESOURCE_NOT_FOUND';
+    if (err.code === 'EACCES' || err.code === 'EPERM') return 'PERMISSION_DENIED';
+    if (err.code === 'EEXIST') return 'CONFLICT_STATE';
+    if (err.code === 'EISDIR' || err.code === 'ENOTDIR') return 'INVALID_INPUT';
+    return super._classifyHandlerError(err);
   }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = { timestamp: new Date().toISOString(), ...payload };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    else if (!enriched.correlation_id)  enriched.correlation_id = crypto.randomUUID();
-    await this.eventBus.publish(name, enriched);
-  }
-
-  // Auxiliar: alias privado de validatePath (compat con el contrato POC2 que
-  // pide auxiliares con prefijo _, sin renombrar la api publica).
-  _validatePath(userPath, options) { return this.validatePath(userPath, options); }
 }
 
 module.exports = FilesystemModule;

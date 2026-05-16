@@ -438,45 +438,6 @@ class CodeExecutorModule extends BaseModule {
   // ==========================================
   // Helpers POC2 canonicos (5)
   // ==========================================
-
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(logEvent, err, kind) {
-    const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'INVALID_INPUT' ? 400
-      : code === 'RESOURCE_NOT_FOUND' ? 404
-      : code === 'PERMISSION_DENIED' ? 403
-      : code === 'UPSTREAM_TIMEOUT' ? 504
-      : code === 'RATE_LIMITED' ? 429
-      : 500;
-    const message = err.message || String(err);
-    const isInfra = status >= 500;
-    this.logger[isInfra ? 'error' : 'warn'](logEvent, { error: message, code });
-    this.metrics?.increment('code-executor.errors', 1, { kind, code });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    if (msg.includes('permission') || msg.includes('blocked') || msg.includes('traversal')) return 'PERMISSION_DENIED';
-    if (msg.includes('timeout') || msg.includes('timed out')) return 'UPSTREAM_TIMEOUT';
-    return 'UNKNOWN_ERROR';
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = {
-      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      ...payload
-    };
-    await this.eventBus?.publish(name, enriched);
-  }
 }
 
 module.exports = CodeExecutorModule;

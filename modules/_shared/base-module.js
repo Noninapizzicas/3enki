@@ -76,7 +76,7 @@ class BaseModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('not configured')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation') || msg.includes('not supported') || msg.includes('missing')) return 'INVALID_INPUT';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation') || msg.includes('not supported') || msg.includes('missing') || msg.includes('must be')) return 'INVALID_INPUT';
     if (msg.includes('authentication') || msg.includes('credential') || msg.includes('login')) return 'AUTHENTICATION_REQUIRED';
     if (msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('permission') || msg.includes('access denied')) return 'PERMISSION_DENIED';
     if (msg.includes('already')) return 'ALREADY_EXISTS';

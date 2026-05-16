@@ -706,36 +706,8 @@ class ESP32DevModule extends BaseModule {
 
   // ─── POC2 Helpers ──────────────────────────────────────────
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details && typeof details === 'object') error.details = details;
-    return { status, error };
-  }
-
-  _handleHandlerError(handlerName, err) {
-    const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'UNKNOWN_ERROR' ? 500 : 500;
-    const message = err.message || String(err);
-    this.logger.error(`esp32-dev.${handlerName}.failed`, { error_code: code, error_message: message });
-    this.metrics?.increment('esp32-dev.handler.errors', 1, { code, kind: 'infrastructure' });
-    return this._errorResponse(status, code, message, err._details);
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('enoent') || msg.includes('eacces') || msg.includes('eio')) return 'UNKNOWN_ERROR';
-    if (msg.includes('timeout') || msg.includes('etimedout')) return 'UPSTREAM_TIMEOUT';
-    return 'UNKNOWN_ERROR';
-  }
-
   _classifyDomainError(err) {
     return this._classifyHandlerError(err);
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    const enriched = { timestamp: new Date().toISOString(), ...payload };
-    if (sourcePayload?.correlation_id) enriched.correlation_id = sourcePayload.correlation_id;
-    await this.eventBus.publish(name, enriched);
   }
 
   /**

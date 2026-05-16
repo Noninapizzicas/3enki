@@ -567,7 +567,7 @@ async function createConversation(m, opts = {}) {
     assert.strictEqual(m._classifyHandlerError(new Error('Conversation not found')), 'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
     assert.strictEqual(m._classifyHandlerError(new Error('must be UUID')), 'INVALID_INPUT');
-    assert.strictEqual(m._classifyHandlerError(new Error('upstream timeout')), 'UPSTREAM_UNREACHABLE');
+    assert.strictEqual(m._classifyHandlerError(new Error('upstream timeout')), 'UPSTREAM_TIMEOUT');
     assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });

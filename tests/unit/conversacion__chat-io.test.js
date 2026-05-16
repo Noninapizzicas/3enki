@@ -188,18 +188,18 @@ async function createConversation(m, opts = {}) {
   // Group 2: Validacion canonica de handlers
   // ==========================================
 
-  await testAsync('handleSend sin project_id → 400 VALIDATION_FAILED + kind=PROJECT_REQUIRED', async () => {
+  await testAsync('handleSend sin project_id → 400 INVALID_INPUT + kind=PROJECT_REQUIRED', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleSend({ message: 'hola' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.strictEqual(r.error.details.kind, 'PROJECT_REQUIRED');
     await m.onUnload();
   });
 
-  await testAsync('handleSend project_id no UUID → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleSend project_id no UUID → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleSend({ project_id: 'not-uuid', conversation_id: 'x', message: 'hi' });
@@ -232,7 +232,7 @@ async function createConversation(m, opts = {}) {
     await m.onUnload();
   });
 
-  await testAsync('handleCreate sin project_id → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleCreate sin project_id → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleCreate({});
@@ -554,10 +554,10 @@ async function createConversation(m, opts = {}) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
   });
 
@@ -565,10 +565,10 @@ async function createConversation(m, opts = {}) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('Conversation not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('must be UUID')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('upstream timeout')), 'UPSTREAM_UNAVAILABLE');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('must be UUID')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('upstream timeout')), 'UPSTREAM_UNREACHABLE');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

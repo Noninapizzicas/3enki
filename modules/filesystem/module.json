@@ -32,7 +32,7 @@
         "type": "object",
         "properties": { "path": { "type": "string", "description": "Ruta del directorio", "default": "/" } }
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.read",
@@ -43,7 +43,7 @@
         "properties": { "path": { "type": "string", "description": "Ruta del archivo" } },
         "required": ["path"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.write",
@@ -57,7 +57,7 @@
         },
         "required": ["path", "content"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.delete",
@@ -69,7 +69,7 @@
         "properties": { "path": { "type": "string", "description": "Ruta a eliminar" } },
         "required": ["path"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.mkdir",
@@ -80,7 +80,7 @@
         "properties": { "path": { "type": "string", "description": "Ruta del directorio a crear" } },
         "required": ["path"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.move",
@@ -95,7 +95,7 @@
         },
         "required": ["from", "to"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.copy",
@@ -109,7 +109,7 @@
         },
         "required": ["from", "to"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.search",
@@ -124,7 +124,7 @@
         },
         "required": ["query"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.info",
@@ -135,7 +135,7 @@
         "properties": { "path": { "type": "string", "description": "Ruta del archivo o carpeta" } },
         "required": ["path"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.cleanup",
@@ -149,7 +149,7 @@
           "dry_run":       { "type": "boolean", "description": "Solo muestra que se eliminaria sin eliminar", "default": false }
         }
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.stats",
@@ -159,7 +159,7 @@
         "type": "object",
         "properties": { "path": { "type": "string", "description": "Ruta base", "default": "/" } }
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.setWorkDir",
@@ -170,14 +170,14 @@
         "properties": { "path": { "type": "string", "description": "Nueva ruta de trabajo" } },
         "required": ["path"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.getWorkDir",
       "description": "Devuelve el directorio de trabajo actual y contexto del proyecto activo.",
       "handler": "handleGetWorkDir",
       "parameters": { "type": "object", "properties": {} },
-      "errores_conocidos": ["INTERNAL_ERROR"]
+      "errores_conocidos": ["UNKNOWN_ERROR"]
     },
     {
       "name": "fs.append",
@@ -192,7 +192,7 @@
         },
         "required": ["path", "content"]
       },
-      "errores_conocidos": ["VALIDATION_FAILED", "AUTHORIZATION_REQUIRED", "INTERNAL_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     }
   ],
 

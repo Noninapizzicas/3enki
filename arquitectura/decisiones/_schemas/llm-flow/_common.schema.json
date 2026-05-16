@@ -147,8 +147,8 @@
             "UPSTREAM_5XX",
             "UPSTREAM_UNREACHABLE",
             "UPSTREAM_INVALID_RESPONSE",
-            "VALIDATION_FAILED",
-            "INTERNAL_ERROR"
+            "INVALID_INPUT",
+            "UNKNOWN_ERROR"
           ],
           "description": "Codigo canonico del catalogo errors.contract.json. Sin codigos inventados."
         },

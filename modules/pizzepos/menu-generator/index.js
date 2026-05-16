@@ -69,7 +69,7 @@ class MenuGeneratorModule {
     if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado|no soportado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -364,7 +364,7 @@ class MenuGeneratorModule {
         request_id: data?.request_id,
         project_id: data?.project_id,
         nombre: data?.nombre,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, { correlation_id: data?.correlation_id, project_id: data?.project_id });
       this._handleHandlerError('menu-generator.carta_generar.error', err, 'subscribe');
     }

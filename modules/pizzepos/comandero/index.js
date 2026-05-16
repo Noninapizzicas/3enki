@@ -718,7 +718,7 @@ class ComanderoModule {
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (msg.includes('conflict') || msg.includes('already')) return 'CONFLICT_STATE';
     if (ecod && ecod.startsWith('E')) return 'FILESYSTEM_ERROR';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -733,7 +733,7 @@ class ComanderoModule {
       await this.eventBus.publish(name, enriched);
     } catch (err) {
       this.logger.error('comandero.publish_error', { event: name, error: err.message });
-      this.metrics?.increment('comandero.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('comandero.errors', { kind: 'publish', code: 'UNKNOWN_ERROR' });
     }
   }
 

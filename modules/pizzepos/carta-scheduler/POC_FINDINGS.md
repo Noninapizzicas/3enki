@@ -36,7 +36,7 @@ El cambio es trivial pero el efecto es enorme: la auditoría sabe a qué módulo
 
 ### 6. Shape canónico `{status, data | error}` con códigos reusables
 
-Toda salida de tools es ahora `{status, data | error: { code, message, details }}`. Cierra el drift del original que mezclaba `error: 'string'` con `data` arbitrario. Con `errors v1.4.0` (POC2 F3) los códigos `RESOURCE_NOT_FOUND`, `VALIDATION_FAILED`, `CONFLICT`, `UPSTREAM_TIMEOUT`, `DEPENDENCY_UNAVAILABLE` ya son canónicos del catálogo.
+Toda salida de tools es ahora `{status, data | error: { code, message, details }}`. Cierra el drift del original que mezclaba `error: 'string'` con `data` arbitrario. Con `errors v1.4.0` (POC2 F3) los códigos `RESOURCE_NOT_FOUND`, `INVALID_INPUT`, `CONFLICT_STATE`, `UPSTREAM_TIMEOUT`, `DEPENDENCY_UNAVAILABLE` ya son canónicos del catálogo.
 
 ---
 

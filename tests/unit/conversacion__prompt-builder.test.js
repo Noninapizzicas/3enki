@@ -462,10 +462,10 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const tmpDir = makeTmpModulesDir();
     const { module: m } = await instantiate(mocks, { modulesDir: tmpDir });
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
     await cleanup(tmpDir);
   });
@@ -475,9 +475,9 @@ function publishedOf(mocks, name) {
     const tmpDir = makeTmpModulesDir();
     const { module: m } = await instantiate(mocks, { modulesDir: tmpDir });
     assert.strictEqual(m._classifyHandlerError(new Error('Prompt not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('db timeout')), 'UPSTREAM_UNAVAILABLE');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('db timeout')), 'UPSTREAM_TIMEOUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
     await cleanup(tmpDir);
   });

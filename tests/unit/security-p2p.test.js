@@ -443,7 +443,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(payload.request_id, 'req-2');
     assert.strictEqual(payload.public_key, null);
     assert.strictEqual(payload.has_keys, false);
-    assert.strictEqual(payload.error.code, 'INTERNAL_ERROR');
+    assert.strictEqual(payload.error.code, 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

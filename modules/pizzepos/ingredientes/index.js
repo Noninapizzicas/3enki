@@ -562,7 +562,7 @@ class IngredientesModule {
     if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('invalid'))                            return 'INVALID_INPUT';
     if (ecod && ecod.startsWith('E'))                                                    return 'FILESYSTEM_ERROR';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -577,7 +577,7 @@ class IngredientesModule {
       await this.eventBus.publish(name, enriched);
     } catch (err) {
       this.logger.error('ingredientes.publish_error', { event: name, error: err.message });
-      this.metrics?.increment('ingredientes.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('ingredientes.errors', { kind: 'publish', code: 'UNKNOWN_ERROR' });
     }
   }
 

@@ -216,7 +216,7 @@ class GatewayManagerModule extends BaseModule {
   async _restartGateway(type, correlation_id) {
     if (!VALID_TYPES.includes(type)) {
       throw Object.assign(new Error(`Gateway type not supported: ${type}`),
-        { _code: 'VALIDATION_FAILED',
+        { _code: 'INVALID_INPUT',
           _details: { kind: 'domain', field: 'type', allowed: VALID_TYPES } });
     }
 
@@ -230,7 +230,7 @@ class GatewayManagerModule extends BaseModule {
     const mqtt = this.eventBus?.mqtt;
     if (!mqtt?.isConnected) {
       throw Object.assign(new Error('MQTT not available'),
-        { _code: 'UPSTREAM_UNAVAILABLE',
+        { _code: 'UPSTREAM_UNREACHABLE',
           _details: { upstream: 'mqtt', state: 'disconnected' } });
     }
 
@@ -256,14 +256,14 @@ class GatewayManagerModule extends BaseModule {
   async _discoverGateway(type) {
     if (!VALID_TYPES.includes(type)) {
       throw Object.assign(new Error(`Gateway type not supported: ${type}`),
-        { _code: 'VALIDATION_FAILED',
+        { _code: 'INVALID_INPUT',
           _details: { kind: 'domain', field: 'type', allowed: VALID_TYPES } });
     }
 
     const mqtt = this.eventBus?.mqtt;
     if (!mqtt?.isConnected) {
       throw Object.assign(new Error('MQTT not available'),
-        { _code: 'UPSTREAM_UNAVAILABLE',
+        { _code: 'UPSTREAM_UNREACHABLE',
           _details: { upstream: 'mqtt', state: 'disconnected' } });
     }
 
@@ -308,12 +308,12 @@ class GatewayManagerModule extends BaseModule {
     try {
       const { type } = data || {};
       if (!type) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'Gateway type is required',
           { kind: 'domain', field: 'type', allowed: VALID_TYPES });
       }
       if (!VALID_TYPES.includes(type)) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           `Gateway type not supported: ${type}`,
           { kind: 'domain', field: 'type', allowed: VALID_TYPES });
       }
@@ -339,7 +339,7 @@ class GatewayManagerModule extends BaseModule {
     try {
       const { type } = data || {};
       if (!type) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'Gateway type is required',
           { kind: 'domain', field: 'type', allowed: VALID_TYPES });
       }
@@ -357,7 +357,7 @@ class GatewayManagerModule extends BaseModule {
     try {
       const { type } = data || {};
       if (!type) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'Gateway type is required',
           { kind: 'domain', field: 'type', allowed: VALID_TYPES });
       }

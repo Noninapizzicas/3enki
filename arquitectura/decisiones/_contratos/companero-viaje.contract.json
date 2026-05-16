@@ -527,7 +527,7 @@
       {
         "id": "no_silent_failures",
         "afirmacion": "Todo flujo que arranca con un evento canonico TERMINA con un evento canonico — exito o fallo, pero NUNCA colgado. El usuario o el caller siempre recibe respuesta (aunque sea de error).",
-        "como_se_logra": "(1) Cada categoria de evento tiene su evento de exito Y su evento de fallo (chat.message.saved → ai.chat.response O ai.chat.failed; agent.execute.request → agent.execute.response O agent.execute.failed; etc.). (2) ai-gateway tiene timeouts en cada llamada al LLM (regla http-client). (3) ai-agent-framework tiene timeout para la ejecucion completa de un agente. (4) Cualquier excepcion no manejada se traduce a un evento .failed con codigo canonico (UPSTREAM_TIMEOUT, INTERNAL_ERROR, etc.).",
+        "como_se_logra": "(1) Cada categoria de evento tiene su evento de exito Y su evento de fallo (chat.message.saved → ai.chat.response O ai.chat.failed; agent.execute.request → agent.execute.response O agent.execute.failed; etc.). (2) ai-gateway tiene timeouts en cada llamada al LLM (regla http-client). (3) ai-agent-framework tiene timeout para la ejecucion completa de un agente. (4) Cualquier excepcion no manejada se traduce a un evento .failed con codigo canonico (UPSTREAM_TIMEOUT, UNKNOWN_ERROR, etc.).",
         "como_se_verifica": "Validator: cualquier handler de evento del subsistema tiene try/catch que publica el evento .failed correspondiente. Test: forzar un fallo del LLM (mock que lanza), verificar que llega ai.chat.failed con el shape canonico — NO que el flujo se queda colgado.",
         "consecuencia_si_se_rompe": "El usuario manda un mensaje y nunca recibe respuesta. Otros modulos esperan responses que nunca llegan. El sistema acumula promises pendientes hasta agotar memoria. Imposible distinguir 'lento' de 'roto'."
       },
@@ -615,7 +615,7 @@
         "regla": "Todo flujo iniciado por un evento canonico TERMINA con un evento canonico — exito o fallo, pero NUNCA colgado. Los handlers tienen try/catch que publican el evento .failed correspondiente con codigo canonico.",
         "viola_garantias": ["no_silent_failures"],
         "como_detectar": "Validator que detecta handlers async de eventos canonicos sin try/catch en el cuerpo principal — pueden lanzar y dejar el flujo colgado. Test: forzar fallo en mock, verificar que llega evento .failed.",
-        "alternativa_correcta": "Patron canonico: handler envuelto en try/catch que en el catch publica el evento .failed con error.code canonico (UPSTREAM_TIMEOUT, INTERNAL_ERROR, RESOURCE_NOT_FOUND, etc.)."
+        "alternativa_correcta": "Patron canonico: handler envuelto en try/catch que en el catch publica el evento .failed con error.code canonico (UPSTREAM_TIMEOUT, UNKNOWN_ERROR, RESOURCE_NOT_FOUND, etc.)."
       }
     ]
   },

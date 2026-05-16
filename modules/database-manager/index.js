@@ -222,7 +222,7 @@ class DatabaseManagerModule {
         sqlParams = Object.values(where || {});
       } else {
         throw Object.assign(new Error(`unknown operation: ${operation}`),
-          { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'operation' } });
+          { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'operation' } });
       }
 
       await this._run(db, query, sqlParams);
@@ -341,9 +341,9 @@ class DatabaseManagerModule {
     const { projectId } = context.params;
     const { query, params = [], read_only = false } = context.body || {};
 
-    if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+    if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required',
       { kind: 'domain', field: 'projectId' });
-    if (!query) return this._errorResponse(400, 'VALIDATION_FAILED', 'query is required',
+    if (!query) return this._errorResponse(400, 'INVALID_INPUT', 'query is required',
       { kind: 'domain', field: 'query' });
 
     try {
@@ -364,7 +364,7 @@ class DatabaseManagerModule {
 
   async handleGetSchema(req, context) {
     const { projectId } = context.params;
-    if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+    if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required',
       { kind: 'domain', field: 'projectId' });
 
     try {
@@ -383,9 +383,9 @@ class DatabaseManagerModule {
   async handleInitSchema(req, context) {
     const { projectId } = context.params;
     const { schema } = context.body || {};
-    if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+    if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required',
       { kind: 'domain', field: 'projectId' });
-    if (!schema) return this._errorResponse(400, 'VALIDATION_FAILED', 'schema is required',
+    if (!schema) return this._errorResponse(400, 'INVALID_INPUT', 'schema is required',
       { kind: 'domain', field: 'schema' });
 
     try {
@@ -407,7 +407,7 @@ class DatabaseManagerModule {
 
   async handleDeleteDatabase(req, context) {
     const { projectId } = context.params;
-    if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+    if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required',
       { kind: 'domain', field: 'projectId' });
 
     try {
@@ -441,7 +441,7 @@ class DatabaseManagerModule {
 
   async handleListTables(req, context) {
     const { projectId } = context.params;
-    if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+    if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required',
       { kind: 'domain', field: 'projectId' });
 
     try {
@@ -487,14 +487,14 @@ class DatabaseManagerModule {
   async handleToolQuery(args) {
     try {
       const { projectId, query, params = [] } = args || {};
-      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+      if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required',
         { kind: 'domain', field: 'projectId' });
-      if (!query) return this._errorResponse(400, 'VALIDATION_FAILED', 'query is required',
+      if (!query) return this._errorResponse(400, 'INVALID_INPUT', 'query is required',
         { kind: 'domain', field: 'query' });
 
       const normalizedQuery = query.trim().toUpperCase();
       if (!normalizedQuery.startsWith('SELECT')) {
-        return this._errorResponse(403, 'AUTHORIZATION_REQUIRED',
+        return this._errorResponse(403, 'PERMISSION_DENIED',
           'Only SELECT queries allowed via db.query — use db.execute for INSERT/UPDATE/DELETE',
           { kind: 'security', allowed: 'SELECT' });
       }
@@ -519,7 +519,7 @@ class DatabaseManagerModule {
   async handleToolTables(args) {
     try {
       const { projectId } = args || {};
-      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+      if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required',
         { kind: 'domain', field: 'projectId' });
 
       const db = await this._getDatabase(projectId);
@@ -536,9 +536,9 @@ class DatabaseManagerModule {
   async handleToolSchema(args) {
     try {
       const { projectId, tableName } = args || {};
-      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+      if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required',
         { kind: 'domain', field: 'projectId' });
-      if (!tableName) return this._errorResponse(400, 'VALIDATION_FAILED', 'tableName is required',
+      if (!tableName) return this._errorResponse(400, 'INVALID_INPUT', 'tableName is required',
         { kind: 'domain', field: 'tableName' });
 
       const db = await this._getDatabase(projectId);
@@ -582,14 +582,14 @@ class DatabaseManagerModule {
   async handleToolExecute(args) {
     try {
       const { projectId, query, params = [] } = args || {};
-      if (!projectId) return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required',
+      if (!projectId) return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required',
         { kind: 'domain', field: 'projectId' });
-      if (!query) return this._errorResponse(400, 'VALIDATION_FAILED', 'query is required',
+      if (!query) return this._errorResponse(400, 'INVALID_INPUT', 'query is required',
         { kind: 'domain', field: 'query' });
 
       const normalizedQuery = query.trim().toUpperCase();
       if (normalizedQuery.startsWith('SELECT')) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'Use db.query for SELECT statements — db.execute is for INSERT/UPDATE/DELETE/CREATE/ALTER/DROP',
           { kind: 'domain', allowed: 'NOT SELECT' });
       }
@@ -750,10 +750,10 @@ class DatabaseManagerModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED' ? 400 :
+    const status = code === 'INVALID_INPUT' ? 400 :
                    code === 'RESOURCE_NOT_FOUND' ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT' ? 409 : 500;
+                   code === 'PERMISSION_DENIED' ? 403 :
+                   code === 'CONFLICT_STATE' ? 409 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code });
     this.metrics?.increment('database-manager.errors', { kind, code });
@@ -763,10 +763,10 @@ class DatabaseManagerModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('no such table')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('syntax error')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('not allowed')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('unique') || msg.includes('constraint') || msg.includes('already exists')) return 'CONFLICT';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('syntax error')) return 'INVALID_INPUT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('not allowed')) return 'PERMISSION_DENIED';
+    if (msg.includes('unique') || msg.includes('constraint') || msg.includes('already exists')) return 'CONFLICT_STATE';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

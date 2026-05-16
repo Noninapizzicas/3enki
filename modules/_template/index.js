@@ -130,25 +130,25 @@ class TemplateModule {
     // 1. Validacion defensiva
     if (!args || typeof args !== 'object') {
       this.logger.warn('_template.crear.invalid_args');
-      this.metrics?.increment('_template.crear.errors', { code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('_template.crear.errors', { code: 'INVALID_INPUT' });
       return {
         status: 400,
-        error: { code: 'VALIDATION_FAILED', message: 'args debe ser un object', details: { kind: 'shape' } }
+        error: { code: 'INVALID_INPUT', message: 'args debe ser un object', details: { kind: 'shape' } }
       };
     }
     const { project_id, datos } = args;
     if (!project_id || typeof project_id !== 'string') {
-      this.metrics?.increment('_template.crear.errors', { code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('_template.crear.errors', { code: 'INVALID_INPUT' });
       return {
         status: 400,
-        error: { code: 'VALIDATION_FAILED', message: 'project_id requerido (string)', details: { kind: 'domain', field: 'project_id' } }
+        error: { code: 'INVALID_INPUT', message: 'project_id requerido (string)', details: { kind: 'domain', field: 'project_id' } }
       };
     }
     if (!datos || typeof datos !== 'object') {
-      this.metrics?.increment('_template.crear.errors', { code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('_template.crear.errors', { code: 'INVALID_INPUT' });
       return {
         status: 400,
-        error: { code: 'VALIDATION_FAILED', message: 'datos requerido (object)', details: { kind: 'domain', field: 'datos' } }
+        error: { code: 'INVALID_INPUT', message: 'datos requerido (object)', details: { kind: 'domain', field: 'datos' } }
       };
     }
 
@@ -180,10 +180,10 @@ class TemplateModule {
       this.logger.error('_template.crear.failed', {
         project_id, error: err.message, correlation_id
       });
-      this.metrics?.increment('_template.crear.errors', { code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('_template.crear.errors', { code: 'UNKNOWN_ERROR' });
       return {
         status: 500,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       };
     }
   }
@@ -195,7 +195,7 @@ class TemplateModule {
   async handleUiList(data) {
     const { project_id } = data || {};
     if (!project_id) {
-      throw { status: 400, code: 'VALIDATION_FAILED', message: 'project_id requerido' };
+      throw { status: 400, code: 'INVALID_INPUT', message: 'project_id requerido' };
     }
     try {
       await this._ensureSchema(project_id);
@@ -210,7 +210,7 @@ class TemplateModule {
       return { status: 200, data: { entidades, count: entidades.length } };
     } catch (err) {
       this.logger.error('_template.ui.list.failed', { project_id, error: err.message });
-      throw { status: 500, code: 'INTERNAL_ERROR', message: err.message };
+      throw { status: 500, code: 'UNKNOWN_ERROR', message: err.message };
     }
   }
 

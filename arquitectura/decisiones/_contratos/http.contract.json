@@ -138,7 +138,7 @@
       ],
       "ejemplo_request": "POST /modules/notas/crear\\nContent-Type: application/json\\n\\n{\"titulo\":\"x\",\"contenido\":\"y\"}",
       "ejemplo_response_ok": "HTTP/1.1 201 Created\\nContent-Type: application/json\\n\\n{\"status\":201,\"data\":{\"id\":\"abc\",\"titulo\":\"x\"}}",
-      "ejemplo_response_error": "HTTP/1.1 400 Bad Request\\nContent-Type: application/json\\n\\n{\"status\":400,\"error\":{\"code\":\"VALIDATION_FAILED\",\"message\":\"titulo es requerido\",\"details\":{\"field\":\"titulo\"}}}",
+      "ejemplo_response_error": "HTTP/1.1 400 Bad Request\\nContent-Type: application/json\\n\\n{\"status\":400,\"error\":{\"code\":\"INVALID_INPUT\",\"message\":\"titulo es requerido\",\"details\":{\"field\":\"titulo\"}}}",
       "ejemplo_modulos_audit": [
         "scratch-designer (20 endpoints)",
         "ui-designer (18 endpoints)",

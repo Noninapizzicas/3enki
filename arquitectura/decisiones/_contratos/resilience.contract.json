@@ -52,7 +52,7 @@
   "principios": [
     {
       "id": "retry_solo_errores_retryables",
-      "regla": "Solo errores en lista retryable (UPSTREAM_TIMEOUT, UPSTREAM_5XX, UPSTREAM_RATE_LIMITED, UPSTREAM_UNREACHABLE, BROKER_DISCONNECTED) se reintentan. Errores no retryables (UPSTREAM_AUTH_FAILED, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, RESOURCE_NOT_FOUND, AUTHORIZATION_REQUIRED) van directo a .failed.",
+      "regla": "Solo errores en lista retryable (UPSTREAM_TIMEOUT, UPSTREAM_5XX, UPSTREAM_RATE_LIMITED, UPSTREAM_UNREACHABLE, BROKER_DISCONNECTED) se reintentan. Errores no retryables (UPSTREAM_AUTH_FAILED, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, RESOURCE_NOT_FOUND, PERMISSION_DENIED) van directo a .failed.",
       "razon": "Reintentar errores permanentes desperdicia recursos y puede empeorar (rate limits, lockouts)."
     },
     {
@@ -105,7 +105,7 @@
   "decisiones_arquitectonicas": [
     {
       "id": "lista_canonica_retryable_vs_permanente",
-      "decision": "Errores retryables: UPSTREAM_TIMEOUT, UPSTREAM_5XX, UPSTREAM_RATE_LIMITED, UPSTREAM_UNREACHABLE, BROKER_DISCONNECTED. Permanentes: UPSTREAM_AUTH_FAILED, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, RESOURCE_NOT_FOUND, AUTHORIZATION_REQUIRED, TIMEOUT (de operación interna).",
+      "decision": "Errores retryables: UPSTREAM_TIMEOUT, UPSTREAM_5XX, UPSTREAM_RATE_LIMITED, UPSTREAM_UNREACHABLE, BROKER_DISCONNECTED. Permanentes: UPSTREAM_AUTH_FAILED, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, RESOURCE_NOT_FOUND, PERMISSION_DENIED, TIMEOUT (de operación interna).",
       "alternativa_descartada": "Decisión por módulo (cada uno decide qué reintenta).",
       "razon": "Lista canónica elimina drift. Cada módulo respeta la misma clasificación heredada de errors.contract.codes_infrastructure."
     },

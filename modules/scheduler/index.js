@@ -457,7 +457,7 @@ class SchedulerModule extends BaseModule {
   async handleUIGetJob(data) {
     try {
       const { jobId } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
       const job = this.jobManager.get(jobId);
       if (!job) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
       return { status: 200, data: { ...job, status: this.triggerManager.getStatus(jobId) } };
@@ -469,9 +469,9 @@ class SchedulerModule extends BaseModule {
   async handleUICreateJob(data) {
     try {
       const { name, description, trigger, action, options, metadata, project_id } = data || {};
-      if (!name) return this._errorResponse(400, 'VALIDATION_FAILED', 'name is required', { kind: 'domain', field: 'name' });
-      if (!trigger || !trigger.type) return this._errorResponse(400, 'VALIDATION_FAILED', 'trigger with type is required', { kind: 'domain', field: 'trigger.type' });
-      if (!action || !action.type) return this._errorResponse(400, 'VALIDATION_FAILED', 'action with type is required', { kind: 'domain', field: 'action.type' });
+      if (!name) return this._errorResponse(400, 'INVALID_INPUT', 'name is required', { kind: 'domain', field: 'name' });
+      if (!trigger || !trigger.type) return this._errorResponse(400, 'INVALID_INPUT', 'trigger with type is required', { kind: 'domain', field: 'trigger.type' });
+      if (!action || !action.type) return this._errorResponse(400, 'INVALID_INPUT', 'action with type is required', { kind: 'domain', field: 'action.type' });
 
       const job = this.jobManager.create({
         name, description,
@@ -517,7 +517,7 @@ class SchedulerModule extends BaseModule {
   async handleUIUpdateJob(data) {
     try {
       const { jobId, ...updates } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
 
       const existing = this.jobManager.get(jobId);
       if (!existing) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
@@ -546,7 +546,7 @@ class SchedulerModule extends BaseModule {
   async handleUIDeleteJob(data) {
     try {
       const { jobId } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
       const job = this.jobManager.get(jobId);
       if (!job) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
 
@@ -571,7 +571,7 @@ class SchedulerModule extends BaseModule {
   async handleUIEnableJob(data) {
     try {
       const { jobId } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
       const job = this.jobManager.get(jobId);
       if (!job) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
 
@@ -592,7 +592,7 @@ class SchedulerModule extends BaseModule {
   async handleUIDisableJob(data) {
     try {
       const { jobId } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
       const job = this.jobManager.get(jobId);
       if (!job) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
 
@@ -613,7 +613,7 @@ class SchedulerModule extends BaseModule {
   async handleUITriggerJob(data) {
     try {
       const { jobId } = data || {};
-      if (!jobId) return this._errorResponse(400, 'VALIDATION_FAILED', 'jobId is required', { kind: 'domain', field: 'jobId' });
+      if (!jobId) return this._errorResponse(400, 'INVALID_INPUT', 'jobId is required', { kind: 'domain', field: 'jobId' });
       const job = this.jobManager.get(jobId);
       if (!job) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Job not found', { entity_type: 'job', entity_id: jobId });
 
@@ -780,7 +780,7 @@ class SchedulerModule extends BaseModule {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';
     if (msg.includes('econnrefused') || msg.includes('network')) return 'UPSTREAM_UNREACHABLE';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   _triggerTypesSchema() {

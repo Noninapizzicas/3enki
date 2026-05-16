@@ -63,7 +63,7 @@ class CodeExecutorModule {
     const { command, cwd, timeout, env } = args || {};
 
     if (!command) {
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'command is required', { field: 'command' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'command is required', { field: 'command' });
     }
 
     const safety = this._checkCommandSafe(command);
@@ -176,10 +176,10 @@ class CodeExecutorModule {
     const { projectId, scriptPath, args: scriptArgs = [], timeout } = args || {};
 
     if (!projectId) {
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'projectId is required', { field: 'projectId' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'projectId is required', { field: 'projectId' });
     }
     if (!scriptPath) {
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'scriptPath is required', { field: 'scriptPath' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'scriptPath is required', { field: 'scriptPath' });
     }
 
     try {
@@ -234,7 +234,7 @@ class CodeExecutorModule {
     const { command, cwd, name } = args || {};
 
     if (!command) {
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'command is required', { field: 'command' });
+      return this._errorResponse(400, 'INVALID_INPUT', 'command is required', { field: 'command' });
     }
 
     const maxProcesses = this.config.maxProcesses || 10;
@@ -329,7 +329,7 @@ class CodeExecutorModule {
     const { pid, name } = args || {};
 
     if (!pid && !name) {
-      return this._errorResponse(400, 'VALIDATION_FAILED', 'Either pid or name is required');
+      return this._errorResponse(400, 'INVALID_INPUT', 'Either pid or name is required');
     }
 
     let processInfo = null;
@@ -448,7 +448,7 @@ class CodeExecutorModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED' ? 400
+    const status = code === 'INVALID_INPUT' ? 400
       : code === 'RESOURCE_NOT_FOUND' ? 404
       : code === 'PERMISSION_DENIED' ? 403
       : code === 'TIMEOUT' ? 504
@@ -464,10 +464,10 @@ class CodeExecutorModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (msg.includes('permission') || msg.includes('blocked') || msg.includes('traversal')) return 'PERMISSION_DENIED';
     if (msg.includes('timeout') || msg.includes('timed out')) return 'TIMEOUT';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

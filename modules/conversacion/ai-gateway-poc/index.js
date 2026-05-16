@@ -103,15 +103,15 @@ class AiGateway {
     const validation = this._validateRequest(payload);
     if (!validation.ok) {
       const errResp = this._buildErrorResponse({
-        status: 400, code: 'VALIDATION_FAILED',
+        status: 400, code: 'INVALID_INPUT',
         message: validation.message,
         details: { kind: 'domain', retryable: false, field: validation.field }
       });
       this.logger.warn(`${this.name}.llm.request.invalid`, {
-        request_id: requestId || null, code: 'VALIDATION_FAILED', field: validation.field
+        request_id: requestId || null, code: 'INVALID_INPUT', field: validation.field
       });
       this._emitMetric(`${this.name}.llm.errors`, 1, {
-        code: 'VALIDATION_FAILED', kind: 'domain'
+        code: 'INVALID_INPUT', kind: 'domain'
       });
       await this._publicarEvento('llm.complete.response',
         { request_id: requestId || null, ...errResp },
@@ -139,10 +139,10 @@ class AiGateway {
         request_id: requestId, error: err.message, stack: err.stack
       });
       this._emitMetric(`${this.name}.llm.errors`, 1, {
-        code: 'INTERNAL_ERROR', kind: 'domain'
+        code: 'UNKNOWN_ERROR', kind: 'domain'
       });
       const errResp = this._buildErrorResponse({
-        status: 500, code: 'INTERNAL_ERROR',
+        status: 500, code: 'UNKNOWN_ERROR',
         message: 'Unexpected error during chat completion',
         details: { kind: 'domain', retryable: false }
       });

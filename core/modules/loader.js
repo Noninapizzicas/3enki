@@ -992,7 +992,7 @@ class ModuleLoader {
    * Unwrapping al publicar `result`:
    *   - handler devuelve `{status, data}` con 200-399 → `result = data`.
    *   - handler devuelve `{status>=400, error}` o `{error, ...}` sin status → publica error canonico.
-   *   - handler lanza excepcion → publica `error: { code: 'INTERNAL_ERROR', message }`.
+   *   - handler lanza excepcion → publica `error: { code: 'UNKNOWN_ERROR', message }`.
    *   - cualquier otro shape → `result = raw return`.
    *
    * @private
@@ -1008,7 +1008,7 @@ class ModuleLoader {
           if (result.error && (result.status == null || result.status >= 400)) {
             const errObj = (typeof result.error === 'object' && result.error !== null)
               ? result.error
-              : { code: 'INTERNAL_ERROR', message: String(result.error) };
+              : { code: 'UNKNOWN_ERROR', message: String(result.error) };
             await bus.publish(responseEvent, { request_id, error: errObj });
             return;
           }
@@ -1020,7 +1020,7 @@ class ModuleLoader {
       } catch (err) {
         await bus.publish(responseEvent, {
           request_id,
-          error: { code: 'INTERNAL_ERROR', message: err?.message || String(err) }
+          error: { code: 'UNKNOWN_ERROR', message: err?.message || String(err) }
         });
       }
     };

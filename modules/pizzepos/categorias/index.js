@@ -405,7 +405,7 @@ class CategoriasModule {
     if (msg.includes('already exists') || msg.includes('ya existe'))                        return 'ALREADY_EXISTS';
     if (msg.includes('permission') || msg.includes('forbidden'))                            return 'PERMISSION_DENIED';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -420,7 +420,7 @@ class CategoriasModule {
       await this.eventBus.publish(name, enriched);
     } catch (err) {
       this.logger.error('categorias.publish_error', { event: name, error: err.message });
-      this.metrics?.increment('categorias.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('categorias.errors', { kind: 'publish', code: 'UNKNOWN_ERROR' });
     }
   }
 

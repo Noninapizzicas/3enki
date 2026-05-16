@@ -433,7 +433,7 @@ class StaffManagerModule {
     if (msg.includes('permission') || msg.includes('forbidden'))    return 'PERMISSION_DENIED';
     if (msg.includes('already exists'))                             return 'ALREADY_EXISTS';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -449,7 +449,7 @@ class StaffManagerModule {
       await this.eventBus.publish(name, enriched);
     } catch (err) {
       this.logger?.error('staff-manager.publish_error', { event: name, error: err.message });
-      this.metrics?.increment('staff-manager.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('staff-manager.errors', { kind: 'publish', code: 'UNKNOWN_ERROR' });
     }
   }
 

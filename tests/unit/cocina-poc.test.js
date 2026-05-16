@@ -267,13 +267,13 @@ async function testAsync(description, fn) {
     fs.rmSync(tmpdir, { recursive: true, force: true });
   });
 
-  await testAsync('GET pedido sin pedido_id: 400 VALIDATION_FAILED', async () => {
+  await testAsync('GET pedido sin pedido_id: 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { tmpdir, dataPath } = makeTmpDataPath();
     const m = await loadModule(mocks, dataPath);
     const r = await m.handleGetPedido({ params: {} });
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
     fs.rmSync(tmpdir, { recursive: true, force: true });
   });
@@ -333,7 +333,7 @@ async function testAsync(description, fn) {
     await m.handlePrepararItem({ params: { item_id: 'I1' }, body: { pedido_id: 'P1' } });
     const r = await m.handlePrepararItem({ params: { item_id: 'I1' }, body: { pedido_id: 'P1' } });
     assert.strictEqual(r.status, 409);
-    assert.strictEqual(r.error.code, 'CONFLICT');
+    assert.strictEqual(r.error.code, 'CONFLICT_STATE');
     await m.onUnload();
     fs.rmSync(tmpdir, { recursive: true, force: true });
   });
@@ -350,13 +350,13 @@ async function testAsync(description, fn) {
     fs.rmSync(tmpdir, { recursive: true, force: true });
   });
 
-  await testAsync('Preparar sin pedido_id en body: 400 VALIDATION_FAILED', async () => {
+  await testAsync('Preparar sin pedido_id en body: 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { tmpdir, dataPath } = makeTmpDataPath();
     const m = await loadModule(mocks, dataPath);
     const r = await m.handlePrepararItem({ params: { item_id: 'I1' }, body: {} });
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
     fs.rmSync(tmpdir, { recursive: true, force: true });
   });

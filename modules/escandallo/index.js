@@ -75,7 +75,7 @@ class EscandalloModule {
         if (manager?.close) await manager.close();
       } catch (err) {
         this.logger.error('escandallo.manager.close_failed', { project_id: projectId, error: err.message });
-        this.metrics?.increment('escandallo.errors', { kind: 'manager_close', code: 'INTERNAL_ERROR' });
+        this.metrics?.increment('escandallo.errors', { kind: 'manager_close', code: 'UNKNOWN_ERROR' });
       }
     }
     this.managers.clear();
@@ -1044,7 +1044,7 @@ class EscandalloModule {
     if (ecod === 'ENOENT' || msg.includes('not found') || msg.includes('no encontrad')) return 'RESOURCE_NOT_FOUND';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (ecod && ecod.startsWith('E'))                                                    return 'FILESYSTEM_ERROR';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {
@@ -1059,7 +1059,7 @@ class EscandalloModule {
       await this.eventBus.publish(name, enriched);
     } catch (err) {
       this.logger.error('escandallo.publish_error', { event: name, error: err.message });
-      this.metrics?.increment('escandallo.errors', { kind: 'publish', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('escandallo.errors', { kind: 'publish', code: 'UNKNOWN_ERROR' });
     }
   }
 

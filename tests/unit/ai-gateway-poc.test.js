@@ -121,7 +121,7 @@ async function testAsync(description, fn) {
 
   // ============================================================ Group 1: validation
 
-  await testAsync('VALIDATION_FAILED: payload sin request_id', async () => {
+  await testAsync('INVALID_INPUT: payload sin request_id', async () => {
     const mocks = makeMocks();
     const m = new AiGateway();
     await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
@@ -129,13 +129,13 @@ async function testAsync(description, fn) {
     await m.onLlmCompleteRequest({ messages: [{ role: 'user', content: 'x' }] });
     const r = mocks.published.find(p => p[0] === 'llm.complete.response');
     assert.strictEqual(r[1].status, 400);
-    assert.strictEqual(r[1].error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r[1].error.code, 'INVALID_INPUT');
     assert.strictEqual(r[1].error.details.field, 'request_id');
     assert.strictEqual(r[1].request_id, null);
     await m.onUnload();
   });
 
-  await testAsync('VALIDATION_FAILED: payload sin messages', async () => {
+  await testAsync('INVALID_INPUT: payload sin messages', async () => {
     const mocks = makeMocks();
     const m = new AiGateway();
     await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
@@ -143,19 +143,19 @@ async function testAsync(description, fn) {
     await m.onLlmCompleteRequest({ request_id: 'r1' });
     const r = findResponse(mocks.published, 'r1');
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.strictEqual(r.error.details.field, 'messages');
     await m.onUnload();
   });
 
-  await testAsync('VALIDATION_FAILED: messages array vacio', async () => {
+  await testAsync('INVALID_INPUT: messages array vacio', async () => {
     const mocks = makeMocks();
     const m = new AiGateway();
     await m.onLoad({ logger: mocks.logger, eventBus: mocks.eventBus, metrics: mocks.metrics, moduleConfig, fetch: fetchProxy });
     bindBusToModule(mocks, m);
     await m.onLlmCompleteRequest({ request_id: 'r1', messages: [] });
     const r = findResponse(mocks.published, 'r1');
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.strictEqual(r.error.details.field, 'messages');
     await m.onUnload();
   });

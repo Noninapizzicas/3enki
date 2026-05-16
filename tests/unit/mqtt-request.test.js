@@ -231,7 +231,7 @@ async function testAsync(description, fn) {
          async onLoad() {}
          async onUnload() {}
          async handleFail(data) {
-           return { status: 400, error: { code: 'VALIDATION_FAILED', message: 'missing arg', details: { field: data?.field || '?' } } };
+           return { status: 400, error: { code: 'INVALID_INPUT', message: 'missing arg', details: { field: data?.field || '?' } } };
          }
        }
        module.exports = M;`,
@@ -263,7 +263,7 @@ async function testAsync(description, fn) {
 
     const r = await a.callFail();
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.strictEqual(r.error.details.field, 'x');
 
     await unloadModule(loader, 'peer-a');

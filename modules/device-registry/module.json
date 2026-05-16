@@ -71,7 +71,7 @@
         }
       },
       "errores_conocidos": [
-        { "code": "INTERNAL_ERROR", "cuando": "fallo inesperado al iterar el registry" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo inesperado al iterar el registry" }
       ]
     },
     {
@@ -86,7 +86,7 @@
         "required": ["device_id"]
       },
       "errores_conocidos": [
-        { "code": "VALIDATION_FAILED",  "cuando": "device_id ausente" },
+        { "code": "INVALID_INPUT",  "cuando": "device_id ausente" },
         { "code": "RESOURCE_NOT_FOUND", "cuando": "no existe dispositivo con ese device_id" }
       ]
     },
@@ -99,7 +99,7 @@
         "properties": {}
       },
       "errores_conocidos": [
-        { "code": "INTERNAL_ERROR", "cuando": "fallo inesperado al iterar el registry" }
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo inesperado al iterar el registry" }
       ]
     }
   ],

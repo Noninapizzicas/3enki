@@ -65,39 +65,60 @@ class BaseModule {
   }
 
   /**
-   * Heurística para mapear err.message a código de errors.contract.
+   * Heurística para mapear err.message a código canónico de errors.contract.
    * Patrón POC2: catch genérico → _classifyHandlerError → código + status.
    *
-   * NOTA SOBRE CODIGOS TRANSITORIOS — esta version usa codigos historicos
-   * de los modulos POC2 (VALIDATION_FAILED, AUTHORIZATION_REQUIRED, CONFLICT,
-   * UPSTREAM_UNAVAILABLE, INTERNAL_ERROR). Los canonicos de errors.contract
-   * son respectivamente INVALID_INPUT, AUTHENTICATION_REQUIRED, CONFLICT_STATE,
-   * UPSTREAM_UNREACHABLE, UNKNOWN_ERROR. La normalizacion a canonico se hara
-   * en una pasada coordinada que actualice todos los tests a la vez (no se puede
-   * cambiar BaseModule sin romper los ~50 modulos que esperan los codigos viejos).
+   * Códigos devueltos son SIEMPRE canónicos del catalogo errors.contract.
+   * Si el módulo necesita un código específico (e.g. RATE_LIMITED, MQTT_NOT_AVAILABLE,
+   * AGENT_NOT_FOUND), debe asignarlo a `err._code` antes del throw — _handleHandlerError
+   * lo respeta como precedencia sobre la heurística.
    */
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found') || msg.includes('not configured')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation') || msg.includes('not supported')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('conflict') || msg.includes('already')) return 'CONFLICT';
-    if (msg.includes('timeout') || msg.includes('unavailable') || msg.includes('not available') || msg.includes('disconnected')) return 'UPSTREAM_UNAVAILABLE';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation') || msg.includes('not supported') || msg.includes('missing')) return 'INVALID_INPUT';
+    if (msg.includes('authentication') || msg.includes('credential') || msg.includes('login')) return 'AUTHENTICATION_REQUIRED';
+    if (msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('permission') || msg.includes('access denied')) return 'PERMISSION_DENIED';
+    if (msg.includes('already')) return 'ALREADY_EXISTS';
+    if (msg.includes('conflict')) return 'CONFLICT_STATE';
+    if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';
+    if (msg.includes('unavailable') || msg.includes('not available') || msg.includes('disconnected') || msg.includes('unreachable')) return 'UPSTREAM_UNREACHABLE';
+    return 'UNKNOWN_ERROR';
   }
 
   /**
-   * Mapeo codigo → HTTP status. Aislado para que subclases con codigos
-   * adicionales puedan extender el mapping sin reescribir _handleHandlerError.
+   * Mapeo canonico de codigo → HTTP status. Aislado para que subclases con
+   * codigos custom puedan extender el mapeo sin reescribir _handleHandlerError.
    */
   _statusFromCode(code) {
     switch (code) {
-      case 'VALIDATION_FAILED':      return 400;
-      case 'AUTHORIZATION_REQUIRED': return 403;
-      case 'RESOURCE_NOT_FOUND':     return 404;
-      case 'CONFLICT':               return 409;
-      case 'UPSTREAM_UNAVAILABLE':   return 503;
-      default:                       return 500;
+      case 'INVALID_INPUT':
+      case 'MISSING_FIELD':
+      case 'FIELD_TOO_LONG':
+      case 'INVALID_FORMAT':
+      case 'INVALID_VERSION':
+      case 'MIN_VERSION_NOT_MET':       return 400;
+      case 'AUTHENTICATION_REQUIRED':   return 401;
+      case 'PERMISSION_DENIED':         return 403;
+      case 'RESOURCE_NOT_FOUND':
+      case 'CREDENTIAL_NOT_FOUND':
+      case 'AGENT_NOT_FOUND':           return 404;
+      case 'CONFLICT_STATE':
+      case 'ALREADY_EXISTS':
+      case 'VERSION_CONFLICT':          return 409;
+      case 'RATE_LIMITED':
+      case 'QUOTA_EXCEEDED':            return 429;
+      case 'UPSTREAM_INVALID_RESPONSE':
+      case 'UPSTREAM_PAYLOAD_TOO_LARGE': return 502;
+      case 'UPSTREAM_UNREACHABLE':
+      case 'BROKER_DISCONNECTED':
+      case 'DEPENDENCY_UNAVAILABLE':
+      case 'MQTT_NOT_AVAILABLE':
+      case 'DATABASE_DOWN':             return 503;
+      case 'UPSTREAM_TIMEOUT':
+      case 'TIMEOUT':
+      case 'AGENT_TIMEOUT':             return 504;
+      default:                          return 500;
     }
   }
 

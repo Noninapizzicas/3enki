@@ -48,7 +48,7 @@
       "permissions": [
         "execute"
       ],
-      "errores_conocidos": ["VALIDATION_FAILED", "PERMISSION_DENIED", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -82,7 +82,7 @@
       "permissions": [
         "execute"
       ],
-      "errores_conocidos": ["VALIDATION_FAILED", "PERMISSION_DENIED", "RESOURCE_NOT_FOUND", "TIMEOUT"],
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "RESOURCE_NOT_FOUND", "TIMEOUT"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -120,7 +120,7 @@
       "permissions": [
         "execute"
       ],
-      "errores_conocidos": ["VALIDATION_FAILED", "PERMISSION_DENIED", "QUOTA_EXCEEDED"],
+      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "QUOTA_EXCEEDED"],
       "parameters": {
         "type": "object",
         "properties": {
@@ -146,7 +146,7 @@
       "name": "shell.kill",
       "description": "Detiene un proceso en segundo plano por PID o nombre.",
       "handler": "handleToolKill",
-      "errores_conocidos": ["VALIDATION_FAILED", "RESOURCE_NOT_FOUND"],
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"],
       "parameters": {
         "type": "object",
         "properties": {

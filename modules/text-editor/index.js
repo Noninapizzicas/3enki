@@ -71,7 +71,7 @@ class TextEditorModule {
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/too large/i.test(msg)) return { status: 413, code: 'INVALID_INPUT' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -140,7 +140,7 @@ class TextEditorModule {
       await this._publicarEvento('editor.open.response', {
         request_id: data?.request_id,
         success: false,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, data);
       this._handleHandlerError('text-editor.open_request.error', err, 'subscribe');
     }
@@ -167,7 +167,7 @@ class TextEditorModule {
       const data = event?.data || event;
       await this._publicarEvento('editor.error', {
         request_id: data?.request_id,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, data);
       this._handleHandlerError('text-editor.save_request.error', err, 'subscribe');
     }
@@ -186,7 +186,7 @@ class TextEditorModule {
       await this._publicarEvento('editor.validate.response', {
         request_id: data?.request_id,
         success: false,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, data);
       this._handleHandlerError('text-editor.validate_request.error', err, 'subscribe');
     }
@@ -205,7 +205,7 @@ class TextEditorModule {
       await this._publicarEvento('editor.format.response', {
         request_id: data?.request_id,
         success: false,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, data);
       this._handleHandlerError('text-editor.format_request.error', err, 'subscribe');
     }

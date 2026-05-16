@@ -413,7 +413,7 @@ class CartaDesignModule {
     if (ecod === 'EEXIST' || msg.includes('already exists'))                             return 'ALREADY_EXISTS';
     if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
     if (ecod && ecod.startsWith('E'))                                                     return 'FILESYSTEM_ERROR';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

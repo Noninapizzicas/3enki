@@ -209,7 +209,7 @@ class CocinaModule {
     const pedidoId = req?.params?.pedido_id || req?.pedido_id;
     if (!pedidoId) {
       return this._buildErrorResponse({
-        status: 400, code: 'VALIDATION_FAILED',
+        status: 400, code: 'INVALID_INPUT',
         message: 'pedido_id is required',
         details: { kind: 'domain', field: 'pedido_id' }
       });
@@ -252,7 +252,7 @@ class CocinaModule {
     const v = this._validate({ item_id: itemId, pedido_id: pedidoId }, ['item_id', 'pedido_id']);
     if (!v.ok) {
       return this._buildErrorResponse({
-        status: 400, code: 'VALIDATION_FAILED',
+        status: 400, code: 'INVALID_INPUT',
         message: v.message, details: { kind: 'domain', field: v.field }
       });
     }
@@ -275,7 +275,7 @@ class CocinaModule {
     }
     if (item.estado === 'preparado') {
       return this._buildErrorResponse({
-        status: 409, code: 'CONFLICT',
+        status: 409, code: 'CONFLICT_STATE',
         message: `Item "${itemId}" ya estaba preparado`,
         details: { kind: 'domain', entity_type: 'item', entity_id: itemId, estado_actual: 'preparado' }
       });
@@ -339,7 +339,7 @@ class CocinaModule {
 
     if (!pedidoId) {
       return this._buildErrorResponse({
-        status: 400, code: 'VALIDATION_FAILED',
+        status: 400, code: 'INVALID_INPUT',
         message: 'pedido_id is required',
         details: { kind: 'domain', field: 'pedido_id' }
       });

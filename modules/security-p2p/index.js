@@ -149,7 +149,7 @@ class SecurityP2PModule {
     if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/required|invalid|missing|requerido/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'handler') {
@@ -340,14 +340,14 @@ class SecurityP2PModule {
         request_id,
         error_message: err?.message || String(err)
       });
-      this.metrics?.increment?.('security-p2p.errors', { code: 'INTERNAL_ERROR', kind: 'public_key_request' });
+      this.metrics?.increment?.('security-p2p.errors', { code: 'UNKNOWN_ERROR', kind: 'public_key_request' });
       await this._publicarEvento('security.public-key.response', {
         request_id,
         correlation_id,
         public_key: null,
         fingerprint: null,
         has_keys: false,
-        error: { code: 'INTERNAL_ERROR', message: err?.message || 'Error obteniendo clave publica' }
+        error: { code: 'UNKNOWN_ERROR', message: err?.message || 'Error obteniendo clave publica' }
       }, source);
     }
   }

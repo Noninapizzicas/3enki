@@ -263,7 +263,7 @@ function publishedOf(mocks, name) {
 
     const errs = publishedOf(mocks, 'factura.error');
     assert.strictEqual(errs.length, 1);
-    assert.strictEqual(errs[0].code, 'INTERNAL_ERROR');
+    assert.strictEqual(errs[0].code, 'UNKNOWN_ERROR');
     assert.ok(errs[0].message.includes('pipeline boom'));
     await m.onUnload();
   });
@@ -455,7 +455,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m._classifyHandlerError(Object.assign(new Error('x'), { code: 'EEXIST' })), 'ALREADY_EXISTS');
     assert.strictEqual(m._classifyHandlerError(new Error('connection timeout')), 'TIMEOUT');
     assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
-    assert.strictEqual(m._classifyHandlerError(new Error('weird')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('weird')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

@@ -192,7 +192,7 @@ class PluginManagerModule extends BaseModule {
     try {
       const { name } = context.params || {};
       if (!name) {
-        return this._errorResponse(400, 'VALIDATION_FAILED',
+        return this._errorResponse(400, 'INVALID_INPUT',
           'Plugin name is required',
           { kind: 'domain', field: 'name' });
       }

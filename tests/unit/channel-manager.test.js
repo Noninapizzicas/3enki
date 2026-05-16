@@ -192,13 +192,13 @@ function publishedOf(mocks, name) {
   // Group 2: Validacion canonica de handlers
   // ==========================================
 
-  await testAsync('handleRegister sin campos requeridos → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleRegister sin campos requeridos → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleRegister({ channel_type: 'telegram' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -214,7 +214,7 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleResolve sin params → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleResolve sin params → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleResolve({});
@@ -233,7 +233,7 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleListByProject sin project_id → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleListByProject sin project_id → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleListByProject({});
@@ -242,7 +242,7 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleToolResolve sin params → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleToolResolve sin params → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleToolResolve({});
@@ -517,10 +517,10 @@ function publishedOf(mocks, name) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
   });
 
@@ -528,11 +528,11 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('Channel not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'CONFLICT');
-    assert.strictEqual(m._classifyHandlerError(new Error('Unauthorized')), 'AUTHORIZATION_REQUIRED');
-    assert.strictEqual(m._classifyHandlerError(new Error('upstream timeout')), 'UPSTREAM_UNAVAILABLE');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(new Error('Unauthorized')), 'PERMISSION_DENIED');
+    assert.strictEqual(m._classifyHandlerError(new Error('upstream timeout')), 'UPSTREAM_UNREACHABLE');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

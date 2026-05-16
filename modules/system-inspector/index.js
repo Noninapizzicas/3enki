@@ -336,10 +336,10 @@ class SystemInspectorModule {
 
   _handleHandlerError(logEvent, err, kind, context) {
     const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED'      ? 400 :
+    const status = code === 'INVALID_INPUT'      ? 400 :
                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT'               ? 409 :
+                   code === 'PERMISSION_DENIED' ? 403 :
+                   code === 'CONFLICT_STATE'               ? 409 :
                    code === 'NOT_INITIALIZED'        ? 503 : 500;
     const message = err.message || String(err);
     this.logger?.error(logEvent, {
@@ -354,11 +354,11 @@ class SystemInspectorModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found'))                                                          return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden'))                          return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('conflict') || msg.includes('already exists'))                         return 'CONFLICT';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden'))                          return 'PERMISSION_DENIED';
+    if (msg.includes('conflict') || msg.includes('already exists'))                         return 'CONFLICT_STATE';
     if (msg.includes('not initialized'))                                                    return 'NOT_INITIALIZED';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

@@ -169,23 +169,23 @@ function publishedOf(mocks, name) {
   // Group 2: Validacion canonica de UI handlers
   // ==========================================
 
-  await testAsync('handleUISystemCreate sin name → 400 VALIDATION_FAILED canonico', async () => {
+  await testAsync('handleUISystemCreate sin name → 400 INVALID_INPUT canonico', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleUISystemCreate({});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleUISystemGet sin id → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleUISystemGet sin id → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleUISystemGet({});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -205,7 +205,7 @@ function publishedOf(mocks, name) {
     const r = await m.handleUILink({ sourceId: 'a', targetId: 'b', linkType: 'unknown' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.deepStrictEqual(r.error.details.allowed, ['inspired_by', 'related_to', 'evolved_from']);
     await m.onUnload();
   });
@@ -222,12 +222,12 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleUIUnlink sin linkId → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleUIUnlink sin linkId → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleUIUnlink({});
     assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -295,7 +295,7 @@ function publishedOf(mocks, name) {
     const r = await m.handleUISystemAddEntity({ systemId: b.data.system.id, projectId: 'p', role: 'r' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 409);
-    assert.strictEqual(r.error.code, 'CONFLICT');
+    assert.strictEqual(r.error.code, 'CONFLICT_STATE');
     await m.onUnload();
   });
 
@@ -367,12 +367,12 @@ function publishedOf(mocks, name) {
     // Dedupe: link igual ya existe → 409
     const r2 = await m.handleUILink({ sourceId: 'a', targetId: 'b', linkType: 'inspired_by' });
     assert.strictEqual(r2.status, 409);
-    assert.strictEqual(r2.error.code, 'CONFLICT');
+    assert.strictEqual(r2.error.code, 'CONFLICT_STATE');
 
     // Self-link rechazado
     const r3 = await m.handleUILink({ sourceId: 'x', targetId: 'x', linkType: 'related_to' });
     assert.strictEqual(r3.status, 400);
-    assert.strictEqual(r3.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r3.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -514,7 +514,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(resp.success, false);
     assert.strictEqual(resp.request_id, 'r1');
     assert.strictEqual(resp.correlation_id, 'c1');
-    assert.strictEqual(resp.error_code, 'VALIDATION_FAILED');
+    assert.strictEqual(resp.error_code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -599,10 +599,10 @@ function publishedOf(mocks, name) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
   });
 
@@ -610,10 +610,10 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('System not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('name is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('Invalid link type')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'CONFLICT');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('name is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('Invalid link type')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('already exists')), 'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 
@@ -635,10 +635,10 @@ function publishedOf(mocks, name) {
   await testAsync('_handleHandlerError mapea status segun code y registra metric', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const err = Object.assign(new Error('oops'), { _code: 'CONFLICT', _details: { a: 1 } });
+    const err = Object.assign(new Error('oops'), { _code: 'CONFLICT_STATE', _details: { a: 1 } });
     const r = m._handleHandlerError('test.failed', err, 'kind');
     assert.strictEqual(r.status, 409);
-    assert.strictEqual(r.error.code, 'CONFLICT');
+    assert.strictEqual(r.error.code, 'CONFLICT_STATE');
     assert.deepStrictEqual(r.error.details, { a: 1 });
     const errMetric = mocks.metricsCalls.find(c => c[1] === 'composition-manager.errors');
     assert.ok(errMetric);

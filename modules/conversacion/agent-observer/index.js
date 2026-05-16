@@ -65,7 +65,7 @@ class AgentObserverModule extends BaseModule {
     if (/required|invalid|missing/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
     if (/not found/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
     if (/timeout/i.test(msg)) return { status: 504, code: 'TIMEOUT' };
-    return { status: 500, code: 'INTERNAL_ERROR' };
+    return { status: 500, code: 'UNKNOWN_ERROR' };
   }
 
   _handleHandlerError(logEvent, err, kind = 'subscribe') {
@@ -203,7 +203,7 @@ class AgentObserverModule extends BaseModule {
       if (!card) return;
       this.openCards.delete(data.request_id);
 
-      const code = data.error?.code || 'INTERNAL_ERROR';
+      const code = data.error?.code || 'UNKNOWN_ERROR';
       const msg = data.error?.message || 'Falló sin mensaje';
 
       this.metrics?.increment?.('agent-observer.card.closed', { status: 'failed' });

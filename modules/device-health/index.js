@@ -126,7 +126,7 @@ class DeviceHealthModule {
     const { device_id, project_id, correlation_id } = data || {};
     if (!device_id) {
       this.logger.warn('device-health.online.missing_device_id');
-      this.metrics?.increment('device-health.errors', { kind: 'online', code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('device-health.errors', { kind: 'online', code: 'INVALID_INPUT' });
       return;
     }
 
@@ -173,7 +173,7 @@ class DeviceHealthModule {
     const { device_id, project_id, reason, correlation_id } = data || {};
     if (!device_id) {
       this.logger.warn('device-health.offline.missing_device_id');
-      this.metrics?.increment('device-health.errors', { kind: 'offline', code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('device-health.errors', { kind: 'offline', code: 'INVALID_INPUT' });
       return;
     }
 
@@ -202,7 +202,7 @@ class DeviceHealthModule {
     const { device_id, project_id, type, from, to, correlation_id } = data || {};
     if (!device_id) {
       this.logger.warn('device-health.ota_failed.missing_device_id');
-      this.metrics?.increment('device-health.errors', { kind: 'ota_failed', code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('device-health.errors', { kind: 'ota_failed', code: 'INVALID_INPUT' });
       return;
     }
 
@@ -227,7 +227,7 @@ class DeviceHealthModule {
     const { device_id, type, from, to } = data || {};
     if (!device_id) {
       this.logger.warn('device-health.ota_completed.missing_device_id');
-      this.metrics?.increment('device-health.errors', { kind: 'ota_completed', code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('device-health.errors', { kind: 'ota_completed', code: 'INVALID_INPUT' });
       return;
     }
 
@@ -315,7 +315,7 @@ class DeviceHealthModule {
   async handleDeviceHistory(data) {
     try {
       if (!data?.device_id) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'device_id requerido', { field: 'device_id' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'device_id requerido', { field: 'device_id' });
       }
 
       const state = this.deviceStates.get(data.device_id);
@@ -373,7 +373,7 @@ class DeviceHealthModule {
   async _createAlert(type, deviceId, projectId, body, sourcePayload = null) {
     if (!KNOWN_ALERT_TYPES.includes(type)) {
       this.logger.warn('device-health.alert.unknown_type', { type, device_id: deviceId });
-      this.metrics?.increment('device-health.errors', { kind: 'alert', code: 'VALIDATION_FAILED' });
+      this.metrics?.increment('device-health.errors', { kind: 'alert', code: 'INVALID_INPUT' });
       return;
     }
 
@@ -507,7 +507,7 @@ class DeviceHealthModule {
       await fs.promises.rename(tmpPath, filePath);
     } catch (err) {
       this.logger.error('device-health.save_error', { error: err.message });
-      this.metrics?.increment('device-health.errors', { kind: 'persist', code: 'INTERNAL_ERROR' });
+      this.metrics?.increment('device-health.errors', { kind: 'persist', code: 'UNKNOWN_ERROR' });
     }
   }
 
@@ -523,10 +523,10 @@ class DeviceHealthModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code   = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED'      ? 400 :
+    const status = code === 'INVALID_INPUT'      ? 400 :
                    code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT'               ? 409 : 500;
+                   code === 'PERMISSION_DENIED' ? 403 :
+                   code === 'CONFLICT_STATE'               ? 409 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code });
     this.metrics?.increment('device-health.errors', { kind, code });
@@ -536,10 +536,10 @@ class DeviceHealthModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found'))                                                          return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden'))                          return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('conflict') || msg.includes('already exists'))                         return 'CONFLICT';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden'))                          return 'PERMISSION_DENIED';
+    if (msg.includes('conflict') || msg.includes('already exists'))                         return 'CONFLICT_STATE';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

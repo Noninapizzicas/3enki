@@ -37,7 +37,7 @@
 
     "AGENT.EXECUTE.FAILED CIERRA EL CICLO. Sin este evento, los flujos que fallan quedan colgados sin respuesta al caller. El codigo actual inyecta error como campo dentro de agent.execute.response — drift que rompe no_silent_failures. Se separa: success → agent.execute.response, failure → agent.execute.failed.",
 
-    "ERROR.CODE CANONICO. agent.execute.failed.error.code DEBE ser uno de los codigos de errors.json (UPSTREAM_TIMEOUT, UPSTREAM_RATE_LIMITED, AGENT_NOT_FOUND, AGENT_TIMEOUT, INTERNAL_ERROR, etc.). El consumidor maneja errores de forma uniforme.",
+    "ERROR.CODE CANONICO. agent.execute.failed.error.code DEBE ser uno de los codigos de errors.json (UPSTREAM_TIMEOUT, UPSTREAM_RATE_LIMITED, AGENT_NOT_FOUND, AGENT_TIMEOUT, UNKNOWN_ERROR, etc.). El consumidor maneja errores de forma uniforme.",
 
     "CONVERSATION_ID, CHANNEL, CHANNEL_CONTEXT SON OPCIONALES. Un agente puede invocarse desde chat (lleva conversation_id, channel, channel_context para que el resultado pueda routear de vuelta) o desde cron/webhook (no lleva nada de eso). El agente no distingue: solo procesa context+task. Pero si vienen, viajan obligatoriamente en la response correlacionada.",
 
@@ -163,7 +163,7 @@
     },
     {
       "id": "code_de_error_no_canonico",
-      "regla": "agent.execute.failed.error.code DEBE estar en lista canonica: AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED, UPSTREAM_*, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR. Codigos inventados son drift severidad ERROR.",
+      "regla": "agent.execute.failed.error.code DEBE estar en lista canonica: AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED, UPSTREAM_*, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR. Codigos inventados son drift severidad ERROR.",
       "enforce": "Validador inspecciona codigo emisor de agent.execute.failed; cruza error.code contra lista canonica; ERROR si fuera de ella."
     },
     {
@@ -238,7 +238,7 @@
       "notas_de_drift_a_cerrar": [
         "Evento NUEVO formalmente. Hoy ai-agent-framework captura errores pero los inyecta en agent.execute.response como campo 'error' — eso es drift. Aqui se separa.",
         "error sigue shape canonico de errors.contract: { code, message, details? }.",
-        "code DEBE ser canonico: AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED, UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_5XX, INTERNAL_ERROR.",
+        "code DEBE ser canonico: AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED, UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED, UPSTREAM_5XX, UNKNOWN_ERROR.",
         "iterations_completed util para diagnostico: ¿el agente fallo en la primera iteracion (problema de input) o tras varias (problema en el agentic loop)?"
       ]
     },
@@ -375,7 +375,7 @@
     "3. Iterar audits modulo-completo del subsistema (ai-agent-framework + cualquier modulo que publique agent.execute.request: pizzepos modules, scheduler, etc.). Para cada publish/subscribe de evento agent_flow, verificar que module.json declara request_schema_ref / response_schema_ref apuntando al schema oficial.",
     "4. Escanear codigo fuente de los modulos del subsistema (regex sobre publishes y handlers): buscar 'agentName' (alias deprecado), publish('agent.execute.response', { ... error: ... }) (rompe separacion success/failure).",
     "5. Cruzar audit campos_visibles del publish con campos obligatorios del schema. Faltantes (correlation_id, request_id, user_id, agent_name, timestamp en request; los mismos + result + duration_ms en response) = drift warning.",
-    "6. Para agent.execute.failed, verificar que error.code en codigo emisor esta en lista canonica de codigos del subsistema (AGENT_*) o codes_infrastructure heredados (UPSTREAM_*, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR). Codigo invalido = drift error.",
+    "6. Para agent.execute.failed, verificar que error.code en codigo emisor esta en lista canonica de codigos del subsistema (AGENT_*) o codes_infrastructure heredados (UPSTREAM_*, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR). Codigo invalido = drift error.",
     "7. Reportar PASS/FAIL siguiendo formato comun de validators del repo: banner colorizado + findings agrupados por severidad."
   ],
 
@@ -440,7 +440,7 @@
     },
     {
       "id": "drift_agent_execute_failed_sin_codigo_canonico",
-      "regla": "agent.execute.failed.error.code es uno de los codigos canonicos: AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED, UPSTREAM_TIMEOUT, UPSTREAM_RATE_LIMITED, UPSTREAM_AUTH_FAILED, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR.",
+      "regla": "agent.execute.failed.error.code es uno de los codigos canonicos: AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED, UPSTREAM_TIMEOUT, UPSTREAM_RATE_LIMITED, UPSTREAM_AUTH_FAILED, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, UPSTREAM_INVALID_RESPONSE, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR.",
       "como_detectar": "Inspeccionar publishes de agent.execute.failed: error.code debe estar en lista canonica.",
       "severidad": "error"
     },
@@ -458,7 +458,7 @@
     "naming": "Los nombres de los 3 eventos (agent.execute.request, agent.execute.response, agent.execute.failed) cumplen la forma <module-prefix>.<entity>.<verb> definida en naming.contract.json. Verbos canonicos: request, response, failed. agent_name dentro del payload usa el pattern ^[a-z][a-z0-9-]*[a-z0-9]$ (kebab-case minusculo) coherente con nombres de modulo del repo.",
     "glossary": "Las entidades cross-modulo (conversacion, mensaje, contexto) usan la forma canonica del glossary.json cuando aparecen en el payload. 'agente' es entidad central del subsistema agentes — no esta en glossary global porque es interna al subsistema, no cross-modulo en el sentido del glossary.",
     "events": "Hereda los principios de events.contract: publish-subscribe asincrono, no esperar respuesta sincrona del propio publish. La correlacion request/response se hace via request_id incluido en ambos eventos — el caller filtra por su request_id.",
-    "errors": "agent.execute.failed.error sigue shape canonico {code, message, details?} de errors.contract. error.code esta en codes_infrastructure (UPSTREAM_*, CREDENTIAL_NOT_FOUND, INTERNAL_ERROR) o en codigos especificos del subsistema agentes (AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED). Estos ultimos son de naturaleza infraestructura/sistema (no dominio) — un fallo de tool del agente es infraestructura del subsistema, no del negocio.",
+    "errors": "agent.execute.failed.error sigue shape canonico {code, message, details?} de errors.contract. error.code esta en codes_infrastructure (UPSTREAM_*, CREDENTIAL_NOT_FOUND, UNKNOWN_ERROR) o en codigos especificos del subsistema agentes (AGENT_NOT_FOUND, AGENT_TIMEOUT, AGENT_INPUT_INVALID, AGENT_TOOL_FAILED). Estos ultimos son de naturaleza infraestructura/sistema (no dominio) — un fallo de tool del agente es infraestructura del subsistema, no del negocio.",
     "observability": "Cada publish de agent_flow loguea con metadata correlation_id + request_id + agent_name + (conversation_id cuando aplique). El handler emisor cumple observability.contract con event_name = 'ai-agent-framework.<accion>' o '<modulo-publisher>.<accion>' segun corresponda.",
     "lifecycle": "ai-agent-framework declara sus subscribes en module.json para auto-wire en onLoad. Limpia pendingLlm timeouts en onUnload. Publishers (modulos pizzepos, ai-gateway) declaran agent.execute.request con schema_ref.",
     "persistence": "ai-agent-framework NO persiste estado del agente entre invocaciones (cada agent.execute.request es atomico). El catalogo de agentes (agents/*.json) y sus prompts (prompts/*.json) viven en filesystem, leidos en onLoad. session_id / prev_state / next_state son cimentaciones para agentes con estado futuro — cuando se implementen tendran su propio storage declarado en config.persistence.",

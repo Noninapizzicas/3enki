@@ -87,7 +87,7 @@
         "additionalProperties": false,
         "properties": {}
       },
-      "errores_conocidos": ["INTERNAL_ERROR"]
+      "errores_conocidos": ["UNKNOWN_ERROR"]
     }
   ],
 

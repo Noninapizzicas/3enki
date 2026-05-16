@@ -10,7 +10,7 @@
  *  - Payload ai.chat.response VALIDA contra schema oficial.
  *  - On error publica ai.chat.failed (NO ai.chat.response con error inyectado).
  *  - Mapeo canonico de errores: CREDENTIAL_NOT_FOUND, UPSTREAM_TIMEOUT, UPSTREAM_AUTH_FAILED,
- *    UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, INTERNAL_ERROR.
+ *    UPSTREAM_RATE_LIMITED, UPSTREAM_5XX, UPSTREAM_UNREACHABLE, UNKNOWN_ERROR.
  *  - Payload ai.chat.failed VALIDA contra schema oficial.
  *
  * Ejecutar: node tests/unit/ai-gateway-chat.test.js

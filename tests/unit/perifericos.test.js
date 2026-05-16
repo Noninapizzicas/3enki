@@ -221,28 +221,28 @@ function publishedOf(mocks, name) {
   // Group 2: Validacion canonica de UI handlers
   // ==========================================
 
-  await testAsync('handleGet sin nombre devuelve 400 VALIDATION_FAILED canonico', async () => {
+  await testAsync('handleGet sin nombre devuelve 400 INVALID_INPUT canonico', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleGet({});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.deepStrictEqual(r.error.details, { field: 'nombre' });
     await m.onUnload();
   });
 
-  await testAsync('handleRegistrar sin nombre devuelve 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleRegistrar sin nombre devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleRegistrar({ transporte: { tipo: 'tcp' } });
     assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.strictEqual(r.error.details.field, 'nombre');
     await m.onUnload();
   });
 
-  await testAsync('handleRegistrar sin transporte.tipo devuelve 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleRegistrar sin transporte.tipo devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleRegistrar({ nombre: 'caja' });
@@ -256,7 +256,7 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     const r = await m.handleListarPorCapacidad({});
     assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -266,7 +266,7 @@ function publishedOf(mocks, name) {
     for (const fn of ['handleTestDispositivo', 'handleEstado', 'handleDesregistrar']) {
       const r = await m[fn]({});
       assert.ok(isCanonicalError(r), `${fn} debe devolver shape canonico`);
-      assert.strictEqual(r.error.code, 'VALIDATION_FAILED', `${fn} code`);
+      assert.strictEqual(r.error.code, 'INVALID_INPUT', `${fn} code`);
     }
     await m.onUnload();
   });
@@ -375,7 +375,7 @@ function publishedOf(mocks, name) {
   // Group 4: Bus handlers — error paths con publish y telemetria
   // ==========================================
 
-  await testAsync('onImprimir sin destino publica periferico.error con code VALIDATION_FAILED', async () => {
+  await testAsync('onImprimir sin destino publica periferico.error con code INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     mocks.published.length = 0;
@@ -385,7 +385,7 @@ function publishedOf(mocks, name) {
     const errs = publishedOf(mocks, 'periferico.error');
     assert.strictEqual(errs.length, 1);
     assert.strictEqual(errs[0].kind, 'imprimir');
-    assert.strictEqual(errs[0].code, 'VALIDATION_FAILED');
+    assert.strictEqual(errs[0].code, 'INVALID_INPUT');
     assert.ok(errs[0].correlation_id);
     assert.strictEqual(publishedOf(mocks, 'periferico.impreso').length, 0);
     await m.onUnload();
@@ -419,7 +419,7 @@ function publishedOf(mocks, name) {
 
     const evs = publishedOf(mocks, 'periferico.estado.respuesta');
     assert.strictEqual(evs.length, 1);
-    assert.strictEqual(evs[0].error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(evs[0].error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
@@ -566,10 +566,10 @@ function publishedOf(mocks, name) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
   });
 
@@ -578,10 +578,10 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('not found')),         'RESOURCE_NOT_FOUND');
     assert.strictEqual(m._classifyHandlerError(new Error('no encontrado')),     'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('forbidden access')),  'AUTHORIZATION_REQUIRED');
-    assert.strictEqual(m._classifyHandlerError(new Error('already exists')),    'CONFLICT');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')),'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('forbidden access')),  'PERMISSION_DENIED');
+    assert.strictEqual(m._classifyHandlerError(new Error('already exists')),    'CONFLICT_STATE');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')),'UNKNOWN_ERROR');
     await m.onUnload();
   });
 

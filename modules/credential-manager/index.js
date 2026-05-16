@@ -222,7 +222,7 @@ class CredentialManagerModule {
       this._validateProviderLevelKey(provider, level, api_key);
       const validated = this._validateLevel(level, identifier);
       if (!validated.valid) {
-        throw Object.assign(new Error(validated.message), { _code: 'VALIDATION_FAILED', _details: validated.details });
+        throw Object.assign(new Error(validated.message), { _code: 'INVALID_INPUT', _details: validated.details });
       }
 
       const key = this._buildKey(provider, level, identifier);
@@ -381,7 +381,7 @@ class CredentialManagerModule {
       const { provider, level, identifier, api_key } = req.body || {};
       this._validateProviderLevelKey(provider, level, api_key);
       const validated = this._validateLevel(level, identifier);
-      if (!validated.valid) return this._errorResponse(400, 'VALIDATION_FAILED', validated.message, validated.details);
+      if (!validated.valid) return this._errorResponse(400, 'INVALID_INPUT', validated.message, validated.details);
 
       const key = this._buildKey(provider, level, identifier);
       const existed = this.credentials.has(key);
@@ -404,7 +404,7 @@ class CredentialManagerModule {
   async handleResolveCredential(req) {
     try {
       const { provider, project_id, client_id, customId } = req.body || {};
-      if (!provider) return this._errorResponse(400, 'VALIDATION_FAILED', 'provider is required', { kind: 'domain', field: 'provider' });
+      if (!provider) return this._errorResponse(400, 'INVALID_INPUT', 'provider is required', { kind: 'domain', field: 'provider' });
 
       const result = this._resolveCredential(provider, { customId, clientId: client_id, projectId: project_id });
       if (!result.found) {
@@ -428,8 +428,8 @@ class CredentialManagerModule {
     try {
       const { key } = req.params || {};
       const { api_key } = req.body || {};
-      if (!key) return this._errorResponse(400, 'VALIDATION_FAILED', 'key is required', { kind: 'domain', field: 'key' });
-      if (!api_key) return this._errorResponse(400, 'VALIDATION_FAILED', 'api_key is required', { kind: 'domain', field: 'api_key' });
+      if (!key) return this._errorResponse(400, 'INVALID_INPUT', 'key is required', { kind: 'domain', field: 'key' });
+      if (!api_key) return this._errorResponse(400, 'INVALID_INPUT', 'api_key is required', { kind: 'domain', field: 'api_key' });
       if (!this.credentials.has(key)) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Credential not found', { entity_type: 'credential', entity_id: key });
 
       this.credentials.set(key, api_key);
@@ -448,7 +448,7 @@ class CredentialManagerModule {
   async handleDeleteCredential(req) {
     try {
       const { key } = req.params || {};
-      if (!key) return this._errorResponse(400, 'VALIDATION_FAILED', 'key is required', { kind: 'domain', field: 'key' });
+      if (!key) return this._errorResponse(400, 'INVALID_INPUT', 'key is required', { kind: 'domain', field: 'key' });
       if (!this.credentials.has(key)) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Credential not found', { entity_type: 'credential', entity_id: key });
 
       this.credentials.delete(key);
@@ -514,7 +514,7 @@ class CredentialManagerModule {
   async handleUIGet(data) {
     try {
       const { key } = data || {};
-      if (!key) return this._errorResponse(400, 'VALIDATION_FAILED', 'Credential key is required', { kind: 'domain', field: 'key' });
+      if (!key) return this._errorResponse(400, 'INVALID_INPUT', 'Credential key is required', { kind: 'domain', field: 'key' });
 
       const value = this.credentials.get(key);
       if (!value) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Credential not found', { entity_type: 'credential', entity_id: key });
@@ -545,7 +545,7 @@ class CredentialManagerModule {
       const { provider, level, identifier, api_key } = data || {};
       this._validateProviderLevelKey(provider, level, api_key);
       const validated = this._validateLevel(level, identifier);
-      if (!validated.valid) return this._errorResponse(400, 'VALIDATION_FAILED', validated.message, validated.details);
+      if (!validated.valid) return this._errorResponse(400, 'INVALID_INPUT', validated.message, validated.details);
 
       const key = this._buildKey(provider, level, identifier);
       const existed = this.credentials.has(key);
@@ -568,8 +568,8 @@ class CredentialManagerModule {
   async handleUIUpdate(data) {
     try {
       const { key, api_key } = data || {};
-      if (!key) return this._errorResponse(400, 'VALIDATION_FAILED', 'Credential key is required', { kind: 'domain', field: 'key' });
-      if (!api_key) return this._errorResponse(400, 'VALIDATION_FAILED', 'API key is required', { kind: 'domain', field: 'api_key' });
+      if (!key) return this._errorResponse(400, 'INVALID_INPUT', 'Credential key is required', { kind: 'domain', field: 'key' });
+      if (!api_key) return this._errorResponse(400, 'INVALID_INPUT', 'API key is required', { kind: 'domain', field: 'api_key' });
       if (!this.credentials.has(key)) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Credential not found', { entity_type: 'credential', entity_id: key });
 
       this.credentials.set(key, api_key);
@@ -588,7 +588,7 @@ class CredentialManagerModule {
   async handleUIDelete(data) {
     try {
       const { key } = data || {};
-      if (!key) return this._errorResponse(400, 'VALIDATION_FAILED', 'Credential key is required', { kind: 'domain', field: 'key' });
+      if (!key) return this._errorResponse(400, 'INVALID_INPUT', 'Credential key is required', { kind: 'domain', field: 'key' });
       if (!this.credentials.has(key)) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Credential not found', { entity_type: 'credential', entity_id: key });
 
       this.credentials.delete(key);
@@ -751,13 +751,13 @@ class CredentialManagerModule {
 
   _validateProviderLevelKey(provider, level, api_key) {
     if (!provider) {
-      throw Object.assign(new Error('Provider is required'), { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'provider' } });
+      throw Object.assign(new Error('Provider is required'), { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'provider' } });
     }
     if (!level) {
-      throw Object.assign(new Error('Level is required'), { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'level' } });
+      throw Object.assign(new Error('Level is required'), { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'level' } });
     }
     if (!api_key) {
-      throw Object.assign(new Error('API key is required'), { _code: 'VALIDATION_FAILED', _details: { kind: 'domain', field: 'api_key' } });
+      throw Object.assign(new Error('API key is required'), { _code: 'INVALID_INPUT', _details: { kind: 'domain', field: 'api_key' } });
     }
   }
 
@@ -779,11 +779,11 @@ class CredentialManagerModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code = err._code || this._classifyHandlerError(err);
-    const status = code === 'VALIDATION_FAILED' ? 400 :
+    const status = code === 'INVALID_INPUT' ? 400 :
                    code === 'RESOURCE_NOT_FOUND' ? 404 :
                    code === 'CREDENTIAL_NOT_FOUND' ? 404 :
-                   code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                   code === 'CONFLICT' ? 409 : 500;
+                   code === 'PERMISSION_DENIED' ? 403 :
+                   code === 'CONFLICT_STATE' ? 409 : 500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code });
     this.metrics?.increment('credential-manager.errors', { kind, code });
@@ -793,11 +793,11 @@ class CredentialManagerModule {
   _classifyHandlerError(err) {
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'VALIDATION_FAILED';
-    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('conflict') || msg.includes('already')) return 'CONFLICT';
+    if (msg.includes('required') || msg.includes('invalid') || msg.includes('validation')) return 'INVALID_INPUT';
+    if (msg.includes('unauthorized') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
+    if (msg.includes('conflict') || msg.includes('already')) return 'CONFLICT_STATE';
     if (msg.includes('credential')) return 'CREDENTIAL_NOT_FOUND';
-    return 'INTERNAL_ERROR';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

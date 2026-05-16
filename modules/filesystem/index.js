@@ -19,13 +19,13 @@
  *   - "@/" prefix         → bypass project context, accede al data root.
  *   - "~"/"~/x"           → alias de project storage root (= "/").
  *   - systemMode (Sistema) → permite acceso al cwd completo.
- *   - Cualquier path resuelto fuera de allowedRoot → AUTHORIZATION_REQUIRED.
+ *   - Cualquier path resuelto fuera de allowedRoot → PERMISSION_DENIED.
  *
  * Cumple los 24 contratos transversales:
  *  - errors: handlers UI/tools/bus devuelven { status, data | error: { code, message, details? } }.
  *    Cierra los 24 drift_error_como_string_suelto + 9 respuesta_no_canonica.
- *    Codes canonicos: VALIDATION_FAILED, RESOURCE_NOT_FOUND,
- *    AUTHORIZATION_REQUIRED (path traversal), CONFLICT, INTERNAL_ERROR.
+ *    Codes canonicos: INVALID_INPUT, RESOURCE_NOT_FOUND,
+ *    PERMISSION_DENIED (path traversal), CONFLICT, UNKNOWN_ERROR.
  *  - observability: log + metric en cada error path. Prefix filesystem.*.
  *    Cierra los 23 error_sin_metric + 22 error_sin_log + 14 silent_io_failure.
  *    correlation_id propagado en todos los publishes y responses.
@@ -222,10 +222,10 @@ class FilesystemModule {
         this.logger.error('filesystem.exists.failed', {
           path: p, error: err.message, correlation_id: cid
         });
-        this.metrics?.increment('filesystem.errors', { kind: 'bus_exists', code: err._code || 'INTERNAL_ERROR' });
+        this.metrics?.increment('filesystem.errors', { kind: 'bus_exists', code: err._code || 'UNKNOWN_ERROR' });
         await this._publicarEvento('fs.exists.response', {
           request_id,
-          error: { code: err._code || 'INTERNAL_ERROR', message: err.message }
+          error: { code: err._code || 'UNKNOWN_ERROR', message: err.message }
         }, { correlation_id: cid });
       }
     }
@@ -252,7 +252,7 @@ class FilesystemModule {
       this.metrics?.increment('filesystem.errors', { kind: 'archivo_listar' });
       await this._publicarEvento('archivo.listar.fallido', {
         request_id, project_id, path: p,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, { correlation_id: cid });
     }
   }
@@ -277,7 +277,7 @@ class FilesystemModule {
       this.metrics?.increment('filesystem.errors', { kind: 'archivo_leer' });
       await this._publicarEvento('archivo.leer.fallido', {
         request_id, project_id, path: p,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, { correlation_id: cid });
     }
   }
@@ -301,7 +301,7 @@ class FilesystemModule {
       this.metrics?.increment('filesystem.errors', { kind: 'archivo_borrar' });
       await this._publicarEvento('archivo.borrar.fallido', {
         request_id, project_id, path: p,
-        error: { code: 'INTERNAL_ERROR', message: err.message }
+        error: { code: 'UNKNOWN_ERROR', message: err.message }
       }, { correlation_id: cid });
     }
   }
@@ -332,12 +332,12 @@ class FilesystemModule {
       }
     } catch (err) {
       this.logger.error(`filesystem.bus.${op}.failed`, {
-        error: err.message, code: err._code || 'INTERNAL_ERROR', correlation_id: cid
+        error: err.message, code: err._code || 'UNKNOWN_ERROR', correlation_id: cid
       });
       this.metrics?.increment('filesystem.errors', { kind: `bus_${op}` });
       await this._publicarEvento(responseEvent, {
         request_id,
-        error: { code: err._code || 'INTERNAL_ERROR', message: err.message }
+        error: { code: err._code || 'UNKNOWN_ERROR', message: err.message }
       }, { correlation_id: cid });
     }
   }
@@ -377,7 +377,7 @@ class FilesystemModule {
     const allowedRoot = this.systemMode ? process.cwd() : this.basePath;
     if (!resolved.startsWith(allowedRoot)) {
       const error = new Error(`Access denied: path outside ${this.systemMode ? 'system' : 'data'} directory`);
-      error._code = 'AUTHORIZATION_REQUIRED';
+      error._code = 'PERMISSION_DENIED';
       error._details = { kind: 'path_traversal', requested: inputPath, root: allowedRoot };
       throw error;
     }
@@ -417,7 +417,7 @@ class FilesystemModule {
         throw e;
       }
       if (!stats.isDirectory()) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'Path is not a directory',
+        return this._errorResponse(400, 'INVALID_INPUT', 'Path is not a directory',
           { kind: 'domain', field: 'path', expected: 'directory', got: 'file' });
       }
 
@@ -462,7 +462,7 @@ class FilesystemModule {
   async handleRead(data) {
     try {
       if (!data?.path) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'path is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
       const safePath = this.validatePath(data.path);
@@ -477,11 +477,11 @@ class FilesystemModule {
         throw e;
       }
       if (stats.isDirectory()) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'Cannot read directory as file',
+        return this._errorResponse(400, 'INVALID_INPUT', 'Cannot read directory as file',
           { kind: 'domain', field: 'path', expected: 'file', got: 'directory' });
       }
       if (stats.size > MAX_READ_SIZE) {
-        return this._errorResponse(413, 'VALIDATION_FAILED',
+        return this._errorResponse(413, 'INVALID_INPUT',
           `File too large. Max size: ${MAX_READ_SIZE / (1024 * 1024)}MB`,
           { kind: 'limit', max_size: MAX_READ_SIZE, actual_size: stats.size });
       }
@@ -519,11 +519,11 @@ class FilesystemModule {
     try {
       const filePath = data?.path || data?.file_path;
       if (!filePath) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'path is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
       if (data.content === undefined) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'content is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'content is required',
           { kind: 'domain', field: 'content' });
       }
 
@@ -566,11 +566,11 @@ class FilesystemModule {
     try {
       const filePath = data?.path || data?.file_path;
       if (!filePath) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'path is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
       if (filePath === '/' || filePath === '') {
-        return this._errorResponse(403, 'AUTHORIZATION_REQUIRED', 'Cannot delete root directory',
+        return this._errorResponse(403, 'PERMISSION_DENIED', 'Cannot delete root directory',
           { kind: 'protected_path' });
       }
 
@@ -608,7 +608,7 @@ class FilesystemModule {
   async handleMkdir(data) {
     try {
       if (!data?.path) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'path is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
       const safePath = this.validatePath(data.path);
@@ -626,7 +626,7 @@ class FilesystemModule {
   async handleMove(data) {
     try {
       if (!data?.from || !data?.to) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'from and to are required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'from and to are required',
           { kind: 'domain', field: 'from|to' });
       }
       const safeFrom = this.validatePath(data.from);
@@ -652,7 +652,7 @@ class FilesystemModule {
   async handleCopy(data) {
     try {
       if (!data?.from || !data?.to) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'from and to are required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'from and to are required',
           { kind: 'domain', field: 'from|to' });
       }
       const safeFrom = this.validatePath(data.from);
@@ -667,7 +667,7 @@ class FilesystemModule {
         throw e;
       }
       if (stats.isDirectory()) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'Cannot copy directories (use recursive copy)',
+        return this._errorResponse(400, 'INVALID_INPUT', 'Cannot copy directories (use recursive copy)',
           { kind: 'domain', field: 'from', expected: 'file', got: 'directory' });
       }
       await fs.mkdir(path.dirname(safeTo), { recursive: true });
@@ -683,7 +683,7 @@ class FilesystemModule {
   async handleSearch(data) {
     try {
       if (!data?.query) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'query is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'query is required',
           { kind: 'domain', field: 'query' });
       }
       const basePath = this.validatePath(data.path || '/');
@@ -711,7 +711,7 @@ class FilesystemModule {
   async handleInfo(data) {
     try {
       if (!data?.path) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'path is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
       const safePath = this.validatePath(data.path);
@@ -743,11 +743,11 @@ class FilesystemModule {
   async handleAppend(data) {
     try {
       if (!data?.path) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'path is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
       if (data.content === undefined) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'content is required',
+        return this._errorResponse(400, 'INVALID_INPUT', 'content is required',
           { kind: 'domain', field: 'content' });
       }
       const safePath = this.validatePath(data.path);
@@ -775,7 +775,7 @@ class FilesystemModule {
       try {
         const stats = await fs.stat(safePath);
         if (!stats.isDirectory()) {
-          return this._errorResponse(400, 'VALIDATION_FAILED', 'Path is not a directory',
+          return this._errorResponse(400, 'INVALID_INPUT', 'Path is not a directory',
             { kind: 'domain', field: 'path', expected: 'directory', got: 'file' });
         }
       } catch (e) {
@@ -815,7 +815,7 @@ class FilesystemModule {
       try {
         const dirStats = await fs.stat(safePath);
         if (!dirStats.isDirectory()) {
-          return this._errorResponse(400, 'VALIDATION_FAILED', 'Path is not a directory',
+          return this._errorResponse(400, 'INVALID_INPUT', 'Path is not a directory',
             { kind: 'domain', field: 'path', expected: 'directory', got: 'file' });
         }
       } catch (e) {
@@ -862,7 +862,7 @@ class FilesystemModule {
       const safePath = this.validatePath(requestedPath);
       const stats = await fs.stat(safePath);
       if (!stats.isDirectory()) {
-        return this._errorResponse(400, 'VALIDATION_FAILED', 'Path is not a directory',
+        return this._errorResponse(400, 'INVALID_INPUT', 'Path is not a directory',
           { kind: 'domain', field: 'path', expected: 'directory', got: 'file' });
       }
 
@@ -1034,11 +1034,11 @@ class FilesystemModule {
 
   _handleHandlerError(logEvent, err, kind) {
     const code    = err._code || this._classifyHandlerError(err);
-    const status  = code === 'VALIDATION_FAILED'      ? 400 :
+    const status  = code === 'INVALID_INPUT'      ? 400 :
                     code === 'RESOURCE_NOT_FOUND'     ? 404 :
-                    code === 'AUTHORIZATION_REQUIRED' ? 403 :
-                    code === 'CONFLICT'               ? 409 :
-                    code === 'UPSTREAM_UNAVAILABLE'   ? 503 :
+                    code === 'PERMISSION_DENIED' ? 403 :
+                    code === 'CONFLICT_STATE'               ? 409 :
+                    code === 'UPSTREAM_UNREACHABLE'   ? 503 :
                                                         500;
     const message = err.message || String(err);
     this.logger.error(logEvent, { error: message, code });
@@ -1048,15 +1048,15 @@ class FilesystemModule {
 
   _classifyHandlerError(err) {
     if (err.code === 'ENOENT') return 'RESOURCE_NOT_FOUND';
-    if (err.code === 'EACCES' || err.code === 'EPERM') return 'AUTHORIZATION_REQUIRED';
-    if (err.code === 'EEXIST') return 'CONFLICT';
-    if (err.code === 'EISDIR' || err.code === 'ENOTDIR') return 'VALIDATION_FAILED';
+    if (err.code === 'EACCES' || err.code === 'EPERM') return 'PERMISSION_DENIED';
+    if (err.code === 'EEXIST') return 'CONFLICT_STATE';
+    if (err.code === 'EISDIR' || err.code === 'ENOTDIR') return 'INVALID_INPUT';
     const msg = (err?.message || '').toLowerCase();
     if (msg.includes('not found')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('invalid')) return 'VALIDATION_FAILED';
-    if (msg.includes('access denied') || msg.includes('forbidden')) return 'AUTHORIZATION_REQUIRED';
-    if (msg.includes('already')) return 'CONFLICT';
-    return 'INTERNAL_ERROR';
+    if (msg.includes('required') || msg.includes('invalid')) return 'INVALID_INPUT';
+    if (msg.includes('access denied') || msg.includes('forbidden')) return 'PERMISSION_DENIED';
+    if (msg.includes('already')) return 'CONFLICT_STATE';
+    return 'UNKNOWN_ERROR';
   }
 
   async _publicarEvento(name, payload, sourcePayload = null) {

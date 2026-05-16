@@ -287,13 +287,13 @@ function publishedOf(mocks, name) {
   // Group 2: Validacion canonica de UI handlers
   // ==========================================
 
-  await testAsync('handleStatus sin type → 400 VALIDATION_FAILED canonico', async () => {
+  await testAsync('handleStatus sin type → 400 INVALID_INPUT canonico', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleStatus({});
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     assert.deepStrictEqual(r.error.details.allowed, ['tcp', 'ble', 'usb', 'cmd']);
     await m.onUnload();
   });
@@ -304,11 +304,11 @@ function publishedOf(mocks, name) {
     const r = await m.handleStatus({ type: 'unknown' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'VALIDATION_FAILED');
+    assert.strictEqual(r.error.code, 'INVALID_INPUT');
     await m.onUnload();
   });
 
-  await testAsync('handleRestart sin type → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleRestart sin type → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleRestart({});
@@ -317,7 +317,7 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleRestart sin MQTT → 503 UPSTREAM_UNAVAILABLE', async () => {
+  await testAsync('handleRestart sin MQTT → 503 UPSTREAM_UNREACHABLE', async () => {
     const mocks = makeMocks(true);
     const { module: m } = await instantiate(mocks, { tcp: { enabled: true } });
     // Cortar MQTT despues del onLoad
@@ -325,11 +325,11 @@ function publishedOf(mocks, name) {
     const r = await m.handleRestart({ type: 'tcp' });
     assert.ok(isCanonicalError(r));
     assert.strictEqual(r.status, 503);
-    assert.strictEqual(r.error.code, 'UPSTREAM_UNAVAILABLE');
+    assert.strictEqual(r.error.code, 'UPSTREAM_UNREACHABLE');
     await m.onUnload();
   });
 
-  await testAsync('handleDiscover sin type → 400 VALIDATION_FAILED', async () => {
+  await testAsync('handleDiscover sin type → 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     const r = await m.handleDiscover({});
@@ -338,7 +338,7 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('handleDiscover sin MQTT → 503 UPSTREAM_UNAVAILABLE', async () => {
+  await testAsync('handleDiscover sin MQTT → 503 UPSTREAM_UNREACHABLE', async () => {
     const mocks = makeMocks(false);
     const { module: m } = await instantiate(mocks);
     const r = await m.handleDiscover({ type: 'tcp' });
@@ -443,10 +443,10 @@ function publishedOf(mocks, name) {
   await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'VALIDATION_FAILED', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'VALIDATION_FAILED', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'INTERNAL_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'INTERNAL_ERROR', message: 'oops' } });
+    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
+    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
+    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
+    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
     await m.onUnload();
   });
 
@@ -454,10 +454,10 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m._classifyHandlerError(new Error('Gateway not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('type is required')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('Type not supported: foo')), 'VALIDATION_FAILED');
-    assert.strictEqual(m._classifyHandlerError(new Error('MQTT not available')), 'UPSTREAM_UNAVAILABLE');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'INTERNAL_ERROR');
+    assert.strictEqual(m._classifyHandlerError(new Error('type is required')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('Type not supported: foo')), 'INVALID_INPUT');
+    assert.strictEqual(m._classifyHandlerError(new Error('MQTT not available')), 'UPSTREAM_UNREACHABLE');
+    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
     await m.onUnload();
   });
 
@@ -479,10 +479,10 @@ function publishedOf(mocks, name) {
   await testAsync('_handleHandlerError mapea status segun code y registra metric', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    const err = Object.assign(new Error('mqtt down'), { _code: 'UPSTREAM_UNAVAILABLE', _details: { upstream: 'mqtt' } });
+    const err = Object.assign(new Error('mqtt down'), { _code: 'UPSTREAM_UNREACHABLE', _details: { upstream: 'mqtt' } });
     const r = m._handleHandlerError('test.failed', err, 'kind');
     assert.strictEqual(r.status, 503);
-    assert.strictEqual(r.error.code, 'UPSTREAM_UNAVAILABLE');
+    assert.strictEqual(r.error.code, 'UPSTREAM_UNREACHABLE');
     assert.deepStrictEqual(r.error.details, { upstream: 'mqtt' });
     const errMetric = mocks.metricsCalls.find(c => c[1] === 'gateway-manager.errors');
     assert.ok(errMetric);

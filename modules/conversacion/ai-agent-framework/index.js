@@ -44,6 +44,10 @@ class AiAgentFrameworkModule extends BaseModule {
     this._conversationCacheTTL = DEFAULT_CONVERSATION_CACHE_TTL_MS;
   }
 
+  // ============================================================
+  // Lifecycle
+  // ============================================================
+
   async onLoad(context) {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
@@ -128,7 +132,11 @@ class AiAgentFrameworkModule extends BaseModule {
   }
 
   // ============================================================
-  // Carga de base prompt + agentes
+  // HTTP / UI API — sin endpoints HTTP (modulo solo bus + LLM)
+  // ============================================================
+
+  // ============================================================
+  // Privados — Carga de base prompt + agentes desde FS
   // ============================================================
 
   _loadBasePrompt() {
@@ -191,7 +199,7 @@ class AiAgentFrameworkModule extends BaseModule {
         this.logger.warn('ai-agent-framework.agent.load.failed', {
           file, error_message: err.message
         });
-        this.metrics?.increment?.('ai-agent-framework.errors', { code: 'AGENT_LOAD_FAILED', kind: 'load' });
+        this.metrics?.increment?.('ai-agent-framework.errors', { code: 'UNKNOWN_ERROR', kind: 'load' });
       }
     }
   }

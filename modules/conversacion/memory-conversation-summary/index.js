@@ -160,7 +160,7 @@ class MemoryConversationSummaryModule extends BaseModule {
           this.logger.error('memory-conversation-summary.summarize.scheduling_failed', {
             error_message: err.message, conversation_id
           });
-          this.metrics?.increment?.('memory-conversation-summary.errors', { code: 'SCHEDULING_FAILED', kind: 'summarize' });
+          this.metrics?.increment?.('memory-conversation-summary.errors', { code: 'UNKNOWN_ERROR', kind: 'summarize' });
           this.summaryInFlight.delete(conversation_id);
         });
       }

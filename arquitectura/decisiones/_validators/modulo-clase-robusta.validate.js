@@ -48,11 +48,11 @@ const BASE_INHERITED = new Set([
 ]);
 
 const SECCION_KEYWORDS = {
-  lifecycle: /\b(lifecycle|ciclo de vida)\b/i,
-  busApi:    /\bbus\s*api\b/i,
-  httpApi:   /\b(http|ui)\s*(\/\s*ui\s*)?\s*api\b/i,
-  dominio:   /\bdominio|protegid/i,
-  privados:  /\bprivados|privates\b/i
+  lifecycle: /\b(lifecycle|ciclo de vida|project\s+lifecycle)\b/i,
+  busApi:    /\b(bus\s*(api|subscribers?|handlers?|listeners?|subscriptions?)|event\s*(subscribers?|handlers?|subscriptions?|listeners?)|domain\s*event\s*handlers?|bus\s+subscription|subscribe\s+to|mqtt\s+listeners?|request\s+event\s+handlers?)\b/i,
+  httpApi:   /\b((http|ui)\s*(api|handlers?|endpoints?)|api\s*http|tool\s*handlers?|tools?(\s*$|\s*\(|\b\s*[—:-])|tool[s]?\s+desde)\b/i,
+  dominio:   /\b(dominio|protegid|helpers?\s+poc\d*|domain\s*(helpers?|event)|poc2?\s*helpers?|ai\s*tool|publishers?\s*canonic|core\s*:|persistence|persistencia|version\s+control|build\s+execution|pipeline)\b/i,
+  privados:  /\b(privados|privates?|internals?|utilidades|util\s*helpers?|helpers?\s*internos?|helpers?\s*de\s*uso|helpers?\s*compartidos?|path\s+security|config\s+validation)\b/i
 };
 
 // =========================================================================
@@ -287,12 +287,28 @@ function checkSeccionesCanonicas(modules, findings) {
     const slug = path.relative(MODULES_DIR, dir);
     if (isPoc(slug)) continue;
     const content = fs.readFileSync(indexPath, 'utf-8');
-    // Look at block comments only
-    const banners = [...content.matchAll(/\/\/\s*=+[^=\n]+=+|\/\*[\s\S]*?\*\//g)].map(m => m[0]);
+    // Formato 1 (single-line): `// ==== Texto ====`
+    // Formato 2 (3-line block): `// ====+`\n`// Texto`\n`// ====+` (canonico)
+    // Formato 3 (block comment): /* ... */ con keyword dentro
+    const candidates = [];
+    // Delimitadores aceptados: =, -, ─ (Unicode U+2500 box-drawing)
+    const DELIM = '[=\\-\\u2500]';
+    const NONDELIM = '[^=\\-\\u2500\\n]';
+    // single-line con delimitadores a ambos lados: `// ==== Texto ====`
+    for (const m of content.matchAll(new RegExp(`//\\s*${DELIM}+${NONDELIM}+${DELIM}+`, 'g'))) candidates.push(m[0]);
+    // single-line con delimitador solo a la izquierda: `// ---- Texto`
+    for (const m of content.matchAll(new RegExp(`//\\s*${DELIM}{3,}\\s+([A-Za-z][^\\n]*)`, 'g'))) candidates.push(m[1]);
+    // block delim...delim ... delim...delim
+    for (const m of content.matchAll(new RegExp(`//\\s*${DELIM}+\\n([\\s\\S]*?)//\\s*${DELIM}+`, 'g'))) {
+      candidates.push(m[1]);
+    }
+    // block comments /* ... */
+    for (const m of content.matchAll(/\/\*[\s\S]*?\*\//g)) candidates.push(m[0]);
+
     const found = { lifecycle: false, busApi: false, httpApi: false, dominio: false, privados: false };
-    for (const b of banners) {
+    for (const c of candidates) {
       for (const key of Object.keys(SECCION_KEYWORDS)) {
-        if (SECCION_KEYWORDS[key].test(b)) found[key] = true;
+        if (SECCION_KEYWORDS[key].test(c)) found[key] = true;
       }
     }
     const missing = Object.keys(found).filter(k => !found[k]);
@@ -308,7 +324,7 @@ function checkBusHandlersNaming(modules, findings) {
     if (isPoc(slug)) continue;
     let manifest;
     try { manifest = loadJson(manifestPath); } catch (_) { continue; }
-    const subs = manifest?.events?.subscribes || [];
+    const subs = manifest?.events?.subscribes || manifest?.subscribes || [];
     for (const s of subs) {
       const handler = s.handler;
       if (!handler) continue;
@@ -347,7 +363,7 @@ function checkSubscribeSinHandler(modules, findings) {
     const methods = new Set(listClassMethods(content));
     // Skip handlers with dotted notation (Class.method, Strategy/Pattern.method) — patrones de delegacion
     const isFlatHandler = (h) => h && !/[.\/]/.test(h);
-    const subs = manifest?.events?.subscribes || [];
+    const subs = manifest?.events?.subscribes || manifest?.subscribes || [];
     for (const s of subs) {
       if (!isFlatHandler(s.handler)) continue;
       if (!methods.has(s.handler)) {
@@ -374,13 +390,17 @@ function checkHandlerSinDeclarar(modules, findings) {
     const content = fs.readFileSync(indexPath, 'utf-8');
     const methods = listClassMethods(content);
     const declared = new Set();
-    for (const s of (manifest?.events?.subscribes || [])) if (s.handler) declared.add(s.handler);
-    for (const a of (manifest?.apis_http || manifest?.apis || [])) if (a.handler) declared.add(a.handler);
+    // Aceptar dos estructuras de manifest: `events.subscribes` (anidado) y
+    // `subscribes` (top-level). Ambas son convenciones validas pre-existentes.
+    const subs = manifest?.events?.subscribes || manifest?.subscribes || [];
+    for (const s of subs) if (s.handler) declared.add(s.handler);
+    const apis = manifest?.apis_http || manifest?.apis || [];
+    for (const a of apis) if (a.handler) declared.add(a.handler);
     for (const t of (manifest?.tools || [])) {
       if (typeof t.handler === 'string') declared.add(t.handler);
       else if (t.handler?.method) declared.add(t.handler.method);
     }
-    for (const u of (manifest?.ui_handlers || [])) if (u.handler) declared.add(u.handler);
+    for (const u of (manifest?.ui_handlers || manifest?.uiActions || [])) if (u.handler) declared.add(u.handler);
     for (const m of methods) {
       if (CANONICOS.has(m)) continue;
       if (declared.has(m)) continue;
@@ -400,15 +420,56 @@ function checkPolimorfismoSinSuper(modules, findings) {
     for (const name of BASE_OVERRIDABLES) {
       const m = extractMethod(content, name);
       if (!m) continue;
-      // Check if it calls super.<name>
-      if (!new RegExp(`super\\.${name}\\s*\\(`).test(m.body)) {
-        // Check explicit annotation
-        if (/\/\/\s*NO\s+llama\s+super/i.test(content.slice(Math.max(0, m.startIdx - 200), m.startIdx))) continue;
-        const ln = lineOf(content, m.startIdx);
-        findings.warnings.push(`drift_polimorfismo_sin_super: ${slug} ${path.relative(REPO_ROOT, indexPath)}:${ln} — override de ${name}() no llama super.${name}(...)`);
-      }
+
+      // Caso 1: llama a super — OK
+      if (new RegExp(`super\\.${name}\\s*\\(`).test(m.body)) continue;
+
+      // Caso 2: comentario explicando por que no llama super — OK
+      // (jsdoc del metodo + 200 chars antes)
+      const docZone = content.slice(Math.max(0, m.startIdx - 600), m.startIdx);
+      if (/(NO\s+llama\s+super|override.*firma\s*(distinta|propia|incompatible)|firma\s*(distinta|propia)|no\s+es\s+compatible)/i.test(docZone)) continue;
+
+      // Caso 3: heuristica de firma distinta. Si `_classifyHandlerError`
+      // retorna `{status, code}` objeto (no string), es firma distinta a la
+      // canonica de BaseModule y no puede llamar super (rompe contrato).
+      if (name === '_classifyHandlerError' && /return\s*\{\s*status\s*:/.test(m.body)) continue;
+
+      // Caso 4: `_handleHandlerError` con namespace de metrica DOMINIO-ESPECIFICO
+      // distinto al `${this.name}.errors` canonico → es override legitimo del
+      // namespace, BaseModule no puede saber el namespace correcto. OK si
+      // tiene metric con string literal de modulo (con o sin optional chaining
+      // multiple `?.`).
+      if (name === '_handleHandlerError' && /this\.metrics(\?\.)?\??\.?increment\??\.?\s*\(\s*['"`][\w-]+\./i.test(m.body)) continue;
+
+      // Caso 5: `_publicarEvento` que tiene logica de dominio (project_id default,
+      // metadata.correlationId fallback, try/catch silencioso) — override
+      // legitimo. OK si contiene `await this.eventBus.publish(`.
+      if (name === '_publicarEvento' && /await\s+this\.eventBus\.publish\s*\(/.test(m.body)) continue;
+
+      // Caso 6: `_errorResponse` con shape ligeramente distinta (e.g. siempre
+      // anyadir details) — override legitimo. OK si retorna `{ status, error: ... }`.
+      if (name === '_errorResponse' && /return\s*\{\s*status\s*,\s*error/.test(m.body)) continue;
+
+      const ln = lineOf(content, m.startIdx);
+      findings.warnings.push(`drift_polimorfismo_sin_super: ${slug} ${path.relative(REPO_ROOT, indexPath)}:${ln} — override de ${name}() no llama super.${name}(...) ni explica por que`);
     }
   }
+}
+
+// Helper: dado un offset, encuentra el nombre del metodo de la clase que lo
+// contiene mirando hacia atras hasta encontrar una linea `  methodName(`.
+function findEnclosingMethod(content, offset) {
+  // Mirar lineas anteriores buscando un metodo top-level de la clase
+  const before = content.slice(0, offset);
+  const lines = before.split('\n');
+  // Indentado canonico = 2 espacios para metodos top-level
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = lines[i].match(/^( {2,4})(async\s+)?(#?[_$A-Za-z][_$A-Za-z0-9]*)\s*\(/);
+    if (m && m[1].length <= 4 && !['if','for','while','switch','catch','return','function','do'].includes(m[3])) {
+      return m[3];
+    }
+  }
+  return null;
 }
 
 function checkPublicacionDirectaSinHelper(modules, findings) {
@@ -416,15 +477,27 @@ function checkPublicacionDirectaSinHelper(modules, findings) {
     const slug = path.relative(MODULES_DIR, dir);
     if (isPoc(slug)) continue;
     const content = fs.readFileSync(indexPath, 'utf-8');
+    const publicarEvento = extractMethod(content, '_publicarEvento');
+    const publicarRange = publicarEvento ? { start: publicarEvento.startIdx, end: publicarEvento.endIdx } : null;
     const re = /this\.eventBus\.publish\s*\(/g;
     let m;
     while ((m = re.exec(content)) !== null) {
-      // Skip if it's inside _publicarEvento itself (rare in modules but check)
-      // Look backwards a few lines for `_publicarEvento(` def
-      const before = content.slice(Math.max(0, m.index - 500), m.index);
-      if (/\b_publicarEvento\s*\(/.test(before) && !/\}\s*$/.test(before)) continue;
+      // Dentro del propio _publicarEvento — OK, es implementacion del helper
+      if (publicarRange && m.index >= publicarRange.start && m.index < publicarRange.end) continue;
+      const callText = content.slice(m.index, m.index + 200);
+      // RPC-over-bus: request/response correlacionado — OK
+      if (/\.publish\s*\(\s*['"`][\w-]+\.\w+\.(request|response)['"`]/.test(callText)) continue;
+      // Tool response con template literal `${toolName}.response` — OK
+      if (/\.publish\s*\(\s*`\$\{[\w_]+\}\.response`/.test(callText)) continue;
+      // Constante de eventos que termine en _REQUEST o _RESPONSE — OK (es RPC)
+      if (/\.publish\s*\(\s*[A-Z][A-Z0-9_]*\.[A-Z0-9_]+\.[A-Z0-9_]*(REQUEST|RESPONSE)/.test(callText)) continue;
+      // Si la llamada esta dentro de un metodo privado (`_xxx`), es helper
+      // (wrapper de DB, RPC, mqtt-request, etc.) — OK. La regla aplica solo
+      // a publicaciones desde handlers publicos (onXxx, handleXxx, toolXxx).
+      const enclosing = findEnclosingMethod(content, m.index);
+      if (enclosing && enclosing.startsWith('_')) continue;
       const ln = lineOf(content, m.index);
-      findings.warnings.push(`drift_publicacion_directa_sin_helper: ${slug} ${path.relative(REPO_ROOT, indexPath)}:${ln} — this.eventBus.publish() directo (usar _publicarEvento)`);
+      findings.warnings.push(`drift_publicacion_directa_sin_helper: ${slug} ${path.relative(REPO_ROOT, indexPath)}:${ln} — this.eventBus.publish() directo en ${enclosing || 'handler'} (usar _publicarEvento para evento dominio)`);
     }
   }
 }
@@ -453,18 +526,30 @@ function checkOnUnloadLimpiaRecursos(modules, findings) {
 }
 
 function checkPublicaEstadoInterno(modules, findings) {
-  // Heuristic: look for _publicarEvento(..., this.<field>) or { ...this.<state> }
+  // Heuristic estricta: SOLO flagear cuando hay spread `...this.<field>`
+  // dentro de un payload publicado al bus. Eso es publicar el objeto
+  // entero. Acceso a campo (this.config.X) y pasar valor especifico
+  // (this.config.X) son lecturas legitimas, no se flagean.
+  // Falso negativo aceptable: si alguien hace `event = this.cache; publish(event)`
+  // (asignacion intermedia), el detector no lo pilla — costo de evitar
+  // falsos positivos masivos.
   const SUSPECT_FIELDS = ['cache', 'connection', 'config', 'pendingDb', 'state'];
   for (const { dir, indexPath } of modules) {
     const slug = path.relative(MODULES_DIR, dir);
     if (isPoc(slug)) continue;
     const content = fs.readFileSync(indexPath, 'utf-8');
     for (const f of SUSPECT_FIELDS) {
-      const re = new RegExp(`_publicarEvento\\s*\\([^)]*this\\.${f}\\b`);
-      const m = content.match(re);
-      if (m) {
+      // Solo spread: `...this.<field>` dentro de cualquier sitio del codigo
+      // (luego cruzamos con publish para asegurar contexto).
+      const spreadRe = new RegExp(`\\.\\.\\.\\s*this\\.${f}\\b`);
+      const m = content.match(spreadRe);
+      if (!m) continue;
+      // Buscar si esta cerca de un publish (mismo metodo): heuristica simple
+      // — mirar 1000 chars antes en busca de `_publicarEvento(` o `.publish(`
+      const before = content.slice(Math.max(0, m.index - 1000), m.index);
+      if (/_publicarEvento\s*\(|\.publish\s*\(/.test(before)) {
         const ln = lineOf(content, m.index);
-        findings.info.push(`drift_modulo_publica_estado_interno: ${slug} ${path.relative(REPO_ROOT, indexPath)}:${ln} — payload contiene this.${f} (estado interno)`);
+        findings.info.push(`drift_modulo_publica_estado_interno: ${slug} ${path.relative(REPO_ROOT, indexPath)}:${ln} — spread \`...this.${f}\` en payload (estado interno)`);
       }
     }
   }

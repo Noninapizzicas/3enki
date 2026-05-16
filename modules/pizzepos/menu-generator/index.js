@@ -251,7 +251,7 @@ class MenuGeneratorModule extends BaseModule {
       this.logger.error('menu.extract.pipeline_error', {
         filePath, error_message: err.message
       });
-      this.metrics?.increment?.('menu-generator.errors', { code: 'EXTRACTION_PIPELINE', kind: 'ocr' });
+      this.metrics?.increment?.('menu-generator.errors', { code: 'UNKNOWN_ERROR', kind: 'ocr' });
       return { success: false, error: err.message };
     }
   }

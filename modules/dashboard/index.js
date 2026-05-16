@@ -177,7 +177,7 @@ class DashboardModule extends BaseModule {
         this.logger?.warn?.('dashboard.buffer.error', {
           topic, error_message: err.message
         });
-        this.metrics?.increment?.('dashboard.errors', { code: 'BUFFER_ERROR', kind: 'subscribe' });
+        this.metrics?.increment?.('dashboard.errors', { code: 'UNKNOWN_ERROR', kind: 'subscribe' });
       }
     };
     this.eventBus.on('message', this._busMessageHandler);

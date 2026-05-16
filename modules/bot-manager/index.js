@@ -149,7 +149,7 @@ class BotManagerModule extends BaseModule {
         this.logger.error('bot-manager.file-storage.failed', {
           botName, fileId, error_message: result.error
         });
-        this.metrics?.increment?.('bot-manager.errors', { code: 'DOWNLOAD_FAILED', kind: 'file' });
+        this.metrics?.increment?.('bot-manager.errors', { code: 'UPSTREAM_INVALID_RESPONSE', kind: 'file' });
         return;
       }
 

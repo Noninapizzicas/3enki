@@ -170,7 +170,7 @@ class ESP32FlasherModule extends BaseModule {
       this.logger?.warn?.('esp32-flasher.publish.failed', {
         event: name, error_message: err.message
       });
-      this.metrics?.increment?.('esp32-flasher.errors', { code: 'PUBLISH_FAILED', kind: 'publish' });
+      this.metrics?.increment?.('esp32-flasher.errors', { code: 'UNKNOWN_ERROR', kind: 'publish' });
     }
     return enriched;
   }
@@ -1017,7 +1017,7 @@ class ESP32FlasherModule extends BaseModule {
       this.logger.error('flash.monitor.error', {
         port, error_message: err.message
       });
-      this.metrics?.increment?.('esp32-flasher.errors', { code: 'MONITOR_ERROR', kind: 'monitor' });
+      this.metrics?.increment?.('esp32-flasher.errors', { code: 'UNKNOWN_ERROR', kind: 'monitor' });
     });
 
     this.activeMonitors.set(port, monitor);

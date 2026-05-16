@@ -306,7 +306,7 @@ class MemoryRagModule extends BaseModule {
       this.logger.warn('memory-rag.embedding.skipped', {
         error_message: err.message, source
       });
-      this.metrics?.increment?.('memory-rag.errors', { code: 'EMBEDDING_FAILED', kind: 'embedding' });
+      this.metrics?.increment?.('memory-rag.errors', { code: 'UPSTREAM_INVALID_RESPONSE', kind: 'embedding' });
       return null;
     });
   }

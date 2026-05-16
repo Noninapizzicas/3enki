@@ -199,7 +199,7 @@ class AiAgentFrameworkModule extends BaseModule {
         this.logger.warn('ai-agent-framework.agent.load.failed', {
           file, error_message: err.message
         });
-        this.metrics?.increment?.('ai-agent-framework.errors', { code: 'AGENT_LOAD_FAILED', kind: 'load' });
+        this.metrics?.increment?.('ai-agent-framework.errors', { code: 'UNKNOWN_ERROR', kind: 'load' });
       }
     }
   }

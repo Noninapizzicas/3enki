@@ -117,7 +117,7 @@ class MemoryUserProfileModule extends BaseModule {
             error_message: err.message,
             fact: fact.slice(0, 40)
           });
-          this.metrics?.increment?.('memory-user-profile.errors', { code: 'INSERT_FAILED', kind: 'db' });
+          this.metrics?.increment?.('memory-user-profile.errors', { code: 'UNKNOWN_ERROR', kind: 'db' });
         }
       }
 

@@ -290,7 +290,7 @@ class AgentObserverModule extends BaseModule {
         request_id: data.request_id,
         error_message: err.message
       });
-      this.metrics?.increment?.('agent-observer.errors', { code: 'PUBLISH_FAILED', kind: 'publish' });
+      this.metrics?.increment?.('agent-observer.errors', { code: 'UNKNOWN_ERROR', kind: 'publish' });
     }
   }
 

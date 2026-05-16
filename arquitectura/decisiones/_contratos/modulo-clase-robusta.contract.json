@@ -1,0 +1,292 @@
+{
+  "_doc": "Captura QUE ES UNA CLASE DE MODULO ROBUSTA EN ENKI bajo el paradigma event-core. Documenta que OOP aplica, que OOP NO aplica, la estructura canonica que toda clase de modulo debe seguir, la frontera entre API event-driven y metodos internos, y las validaciones cross que enforcan la disciplina.",
+  "id": "modulo-clase-robusta",
+  "version": "1.0.0",
+  "creada": "2026-05-16",
+  "supersedes_nota": "v1.0.0: primera version. Cierra la deuda conceptual revelada en la sesion de migracion OOP 2026-05-16: queda claro que cada modulo es UNA CLASE DISTINTA con su razon de ser, no una variacion de un patron uniforme. El paradigma OOP aplica solo en su forma compatible con event-core (encapsulacion + herencia vertical de BaseModule + polimorfismo con super), y NO aplica en sus formas que romperian el aislamiento del paradigma (composicion entre modulos, DI cross-modulo, herencia entre dominios). Este contrato consolida ambas afirmaciones como invariante.",
+
+  "objetivo": "Definir la forma canonica de una clase de modulo en Enki para que cada modulo sea ROBUSTO (estado declarado, API explicita, invariantes documentados) y CON PROYECCION (extensible via herencia controlada y polimorfismo limitado), respetando el paradigma event-core (sin acoplamientos directos cross-modulo). El validator afirma que cada modulo cumple la estructura canonica y bloquea drifts contra los principios.",
+
+  "inputs": {
+    "obligatorios": [
+      "modules/<modulo>/index.js — codigo de la clase",
+      "modules/<modulo>/module.json — manifest que declara el contrato bus + HTTP del modulo",
+      "modules/_shared/base-module.js — clase padre obligatoria"
+    ],
+    "opcionales": [
+      "modules/<modulo>/tests/ — tests por capas que validan la API del modulo",
+      "modules/<modulo>/<modulo>.<n>.js — submodulos del dominio si la clase se divide internamente"
+    ],
+    "prohibidos": [
+      "modules/<modulo>/index.js NO require('../<otro-modulo>/...') — rompe aislamiento event-core",
+      "modules/<modulo>/index.js NO declara `class XxxModule extends YyyModule` donde YyyModule sea otro modulo del dominio — solo extiende BaseModule",
+      "modules/<modulo>/index.js NO instancia `new OtroModuloClass()` ni recibe instancia por inyeccion — composicion entre modulos prohibida"
+    ]
+  },
+
+  "filosofia": [
+    "Cada modulo es UNA CLASE DISTINTA, no una variacion. Tiene su propia razon de ser, su estado, sus invariantes, su API. La OOP aqui captura esa identidad, no la borra.",
+    "OOP en Enki es ADAPTADO al paradigma event-core. Algunos principios de OOP aplican (encapsulacion, herencia vertical, polimorfismo limitado). Otros NO aplican (composicion entre modulos, DI cross-modulo, herencia entre dominios). El contrato distingue ambos explicitamente.",
+    "Robustez = constructor declarativo + estado interno claro + API explicita + invariantes documentados + helpers organizados por visibilidad. Una clase robusta se entiende leyendo su estructura, sin recorrer todo el cuerpo.",
+    "Proyeccion = extensible sin romper. La herencia vertical (BaseModule -> MiModulo) permite que mejoras al padre se propaguen. El polimorfismo con super() permite que cada modulo aporte su delta sin reescribir lo comun. El polimorfismo NUNCA se usa entre modulos del dominio.",
+    "La API publica de la clase NO ES un conjunto de metodos llamables desde otros modulos. Es su CONTRATO con el bus (eventos que publica + que escucha) + su CONTRATO con HTTP (si aplica) + su CONTRATO con el loader (lifecycle). Esos contratos se declaran en module.json y se implementan en index.js.",
+    "Los metodos del index.js (onXxxRequest, handleXxx, etc.) son la IMPLEMENTACION del contrato, no API directa. Nadie los llama desde fuera del propio modulo. El loader los engancha por convencion de naming."
+  ],
+
+  "principios": [
+    {
+      "id": "extends_basemodule_obligatorio",
+      "regla": "Toda clase de modulo del runtime tiene `class XxxModule extends BaseModule {}`. Excepto modulos POC explicitos (sufijo `-poc`) o codigo en `_shared/` y `_template/` (no son modulos runtime).",
+      "razon": "BaseModule es el esqueleto compartido. Sin herencia, cada modulo redeclara helpers canonicos, los codigos del catalogo errors, el shape de respuesta, etc. La herencia vertical es la unica permitida en Enki."
+    },
+    {
+      "id": "constructor_declarativo",
+      "regla": "El constructor inicializa TODO el estado de la instancia. Estado adicional (logger, metrics, eventBus, config, conexiones, caches, schedulers, etc.) se decora en `onLoad(context)`, pero los campos deben EXISTIR ya en el constructor (con valor null o estructura vacia). Nada de `this.foo = bar` aparece por primera vez fuera del constructor.",
+      "razon": "Una clase robusta se entiende leyendo su constructor. Si el estado emerge por todo el lifecycle, la clase es ilegible. Tambien hace que la instancia sea construible para tests sin pasar por onLoad."
+    },
+    {
+      "id": "api_event_driven_no_metodos_directos",
+      "regla": "La API publica de un modulo es lo que declara `module.json` (events.subscribes, events.publishes, tools, apis_http, ui_handlers). Los metodos del index.js NO se exportan como API ni se invocan desde otros modulos. Otros modulos interactuan via bus.",
+      "razon": "El paradigma event-core garantiza extensibilidad por desacoplo. Si un modulo expone metodos llamables, otros lo acoplan y la red de dependencias se vuelve grafo en lugar de bus."
+    },
+    {
+      "id": "polimorfismo_solo_vertical",
+      "regla": "El override con super() se permite SOLO para extender BaseModule. Esta prohibido entre modulos del dominio: `class PizzaModule extends FoodModule` es drift, no hay jerarquia de modulos. Lo unico que extiende un modulo es BaseModule.",
+      "razon": "La herencia entre modulos del dominio acopla los dominios. Si dos modulos comparten 80% de logica, se valora fusionar como excepcion razonada, no jerarquizar. La uniformidad estructural viene de BaseModule, no de un arbol de clases."
+    },
+    {
+      "id": "secciones_por_visibilidad",
+      "regla": "El cuerpo de la clase se organiza en secciones canonicas separadas por comentarios de bloque: Lifecycle (onLoad/onUnload), Bus API (onXxxRequest/onXxxEvent), HTTP/UI API (handleXxx), Dominio protegido (helpers `_xxx`), Privados (utils). Cada metodo cae en exactamente una seccion.",
+      "razon": "Una clase de 600 LOC sin organizacion por visibilidad es ilegible. Las secciones hacen que la lectura sea: 'que hace al cargar -> que escucha del bus -> que expone por HTTP -> como lo hace internamente'. Mismo patron para todas las clases facilita revisarlas."
+    },
+    {
+      "id": "metodos_bus_naming_canonico",
+      "regla": "Los metodos que el loader engancha al bus se llaman `on<EventName>` con CamelCase: `onChatMessageSaved`, `onAgentExecuteRequest`, `onCredentialResolveRequest`. El event name viene en kebab-case del bus (chat.message.saved) y se traduce a camelCase con el prefijo `on`.",
+      "razon": "El loader usa esta convencion para enganchar automaticamente. Sin convencion, hay que wirear manualmente o cada modulo invierte su patron y se acumula divergencia."
+    },
+    {
+      "id": "metodos_http_naming_canonico",
+      "regla": "Los handlers HTTP se llaman `handle<Action>`: `handleGetReceta`, `handleCreateRecipe`, `handleHealthCheck`. Su firma es `(req, context) => { return { status, data | error } }`. El gateway los wirea por `module.json.apis_http[*].handler`.",
+      "razon": "Distingue claramente API HTTP de API bus. Si un modulo expone HTTP, sus handlers tienen el prefijo distintivo."
+    },
+    {
+      "id": "helpers_protegidos_prefijo_underscore",
+      "regla": "Los helpers internos del modulo (lo que hace el dominio, no expuesto al bus ni HTTP) se prefijan con `_`: `_validateRecipe`, `_serializeForExport`, `_buildPdfBuffer`. No son llamables por otros modulos (el bus no los engancha). Son la 'cocina' del modulo.",
+      "razon": "Convencion clasica de OOP. Aqui marca claramente que es API interna y que es protocolo cross-modulo (lo no-prefijado mapeado por module.json)."
+    },
+    {
+      "id": "constructor_sin_io",
+      "regla": "El constructor NO hace I/O (no fs, no http, no DB, no setTimeout/setInterval). Solo asigna campos. I/O se difiere a `onLoad`. Esto permite que `new MiModulo()` sea instantaneo y seguro para tests.",
+      "razon": "Un constructor con I/O es testeable solo con mocks complejos o entorno completo. Diferir I/O a onLoad hace que la clase sea instanciable en pure unit tests."
+    },
+    {
+      "id": "onunload_limpia_todo",
+      "regla": "`onUnload` cierra explicitamente todo lo que `onLoad` (u otros metodos) abrieron: timers, intervals, listeners, conexiones DB, sockets, caches con expiracion. Despues de `onUnload` la instancia no produce side effects de fondo.",
+      "razon": "El loader puede recargar modulos en runtime. Sin onUnload, recargas dejan timers huerfanos y memoria fugando. Una clase robusta sabe limpiar."
+    },
+    {
+      "id": "estado_interno_no_se_publica",
+      "regla": "El estado interno de la clase (caches, contadores, conexiones, datos del dominio en memoria) NO se incluye en payloads del bus. Lo que se publica es el evento de dominio (lo que paso), no la representacion interna. Esto previene fugas de implementacion al bus.",
+      "razon": "Si publicas tu estado interno, otros modulos lo consumen y refactorizar la clase rompe el ecosistema. El evento de dominio es el contrato, el estado interno es la implementacion."
+    },
+    {
+      "id": "publicar_eventos_via_helper_canonico",
+      "regla": "Todo publish va por `await this._publicarEvento(name, payload, sourcePayload?)` heredado de BaseModule. Garantiza `correlation_id` y `timestamp` automatico. NO se llama directo a `this.eventBus.publish(...)` excepto en el propio BaseModule.",
+      "razon": "Sin el helper, modulos olvidan correlation_id o timestamp, y la trazabilidad cross-modulo se rompe."
+    },
+    {
+      "id": "classifier_dominio_extiende_super",
+      "regla": "Si el modulo necesita reglas especificas en `_classifyHandlerError`, las anyade y termina con `return super._classifyHandlerError(err);`. Reemplazar completamente el classifier sin delegar a super es drift — duplica la heuristica de BaseModule.",
+      "razon": "BaseModule cubre la heuristica generica. El modulo aporta SOLO su delta. Esto evita divergencia y permite mejorar BaseModule sin tocar cada modulo."
+    },
+    {
+      "id": "module_json_es_contrato_explicito",
+      "regla": "`module.json` declara EXACTAMENTE: nombre, version, description, language, events.subscribes (con shape esperado), events.publishes (con shape canonico), tools (si aplica), apis_http (si aplica), ui_handlers (si aplica), dependencies (otros modulos por nombre, no por path), error_codes_used (subset del catalogo), tracing, persistence. Es la firma publica de la clase.",
+      "razon": "El index.js es la implementacion. module.json es el contrato. Sin contrato declarativo, otros modulos descubren la API leyendo codigo (frágil) o adivinando (rompible)."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "constructor_vs_onload",
+      "decision": "constructor declara campos con valor inicial (null, {}, [], new Map(), 0...). onLoad asigna las dependencias inyectadas del context (logger, metrics, eventBus) y abre recursos (DB, schedulers, listeners). Razon: el constructor es sincrono y deterministico, onLoad puede ser async y abrir I/O.",
+      "alternativa_descartada": "Inicializar todo en onLoad — rechazado porque hace la instancia ininstanciable para tests sin async setup. Pesa mas que el beneficio."
+    },
+    {
+      "id": "herencia_unica_basemodule",
+      "decision": "Solo herencia vertical de BaseModule. Si dos modulos comparten 80%+ de logica, se evalua FUSIONARLOS en uno (con prefijo unificado), no crear `Padre extends BaseModule` + `HijoX extends Padre` + `HijoY extends Padre`. La fusion mantiene independencia event-core; el arbol de clases lo rompe sutilmente.",
+      "alternativa_descartada": "Crear mixins compartidos entre modulos — rechazado porque mezclar el orden de this referencias multiple herencia/composicion es confuso en JavaScript y oculta el comportamiento real del modulo."
+    },
+    {
+      "id": "modulos_no_se_acoplan_por_clase",
+      "decision": "Un modulo NUNCA importa la clase de otro modulo, ni la instancia, ni recibe instancia inyectada. Si necesita capacidad de otro, emite el evento canonico. Esto se enforca con `module-loading.validate.js::drift_require_directo_entre_modulos`.",
+      "alternativa_descartada": "Permitir importar la clase para typing/extends — rechazado porque inevitable lleva a llamadas directas y rompe el aislamiento. Si necesitas type, declarar el shape en JSON Schema (events.subscribes.request_schema_ref)."
+    },
+    {
+      "id": "secciones_canonicas_con_comentarios",
+      "decision": "El cuerpo de la clase se divide en 5 secciones marcadas con comentarios de banner: `// =========== Lifecycle ============`, `// =========== Bus API ============`, `// =========== HTTP / UI API ============`, `// =========== Dominio (protegido) ============`, `// =========== Privados ============`. Validable mecanicamente: el validator chequea que los banners aparezcan y que los metodos esten en la seccion correcta (segun su naming).",
+      "alternativa_descartada": "Subclasses separadas por responsabilidad — rechazado porque rompe la regla de herencia unica y fragmenta el modulo. El modulo es UNA clase con secciones."
+    },
+    {
+      "id": "metricas_namespace_libre",
+      "decision": "BaseModule emite metricas con namespace `${this.name}.errors` por defecto. Si un modulo necesita namespace especifico para distinguir tipos de fallo (e.g. `${this.name}.extract.failed` vs `${this.name}.render.failed`), override `_handleHandlerError` con su propia metric y delega lo demas a `super(...)`. Esto es OOP idiomatico, no drift.",
+      "alternativa_descartada": "Forzar a todos los modulos al mismo namespace — rechazado porque elimina la capacidad de un modulo de distinguir SUS sub-operaciones en el dashboard. Cada modulo conoce su dominio."
+    },
+    {
+      "id": "polimorfismo_via_hook",
+      "decision": "BaseModule no expone hooks dedicados (`_classifyDomainSpecific`, `_publicarEnriched`, etc.). Si quieres extender, override el metodo padre y llama a `super.x(...)`. Es JS estandar. Menos magia, mas explicito.",
+      "alternativa_descartada": "Hooks tipo `beforeXxx` / `afterXxx` — rechazado porque anyade ceremonia. El override directo con super() es suficiente."
+    },
+    {
+      "id": "instanciacion_via_loader",
+      "decision": "Cada modulo se instancia UNA vez al cargar, por el loader. Es un singleton DE FACTO pero no por patron — el loader lo gestiona. La clase no implementa Singleton (con `getInstance()` privado y constructor protegido). Cualquier modulo puede instanciarse multiples veces en tests, con onLoad y onUnload aislados.",
+      "alternativa_descartada": "Patron Singleton clasico — rechazado porque dificulta testing y la unicidad la garantiza el loader."
+    }
+  ],
+
+  "prohibido": [
+    "`new OtroModulo()` o referencia a la clase de otro modulo via require — drift de acoplamiento directo entre dominios",
+    "`class XxxModule extends YyyModule` donde YyyModule sea otro modulo del dominio — herencia horizontal prohibida",
+    "Singleton pattern explicito en el modulo (`static getInstance()`, constructor protegido) — la unicidad la garantiza el loader",
+    "`this.eventBus.publish(...)` directo sin pasar por `_publicarEvento` — pierde correlation_id/timestamp",
+    "Constructor con I/O (fs, http, db, setInterval, fetch, etc.) — diferir a onLoad",
+    "Campos `this.foo` que aparecen por primera vez fuera del constructor — rompe declaratividad",
+    "Metodos publicos sin prefijo `on` u `handle` que no estan en module.json y no son helpers protegidos `_` — ambiguedad de visibilidad",
+    "Tests que invocan helpers `_xxx` directamente sin haber pasado por la API publica — testean implementacion, no contrato",
+    "Modulo sin `onUnload` o con `onUnload` vacio cuando `onLoad` abrio recursos — leaks garantizados en reload",
+    "Publicar al bus el estado interno crudo (`this.cache`, `this.connection`, `this.config`) — fuga de implementacion",
+    "Compartir estado entre modulos via module loader global — rompe el aislamiento. Toda comunicacion via evento."
+  ],
+
+  "output_shape_resumen": {
+    "ubicacion": "arquitectura/decisiones/_outputs/modulo-clase-robusta.json",
+    "contenido_resumen": "Por cada modulo del runtime: identidad (slug, version), conformidad estructural (extends BaseModule, constructor declarativo, secciones canonicas presentes, naming de metodos consistente, onUnload limpio), metricas (LOC, num metodos por seccion, num overrides de BaseModule con super), y findings (drifts identificados con archivo:linea)."
+  },
+
+  "reglas_de_extraccion": [
+    "Para cada modulo: leer index.js + module.json. Detectar `class XxxModule extends BaseModule`. Si extiende otra cosa que no sea BaseModule, drift error.",
+    "Constructor: detectar `constructor(...) { ... }`. Listar todas las asignaciones `this.x = ...` en el cuerpo. Si hay `this.foo` en otros metodos que no aparece en el constructor, drift warning.",
+    "Constructor: detectar uso de fs, http, fetch, setTimeout, setInterval, new Database, etc. Si presente, drift warning (constructor con I/O).",
+    "Secciones: detectar los 5 banners canonicos (`// =========== Lifecycle ===========` etc.). Si faltan, drift warning. Si un metodo `onXxx` esta fuera de Bus API, drift info.",
+    "Bus API: cada metodo con prefijo `on` (excepto onLoad/onUnload) corresponde a un evento. Cruzar con module.json.events.subscribes — si hay `onXxx` sin subscribe declarado, drift warning. Inverso tambien: subscribe sin handler.",
+    "HTTP API: cada metodo con prefijo `handle` debe estar declarado en module.json.apis_http. Inverso tambien.",
+    "Helpers protegidos: cualquier metodo prefijado con `_` (excepto los heredados de BaseModule). Listarlos.",
+    "Polimorfismo: detectar overrides de metodos de BaseModule. Verificar que terminen con `super.<metodo>(...)` o que sea intencional (con comentario explicando por que no llama super).",
+    "onUnload: si onLoad abre recursos (setInterval, new Database, listener, conexion), onUnload debe cerrarlos. Detectar este pareo."
+  ],
+
+  "derivaciones": [
+    "modules/_template/index.js — la plantilla canonica refleja esta estructura. Cualquier modulo nuevo se genera desde aqui.",
+    "arquitectura/migracion/scripts/scaffold-rewrite.js — genera modulos cumpliendo esta estructura desde el principio.",
+    "arquitectura/migracion/notas/<slug>-mapa.md — el mapa exhaustivo PASO 0 incluye seccion 'Estructura de clase' que define las 5 secciones del modulo.",
+    "arquitectura/decisiones/_contratos/module-rewrite.contract.json — la disciplina de reescritura aplica este contrato como invariante de cierre."
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "drift_modulo_no_extiende_basemodule",
+      "regla": "Todo modulo del runtime (modules/*/index.js que NO este en _shared/, _template/, ni tenga sufijo -poc) debe extender BaseModule.",
+      "como_detectar": "Buscar `class \\w+Module(?:\\s+extends\\s+(\\w+))?` en index.js. Si no extiende o extiende algo que no es BaseModule, drift.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_extiende_otro_modulo",
+      "regla": "El extends de la clase principal solo puede ser BaseModule. NUNCA otro modulo del dominio.",
+      "como_detectar": "Si `extends X` y X no es 'BaseModule', drift error.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_constructor_sin_super",
+      "regla": "Si la clase extiende BaseModule, el constructor debe llamar `super();` como primera instruccion.",
+      "como_detectar": "En el cuerpo del constructor, buscar `super(` antes que cualquier `this.x = `. Si ausente y la clase extiende, drift error.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_constructor_con_io",
+      "regla": "El constructor no debe hacer I/O.",
+      "como_detectar": "En el cuerpo del constructor, buscar `fs\\.`, `require('fs')`, `fetch(`, `setInterval(`, `setTimeout(`, `http\\.`, `new Database`, `mqtt\\.`, etc. Si encontrado, drift warning.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_campo_no_declarado_en_constructor",
+      "regla": "Todo `this.foo` asignado en cualquier metodo debe haber aparecido (con valor inicial) en el constructor o en onLoad. Si aparece por primera vez en otro metodo, drift.",
+      "como_detectar": "Listar todos los `this.\\w+ = ` en metodos != constructor && != onLoad. Para cada uno, verificar que aparezca en el constructor o en onLoad.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_secciones_canonicas_faltantes",
+      "regla": "El modulo debe tener los 5 banners de seccion (Lifecycle, Bus API, HTTP/UI API, Dominio protegido, Privados). Cualquiera puede tener cuerpo vacio si la seccion no aplica (e.g. modulo sin HTTP API).",
+      "como_detectar": "Buscar comentarios de bloque que contengan `Lifecycle`, `Bus API`, `HTTP`, `Dominio`, `Privados`. Si faltan 2 o mas, drift warning.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_metodo_bus_sin_naming_canonico",
+      "regla": "Los handlers de bus se llaman `onXxx`. Si un metodo esta wireado por module.json.events.subscribes.handler pero el handler no empieza con `on`, drift.",
+      "como_detectar": "Para cada subscribe.handler de module.json, verificar que el metodo del index.js correspondiente empiece con `on`.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_metodo_http_sin_naming_canonico",
+      "regla": "Los handlers HTTP se llaman `handleXxx`. Si module.json.apis_http.handler apunta a metodo sin prefijo `handle`, drift.",
+      "como_detectar": "Para cada apis_http.handler de module.json, verificar prefijo `handle`.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_subscribe_sin_handler_implementado",
+      "regla": "Si module.json.events.subscribes declara un handler, debe existir el metodo en index.js.",
+      "como_detectar": "Verificar que cada subscribe.handler exista como metodo. Si no, drift error.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_handler_publico_no_declarado_en_manifest",
+      "regla": "Si un metodo del index.js tiene naming canonico de Bus API (`onXxx`) o HTTP API (`handleXxx`) pero NO esta declarado en module.json (como subscribe o api_http), drift.",
+      "como_detectar": "Listar metodos con prefijo on/handle, cruzar con manifest. Excepciones: onLoad, onUnload, handleHealthCheck (canonicos).",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_polimorfismo_sin_super",
+      "regla": "Si un modulo override `_classifyHandlerError`, `_handleHandlerError`, `_publicarEvento`, `_errorResponse` (heredados de BaseModule) y NO llama `super.<metodo>(...)` en algun camino, drift. El override que reemplaza completamente al padre duplica heuristica.",
+      "como_detectar": "Si la clase tiene method M que ya existe en BaseModule, buscar `super.M(` en el cuerpo. Si ausente, drift warning. Excepcion documentada: si el override tiene comentario `// NO llama super: razon` justifica.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_publicacion_directa_sin_helper",
+      "regla": "Llamadas a `this.eventBus.publish(...)` directas (sin pasar por `_publicarEvento`) son drift. Excepcion: el propio BaseModule._publicarEvento.",
+      "como_detectar": "Buscar `this.eventBus.publish` en modulos del runtime. Si encontrado fuera del propio BaseModule, drift warning.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_onunload_no_limpia_recursos_abiertos",
+      "regla": "Si onLoad llama `setInterval`, `setTimeout`, `new Database`, `mqtt.subscribe`, etc., onUnload debe llamar `clearInterval`, `clearTimeout`, `db.close`, `mqtt.unsubscribe` correspondiente.",
+      "como_detectar": "Listar 'aperturas' en onLoad. Para cada una, verificar que onUnload tenga la accion inversa. Si no, drift warning.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_modulo_publica_estado_interno",
+      "regla": "El payload de un publish() NO debe incluir campos cuyo nombre coincida con campos privados/protegidos de this (`this.cache`, `this.connection`, `this.config`).",
+      "como_detectar": "Para cada `_publicarEvento(name, payload)`, inspeccionar payload. Si contiene referencia directa a `this.cache`, `this.<estado_interno>`, drift info.",
+      "severidad": "info"
+    }
+  ],
+
+  "salida_validador": {
+    "pass": "modulo-clase-robusta: PASS (N modulos analizados, 0 errors, M warnings, K info)",
+    "fail": "modulo-clase-robusta: FAIL — lista de modulos con drift, archivo:linea, regla violada"
+  },
+
+  "convenciones_complementarias": [
+    "module-loading.contract: el aislamiento cross-modulo (no requires directos, no acceso a moduleLoader.getModule) es la base sobre la que opera el principio 'modulos_no_se_acoplan_por_clase'.",
+    "lifecycle.contract: onLoad/onUnload son metodos canonicos. Este contrato anyade la disciplina 'lo que se abre se cierra' y la separacion constructor/onLoad.",
+    "events.contract: la API del modulo es lo que declara module.json.events. Este contrato afirma que esa declaracion ES la API publica.",
+    "tools.contract: los tools del modulo son metodos del modulo invocables por LLM. Su nombre y firma siguen el contrato tools (parametros JSON Schema, shape canonico de retorno).",
+    "naming.contract: los nombres de eventos siguen `<module-prefix>.<entity>.<verb>`. Los metodos del index.js que enganchan a esos eventos traducen a camelCase con prefijo `on`.",
+    "module-rewrite.contract: cuando se reescribe un modulo al canon POC2, este contrato es el resultado estructural esperado. La reescritura no esta completa si no cumple los principios de aqui."
+  ],
+
+  "trabajo_pendiente": [
+    "Validator implementado en `arquitectura/decisiones/_validators/modulo-clase-robusta.validate.js`. Pendiente de redactar.",
+    "Module template `modules/_template/index.js` actualizado para reflejar las 5 secciones canonicas con banners y constructor declarativo. Hoy es mas laxo.",
+    "Aplicar el contrato como guia de reescritura modulo a modulo. Empezar por un piloto (sugerencia: pizzepos/comandero por su complejidad) y validar que la estructura es expresiva sin asfixiar. Luego rollout incremental.",
+    "Sub-contratos por subsistema podrian extender este: e.g. `modulo-clase-robusta-canal.contract.json` para canales (telegram-service, channel-manager) que tienen patrones I/O comunes; `modulo-clase-robusta-memoria.contract.json` para memorias (memory-rag, memory-user-profile) con su patron de RAG/embedding."
+  ]
+}

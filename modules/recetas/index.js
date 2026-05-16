@@ -1,8 +1,31 @@
+/**
+ * recetas v3.0.0 — Modulo del dominio recetas, conforme al contrato
+ * modulo-clase-robusta v1.0.0 (piloto OOP en codigo de produccion).
+ *
+ * Persistencia: JSON-per-project en `<base_path>/recetas.json`. Lecturas/
+ * escrituras via filesystem module por el bus (atomicas end-to-end).
+ *
+ * Bus API: 5 subscribers de eventos canonicos + 13 onToolXxx (dispatch a
+ * los handlers de tool).
+ * Tools: 13 operaciones del dominio (crear, listar, ... investigarReceta).
+ * HTTP / UI API: 13 handleXxx que adaptan la firma del bus a la firma HTTP.
+ * Dominio: helpers de normalizacion (ingredientes, instrucciones),
+ * busqueda por ref (id/nombre exacto/parcial), store layer (_withStore,
+ * _readOnly, _loadStore, _saveStore) con cola por proyecto para serializar
+ * writes.
+ *
+ * Constructor declarativo (toda la state al constructor, asignacion en
+ * onLoad solo de dependencias del context). onUnload limpia timers y
+ * caches. Helpers POC2 heredados de BaseModule excepto `_handleHandlerError`
+ * (override por namespace de metrica `recetas.error`) y `_publicarEvento`
+ * (override por default project_id + try/catch silencioso).
+ */
+
 'use strict';
 
 const crypto = require('crypto');
-
 const BaseModule = require('../_shared/base-module');
+
 // ============================================================
 // Tools que el LLM puede invocar
 // ============================================================
@@ -25,8 +48,6 @@ const TOOL_HANDLERS = {
 // Campos sin los cuales una receta se considera incompleta
 const CAMPOS_REQUERIDOS_PARA_COMPLETA = ['ingredientes', 'porciones', 'instrucciones'];
 
-// ============================================================
-
 const DEFAULT_PROJECT_ID = 'default';
 
 class RecetasModule extends BaseModule {
@@ -36,14 +57,16 @@ class RecetasModule extends BaseModule {
     this.version = '3.0.0';
     // project_id → base_path absoluto (cache, poblado por project.activated)
     this.projectBasePaths = new Map();
-
     // project_id → Promise (cola para serializar writes)
     this.writeQueues = new Map();
-
     // request_id → { resolve, reject, timer } para fs.* y project.*
     this.pendingFs = new Map();
     this.pendingProject = new Map();
   }
+
+  // ============================================================
+  // Lifecycle
+  // ============================================================
 
   async onLoad(context) {
     this.logger = context.logger;
@@ -62,89 +85,13 @@ class RecetasModule extends BaseModule {
   }
 
   // ============================================================
-  // POC2 Helpers
-  // ============================================================
-
-  _errorResponse(status, code, message, details) {
-    const err = { code, message };
-    if (details !== undefined) err.details = details;
-    return { status, error: err };
-  }
-
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('not found') || msg.includes('no encontrad') || msg.includes('no existe')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('required') || msg.includes('requerido') || msg.includes('inválid') || msg.includes('invalid')) return 'INVALID_INPUT';
-    if (msg.includes('timeout')) return 'UPSTREAM_TIMEOUT';
-    if (msg.includes('corrupto') || msg.includes('parse') || msg.includes('json')) return 'UNKNOWN_ERROR';
-    return 'UNKNOWN_ERROR';
-  }
-
-  _handleHandlerError(logKey, err, kind) {
-    const code = err._code || this._classifyHandlerError(err);
-    const statusMap = { RESOURCE_NOT_FOUND: 404, INVALID_INPUT: 400, ALREADY_EXISTS: 409, UPSTREAM_TIMEOUT: 503, UNKNOWN_ERROR: 500 };
-    const status = statusMap[code] || 500;
-    this.logger.error('recetas.handler_error', { handler: logKey, error: err.message, code });
-    this.metrics?.increment('recetas.error', { kind: kind || logKey, code });
-    return this._errorResponse(status, code, err.message, err._details);
-  }
-
-  async _publicarEvento(name, payload, sourcePayload = null) {
-    if (!this.eventBus?.publish) return;
-    const enriched = {
-      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
-      timestamp:      new Date().toISOString(),
-      ...payload,
-      project_id:     payload?.project_id || payload?.proyecto_id || sourcePayload?.project_id || DEFAULT_PROJECT_ID
-    };
-    try {
-      await this.eventBus.publish(name, enriched);
-    } catch (err) {
-      this.logger.error('recetas.publish_error', { event: name, error: err.message });
-      this.metrics?.increment('recetas.error', { kind: 'publish', code: 'UNKNOWN_ERROR' });
-    }
-  }
-
-  // 5o helper auxiliar — alias canonico para escritura atomica.
-  // Delegacion al filesystem module via bus (fs.write.request es atomico end-to-end).
-  async _atomicWriteFile(slug, contents) {
-    return this._writeFile(slug, contents);
-  }
-
-  // 6o helper — alias canonico para lectura JSON segura.
-  async _readJsonSafe(slug, _kind) {
-    try {
-      const raw = await this._readFile(slug);
-      if (raw == null) return null;
-      return JSON.parse(raw);
-    } catch (err) {
-      this.logger.warn('recetas.read_json_error', { slug, error: err.message });
-      this.metrics?.increment('recetas.error', { kind: 'read_json', code: 'UNKNOWN_ERROR' });
-      return null;
-    }
-  }
-
-  _logError(logEvent, fields, kind, code) {
-    this.logger.error(logEvent, { ...fields, code, kind });
-    this.metrics?.increment('recetas.error', { kind, code });
-  }
-
-  _unwrap(event) { return event?.data || event?.payload || event || {}; }
-
-  _calcIncompleta(receta) {
-    const pendientes = [];
-    for (const campo of CAMPOS_REQUERIDOS_PARA_COMPLETA) {
-      const v = receta[campo];
-      const vacio = v == null || (Array.isArray(v) && v.length === 0) || v === '';
-      if (vacio) pendientes.push(campo);
-    }
-    receta.incompleta = pendientes.length > 0;
-    receta.campos_pendientes = pendientes;
-    return receta;
-  }
-
-  // ============================================================
-  // Eventos del proyecto — cacheamos slug
+  // Bus API — subscribers wireados por module.json.events.subscribes.
+  // Tres familias:
+  //   1. Project lifecycle (onProjectActivated/Deactivated/GetResponse)
+  //   2. Filesystem responses (onFsRead/WriteResponse) correlacionadas
+  //      por request_id con this.pendingFs
+  //   3. onToolXxx — entrada de cada tool del modulo (13). Cada una
+  //      delega en this._toolDispatch que valida y llama al handler real.
   // ============================================================
 
   onProjectActivated(event) {
@@ -158,35 +105,6 @@ class RecetasModule extends BaseModule {
 
   onProjectDeactivated() { /* no-op; mantenemos cache */ }
 
-  // ============================================================
-  // Resolver project_id → base_path absoluto
-  // Patrón canónico: cache poblado por project.activated. Fallback a
-  // project.get.request para proyectos no activos aún.
-  // ============================================================
-
-  async _basePathForProject(project_id) {
-    if (!project_id) {
-      const err = new Error('proyecto_id requerido');
-      err._code = 'INVALID_INPUT';
-      throw err;
-    }
-    if (this.projectBasePaths.has(project_id)) return this.projectBasePaths.get(project_id);
-
-    const request_id = crypto.randomUUID();
-    const basePath = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pendingProject.delete(request_id);
-        const err = new Error(`project.get timeout para ${project_id}`);
-        err._code = 'UPSTREAM_TIMEOUT';
-        reject(err);
-      }, 5000);
-      this.pendingProject.set(request_id, { resolve, reject, timer });
-      this.eventBus.publish('project.get.request', { request_id, project_id });
-    });
-    this.projectBasePaths.set(project_id, basePath);
-    return basePath;
-  }
-
   onProjectGetResponse(event) {
     const { request_id, project, error } = event.data || event;
     const p = this.pendingProject.get(request_id);
@@ -195,44 +113,6 @@ class RecetasModule extends BaseModule {
     if (error || !project) return p.reject(new Error(error || 'Project not found'));
     if (!project.base_path) return p.reject(new Error('project.base_path missing in response'));
     p.resolve(project.base_path);
-  }
-
-  // ============================================================
-  // Filesystem — leer/escribir archivo JSON del proyecto
-  // ============================================================
-
-  _pathFor(basePath) {
-    return `${basePath}/recetas.json`;
-  }
-
-  async _readFile(slug) {
-    const request_id = crypto.randomUUID();
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pendingFs.delete(request_id);
-        const err = new Error(`fs.read timeout: ${slug}`);
-        err._code = 'UPSTREAM_TIMEOUT';
-        reject(err);
-      }, 8000);
-      this.pendingFs.set(request_id, { resolve, reject, timer, op: 'read' });
-      this.eventBus.publish('fs.read.request', { request_id, path: this._pathFor(slug) });
-    });
-  }
-
-  async _writeFile(slug, content) {
-    const request_id = crypto.randomUUID();
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pendingFs.delete(request_id);
-        const err = new Error(`fs.write timeout: ${slug}`);
-        err._code = 'UPSTREAM_TIMEOUT';
-        reject(err);
-      }, 8000);
-      this.pendingFs.set(request_id, { resolve, reject, timer, op: 'write' });
-      this.eventBus.publish('fs.write.request', {
-        request_id, path: this._pathFor(slug), content, encoding: 'utf-8'
-      });
-    });
   }
 
   onFsReadResponse(event) {
@@ -266,118 +146,46 @@ class RecetasModule extends BaseModule {
     p.resolve(true);
   }
 
-  // ============================================================
-  // Carga / guardado del store — con cola por proyecto
-  // ============================================================
-
-  _emptyStore() {
-    return {
-      _version: '1.0',
-      _updated_at: new Date().toISOString(),
-      recetas: [],
-      ingredientes_catalogo: []
-    };
-  }
-
-  async _loadStore(slug) {
-    const raw = await this._readFile(slug);
-    if (raw == null) return this._emptyStore();
-    try {
-      const parsed = JSON.parse(raw);
-      parsed.recetas = Array.isArray(parsed.recetas) ? parsed.recetas : [];
-      parsed.ingredientes_catalogo = Array.isArray(parsed.ingredientes_catalogo) ? parsed.ingredientes_catalogo : [];
-      return parsed;
-    } catch (err) {
-      this.logger.error('recetas.store.parse.failed', { slug, error: err.message });
-      const e = new Error('recetas.json corrupto: ' + err.message);
-      e._code = 'UNKNOWN_ERROR';
-      throw e;
-    }
-  }
-
-  async _saveStore(slug, store) {
-    store._updated_at = new Date().toISOString();
-    await this._writeFile(slug, JSON.stringify(store, null, 2));
-  }
-
-  async _withStore(project_id, mutator) {
-    const slug = await this._basePathForProject(project_id);
-    const prev = this.writeQueues.get(project_id) || Promise.resolve();
-    const next = prev
-      .catch(() => {})
-      .then(async () => {
-        const store = await this._loadStore(slug);
-        const result = await mutator(store);
-        if (!result || !(result.status >= 400)) await this._saveStore(slug, store);
-        return result;
-      });
-    this.writeQueues.set(project_id, next);
-    try { return await next; }
-    finally {
-      if (this.writeQueues.get(project_id) === next) this.writeQueues.delete(project_id);
-    }
-  }
-
-  async _readOnly(project_id, reader) {
-    const slug = await this._basePathForProject(project_id);
-    const store = await this._loadStore(slug);
-    return reader(store);
-  }
+  // Tool entry points (loader engancha estos via module.json.events.subscribes)
+  async onToolCrear(e)             { return this._toolDispatch('recetas.crear', e); }
+  async onToolListar(e)            { return this._toolDispatch('recetas.listar', e); }
+  async onToolObtener(e)           { return this._toolDispatch('recetas.obtener', e); }
+  async onToolBuscar(e)            { return this._toolDispatch('recetas.buscar', e); }
+  async onToolActualizar(e)        { return this._toolDispatch('recetas.actualizar', e); }
+  async onToolHistorial(e)         { return this._toolDispatch('recetas.historial', e); }
+  async onToolRevertir(e)          { return this._toolDispatch('recetas.revertir', e); }
+  async onToolEliminar(e)          { return this._toolDispatch('recetas.eliminar', e); }
+  async onToolEstadisticas(e)      { return this._toolDispatch('recetas.estadisticas', e); }
+  async onToolIngredientes(e)      { return this._toolDispatch('recetas.ingredientes', e); }
+  async onToolActualizarPrecio(e)  { return this._toolDispatch('recetas.actualizar_precio', e); }
+  async onToolAnalizar(e)          { return this._toolDispatch('recetas.analizar', e); }
+  async onToolInvestigarReceta(e)  { return this._toolDispatch('recetas.investigar_receta', e); }
 
   // ============================================================
-  // Helpers de dominio
+  // HTTP / UI API — handleXxx adapta firma HTTP a la firma del tool.
+  // Wireados por module.json.apis_http o ui_handlers.
   // ============================================================
 
-  _normalizeIngredientes(ingredientes) {
-    if (ingredientes == null) return [];
-    if (typeof ingredientes === 'string') {
-      return [{ nombre: ingredientes.trim(), cantidad: null, unidad: null, notas: 'texto libre' }];
-    }
-    if (!Array.isArray(ingredientes)) return [];
-    return ingredientes.map(it => {
-      if (typeof it === 'string') return { nombre: it.trim(), cantidad: null, unidad: null };
-      if (typeof it !== 'object' || it == null) return { nombre: String(it), cantidad: null, unidad: null };
-      return {
-        nombre: (it.nombre ?? it.name ?? it.ingrediente ?? '').toString().trim(),
-        cantidad: it.cantidad ?? it.quantity ?? null,
-        unidad:   it.unidad   ?? it.unit     ?? null,
-        notas:    it.notas    ?? it.notes    ?? undefined
-      };
-    }).filter(i => i.nombre);
-  }
-
-  _normalizeInstrucciones(input) {
-    if (input == null) return [];
-    if (typeof input === 'string') return input.split(/\n+|\.\s+/).map(s => s.trim()).filter(Boolean);
-    if (!Array.isArray(input)) return [];
-    return input.map(s => String(s).trim()).filter(Boolean);
-  }
-
-  _formatIngredientesText(arr) {
-    if (!arr || !arr.length) return null;
-    return arr.map(i => {
-      const head = [i.cantidad, i.unidad].filter(v => v != null && v !== '').join(' ').trim();
-      const body = head && i.nombre ? `${head} de ${i.nombre}` : (i.nombre || head || '');
-      const suffix = i.notas ? ` (${i.notas})` : '';
-      return body ? `- ${body}${suffix}` : null;
-    }).filter(Boolean).join('\n');
-  }
-
-  _findRecetaByRefBuilder(store) {
-    return (ref) => {
-      if (!ref) return null;
-      let r = store.recetas.find(x => x.id === ref);
-      if (r) return r;
-      const refLower = String(ref).toLowerCase().trim();
-      r = store.recetas.find(x => x.nombre.toLowerCase() === refLower && x.estado === 'activa');
-      if (r) return r;
-      r = store.recetas.find(x => x.nombre.toLowerCase().includes(refLower) && x.estado === 'activa');
-      return r || null;
-    };
-  }
+  async handleCrear(req)            { return this._uiAdapt('crear', req); }
+  async handleListar(req)           { return this._uiAdapt('listar', req); }
+  async handleObtener(req)          { return this._uiAdapt('obtener', req); }
+  async handleBuscar(req)           { return this._uiAdapt('buscar', req); }
+  async handleActualizar(req)       { return this._uiAdapt('actualizar', req); }
+  async handleHistorial(req)        { return this._uiAdapt('historial', req); }
+  async handleRevertir(req)         { return this._uiAdapt('revertir', req); }
+  async handleEliminar(req)         { return this._uiAdapt('eliminar', req); }
+  async handleEstadisticas(req)     { return this._uiAdapt('estadisticas', req); }
+  async handleIngredientes(req)     { return this._uiAdapt('ingredientes', req); }
+  async handleActualizarPrecio(req) { return this._uiAdapt('actualizarPrecio', req); }
+  async handleAnalizar(req)         { return this._uiAdapt('analizar', req); }
+  async handleInvestigarReceta(req) { return this._uiAdapt('investigarReceta', req); }
 
   // ============================================================
-  // Tools — implementaciones sobre el store JSON
+  // Tools — implementacion de cada operacion del dominio.
+  // Cada una valida sus parametros, opera sobre el store JSON via
+  // _withStore (writes serializadas por proyecto) o _readOnly (lecturas
+  // paralelas), publica el evento de dominio correspondiente y devuelve
+  // shape canonico { status, data | error }.
   // ============================================================
 
   async crear(params) {
@@ -837,9 +645,203 @@ class RecetasModule extends BaseModule {
   }
 
   // ============================================================
-  // Wrapper de tools — recibe evento, normaliza project_id, llama handler
+  // Dominio (protegido) — helpers del modulo. Encapsulan el saber hacer
+  // del dominio recetas: clasificacion de errores con keywords spanish,
+  // normalizacion de ingredientes/instrucciones, busqueda por ref,
+  // store layer (load/save con cola por proyecto), resolucion de
+  // base_path para un project_id. No son API publica.
   // ============================================================
 
+  /**
+   * Extiende _classifyHandlerError de BaseModule con keywords spanish y
+   * mensajes del dominio. Delega al super para los genericos (en ingles).
+   */
+  _classifyHandlerError(err) {
+    const msg = (err?.message || '').toLowerCase();
+    if (msg.includes('no encontrad') || msg.includes('no existe')) return 'RESOURCE_NOT_FOUND';
+    if (msg.includes('requerido') || msg.includes('inválid')) return 'INVALID_INPUT';
+    if (msg.includes('corrupto') || msg.includes('parse')) return 'UNKNOWN_ERROR';
+    return super._classifyHandlerError(err);
+  }
+
+  /**
+   * Override de _handleHandlerError: el namespace canonico del modulo
+   * recetas es `recetas.error` (singular). Delega lo demas al super.
+   */
+  _handleHandlerError(logKey, err, kind) {
+    const code = err?._code || this._classifyHandlerError(err);
+    const status = this._statusFromCode(code);
+    this.logger?.error('recetas.handler_error', { handler: logKey, error: err?.message, code });
+    this.metrics?.increment('recetas.error', { kind: kind || logKey, code });
+    return this._errorResponse(status, code, err?.message || String(err), err?._details);
+  }
+
+  /**
+   * Override de _publicarEvento: anyade default project_id y try/catch
+   * silencioso (un error de publish no rompe el flujo del handler).
+   */
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    if (!this.eventBus?.publish) return;
+    const enriched = {
+      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+      timestamp:      new Date().toISOString(),
+      ...payload,
+      project_id:     payload?.project_id || payload?.proyecto_id || sourcePayload?.project_id || DEFAULT_PROJECT_ID
+    };
+    try {
+      await this.eventBus.publish(name, enriched);
+    } catch (err) {
+      this.logger.error('recetas.publish_error', { event: name, error: err.message });
+      this.metrics?.increment('recetas.error', { kind: 'publish', code: 'UNKNOWN_ERROR' });
+    }
+  }
+
+  _calcIncompleta(receta) {
+    const pendientes = [];
+    for (const campo of CAMPOS_REQUERIDOS_PARA_COMPLETA) {
+      const v = receta[campo];
+      const vacio = v == null || (Array.isArray(v) && v.length === 0) || v === '';
+      if (vacio) pendientes.push(campo);
+    }
+    receta.incompleta = pendientes.length > 0;
+    receta.campos_pendientes = pendientes;
+    return receta;
+  }
+
+  _normalizeIngredientes(ingredientes) {
+    if (ingredientes == null) return [];
+    if (typeof ingredientes === 'string') {
+      return [{ nombre: ingredientes.trim(), cantidad: null, unidad: null, notas: 'texto libre' }];
+    }
+    if (!Array.isArray(ingredientes)) return [];
+    return ingredientes.map(it => {
+      if (typeof it === 'string') return { nombre: it.trim(), cantidad: null, unidad: null };
+      if (typeof it !== 'object' || it == null) return { nombre: String(it), cantidad: null, unidad: null };
+      return {
+        nombre: (it.nombre ?? it.name ?? it.ingrediente ?? '').toString().trim(),
+        cantidad: it.cantidad ?? it.quantity ?? null,
+        unidad:   it.unidad   ?? it.unit     ?? null,
+        notas:    it.notas    ?? it.notes    ?? undefined
+      };
+    }).filter(i => i.nombre);
+  }
+
+  _normalizeInstrucciones(input) {
+    if (input == null) return [];
+    if (typeof input === 'string') return input.split(/\n+|\.\s+/).map(s => s.trim()).filter(Boolean);
+    if (!Array.isArray(input)) return [];
+    return input.map(s => String(s).trim()).filter(Boolean);
+  }
+
+  _formatIngredientesText(arr) {
+    if (!arr || !arr.length) return null;
+    return arr.map(i => {
+      const head = [i.cantidad, i.unidad].filter(v => v != null && v !== '').join(' ').trim();
+      const body = head && i.nombre ? `${head} de ${i.nombre}` : (i.nombre || head || '');
+      const suffix = i.notas ? ` (${i.notas})` : '';
+      return body ? `- ${body}${suffix}` : null;
+    }).filter(Boolean).join('\n');
+  }
+
+  _findRecetaByRefBuilder(store) {
+    return (ref) => {
+      if (!ref) return null;
+      let r = store.recetas.find(x => x.id === ref);
+      if (r) return r;
+      const refLower = String(ref).toLowerCase().trim();
+      r = store.recetas.find(x => x.nombre.toLowerCase() === refLower && x.estado === 'activa');
+      if (r) return r;
+      r = store.recetas.find(x => x.nombre.toLowerCase().includes(refLower) && x.estado === 'activa');
+      return r || null;
+    };
+  }
+
+  _emptyStore() {
+    return {
+      _version: '1.0',
+      _updated_at: new Date().toISOString(),
+      recetas: [],
+      ingredientes_catalogo: []
+    };
+  }
+
+  async _loadStore(slug) {
+    const raw = await this._readFile(slug);
+    if (raw == null) return this._emptyStore();
+    try {
+      const parsed = JSON.parse(raw);
+      parsed.recetas = Array.isArray(parsed.recetas) ? parsed.recetas : [];
+      parsed.ingredientes_catalogo = Array.isArray(parsed.ingredientes_catalogo) ? parsed.ingredientes_catalogo : [];
+      return parsed;
+    } catch (err) {
+      this.logger.error('recetas.store.parse.failed', { slug, error: err.message });
+      const e = new Error('recetas.json corrupto: ' + err.message);
+      e._code = 'UNKNOWN_ERROR';
+      throw e;
+    }
+  }
+
+  async _saveStore(slug, store) {
+    store._updated_at = new Date().toISOString();
+    await this._writeFile(slug, JSON.stringify(store, null, 2));
+  }
+
+  async _withStore(project_id, mutator) {
+    const slug = await this._basePathForProject(project_id);
+    const prev = this.writeQueues.get(project_id) || Promise.resolve();
+    const next = prev
+      .catch(() => {})
+      .then(async () => {
+        const store = await this._loadStore(slug);
+        const result = await mutator(store);
+        if (!result || !(result.status >= 400)) await this._saveStore(slug, store);
+        return result;
+      });
+    this.writeQueues.set(project_id, next);
+    try { return await next; }
+    finally {
+      if (this.writeQueues.get(project_id) === next) this.writeQueues.delete(project_id);
+    }
+  }
+
+  async _readOnly(project_id, reader) {
+    const slug = await this._basePathForProject(project_id);
+    const store = await this._loadStore(slug);
+    return reader(store);
+  }
+
+  /**
+   * Resuelve project_id → base_path absoluto. Patron canonico: cache
+   * poblado por project.activated; fallback a project.get.request si el
+   * proyecto no esta en cache.
+   */
+  async _basePathForProject(project_id) {
+    if (!project_id) {
+      const err = new Error('proyecto_id requerido');
+      err._code = 'INVALID_INPUT';
+      throw err;
+    }
+    if (this.projectBasePaths.has(project_id)) return this.projectBasePaths.get(project_id);
+
+    const request_id = crypto.randomUUID();
+    const basePath = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingProject.delete(request_id);
+        const err = new Error(`project.get timeout para ${project_id}`);
+        err._code = 'UPSTREAM_TIMEOUT';
+        reject(err);
+      }, 5000);
+      this.pendingProject.set(request_id, { resolve, reject, timer });
+      this.eventBus.publish('project.get.request', { request_id, project_id });
+    });
+    this.projectBasePaths.set(project_id, basePath);
+    return basePath;
+  }
+
+  /**
+   * Wrapper de dispatch: recibe evento del bus, normaliza project_id ->
+   * proyecto_id, llama al handler de tool por nombre, publica response.
+   */
   async _toolDispatch(toolName, event) {
     const data = event.data || event;
     const { request_id, project_id, ...rest } = data;
@@ -868,22 +870,10 @@ class RecetasModule extends BaseModule {
     }
   }
 
-  // Handlers expuestos al loader (subscribes en module.json)
-  async onToolCrear(e)             { return this._toolDispatch('recetas.crear', e); }
-  async onToolListar(e)            { return this._toolDispatch('recetas.listar', e); }
-  async onToolObtener(e)           { return this._toolDispatch('recetas.obtener', e); }
-  async onToolBuscar(e)            { return this._toolDispatch('recetas.buscar', e); }
-  async onToolActualizar(e)        { return this._toolDispatch('recetas.actualizar', e); }
-  async onToolHistorial(e)         { return this._toolDispatch('recetas.historial', e); }
-  async onToolRevertir(e)          { return this._toolDispatch('recetas.revertir', e); }
-  async onToolEliminar(e)          { return this._toolDispatch('recetas.eliminar', e); }
-  async onToolEstadisticas(e)      { return this._toolDispatch('recetas.estadisticas', e); }
-  async onToolIngredientes(e)      { return this._toolDispatch('recetas.ingredientes', e); }
-  async onToolActualizarPrecio(e)  { return this._toolDispatch('recetas.actualizar_precio', e); }
-  async onToolAnalizar(e)          { return this._toolDispatch('recetas.analizar', e); }
-  async onToolInvestigarReceta(e)  { return this._toolDispatch('recetas.investigar_receta', e); }
-
-  // UI handlers
+  /**
+   * Wrapper de UI: traduce firma HTTP -> firma de tool, captura excepciones
+   * y devuelve shape canonico.
+   */
   async _uiAdapt(handlerName, request) {
     const params = { ...request, proyecto_id: request.project_id ?? request.proyecto_id };
     try {
@@ -893,19 +883,45 @@ class RecetasModule extends BaseModule {
     }
   }
 
-  async handleCrear(req)            { return this._uiAdapt('crear', req); }
-  async handleListar(req)           { return this._uiAdapt('listar', req); }
-  async handleObtener(req)          { return this._uiAdapt('obtener', req); }
-  async handleBuscar(req)           { return this._uiAdapt('buscar', req); }
-  async handleActualizar(req)       { return this._uiAdapt('actualizar', req); }
-  async handleHistorial(req)        { return this._uiAdapt('historial', req); }
-  async handleRevertir(req)         { return this._uiAdapt('revertir', req); }
-  async handleEliminar(req)         { return this._uiAdapt('eliminar', req); }
-  async handleEstadisticas(req)     { return this._uiAdapt('estadisticas', req); }
-  async handleIngredientes(req)     { return this._uiAdapt('ingredientes', req); }
-  async handleActualizarPrecio(req) { return this._uiAdapt('actualizarPrecio', req); }
-  async handleAnalizar(req)         { return this._uiAdapt('analizar', req); }
-  async handleInvestigarReceta(req) { return this._uiAdapt('investigarReceta', req); }
+  // ============================================================
+  // Privados — utilidades fs sin side effects observables fuera del modulo.
+  // Resuelven la pareja de filesystem.* request/response correlacionada
+  // por request_id contra this.pendingFs.
+  // ============================================================
+
+  _pathFor(basePath) {
+    return `${basePath}/recetas.json`;
+  }
+
+  async _readFile(slug) {
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingFs.delete(request_id);
+        const err = new Error(`fs.read timeout: ${slug}`);
+        err._code = 'UPSTREAM_TIMEOUT';
+        reject(err);
+      }, 8000);
+      this.pendingFs.set(request_id, { resolve, reject, timer, op: 'read' });
+      this.eventBus.publish('fs.read.request', { request_id, path: this._pathFor(slug) });
+    });
+  }
+
+  async _writeFile(slug, content) {
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingFs.delete(request_id);
+        const err = new Error(`fs.write timeout: ${slug}`);
+        err._code = 'UPSTREAM_TIMEOUT';
+        reject(err);
+      }, 8000);
+      this.pendingFs.set(request_id, { resolve, reject, timer, op: 'write' });
+      this.eventBus.publish('fs.write.request', {
+        request_id, path: this._pathFor(slug), content, encoding: 'utf-8'
+      });
+    });
+  }
 }
 
 module.exports = RecetasModule;

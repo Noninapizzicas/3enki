@@ -155,6 +155,9 @@ jobs:
       - name: Run unit tests (tecnicas — modulo nuevo del subsistema-recetario)
         run: npm run test:tecnicas
 
+      - name: Run unit tests (recetario-creativo — modulo nuevo del subsistema-recetario)
+        run: npm run test:recetario-creativo
+
       - name: Run unit tests (perifericos — reescritura canonica)
         run: npm run test:perifericos
 

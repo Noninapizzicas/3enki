@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-17T10:29:38.202Z",
-  "total": 2073,
+  "generated_at": "2026-05-17T10:39:49.713Z",
+  "total": 2074,
   "by_validator": {
     "naming": 49,
     "glossary": 1,
@@ -15,7 +15,7 @@
     "llm-flow": 1,
     "tools": 94,
     "agents-config": 94,
-    "module-rewrite": 68,
+    "module-rewrite": 69,
     "frontend": 374,
     "security": 1,
     "testing": 45,
@@ -30,7 +30,7 @@
   },
   "by_severity": {
     "warning": 1973,
-    "info": 115,
+    "info": 116,
     "error": 14
   },
   "signatures": [
@@ -1349,6 +1349,7 @@
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|pizzepos__tarifas — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|pizzepos__variaciones — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|prompt-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
+    "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|recetario-creativo — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|recetas — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|staff-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|system-inspector — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",

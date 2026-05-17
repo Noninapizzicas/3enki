@@ -59,6 +59,7 @@
     "test:pizzepos__carta-manager": "node tests/unit/pizzepos__carta-manager.test.js",
     "test:recetas": "node tests/unit/recetas.test.js",
     "test:tecnicas": "node tests/unit/tecnicas.test.js",
+    "test:recetario-creativo": "node tests/unit/recetario-creativo.test.js",
     "test:perifericos": "node tests/unit/perifericos.test.js",
     "test:pizzepos__carta-design": "node tests/unit/pizzepos__carta-design.test.js",
     "test:facturas": "node tests/unit/facturas.test.js",

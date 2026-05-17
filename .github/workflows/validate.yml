@@ -158,6 +158,9 @@ jobs:
       - name: Run unit tests (recetario-creativo — modulo nuevo del subsistema-recetario)
         run: npm run test:recetario-creativo
 
+      - name: Run unit tests (pase-cocina — modulo nuevo del subsistema-recetario)
+        run: npm run test:pase-cocina
+
       - name: Run unit tests (perifericos — reescritura canonica)
         run: npm run test:perifericos
 

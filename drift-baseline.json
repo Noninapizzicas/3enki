@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-17T10:53:46.442Z",
-  "total": 2075,
+  "generated_at": "2026-05-17T11:02:08.536Z",
+  "total": 2076,
   "by_validator": {
     "naming": 49,
     "glossary": 1,
@@ -15,7 +15,7 @@
     "llm-flow": 1,
     "tools": 94,
     "agents-config": 94,
-    "module-rewrite": 70,
+    "module-rewrite": 71,
     "frontend": 374,
     "security": 1,
     "testing": 45,
@@ -30,7 +30,7 @@
   },
   "by_severity": {
     "warning": 1973,
-    "info": 117,
+    "info": 118,
     "error": 14
   },
   "signatures": [
@@ -1329,6 +1329,7 @@
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|gateway-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|log-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|metricas — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
+    "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|mise-en-place — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|pase-cocina — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|pdf-viewer — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|perifericos — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",

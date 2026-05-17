@@ -1,0 +1,209 @@
+{
+  "name": "mise-en-place",
+  "version": "1.0.0",
+  "description": "Planificacion previa al servicio: escalado de recetas a porciones objetivo, planes de produccion (que recetas en que franja con cuantas porciones), consolidacion de listas de compra agregando ingredientes a lo largo de un horizonte. Eventos canonicos con prefix 'produccion.*' (decision del sub-contrato). Modulo del subsistema-recetario (ver arquitectura/decisiones/_contratos/subsistema-recetario.contract.json).",
+  "author": "Enki",
+  "language": "es",
+  "tier": "tier_4_dominio",
+
+  "events": {
+    "publishes": [
+      {
+        "event":               "produccion.escalado.calculado",
+        "description":         "Se calculo el escalado de una receta a nuevas porciones.",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/produccion.escalado.calculado.schema.json"
+      },
+      {
+        "event":               "produccion.plan.publicado",
+        "description":         "El jefe publico un plan de produccion semanal/diario.",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/produccion.plan.publicado.schema.json"
+      },
+      {
+        "event":               "produccion.compra.calculada",
+        "description":         "Se consolido la lista de compra de un horizonte.",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/produccion.compra.calculada.schema.json"
+      }
+    ],
+    "subscribes": [
+      { "event": "project.activated",          "handler": "onProjectActivated",   "description": "Cachea base_path del proyecto activado." },
+      { "event": "project.get.response",       "handler": "onProjectGetResponse", "description": "Resuelve project.get pendiente por request_id." },
+      { "event": "fs.read.response",           "handler": "onFsReadResponse",     "description": "Resuelve lectura pendiente por request_id." },
+      { "event": "fs.write.response",          "handler": "onFsWriteResponse",    "description": "Resuelve escritura pendiente por request_id." },
+
+      { "event": "produccion.escalado.calcular","handler": "onCalcularEscalado",  "description": "Tool LLM: calcular escalado de receta." },
+      { "event": "produccion.plan.publicar",   "handler": "onPublicarPlan",      "description": "Tool LLM: publicar plan de produccion." },
+      { "event": "produccion.compra.calcular", "handler": "onCalcularCompra",    "description": "Tool LLM: consolidar lista de compra." },
+      { "event": "produccion.plan.obtener",    "handler": "onObtenerPlan",       "description": "Tool LLM: leer plan por id." },
+      { "event": "produccion.planes.listar",   "handler": "onListarPlanes",      "description": "Tool LLM: listar planes del proyecto." }
+    ]
+  },
+
+  "apis": [],
+
+  "tools": [
+    {
+      "name":        "produccion.escalado.calcular",
+      "description": "Calcular el escalado lineal de una receta a nuevas porciones. Multiplica cada cantidad por factor = porciones_destino/porciones_origen. NO modifica la receta canonica.",
+      "handler":     "onCalcularEscalado",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id":        { "type": "string", "description": "ID del proyecto activo." },
+          "receta_id":         { "type": "string", "description": "ID de la receta a escalar." },
+          "porciones_origen":  { "type": "integer", "minimum": 1, "description": "Porciones originales de la receta." },
+          "porciones_destino": { "type": "integer", "minimum": 1, "description": "Porciones objetivo." },
+          "ingredientes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "nombre":   { "type": "string" },
+                "cantidad": { "type": "number", "minimum": 0 },
+                "unidad":   { "type": "string" }
+              },
+              "required": ["nombre", "cantidad", "unidad"]
+            },
+            "description": "Ingredientes de la receta original (para las porciones_origen)."
+          },
+          "user_id":           { "type": "string", "description": "Opcional." }
+        },
+        "required": ["project_id", "receta_id", "porciones_origen", "porciones_destino", "ingredientes"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+    {
+      "name":        "produccion.plan.publicar",
+      "description": "Publicar un plan de produccion: lineas con receta_id, porciones y franja para un horizonte temporal.",
+      "handler":     "onPublicarPlan",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id":      { "type": "string", "description": "ID del proyecto activo." },
+          "plan_id":         { "type": "string", "description": "ID opcional. Si se omite, se genera 'plan_xxx'." },
+          "horizonte_desde": { "type": "string", "description": "ISO 8601 date-time inicio del horizonte." },
+          "horizonte_hasta": { "type": "string", "description": "ISO 8601 date-time fin del horizonte." },
+          "lineas": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "receta_id": { "type": "string" },
+                "porciones": { "type": "integer", "minimum": 1 },
+                "franja":    { "type": "string", "enum": ["desayuno", "comida", "merienda", "cena", "all_day"] },
+                "dia":       { "type": "string", "description": "ISO 8601 date opcional." }
+              },
+              "required": ["receta_id", "porciones", "franja"]
+            }
+          },
+          "user_id":         { "type": "string", "description": "Opcional." }
+        },
+        "required": ["project_id", "horizonte_desde", "horizonte_hasta", "lineas"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT"]
+    },
+    {
+      "name":        "produccion.compra.calcular",
+      "description": "Consolidar lista de compra agregando ingredientes a lo largo de un conjunto de recetas. El caller pasa cada receta con sus ingredientes ya escalados para las porciones objetivo. Agrega por (ingrediente, unidad) y aplica merma_pct opcional.",
+      "handler":     "onCalcularCompra",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto activo." },
+          "horizonte": {
+            "type": "object",
+            "properties": {
+              "tipo":     { "type": "string", "enum": ["servicio", "dia", "semana", "evento", "personalizado"] },
+              "desde":    { "type": "string" },
+              "hasta":    { "type": "string" },
+              "etiqueta": { "type": "string" }
+            },
+            "required": ["tipo"]
+          },
+          "recetas": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "receta_id":  { "type": "string" },
+                "porciones":  { "type": "integer", "minimum": 1 },
+                "ingredientes": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "nombre":     { "type": "string" },
+                      "cantidad":   { "type": "number", "minimum": 0 },
+                      "unidad":     { "type": "string" },
+                      "merma_pct":  { "type": "number", "minimum": 0, "maximum": 100 }
+                    },
+                    "required": ["nombre", "cantidad", "unidad"]
+                  }
+                }
+              },
+              "required": ["receta_id", "porciones", "ingredientes"]
+            }
+          },
+          "user_id": { "type": "string", "description": "Opcional." }
+        },
+        "required": ["project_id", "horizonte", "recetas"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT"]
+    },
+    {
+      "name":        "produccion.plan.obtener",
+      "description": "Obtener un plan de produccion por id.",
+      "handler":     "onObtenerPlan",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto activo." },
+          "plan_id":    { "type": "string", "description": "ID del plan." }
+        },
+        "required": ["project_id", "plan_id"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
+    },
+    {
+      "name":        "produccion.planes.listar",
+      "description": "Listar planes del proyecto.",
+      "handler":     "onListarPlanes",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto activo." }
+        },
+        "required": ["project_id"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT"]
+    }
+  ],
+
+  "config": {
+    "data_file_pattern":      "data/projects/{slug}/mise-en-place.json",
+    "persistence":            "json-per-project",
+    "project_get_timeout_ms": 5000,
+    "fs_request_timeout_ms":  5000
+  },
+
+  "observability": {
+    "metrics": {
+      "counters": [
+        "mise-en-place.escalado.calculado.total",
+        "mise-en-place.plan.publicado.total",
+        "mise-en-place.compra.calculada.total",
+        "mise-en-place.errors",
+        "mise-en-place.publish_error"
+      ],
+      "gauges": [
+        "mise-en-place.planes.count"
+      ],
+      "timings": [
+        "mise-en-place.compra.duration"
+      ]
+    }
+  }
+}

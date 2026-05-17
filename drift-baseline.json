@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-17T09:29:30.040Z",
-  "total": 2072,
+  "generated_at": "2026-05-17T10:29:38.202Z",
+  "total": 2073,
   "by_validator": {
     "naming": 49,
     "glossary": 1,
@@ -15,7 +15,7 @@
     "llm-flow": 1,
     "tools": 94,
     "agents-config": 94,
-    "module-rewrite": 67,
+    "module-rewrite": 68,
     "frontend": 374,
     "security": 1,
     "testing": 45,
@@ -30,7 +30,7 @@
   },
   "by_severity": {
     "warning": 1973,
-    "info": 114,
+    "info": 115,
     "error": 14
   },
   "signatures": [
@@ -1352,6 +1352,7 @@
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|recetas — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|staff-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|system-inspector — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
+    "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|tecnicas — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|text-editor — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|viabilidad — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_legacy_archivado|scheduler — no se encontró archivo en arquitectura/migracion/_legacy/ con prefijo \"scheduler\". Si la reescritura es del POC2, archivar monolito.",

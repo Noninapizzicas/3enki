@@ -1,88 +1,179 @@
-# viabilidad — Mapa exhaustivo (PASO 0 del rewrite)
+# PASO 0 — mapa del modulo `viabilidad` (NUEVO, v1.0.0, POC2 canon subsistema-recetario)
 
-Generado siguiendo el contrato `module-rewrite.contract.json` antes de tocar codigo.
-Scaffold automatico via `scripts/scaffold-rewrite.js` — completa las secciones `<TODO>`.
+Modulo NUEVO del horizontal del subsistema-recetario (septimo backend, anadido en v1.0.3 del sub-contrato). Reusa el patron POC2 ya validado seis veces: extends BaseModule + json-per-project via bus + 7 grupos de tests con validacion AJV strict.
+
+**Contexto historico**: existe `viabilidad-mapa-prev-historico.md` de un intento anterior con scope distinto. Este mapa cubre la implementacion v1.0.0 que va al canon del subsistema-recetario.
+
+**Por que existe**: hoy el flujo creativo arranca directo en `recetario-creativo` (creando un prototipo) sin filtro previo. Eso significa que se invierten iteraciones en ideas que despues se descartan por motivos economicos. `viabilidad` es la fase 0: dada una idea de producto (aun no receta), evalua economicamente si tiene sentido invertir tiempo en prototipar.
+
+**Flujo del subsistema-recetario tras la incorporacion**:
+```
+IDEA  →  viabilidad evalua  →  recetario-creativo (prototipo)  →  iteraciones  →  recetas (canonico)  →  mise-en-place / pase-cocina
+```
 
 ## Identidad
 
-- **Path**: `modules/viabilidad/`
-- **Version actual**: 1.0.0 → bump a **<TODO>** post-rewrite.
-- **LOC index.js**: 651.
-- **Drifts en baseline**: 74 (21 tipos).
-- **Categoria**: core.
-- **Description oficial**: Estudio de viabilidad de negocio: punto de equilibrio, proyecciones, escenarios, análisis de rentabilidad.
+- **Slug**: `viabilidad`
+- **Version**: v1.0.0 (NUEVO).
+- **Language**: `es`.
+- **Tier**: `tier_4_dominio`.
+- **Subsistema**: `subsistema-recetario` v1.0.3 (este commit lo bumpea de v1.0.2 a v1.0.3).
+- **Tipo canonico**: `evaluador_previo` (tipo nuevo del sub-contrato).
+- **Dueno de**: expedientes de viabilidad por idea (audit trail antes de prototipar).
 
 ## Responsabilidad acotada
 
-<TODO en una frase: que hace este modulo y por que NO se descompone (o por que SI).>
+Evaluar economicamente una IDEA de producto antes de invertir tiempo en prototiparla. Calcula coste estimado a partir de ingredientes propuestos + food cost previsto si hay PVP objetivo. Veredicto deterministico (`viable` / `viable_con_advertencias` / `no_viable_economicamente` / `sin_pvp_objetivo`). Persiste expediente con audit trail; permite descartar explicitamente.
 
-## Inventario de eventos (extraido del audit)
+**Decision arquitectonica**: solo dimension ECONOMICA. Las dimensiones cualitativas (diferenciacion comercial, encaje en oferta, estilo) las decide el LLM principal que invoca la tool — el modulo no las toca. Las dimensiones operativas (tecnicas disponibles, estacionalidad) se delegan al caller que ya tiene esos catalogos. Esto mantiene el modulo determinista y aislado.
 
-### Publishes (2)
+**No es**: un agente IA. Es una calculadora de viabilidad economica con audit trail.
 
-- `viabilidad.estudio.generado` — emitido en `handleEstudio (probable)`.
-- `viabilidad.escenario.calculado` — emitido en `handleEscenario`.
+## Publishes canonicos (2)
 
-### Subscribes (6)
+- `viabilidad.evaluacion.completada` tras evaluar una idea. Veredicto + coste estimado + food cost si aplica. Schema oficial: `arquitectura/decisiones/_schemas/subsistema-recetario/viabilidad.evaluacion.completada.schema.json`.
+- `viabilidad.evaluacion.descartada` cuando el chef marca explicitamente un expediente como descartado (no es lo mismo que `veredicto='no_viable_economicamente'`; aquel es del modulo, este es decision humana). Schema oficial: `viabilidad.evaluacion.descartada.schema.json`.
 
-- `project.activated` → `onProjectActivated`
-- `project.deactivated` → `onProjectDeactivated`
-- `receta.creada` → `onRecetaChanged`
-- `receta.actualizada` → `onRecetaChanged`
-- `receta.eliminada` → `onRecetaChanged`
-- `escandallo.calculado` → `onEscandalloCalculado`
+Ambos cumplen shape AJV strict con campos canonicos del subsistema (`correlation_id`, `project_id`, `user_id`, `timestamp`).
 
-## Drifts conocidos en baseline (74)
+## Subscribes
 
-| Tipo | Count | Naturaleza |
-|---|---|---|
-| `drift_error_sin_log` | 14 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_error_sin_metric` | 14 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_tool_errores_conocidos_vacio_handler_devuelve_error` | 6 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_color_hex_custom_en_frontend_src` | 5 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_tool_handler_que_devuelve_valor_pelado` | 5 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_silent_io_failure` | 4 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_design_doc_propio_de_modulo` | 3 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_ui_handler_sin_type_canonico` | 3 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_ui_handler_sin_zone_canonica` | 3 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_markdown_con_shape_estructurable` | 2 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_inventar_error_code` | 2 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_swallow_error_silently` | 2 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_publish_dominio_sin_project_id` | 2 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_agent_no_cumple_schema` | 1 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_agent_prompt_file_sin_h1` | 1 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_agent_stats_persistido` | 1 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_error_como_string_suelto` | 1 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_missing_onUnload_with_reservations` | 1 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_correlation_id_no_propagado` | 1 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_unbounded_growth_no_eviction` | 1 | <TODO clasificar: real / falso positivo / stale audit> |
-| `drift_undeclared_persistence_pattern` | 1 | <TODO clasificar: real / falso positivo / stale audit> |
+Solo lifecycle + tools — **NO consume eventos de dominio del subsistema** (decision arquitectonica: evaluacion a peticion, no reactiva).
 
-<TODO patron principal en 1-2 frases: cuantos son reales vs falsos positivos vs stale audit.>
+- `project.activated` → `onProjectActivated`: cachea base_path.
+- `project.get.response` → `onProjectGetResponse`.
+- `fs.read.response` → `onFsReadResponse`.
+- `fs.write.response` → `onFsWriteResponse`.
 
-## Cosas criticas a preservar (validacion post-rewrite)
+Tools invocadas por bus:
+- `viabilidad.evaluar` → `onEvaluar`: evaluar una idea.
+- `viabilidad.obtener` → `onObtener`: leer expediente por id.
+- `viabilidad.listar` → `onListar`: listar expedientes (filtros opcionales).
+- `viabilidad.descartar` → `onDescartar`: marcar como descartada.
 
-<TODO lista numerada de invariantes que la reescritura DEBE preservar:
-eventos del bus, ui_handlers, schemas idempotentes, backward-compat, cascades,
-extension points, etc.>
+## Persistencia
 
-## Plan del rewrite
+- **Patron**: `json-per-project`.
+- **Path**: `data/projects/{slug}/viabilidad.json`.
+- **Acceso**: via `fs.read.request` / `fs.write.request` por bus.
+- **Concurrencia**: `writeQueues: Map<project_id, Promise>` (mismo patron que los 6 modulos previos).
+- **Shape del archivo**:
+  ```json
+  {
+    "_version": "1.0.0",
+    "_updated_at": "ISO 8601",
+    "expedientes": [
+      {
+        "id": "viab_<timestamp>_<rand>",
+        "nombre_idea": "Postre con miso y chocolate",
+        "ingredientes_estimados": [
+          { "nombre": "miso", "cantidad": 0.02, "unidad": "kg" }
+        ],
+        "porciones": 4,
+        "precio_venta_objetivo": 8.0,
+        "coste_total": 1.50,
+        "coste_por_porcion": 0.375,
+        "coste_es_real": true,
+        "food_cost_pct": 4.69,
+        "veredicto": "viable",
+        "advertencias": [],
+        "ingredientes_sin_precio": [],
+        "estado_expediente": "evaluada",
+        "motivo_descarte": null,
+        "created_at": "ISO 8601",
+        "updated_at": "ISO 8601"
+      }
+    ]
+  }
+  ```
 
-1. Archivar monolito (651 LOC) en `_legacy/viabilidad-monolito-pre-rewrite.js.bak`. _(automatico via scaffold)_
-2. Reescribir `index.js` v<NEW> al canon:
-   - 5 helpers POC2 (`_errorResponse`, `_handleHandlerError`, `_classifyHandlerError`, `_publicarEvento`, + auxiliar `<TODO>`).
-   - Throws con `_code` canonico.
-   - Handlers UI/HTTP devuelven `{ status, data | error: { code, message, details? } }`.
-   - Telemetria completa con prefix `viabilidad.*`.
-3. `module.json` v<NEW>:
-   - `tracing.propaga_correlation_id: true`.
-   - Schemas refs si subsistema chat/agent/llm/embedding.
-   - Counters/gauges con prefix canonico.
-4. Tests por capas (`tests/unit/viabilidad.test.js` ya scaffoldeado):
-   - Group 1: Lifecycle. _(skeleton listo)_
-   - Group 2: Validacion canonica. <TODO>
-   - Group 3-N: <TODO especifico del dominio>
-   - Group 7: Helpers POC2. _(skeleton listo)_
-5. Wire CI: `package.json` + `workflow.yml`. _(automatico via scaffold)_
-6. Verificar drift count + regenerar baseline si es legitimo.
-7. Commit con metricas via `finish-rewrite.js`.
+## Algoritmo de viabilidad (determinista, sin LLM)
+
+```
+coste_total = suma(ing.cantidad * precios_catalogo[ing.nombre]) si esta en catalogo
+coste_es_real = todos los ingredientes propuestos tenian precio en catalogo
+coste_por_porcion = coste_total / porciones
+
+if precio_venta_objetivo > 0:
+  food_cost_pct = coste_por_porcion / precio_venta_objetivo * 100
+  if food_cost_pct > umbral_alerta (35%):     veredicto = 'no_viable_economicamente'
+  elif food_cost_pct > umbral_advertencia (30%): veredicto = 'viable_con_advertencias'
+  else:                                        veredicto = 'viable'
+else:
+  veredicto = 'sin_pvp_objetivo'  (informativo)
+
+advertencias[] += "food cost al limite" si umbral_advertencia < food_cost_pct <= umbral_alerta
+advertencias[] += "ingredientes sin precio: X, Y" si ingredientes_sin_precio.length > 0
+```
+
+Mismos umbrales por defecto que `escandallo` (coherencia cross-modulo del subsistema): `food_cost_umbral_alerta=35%`, `food_cost_umbral_advertencia=30%`. Ambos configurables.
+
+## Estados del expediente
+
+- `evaluada` — acaba de pasar `viabilidad.evaluar`.
+- `descartada` — chef marco con `viabilidad.descartar`. NO se borra del archivo (audit trail).
+
+Si en el futuro se quiere "promocionar" (idea pasa a `recetario-creativo` o `recetas`), seria un evento adicional `viabilidad.evaluacion.promocionada` no implementado en v1.0.0 — la promocion la hace el LLM invocando `creativo.prototipo.crear` directamente.
+
+## Helpers POC2
+
+5 heredados de BaseModule + override `_publicarEvento` con `project_id` + `user_id` canonicos.
+
+Helpers de dominio:
+- `_validarEvaluar`, `_validarDescartar`.
+- `_generarId(prefix)` — `viab_<timestamp>_<hex6>`.
+- `_calcularViabilidad(ingredientes, precios_catalogo, porciones, precio_venta_objetivo)`.
+
+Helpers de persistencia: `_basePathForProject`, `_loadStore`, `_saveStore`, `_withStore`, `_readOnly`, `_readFile`, `_writeFile`.
+
+## Validaciones canonicas
+
+Evaluar:
+- `project_id`, `nombre_idea`, `ingredientes_estimados`, `porciones`, `precios_catalogo` obligatorios.
+- `nombre_idea` string 1-200 chars.
+- `porciones` integer >= 1.
+- `ingredientes_estimados` array no vacio.
+- `precios_catalogo` plain object.
+- `precio_venta_objetivo` opcional, number > 0 si presente.
+
+Descartar:
+- `project_id`, `expediente_id`, `motivo` obligatorios.
+
+Errores canonicos:
+- 400 `INVALID_INPUT` (con `details.field`).
+- 404 `RESOURCE_NOT_FOUND` (con `details.entity_type: 'viability-record'`).
+- 409 `CONFLICT_STATE` si ya esta descartada.
+
+## Tests por capas (7 grupos)
+
+1. **Lifecycle**: onLoad / onUnload.
+2. **Validacion canonica**: cada tool con field invalido.
+3. **Success evaluar con PVP**: 3 veredictos (viable / con advertencias / no viable) + publish AJV strict.
+4. **Success evaluar sin PVP**: veredicto `sin_pvp_objetivo`.
+5. **Success obtener / listar**: filtros por veredicto / estado.
+6. **Success descartar**: transicion + publish `evaluacion.descartada` AJV strict.
+7. **Helpers POC2**: `_publicarEvento` + `_calcularViabilidad` (umbrales exactos).
+
+## Criterio de cierre
+
+- `tests/unit/viabilidad.test.js` verde.
+- `npm run validate:ci` verde.
+- `module.json` con 2 `response_schema_ref`.
+- subsistema-recetario.validate.js PASS sin findings.
+- Sub-contrato v1.0.3 publicado.
+
+## Estado del horizontal tras este modulo
+
+```
+Backend (7/7 ✓):
+  ✓ tecnicas              v1.0.0
+  ✓ recetario-creativo    v1.0.0
+  ✓ pase-cocina           v1.0.0
+  ✓ mise-en-place         v1.0.0
+  ✓ escandallo            v4.0.0
+  ✓ recetas               v4.0.0
+  + viabilidad            v1.0.0  ← este modulo
+
+Frontend (0/1):
+  ☐ frontend-recetario
+```

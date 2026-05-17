@@ -1,785 +1,679 @@
 /**
- * Viabilidad v2.0.0 — POC2 canonico.
+ * Modulo `viabilidad` v1.0.0
  *
- * Estudio de viabilidad de negocio: punto de equilibrio, escenarios,
- * proyecciones y analisis de rentabilidad. Lee datos de recetas y escandallo
- * por proyecto (cache invalidado por receta.{creada,actualizada,eliminada}).
+ * Evaluador previo del subsistema-recetario. Calcula viabilidad ECONOMICA de
+ * una idea de producto ANTES de invertir tiempo en prototipar. Algoritmo
+ * determinista (sin LLM interno): coste estimado a partir de ingredientes
+ * propuestos + food cost previsto si hay PVP objetivo.
  *
- * Tools:
- *   viabilidad.estudio             — Estudio completo (3 escenarios + analisis recetas)
- *   viabilidad.punto_equilibrio    — Break-even analysis
- *   viabilidad.escenario           — Calcula y persiste un escenario
- *   viabilidad.comparar_escenarios — Compara N escenarios lado a lado
- *   viabilidad.proyeccion          — Proyeccion financiera a N meses + ROI
- *   viabilidad.guardar_config      — Persiste config del negocio
+ * Decision arquitectonica: solo dimension ECONOMICA. Las dimensiones
+ * cualitativas (diferenciacion comercial, encaje en oferta, estilo) las
+ * decide el LLM principal que invoca la tool. Las dimensiones operativas
+ * (tecnicas disponibles, estacionalidad) las cubre el caller pasando los
+ * catalogos correspondientes.
+ *
+ * Cumple los 24 contratos transversales:
+ *   - class ViabilidadModule extends BaseModule.
+ *   - Override _publicarEvento para anadir project_id + user_id canonicos.
+ *   - Toda respuesta { status, data | error: { code, message, details? } }.
+ *   - Persistencia json-per-project via bus.
+ *   - 2 publishes canonicos con AJV strict:
+ *     viabilidad.evaluacion.completada, viabilidad.evaluacion.descartada.
+ *
+ * Flujo del subsistema:
+ *   IDEA -> viabilidad.evaluar -> recetario-creativo.prototipo.crear ->
+ *   iteraciones -> recetas.crear (canonico) -> mise-en-place / pase-cocina.
  */
 
 'use strict';
 
-const path = require('path');
+const crypto     = require('crypto');
 const BaseModule = require('../_shared/base-module');
-const fs = require('fs').promises;
 
-const DEFAULT_DIAS_OPERACION = 25;
-const DEFAULT_COMENSALES_DIA = 50;
-const DEFAULT_TICKET_MEDIO = 15;
-const DEFAULT_FOOD_COST_PCT = 33;
-const FOOD_COST_ALTO_PCT = 35;
+const DEFAULT_PROJECT_ID = 'default';
+const DEFAULT_USER_ID    = 'default';
+const ENTITY_TYPE        = 'viability-record';
+
+const VEREDICTOS = Object.freeze({
+  VIABLE:                     'viable',
+  VIABLE_CON_ADVERTENCIAS:    'viable_con_advertencias',
+  NO_VIABLE_ECONOMICAMENTE:   'no_viable_economicamente',
+  SIN_PVP_OBJETIVO:           'sin_pvp_objetivo'
+});
+const VEREDICTOS_VALIDOS = new Set(Object.values(VEREDICTOS));
+
+const ESTADOS = Object.freeze({
+  EVALUADA:   'evaluada',
+  DESCARTADA: 'descartada'
+});
+const ESTADOS_VALIDOS = new Set(Object.values(ESTADOS));
 
 class ViabilidadModule extends BaseModule {
   constructor() {
     super();
-    this.name = 'viabilidad';
-    this.version = '2.0.0';
-    this.configs = new Map();
-    this.recetasCache = new Map();
-    this.projectPaths = new Map();
-    this.escenarios = new Map();
+    this.name    = 'viabilidad';
+    this.version = '1.0.0';
+
+    this.config = {
+      data_file_pattern:            'data/projects/{slug}/viabilidad.json',
+      max_nombre_idea_length:       200,
+      max_motivo_length:            500,
+      food_cost_umbral_alerta:      35,
+      food_cost_umbral_advertencia: 30,
+      project_get_timeout_ms:       5000,
+      fs_request_timeout_ms:        5000
+    };
+
+    this.projectBasePaths = new Map();
+    this.pendingProject   = new Map();
+    this.pendingFs        = new Map();
+    this.writeQueues      = new Map();
   }
 
-  async onLoad(context) {
-    this.eventBus = context.eventBus;
-    this.logger = context.logger;
-    this.metrics = context.metrics;
-    this.logger.info('module.loaded', { module: this.name, version: this.version });
+  // ============================================================
+  // Lifecycle
+  // ============================================================
+
+  async onLoad(core) {
+    this.logger   = core.logger;
+    this.metrics  = core.metrics;
+    this.eventBus = core.eventBus;
+
+    if (core.config?.[this.name]) {
+      this.config = { ...this.config, ...core.config[this.name] };
+    }
+
+    this.logger.info('viabilidad.loaded', {
+      module:  this.name,
+      version: this.version,
+      storage: 'json-per-project'
+    });
   }
 
   async onUnload() {
-    this.configs.clear();
-    this.recetasCache.clear();
-    this.projectPaths.clear();
-    this.escenarios.clear();
-    this.logger?.info?.('module.unloaded', { module: this.name });
+    for (const { timer } of this.pendingProject.values()) clearTimeout(timer);
+    for (const { timer } of this.pendingFs.values())      clearTimeout(timer);
+
+    this.pendingProject.clear();
+    this.pendingFs.clear();
+    this.writeQueues.clear();
+    this.projectBasePaths.clear();
+
+    this.logger?.info('viabilidad.unloaded', { module: this.name });
   }
 
-  // ==========================================
-  // Helpers POC2
-  // ==========================================
+  // ============================================================
+  // Bus subscribers — lifecycle de project + fs responses
+  // ============================================================
 
-  _errorResponse(status, code, message, details) {
-    const error = { code, message };
-    if (details !== undefined) error.details = details;
-    return { status, error };
-  }
-
-  _classifyHandlerError(err) {
-    const msg = err?.message || String(err);
-    const code = err?.code;
-    if (code === 'ENOENT') return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    if (code === 'EACCES' || code === 'EPERM') return { status: 500, code: 'UNKNOWN_ERROR' };
-    if (/required|invalid|missing|requerido|necesitan/i.test(msg)) return { status: 400, code: 'INVALID_INPUT' };
-    if (/not found|no encontrado/i.test(msg)) return { status: 404, code: 'RESOURCE_NOT_FOUND' };
-    return { status: 500, code: 'UNKNOWN_ERROR' };
-  }
-
-  _handleHandlerError(logEvent, err, kind = 'handler') {
-    const { status, code } = this._classifyHandlerError(err);
-    this.logger?.error?.(logEvent, {
-      kind,
-      error_code: code,
-      error_message: err?.message || String(err)
-    });
-    this.metrics?.increment?.('viabilidad.errors', { code, kind });
-    return this._errorResponse(status, code, err?.message || 'Error interno');
-  }
-
-  async _publicarEvento(name, payload, sourcePayload) {
-    const correlation_id =
-      payload?.correlation_id ||
-      sourcePayload?.correlation_id ||
-      sourcePayload?.metadata?.correlationId ||
-      null;
-    const project_id =
-      payload?.project_id ??
-      sourcePayload?.project_id ??
-      null;
-    const enriched = {
-      ...payload,
-      correlation_id,
-      timestamp: payload?.timestamp || new Date().toISOString()
-    };
-    if (project_id !== null && project_id !== undefined) enriched.project_id = project_id;
-    await this.eventBus.publish(name, enriched);
-    return enriched;
-  }
-
-  async _atomicWriteFile(targetPath, data) {
-    const tmp = `${targetPath}.tmp`;
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.writeFile(tmp, data);
-    try {
-      await fs.rename(tmp, targetPath);
-    } catch (err) {
-      try { await fs.unlink(tmp); } catch (_) { /* ignore */ }
-      throw err;
+  onProjectActivated(event) {
+    const data = event?.data || event || {};
+    const id = data.project_id || data.id;
+    const basePath = data.base_path || data.project?.base_path;
+    if (id && basePath) {
+      this.projectBasePaths.set(id, basePath);
+      this.logger?.debug('viabilidad.project.cached', { project_id: id, base_path: basePath });
     }
   }
 
-  async _readJsonSafe(filePath, defaultValue = null) {
-    try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      return JSON.parse(content);
-    } catch (err) {
-      if (err.code === 'ENOENT') return defaultValue;
-      this.logger?.warn?.('viabilidad.read_json.error', {
-        file: filePath,
-        error_code: err.code || 'PARSE_ERROR',
-        error_message: err.message
-      });
-      return defaultValue;
+  onProjectGetResponse(event) {
+    const data = event?.data || event || {};
+    const request_id = data.request_id;
+    if (!request_id) return;
+    const pending = this.pendingProject.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timer);
+    this.pendingProject.delete(request_id);
+
+    if (data.error) {
+      pending.reject(Object.assign(new Error(data.error.message || 'project.get.failed'), { _code: data.error.code || 'UPSTREAM_INVALID_RESPONSE' }));
+      return;
     }
+    const basePath = data.base_path || data.project?.base_path;
+    if (!basePath) {
+      pending.reject(Object.assign(new Error('project.get response sin base_path'), { _code: 'UPSTREAM_INVALID_RESPONSE' }));
+      return;
+    }
+    pending.resolve(basePath);
   }
 
-  // ==========================================
-  // Project resolution + cache loaders
-  // ==========================================
+  onFsReadResponse(event) {
+    const data = event?.data || event || {};
+    const request_id = data.request_id;
+    if (!request_id) return;
+    const pending = this.pendingFs.get(request_id);
+    if (!pending) return;
 
-  resolveToActiveProject(projectId) {
-    if (projectId && this.projectPaths.has(projectId)) return projectId;
-    for (const [pid] of this.projectPaths) return pid;
-    return projectId;
+    clearTimeout(pending.timer);
+    this.pendingFs.delete(request_id);
+
+    if (data.error) {
+      if (data.error.code === 'RESOURCE_NOT_FOUND' || data.error.kind === 'enoent') {
+        pending.resolve(null);
+        return;
+      }
+      pending.reject(Object.assign(new Error(data.error.message || 'fs.read.failed'), { _code: data.error.code || 'UPSTREAM_INVALID_RESPONSE' }));
+      return;
+    }
+    pending.resolve(data.content ?? null);
   }
 
-  async loadRecetasData(projectId) {
-    const paths = this.projectPaths.get(projectId);
-    if (!paths) return { recetas: [], ingredientes: [] };
+  onFsWriteResponse(event) {
+    const data = event?.data || event || {};
+    const request_id = data.request_id;
+    if (!request_id) return;
+    const pending = this.pendingFs.get(request_id);
+    if (!pending) return;
 
-    const dir = path.join(paths.storagePath, 'recetas');
-    const recetas = await this._readJsonSafe(path.join(dir, 'recetas.json'), []);
-    const ingredientes = await this._readJsonSafe(path.join(dir, 'ingredientes.json'), []);
+    clearTimeout(pending.timer);
+    this.pendingFs.delete(request_id);
 
-    const data = { recetas, ingredientes };
-    this.recetasCache.set(projectId, data);
-    return data;
+    if (data.error) {
+      pending.reject(Object.assign(new Error(data.error.message || 'fs.write.failed'), { _code: data.error.code || 'UPSTREAM_INVALID_RESPONSE' }));
+      return;
+    }
+    pending.resolve(true);
   }
 
-  async getRecetas(projectId) {
-    if (this.recetasCache.has(projectId)) return this.recetasCache.get(projectId);
-    return await this.loadRecetasData(projectId);
-  }
+  // ============================================================
+  // Tools — viabilidad
+  // ============================================================
 
-  async loadConfig(projectId) {
-    const paths = this.projectPaths.get(projectId);
-    if (!paths) return null;
-    const filePath = path.join(paths.storagePath, 'viabilidad', 'config.json');
-    const config = await this._readJsonSafe(filePath, null);
-    if (config) this.configs.set(projectId, config);
-    return config;
-  }
+  async onEvaluar(params = {}) {
+    const start = Date.now();
+    const { project_id } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
 
-  async saveConfig(projectId, config) {
-    const paths = this.projectPaths.get(projectId);
-    if (!paths) return;
-    const filePath = path.join(paths.storagePath, 'viabilidad', 'config.json');
-    await this._atomicWriteFile(filePath, JSON.stringify(config, null, 2));
-    this.configs.set(projectId, config);
-  }
+    const errores = this._validarEvaluar(params);
+    if (errores.length > 0) {
+      return this._errorResponse(400, errores[0].code, errores[0].message, { ...errores[0].details, all_errors: errores });
+    }
 
-  async saveEstudio(projectId, estudio) {
-    const paths = this.projectPaths.get(projectId);
-    if (!paths) return;
-    const filename = `estudio_${Date.now().toString(36)}.json`;
-    const filePath = path.join(paths.storagePath, 'viabilidad', filename);
-    await this._atomicWriteFile(filePath, JSON.stringify(estudio, null, 2));
-  }
-
-  async loadEscenarios(projectId) {
-    const paths = this.projectPaths.get(projectId);
-    if (!paths) return [];
-    const filePath = path.join(paths.storagePath, 'viabilidad', 'escenarios.json');
-    const escenarios = await this._readJsonSafe(filePath, []);
-    this.escenarios.set(projectId, escenarios);
-    return escenarios;
-  }
-
-  async saveEscenarios(projectId) {
-    const paths = this.projectPaths.get(projectId);
-    if (!paths) return;
-    const lista = this.escenarios.get(projectId) || [];
-    const filePath = path.join(paths.storagePath, 'viabilidad', 'escenarios.json');
-    await this._atomicWriteFile(filePath, JSON.stringify(lista, null, 2));
-  }
-
-  // ==========================================
-  // Bus subscribers
-  // ==========================================
-
-  async onProjectActivated(event) {
     try {
-      const data = event?.data || event;
-      const { project_id, base_path, metadata } = data || {};
-      const resolvedBase = (metadata?.is_system === true) ? process.cwd() : base_path;
-      if (resolvedBase) {
-        this.projectPaths.set(project_id, {
-          storagePath: path.join(resolvedBase, 'storage')
+      return await this._withStore(project_id, async (store) => {
+        const calculo = this._calcularViabilidad({
+          ingredientes:           params.ingredientes_estimados,
+          precios_catalogo:       params.precios_catalogo,
+          porciones:              params.porciones,
+          precio_venta_objetivo:  typeof params.precio_venta_objetivo === 'number' ? params.precio_venta_objetivo : null
         });
-      }
-      await this.loadRecetasData(project_id);
-      await this.loadConfig(project_id);
-      await this.loadEscenarios(project_id);
-      this.logger.info('viabilidad.project.activated', { project_id });
-    } catch (err) {
-      this._handleHandlerError('viabilidad.project_activated.error', err, 'subscribe');
-    }
-  }
 
-  async onProjectDeactivated() {}
+        const now = new Date().toISOString();
+        const expediente = {
+          id:                      this._generarId('viab'),
+          nombre_idea:             params.nombre_idea.trim(),
+          ingredientes_estimados:  params.ingredientes_estimados.map(i => ({
+            nombre: String(i.nombre), cantidad: i.cantidad, unidad: String(i.unidad)
+          })),
+          porciones:               params.porciones,
+          precio_venta_objetivo:   typeof params.precio_venta_objetivo === 'number' ? params.precio_venta_objetivo : null,
+          coste_total:             calculo.coste_total,
+          coste_por_porcion:       calculo.coste_por_porcion,
+          coste_es_real:           calculo.coste_es_real,
+          food_cost_pct:           calculo.food_cost_pct,
+          veredicto:               calculo.veredicto,
+          advertencias:            calculo.advertencias,
+          ingredientes_sin_precio: calculo.ingredientes_sin_precio,
+          estado_expediente:       ESTADOS.EVALUADA,
+          motivo_descarte:         null,
+          created_at:              now,
+          updated_at:              now
+        };
+        store.expedientes.push(expediente);
 
-  async onRecetaChanged(event) {
-    const data = event?.data || event;
-    if (data?.proyecto_id) this.recetasCache.delete(data.proyecto_id);
-    if (data?.project_id) this.recetasCache.delete(data.project_id);
-  }
-
-  async onEscandalloCalculado() {
-    // hook para futuras auto-actualizaciones de estudios
-  }
-
-  // ==========================================
-  // Helpers internos
-  // ==========================================
-
-  round(n, decimals = 2) {
-    const f = Math.pow(10, decimals);
-    return Math.round(n * f) / f;
-  }
-
-  getConfig(projectId) {
-    return this.configs.get(projectId) || {};
-  }
-
-  calcularFoodCostMedio(recetas) {
-    if (!recetas || recetas.length === 0) return DEFAULT_FOOD_COST_PCT;
-    return recetas.reduce((s, r) => s + (r.coste_porcion || 0), 0) / recetas.length;
-  }
-
-  calcularEscenario(params) {
-    const {
-      nombre, gastos_fijos_mensuales, comensales_dia,
-      ticket_medio, food_cost_porcentaje,
-      dias_operacion_mes = DEFAULT_DIAS_OPERACION
-    } = params;
-
-    const ingresos_dia = comensales_dia * ticket_medio;
-    const ingresos_mes = ingresos_dia * dias_operacion_mes;
-    const coste_materia_prima_mes = ingresos_mes * (food_cost_porcentaje / 100);
-    const gastos_totales_mes = gastos_fijos_mensuales + coste_materia_prima_mes;
-    const beneficio_mes = ingresos_mes - gastos_totales_mes;
-    const beneficio_dia = beneficio_mes / dias_operacion_mes;
-
-    const margen_contribucion_por_comensal = ticket_medio * (1 - food_cost_porcentaje / 100);
-    const comensales_break_even_mes = margen_contribucion_por_comensal > 0
-      ? Math.ceil(gastos_fijos_mensuales / margen_contribucion_por_comensal)
-      : Infinity;
-    const comensales_break_even_dia = Math.ceil(comensales_break_even_mes / dias_operacion_mes);
-
-    return {
-      nombre: nombre || 'Sin nombre',
-      parametros: {
-        gastos_fijos_mensuales, comensales_dia, ticket_medio,
-        food_cost_porcentaje, dias_operacion_mes
-      },
-      ingresos: {
-        dia: this.round(ingresos_dia),
-        mes: this.round(ingresos_mes),
-        anual: this.round(ingresos_mes * 12)
-      },
-      gastos: {
-        fijos_mes: gastos_fijos_mensuales,
-        materia_prima_mes: this.round(coste_materia_prima_mes),
-        total_mes: this.round(gastos_totales_mes)
-      },
-      beneficio: {
-        dia: this.round(beneficio_dia),
-        mes: this.round(beneficio_mes),
-        anual: this.round(beneficio_mes * 12),
-        es_rentable: beneficio_mes > 0
-      },
-      punto_equilibrio: {
-        comensales_dia: comensales_break_even_dia,
-        comensales_mes: comensales_break_even_mes,
-        margen_sobre_equilibrio: comensales_dia - comensales_break_even_dia,
-        porcentaje_ocupacion_necesaria: this.round((comensales_break_even_dia / comensales_dia) * 100)
-      }
-    };
-  }
-
-  // ==========================================
-  // UI Handlers (canonical shape)
-  // ==========================================
-
-  async handleEstudio(data) {
-    try {
-      const project_id = this.resolveToActiveProject(data?.project_id);
-      return await this.toolEstudio({ ...data, project_id });
-    } catch (err) {
-      return this._handleHandlerError('viabilidad.ui.estudio.error', err);
-    }
-  }
-
-  async handleEscenario(data) {
-    try {
-      const project_id = this.resolveToActiveProject(data?.project_id);
-      return await this.toolEscenario({ ...data, project_id });
-    } catch (err) {
-      return this._handleHandlerError('viabilidad.ui.escenario.error', err);
-    }
-  }
-
-  async handleConfig(data) {
-    try {
-      const project_id = this.resolveToActiveProject(data?.project_id);
-      if (data?.action === 'get') {
-        return { status: 200, data: this.getConfig(project_id) };
-      }
-      return await this.toolGuardarConfig({ ...data, project_id });
-    } catch (err) {
-      return this._handleHandlerError('viabilidad.ui.config.error', err);
-    }
-  }
-
-  async handleHealth() {
-    return {
-      status: 200,
-      data: {
-        status: 'healthy',
-        module: this.name,
-        version: this.version,
-        proyectos_cargados: this.projectPaths.size
-      }
-    };
-  }
-
-  // ==========================================
-  // Tools
-  // ==========================================
-
-  async toolEstudio(params) {
-    try {
-      const {
-        nombre_negocio, tipo_negocio, gastos_fijos_mensuales,
-        dias_operacion_mes, comensales_dia_estimados,
-        ticket_medio, precios_venta, project_id, correlation_id
-      } = params || {};
-
-      if (!gastos_fijos_mensuales) {
-        this.metrics?.increment?.('viabilidad.errors', { code: 'INVALID_INPUT', kind: 'estudio' });
-        this.logger.warn('viabilidad.estudio.missing', { field: 'gastos_fijos_mensuales' });
-        return this._errorResponse(400, 'INVALID_INPUT',
-          'Se requiere gastos_fijos_mensuales',
-          { field: 'gastos_fijos_mensuales' });
-      }
-      if (!project_id) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id', { field: 'project_id' });
-      }
-
-      const config = this.getConfig(project_id);
-      const { recetas } = await this.getRecetas(project_id);
-
-      const gf = gastos_fijos_mensuales || config.gastos_fijos_mensuales || 0;
-      const dias = dias_operacion_mes || config.dias_operacion_mes || DEFAULT_DIAS_OPERACION;
-      const comensales = comensales_dia_estimados || config.comensales_dia_estimados || DEFAULT_COMENSALES_DIA;
-
-      let foodCostPct = DEFAULT_FOOD_COST_PCT;
-      let ticketMedio = ticket_medio || config.ticket_medio;
-
-      if (recetas.length > 0) {
-        const costeMedio = this.calcularFoodCostMedio(recetas);
-        if (ticketMedio) {
-          foodCostPct = this.round((costeMedio / ticketMedio) * 100);
-        } else {
-          ticketMedio = this.round(costeMedio * 3);
-          foodCostPct = DEFAULT_FOOD_COST_PCT;
+        // Publish payload canonico (segun schema oficial)
+        const payload = {
+          project_id,
+          user_id:           params.user_id || DEFAULT_USER_ID,
+          expediente_id:     expediente.id,
+          nombre_idea:       expediente.nombre_idea,
+          veredicto:         expediente.veredicto,
+          coste_total:       expediente.coste_total,
+          coste_por_porcion: expediente.coste_por_porcion,
+          coste_es_real:     expediente.coste_es_real
+        };
+        if (expediente.food_cost_pct !== null && expediente.food_cost_pct !== undefined) {
+          payload.food_cost_pct = expediente.food_cost_pct;
         }
-      } else if (!ticketMedio) {
-        ticketMedio = DEFAULT_TICKET_MEDIO;
-      }
+        if (expediente.precio_venta_objetivo !== null) {
+          payload.precio_venta_objetivo = expediente.precio_venta_objetivo;
+        }
+        if (expediente.ingredientes_sin_precio.length > 0) {
+          payload.ingredientes_sin_precio = expediente.ingredientes_sin_precio;
+        }
+        if (expediente.advertencias.length > 0) {
+          payload.advertencias = expediente.advertencias;
+        }
 
-      const escenarioPrincipal = this.calcularEscenario({
-        nombre: 'Principal',
-        gastos_fijos_mensuales: gf, comensales_dia: comensales,
-        ticket_medio: ticketMedio, food_cost_porcentaje: foodCostPct,
-        dias_operacion_mes: dias
-      });
+        await this._publicarEvento('viabilidad.evaluacion.completada', payload, params);
 
-      const escenarioConservador = this.calcularEscenario({
-        nombre: 'Conservador (-20% comensales)',
-        gastos_fijos_mensuales: gf,
-        comensales_dia: Math.floor(comensales * 0.8),
-        ticket_medio: ticketMedio, food_cost_porcentaje: foodCostPct,
-        dias_operacion_mes: dias
-      });
+        this.metrics?.increment(`${this.name}.evaluacion.completada.total`, 1, { project_id, veredicto: expediente.veredicto });
+        this.metrics?.timing(`${this.name}.evaluar.duration`, Date.now() - start);
+        this.metrics?.gauge(`${this.name}.expedientes.count`, store.expedientes.length, { project_id });
 
-      const escenarioOptimista = this.calcularEscenario({
-        nombre: 'Optimista (+30% comensales)',
-        gastos_fijos_mensuales: gf,
-        comensales_dia: Math.ceil(comensales * 1.3),
-        ticket_medio: ticketMedio, food_cost_porcentaje: foodCostPct,
-        dias_operacion_mes: dias
-      });
-
-      let analisisRecetas = null;
-      if (recetas.length > 0) {
-        const preciosMap = precios_venta || {};
-        analisisRecetas = recetas.map(r => {
-          const pv = preciosMap[r.id] || this.round((r.coste_porcion || 0) * 3);
-          const margen = pv - (r.coste_porcion || 0);
-          return {
-            nombre: r.nombre,
-            coste_porcion: r.coste_porcion || 0,
-            precio_venta_sugerido: pv,
-            margen: this.round(margen),
-            food_cost: pv > 0 ? this.round(((r.coste_porcion || 0) / pv) * 100) : 0
-          };
-        });
-      }
-
-      const estudio = {
-        negocio: {
-          nombre: nombre_negocio || config.nombre_negocio || 'Nuevo negocio',
-          tipo: tipo_negocio || config.tipo_negocio || 'No especificado'
-        },
-        fecha: new Date().toISOString(),
-        recetas_analizadas: recetas.length,
-        food_cost_medio: foodCostPct,
-        ticket_medio: ticketMedio,
-        escenarios: {
-          principal: escenarioPrincipal,
-          conservador: escenarioConservador,
-          optimista: escenarioOptimista
-        },
-        recetas: analisisRecetas,
-        conclusiones: []
-      };
-
-      const ep = escenarioPrincipal;
-      if (ep.beneficio.es_rentable) {
-        estudio.conclusiones.push(`El negocio es rentable con ${comensales} comensales/dia: beneficio estimado ${ep.beneficio.mes}€/mes.`);
-      } else {
-        estudio.conclusiones.push(`El negocio NO es rentable con ${comensales} comensales/dia. Perdida estimada: ${Math.abs(ep.beneficio.mes)}€/mes.`);
-      }
-      estudio.conclusiones.push(`Punto de equilibrio: ${ep.punto_equilibrio.comensales_dia} comensales/dia (${ep.punto_equilibrio.porcentaje_ocupacion_necesaria}% de ocupacion).`);
-
-      if (escenarioConservador.beneficio.es_rentable) {
-        estudio.conclusiones.push(`Incluso en escenario conservador (-20%), el negocio seria rentable.`);
-      } else {
-        estudio.conclusiones.push(`En escenario conservador (-20%), el negocio entraria en perdidas. Margen de seguridad bajo.`);
-      }
-
-      if (foodCostPct > FOOD_COST_ALTO_PCT) {
-        estudio.conclusiones.push(`Food cost alto (${foodCostPct}%). Conviene optimizar costes o subir precios. Objetivo: < ${DEFAULT_FOOD_COST_PCT}%.`);
-      }
-
-      await this.saveEstudio(project_id, estudio);
-      await this._publicarEvento('viabilidad.estudio.generado', estudio, { correlation_id, project_id });
-      this.metrics?.increment?.('viabilidad.estudio.generated');
-
-      return { status: 200, data: estudio };
-    } catch (err) {
-      return this._handleHandlerError('viabilidad.estudio.error', err);
-    }
-  }
-
-  async toolPuntoEquilibrio(params) {
-    try {
-      const {
-        gastos_fijos_mensuales, ticket_medio, food_cost_porcentaje,
-        dias_operacion_mes, project_id
-      } = params || {};
-
-      if (!gastos_fijos_mensuales) {
-        this.metrics?.increment?.('viabilidad.errors', { code: 'INVALID_INPUT', kind: 'punto_equilibrio' });
-        return this._errorResponse(400, 'INVALID_INPUT',
-          'Se requiere gastos_fijos_mensuales',
-          { field: 'gastos_fijos_mensuales' });
-      }
-      if (!project_id) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id', { field: 'project_id' });
-      }
-
-      const config = this.getConfig(project_id);
-      const { recetas } = await this.getRecetas(project_id);
-
-      const gf = gastos_fijos_mensuales;
-      const dias = dias_operacion_mes || config.dias_operacion_mes || DEFAULT_DIAS_OPERACION;
-      let tm = ticket_medio || config.ticket_medio;
-      let fc = food_cost_porcentaje;
-
-      if (recetas.length > 0 && (!tm || !fc)) {
-        const costeMedio = this.calcularFoodCostMedio(recetas);
-        if (!tm) tm = this.round(costeMedio * 3);
-        if (!fc) fc = tm > 0 ? this.round((costeMedio / tm) * 100) : DEFAULT_FOOD_COST_PCT;
-      }
-      if (!tm) tm = DEFAULT_TICKET_MEDIO;
-      if (!fc) fc = DEFAULT_FOOD_COST_PCT;
-
-      const margen_por_comensal = tm * (1 - fc / 100);
-      const comensales_mes = margen_por_comensal > 0 ? Math.ceil(gf / margen_por_comensal) : Infinity;
-      const comensales_dia = Math.ceil(comensales_mes / dias);
-      const facturacion_necesaria_mes = comensales_mes * tm;
-
-      const escenarios = [20, 30, 40, 50, 60, 80, 100].map(n => {
-        const ingresos = n * tm * dias;
-        const costeMP = ingresos * (fc / 100);
-        const beneficio = ingresos - gf - costeMP;
         return {
-          comensales_dia: n,
-          ingresos_mes: this.round(ingresos),
-          beneficio_mes: this.round(beneficio),
-          rentable: beneficio > 0
+          status: 201,
+          data: {
+            expediente_id:     expediente.id,
+            nombre_idea:       expediente.nombre_idea,
+            veredicto:         expediente.veredicto,
+            coste_total:       expediente.coste_total,
+            coste_por_porcion: expediente.coste_por_porcion,
+            coste_es_real:     expediente.coste_es_real,
+            food_cost_pct:     expediente.food_cost_pct,
+            advertencias:      expediente.advertencias
+          }
         };
       });
-
-      this.metrics?.increment?.('viabilidad.punto_equilibrio.calculated');
-
-      return {
-        status: 200,
-        data: {
-          gastos_fijos_mensuales: gf,
-          ticket_medio: tm,
-          food_cost_porcentaje: fc,
-          margen_contribucion_por_comensal: this.round(margen_por_comensal),
-          punto_equilibrio: {
-            comensales_dia,
-            comensales_mes,
-            facturacion_necesaria_mes: this.round(facturacion_necesaria_mes),
-            facturacion_necesaria_dia: this.round(facturacion_necesaria_mes / dias)
-          },
-          tabla_escenarios: escenarios,
-          message: `Necesitas ${comensales_dia} comensales/dia (${comensales_mes}/mes) para cubrir los ${gf}€ de gastos fijos.`
-        }
-      };
     } catch (err) {
-      return this._handleHandlerError('viabilidad.punto_equilibrio.error', err);
+      return this._handleHandlerError('viabilidad.evaluar', err, 'tool');
     }
   }
 
-  async toolEscenario(params) {
+  async onObtener(params = {}) {
+    const { project_id, expediente_id } = params;
+    if (!project_id)    return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio',    { field: 'project_id' });
+    if (!expediente_id) return this._errorResponse(400, 'INVALID_INPUT', 'expediente_id es obligatorio', { field: 'expediente_id' });
+
     try {
-      const {
-        nombre, gastos_fijos_mensuales, comensales_dia, ticket_medio,
-        food_cost_porcentaje, dias_operacion_mes, project_id, correlation_id
-      } = params || {};
-
-      if (!nombre) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere nombre', { field: 'nombre' });
-      }
-      if (!gastos_fijos_mensuales) {
-        return this._errorResponse(400, 'INVALID_INPUT',
-          'Se requiere gastos_fijos_mensuales',
-          { field: 'gastos_fijos_mensuales' });
-      }
-      if (!project_id) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id', { field: 'project_id' });
-      }
-
-      const { recetas } = await this.getRecetas(project_id);
-      let fc = food_cost_porcentaje;
-      if (!fc && recetas.length > 0) {
-        const costeMedio = this.calcularFoodCostMedio(recetas);
-        fc = ticket_medio > 0 ? this.round((costeMedio / ticket_medio) * 100) : DEFAULT_FOOD_COST_PCT;
-      }
-      if (!fc) fc = DEFAULT_FOOD_COST_PCT;
-
-      const result = this.calcularEscenario({
-        nombre, gastos_fijos_mensuales, comensales_dia, ticket_medio,
-        food_cost_porcentaje: fc,
-        dias_operacion_mes: dias_operacion_mes || DEFAULT_DIAS_OPERACION
+      return await this._readOnly(project_id, async (store) => {
+        const exp = store.expedientes.find(e => e.id === expediente_id);
+        if (!exp) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Expediente ${expediente_id} no encontrado`,
+            { entity_type: ENTITY_TYPE, entity_id: expediente_id });
+        }
+        return { status: 200, data: exp };
       });
-
-      if (!this.escenarios.has(project_id)) this.escenarios.set(project_id, []);
-      const lista = this.escenarios.get(project_id);
-      const idx = lista.findIndex(e => e.nombre === nombre);
-      if (idx >= 0) lista[idx] = result;
-      else lista.push(result);
-      await this.saveEscenarios(project_id);
-
-      await this._publicarEvento('viabilidad.escenario.calculado', result, { correlation_id, project_id });
-      this.metrics?.increment?.('viabilidad.escenario.calculated');
-
-      return { status: 200, data: result };
     } catch (err) {
-      return this._handleHandlerError('viabilidad.escenario.error', err);
+      return this._handleHandlerError('viabilidad.obtener', err, 'tool');
     }
   }
 
-  async toolCompararEscenarios(params) {
+  async onListar(params = {}) {
+    const { project_id, veredicto, estado } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+    if (veredicto !== undefined && !VEREDICTOS_VALIDOS.has(veredicto)) {
+      return this._errorResponse(400, 'INVALID_INPUT', `veredicto debe ser uno de: ${Array.from(VEREDICTOS_VALIDOS).join(', ')}`,
+        { field: 'veredicto', allowed: Array.from(VEREDICTOS_VALIDOS) });
+    }
+    if (estado !== undefined && !ESTADOS_VALIDOS.has(estado)) {
+      return this._errorResponse(400, 'INVALID_INPUT', `estado debe ser uno de: ${Array.from(ESTADOS_VALIDOS).join(', ')}`,
+        { field: 'estado', allowed: Array.from(ESTADOS_VALIDOS) });
+    }
+
     try {
-      const { escenarios, project_id } = params || {};
-      if (!escenarios || escenarios.length < 2) {
-        this.metrics?.increment?.('viabilidad.errors', { code: 'INVALID_INPUT', kind: 'comparar_escenarios' });
-        return this._errorResponse(400, 'INVALID_INPUT',
-          'Se necesitan al menos 2 escenarios para comparar',
-          { field: 'escenarios', min_length: 2 });
-      }
-      if (!project_id) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id', { field: 'project_id' });
-      }
-
-      const { recetas } = await this.getRecetas(project_id);
-
-      const resultados = escenarios.map(e => {
-        let fc = e.food_cost_porcentaje;
-        if (!fc && recetas.length > 0) {
-          const costeMedio = this.calcularFoodCostMedio(recetas);
-          fc = e.ticket_medio > 0 ? this.round((costeMedio / e.ticket_medio) * 100) : DEFAULT_FOOD_COST_PCT;
-        }
-        if (!fc) fc = DEFAULT_FOOD_COST_PCT;
-
-        return this.calcularEscenario({
-          ...e, food_cost_porcentaje: fc,
-          dias_operacion_mes: e.dias_operacion_mes || DEFAULT_DIAS_OPERACION
-        });
-      });
-
-      const mejor = resultados.reduce((best, r) => r.beneficio.mes > best.beneficio.mes ? r : best);
-      const peor = resultados.reduce((worst, r) => r.beneficio.mes < worst.beneficio.mes ? r : worst);
-
-      return {
-        status: 200,
-        data: {
-          escenarios: resultados,
-          comparativa: {
-            mejor_escenario: mejor.nombre,
-            mejor_beneficio_mes: mejor.beneficio.mes,
-            peor_escenario: peor.nombre,
-            peor_beneficio_mes: peor.beneficio.mes,
-            diferencia: this.round(mejor.beneficio.mes - peor.beneficio.mes)
+      return await this._readOnly(project_id, async (store) => {
+        let items = store.expedientes;
+        if (veredicto) items = items.filter(e => e.veredicto === veredicto);
+        if (estado)    items = items.filter(e => e.estado_expediente === estado);
+        return {
+          status: 200,
+          data: {
+            total: items.length,
+            expedientes: items.map(e => ({
+              expediente_id:    e.id,
+              nombre_idea:      e.nombre_idea,
+              veredicto:        e.veredicto,
+              coste_por_porcion:e.coste_por_porcion,
+              food_cost_pct:    e.food_cost_pct,
+              estado:           e.estado_expediente,
+              created_at:       e.created_at
+            }))
           }
-        }
-      };
+        };
+      });
     } catch (err) {
-      return this._handleHandlerError('viabilidad.comparar_escenarios.error', err);
+      return this._handleHandlerError('viabilidad.listar', err, 'tool');
     }
   }
 
-  async toolProyeccion(params) {
+  async onDescartar(params = {}) {
+    const { project_id, expediente_id, motivo } = params;
+    if (!project_id)    return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio',    { field: 'project_id' });
+    if (!expediente_id) return this._errorResponse(400, 'INVALID_INPUT', 'expediente_id es obligatorio', { field: 'expediente_id' });
+    if (!motivo || typeof motivo !== 'string' || motivo.trim() === '') {
+      return this._errorResponse(400, 'INVALID_INPUT', 'motivo es obligatorio', { field: 'motivo' });
+    }
+    if (motivo.length > this.config.max_motivo_length) {
+      return this._errorResponse(400, 'INVALID_INPUT', `motivo excede ${this.config.max_motivo_length} caracteres`,
+        { field: 'motivo', max: this.config.max_motivo_length });
+    }
+
     try {
-      const {
-        meses, gastos_fijos_mensuales, comensales_dia_inicial,
-        comensales_dia_objetivo, ticket_medio, food_cost_porcentaje,
-        dias_operacion_mes, inversion_inicial, project_id
-      } = params || {};
-
-      if (!gastos_fijos_mensuales) {
-        return this._errorResponse(400, 'INVALID_INPUT',
-          'Se requiere gastos_fijos_mensuales',
-          { field: 'gastos_fijos_mensuales' });
-      }
-      if (!comensales_dia_inicial) {
-        return this._errorResponse(400, 'INVALID_INPUT',
-          'Se requiere comensales_dia_inicial',
-          { field: 'comensales_dia_inicial' });
-      }
-      if (!ticket_medio) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere ticket_medio', { field: 'ticket_medio' });
-      }
-      if (!project_id) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id', { field: 'project_id' });
-      }
-
-      const config = this.getConfig(project_id);
-      const { recetas } = await this.getRecetas(project_id);
-
-      const totalMeses = meses || 12;
-      const dias = dias_operacion_mes || config.dias_operacion_mes || DEFAULT_DIAS_OPERACION;
-      const objetivo = comensales_dia_objetivo || comensales_dia_inicial;
-      const inversion = inversion_inicial || config.inversion_inicial || 0;
-
-      let fc = food_cost_porcentaje;
-      if (!fc && recetas.length > 0) {
-        const costeMedio = this.calcularFoodCostMedio(recetas);
-        fc = ticket_medio > 0 ? this.round((costeMedio / ticket_medio) * 100) : DEFAULT_FOOD_COST_PCT;
-      }
-      if (!fc) fc = DEFAULT_FOOD_COST_PCT;
-
-      const proyeccion = [];
-      let acumulado = -inversion;
-
-      for (let mes = 1; mes <= totalMeses; mes++) {
-        const progreso = totalMeses > 1 ? (mes - 1) / (totalMeses - 1) : 1;
-        const comensalesDia = Math.round(comensales_dia_inicial + (objetivo - comensales_dia_inicial) * progreso);
-
-        const ingresos = comensalesDia * ticket_medio * dias;
-        const costeMP = ingresos * (fc / 100);
-        const gastosTotales = gastos_fijos_mensuales + costeMP;
-        const beneficio = ingresos - gastosTotales;
-        acumulado += beneficio;
-
-        proyeccion.push({
-          mes,
-          comensales_dia: comensalesDia,
-          ingresos: this.round(ingresos),
-          gastos_fijos: gastos_fijos_mensuales,
-          materia_prima: this.round(costeMP),
-          gastos_totales: this.round(gastosTotales),
-          beneficio: this.round(beneficio),
-          acumulado: this.round(acumulado),
-          rentable: beneficio > 0
-        });
-      }
-
-      const primerMesRentable = proyeccion.find(p => p.rentable);
-      const mesRecuperacion = inversion > 0 ? proyeccion.find(p => p.acumulado >= 0) : null;
-
-      const resultado = {
-        parametros: {
-          meses: totalMeses, gastos_fijos_mensuales,
-          comensales_dia_inicial, comensales_dia_objetivo: objetivo,
-          ticket_medio, food_cost_porcentaje: fc,
-          dias_operacion_mes: dias, inversion_inicial: inversion
-        },
-        proyeccion,
-        resumen: {
-          beneficio_total_periodo: this.round(proyeccion.reduce((s, p) => s + p.beneficio, 0)),
-          beneficio_medio_mensual: this.round(proyeccion.reduce((s, p) => s + p.beneficio, 0) / totalMeses),
-          ingresos_total_periodo: this.round(proyeccion.reduce((s, p) => s + p.ingresos, 0)),
-          primer_mes_rentable: primerMesRentable ? primerMesRentable.mes : null,
-          mes_recuperacion_inversion: mesRecuperacion ? mesRecuperacion.mes : null,
-          acumulado_final: this.round(acumulado)
+      return await this._withStore(project_id, async (store) => {
+        const exp = store.expedientes.find(e => e.id === expediente_id);
+        if (!exp) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Expediente ${expediente_id} no encontrado`,
+            { entity_type: ENTITY_TYPE, entity_id: expediente_id });
         }
-      };
+        if (exp.estado_expediente === ESTADOS.DESCARTADA) {
+          return this._errorResponse(409, 'CONFLICT_STATE', 'Expediente ya estaba descartado',
+            { kind: 'invalid_state_transition', estado_anterior: ESTADOS.DESCARTADA });
+        }
 
-      if (inversion > 0 && mesRecuperacion) {
-        resultado.resumen.roi = this.round(((acumulado / inversion) * 100));
-        resultado.resumen.roi_mensaje = `ROI: ${resultado.resumen.roi}% en ${totalMeses} meses. Inversion recuperada en mes ${mesRecuperacion.mes}.`;
-      } else if (inversion > 0) {
-        resultado.resumen.roi_mensaje = `La inversion de ${inversion}€ NO se recupera en ${totalMeses} meses. Acumulado: ${this.round(acumulado)}€.`;
-      }
+        const veredictoSnapshot = exp.veredicto;
+        exp.estado_expediente   = ESTADOS.DESCARTADA;
+        exp.motivo_descarte     = motivo.trim();
+        exp.updated_at          = new Date().toISOString();
 
-      this.metrics?.increment?.('viabilidad.proyeccion.generated');
-      return { status: 200, data: resultado };
+        const payload = {
+          project_id,
+          user_id:        params.user_id || DEFAULT_USER_ID,
+          expediente_id:  exp.id,
+          nombre_idea:    exp.nombre_idea,
+          motivo:         exp.motivo_descarte,
+          veredicto_economico: veredictoSnapshot
+        };
+
+        await this._publicarEvento('viabilidad.evaluacion.descartada', payload, params);
+
+        this.metrics?.increment(`${this.name}.evaluacion.descartada.total`, 1, { project_id, veredicto_economico: veredictoSnapshot });
+
+        return {
+          status: 200,
+          data: {
+            expediente_id:    exp.id,
+            estado:           exp.estado_expediente,
+            motivo_descarte:  exp.motivo_descarte
+          }
+        };
+      });
     } catch (err) {
-      return this._handleHandlerError('viabilidad.proyeccion.error', err);
+      return this._handleHandlerError('viabilidad.descartar', err, 'tool');
     }
   }
 
-  async toolGuardarConfig(params) {
-    try {
-      const { project_id, ...configData } = params || {};
-      if (!project_id) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'Se requiere project_id', { field: 'project_id' });
-      }
+  // ============================================================
+  // Helpers POC2 — heredados de BaseModule. Override _publicarEvento.
+  // ============================================================
 
-      const existing = this.getConfig(project_id);
-      const newConfig = { ...existing, ...configData, updated_at: new Date().toISOString() };
-
-      for (const key of Object.keys(newConfig)) {
-        if (newConfig[key] === undefined) delete newConfig[key];
-      }
-
-      await this.saveConfig(project_id, newConfig);
-
-      return {
-        status: 200,
-        data: {
-          config: newConfig,
-          message: 'Configuracion del negocio guardada. Se usara como valores por defecto en los calculos.'
-        }
-      };
-    } catch (err) {
-      return this._handleHandlerError('viabilidad.guardar_config.error', err);
+  async _publicarEvento(name, payload, sourcePayload = null) {
+    if (!this.eventBus?.publish) {
+      this.logger?.warn(`${this.name}.publish.bus_no_disponible`, { event: name });
+      return;
     }
+
+    const enriched = {
+      correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+      project_id:     payload?.project_id || sourcePayload?.project_id || DEFAULT_PROJECT_ID,
+      user_id:        payload?.user_id    || sourcePayload?.user_id    || DEFAULT_USER_ID,
+      timestamp:      new Date().toISOString(),
+      ...payload
+    };
+
+    try {
+      await this.eventBus.publish(name, enriched);
+    } catch (err) {
+      this.logger?.error(`${this.name}.publish_error`, {
+        event:         name,
+        error_message: err.message,
+        stack:         err.stack
+      });
+      this.metrics?.increment(`${this.name}.publish_error`, 1, { event: name });
+    }
+  }
+
+  // ============================================================
+  // Dominio protegido — validaciones + algoritmo + id
+  // ============================================================
+
+  _validarEvaluar(data) {
+    const errores = [];
+    const { nombre_idea, ingredientes_estimados, porciones, precios_catalogo, precio_venta_objetivo } = data;
+
+    if (!nombre_idea || typeof nombre_idea !== 'string' || nombre_idea.trim() === '') {
+      errores.push({ code: 'INVALID_INPUT', message: 'nombre_idea es obligatorio', details: { field: 'nombre_idea' } });
+    } else if (nombre_idea.length > this.config.max_nombre_idea_length) {
+      errores.push({ code: 'INVALID_INPUT', message: `nombre_idea excede ${this.config.max_nombre_idea_length} caracteres`,
+        details: { field: 'nombre_idea', max: this.config.max_nombre_idea_length } });
+    }
+
+    if (!Array.isArray(ingredientes_estimados) || ingredientes_estimados.length === 0) {
+      errores.push({ code: 'INVALID_INPUT', message: 'ingredientes_estimados debe ser array no vacio', details: { field: 'ingredientes_estimados' } });
+    } else {
+      for (let i = 0; i < ingredientes_estimados.length; i++) {
+        const ing = ingredientes_estimados[i];
+        if (!ing || typeof ing.nombre !== 'string' || ing.nombre.trim() === '') {
+          errores.push({ code: 'INVALID_INPUT', message: `ingredientes_estimados[${i}].nombre obligatorio`, details: { field: 'ingredientes_estimados', index: i } });
+          break;
+        }
+        if (typeof ing.cantidad !== 'number' || ing.cantidad < 0) {
+          errores.push({ code: 'INVALID_INPUT', message: `ingredientes_estimados[${i}].cantidad debe ser number >= 0`, details: { field: 'ingredientes_estimados', index: i } });
+          break;
+        }
+        if (typeof ing.unidad !== 'string' || ing.unidad === '') {
+          errores.push({ code: 'INVALID_INPUT', message: `ingredientes_estimados[${i}].unidad obligatorio`, details: { field: 'ingredientes_estimados', index: i } });
+          break;
+        }
+      }
+    }
+
+    if (!Number.isInteger(porciones) || porciones < 1) {
+      errores.push({ code: 'INVALID_INPUT', message: 'porciones debe ser entero >= 1', details: { field: 'porciones' } });
+    }
+
+    if (!precios_catalogo || typeof precios_catalogo !== 'object' || Array.isArray(precios_catalogo)) {
+      errores.push({ code: 'INVALID_INPUT', message: 'precios_catalogo es obligatorio (objeto)', details: { field: 'precios_catalogo' } });
+    }
+
+    if (precio_venta_objetivo !== undefined && precio_venta_objetivo !== null) {
+      if (typeof precio_venta_objetivo !== 'number' || precio_venta_objetivo <= 0 || Number.isNaN(precio_venta_objetivo)) {
+        errores.push({ code: 'INVALID_INPUT', message: 'precio_venta_objetivo debe ser number > 0 si se pasa', details: { field: 'precio_venta_objetivo' } });
+      }
+    }
+
+    return errores;
+  }
+
+  /**
+   * Algoritmo determinista de viabilidad economica.
+   *   coste_total = suma(cantidad * precio_por_unidad) si esta en catalogo
+   *   coste_es_real = todos los ingredientes tenian precio
+   *   coste_por_porcion = coste_total / porciones
+   *   food_cost_pct = (coste_por_porcion / precio_venta_objetivo) * 100 (si hay PVP)
+   *   veredicto:
+   *     - sin PVP: 'sin_pvp_objetivo' (informativo)
+   *     - food_cost <= umbral_advertencia: 'viable'
+   *     - umbral_advertencia < food_cost <= umbral_alerta: 'viable_con_advertencias'
+   *     - food_cost > umbral_alerta: 'no_viable_economicamente'
+   *
+   * precios_catalogo acepta dos shapes por ingrediente:
+   *   number puro (precio_por_unidad directo)
+   *   { precio_por_unidad: number, unidad?: string }
+   */
+  _calcularViabilidad({ ingredientes, precios_catalogo, porciones, precio_venta_objetivo }) {
+    const { food_cost_umbral_alerta, food_cost_umbral_advertencia } = this.config;
+    let coste_total = 0;
+    const ingredientes_sin_precio = [];
+
+    for (const ing of ingredientes) {
+      const precio = precios_catalogo[ing.nombre];
+      let precio_unitario = null;
+      if (typeof precio === 'number' && precio >= 0) {
+        precio_unitario = precio;
+      } else if (precio && typeof precio === 'object' && typeof precio.precio_por_unidad === 'number' && precio.precio_por_unidad >= 0) {
+        precio_unitario = precio.precio_por_unidad;
+      }
+
+      if (precio_unitario !== null) {
+        coste_total += ing.cantidad * precio_unitario;
+      } else {
+        ingredientes_sin_precio.push(ing.nombre);
+      }
+    }
+
+    const coste_es_real     = ingredientes_sin_precio.length === 0;
+    const coste_por_porcion = porciones > 0 ? coste_total / porciones : 0;
+
+    let food_cost_pct = null;
+    let veredicto;
+    const advertencias = [];
+
+    if (typeof precio_venta_objetivo === 'number' && precio_venta_objetivo > 0) {
+      food_cost_pct = (coste_por_porcion / precio_venta_objetivo) * 100;
+      if (food_cost_pct > food_cost_umbral_alerta) {
+        veredicto = VEREDICTOS.NO_VIABLE_ECONOMICAMENTE;
+      } else if (food_cost_pct > food_cost_umbral_advertencia) {
+        veredicto = VEREDICTOS.VIABLE_CON_ADVERTENCIAS;
+        advertencias.push(`food cost al limite (${food_cost_pct.toFixed(1)}% > umbral advertencia ${food_cost_umbral_advertencia}%)`);
+      } else {
+        veredicto = VEREDICTOS.VIABLE;
+      }
+    } else {
+      veredicto = VEREDICTOS.SIN_PVP_OBJETIVO;
+    }
+
+    if (!coste_es_real) {
+      advertencias.push(`ingredientes sin precio en catalogo: ${ingredientes_sin_precio.join(', ')}`);
+    }
+
+    return { coste_total, coste_por_porcion, coste_es_real, food_cost_pct, ingredientes_sin_precio, veredicto, advertencias };
+  }
+
+  _generarId(prefix) {
+    return `${prefix}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+  }
+
+  // ============================================================
+  // Persistencia json-per-project
+  // ============================================================
+
+  async _basePathForProject(project_id) {
+    if (!project_id) {
+      const err = new Error('project_id requerido');
+      err._code = 'INVALID_INPUT';
+      throw err;
+    }
+    if (this.projectBasePaths.has(project_id)) return this.projectBasePaths.get(project_id);
+
+    if (!this.eventBus?.publish) {
+      const err = new Error('eventBus no disponible para project.get.request');
+      err._code = 'UPSTREAM_UNREACHABLE';
+      throw err;
+    }
+
+    const request_id = crypto.randomUUID();
+    const basePath = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingProject.delete(request_id);
+        const err = new Error(`project.get timeout para ${project_id}`);
+        err._code = 'UPSTREAM_TIMEOUT';
+        reject(err);
+      }, this.config.project_get_timeout_ms);
+      this.pendingProject.set(request_id, { resolve, reject, timer });
+      this.eventBus.publish('project.get.request', { request_id, project_id }).catch(err => {
+        clearTimeout(timer);
+        this.pendingProject.delete(request_id);
+        err._code = err._code || 'UPSTREAM_UNREACHABLE';
+        reject(err);
+      });
+    });
+
+    this.projectBasePaths.set(project_id, basePath);
+    return basePath;
+  }
+
+  async _loadStore(basePath) {
+    const absPath = `${basePath}/viabilidad.json`.replace(/\/+/g, '/');
+    const content = await this._readFile(absPath);
+    if (!content) return this._emptyStore();
+    try {
+      const parsed = JSON.parse(content);
+      if (!Array.isArray(parsed.expedientes)) parsed.expedientes = [];
+      return parsed;
+    } catch (err) {
+      this.logger?.warn(`${this.name}.persist.parse_error`, { abs_path: absPath, error_message: err.message });
+      return this._emptyStore();
+    }
+  }
+
+  async _saveStore(basePath, store) {
+    const absPath = `${basePath}/viabilidad.json`.replace(/\/+/g, '/');
+    store._version    = this.version;
+    store._updated_at = new Date().toISOString();
+    await this._writeFile(absPath, JSON.stringify(store, null, 2));
+  }
+
+  _emptyStore() {
+    return { _version: this.version, _updated_at: null, expedientes: [] };
+  }
+
+  async _withStore(project_id, mutator) {
+    const basePath = await this._basePathForProject(project_id);
+
+    const prev = this.writeQueues.get(project_id) || Promise.resolve();
+    const next = prev
+      .catch(() => {})
+      .then(async () => {
+        const store  = await this._loadStore(basePath);
+        const result = await mutator(store);
+        if (!result || result.status === undefined || result.status < 400) {
+          await this._saveStore(basePath, store);
+        }
+        return result;
+      });
+
+    this.writeQueues.set(project_id, next);
+    try {
+      return await next;
+    } finally {
+      if (this.writeQueues.get(project_id) === next) this.writeQueues.delete(project_id);
+    }
+  }
+
+  async _readOnly(project_id, reader) {
+    const basePath = await this._basePathForProject(project_id);
+    const store    = await this._loadStore(basePath);
+    return reader(store);
+  }
+
+  async _readFile(absPath) {
+    if (!this.eventBus?.publish) {
+      const err = new Error('eventBus no disponible para fs.read.request');
+      err._code = 'UPSTREAM_UNREACHABLE';
+      throw err;
+    }
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingFs.delete(request_id);
+        const err = new Error(`fs.read timeout para ${absPath}`);
+        err._code = 'UPSTREAM_TIMEOUT';
+        reject(err);
+      }, this.config.fs_request_timeout_ms);
+      this.pendingFs.set(request_id, { resolve, reject, timer });
+      this.eventBus.publish('fs.read.request', { request_id, path: absPath, encoding: 'utf8' }).catch(err => {
+        clearTimeout(timer);
+        this.pendingFs.delete(request_id);
+        err._code = err._code || 'UPSTREAM_UNREACHABLE';
+        reject(err);
+      });
+    });
+  }
+
+  async _writeFile(absPath, content) {
+    if (!this.eventBus?.publish) {
+      const err = new Error('eventBus no disponible para fs.write.request');
+      err._code = 'UPSTREAM_UNREACHABLE';
+      throw err;
+    }
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingFs.delete(request_id);
+        const err = new Error(`fs.write timeout para ${absPath}`);
+        err._code = 'UPSTREAM_TIMEOUT';
+        reject(err);
+      }, this.config.fs_request_timeout_ms);
+      this.pendingFs.set(request_id, { resolve, reject, timer });
+      this.eventBus.publish('fs.write.request', { request_id, path: absPath, content, encoding: 'utf8', atomic: true }).catch(err => {
+        clearTimeout(timer);
+        this.pendingFs.delete(request_id);
+        err._code = err._code || 'UPSTREAM_UNREACHABLE';
+        reject(err);
+      });
+    });
   }
 }
 

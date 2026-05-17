@@ -1,14 +1,14 @@
 {
   "id": "viabilidad-receta-analyzer",
   "name": "viabilidad-receta-analyzer",
-  "description": "Evaluación de viabilidad de receta: rentabilidad, riesgos, recomendaciones, impacto en negocio.",
-  "version": "1.0.0",
+  "description": "Agente complementario al modulo viabilidad. El modulo cubre la dimension ECONOMICA (deterministica); este agente cubre las dimensiones CUALITATIVAS (riesgos, diferenciacion, encaje en oferta, recomendaciones). Se dispara cuando viabilidad.evaluacion.completada emerge y enriquece el expediente con analisis cualitativo via LLM.",
+  "version": "2.0.0",
   "enabled": true,
   "prompt_file": "prompts/viabilidad-receta-analyzer.json",
   "tools": [
-    "viabilidad.estudio",
-    "viabilidad.escenario",
-    "viabilidad.punto_equilibrio"
+    "viabilidad.evaluar",
+    "viabilidad.obtener",
+    "viabilidad.listar"
   ],
   "provider": "auto",
   "temperature": 0.3,
@@ -17,33 +17,44 @@
   "timeout_ms": 120000,
   "max_retries": 1,
   "event_listener": {
-    "event": "receta.viabilidad.evaluada",
+    "event": "viabilidad.evaluacion.completada",
     "context_mapping": {
-      "receta_id": "$.receta_id",
-      "projectId": "$.projectId",
-      "viabilidad": "$.viabilidad",
-      "recomendaciones": "$.recomendaciones",
+      "correlation_id": "$.correlation_id",
+      "project_id": "$.project_id",
+      "user_id": "$.user_id",
+      "expediente_id": "$.expediente_id",
+      "nombre_idea": "$.nombre_idea",
+      "veredicto": "$.veredicto",
+      "coste_total": "$.coste_total",
+      "coste_por_porcion": "$.coste_por_porcion",
+      "coste_es_real": "$.coste_es_real",
+      "food_cost_pct": "$.food_cost_pct",
+      "advertencias": "$.advertencias",
+      "ingredientes_sin_precio": "$.ingredientes_sin_precio",
       "timestamp": "$.timestamp"
     }
   },
   "publish_on_success": {
-    "event": "receta.viabilidad.analysis.completed",
+    "event": "viabilidad.analisis.cualitativo.completado",
     "payload_template": {
-      "receta_id": "$.context.receta_id",
-      "projectId": "$.context.projectId",
-      "viabilidad": "$.context.viabilidad",
+      "correlation_id": "$.context.correlation_id",
+      "project_id": "$.context.project_id",
+      "user_id": "$.context.user_id",
+      "expediente_id": "$.context.expediente_id",
+      "nombre_idea": "$.context.nombre_idea",
       "analisis": "$.result.analisis",
       "riesgos": "$.result.riesgos",
-      "recomendaciones_ampliadas": "$.result.recomendaciones_ampliadas",
-      "alertas_generadas": "$.result.alertas_generadas",
+      "recomendaciones": "$.result.recomendaciones",
       "timestamp": "$.timestamp"
     }
   },
   "publish_on_failure": {
-    "event": "receta.viabilidad.analysis.failed",
+    "event": "viabilidad.analisis.cualitativo.fallido",
     "payload_template": {
-      "receta_id": "$.context.receta_id",
-      "projectId": "$.context.projectId",
+      "correlation_id": "$.context.correlation_id",
+      "project_id": "$.context.project_id",
+      "user_id": "$.context.user_id",
+      "expediente_id": "$.context.expediente_id",
       "error": "$.error.message",
       "timestamp": "$.timestamp"
     }
@@ -51,18 +62,19 @@
   "metadata": {
     "type": "pipeline-agent",
     "domain": "viabilidad",
-    "pipeline_role": "viability-analyzer",
+    "pipeline_role": "viability-qualitative-analyzer",
     "author": "system",
     "created_at": "2026-04-15",
+    "updated_at": "2026-05-17",
     "tags": [
       "viabilidad",
-      "análisis",
-      "rentabilidad",
+      "analisis-cualitativo",
+      "riesgos",
       "recomendaciones"
     ]
   },
   "created_at": "2026-04-15T00:00:00.000Z",
-  "updated_at": "2026-04-15T00:00:00.000Z",
+  "updated_at": "2026-05-17T00:00:00.000Z",
   "stats": {
     "executions": 0,
     "successes": 0,

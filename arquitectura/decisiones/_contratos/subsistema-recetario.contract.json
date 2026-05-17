@@ -1,9 +1,9 @@
 {
   "_doc": "Sub-contrato que formaliza el SUBSISTEMA RECETARIO del sistema event-core. Captura la particion canonica del subsistema en N modulos backend acotados (recetas como core; escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina como satelites especializados) mas UN modulo frontend (frontend-recetario) que compone las tres vistas operativas (chef / jefe / pase) sin contener logica de dominio. Define los 20 eventos canonicos del subsistema con shape estricto (schemas AJV strict additionalProperties:false), el principio una-receta-tres-vistas-un-dueno-del-dato, las prohibiciones cross-modulo que sostienen la independencia, los drifts heredados del estado actual y el catalogo de modulos nuevos a anadir. No deriva de companero-viaje (que gobierna el subsistema chat/LLM/agentes) sino que es un subsistema paralelo de DOMINIO; se relaciona con companero-viaje porque expone tools al LLM. El validator subsistema-recetario.validate.js cruza module.json/audits/codigo de los modulos del subsistema con los schemas declarados aqui y detecta drift estructural ANTES de produccion. Lectura obligatoria antes de anadir o reescribir cualquier modulo del subsistema.",
   "id": "subsistema-recetario",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "creada": "2026-05-17",
-  "supersedes_nota": "v1.0.2 (cierre del drift de naming heredado de escandallo): renombra los 2 eventos del subsistema que rompian <prefix>.<entity>.<verb>: 'escandallo.alerta' → 'escandallo.alerta.detectada' y 'escandallo.comparativa' → 'escandallo.comparativa.calculada'. Los schemas oficiales tambien se renombran (con $id y title actualizados); los antiguos se eliminan. El trabajo_pendiente 'cerrar_drift_naming_escandallo_alerta_comparativa' pasa a estado 'cerrado'. Migracion coordinada con el refactor de escandallo v3.0.0 → v4.0.0 que aterriza el shape canonico de los 3 publishes (correlation_id, project_id, user_id, timestamp + campos especificos por evento). Sin cambios en el catalogo de eventos del subsistema (siguen siendo los mismos N eventos, solo renombrados los 2 con drift) ni en los principios/validaciones.\n\nv1.0.1 (alineacion con canon real de errors.contract): la v1.0.0 listaba en trabajo_pendiente la introduccion de codigos por entidad (RECIPE_NOT_FOUND, TECHNIQUE_NOT_FOUND, PROTOTYPE_NOT_FOUND, PASSCARD_NOT_FOUND, RECIPE_NOT_IN_SERVICE, INGREDIENT_PRICE_MISSING, etc.). Esto VIOLA explicitamente la regla de codes_domain[RESOURCE_NOT_FOUND] que prohibe codigos por entidad y exige RESOURCE_NOT_FOUND + details.entity_type. Reemplazado por la formula canonica: RESOURCE_NOT_FOUND para 'no existe', PRECONDITION_FAILED para precondiciones de dominio, CONFLICT_STATE para transiciones invalidas, INVALID_INPUT para validaciones — todos con details.kind / details.entity_type apropiados. errors.json v1.5.0 documenta los entity_types y kinds del subsistema. Sin cambio en el catalogo de eventos, schemas ni validator del subsistema-recetario — esto es alineacion documental, no de shape.\n\nv1.0.0: Primera version del sub-contrato. Cierra una ambiguedad arquitectonica historica del modulo recetas: tres responsabilidades distintas (CRUD canonico, escandallo de coste, ficha de pase) operando dentro de UN modulo. La resolucion canonica es una-receta-tres-vistas-un-dueno-del-dato: el dato es de recetas, las capas derivadas (coste, prototipos, escalado, ficha de pase) viven en modulos satelite que escuchan receta.* y publican lo suyo; el frontend agrupa las vistas. No cierra los drifts existentes de escandallo (alerta/comparativa rompen naming) — los anota en trabajo_pendiente para que los cierre quien reescriba escandallo siguiendo module-rewrite.contract. Tampoco cierra el drift de project_id vs proyecto_id en publishes de recetas — anotado igual.",
+  "supersedes_nota": "v1.0.3 (anade modulo viabilidad como 7º modulo backend del subsistema-recetario): introduce la fase 'idea → evaluacion previa' antes del prototipo creativo. El modulo evalúa economicamente una idea de producto (coste estimado a partir de ingredientes propuestos + food cost previsto si hay PVP objetivo) y persiste un expediente por idea. Veredicto deterministico (viable / viable_con_advertencias / no_viable_economicamente / sin_pvp_objetivo). NO toma decisiones cualitativas; esas las decide el LLM principal que invoca la tool. NO consume eventos del subsistema reactivamente (recibe los ingredientes + precios como params del caller, igual que escandallo.comparar_precios). Anade 2 eventos canonicos (viabilidad.evaluacion.completada, viabilidad.evaluacion.descartada) con sus schemas oficiales. Catalogo de modulos: 6 backend → 7 backend. El sub-contrato sigue siendo coherente con la doctrina 'una receta, tres vistas, un dueno del dato': viabilidad NO es duena de receta ni de prototipo; es duena del expediente de viabilidad. Sin cambios en los 19 eventos previos ni en sus schemas. Sin cambios en principios, prohibiciones ni validaciones del subsistema.\n\nv1.0.2 (cierre del drift de naming heredado de escandallo): renombra los 2 eventos del subsistema que rompian <prefix>.<entity>.<verb>: 'escandallo.alerta' → 'escandallo.alerta.detectada' y 'escandallo.comparativa' → 'escandallo.comparativa.calculada'. Los schemas oficiales tambien se renombran (con $id y title actualizados); los antiguos se eliminan. El trabajo_pendiente 'cerrar_drift_naming_escandallo_alerta_comparativa' pasa a estado 'cerrado'. Migracion coordinada con el refactor de escandallo v3.0.0 → v4.0.0 que aterriza el shape canonico de los 3 publishes (correlation_id, project_id, user_id, timestamp + campos especificos por evento). Sin cambios en el catalogo de eventos del subsistema (siguen siendo los mismos N eventos, solo renombrados los 2 con drift) ni en los principios/validaciones.\n\nv1.0.1 (alineacion con canon real de errors.contract): la v1.0.0 listaba en trabajo_pendiente la introduccion de codigos por entidad (RECIPE_NOT_FOUND, TECHNIQUE_NOT_FOUND, PROTOTYPE_NOT_FOUND, PASSCARD_NOT_FOUND, RECIPE_NOT_IN_SERVICE, INGREDIENT_PRICE_MISSING, etc.). Esto VIOLA explicitamente la regla de codes_domain[RESOURCE_NOT_FOUND] que prohibe codigos por entidad y exige RESOURCE_NOT_FOUND + details.entity_type. Reemplazado por la formula canonica: RESOURCE_NOT_FOUND para 'no existe', PRECONDITION_FAILED para precondiciones de dominio, CONFLICT_STATE para transiciones invalidas, INVALID_INPUT para validaciones — todos con details.kind / details.entity_type apropiados. errors.json v1.5.0 documenta los entity_types y kinds del subsistema. Sin cambio en el catalogo de eventos, schemas ni validator del subsistema-recetario — esto es alineacion documental, no de shape.\n\nv1.0.0: Primera version del sub-contrato. Cierra una ambiguedad arquitectonica historica del modulo recetas: tres responsabilidades distintas (CRUD canonico, escandallo de coste, ficha de pase) operando dentro de UN modulo. La resolucion canonica es una-receta-tres-vistas-un-dueno-del-dato: el dato es de recetas, las capas derivadas (coste, prototipos, escalado, ficha de pase) viven en modulos satelite que escuchan receta.* y publican lo suyo; el frontend agrupa las vistas. No cierra los drifts existentes de escandallo (alerta/comparativa rompen naming) — los anota en trabajo_pendiente para que los cierre quien reescriba escandallo siguiendo module-rewrite.contract. Tampoco cierra el drift de project_id vs proyecto_id en publishes de recetas — anotado igual.",
 
   "deriva_de": null,
   "relacion_con_otros_contratos": {
@@ -158,7 +158,7 @@
   ],
 
   "tipos_canonicos_de_modulo_del_subsistema": {
-    "descripcion": "El subsistema-recetario contiene 6 modulos backend mas 1 frontend. Cada uno tiene un tipo canonico con responsabilidad acotada, dueño de dato definido y prohibiciones cruzadas.",
+    "descripcion": "El subsistema-recetario contiene 7 modulos backend mas 1 frontend. Cada uno tiene un tipo canonico con responsabilidad acotada, dueño de dato definido y prohibiciones cruzadas.",
     "modulos": [
       {
         "slug": "recetas",
@@ -209,6 +209,24 @@
         "prohibido_para_este_modulo": [
           "Modificar recetas ni prototipos (las referencias son por id, no por valor)",
           "Persistir contenido de recetas"
+        ]
+      },
+      {
+        "slug": "viabilidad",
+        "tipo": "evaluador_previo",
+        "estado": "nuevo",
+        "language": "es",
+        "dueño_de": ["expedientes de viabilidad por idea (audit trail antes de prototipar)"],
+        "responsabilidad": "Evaluar economicamente una IDEA de producto antes de invertir tiempo en prototiparla. Calcula coste estimado a partir de ingredientes propuestos + food cost previsto si hay PVP objetivo. Veredicto deterministico (viable / viable_con_advertencias / no_viable_economicamente / sin_pvp_objetivo). Persiste expediente con audit trail; permite descartar explicitamente. Es la fase 0 del flujo: IDEA -> viabilidad -> recetario-creativo (prototipo) -> recetas (canonica) -> mise-en-place -> pase-cocina.",
+        "publica_canonicamente": ["viabilidad.evaluacion.completada", "viabilidad.evaluacion.descartada"],
+        "consume_canonicamente": [],
+        "tools_que_expone": ["viabilidad.evaluar", "viabilidad.obtener", "viabilidad.listar", "viabilidad.descartar"],
+        "persistencia": "data/projects/{slug}/viabilidad.json.",
+        "prohibido_para_este_modulo": [
+          "Tomar decisiones cualitativas (diferenciacion, encaje comercial, estilo): eso lo decide el LLM principal que invoca la tool",
+          "Acceder a recetas, ingredientes-catalogo, facturas o cualquier otro modulo via cross-modulo: los datos vienen como params",
+          "Persistir prototipos o recetas (es de recetario-creativo / recetas)",
+          "Reaccionar a eventos de otros modulos del subsistema (es evaluacion a peticion, no reactiva)"
         ]
       },
       {
@@ -278,6 +296,8 @@
           "escandallo.alerta.detectada",
           "tecnica.creada",
           "tecnica.actualizada",
+          "viabilidad.evaluacion.completada",
+          "viabilidad.evaluacion.descartada",
           "creativo.prototipo.creado",
           "creativo.iteracion.registrada",
           "creativo.alineacion.validada",
@@ -565,6 +585,32 @@
         "opcionales":   ["severidad"]
       },
       "notas_de_drift_a_cerrar": ["Evento NUEVO."]
+    },
+    {
+      "id": "viabilidad.evaluacion.completada",
+      "name": "viabilidad.evaluacion.completada",
+      "publicado_por": "viabilidad",
+      "consumido_por": "frontend-recetario (refresca lista de ideas evaluadas), recetario-creativo (opcional: si veredicto='viable' puede sugerir crear prototipo)",
+      "proposito": "Una idea de producto fue evaluada economicamente. Reporta coste estimado, food cost previsto si aplica, veredicto deterministico. Trigger para la decision del chef sobre si proceder a prototipar.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/viabilidad.evaluacion.completada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "expediente_id", "nombre_idea", "veredicto", "coste_total", "coste_por_porcion", "coste_es_real", "timestamp"],
+        "opcionales":   ["food_cost_pct", "precio_venta_objetivo", "ingredientes_sin_precio", "advertencias"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO (sub-contrato v1.0.3)."]
+    },
+    {
+      "id": "viabilidad.evaluacion.descartada",
+      "name": "viabilidad.evaluacion.descartada",
+      "publicado_por": "viabilidad",
+      "consumido_por": "frontend-recetario (mueve a 'descartadas'), agentes (analizan patrones de descarte)",
+      "proposito": "Decision explicita del chef de NO continuar con una idea evaluada. Queda en historial; el expediente NO se borra. Distingue 'descarte por no rentable' (motivo correlado con veredicto economico) de 'descarte por otra razon' (estilo, oportunidad, etc.).",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/viabilidad.evaluacion.descartada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "expediente_id", "nombre_idea", "motivo", "timestamp"],
+        "opcionales":   ["veredicto_economico"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO (sub-contrato v1.0.3)."]
     }
   ],
 
@@ -716,6 +762,8 @@
         "escandallo.comparativa.calculada.schema.json",
         "tecnica.creada.schema.json",
         "tecnica.actualizada.schema.json",
+        "viabilidad.evaluacion.completada.schema.json",
+        "viabilidad.evaluacion.descartada.schema.json",
         "creativo.prototipo.creado.schema.json",
         "creativo.iteracion.registrada.schema.json",
         "creativo.alineacion.validada.schema.json",

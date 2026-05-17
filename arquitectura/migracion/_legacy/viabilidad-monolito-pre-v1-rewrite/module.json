@@ -1,0 +1,217 @@
+{
+  "name": "viabilidad",
+  "version": "2.0.0",
+  "description": "Estudio de viabilidad de negocio: punto de equilibrio, escenarios, proyecciones y analisis de rentabilidad. Lee recetas/ingredientes desde {project.base_path}/storage/recetas/ (cache invalidado por receta.{creada,actualizada,eliminada}). Persiste config + escenarios + estudios en {project.base_path}/storage/viabilidad/ con write atomico.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+  "intents": [
+    { "keywords": ["viabilidad", "estudio de viabilidad", "es viable", "puedo montar", "analisis del negocio"], "action": "tool_call", "tool": "viabilidad.estudio", "description": "Generar estudio de viabilidad completo del negocio" },
+    { "keywords": ["punto de equilibrio", "break even", "cuanto tengo que vender", "para no perder", "minimo para cubrir"], "action": "tool_call", "tool": "viabilidad.punto_equilibrio", "description": "Calcular punto de equilibrio del negocio" },
+    { "keywords": ["escenario", "que pasa si", "simular negocio", "escenario optimista", "escenario conservador"], "action": "tool_call", "tool": "viabilidad.escenario", "description": "Calcular un escenario de negocio" },
+    { "keywords": ["comparar escenarios", "varios escenarios", "escenario vs escenario"], "action": "tool_call", "tool": "viabilidad.comparar_escenarios", "description": "Comparar multiples escenarios" },
+    { "keywords": ["proyeccion", "proyectar", "prevision a meses", "proyeccion anual", "a 12 meses", "a 6 meses"], "action": "tool_call", "tool": "viabilidad.proyeccion", "description": "Proyeccion financiera a meses vista" },
+    { "keywords": ["guardar configuracion negocio", "guardar gastos fijos", "configurar negocio"], "action": "tool_call", "tool": "viabilidad.guardar_config", "description": "Guardar configuracion del negocio" }
+  ],
+  "events": {
+    "publishes": [
+      { "event": "viabilidad.estudio.generado",   "description": "Estudio de viabilidad completo generado. project_id top-level + correlation_id + timestamp." },
+      { "event": "viabilidad.escenario.calculado","description": "Escenario de negocio calculado y persistido. project_id top-level + correlation_id + timestamp." }
+    ],
+    "subscribes": [
+      { "event": "project.activated",     "handler": "onProjectActivated",   "description": "Cache base_path + carga recetas/config/escenarios desde disco." },
+      { "event": "project.deactivated",   "handler": "onProjectDeactivated", "description": "No-op multi-tenant." },
+      { "event": "receta.creada",         "handler": "onRecetaChanged",      "description": "Invalida cache de recetas del proyecto." },
+      { "event": "receta.actualizada",    "handler": "onRecetaChanged",      "description": "Invalida cache de recetas del proyecto." },
+      { "event": "receta.eliminada",      "handler": "onRecetaChanged",      "description": "Invalida cache de recetas del proyecto." },
+      { "event": "escandallo.calculado",  "handler": "onEscandalloCalculado","description": "Hook para futuras auto-actualizaciones de estudios." }
+    ]
+  },
+  "ui_handlers": [
+    { "domain": "viabilidad", "action": "estudio",   "handler": "handleEstudio",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "viabilidad", "action": "escenario", "handler": "handleEscenario", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "viabilidad", "action": "config",    "handler": "handleConfig",    "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "viabilidad", "action": "health",    "handler": "handleHealth",    "type": "workspace_module", "zone": "barra_modulos" }
+  ],
+  "tools": [
+    {
+      "name": "viabilidad.estudio",
+      "description": "Genera un estudio de viabilidad completo del negocio basandose en las recetas, sus costes y los parametros del negocio. Incluye 3 escenarios (principal, conservador, optimista), punto de equilibrio, analisis de recetas y conclusiones.",
+      "handler": "toolEstudio",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "nombre_negocio": { "type": "string" },
+          "tipo_negocio": { "type": "string", "description": "restaurante, catering, food truck, obrador, etc." },
+          "gastos_fijos_mensuales": { "type": "number", "description": "Gastos fijos mensuales en €" },
+          "dias_operacion_mes": { "type": "number", "description": "Dias de operacion al mes (default 25)" },
+          "comensales_dia_estimados": { "type": "number" },
+          "ticket_medio": { "type": "number", "description": "Si no se indica, se calcula de las recetas" },
+          "precios_venta": { "type": "object", "description": "Map receta_id → precio_venta" },
+          "project_id": { "type": "string" }
+        },
+        "required": ["gastos_fijos_mensuales", "project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "gastos_fijos_mensuales o project_id ausentes" },
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo de escritura del estudio" }
+      ]
+    },
+    {
+      "name": "viabilidad.punto_equilibrio",
+      "description": "Calcula el punto de equilibrio (break-even): cuantos servicios/comensales necesitas al dia/mes para cubrir gastos fijos.",
+      "handler": "toolPuntoEquilibrio",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "gastos_fijos_mensuales": { "type": "number" },
+          "ticket_medio": { "type": "number" },
+          "food_cost_porcentaje": { "type": "number", "description": "Se calcula de las recetas si no se indica" },
+          "dias_operacion_mes": { "type": "number" },
+          "project_id": { "type": "string" }
+        },
+        "required": ["gastos_fijos_mensuales", "project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "gastos_fijos_mensuales o project_id ausentes" }
+      ]
+    },
+    {
+      "name": "viabilidad.escenario",
+      "description": "Calcula y persiste un escenario de negocio. Util para comparar alternativas (cambio de carta, modelo de negocio, etc.).",
+      "handler": "toolEscenario",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "nombre": { "type": "string", "description": "Ej: Conservador, Optimista, Menu reducido" },
+          "gastos_fijos_mensuales": { "type": "number" },
+          "comensales_dia": { "type": "number" },
+          "ticket_medio": { "type": "number" },
+          "food_cost_porcentaje": { "type": "number" },
+          "dias_operacion_mes": { "type": "number" },
+          "project_id": { "type": "string" }
+        },
+        "required": ["nombre", "gastos_fijos_mensuales", "comensales_dia", "ticket_medio", "project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "nombre, gastos_fijos_mensuales o project_id ausentes" },
+        { "code": "UNKNOWN_ERROR", "cuando": "fallo de escritura de escenarios.json" }
+      ]
+    },
+    {
+      "name": "viabilidad.comparar_escenarios",
+      "description": "Compara varios escenarios lado a lado: muestra ingresos, gastos, beneficio y punto de equilibrio de cada uno + identifica el mejor/peor.",
+      "handler": "toolCompararEscenarios",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "escenarios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "nombre": { "type": "string" },
+                "gastos_fijos_mensuales": { "type": "number" },
+                "comensales_dia": { "type": "number" },
+                "ticket_medio": { "type": "number" },
+                "food_cost_porcentaje": { "type": "number" },
+                "dias_operacion_mes": { "type": "number" }
+              },
+              "required": ["nombre", "gastos_fijos_mensuales", "comensales_dia", "ticket_medio"]
+            }
+          },
+          "project_id": { "type": "string" }
+        },
+        "required": ["escenarios", "project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "escenarios con menos de 2 elementos o project_id ausente" }
+      ]
+    },
+    {
+      "name": "viabilidad.proyeccion",
+      "description": "Proyeccion financiera a 3, 6 o 12 meses. Crecimiento progresivo de comensales, calculo de ROI con inversion inicial.",
+      "handler": "toolProyeccion",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "meses": { "type": "number", "description": "3, 6 o 12 (default 12)" },
+          "gastos_fijos_mensuales": { "type": "number" },
+          "comensales_dia_inicial": { "type": "number" },
+          "comensales_dia_objetivo": { "type": "number" },
+          "ticket_medio": { "type": "number" },
+          "food_cost_porcentaje": { "type": "number" },
+          "dias_operacion_mes": { "type": "number" },
+          "inversion_inicial": { "type": "number", "description": "Para calcular ROI" },
+          "project_id": { "type": "string" }
+        },
+        "required": ["gastos_fijos_mensuales", "comensales_dia_inicial", "ticket_medio", "project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT", "cuando": "campos requeridos ausentes (gastos_fijos_mensuales, comensales_dia_inicial, ticket_medio, project_id)" }
+      ]
+    },
+    {
+      "name": "viabilidad.guardar_config",
+      "description": "Guarda la configuracion del negocio (gastos fijos, tipo, nombre, etc.) para no tener que repetirla en cada calculo. Write atomico (tmp + rename).",
+      "handler": "toolGuardarConfig",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "nombre_negocio": { "type": "string" },
+          "tipo_negocio": { "type": "string" },
+          "gastos_fijos_mensuales": { "type": "number" },
+          "dias_operacion_mes": { "type": "number" },
+          "comensales_dia_estimados": { "type": "number" },
+          "ticket_medio": { "type": "number" },
+          "food_cost_objetivo": { "type": "number" },
+          "inversion_inicial": { "type": "number" },
+          "notas": { "type": "string" },
+          "project_id": { "type": "string" }
+        },
+        "required": ["project_id"]
+      },
+      "errores_conocidos": [
+        { "code": "INVALID_INPUT",     "cuando": "project_id ausente" },
+        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura de config.json" }
+      ]
+    }
+  ],
+  "dependencies": ["recetas", "escandallo"],
+  "config": {
+    "persistence": {
+      "type": "json-file-per-project",
+      "owner": "ViabilidadModule (Map configs + Map recetasCache + Map escenarios + Map projectPaths)",
+      "paths": [
+        "{project.base_path}/storage/recetas/recetas.json (read)",
+        "{project.base_path}/storage/recetas/ingredientes.json (read)",
+        "{project.base_path}/storage/viabilidad/config.json (write atomico)",
+        "{project.base_path}/storage/viabilidad/escenarios.json (write atomico)",
+        "{project.base_path}/storage/viabilidad/estudio_<timestamp>.json (write atomico, append-only)"
+      ],
+      "restart_resilient": true,
+      "concurrency": "single-writer-per-project",
+      "lost_on_restart": ["recetasCache"]
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "viabilidad.estudio.generated",
+        "viabilidad.punto_equilibrio.calculated",
+        "viabilidad.escenario.calculated",
+        "viabilidad.proyeccion.generated",
+        "viabilidad.errors"
+      ]
+    }
+  }
+}

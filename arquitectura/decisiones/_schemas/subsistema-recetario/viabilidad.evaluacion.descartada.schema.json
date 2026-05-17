@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/viabilidad.evaluacion.descartada.schema.json",
+  "title": "viabilidad.evaluacion.descartada — payload schema",
+  "description": "Evento emitido por viabilidad cuando el chef/usuario marca explicitamente un expediente como descartado (no se va a continuar con esta idea). NO es un veredicto del modulo (eso es el evento .completada con veredicto='no_viable_economicamente'). Esta es una decision humana posterior. El expediente NO se borra del archivo — sigue accesible en historial y queda como auditoria de que se evaluo y se decidio no continuar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "expediente_id",
+    "nombre_idea",
+    "motivo",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":         { "$ref": "_common.schema.json#/$defs/user_id" },
+    "expediente_id":   { "type": "string", "minLength": 1 },
+    "nombre_idea":     { "type": "string", "minLength": 1, "maxLength": 200 },
+    "motivo":          { "$ref": "_common.schema.json#/$defs/motivo" },
+    "veredicto_economico": {
+      "enum": ["viable", "viable_con_advertencias", "no_viable_economicamente", "sin_pvp_objetivo"],
+      "description": "Veredicto economico del momento en que se evaluo (snapshot del expediente). Util para auditoria — distingue entre 'descarte por no rentable' vs 'descarte por otra razon' (estilo, oportunidad, etc.)."
+    },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

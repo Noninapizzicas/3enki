@@ -466,10 +466,10 @@ test('Group 6 / onRecetaActualizada invalida cache del proyecto (no de otros)', 
   assert.strictEqual(mod.snapshotCache.has('p2|r1'), true,  'p2 intacto');
 });
 
-test('Group 6 / onRecetaCreada acepta compat proyecto_id (drift heredado)', async () => {
+test('Group 6 / onRecetaCreada invalida cache con project_id canonico (drift heredado de recetas cerrado en v4)', async () => {
   const { mod } = await setupModule();
   mod.snapshotCache.set('p1|r1', { snapshot: {}, ts: 1 });
-  mod.onRecetaCreada({ data: { proyecto_id: 'p1', receta_id: 'r1' } });
+  mod.onRecetaCreada({ data: { project_id: 'p1', receta_id: 'r1' } });
   assert.strictEqual(mod.snapshotCache.has('p1|r1'), false);
 });
 

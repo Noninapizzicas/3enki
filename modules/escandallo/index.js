@@ -171,16 +171,14 @@ class EscandalloModule extends BaseModule {
   }
 
   onRecetaCreada(event) {
-    // Compat hack: recetas aun publica con proyecto_id (drift heredado; cerrara con v4 de recetas).
+    // recetas v4 publica con project_id canonico (drift heredado cerrado).
     const data = event?.data || event || {};
-    const project_id = data.project_id || data.proyecto_id;
-    if (project_id) this._invalidateProjectCache(project_id);
+    if (data.project_id) this._invalidateProjectCache(data.project_id);
   }
 
   onRecetaActualizada(event) {
     const data = event?.data || event || {};
-    const project_id = data.project_id || data.proyecto_id;
-    if (project_id) this._invalidateProjectCache(project_id);
+    if (data.project_id) this._invalidateProjectCache(data.project_id);
   }
 
   onIngredientePrecioActualizado() {

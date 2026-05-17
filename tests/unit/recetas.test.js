@@ -1,17 +1,55 @@
+/**
+ * Tests del modulo `recetas` v4.0.0 — aggregate root del subsistema-recetario.
+ *
+ * 7 grupos POC2:
+ *   1. Lifecycle
+ *   2. Validacion canonica
+ *   3. Success crear (publish receta.creada AJV strict)
+ *   4. Success actualizar / revertir (publish receta.actualizada AJV strict)
+ *   5. Success cambiar_estado / eliminar (publish receta.estado.actualizada + receta.eliminada AJV strict)
+ *   6. Ingredientes / catalogo / precios (publish ingrediente.precio.actualizado AJV strict) + analizar + migracion legacy
+ *   7. Helpers POC2 (_publicarEvento, _normalizeIngredientes, _calcIncompleta, validacion de transiciones)
+ */
+
 'use strict';
 
 const assert = require('assert');
+const path   = require('path');
+const Ajv    = require('ajv/dist/2020');
+const addFormats = require('ajv-formats');
 
 const RecetasModule = require('../../modules/recetas/index.js');
 
-// --------------------------------------------------
-// Mock infra
-// --------------------------------------------------
+const SCHEMAS_DIR = path.resolve(__dirname, '../../arquitectura/decisiones/_schemas/subsistema-recetario');
 
-function makeMocks() {
-  const logs = [];
-  const published = [];
-  const metricsCalls = [];
+function loadAjv() {
+  const fs = require('fs');
+  const ajv = new Ajv({ strict: true, strictRequired: false, allowUnionTypes: true, allErrors: true });
+  addFormats(ajv);
+  for (const f of fs.readdirSync(SCHEMAS_DIR)) {
+    if (!f.endsWith('.json')) continue;
+    const schema = JSON.parse(fs.readFileSync(path.join(SCHEMAS_DIR, f), 'utf-8'));
+    ajv.addSchema(schema, f);
+  }
+  return ajv;
+}
+
+const ajv = loadAjv();
+const validateCreada       = ajv.getSchema('receta.creada.schema.json');
+const validateActualizada  = ajv.getSchema('receta.actualizada.schema.json');
+const validateEliminada    = ajv.getSchema('receta.eliminada.schema.json');
+const validateEstadoActual = ajv.getSchema('receta.estado.actualizada.schema.json');
+const validatePrecioActual = ajv.getSchema('ingrediente.precio.actualizado.schema.json');
+if (!validateCreada || !validateActualizada || !validateEliminada || !validateEstadoActual || !validatePrecioActual) {
+  throw new Error('Schemas oficiales receta.* / ingrediente.precio.actualizado no encontrados');
+}
+
+function makeMocks({ projectBasePath = '/tmp/proj-test', preexistingStore = null } = {}) {
+  const logs = [], metricsCalls = [], published = [];
+  const fsStore = new Map();
+  if (preexistingStore) {
+    fsStore.set(`${projectBasePath}/recetas.json`, JSON.stringify(preexistingStore, null, 2));
+  }
 
   const logger = {
     debug: (e, p) => logs.push(['debug', e, p]),
@@ -19,628 +57,542 @@ function makeMocks() {
     warn:  (e, p) => logs.push(['warn',  e, p]),
     error: (e, p) => logs.push(['error', e, p])
   };
-
   const metrics = {
-    increment: (n, l) => metricsCalls.push(['increment', n, l]),
-    gauge:     (n, v, l) => metricsCalls.push(['gauge', n, v, l]),
-    timing:    (n, ms, l) => metricsCalls.push(['timing', n, ms, l])
+    increment: (n, v, labels) => metricsCalls.push(['increment', n, v, labels]),
+    gauge:     (n, v, labels) => metricsCalls.push(['gauge',     n, v, labels]),
+    timing:    (n, v, labels) => metricsCalls.push(['timing',    n, v, labels])
   };
 
+  let mod = null;
   const eventBus = {
-    publish: async (event, payload) => { published.push([event, payload]); }
+    publish: async (eventName, payload) => {
+      published.push([eventName, payload]);
+      if (eventName === 'fs.read.request') {
+        const content = fsStore.has(payload.path) ? fsStore.get(payload.path) : null;
+        const resp = content !== null
+          ? { request_id: payload.request_id, content, path: payload.path }
+          : { request_id: payload.request_id, error: { code: 'RESOURCE_NOT_FOUND', kind: 'enoent' }, path: payload.path };
+        process.nextTick(() => mod && mod.onFsReadResponse({ data: resp }));
+      }
+      if (eventName === 'fs.write.request') {
+        fsStore.set(payload.path, payload.content);
+        process.nextTick(() => mod && mod.onFsWriteResponse({ data: { request_id: payload.request_id, path: payload.path } }));
+      }
+      if (eventName === 'project.get.request') {
+        process.nextTick(() => mod && mod.onProjectGetResponse({ data: { request_id: payload.request_id, project_id: payload.project_id, base_path: projectBasePath } }));
+      }
+    }
   };
 
-  return { logs, published, metricsCalls, logger, metrics, eventBus };
+  const core = { logger, metrics, eventBus, config: {} };
+  return { logs, metricsCalls, published, fsStore, logger, metrics, eventBus, core, setMod: (m) => { mod = m; } };
 }
 
-async function instantiate(mocks) {
-  const m = new RecetasModule();
-  await m.onLoad({ logger: mocks.logger, metrics: mocks.metrics, eventBus: mocks.eventBus, moduleConfig: {} });
-  return { module: m };
-}
-
-// Instantiate with in-memory store — bypasses async event-bus I/O
-async function instantiateWithStore(mocks) {
-  const stores = new Map();
-  const m = new RecetasModule();
-  await m.onLoad({ logger: mocks.logger, metrics: mocks.metrics, eventBus: mocks.eventBus, moduleConfig: {} });
-
-  m._basePathForProject = async (pid) => {
-    if (!pid) { const e = new Error('proyecto_id requerido'); e._code = 'INVALID_INPUT'; throw e; }
-    return `/tmp/recetas-test/${pid}`;
-  };
-  m._loadStore = async (slug) => {
-    const s = stores.get(slug);
-    return s ? JSON.parse(JSON.stringify(s)) : m._emptyStore();
-  };
-  m._saveStore = async (slug, store) => { stores.set(slug, JSON.parse(JSON.stringify(store))); };
-
-  return { module: m, stores };
-}
-
-async function testAsync(description, fn) {
-  try { await fn(); console.log(`✓ ${description}`); }
-  catch (error) {
-    console.error(`✗ ${description}`);
-    console.error(`  ${error.message}`);
-    if (process.env.STACK) console.error(error.stack);
-    process.exit(1);
+async function setupModule(opts = {}) {
+  const mocks = makeMocks(opts);
+  const mod = new RecetasModule();
+  mocks.setMod(mod);
+  await mod.onLoad(mocks.core);
+  if (opts.projectId) {
+    mod.projectBasePaths.set(opts.projectId, opts.projectBasePath || '/tmp/proj-test');
   }
+  return { mod, mocks };
 }
 
-function isCanonicalError(result) {
-  return result && typeof result.status === 'number'
-    && result.error && typeof result.error === 'object'
-    && typeof result.error.code === 'string'
-    && typeof result.error.message === 'string'
-    && !('data' in result);
+const baseCrear = {
+  project_id:   'p1',
+  user_id:      'chef',
+  nombre:       'Tomate confitado',
+  descripcion:  'Confitar lentamente',
+  ingredientes: [
+    { nombre: 'tomate', cantidad: 1.0, unidad: 'kg' },
+    { nombre: 'aceite', cantidad: 0.1, unidad: 'l' }
+  ],
+  instrucciones: ['Cortar', 'Confitar 4h a 80C'],
+  porciones:    4,
+  tiempo_min:   240,
+  dificultad:   3
+};
+
+const tests = [];
+function test(name, fn) { tests.push({ name, fn }); }
+
+async function runTests() {
+  let passed = 0, failed = 0;
+  for (const t of tests) {
+    try {
+      await t.fn();
+      console.log(`  ok ${t.name}`);
+      passed++;
+    } catch (err) {
+      console.log(`  FAIL ${t.name}`);
+      console.log(`       ${err.message}`);
+      if (err.stack) console.log(`       ${err.stack.split('\n').slice(1, 3).join('\n       ')}`);
+      failed++;
+    }
+  }
+  console.log(`\n${passed} passed, ${failed} failed (total ${tests.length})`);
+  if (failed > 0) process.exit(1);
 }
 
-function isCanonicalSuccess(result) {
-  return result && typeof result.status === 'number'
-    && result.data && typeof result.data === 'object'
-    && !('error' in result);
-}
+// ============================================================
+// Group 1: Lifecycle
+// ============================================================
 
-function publishedOf(mocks, name) {
-  return mocks.published.filter(p => p[0] === name).map(p => p[1]);
-}
+test('Group 1 / onLoad inyecta deps + extiende BaseModule', async () => {
+  const { mod, mocks } = await setupModule();
+  assert.strictEqual(mod.logger,   mocks.logger);
+  assert.strictEqual(mod.eventBus, mocks.eventBus);
+  assert.strictEqual(mod.name, 'recetas');
+  assert.strictEqual(mod.version, '4.0.0');
+  assert.strictEqual(typeof mod._errorResponse, 'function');
+  assert.strictEqual(typeof mod._handleHandlerError, 'function');
+});
 
-// ==================================================
-//                                                Tests
-// ==================================================
+test('Group 1 / onLoad loguea recetas.loaded con storage json-per-project', async () => {
+  const { mocks } = await setupModule();
+  const loaded = mocks.logs.find(l => l[1] === 'recetas.loaded');
+  assert.ok(loaded);
+  assert.strictEqual(loaded[2].version, '4.0.0');
+  assert.strictEqual(loaded[2].storage, 'json-per-project');
+});
 
-(async () => {
-  console.log('recetas — reescritura canonica (POC2)\n');
+test('Group 1 / onUnload limpia caches y queues', async () => {
+  const { mod } = await setupModule();
+  mod.projectBasePaths.set('p1', '/tmp/p1');
+  mod.pendingFs.set('r', { resolve: () => {}, reject: () => {}, timer: setTimeout(() => {}, 1e6) });
+  mod.writeQueues.set('p1', Promise.resolve());
+  await mod.onUnload();
+  assert.strictEqual(mod.projectBasePaths.size, 0);
+  assert.strictEqual(mod.pendingFs.size, 0);
+  assert.strictEqual(mod.writeQueues.size, 0);
+});
 
-  // ==========================================
-  // Group 1: Lifecycle
-  // ==========================================
+// ============================================================
+// Group 2: Validacion canonica
+// ============================================================
 
-  await testAsync('onLoad inicializa maps vacios y captura logger/metrics/eventBus', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    assert.ok(m.pendingFs instanceof Map && m.pendingFs.size === 0);
-    assert.ok(m.pendingProject instanceof Map && m.pendingProject.size === 0);
-    assert.ok(m.writeQueues instanceof Map && m.writeQueues.size === 0);
-    assert.ok(m.projectBasePaths instanceof Map && m.projectBasePaths.size === 0);
-    assert.strictEqual(m.logger, mocks.logger);
-    assert.strictEqual(m.metrics, mocks.metrics);
-    await m.onUnload();
+test('Group 2 / crear sin project_id devuelve 400', async () => {
+  const { mod } = await setupModule();
+  const r = await mod.onCrear({ ...baseCrear, project_id: undefined });
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.error.details.field, 'project_id');
+});
+
+test('Group 2 / crear sin nombre devuelve 400', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const r = await mod.onCrear({ ...baseCrear, nombre: '' });
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.error.details.field, 'nombre');
+});
+
+test('Group 2 / crear con fuente invalida devuelve 400', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const r = await mod.onCrear({ ...baseCrear, fuente: 'inventado' });
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.error.details.field, 'fuente');
+});
+
+test('Group 2 / listar con estado invalido devuelve 400 con allowed', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const r = await mod.onListar({ project_id: 'p1', estado: 'invalido' });
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.error.details.field, 'estado');
+  assert.ok(r.error.details.allowed.includes('en_servicio'));
+});
+
+test('Group 2 / cambiar_estado con target invalido devuelve 400', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const r = await mod.onCambiarEstado({ project_id: 'p1', receta_id: 'r', target_estado: 'pausada' });
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.error.details.field, 'target_estado');
+});
+
+test('Group 2 / actualizar_precio con precio_mercado negativo devuelve 400', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const r = await mod.onActualizarPrecio({ project_id: 'p1', nombre: 'tomate', precio_mercado: -1 });
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.error.details.field, 'precio_mercado');
+});
+
+test('Group 2 / obtener sin receta_id ni nombre devuelve 400', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const r = await mod.onObtener({ project_id: 'p1' });
+  assert.strictEqual(r.status, 400);
+});
+
+// ============================================================
+// Group 3: Success crear
+// ============================================================
+
+test('Group 3 / crear receta completa retorna 201 con estado_operativo=en_servicio', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const r = await mod.onCrear(baseCrear);
+  assert.strictEqual(r.status, 201);
+  assert.ok(r.data.receta_id);
+  assert.strictEqual(r.data.nombre, 'Tomate confitado');
+  assert.strictEqual(r.data.version, 1);
+  assert.strictEqual(r.data.estado_operativo, 'en_servicio');
+  assert.strictEqual(r.data.incompleta, false);
+});
+
+test('Group 3 / crear receta incompleta arranca en estado_operativo=borrador', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  // Sin ingredientes ni instrucciones ni porciones (campos_para_completa)
+  const r = await mod.onCrear({ project_id: 'p1', nombre: 'Idea suelta' });
+  assert.strictEqual(r.data.estado_operativo, 'borrador');
+  assert.strictEqual(r.data.incompleta, true);
+  assert.ok(r.data.campos_pendientes.length > 0);
+});
+
+test('Group 3 / crear publica receta.creada con shape canonico AJV strict', async () => {
+  const { mod, mocks } = await setupModule({ projectId: 'p1' });
+  await mod.onCrear({ ...baseCrear, correlation_id: 'corr-c-1' });
+  const ev = mocks.published.find(([n]) => n === 'receta.creada');
+  assert.ok(ev);
+  const [, payload] = ev;
+  if (!validateCreada(payload)) {
+    const msg = validateCreada.errors.map(e => `${e.instancePath} ${e.message}`).join('; ');
+    throw new Error(`payload no cumple schema: ${msg}\npayload: ${JSON.stringify(payload, null, 2)}`);
+  }
+  assert.strictEqual(payload.correlation_id, 'corr-c-1');
+  assert.strictEqual(payload.user_id, 'chef');
+  assert.strictEqual(payload.estado_operativo, 'en_servicio');
+  assert.strictEqual(payload.version, 1);
+});
+
+test('Group 3 / crear receta duplicada devuelve 409 ALREADY_EXISTS', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  await mod.onCrear(baseCrear);
+  const r = await mod.onCrear(baseCrear);
+  assert.strictEqual(r.status, 409);
+  assert.strictEqual(r.error.code, 'ALREADY_EXISTS');
+});
+
+// ============================================================
+// Group 4: Success actualizar / revertir
+// ============================================================
+
+test('Group 4 / actualizar retorna 200 con cambios_aplicados + version++', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const c = await mod.onCrear(baseCrear);
+  const r = await mod.onActualizar({
+    project_id: 'p1', user_id: 'chef',
+    receta_id: c.data.receta_id,
+    cambios: { porciones: 8, descripcion: 'Confitado largo' }
   });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.version, 2);
+  assert.deepStrictEqual(r.data.campos_actualizados.sort(), ['descripcion', 'porciones']);
+});
 
-  await testAsync('onUnload limpia todos los Maps y cancela timers sin leak', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-
-    m.pendingFs.set('leak-1', { resolve: () => {}, reject: () => {}, timer: setTimeout(() => {}, 60000) });
-    m.pendingProject.set('leak-2', { resolve: () => {}, reject: () => {}, timer: setTimeout(() => {}, 60000) });
-    m.projectBasePaths.set('pid', 'slug');
-
-    await m.onUnload();
-    assert.strictEqual(m.pendingFs.size, 0);
-    assert.strictEqual(m.pendingProject.size, 0);
-    assert.strictEqual(m.writeQueues.size, 0);
-    assert.strictEqual(m.projectBasePaths.size, 0);
+test('Group 4 / actualizar publica receta.actualizada con AJV strict + campos_actualizados', async () => {
+  const { mod, mocks } = await setupModule({ projectId: 'p1' });
+  const c = await mod.onCrear(baseCrear);
+  await mod.onActualizar({
+    project_id: 'p1', user_id: 'chef', correlation_id: 'corr-act-1',
+    receta_id: c.data.receta_id,
+    cambios: { porciones: 8 }
   });
+  const ev = mocks.published.find(([n]) => n === 'receta.actualizada');
+  assert.ok(ev);
+  const [, payload] = ev;
+  if (!validateActualizada(payload)) {
+    const msg = validateActualizada.errors.map(e => `${e.instancePath} ${e.message}`).join('; ');
+    throw new Error(`payload no cumple schema: ${msg}\npayload: ${JSON.stringify(payload, null, 2)}`);
+  }
+  assert.strictEqual(payload.correlation_id, 'corr-act-1');
+  assert.strictEqual(payload.version, 2);
+  assert.deepStrictEqual(payload.campos_actualizados, ['porciones']);
+});
 
-  // ==========================================
-  // Group 2: Validacion canonica de handlers
-  // ==========================================
+test('Group 4 / actualizar sin campos validos devuelve 400 (no afecta history)', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const c = await mod.onCrear(baseCrear);
+  const r = await mod.onActualizar({ project_id: 'p1', receta_id: c.data.receta_id, cambios: { campo_inventado: 'x' } });
+  assert.strictEqual(r.status, 400);
+  // History no debe crecer en error path
+  const ev = await mod.onHistorial({ project_id: 'p1', receta_id: c.data.receta_id });
+  assert.strictEqual(ev.data.versiones_anteriores, 0);
+});
 
-  await testAsync('crear: proyecto_id faltante → 400 INVALID_INPUT', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    const r = await m.crear({ nombre: 'Test' });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'INVALID_INPUT');
-    await m.onUnload();
+test('Group 4 / revertir publica receta.actualizada con motivo=revertir', async () => {
+  const { mod, mocks } = await setupModule({ projectId: 'p1' });
+  const c = await mod.onCrear(baseCrear);
+  await mod.onActualizar({ project_id: 'p1', receta_id: c.data.receta_id, cambios: { porciones: 12 } });
+  const rev = await mod.onRevertir({ project_id: 'p1', receta_id: c.data.receta_id, target_version: 1 });
+  assert.strictEqual(rev.status, 200);
+  assert.strictEqual(rev.data.revertida_a_version, 1);
+
+  const evs = mocks.published.filter(([n]) => n === 'receta.actualizada');
+  const evRev = evs.find(([, p]) => p.motivo === 'revertir');
+  assert.ok(evRev);
+  if (!validateActualizada(evRev[1])) throw new Error('revert payload no cumple AJV');
+});
+
+// ============================================================
+// Group 5: cambiar_estado / eliminar
+// ============================================================
+
+test('Group 5 / eliminar publica AMBOS receta.estado.actualizada + receta.eliminada', async () => {
+  const { mod, mocks } = await setupModule({ projectId: 'p1' });
+  const c = await mod.onCrear(baseCrear);
+  const r = await mod.onEliminar({
+    project_id: 'p1', user_id: 'chef', correlation_id: 'corr-el-1',
+    receta_id: c.data.receta_id, motivo: 'duplicada'
   });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.estado_operativo, 'archivada');
 
-  await testAsync('crear: nombre faltante → 400 INVALID_INPUT', async () => {
-    const mocks = makeMocks();
-    const { module: m, stores } = await instantiateWithStore(mocks);
-    const r = await m.crear({ proyecto_id: 'p1' });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'INVALID_INPUT');
-    await m.onUnload();
+  const evEstado = mocks.published.find(([n]) => n === 'receta.estado.actualizada');
+  const evElim   = mocks.published.find(([n]) => n === 'receta.eliminada');
+  assert.ok(evEstado, 'esperaba receta.estado.actualizada');
+  assert.ok(evElim,   'esperaba receta.eliminada');
+
+  if (!validateEstadoActual(evEstado[1])) {
+    const msg = validateEstadoActual.errors.map(e => `${e.instancePath} ${e.message}`).join('; ');
+    throw new Error(`estado.actualizada no cumple: ${msg}\n${JSON.stringify(evEstado[1], null, 2)}`);
+  }
+  if (!validateEliminada(evElim[1])) {
+    const msg = validateEliminada.errors.map(e => `${e.instancePath} ${e.message}`).join('; ');
+    throw new Error(`eliminada no cumple: ${msg}\n${JSON.stringify(evElim[1], null, 2)}`);
+  }
+
+  assert.strictEqual(evEstado[1].estado_anterior, 'en_servicio');
+  assert.strictEqual(evEstado[1].estado_nuevo, 'archivada');
+  assert.strictEqual(evEstado[1].motivo, 'duplicada');
+  assert.strictEqual(evElim[1].motivo, 'duplicada');
+});
+
+test('Group 5 / cambiar_estado en_servicio -> borrador publica solo receta.estado.actualizada', async () => {
+  const { mod, mocks } = await setupModule({ projectId: 'p1' });
+  const c = await mod.onCrear(baseCrear);
+  const r = await mod.onCambiarEstado({
+    project_id: 'p1', user_id: 'chef',
+    receta_id: c.data.receta_id, target_estado: 'borrador'
   });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.estado_operativo, 'borrador');
 
-  await testAsync('obtener: proyecto_id faltante → 400 INVALID_INPUT', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    const r = await m.obtener({ receta_id: 'x' });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'INVALID_INPUT');
-    await m.onUnload();
+  const evs = mocks.published.filter(([n]) => n === 'receta.estado.actualizada');
+  assert.strictEqual(evs.length, 1);
+  if (!validateEstadoActual(evs[0][1])) throw new Error('estado.actualizada no cumple AJV');
+
+  const evElim = mocks.published.find(([n]) => n === 'receta.eliminada');
+  assert.ok(!evElim, 'NO debe publicar receta.eliminada en transicion no-archivada');
+});
+
+test('Group 5 / cambiar_estado archivada -> en_servicio devuelve 422 PRECONDITION_FAILED', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const c = await mod.onCrear(baseCrear);
+  await mod.onEliminar({ project_id: 'p1', receta_id: c.data.receta_id });
+  const r = await mod.onCambiarEstado({
+    project_id: 'p1', receta_id: c.data.receta_id, target_estado: 'en_servicio'
   });
+  assert.strictEqual(r.status, 422);
+  assert.strictEqual(r.error.code, 'PRECONDITION_FAILED');
+  assert.strictEqual(r.error.details.kind, 'invalid_state_transition');
+  assert.strictEqual(r.error.details.estado_anterior, 'archivada');
+});
 
-  await testAsync('actualizar: receta_id faltante → 400 INVALID_INPUT', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-    const r = await m.actualizar({ proyecto_id: 'p1', cambios: {} });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'INVALID_INPUT');
-    await m.onUnload();
+test('Group 5 / cambiar_estado al mismo estado devuelve 200 sin cambios', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const c = await mod.onCrear(baseCrear);
+  const r = await mod.onCambiarEstado({
+    project_id: 'p1', receta_id: c.data.receta_id, target_estado: 'en_servicio'
   });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.status, 'sin_cambios');
+});
 
-  await testAsync('revertir: target_version faltante → 400 INVALID_INPUT', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-    const r = await m.revertir({ proyecto_id: 'p1', receta_id: 'x' });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'INVALID_INPUT');
-    await m.onUnload();
+test('Group 5 / eliminar receta inexistente devuelve 404 con entity_type=recipe', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const r = await mod.onEliminar({ project_id: 'p1', receta_id: 'no-existe' });
+  assert.strictEqual(r.status, 404);
+  assert.strictEqual(r.error.details.entity_type, 'recipe');
+});
+
+// ============================================================
+// Group 6: Ingredientes / catalogo / precios / analizar / migracion legacy
+// ============================================================
+
+test('Group 6 / actualizar_precio publica ingrediente.precio.actualizado AJV strict', async () => {
+  const { mod, mocks } = await setupModule({ projectId: 'p1' });
+  const r = await mod.onActualizarPrecio({
+    project_id: 'p1', user_id: 'chef', correlation_id: 'corr-pr-1',
+    nombre: 'tomate', precio_mercado: 2.5, unidad: 'kg', categoria: 'verdura', fuente: 'manual'
   });
-
-  await testAsync('actualizarPrecio: nombre faltante → 400 INVALID_INPUT', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-    const r = await m.actualizarPrecio({ proyecto_id: 'p1', precio_mercado: 1.0 });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'INVALID_INPUT');
-    await m.onUnload();
-  });
-
-  await testAsync('investigarReceta: nombre_receta faltante → 400 INVALID_INPUT', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-    const r = await m.investigarReceta({ proyecto_id: 'p1' });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.error.code, 'INVALID_INPUT');
-    await m.onUnload();
-  });
-
-  // ==========================================
-  // Group 3: CRUD basico
-  // ==========================================
-
-  await testAsync('crear: crea receta con status 201 y publica receta.creada con correlation_id', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const r = await m.crear({ proyecto_id: 'p1', nombre: 'Tortilla', ingredientes: ['huevos', 'patatas'], porciones: 4 });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.status, 201);
-    assert.ok(r.data.id);
-    assert.strictEqual(r.data.nombre, 'Tortilla');
-    assert.strictEqual(r.data.version, 1);
-
-    const ev = publishedOf(mocks, 'receta.creada');
-    assert.strictEqual(ev.length, 1);
-    assert.strictEqual(ev[0].nombre, 'Tortilla');
-    assert.ok(ev[0].correlation_id);
-    assert.ok(ev[0].timestamp);
-    await m.onUnload();
-  });
-
-  await testAsync('crear: nombre duplicado activo → 409 ALREADY_EXISTS', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.crear({ proyecto_id: 'p1', nombre: 'Gazpacho' });
-    const r = await m.crear({ proyecto_id: 'p1', nombre: 'Gazpacho' });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 409);
-    assert.strictEqual(r.error.code, 'ALREADY_EXISTS');
-    await m.onUnload();
-  });
-
-  await testAsync('crear: receta sin ingredientes/porciones/instrucciones marca incompleta=true', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const r = await m.crear({ proyecto_id: 'p1', nombre: 'Solo nombre' });
-    assert.strictEqual(r.status, 201);
-    assert.strictEqual(r.data.incompleta, true);
-    assert.ok(r.data.campos_pendientes.includes('ingredientes'));
-    assert.ok(r.data.campos_pendientes.includes('porciones'));
-    assert.ok(r.data.campos_pendientes.includes('instrucciones'));
-    await m.onUnload();
-  });
-
-  await testAsync('listar: devuelve recetas activas paginadas', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.crear({ proyecto_id: 'p1', nombre: 'Receta A' });
-    await m.crear({ proyecto_id: 'p1', nombre: 'Receta B' });
-
-    const r = await m.listar({ proyecto_id: 'p1' });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.status, 200);
-    assert.strictEqual(r.data.total, 2);
-    assert.ok(Array.isArray(r.data.recetas));
-    await m.onUnload();
-  });
-
-  await testAsync('listar: solo_incompletas filtra correctamente', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.crear({ proyecto_id: 'p1', nombre: 'Incompleta' });
-    await m.crear({ proyecto_id: 'p1', nombre: 'Completa',
-      ingredientes: [{ nombre: 'x', cantidad: 1, unidad: 'kg' }], porciones: 2,
-      instrucciones: ['paso 1'] });
-
-    const r = await m.listar({ proyecto_id: 'p1', solo_incompletas: true });
-    assert.strictEqual(r.data.total, 1);
-    assert.strictEqual(r.data.recetas[0].nombre, 'Incompleta');
-    await m.onUnload();
-  });
-
-  await testAsync('obtener: encuentra receta por id → 200', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const created = await m.crear({ proyecto_id: 'p1', nombre: 'Paella' });
-    const r = await m.obtener({ proyecto_id: 'p1', receta_id: created.data.id });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.nombre, 'Paella');
-    assert.ok('versiones_anteriores' in r.data);
-    await m.onUnload();
-  });
-
-  await testAsync('obtener: encuentra receta por nombre parcial', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.crear({ proyecto_id: 'p1', nombre: 'Caldo de pollo' });
-    const r = await m.obtener({ proyecto_id: 'p1', nombre: 'caldo de pollo' });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.nombre, 'Caldo de pollo');
-    await m.onUnload();
-  });
-
-  await testAsync('obtener: no encontrada → 404 RESOURCE_NOT_FOUND', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const r = await m.obtener({ proyecto_id: 'p1', receta_id: 'no-existe' });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 404);
-    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
-    await m.onUnload();
-  });
-
-  await testAsync('eliminar: archiva receta y la excluye del listado por defecto', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const created = await m.crear({ proyecto_id: 'p1', nombre: 'Para eliminar' });
-    const r = await m.eliminar({ proyecto_id: 'p1', receta_id: created.data.id });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.status, 'archivada');
-
-    const ev = publishedOf(mocks, 'receta.eliminada');
-    assert.strictEqual(ev.length, 1);
-    assert.ok(ev[0].correlation_id);
-
-    const lista = await m.listar({ proyecto_id: 'p1' });
-    assert.strictEqual(lista.data.total, 0);
-
-    const archivadas = await m.listar({ proyecto_id: 'p1', estado: 'archivada' });
-    assert.strictEqual(archivadas.data.total, 1);
-    await m.onUnload();
-  });
-
-  await testAsync('eliminar: ya archivada → 200 ya_estaba_archivada (idempotente)', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const created = await m.crear({ proyecto_id: 'p1', nombre: 'Doble archivo' });
-    await m.eliminar({ proyecto_id: 'p1', receta_id: created.data.id });
-    const r = await m.eliminar({ proyecto_id: 'p1', receta_id: created.data.id });
-    assert.strictEqual(r.status, 200);
-    assert.strictEqual(r.data.status, 'ya_estaba_archivada');
-    await m.onUnload();
-  });
-
-  // ==========================================
-  // Group 4: actualizar, historial, revertir
-  // ==========================================
-
-  await testAsync('actualizar: modifica campos y sube version a 2, publica receta.actualizada', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const created = await m.crear({ proyecto_id: 'p1', nombre: 'Antes' });
-    const r = await m.actualizar({ proyecto_id: 'p1', receta_id: created.data.id,
-      cambios: { nombre: 'Despues', porciones: 4 } });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.version, 2);
-    assert.strictEqual(r.data.nombre, 'Despues');
-    assert.ok(r.data.cambios_aplicados.nombre);
-    assert.ok(r.data.cambios_aplicados.porciones);
-
-    const ev = publishedOf(mocks, 'receta.actualizada');
-    assert.strictEqual(ev.length, 1);
-    assert.ok(ev[0].correlation_id);
-    await m.onUnload();
-  });
-
-  await testAsync('actualizar: receta no encontrada → 404 RESOURCE_NOT_FOUND', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const r = await m.actualizar({ proyecto_id: 'p1', receta_id: 'id-fantasma', cambios: { nombre: 'X' } });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 404);
-    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
-    await m.onUnload();
-  });
-
-  await testAsync('historial: devuelve versiones anteriores tras actualizaciones', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const created = await m.crear({ proyecto_id: 'p1', nombre: 'Con historia' });
-    await m.actualizar({ proyecto_id: 'p1', receta_id: created.data.id, cambios: { porciones: 2 } });
-    await m.actualizar({ proyecto_id: 'p1', receta_id: created.data.id, cambios: { porciones: 4 } });
-
-    const r = await m.historial({ proyecto_id: 'p1', receta_id: created.data.id });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.version_actual, 3);
-    assert.strictEqual(r.data.versiones_anteriores, 2);
-    assert.strictEqual(r.data.historial.length, 2);
-    await m.onUnload();
-  });
-
-  await testAsync('revertir: restaura nombre de version anterior y sube version', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const created = await m.crear({ proyecto_id: 'p1', nombre: 'Original' });
-    await m.actualizar({ proyecto_id: 'p1', receta_id: created.data.id, cambios: { nombre: 'Modificado' } });
-
-    const r = await m.revertir({ proyecto_id: 'p1', receta_id: created.data.id, target_version: 1 });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.revertida_a_version, 1);
-    assert.ok(r.data.version_actual >= 3);
-
-    const obtenida = await m.obtener({ proyecto_id: 'p1', receta_id: created.data.id });
-    assert.strictEqual(obtenida.data.nombre, 'Original');
-    await m.onUnload();
-  });
-
-  await testAsync('revertir: version no existente → 404 RESOURCE_NOT_FOUND', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const created = await m.crear({ proyecto_id: 'p1', nombre: 'Solo v1' });
-    const r = await m.revertir({ proyecto_id: 'p1', receta_id: created.data.id, target_version: 99 });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 404);
-    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
-    await m.onUnload();
-  });
-
-  // ==========================================
-  // Group 5: estadisticas, buscar, ingredientes, analizar, investigarReceta
-  // ==========================================
-
-  await testAsync('estadisticas: cuenta recetas por estado e ingredientes del catalogo', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.crear({ proyecto_id: 'p1', nombre: 'A' });
-    await m.crear({ proyecto_id: 'p1', nombre: 'B' });
-    const c = await m.crear({ proyecto_id: 'p1', nombre: 'C' });
-    await m.eliminar({ proyecto_id: 'p1', receta_id: c.data.id });
-    await m.actualizarPrecio({ proyecto_id: 'p1', nombre: 'Harina', precio_mercado: 1.2 });
-
-    const r = await m.estadisticas({ proyecto_id: 'p1' });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.total_recetas, 3);
-    assert.strictEqual(r.data.por_estado.activa, 2);
-    assert.strictEqual(r.data.por_estado.archivada, 1);
-    assert.strictEqual(r.data.ingredientes_catalogo, 1);
-    assert.strictEqual(r.data.ingredientes_con_precio, 1);
-    await m.onUnload();
-  });
-
-  await testAsync('buscar: filtra por texto en nombre', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.crear({ proyecto_id: 'p1', nombre: 'Gazpacho Andaluz' });
-    await m.crear({ proyecto_id: 'p1', nombre: 'Paella Valenciana' });
-
-    const r = await m.buscar({ proyecto_id: 'p1', texto: 'gazpacho' });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.total, 1);
-    assert.strictEqual(r.data.recetas[0].nombre, 'Gazpacho Andaluz');
-    await m.onUnload();
-  });
-
-  await testAsync('buscar: filtra por ingrediente', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.crear({ proyecto_id: 'p1', nombre: 'Con Tomate',
-      ingredientes: [{ nombre: 'tomate', cantidad: 2, unidad: 'ud' }] });
-    await m.crear({ proyecto_id: 'p1', nombre: 'Sin Tomate',
-      ingredientes: [{ nombre: 'lechuga', cantidad: 1, unidad: 'ud' }] });
-
-    const r = await m.buscar({ proyecto_id: 'p1', ingrediente: 'tomate' });
-    assert.strictEqual(r.data.total, 1);
-    assert.strictEqual(r.data.recetas[0].nombre, 'Con Tomate');
-    await m.onUnload();
-  });
-
-  await testAsync('ingredientes: lista catalogo y filtra por categoria', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.actualizarPrecio({ proyecto_id: 'p1', nombre: 'Harina', precio_mercado: 1.2, categoria: 'seco' });
-    await m.actualizarPrecio({ proyecto_id: 'p1', nombre: 'Leche', precio_mercado: 0.9, categoria: 'lacteo' });
-
-    const r = await m.ingredientes({ proyecto_id: 'p1' });
-    assert.strictEqual(r.data.total, 2);
-
-    const filtrado = await m.ingredientes({ proyecto_id: 'p1', categoria: 'seco' });
-    assert.strictEqual(filtrado.data.total, 1);
-    assert.strictEqual(filtrado.data.ingredientes[0].nombre, 'Harina');
-    await m.onUnload();
-  });
-
-  await testAsync('actualizarPrecio: crea ingrediente nuevo y luego lo actualiza sin duplicar', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.actualizarPrecio({ proyecto_id: 'p1', nombre: 'Aceite', precio_mercado: 5.0 });
-    const r = await m.actualizarPrecio({ proyecto_id: 'p1', nombre: 'Aceite', precio_mercado: 5.5 });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.precio_mercado, 5.5);
-
-    const lista = await m.ingredientes({ proyecto_id: 'p1' });
-    assert.strictEqual(lista.data.total, 1);
-
-    const ev = publishedOf(mocks, 'ingrediente.precio.actualizado');
-    assert.strictEqual(ev.length, 2);
-    assert.ok(ev[0].correlation_id);
-    await m.onUnload();
-  });
-
-  await testAsync('analizar: calcula coste con ingredientes del catalogo', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.actualizarPrecio({ proyecto_id: 'p1', nombre: 'leche', precio_mercado: 1.0, unidad: 'litro' });
-    const created = await m.crear({ proyecto_id: 'p1', nombre: 'Cafe con leche',
-      ingredientes: [{ nombre: 'leche', cantidad: 0.2, unidad: 'litro' }],
-      instrucciones: ['paso 1'], porciones: 1 });
-
-    const r = await m.analizar({ proyecto_id: 'p1', receta_id: created.data.id });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.coste_es_real, true);
-    assert.ok(r.data.coste_total != null);
-    assert.ok(r.data.coste_por_porcion != null);
-    await m.onUnload();
-  });
-
-  await testAsync('analizar: receta incompleta → 422 PRECONDITION_FAILED', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const created = await m.crear({ proyecto_id: 'p1', nombre: 'Incompleta' });
-    const r = await m.analizar({ proyecto_id: 'p1', receta_id: created.data.id });
-    assert.ok(isCanonicalError(r));
-    assert.strictEqual(r.status, 422);
-    assert.strictEqual(r.error.code, 'PRECONDITION_FAILED');
-    assert.ok(r.error.details.campos_pendientes.length > 0);
-    await m.onUnload();
-  });
-
-  await testAsync('investigarReceta: devuelve receta existente con existe_en_proyecto=true', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    await m.crear({ proyecto_id: 'p1', nombre: 'Tortilla' });
-    const r = await m.investigarReceta({ proyecto_id: 'p1', nombre_receta: 'Tortilla' });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.existe_en_proyecto, true);
-    assert.ok(r.data.receta);
-    await m.onUnload();
-  });
-
-  await testAsync('investigarReceta: receta inexistente → 200 con instruccion_para_llm', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiateWithStore(mocks);
-
-    const r = await m.investigarReceta({ proyecto_id: 'p1', nombre_receta: 'Sushi' });
-    assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.existe_en_proyecto, false);
-    assert.ok(typeof r.data.instruccion_para_llm === 'string' && r.data.instruccion_para_llm.length > 0);
-    await m.onUnload();
-  });
-
-  // ==========================================
-  // Group 6: _calcIncompleta
-  // ==========================================
-
-  await testAsync('_calcIncompleta: receta completa → incompleta=false, campos_pendientes=[]', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    const receta = { ingredientes: [{ nombre: 'x' }], porciones: 2, instrucciones: ['paso 1'] };
-    m._calcIncompleta(receta);
-    assert.strictEqual(receta.incompleta, false);
-    assert.deepStrictEqual(receta.campos_pendientes, []);
-    await m.onUnload();
-  });
-
-  await testAsync('_calcIncompleta: todos los campos vacíos → incompleta=true con 3 pendientes', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    const receta = { ingredientes: [], porciones: null, instrucciones: [] };
-    m._calcIncompleta(receta);
-    assert.strictEqual(receta.incompleta, true);
-    assert.ok(receta.campos_pendientes.includes('ingredientes'));
-    assert.ok(receta.campos_pendientes.includes('porciones'));
-    assert.ok(receta.campos_pendientes.includes('instrucciones'));
-    await m.onUnload();
-  });
-
-  // ==========================================
-  // Group 7: Helpers POC2 internos
-  // ==========================================
-
-  await testAsync('_errorResponse construye shape canonico { status, error: { code, message, details? } }', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    const r1 = m._errorResponse(400, 'INVALID_INPUT', 'msg', { field: 'x' });
-    assert.deepStrictEqual(r1, { status: 400, error: { code: 'INVALID_INPUT', message: 'msg', details: { field: 'x' } } });
-    const r2 = m._errorResponse(500, 'UNKNOWN_ERROR', 'oops');
-    assert.deepStrictEqual(r2, { status: 500, error: { code: 'UNKNOWN_ERROR', message: 'oops' } });
-    assert.ok(!('details' in r2.error));
-    await m.onUnload();
-  });
-
-  await testAsync('_classifyHandlerError mapea mensajes a codigos canonicos', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    assert.strictEqual(m._classifyHandlerError(new Error('not found')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('no encontrado')), 'RESOURCE_NOT_FOUND');
-    assert.strictEqual(m._classifyHandlerError(new Error('field is required')), 'INVALID_INPUT');
-    assert.strictEqual(m._classifyHandlerError(new Error('something exploded')), 'UNKNOWN_ERROR');
-    assert.strictEqual(m._classifyHandlerError(new Error('request timeout')), 'UPSTREAM_TIMEOUT');
-    await m.onUnload();
-  });
-
-  await testAsync('_publicarEvento hereda correlation_id si se pasa, genera uno nuevo si no', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    mocks.published.length = 0;
-    await m._publicarEvento('test.event', { foo: 1 }, { correlation_id: 'cid-inherit' });
-    await m._publicarEvento('test.event', { bar: 2 });
-    const evs = publishedOf(mocks, 'test.event');
-    assert.strictEqual(evs.length, 2);
-    assert.strictEqual(evs[0].correlation_id, 'cid-inherit');
-    assert.notStrictEqual(evs[1].correlation_id, 'cid-inherit');
-    assert.ok(typeof evs[1].correlation_id === 'string' && evs[1].correlation_id.length > 0);
-    assert.ok(evs[0].timestamp && evs[1].timestamp);
-    await m.onUnload();
-  });
-
-  await testAsync('_handleHandlerError mapea status segun code y registra metric', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    const err = Object.assign(new Error('not found'), { _code: 'RESOURCE_NOT_FOUND', _details: { e: 1 } });
-    const r = m._handleHandlerError('test.failed', err, 'kind');
-    assert.strictEqual(r.status, 404);
-    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
-    assert.deepStrictEqual(r.error.details, { e: 1 });
-    const incremented = mocks.metricsCalls.filter(c => c[0] === 'increment' && c[1] === 'recetas.error');
-    assert.ok(incremented.length > 0);
-    await m.onUnload();
-  });
-
-  console.log('\nTodos los tests pasaron.');
-})();
+  assert.strictEqual(r.status, 200);
+
+  const ev = mocks.published.find(([n]) => n === 'ingrediente.precio.actualizado');
+  assert.ok(ev);
+  if (!validatePrecioActual(ev[1])) {
+    const msg = validatePrecioActual.errors.map(e => `${e.instancePath} ${e.message}`).join('; ');
+    throw new Error(`precio no cumple: ${msg}\n${JSON.stringify(ev[1], null, 2)}`);
+  }
+  assert.strictEqual(ev[1].correlation_id, 'corr-pr-1');
+  assert.strictEqual(ev[1].nombre, 'tomate');
+  assert.strictEqual(ev[1].precio_mercado, 2.5);
+  assert.strictEqual(ev[1].unidad, 'kg');
+});
+
+test('Group 6 / actualizar_precio existente actualiza no duplica', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  await mod.onActualizarPrecio({ project_id: 'p1', nombre: 'tomate', precio_mercado: 2.0, unidad: 'kg' });
+  await mod.onActualizarPrecio({ project_id: 'p1', nombre: 'tomate', precio_mercado: 2.5, unidad: 'kg' });
+  const list = await mod.onIngredientes({ project_id: 'p1' });
+  assert.strictEqual(list.data.total, 1);
+  assert.strictEqual(list.data.ingredientes[0].precio_mercado, 2.5);
+});
+
+test('Group 6 / analizar con todos los precios devuelve coste_es_real=true', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  await mod.onActualizarPrecio({ project_id: 'p1', nombre: 'tomate', precio_mercado: 2.5, unidad: 'kg' });
+  await mod.onActualizarPrecio({ project_id: 'p1', nombre: 'aceite', precio_mercado: 8.0, unidad: 'l' });
+  const c = await mod.onCrear(baseCrear);
+  const r = await mod.onAnalizar({ project_id: 'p1', receta_id: c.data.receta_id });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.coste_es_real, true);
+  // 1*2.5 + 0.1*8 = 3.3 ; / 4 porciones = 0.825
+  assert.ok(Math.abs(r.data.coste_total - 3.3) < 1e-9);
+  assert.ok(Math.abs(r.data.coste_por_porcion - 0.825) < 1e-9);
+});
+
+test('Group 6 / analizar receta incompleta devuelve 422 PRECONDITION_FAILED', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const c = await mod.onCrear({ project_id: 'p1', nombre: 'Sin datos' });
+  const r = await mod.onAnalizar({ project_id: 'p1', receta_id: c.data.receta_id });
+  assert.strictEqual(r.status, 422);
+  assert.strictEqual(r.error.code, 'PRECONDITION_FAILED');
+  assert.strictEqual(r.error.details.kind, 'incomplete_recipe');
+});
+
+test('Group 6 / migracion lectura: estado activa->en_servicio + timestamps ms->ISO', async () => {
+  const legacyStore = {
+    _version: '3.0.0',
+    _updated_at: 1714000000000,  // epoch ms legacy
+    recetas: [{
+      id: 'r1',
+      nombre: 'Receta legacy',
+      descripcion: '',
+      ingredientes: [{ nombre: 'sal', cantidad: 0.01, unidad: 'kg' }],
+      instrucciones: ['Cocer'],
+      porciones: 2,
+      tiempo_min: 30,
+      dificultad: 1,
+      categorias: [],
+      etiquetas: [],
+      fuente: 'manual',
+      notas: '',
+      version: 1,
+      history: [],
+      incompleta: false,
+      campos_pendientes: [],
+      estado: 'activa',                  // legacy
+      created_at: 1714000000000,         // legacy epoch ms
+      updated_at: 1714000000000
+    }],
+    ingredientes_catalogo: [{
+      nombre: 'sal', categoria: null, unidad: 'kg', precio_mercado: 0.5,
+      fuente: 'manual', created_at: 1714000000000, updated_at: 1714000000000
+    }]
+  };
+  const { mod } = await setupModule({ projectId: 'p1', preexistingStore: legacyStore });
+
+  const r = await mod.onObtener({ project_id: 'p1', receta_id: 'r1' });
+  assert.strictEqual(r.data.estado_operativo, 'en_servicio');
+  assert.ok(typeof r.data.created_at === 'string' && r.data.created_at.match(/^\d{4}-\d{2}-\d{2}T/));
+  assert.ok(!('estado' in r.data), 'estado legacy debe haberse eliminado');
+
+  const list = await mod.onIngredientes({ project_id: 'p1' });
+  assert.ok(typeof list.data.ingredientes[0].created_at === 'string');
+});
+
+test('Group 6 / listar default solo en_servicio (no archivadas)', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  const c1 = await mod.onCrear({ ...baseCrear, nombre: 'Receta A' });
+  await mod.onCrear({ ...baseCrear, nombre: 'Receta B' });
+  await mod.onEliminar({ project_id: 'p1', receta_id: c1.data.receta_id });
+  const r = await mod.onListar({ project_id: 'p1' });
+  assert.strictEqual(r.data.total, 1);
+  assert.strictEqual(r.data.recetas[0].nombre, 'Receta B');
+});
+
+test('Group 6 / buscar texto matchea nombre, descripcion e ingredientes', async () => {
+  const { mod } = await setupModule({ projectId: 'p1' });
+  await mod.onCrear({ ...baseCrear, nombre: 'Tomate confitado' });
+  await mod.onCrear({ ...baseCrear, nombre: 'Pasta carbonara',
+                       ingredientes: [{ nombre: 'huevo', cantidad: 2, unidad: 'ud' }] });
+  const r = await mod.onBuscar({ project_id: 'p1', texto: 'huevo' });
+  assert.strictEqual(r.data.total, 1);
+  assert.strictEqual(r.data.resultados[0].nombre, 'Pasta carbonara');
+});
+
+// ============================================================
+// Group 7: Helpers POC2 + algoritmos
+// ============================================================
+
+test('Group 7 / _publicarEvento propaga correlation_id + anade project_id/user_id/timestamp', async () => {
+  const { mod, mocks } = await setupModule();
+  await mod._publicarEvento('test.ev', { project_id: 'p1', user_id: 'u1' }, { correlation_id: 'cc' });
+  const ev = mocks.published.find(([n]) => n === 'test.ev');
+  assert.strictEqual(ev[1].correlation_id, 'cc');
+  assert.strictEqual(ev[1].project_id, 'p1');
+  assert.strictEqual(ev[1].user_id, 'u1');
+  assert.ok(ev[1].timestamp.match(/^\d{4}-\d{2}-\d{2}T/));
+});
+
+test('Group 7 / _normalizeIngredientes acepta array de objetos', async () => {
+  const { mod } = await setupModule();
+  const r = mod._normalizeIngredientes([
+    { nombre: 'tomate', cantidad: 1, unidad: 'kg' },
+    { nombre: '', cantidad: 0, unidad: '' }  // descartado por nombre vacio
+  ]);
+  assert.strictEqual(r.length, 1);
+  assert.strictEqual(r[0].nombre, 'tomate');
+});
+
+test('Group 7 / _normalizeIngredientes parsea string libre con saltos/coma/punto-coma', async () => {
+  const { mod } = await setupModule();
+  const r = mod._normalizeIngredientes('tomate\naceite, sal; pimienta');
+  assert.deepStrictEqual(r.map(i => i.nombre), ['tomate', 'aceite', 'sal', 'pimienta']);
+});
+
+test('Group 7 / _calcIncompleta marca pendientes si faltan ingredientes/porciones/instrucciones', async () => {
+  const { mod } = await setupModule();
+  const r = { ingredientes: [], porciones: null, instrucciones: [] };
+  mod._calcIncompleta(r);
+  assert.strictEqual(r.incompleta, true);
+  assert.deepStrictEqual(r.campos_pendientes.sort(), ['ingredientes', 'instrucciones', 'porciones']);
+});
+
+test('Group 7 / _calcIncompleta sin campos_pendientes marca incompleta=false', async () => {
+  const { mod } = await setupModule();
+  const r = { ingredientes: [{ nombre: 'x', cantidad: 1, unidad: 'kg' }], porciones: 4, instrucciones: ['paso'] };
+  mod._calcIncompleta(r);
+  assert.strictEqual(r.incompleta, false);
+  assert.deepStrictEqual(r.campos_pendientes, []);
+});
+
+test('Group 7 / _findRecetaByRefBuilder busca por id, nombre exacto, nombre parcial', async () => {
+  const { mod } = await setupModule();
+  const store = { recetas: [
+    { id: 'abc-123', nombre: 'Tomate confitado' },
+    { id: 'def-456', nombre: 'Pasta carbonara' }
+  ] };
+  const find = mod._findRecetaByRefBuilder(store);
+  assert.strictEqual(find('abc-123').id, 'abc-123');
+  assert.strictEqual(find('Tomate confitado').id, 'abc-123');
+  assert.strictEqual(find('carbonara').id, 'def-456');
+  assert.strictEqual(find('no-existe'), null);
+});
+
+test('Group 7 / _handleHandlerError respeta err._code y mapea status', async () => {
+  const { mod } = await setupModule();
+  const r1 = mod._handleHandlerError('test', Object.assign(new Error('x'), { _code: 'RESOURCE_NOT_FOUND' }), 'tool');
+  assert.strictEqual(r1.status, 404);
+  const r2 = mod._handleHandlerError('test', Object.assign(new Error('x'), { _code: 'UPSTREAM_TIMEOUT' }), 'tool');
+  assert.strictEqual(r2.status, 504);
+});
+
+runTests();

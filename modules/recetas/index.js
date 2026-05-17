@@ -1,827 +1,992 @@
 /**
- * recetas v3.0.0 — Modulo del dominio recetas, conforme al contrato
- * modulo-clase-robusta v1.0.0 (piloto OOP en codigo de produccion).
+ * Modulo `recetas` v4.0.0
  *
- * Persistencia: JSON-per-project en `<base_path>/recetas.json`. Lecturas/
- * escrituras via filesystem module por el bus (atomicas end-to-end).
+ * Aggregate root del subsistema-recetario. Dueno del dato canonico de
+ * receta + catalogo de ingredientes. Persistencia json-per-project via bus
+ * (data/projects/{slug}/recetas.json). Cero SQL, cero schema migrations.
  *
- * Bus API: 5 subscribers de eventos canonicos + 13 onToolXxx (dispatch a
- * los handlers de tool).
- * Tools: 13 operaciones del dominio (crear, listar, ... investigarReceta).
- * HTTP / UI API: 13 handleXxx que adaptan la firma del bus a la firma HTTP.
- * Dominio: helpers de normalizacion (ingredientes, instrucciones),
- * busqueda por ref (id/nombre exacto/parcial), store layer (_withStore,
- * _readOnly, _loadStore, _saveStore) con cola por proyecto para serializar
- * writes.
+ * Cumple los 24 contratos transversales:
+ *   - class RecetasModule extends BaseModule.
+ *   - Override _publicarEvento para anadir project_id + user_id canonicos.
+ *   - Toda respuesta { status, data | error: { code, message, details? } }.
+ *   - Persistencia json-per-project via bus (fs.read.request/fs.write.request).
+ *   - 5 publishes canonicos del subsistema con AJV strict:
+ *     receta.creada, receta.actualizada, receta.eliminada,
+ *     receta.estado.actualizada, ingrediente.precio.actualizado.
  *
- * Constructor declarativo (toda la state al constructor, asignacion en
- * onLoad solo de dependencias del context). onUnload limpia timers y
- * caches. Helpers POC2 heredados de BaseModule excepto `_handleHandlerError`
- * (override por namespace de metrica `recetas.error`) y `_publicarEvento`
- * (override por default project_id + try/catch silencioso).
+ * Cambios v3.0.0 -> v4.0.0:
+ *   - Rename interno proyecto_id -> project_id (77 ocurrencias). Eliminado
+ *     _toolDispatch y _uiAdapt (no mas traduccion de borde).
+ *   - Timestamps de storage a ISO 8601 (no mas Date.now() epoch ms).
+ *     Helper _migrateStoreInPlace migra storage legacy en lectura.
+ *   - Publishes incluyen user_id (campo canonico obligatorio del subsistema).
+ *   - receta.creada incluye version y estado_operativo (campos canonicos).
+ *   - Implementacion de receta.estado.actualizada (separado de receta.eliminada).
+ *     Cuando archive emite ambos eventos coordinadamente.
+ *   - Estado 'activa' legacy -> 'en_servicio' canonico (con migracion lectura).
+ *   - Constants ESTADOS al top + validacion de transiciones de estado.
+ *   - Nueva tool recetas.cambiar_estado (transiciones explicitas con validacion).
+ *   - Eliminados ui_handlers (13 workspace_module legacy — frontend-recetario
+ *     los reemplaza componiendo tools).
+ *   - Eliminado override _classifyHandlerError (heredado de BaseModule;
+ *     asignar err._code en throws).
+ *   - Eliminados __tests__/smoke.js, context.json, prompt.json, README.md
+ *     (legacy NLU pre-LLM + docs externas).
+ *   - Handlers renombrados onToolXxx -> onXxx para consistencia con los 4
+ *     modulos nuevos del subsistema.
  */
 
 'use strict';
 
-const crypto = require('crypto');
+const crypto     = require('crypto');
 const BaseModule = require('../_shared/base-module');
 
-// ============================================================
-// Tools que el LLM puede invocar
-// ============================================================
-const TOOL_HANDLERS = {
-  'recetas.crear':            'crear',
-  'recetas.listar':           'listar',
-  'recetas.obtener':          'obtener',
-  'recetas.buscar':           'buscar',
-  'recetas.actualizar':       'actualizar',
-  'recetas.historial':        'historial',
-  'recetas.revertir':         'revertir',
-  'recetas.eliminar':         'eliminar',
-  'recetas.estadisticas':     'estadisticas',
-  'recetas.ingredientes':     'ingredientes',
-  'recetas.actualizar_precio':'actualizarPrecio',
-  'recetas.analizar':         'analizar',
-  'recetas.investigar_receta':'investigarReceta'
-};
-
-// Campos sin los cuales una receta se considera incompleta
-const CAMPOS_REQUERIDOS_PARA_COMPLETA = ['ingredientes', 'porciones', 'instrucciones'];
-
 const DEFAULT_PROJECT_ID = 'default';
+const DEFAULT_USER_ID    = 'default';
+
+const ESTADOS = Object.freeze({
+  BORRADOR:    'borrador',
+  EN_SERVICIO: 'en_servicio',
+  ARCHIVADA:   'archivada'
+});
+const ESTADOS_VALIDOS = new Set(Object.values(ESTADOS));
+
+// Transiciones canonicas validas (de -> a). archivada es terminal salvo via revertir.
+const TRANSICIONES_VALIDAS = new Map([
+  [ESTADOS.BORRADOR,    new Set([ESTADOS.EN_SERVICIO, ESTADOS.ARCHIVADA])],
+  [ESTADOS.EN_SERVICIO, new Set([ESTADOS.BORRADOR, ESTADOS.ARCHIVADA])],
+  [ESTADOS.ARCHIVADA,   new Set()]
+]);
+
+const FUENTES_RECETA      = new Set(['manual', 'investigada', 'importada']);
+const FUENTES_PRECIO      = new Set(['manual', 'factura', 'investigada', 'scraper']);
+const CAMPOS_PARA_COMPLETA_DEFAULT = ['ingredientes', 'porciones', 'instrucciones'];
 
 class RecetasModule extends BaseModule {
   constructor() {
     super();
-    this.name = 'recetas';
-    this.version = '3.0.0';
-    // project_id → base_path absoluto (cache, poblado por project.activated)
+    this.name    = 'recetas';
+    this.version = '4.0.0';
+
+    this.config = {
+      data_file_pattern:        'data/projects/{slug}/recetas.json',
+      campos_para_completa:     CAMPOS_PARA_COMPLETA_DEFAULT,
+      project_get_timeout_ms:   5000,
+      fs_request_timeout_ms:    8000,
+      default_listar_limit:     100,
+      default_buscar_limit:     50
+    };
+
     this.projectBasePaths = new Map();
-    // project_id → Promise (cola para serializar writes)
-    this.writeQueues = new Map();
-    // request_id → { resolve, reject, timer } para fs.* y project.*
-    this.pendingFs = new Map();
-    this.pendingProject = new Map();
+    this.pendingProject   = new Map();
+    this.pendingFs        = new Map();
+    this.writeQueues      = new Map();
   }
 
   // ============================================================
   // Lifecycle
   // ============================================================
 
-  async onLoad(context) {
-    this.logger = context.logger;
-    this.eventBus = context.eventBus;
-    this.metrics = context.metrics;
-    this.logger.info('recetas.loaded', { storage: 'json-per-project' });
+  async onLoad(core) {
+    this.logger   = core.logger;
+    this.metrics  = core.metrics;
+    this.eventBus = core.eventBus;
+
+    if (core.config?.[this.name]) {
+      this.config = { ...this.config, ...core.config[this.name] };
+    }
+
+    this.logger.info('recetas.loaded', {
+      module:  this.name,
+      version: this.version,
+      storage: 'json-per-project'
+    });
   }
 
   async onUnload() {
-    for (const { timer } of this.pendingFs.values()) clearTimeout(timer);
     for (const { timer } of this.pendingProject.values()) clearTimeout(timer);
-    this.pendingFs.clear();
+    for (const { timer } of this.pendingFs.values())      clearTimeout(timer);
+
     this.pendingProject.clear();
+    this.pendingFs.clear();
     this.writeQueues.clear();
     this.projectBasePaths.clear();
+
+    this.logger?.info('recetas.unloaded', { module: this.name });
   }
 
   // ============================================================
-  // Bus API — subscribers wireados por module.json.events.subscribes.
-  // Tres familias:
-  //   1. Project lifecycle (onProjectActivated/Deactivated/GetResponse)
-  //   2. Filesystem responses (onFsRead/WriteResponse) correlacionadas
-  //      por request_id con this.pendingFs
-  //   3. onToolXxx — entrada de cada tool del modulo (13). Cada una
-  //      delega en this._toolDispatch que valida y llama al handler real.
+  // Bus subscribers — lifecycle de project + fs responses
   // ============================================================
 
   onProjectActivated(event) {
-    const data = event.data || event;
+    const data = event?.data || event || {};
     const id = data.project_id || data.id;
-    // base_path canónico viene en el payload top-level (project-identity.contract P1/D1).
-    // Fallback a data.project.base_path por compat con publishers legacy.
     const basePath = data.base_path || data.project?.base_path;
-    if (id && basePath) this.projectBasePaths.set(id, basePath);
+    if (id && basePath) {
+      this.projectBasePaths.set(id, basePath);
+      this.logger?.debug('recetas.project.cached', { project_id: id, base_path: basePath });
+    }
   }
 
-  onProjectDeactivated() { /* no-op; mantenemos cache */ }
+  onProjectDeactivated() {
+    // No-op (cache permanente; no hay manager que cerrar).
+  }
 
   onProjectGetResponse(event) {
-    const { request_id, project, error } = event.data || event;
-    const p = this.pendingProject.get(request_id);
-    if (!p) return;
-    clearTimeout(p.timer); this.pendingProject.delete(request_id);
-    if (error || !project) return p.reject(new Error(error || 'Project not found'));
-    if (!project.base_path) return p.reject(new Error('project.base_path missing in response'));
-    p.resolve(project.base_path);
+    const data = event?.data || event || {};
+    const request_id = data.request_id;
+    if (!request_id) return;
+    const pending = this.pendingProject.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timer);
+    this.pendingProject.delete(request_id);
+
+    if (data.error) {
+      pending.reject(Object.assign(new Error(data.error.message || 'project.get.failed'), { _code: data.error.code || 'UPSTREAM_INVALID_RESPONSE' }));
+      return;
+    }
+    const basePath = data.base_path || data.project?.base_path;
+    if (!basePath) {
+      pending.reject(Object.assign(new Error('project.get response sin base_path'), { _code: 'UPSTREAM_INVALID_RESPONSE' }));
+      return;
+    }
+    pending.resolve(basePath);
   }
 
   onFsReadResponse(event) {
-    const { request_id, content, status, error } = event.data || event;
-    const p = this.pendingFs.get(request_id);
-    if (!p) return;
-    clearTimeout(p.timer); this.pendingFs.delete(request_id);
-    // filesystem moderno usa { error: { code, message, details } } sin status numerico.
-    // RESOURCE_NOT_FOUND equivale a 404: archivo no existe → resolvemos null.
-    if (status === 404 || error?.code === 'RESOURCE_NOT_FOUND') return p.resolve(null);
-    if (error || status >= 400) {
-      const msg = typeof error === 'object' && error !== null
-        ? (error.message || JSON.stringify(error))
-        : (error || `fs.read status ${status}`);
-      return p.reject(new Error(msg));
+    const data = event?.data || event || {};
+    const request_id = data.request_id;
+    if (!request_id) return;
+    const pending = this.pendingFs.get(request_id);
+    if (!pending) return;
+
+    clearTimeout(pending.timer);
+    this.pendingFs.delete(request_id);
+
+    if (data.error) {
+      if (data.error.code === 'RESOURCE_NOT_FOUND' || data.error.kind === 'enoent') {
+        pending.resolve(null);
+        return;
+      }
+      pending.reject(Object.assign(new Error(data.error.message || 'fs.read.failed'), { _code: data.error.code || 'UPSTREAM_INVALID_RESPONSE' }));
+      return;
     }
-    p.resolve(content);
+    pending.resolve(data.content ?? null);
   }
 
   onFsWriteResponse(event) {
-    const { request_id, error, status } = event.data || event;
-    const p = this.pendingFs.get(request_id);
-    if (!p) return;
-    clearTimeout(p.timer); this.pendingFs.delete(request_id);
-    if (error || status >= 400) {
-      const msg = typeof error === 'object' && error !== null
-        ? (error.message || JSON.stringify(error))
-        : (error || `fs.write status ${status}`);
-      return p.reject(new Error(msg));
-    }
-    p.resolve(true);
-  }
+    const data = event?.data || event || {};
+    const request_id = data.request_id;
+    if (!request_id) return;
+    const pending = this.pendingFs.get(request_id);
+    if (!pending) return;
 
-  // Tool entry points (loader engancha estos via module.json.events.subscribes)
-  async onToolCrear(e)             { return this._toolDispatch('recetas.crear', e); }
-  async onToolListar(e)            { return this._toolDispatch('recetas.listar', e); }
-  async onToolObtener(e)           { return this._toolDispatch('recetas.obtener', e); }
-  async onToolBuscar(e)            { return this._toolDispatch('recetas.buscar', e); }
-  async onToolActualizar(e)        { return this._toolDispatch('recetas.actualizar', e); }
-  async onToolHistorial(e)         { return this._toolDispatch('recetas.historial', e); }
-  async onToolRevertir(e)          { return this._toolDispatch('recetas.revertir', e); }
-  async onToolEliminar(e)          { return this._toolDispatch('recetas.eliminar', e); }
-  async onToolEstadisticas(e)      { return this._toolDispatch('recetas.estadisticas', e); }
-  async onToolIngredientes(e)      { return this._toolDispatch('recetas.ingredientes', e); }
-  async onToolActualizarPrecio(e)  { return this._toolDispatch('recetas.actualizar_precio', e); }
-  async onToolAnalizar(e)          { return this._toolDispatch('recetas.analizar', e); }
-  async onToolInvestigarReceta(e)  { return this._toolDispatch('recetas.investigar_receta', e); }
+    clearTimeout(pending.timer);
+    this.pendingFs.delete(request_id);
+
+    if (data.error) {
+      pending.reject(Object.assign(new Error(data.error.message || 'fs.write.failed'), { _code: data.error.code || 'UPSTREAM_INVALID_RESPONSE' }));
+      return;
+    }
+    pending.resolve(true);
+  }
 
   // ============================================================
-  // HTTP / UI API — handleXxx adapta firma HTTP a la firma del tool.
-  // Wireados por module.json.apis_http o ui_handlers.
+  // Tools — recetas (CRUD + ciclo de vida)
   // ============================================================
 
-  async handleCrear(req)            { return this._uiAdapt('crear', req); }
-  async handleListar(req)           { return this._uiAdapt('listar', req); }
-  async handleObtener(req)          { return this._uiAdapt('obtener', req); }
-  async handleBuscar(req)           { return this._uiAdapt('buscar', req); }
-  async handleActualizar(req)       { return this._uiAdapt('actualizar', req); }
-  async handleHistorial(req)        { return this._uiAdapt('historial', req); }
-  async handleRevertir(req)         { return this._uiAdapt('revertir', req); }
-  async handleEliminar(req)         { return this._uiAdapt('eliminar', req); }
-  async handleEstadisticas(req)     { return this._uiAdapt('estadisticas', req); }
-  async handleIngredientes(req)     { return this._uiAdapt('ingredientes', req); }
-  async handleActualizarPrecio(req) { return this._uiAdapt('actualizarPrecio', req); }
-  async handleAnalizar(req)         { return this._uiAdapt('analizar', req); }
-  async handleInvestigarReceta(req) { return this._uiAdapt('investigarReceta', req); }
+  async onCrear(params = {}) {
+    const { project_id } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
 
-  // ============================================================
-  // Tools — implementacion de cada operacion del dominio.
-  // Cada una valida sus parametros, opera sobre el store JSON via
-  // _withStore (writes serializadas por proyecto) o _readOnly (lecturas
-  // paralelas), publica el evento de dominio correspondiente y devuelve
-  // shape canonico { status, data | error }.
-  // ============================================================
-
-  async crear(params) {
-    const { proyecto_id, nombre } = params;
-    if (!proyecto_id) {
-      this.logger.warn('recetas.crear.validation', { field: 'proyecto_id' });
-      this.metrics?.increment('recetas.error', { kind: 'crear', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'proyecto_id requerido');
+    if (!params.nombre || typeof params.nombre !== 'string' || params.nombre.trim() === '') {
+      return this._errorResponse(400, 'INVALID_INPUT', 'nombre es obligatorio', { field: 'nombre' });
     }
-    if (!nombre || !nombre.trim()) {
-      this.logger.warn('recetas.crear.validation', { field: 'nombre' });
-      this.metrics?.increment('recetas.error', { kind: 'crear', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'nombre requerido');
+    if (params.fuente !== undefined && !FUENTES_RECETA.has(params.fuente)) {
+      return this._errorResponse(400, 'INVALID_INPUT', `fuente debe ser una de: ${Array.from(FUENTES_RECETA).join(', ')}`,
+        { field: 'fuente', allowed: Array.from(FUENTES_RECETA) });
     }
 
-    const ingredientes = this._normalizeIngredientes(params.ingredientes);
-    const instrucciones = this._normalizeInstrucciones(params.instrucciones);
-
-    return this._withStore(proyecto_id, async (store) => {
-      const dup = store.recetas.find(r => r.nombre.toLowerCase() === nombre.toLowerCase().trim() && r.estado === 'activa');
-      if (dup) {
-        this.logger.warn('recetas.crear.duplicate', { nombre, proyecto_id });
-        this.metrics?.increment('recetas.error', { kind: 'crear', code: 'ALREADY_EXISTS' });
-        return this._errorResponse(409, 'ALREADY_EXISTS', 'Ya existe una receta activa con ese nombre', { existing_id: dup.id });
-      }
-
-      const id = crypto.randomUUID();
-      const now = Date.now();
-      const receta = {
-        id, nombre: nombre.trim(),
-        descripcion: params.descripcion || null,
-        ingredientes, instrucciones,
-        porciones: params.porciones ?? null,
-        tiempo_min: params.tiempo_min ?? params.tiempo_preparacion ?? null,
-        dificultad: params.dificultad ?? null,
-        categorias: Array.isArray(params.categorias) ? params.categorias : [],
-        etiquetas: Array.isArray(params.etiquetas) ? params.etiquetas : [],
-        estado: 'activa',
-        fuente: params.fuente || 'manual',
-        notas: params.notas || null,
-        created_at: now, updated_at: now,
-        version: 1, history: []
-      };
-      this._calcIncompleta(receta);
-      store.recetas.push(receta);
-
-      await this._publicarEvento('receta.creada', { project_id: proyecto_id, id, nombre: receta.nombre }, params);
-      this.metrics?.increment('recetas.receta.creada', { project_id: proyecto_id });
-
-      return {
-        status: 201,
-        data: {
-          id, nombre: receta.nombre, status: 'creada',
-          incompleta: receta.incompleta, campos_pendientes: receta.campos_pendientes,
-          ingredientes_formateados: this._formatIngredientesText(ingredientes),
-          version: 1
+    try {
+      return await this._withStore(project_id, async (store) => {
+        const nombreTrim = params.nombre.trim();
+        const dup = store.recetas.find(r => r.nombre.toLowerCase() === nombreTrim.toLowerCase());
+        if (dup) {
+          return this._errorResponse(409, 'ALREADY_EXISTS', `Ya existe una receta con nombre ${nombreTrim}`,
+            { entity_type: 'recipe', entity_name: nombreTrim, existing_id: dup.id });
         }
-      };
-    });
-  }
 
-  async listar(params) {
-    const { proyecto_id } = params;
-    if (!proyecto_id) {
-      this.logger.warn('recetas.listar.validation', { field: 'proyecto_id' });
-      this.metrics?.increment('recetas.error', { kind: 'listar', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'proyecto_id requerido');
-    }
-    return this._readOnly(proyecto_id, (store) => {
-      let r = store.recetas;
-      if (params.estado) r = r.filter(x => x.estado === params.estado);
-      else r = r.filter(x => x.estado !== 'archivada');
-      if (params.solo_incompletas) r = r.filter(x => x.incompleta);
-      const limit = params.limit ?? 100;
-      const items = r
-        .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
-        .slice(0, limit)
-        .map(x => ({ id: x.id, nombre: x.nombre, porciones: x.porciones, dificultad: x.dificultad,
-                     incompleta: x.incompleta, campos_pendientes: x.campos_pendientes,
-                     estado: x.estado, version: x.version, updated_at: x.updated_at }));
-      return { status: 200, data: { total: items.length, recetas: items } };
-    });
-  }
+        const now = new Date().toISOString();
+        const ingredientes  = this._normalizeIngredientes(params.ingredientes);
+        const instrucciones = this._normalizeInstrucciones(params.instrucciones);
 
-  async obtener(params) {
-    const { proyecto_id, receta_id, nombre } = params;
-    if (!proyecto_id) {
-      this.logger.warn('recetas.obtener.validation', { field: 'proyecto_id' });
-      this.metrics?.increment('recetas.error', { kind: 'obtener', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'proyecto_id requerido');
-    }
-    return this._readOnly(proyecto_id, (store) => {
-      const find = this._findRecetaByRefBuilder(store);
-      const r = find(receta_id || nombre);
-      if (!r) {
-        this.logger.warn('recetas.obtener.not_found', { ref: receta_id || nombre, proyecto_id });
-        this.metrics?.increment('recetas.error', { kind: 'obtener', code: 'RESOURCE_NOT_FOUND' });
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Receta no encontrada', { ref: receta_id || nombre });
-      }
-      const { history, ...rest } = r;
-      return {
-        status: 200,
-        data: { ...rest, ingredientes_formateados: this._formatIngredientesText(r.ingredientes), versiones_anteriores: history.length }
-      };
-    });
-  }
+        const receta = {
+          id:           crypto.randomUUID(),
+          nombre:       nombreTrim,
+          descripcion:  typeof params.descripcion === 'string' ? params.descripcion : '',
+          ingredientes,
+          instrucciones,
+          porciones:    typeof params.porciones === 'number' && params.porciones > 0 ? params.porciones : null,
+          tiempo_min:   typeof params.tiempo_min === 'number' && params.tiempo_min >= 0 ? params.tiempo_min : null,
+          dificultad:   typeof params.dificultad === 'number' ? params.dificultad : null,
+          categorias:   Array.isArray(params.categorias) ? params.categorias.map(String) : [],
+          etiquetas:    Array.isArray(params.etiquetas) ? params.etiquetas.map(String) : [],
+          fuente:       FUENTES_RECETA.has(params.fuente) ? params.fuente : 'manual',
+          notas:        typeof params.notas === 'string' ? params.notas : '',
+          version:      1,
+          history:      [],
+          incompleta:   false,
+          campos_pendientes: [],
+          estado_operativo:  ESTADOS.EN_SERVICIO,
+          created_at:   now,
+          updated_at:   now
+        };
 
-  async buscar(params) {
-    const { proyecto_id } = params;
-    if (!proyecto_id) {
-      this.logger.warn('recetas.buscar.validation', { field: 'proyecto_id' });
-      this.metrics?.increment('recetas.error', { kind: 'buscar', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'proyecto_id requerido');
-    }
-    return this._readOnly(proyecto_id, (store) => {
-      let r = store.recetas.filter(x => x.estado === 'activa');
-      if (params.texto) {
-        const t = params.texto.toLowerCase();
-        r = r.filter(x => x.nombre.toLowerCase().includes(t)
-                       || (x.descripcion || '').toLowerCase().includes(t)
-                       || x.ingredientes.some(i => (i.nombre || '').toLowerCase().includes(t)));
-      }
-      if (params.ingrediente) {
-        const t = params.ingrediente.toLowerCase();
-        r = r.filter(x => x.ingredientes.some(i => (i.nombre || '').toLowerCase().includes(t)));
-      }
-      if (params.categoria) r = r.filter(x => (x.categorias || []).some(c => c.toLowerCase() === params.categoria.toLowerCase()));
-      if (params.etiqueta)   r = r.filter(x => (x.etiquetas   || []).some(e => e.toLowerCase() === params.etiqueta.toLowerCase()));
-      if (params.dificultad_max != null) r = r.filter(x => x.dificultad != null && x.dificultad <= params.dificultad_max);
-      if (params.dificultad_min != null) r = r.filter(x => x.dificultad != null && x.dificultad >= params.dificultad_min);
-      if (params.tiempo_max != null)     r = r.filter(x => x.tiempo_min != null && x.tiempo_min <= params.tiempo_max);
-      if (params.porciones != null)      r = r.filter(x => x.porciones === params.porciones);
-      const limit = params.limit ?? 50;
-      const items = r.slice(0, limit).map(x => ({
-        id: x.id, nombre: x.nombre, porciones: x.porciones, tiempo_min: x.tiempo_min,
-        dificultad: x.dificultad, categorias: x.categorias, etiquetas: x.etiquetas
-      }));
-      return { status: 200, data: { total: items.length, recetas: items } };
-    });
-  }
+        this._calcIncompleta(receta);
+        if (receta.incompleta) receta.estado_operativo = ESTADOS.BORRADOR;
 
-  async actualizar(params) {
-    const { proyecto_id, receta_id, cambios = {} } = params;
-    if (!receta_id) {
-      this.logger.warn('recetas.actualizar.validation', { field: 'receta_id' });
-      this.metrics?.increment('recetas.error', { kind: 'actualizar', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'receta_id requerido');
-    }
+        store.recetas.push(receta);
 
-    return this._withStore(proyecto_id, async (store) => {
-      const find = this._findRecetaByRefBuilder(store);
-      const r = find(receta_id);
-      if (!r) {
-        this.logger.warn('recetas.actualizar.not_found', { receta_id, proyecto_id });
-        this.metrics?.increment('recetas.error', { kind: 'actualizar', code: 'RESOURCE_NOT_FOUND' });
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Receta no encontrada', { ref: receta_id });
-      }
+        const payload = {
+          project_id,
+          user_id:           params.user_id || DEFAULT_USER_ID,
+          receta_id:         receta.id,
+          nombre:            receta.nombre,
+          version:           receta.version,
+          estado_operativo:  receta.estado_operativo
+        };
+        if (receta.incompleta) payload.incompleta = true;
+        if (receta.campos_pendientes.length > 0) payload.campos_pendientes = receta.campos_pendientes;
 
-      const { history: _h, ...snapshot } = r;
-      r.history.push({ ...snapshot, _archived_at: Date.now() });
+        await this._publicarEvento('receta.creada', payload, params);
 
-      const aplicados = {};
-      const setIf = (k, transform) => {
-        if (k in cambios) {
-          const v = transform ? transform(cambios[k]) : cambios[k];
-          aplicados[k] = { antes: r[k], despues: v };
-          r[k] = v;
-        }
-      };
-      setIf('nombre'); setIf('descripcion'); setIf('porciones'); setIf('tiempo_min');
-      setIf('dificultad'); setIf('estado'); setIf('notas'); setIf('fuente');
-      setIf('ingredientes', this._normalizeIngredientes.bind(this));
-      setIf('instrucciones', this._normalizeInstrucciones.bind(this));
-      if ('categorias' in cambios) { aplicados.categorias = { antes: r.categorias, despues: cambios.categorias }; r.categorias = cambios.categorias; }
-      if ('etiquetas' in cambios)  { aplicados.etiquetas  = { antes: r.etiquetas,  despues: cambios.etiquetas  }; r.etiquetas  = cambios.etiquetas; }
+        this.metrics?.increment(`${this.name}.creada.total`, 1, { project_id });
+        this.metrics?.gauge(`${this.name}.total`, store.recetas.length, { project_id });
 
-      r.version += 1;
-      r.updated_at = Date.now();
-      this._calcIncompleta(r);
-
-      await this._publicarEvento('receta.actualizada', { project_id: proyecto_id, id: r.id, nombre: r.nombre, version: r.version }, params);
-      this.metrics?.increment('recetas.receta.actualizada', { project_id: proyecto_id });
-
-      return {
-        status: 200,
-        data: { id: r.id, nombre: r.nombre, version: r.version, cambios_aplicados: aplicados,
-                incompleta: r.incompleta, campos_pendientes: r.campos_pendientes }
-      };
-    });
-  }
-
-  async historial(params) {
-    const { proyecto_id, receta_id } = params;
-    if (!proyecto_id) {
-      this.logger.warn('recetas.historial.validation', { field: 'proyecto_id' });
-      this.metrics?.increment('recetas.error', { kind: 'historial', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'proyecto_id requerido');
-    }
-    return this._readOnly(proyecto_id, (store) => {
-      const find = this._findRecetaByRefBuilder(store);
-      const r = find(receta_id);
-      if (!r) {
-        this.logger.warn('recetas.historial.not_found', { receta_id, proyecto_id });
-        this.metrics?.increment('recetas.error', { kind: 'historial', code: 'RESOURCE_NOT_FOUND' });
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Receta no encontrada', { ref: receta_id });
-      }
-      const versiones = r.history.map(h => ({
-        version: h.version, archived_at: h._archived_at,
-        nombre: h.nombre, porciones: h.porciones, dificultad: h.dificultad,
-        ingredientes_count: (h.ingredientes || []).length
-      }));
-      return {
-        status: 200,
-        data: {
-          receta_id: r.id, nombre: r.nombre, version_actual: r.version,
-          versiones_anteriores: versiones.length, historial: versiones
-        }
-      };
-    });
-  }
-
-  async revertir(params) {
-    const { proyecto_id, receta_id, target_version } = params;
-    if (target_version == null) {
-      this.logger.warn('recetas.revertir.validation', { field: 'target_version' });
-      this.metrics?.increment('recetas.error', { kind: 'revertir', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'target_version requerido');
-    }
-
-    return this._withStore(proyecto_id, async (store) => {
-      const find = this._findRecetaByRefBuilder(store);
-      const r = find(receta_id);
-      if (!r) {
-        this.logger.warn('recetas.revertir.not_found', { receta_id, proyecto_id });
-        this.metrics?.increment('recetas.error', { kind: 'revertir', code: 'RESOURCE_NOT_FOUND' });
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Receta no encontrada', { ref: receta_id });
-      }
-
-      const target = r.history.find(h => h.version === target_version);
-      if (!target) {
-        this.logger.warn('recetas.revertir.version_not_found', { receta_id, target_version });
-        this.metrics?.increment('recetas.error', { kind: 'revertir', code: 'RESOURCE_NOT_FOUND' });
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `version ${target_version} no encontrada`, { versiones_disponibles: r.history.map(h => h.version) });
-      }
-
-      const { history: _h, ...snapshot } = r;
-      r.history.push({ ...snapshot, _archived_at: Date.now() });
-
-      const { _archived_at, version: _v, history: _hh, ...restore } = target;
-      Object.assign(r, restore);
-      r.version += 1;
-      r.updated_at = Date.now();
-      this._calcIncompleta(r);
-
-      await this._publicarEvento('receta.actualizada', { project_id: proyecto_id, id: r.id, nombre: r.nombre, version: r.version, motivo: 'revertir' }, params);
-
-      return {
-        status: 200,
-        data: { id: r.id, nombre: r.nombre, revertida_a_version: target_version, version_actual: r.version }
-      };
-    });
-  }
-
-  async eliminar(params) {
-    const { proyecto_id, receta_id } = params;
-    if (!proyecto_id) {
-      this.logger.warn('recetas.eliminar.validation', { field: 'proyecto_id' });
-      this.metrics?.increment('recetas.error', { kind: 'eliminar', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'proyecto_id requerido');
-    }
-    return this._withStore(proyecto_id, async (store) => {
-      const find = this._findRecetaByRefBuilder(store);
-      const r = find(receta_id);
-      if (!r) {
-        this.logger.warn('recetas.eliminar.not_found', { receta_id, proyecto_id });
-        this.metrics?.increment('recetas.error', { kind: 'eliminar', code: 'RESOURCE_NOT_FOUND' });
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Receta no encontrada', { ref: receta_id });
-      }
-      if (r.estado === 'archivada') {
-        return { status: 200, data: { id: r.id, nombre: r.nombre, status: 'ya_estaba_archivada' } };
-      }
-      r.estado = 'archivada';
-      r.updated_at = Date.now();
-      await this._publicarEvento('receta.eliminada', { project_id: proyecto_id, id: r.id, nombre: r.nombre }, params);
-      this.metrics?.increment('recetas.receta.eliminada', { project_id: proyecto_id });
-      return { status: 200, data: { id: r.id, nombre: r.nombre, status: 'archivada' } };
-    });
-  }
-
-  async estadisticas(params) {
-    const { proyecto_id } = params;
-    if (!proyecto_id) {
-      this.logger.warn('recetas.estadisticas.validation', { field: 'proyecto_id' });
-      this.metrics?.increment('recetas.error', { kind: 'estadisticas', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'proyecto_id requerido');
-    }
-    return this._readOnly(proyecto_id, (store) => {
-      const por_estado = { activa: 0, archivada: 0, borrador: 0 };
-      let incompletas = 0;
-      let con_precios = 0;
-      const ingredientesUsados = new Set();
-      for (const r of store.recetas) {
-        por_estado[r.estado] = (por_estado[r.estado] || 0) + 1;
-        if (r.incompleta) incompletas += 1;
-        for (const i of r.ingredientes || []) ingredientesUsados.add((i.nombre || '').toLowerCase());
-      }
-      for (const ing of store.ingredientes_catalogo) {
-        if (ing.precio_mercado != null) con_precios += 1;
-      }
-      return {
-        status: 200,
-        data: {
-          total_recetas: store.recetas.length, por_estado, incompletas,
-          ingredientes_catalogo: store.ingredientes_catalogo.length,
-          ingredientes_con_precio: con_precios,
-          ingredientes_usados_unicos: ingredientesUsados.size
-        }
-      };
-    });
-  }
-
-  async ingredientes(params) {
-    const { proyecto_id } = params;
-    if (!proyecto_id) {
-      this.logger.warn('recetas.ingredientes.validation', { field: 'proyecto_id' });
-      this.metrics?.increment('recetas.error', { kind: 'ingredientes', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'proyecto_id requerido');
-    }
-    return this._readOnly(proyecto_id, (store) => {
-      let arr = store.ingredientes_catalogo;
-      if (params.categoria) arr = arr.filter(i => (i.categoria || '').toLowerCase() === params.categoria.toLowerCase());
-      return { status: 200, data: { total: arr.length, ingredientes: arr } };
-    });
-  }
-
-  async actualizarPrecio(params) {
-    const { proyecto_id, nombre, precio_mercado, unidad, fuente, categoria } = params;
-    if (!nombre) {
-      this.logger.warn('recetas.actualizar_precio.validation', { field: 'nombre' });
-      this.metrics?.increment('recetas.error', { kind: 'actualizar_precio', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'nombre requerido');
-    }
-    if (precio_mercado == null) {
-      this.logger.warn('recetas.actualizar_precio.validation', { field: 'precio_mercado' });
-      this.metrics?.increment('recetas.error', { kind: 'actualizar_precio', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'precio_mercado requerido');
-    }
-
-    return this._withStore(proyecto_id, async (store) => {
-      const nombreLower = nombre.toLowerCase().trim();
-      let item = store.ingredientes_catalogo.find(i => (i.nombre || '').toLowerCase() === nombreLower);
-      const now = Date.now();
-      if (!item) {
-        item = { nombre: nombre.trim(), categoria: categoria || null, unidad: unidad || null,
-                 precio_mercado, fuente: fuente || 'manual', created_at: now, updated_at: now };
-        store.ingredientes_catalogo.push(item);
-      } else {
-        item.precio_mercado = precio_mercado;
-        if (unidad) item.unidad = unidad;
-        if (categoria) item.categoria = categoria;
-        if (fuente) item.fuente = fuente;
-        item.updated_at = now;
-      }
-      await this._publicarEvento('ingrediente.precio.actualizado', { project_id: proyecto_id, nombre: item.nombre, precio_mercado }, params);
-      this.metrics?.increment('recetas.ingrediente.precio.actualizado', { project_id: proyecto_id });
-      return { status: 200, data: { nombre: item.nombre, precio_mercado, unidad: item.unidad, status: 'actualizado' } };
-    });
-  }
-
-  async analizar(params) {
-    const { proyecto_id, receta_id } = params;
-    if (!proyecto_id) {
-      this.logger.warn('recetas.analizar.validation', { field: 'proyecto_id' });
-      this.metrics?.increment('recetas.error', { kind: 'analizar', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'proyecto_id requerido');
-    }
-    return this._readOnly(proyecto_id, (store) => {
-      const find = this._findRecetaByRefBuilder(store);
-      const r = find(receta_id);
-      if (!r) {
-        this.logger.warn('recetas.analizar.not_found', { receta_id, proyecto_id });
-        this.metrics?.increment('recetas.error', { kind: 'analizar', code: 'RESOURCE_NOT_FOUND' });
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Receta no encontrada', { ref: receta_id });
-      }
-      if (r.incompleta) {
-        this.logger.warn('recetas.analizar.incompleta', { receta_id, campos_pendientes: r.campos_pendientes });
-        this.metrics?.increment('recetas.error', { kind: 'analizar', code: 'PRECONDITION_FAILED' });
-        return this._errorResponse(422, 'PRECONDITION_FAILED', 'Receta incompleta — faltan campos para analizar', { campos_pendientes: r.campos_pendientes });
-      }
-
-      const cat = new Map(store.ingredientes_catalogo.map(i => [(i.nombre || '').toLowerCase(), i]));
-      let costeTotal = 0;
-      let costeReal = true;
-      const detalles = (r.ingredientes || []).map(i => {
-        const matched = cat.get((i.nombre || '').toLowerCase());
-        const precio_mercado = matched?.precio_mercado ?? null;
-        if (precio_mercado == null) costeReal = false;
-        let coste = null;
-        if (precio_mercado != null && i.cantidad != null && (matched.unidad === i.unidad || !matched.unidad)) {
-          coste = Number((i.cantidad * precio_mercado).toFixed(4));
-          costeTotal += coste;
-        }
-        return { nombre: i.nombre, cantidad: i.cantidad, unidad: i.unidad, precio_mercado, coste, en_catalogo: !!matched };
+        return {
+          status: 201,
+          data: {
+            receta_id:         receta.id,
+            nombre:            receta.nombre,
+            version:           receta.version,
+            estado_operativo:  receta.estado_operativo,
+            incompleta:        receta.incompleta,
+            campos_pendientes: receta.campos_pendientes
+          }
+        };
       });
-      const costePorPorcion = (r.porciones && r.porciones > 0 && costeReal) ? Number((costeTotal / r.porciones).toFixed(2)) : null;
-
-      return {
-        status: 200,
-        data: {
-          receta_id: r.id, nombre: r.nombre, porciones: r.porciones,
-          tiempo_min: r.tiempo_min, dificultad: r.dificultad,
-          ingredientes: detalles,
-          coste_total: costeReal ? Number(costeTotal.toFixed(2)) : null,
-          coste_por_porcion: costePorPorcion,
-          coste_es_real: costeReal,
-          nota: costeReal ? 'Coste calculado con precios reales del catálogo' : 'Faltan precios en catálogo para algunos ingredientes — coste no calculable'
-        }
-      };
-    });
+    } catch (err) {
+      return this._handleHandlerError('recetas.crear', err, 'tool');
+    }
   }
 
-  async investigarReceta(params) {
-    const { proyecto_id, nombre_receta } = params;
-    if (!nombre_receta) {
-      this.logger.warn('recetas.investigar.validation', { field: 'nombre_receta' });
-      this.metrics?.increment('recetas.error', { kind: 'investigar', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'nombre_receta requerido');
+  async onListar(params = {}) {
+    const { project_id } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+    if (params.estado !== undefined && !ESTADOS_VALIDOS.has(params.estado)) {
+      return this._errorResponse(400, 'INVALID_INPUT', `estado debe ser uno de: ${Array.from(ESTADOS_VALIDOS).join(', ')}`,
+        { field: 'estado', allowed: Array.from(ESTADOS_VALIDOS) });
     }
-    if (!proyecto_id) {
-      this.logger.warn('recetas.investigar.validation', { field: 'proyecto_id' });
-      this.metrics?.increment('recetas.error', { kind: 'investigar', code: 'INVALID_INPUT' });
-      return this._errorResponse(400, 'INVALID_INPUT', 'proyecto_id requerido');
-    }
-    return this._readOnly(proyecto_id, (store) => {
-      const find = this._findRecetaByRefBuilder(store);
-      const existing = find(nombre_receta);
-      if (existing) {
+
+    try {
+      return await this._readOnly(project_id, async (store) => {
+        const estado = params.estado || ESTADOS.EN_SERVICIO;
+        const limit  = typeof params.limit === 'number' && params.limit > 0 ? params.limit : this.config.default_listar_limit;
+
+        let items = store.recetas.filter(r => r.estado_operativo === estado);
+        if (params.solo_incompletas === true) items = items.filter(r => r.incompleta === true);
+
         return {
           status: 200,
           data: {
-            existe_en_proyecto: true,
-            receta: { id: existing.id, nombre: existing.nombre, version: existing.version,
-                      incompleta: existing.incompleta, ingredientes: existing.ingredientes,
-                      porciones: existing.porciones, instrucciones: existing.instrucciones }
+            total: items.length,
+            recetas: items.slice(0, limit).map(r => ({
+              receta_id:         r.id,
+              nombre:            r.nombre,
+              porciones:         r.porciones,
+              dificultad:        r.dificultad,
+              incompleta:        r.incompleta,
+              campos_pendientes: r.campos_pendientes,
+              estado_operativo:  r.estado_operativo,
+              version:           r.version,
+              updated_at:        r.updated_at
+            }))
           }
         };
-      }
-      return {
-        status: 200,
-        data: {
-          existe_en_proyecto: false,
-          nombre_receta,
-          instruccion_para_llm: 'No existe esta receta en el proyecto. Proponla al usuario con ingredientes (cantidad, unidad), instrucciones, porciones, tiempo y dificultad estimados. Cuando el usuario confirme, llama recetas.crear con esos datos.'
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.listar', err, 'tool');
+    }
+  }
+
+  async onObtener(params = {}) {
+    const { project_id, receta_id, nombre } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+    if (!receta_id && !nombre) {
+      return this._errorResponse(400, 'INVALID_INPUT', 'receta_id o nombre es obligatorio', { field: 'receta_id|nombre' });
+    }
+
+    try {
+      return await this._readOnly(project_id, async (store) => {
+        const find = this._findRecetaByRefBuilder(store);
+        const r = find(receta_id || nombre);
+        if (!r) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Receta ${receta_id || nombre} no encontrada`,
+            { entity_type: 'recipe', entity_ref: receta_id || nombre });
         }
-      };
-    });
+        const { history, ...rest } = r;
+        return { status: 200, data: { ...rest, versiones_anteriores: history.length } };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.obtener', err, 'tool');
+    }
+  }
+
+  async onBuscar(params = {}) {
+    const { project_id } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+
+    try {
+      return await this._readOnly(project_id, async (store) => {
+        const limit = typeof params.limit === 'number' && params.limit > 0 ? params.limit : this.config.default_buscar_limit;
+        let items = store.recetas.filter(r => r.estado_operativo === ESTADOS.EN_SERVICIO);
+
+        if (params.texto) {
+          const t = String(params.texto).toLowerCase();
+          items = items.filter(r =>
+            r.nombre.toLowerCase().includes(t) ||
+            r.descripcion.toLowerCase().includes(t) ||
+            r.ingredientes.some(ing => ing.nombre.toLowerCase().includes(t))
+          );
+        }
+        if (params.ingrediente) {
+          const ing = String(params.ingrediente).toLowerCase();
+          items = items.filter(r => r.ingredientes.some(i => i.nombre.toLowerCase().includes(ing)));
+        }
+        if (params.categoria)  items = items.filter(r => r.categorias.includes(params.categoria));
+        if (params.etiqueta)   items = items.filter(r => r.etiquetas.includes(params.etiqueta));
+        if (typeof params.dificultad_min === 'number') items = items.filter(r => typeof r.dificultad === 'number' && r.dificultad >= params.dificultad_min);
+        if (typeof params.dificultad_max === 'number') items = items.filter(r => typeof r.dificultad === 'number' && r.dificultad <= params.dificultad_max);
+        if (typeof params.tiempo_max === 'number')     items = items.filter(r => typeof r.tiempo_min === 'number' && r.tiempo_min <= params.tiempo_max);
+        if (typeof params.porciones === 'number')      items = items.filter(r => r.porciones === params.porciones);
+
+        return {
+          status: 200,
+          data: {
+            total: items.length,
+            resultados: items.slice(0, limit).map(r => ({
+              receta_id: r.id, nombre: r.nombre, porciones: r.porciones,
+              dificultad: r.dificultad, tiempo_min: r.tiempo_min,
+              categorias: r.categorias, etiquetas: r.etiquetas
+            }))
+          }
+        };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.buscar', err, 'tool');
+    }
+  }
+
+  async onActualizar(params = {}) {
+    const { project_id, receta_id, cambios } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+    if (!receta_id)  return this._errorResponse(400, 'INVALID_INPUT', 'receta_id es obligatorio', { field: 'receta_id' });
+    if (!cambios || typeof cambios !== 'object' || Array.isArray(cambios)) {
+      return this._errorResponse(400, 'INVALID_INPUT', 'cambios debe ser un objeto', { field: 'cambios' });
+    }
+
+    try {
+      return await this._withStore(project_id, async (store) => {
+        const find = this._findRecetaByRefBuilder(store);
+        const r = find(receta_id);
+        if (!r) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Receta ${receta_id} no encontrada`,
+            { entity_type: 'recipe', entity_ref: receta_id });
+        }
+
+        const { history: _h, ...snapshot } = r;
+        r.history.push({ ...snapshot, _archived_at: new Date().toISOString() });
+
+        const aplicados = [];
+        const setIf = (k, transform) => {
+          if (k in cambios) {
+            const v = transform ? transform(cambios[k]) : cambios[k];
+            r[k] = v;
+            aplicados.push(k);
+          }
+        };
+        setIf('nombre',       v => String(v).trim());
+        setIf('descripcion',  v => typeof v === 'string' ? v : '');
+        setIf('porciones',    v => typeof v === 'number' && v > 0 ? v : null);
+        setIf('tiempo_min',   v => typeof v === 'number' && v >= 0 ? v : null);
+        setIf('dificultad',   v => typeof v === 'number' ? v : null);
+        setIf('notas',        v => typeof v === 'string' ? v : '');
+        setIf('fuente',       v => FUENTES_RECETA.has(v) ? v : r.fuente);
+        setIf('ingredientes', v => this._normalizeIngredientes(v));
+        setIf('instrucciones',v => this._normalizeInstrucciones(v));
+        if ('categorias' in cambios) { r.categorias = Array.isArray(cambios.categorias) ? cambios.categorias.map(String) : []; aplicados.push('categorias'); }
+        if ('etiquetas'  in cambios) { r.etiquetas  = Array.isArray(cambios.etiquetas)  ? cambios.etiquetas.map(String)  : []; aplicados.push('etiquetas'); }
+
+        if (aplicados.length === 0) {
+          r.history.pop();
+          return this._errorResponse(400, 'INVALID_INPUT', 'cambios no incluye ningun campo conocido', { field: 'cambios' });
+        }
+
+        r.version    += 1;
+        r.updated_at  = new Date().toISOString();
+        this._calcIncompleta(r);
+
+        const payload = {
+          project_id,
+          user_id:    params.user_id || DEFAULT_USER_ID,
+          receta_id:  r.id,
+          nombre:     r.nombre,
+          version:    r.version,
+          campos_actualizados: aplicados
+        };
+        if (r.incompleta) payload.incompleta = true;
+        if (r.campos_pendientes.length > 0) payload.campos_pendientes = r.campos_pendientes;
+
+        await this._publicarEvento('receta.actualizada', payload, params);
+
+        this.metrics?.increment(`${this.name}.actualizada.total`, 1, { project_id });
+
+        return {
+          status: 200,
+          data: {
+            receta_id:           r.id,
+            nombre:              r.nombre,
+            version:             r.version,
+            campos_actualizados: aplicados,
+            incompleta:          r.incompleta,
+            campos_pendientes:   r.campos_pendientes
+          }
+        };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.actualizar', err, 'tool');
+    }
+  }
+
+  async onHistorial(params = {}) {
+    const { project_id, receta_id } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+    if (!receta_id)  return this._errorResponse(400, 'INVALID_INPUT', 'receta_id es obligatorio', { field: 'receta_id' });
+
+    try {
+      return await this._readOnly(project_id, async (store) => {
+        const find = this._findRecetaByRefBuilder(store);
+        const r = find(receta_id);
+        if (!r) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Receta ${receta_id} no encontrada`,
+            { entity_type: 'recipe', entity_ref: receta_id });
+        }
+        const versiones = (r.history || []).map(h => ({
+          version: h.version,
+          archived_at: h._archived_at,
+          nombre: h.nombre,
+          porciones: h.porciones,
+          dificultad: h.dificultad,
+          ingredientes_count: Array.isArray(h.ingredientes) ? h.ingredientes.length : 0
+        }));
+        return {
+          status: 200,
+          data: { receta_id: r.id, nombre: r.nombre, version_actual: r.version, versiones_anteriores: versiones.length, historial: versiones }
+        };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.historial', err, 'tool');
+    }
+  }
+
+  async onRevertir(params = {}) {
+    const { project_id, receta_id, target_version } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+    if (!receta_id)  return this._errorResponse(400, 'INVALID_INPUT', 'receta_id es obligatorio', { field: 'receta_id' });
+    if (!Number.isInteger(target_version) || target_version < 1) {
+      return this._errorResponse(400, 'INVALID_INPUT', 'target_version debe ser entero >= 1', { field: 'target_version' });
+    }
+
+    try {
+      return await this._withStore(project_id, async (store) => {
+        const find = this._findRecetaByRefBuilder(store);
+        const r = find(receta_id);
+        if (!r) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Receta ${receta_id} no encontrada`,
+            { entity_type: 'recipe', entity_ref: receta_id });
+        }
+        const target = (r.history || []).find(h => h.version === target_version);
+        if (!target) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Version ${target_version} no encontrada`,
+            { entity_type: 'recipe-version', entity_ref: target_version, versiones_disponibles: (r.history || []).map(h => h.version) });
+        }
+
+        const { history: _h, ...currentSnap } = r;
+        r.history.push({ ...currentSnap, _archived_at: new Date().toISOString() });
+
+        const { _archived_at, version, ...restore } = target;
+        Object.assign(r, restore);
+        r.version    += 1;
+        r.updated_at  = new Date().toISOString();
+        this._calcIncompleta(r);
+
+        await this._publicarEvento('receta.actualizada', {
+          project_id,
+          user_id:    params.user_id || DEFAULT_USER_ID,
+          receta_id:  r.id,
+          nombre:     r.nombre,
+          version:    r.version,
+          motivo:     'revertir'
+        }, params);
+
+        this.metrics?.increment(`${this.name}.actualizada.total`, 1, { project_id, motivo: 'revertir' });
+
+        return {
+          status: 200,
+          data: { receta_id: r.id, nombre: r.nombre, revertida_a_version: target_version, version_actual: r.version }
+        };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.revertir', err, 'tool');
+    }
+  }
+
+  async onEliminar(params = {}) {
+    const { project_id, receta_id, motivo } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+    if (!receta_id)  return this._errorResponse(400, 'INVALID_INPUT', 'receta_id es obligatorio', { field: 'receta_id' });
+
+    try {
+      return await this._withStore(project_id, async (store) => {
+        const find = this._findRecetaByRefBuilder(store);
+        const r = find(receta_id);
+        if (!r) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Receta ${receta_id} no encontrada`,
+            { entity_type: 'recipe', entity_ref: receta_id });
+        }
+        if (r.estado_operativo === ESTADOS.ARCHIVADA) {
+          return { status: 200, data: { receta_id: r.id, nombre: r.nombre, estado_operativo: r.estado_operativo, status: 'ya_estaba_archivada' } };
+        }
+
+        const estadoAnterior = r.estado_operativo;
+        r.estado_operativo   = ESTADOS.ARCHIVADA;
+        r.updated_at         = new Date().toISOString();
+
+        const basePayload = {
+          project_id,
+          user_id:    params.user_id || DEFAULT_USER_ID,
+          receta_id:  r.id,
+          nombre:     r.nombre
+        };
+        await this._publicarEvento('receta.estado.actualizada', {
+          ...basePayload,
+          estado_anterior: estadoAnterior,
+          estado_nuevo:    ESTADOS.ARCHIVADA,
+          version:         r.version,
+          ...(typeof motivo === 'string' && motivo.length > 0 ? { motivo } : {})
+        }, params);
+        await this._publicarEvento('receta.eliminada', {
+          ...basePayload,
+          ...(typeof motivo === 'string' && motivo.length > 0 ? { motivo } : {})
+        }, params);
+
+        this.metrics?.increment(`${this.name}.eliminada.total`, 1, { project_id });
+        this.metrics?.increment(`${this.name}.estado.actualizada.total`, 1, { project_id, estado_nuevo: ESTADOS.ARCHIVADA });
+
+        return { status: 200, data: { receta_id: r.id, nombre: r.nombre, estado_operativo: r.estado_operativo, status: 'archivada' } };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.eliminar', err, 'tool');
+    }
+  }
+
+  async onCambiarEstado(params = {}) {
+    const { project_id, receta_id, target_estado, motivo } = params;
+    if (!project_id)    return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio',    { field: 'project_id' });
+    if (!receta_id)     return this._errorResponse(400, 'INVALID_INPUT', 'receta_id es obligatorio',     { field: 'receta_id' });
+    if (!target_estado) return this._errorResponse(400, 'INVALID_INPUT', 'target_estado es obligatorio', { field: 'target_estado' });
+    if (!ESTADOS_VALIDOS.has(target_estado)) {
+      return this._errorResponse(400, 'INVALID_INPUT', `target_estado debe ser uno de: ${Array.from(ESTADOS_VALIDOS).join(', ')}`,
+        { field: 'target_estado', allowed: Array.from(ESTADOS_VALIDOS) });
+    }
+
+    try {
+      return await this._withStore(project_id, async (store) => {
+        const find = this._findRecetaByRefBuilder(store);
+        const r = find(receta_id);
+        if (!r) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Receta ${receta_id} no encontrada`,
+            { entity_type: 'recipe', entity_ref: receta_id });
+        }
+        const estadoAnterior = r.estado_operativo;
+        if (estadoAnterior === target_estado) {
+          return { status: 200, data: { receta_id: r.id, estado_operativo: r.estado_operativo, status: 'sin_cambios' } };
+        }
+
+        const permitidas = TRANSICIONES_VALIDAS.get(estadoAnterior) || new Set();
+        if (!permitidas.has(target_estado)) {
+          return this._errorResponse(422, 'PRECONDITION_FAILED',
+            `Transicion ${estadoAnterior} -> ${target_estado} no permitida`,
+            { kind: 'invalid_state_transition', estado_anterior: estadoAnterior, target_estado, transiciones_permitidas: Array.from(permitidas) });
+        }
+
+        r.estado_operativo = target_estado;
+        r.updated_at       = new Date().toISOString();
+
+        const basePayload = {
+          project_id,
+          user_id:    params.user_id || DEFAULT_USER_ID,
+          receta_id:  r.id,
+          nombre:     r.nombre
+        };
+        await this._publicarEvento('receta.estado.actualizada', {
+          ...basePayload,
+          estado_anterior: estadoAnterior,
+          estado_nuevo:    target_estado,
+          version:         r.version,
+          ...(typeof motivo === 'string' && motivo.length > 0 ? { motivo } : {})
+        }, params);
+
+        if (target_estado === ESTADOS.ARCHIVADA) {
+          await this._publicarEvento('receta.eliminada', {
+            ...basePayload,
+            ...(typeof motivo === 'string' && motivo.length > 0 ? { motivo } : {})
+          }, params);
+          this.metrics?.increment(`${this.name}.eliminada.total`, 1, { project_id });
+        }
+
+        this.metrics?.increment(`${this.name}.estado.actualizada.total`, 1, { project_id, estado_nuevo: target_estado });
+
+        return {
+          status: 200,
+          data: {
+            receta_id:        r.id,
+            estado_anterior:  estadoAnterior,
+            estado_operativo: r.estado_operativo
+          }
+        };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.cambiar_estado', err, 'tool');
+    }
+  }
+
+  async onEstadisticas(params = {}) {
+    const { project_id } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+
+    try {
+      return await this._readOnly(project_id, async (store) => {
+        const por_estado = { borrador: 0, en_servicio: 0, archivada: 0 };
+        let incompletas = 0;
+        const ingredientesUsados = new Set();
+        for (const r of store.recetas) {
+          por_estado[r.estado_operativo] = (por_estado[r.estado_operativo] || 0) + 1;
+          if (r.incompleta) incompletas++;
+          for (const ing of r.ingredientes) ingredientesUsados.add(String(ing.nombre).toLowerCase());
+        }
+        const con_precio = store.ingredientes_catalogo.filter(i => typeof i.precio_mercado === 'number' && i.precio_mercado > 0).length;
+
+        return {
+          status: 200,
+          data: {
+            total_recetas:           store.recetas.length,
+            por_estado,
+            incompletas,
+            ingredientes_catalogo:   store.ingredientes_catalogo.length,
+            ingredientes_con_precio: con_precio,
+            ingredientes_usados_unicos: ingredientesUsados.size
+          }
+        };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.estadisticas', err, 'tool');
+    }
+  }
+
+  async onIngredientes(params = {}) {
+    const { project_id, categoria } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+
+    try {
+      return await this._readOnly(project_id, async (store) => {
+        let arr = store.ingredientes_catalogo;
+        if (categoria) arr = arr.filter(i => i.categoria === categoria);
+        return { status: 200, data: { total: arr.length, ingredientes: arr } };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.ingredientes', err, 'tool');
+    }
+  }
+
+  async onActualizarPrecio(params = {}) {
+    const { project_id, nombre, precio_mercado } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+    if (!nombre || typeof nombre !== 'string' || nombre.trim() === '') {
+      return this._errorResponse(400, 'INVALID_INPUT', 'nombre es obligatorio', { field: 'nombre' });
+    }
+    if (typeof precio_mercado !== 'number' || precio_mercado < 0 || Number.isNaN(precio_mercado)) {
+      return this._errorResponse(400, 'INVALID_INPUT', 'precio_mercado debe ser number >= 0', { field: 'precio_mercado' });
+    }
+    if (params.fuente !== undefined && !FUENTES_PRECIO.has(params.fuente)) {
+      return this._errorResponse(400, 'INVALID_INPUT', `fuente debe ser una de: ${Array.from(FUENTES_PRECIO).join(', ')}`,
+        { field: 'fuente', allowed: Array.from(FUENTES_PRECIO) });
+    }
+
+    try {
+      return await this._withStore(project_id, async (store) => {
+        const nombreTrim = nombre.trim();
+        const lower = nombreTrim.toLowerCase();
+        let item = store.ingredientes_catalogo.find(i => i.nombre.toLowerCase() === lower);
+        const now = new Date().toISOString();
+
+        if (!item) {
+          item = {
+            nombre:        nombreTrim,
+            categoria:     typeof params.categoria === 'string' ? params.categoria : null,
+            unidad:        typeof params.unidad === 'string' ? params.unidad : null,
+            precio_mercado,
+            fuente:        FUENTES_PRECIO.has(params.fuente) ? params.fuente : 'manual',
+            created_at:    now,
+            updated_at:    now
+          };
+          store.ingredientes_catalogo.push(item);
+        } else {
+          if (typeof params.categoria === 'string') item.categoria = params.categoria;
+          if (typeof params.unidad === 'string')    item.unidad    = params.unidad;
+          if (FUENTES_PRECIO.has(params.fuente))    item.fuente    = params.fuente;
+          item.precio_mercado = precio_mercado;
+          item.updated_at     = now;
+        }
+
+        const payload = {
+          project_id,
+          user_id:        params.user_id || DEFAULT_USER_ID,
+          nombre:         item.nombre,
+          precio_mercado: item.precio_mercado
+        };
+        if (item.unidad)    payload.unidad    = item.unidad;
+        if (item.categoria) payload.categoria = item.categoria;
+        if (item.fuente)    payload.fuente    = item.fuente;
+
+        await this._publicarEvento('ingrediente.precio.actualizado', payload, params);
+
+        this.metrics?.increment(`${this.name}.ingrediente.precio.actualizado.total`, 1, { project_id });
+        this.metrics?.gauge(`${this.name}.ingredientes_catalogo.total`, store.ingredientes_catalogo.length, { project_id });
+
+        return {
+          status: 200,
+          data: { nombre: item.nombre, precio_mercado: item.precio_mercado, unidad: item.unidad, status: 'actualizado' }
+        };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.actualizar_precio', err, 'tool');
+    }
+  }
+
+  async onAnalizar(params = {}) {
+    const { project_id, receta_id } = params;
+    if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio', { field: 'project_id' });
+    if (!receta_id)  return this._errorResponse(400, 'INVALID_INPUT', 'receta_id es obligatorio', { field: 'receta_id' });
+
+    try {
+      return await this._readOnly(project_id, async (store) => {
+        const find = this._findRecetaByRefBuilder(store);
+        const r = find(receta_id);
+        if (!r) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Receta ${receta_id} no encontrada`,
+            { entity_type: 'recipe', entity_ref: receta_id });
+        }
+        if (r.incompleta) {
+          return this._errorResponse(422, 'PRECONDITION_FAILED', 'Receta incompleta — completala antes de analizar',
+            { kind: 'incomplete_recipe', campos_pendientes: r.campos_pendientes });
+        }
+
+        let coste_total = 0;
+        let costeReal   = true;
+        const desglose  = [];
+        for (const ing of r.ingredientes) {
+          const cat = store.ingredientes_catalogo.find(i => i.nombre.toLowerCase() === String(ing.nombre).toLowerCase());
+          let coste = null;
+          if (cat && typeof cat.precio_mercado === 'number' && cat.unidad && cat.unidad === ing.unidad && typeof ing.cantidad === 'number') {
+            coste = ing.cantidad * cat.precio_mercado;
+            coste_total += coste;
+          } else {
+            costeReal = false;
+          }
+          desglose.push({
+            nombre:         ing.nombre,
+            cantidad:       ing.cantidad,
+            unidad:         ing.unidad,
+            precio_mercado: cat ? cat.precio_mercado : null,
+            coste,
+            en_catalogo:    !!cat
+          });
+        }
+
+        const porciones = r.porciones || 1;
+        const cpp = costeReal ? (coste_total / porciones) : null;
+
+        return {
+          status: 200,
+          data: {
+            receta_id: r.id,
+            nombre: r.nombre,
+            porciones: r.porciones,
+            tiempo_min: r.tiempo_min,
+            dificultad: r.dificultad,
+            ingredientes: desglose,
+            coste_total: costeReal ? coste_total : null,
+            coste_por_porcion: cpp,
+            coste_es_real: costeReal,
+            nota: costeReal ? null : 'Faltan precios o unidades incompatibles en el catalogo para algunos ingredientes.'
+          }
+        };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.analizar', err, 'tool');
+    }
+  }
+
+  async onInvestigarReceta(params = {}) {
+    const { project_id, nombre_receta } = params;
+    if (!project_id)    return this._errorResponse(400, 'INVALID_INPUT', 'project_id es obligatorio',    { field: 'project_id' });
+    if (!nombre_receta) return this._errorResponse(400, 'INVALID_INPUT', 'nombre_receta es obligatorio', { field: 'nombre_receta' });
+
+    try {
+      return await this._readOnly(project_id, async (store) => {
+        const find = this._findRecetaByRefBuilder(store);
+        const r = find(nombre_receta);
+        if (r) {
+          const { history: _h, ...rest } = r;
+          return { status: 200, data: { existe: true, receta: rest } };
+        }
+        return {
+          status: 200,
+          data: {
+            existe: false,
+            instruccion: 'No existe en el proyecto. Propon una receta y guardala con recetas.crear tras confirmacion del usuario.'
+          }
+        };
+      });
+    } catch (err) {
+      return this._handleHandlerError('recetas.investigar_receta', err, 'tool');
+    }
   }
 
   // ============================================================
-  // Dominio (protegido) — helpers del modulo. Encapsulan el saber hacer
-  // del dominio recetas: clasificacion de errores con keywords spanish,
-  // normalizacion de ingredientes/instrucciones, busqueda por ref,
-  // store layer (load/save con cola por proyecto), resolucion de
-  // base_path para un project_id. No son API publica.
+  // Helpers POC2 — _errorResponse, _classifyHandlerError, _handleHandlerError,
+  // _statusFromCode, _enrich vienen de BaseModule. Override _publicarEvento.
   // ============================================================
 
-  /**
-   * Extiende _classifyHandlerError de BaseModule con keywords spanish y
-   * mensajes del dominio. Delega al super para los genericos (en ingles).
-   */
-  _classifyHandlerError(err) {
-    const msg = (err?.message || '').toLowerCase();
-    if (msg.includes('no encontrad') || msg.includes('no existe')) return 'RESOURCE_NOT_FOUND';
-    if (msg.includes('requerido') || msg.includes('inválid')) return 'INVALID_INPUT';
-    if (msg.includes('corrupto') || msg.includes('parse')) return 'UNKNOWN_ERROR';
-    return super._classifyHandlerError(err);
-  }
-
-  /**
-   * Override de _handleHandlerError: el namespace canonico del modulo
-   * recetas es `recetas.error` (singular). Delega lo demas al super.
-   */
-  _handleHandlerError(logKey, err, kind) {
-    const code = err?._code || this._classifyHandlerError(err);
-    const status = this._statusFromCode(code);
-    this.logger?.error('recetas.handler_error', { handler: logKey, error: err?.message, code });
-    this.metrics?.increment('recetas.error', { kind: kind || logKey, code });
-    return this._errorResponse(status, code, err?.message || String(err), err?._details);
-  }
-
-  /**
-   * Override de _publicarEvento: anyade default project_id y try/catch
-   * silencioso (un error de publish no rompe el flujo del handler).
-   */
   async _publicarEvento(name, payload, sourcePayload = null) {
-    if (!this.eventBus?.publish) return;
+    if (!this.eventBus?.publish) {
+      this.logger?.warn(`${this.name}.publish.bus_no_disponible`, { event: name });
+      return;
+    }
+
     const enriched = {
       correlation_id: sourcePayload?.correlation_id || crypto.randomUUID(),
+      project_id:     payload?.project_id || sourcePayload?.project_id || DEFAULT_PROJECT_ID,
+      user_id:        payload?.user_id    || sourcePayload?.user_id    || DEFAULT_USER_ID,
       timestamp:      new Date().toISOString(),
-      ...payload,
-      project_id:     payload?.project_id || payload?.proyecto_id || sourcePayload?.project_id || DEFAULT_PROJECT_ID
+      ...payload
     };
+
     try {
       await this.eventBus.publish(name, enriched);
     } catch (err) {
-      this.logger.error('recetas.publish_error', { event: name, error: err.message });
-      this.metrics?.increment('recetas.error', { kind: 'publish', code: 'UNKNOWN_ERROR' });
+      this.logger?.error(`${this.name}.publish_error`, {
+        event:         name,
+        error_message: err.message,
+        stack:         err.stack
+      });
+      this.metrics?.increment(`${this.name}.publish_error`, 1, { event: name });
     }
   }
 
-  _calcIncompleta(receta) {
-    const pendientes = [];
-    for (const campo of CAMPOS_REQUERIDOS_PARA_COMPLETA) {
-      const v = receta[campo];
-      const vacio = v == null || (Array.isArray(v) && v.length === 0) || v === '';
-      if (vacio) pendientes.push(campo);
-    }
-    receta.incompleta = pendientes.length > 0;
-    receta.campos_pendientes = pendientes;
-    return receta;
-  }
+  // ============================================================
+  // Dominio protegido — normalizaciones + lookup + incompleta
+  // ============================================================
 
-  _normalizeIngredientes(ingredientes) {
-    if (ingredientes == null) return [];
-    if (typeof ingredientes === 'string') {
-      return [{ nombre: ingredientes.trim(), cantidad: null, unidad: null, notas: 'texto libre' }];
+  _normalizeIngredientes(input) {
+    if (Array.isArray(input)) {
+      return input.map(it => {
+        if (typeof it === 'string') {
+          return { nombre: it.trim(), cantidad: null, unidad: null, notas: '' };
+        }
+        return {
+          nombre:   typeof it?.nombre === 'string' ? it.nombre.trim() : '',
+          cantidad: typeof it?.cantidad === 'number' ? it.cantidad : null,
+          unidad:   typeof it?.unidad === 'string' ? it.unidad : null,
+          notas:    typeof it?.notas === 'string' ? it.notas : ''
+        };
+      }).filter(i => i.nombre !== '');
     }
-    if (!Array.isArray(ingredientes)) return [];
-    return ingredientes.map(it => {
-      if (typeof it === 'string') return { nombre: it.trim(), cantidad: null, unidad: null };
-      if (typeof it !== 'object' || it == null) return { nombre: String(it), cantidad: null, unidad: null };
-      return {
-        nombre: (it.nombre ?? it.name ?? it.ingrediente ?? '').toString().trim(),
-        cantidad: it.cantidad ?? it.quantity ?? null,
-        unidad:   it.unidad   ?? it.unit     ?? null,
-        notas:    it.notas    ?? it.notes    ?? undefined
-      };
-    }).filter(i => i.nombre);
+    if (typeof input === 'string' && input.trim() !== '') {
+      return input.split(/\r?\n|;|,/).map(s => s.trim()).filter(s => s !== '')
+        .map(s => ({ nombre: s, cantidad: null, unidad: null, notas: '' }));
+    }
+    return [];
   }
 
   _normalizeInstrucciones(input) {
-    if (input == null) return [];
-    if (typeof input === 'string') return input.split(/\n+|\.\s+/).map(s => s.trim()).filter(Boolean);
-    if (!Array.isArray(input)) return [];
-    return input.map(s => String(s).trim()).filter(Boolean);
+    if (Array.isArray(input)) return input.map(String).filter(s => s.trim() !== '');
+    if (typeof input === 'string' && input.trim() !== '') {
+      return input.split(/\r?\n|\. /).map(s => s.trim()).filter(s => s !== '');
+    }
+    return [];
   }
 
-  _formatIngredientesText(arr) {
-    if (!arr || !arr.length) return null;
-    return arr.map(i => {
-      const head = [i.cantidad, i.unidad].filter(v => v != null && v !== '').join(' ').trim();
-      const body = head && i.nombre ? `${head} de ${i.nombre}` : (i.nombre || head || '');
-      const suffix = i.notas ? ` (${i.notas})` : '';
-      return body ? `- ${body}${suffix}` : null;
-    }).filter(Boolean).join('\n');
+  _calcIncompleta(receta) {
+    const requeridos = this.config.campos_para_completa || CAMPOS_PARA_COMPLETA_DEFAULT;
+    const pendientes = [];
+    for (const campo of requeridos) {
+      const v = receta[campo];
+      if (campo === 'ingredientes' || campo === 'instrucciones') {
+        if (!Array.isArray(v) || v.length === 0) pendientes.push(campo);
+      } else if (campo === 'porciones') {
+        if (typeof v !== 'number' || v <= 0) pendientes.push(campo);
+      } else if (v === null || v === undefined || v === '') {
+        pendientes.push(campo);
+      }
+    }
+    receta.incompleta = pendientes.length > 0;
+    receta.campos_pendientes = pendientes;
   }
 
   _findRecetaByRefBuilder(store) {
     return (ref) => {
       if (!ref) return null;
+      const refLower = String(ref).toLowerCase();
       let r = store.recetas.find(x => x.id === ref);
       if (r) return r;
-      const refLower = String(ref).toLowerCase().trim();
-      r = store.recetas.find(x => x.nombre.toLowerCase() === refLower && x.estado === 'activa');
+      r = store.recetas.find(x => x.nombre.toLowerCase() === refLower);
       if (r) return r;
-      r = store.recetas.find(x => x.nombre.toLowerCase().includes(refLower) && x.estado === 'activa');
+      r = store.recetas.find(x => x.nombre.toLowerCase().includes(refLower));
       return r || null;
     };
   }
 
-  _emptyStore() {
-    return {
-      _version: '1.0',
-      _updated_at: new Date().toISOString(),
-      recetas: [],
-      ingredientes_catalogo: []
-    };
-  }
+  // ============================================================
+  // Persistencia json-per-project
+  // ============================================================
 
-  async _loadStore(slug) {
-    const raw = await this._readFile(slug);
-    if (raw == null) return this._emptyStore();
-    try {
-      const parsed = JSON.parse(raw);
-      parsed.recetas = Array.isArray(parsed.recetas) ? parsed.recetas : [];
-      parsed.ingredientes_catalogo = Array.isArray(parsed.ingredientes_catalogo) ? parsed.ingredientes_catalogo : [];
-      return parsed;
-    } catch (err) {
-      this.logger.error('recetas.store.parse.failed', { slug, error: err.message });
-      const e = new Error('recetas.json corrupto: ' + err.message);
-      e._code = 'UNKNOWN_ERROR';
-      throw e;
-    }
-  }
-
-  async _saveStore(slug, store) {
-    store._updated_at = new Date().toISOString();
-    await this._writeFile(slug, JSON.stringify(store, null, 2));
-  }
-
-  async _withStore(project_id, mutator) {
-    const slug = await this._basePathForProject(project_id);
-    const prev = this.writeQueues.get(project_id) || Promise.resolve();
-    const next = prev
-      .catch(() => {})
-      .then(async () => {
-        const store = await this._loadStore(slug);
-        const result = await mutator(store);
-        if (!result || !(result.status >= 400)) await this._saveStore(slug, store);
-        return result;
-      });
-    this.writeQueues.set(project_id, next);
-    try { return await next; }
-    finally {
-      if (this.writeQueues.get(project_id) === next) this.writeQueues.delete(project_id);
-    }
-  }
-
-  async _readOnly(project_id, reader) {
-    const slug = await this._basePathForProject(project_id);
-    const store = await this._loadStore(slug);
-    return reader(store);
-  }
-
-  /**
-   * Resuelve project_id → base_path absoluto. Patron canonico: cache
-   * poblado por project.activated; fallback a project.get.request si el
-   * proyecto no esta en cache.
-   */
   async _basePathForProject(project_id) {
     if (!project_id) {
-      const err = new Error('proyecto_id requerido');
+      const err = new Error('project_id requerido');
       err._code = 'INVALID_INPUT';
       throw err;
     }
     if (this.projectBasePaths.has(project_id)) return this.projectBasePaths.get(project_id);
+
+    if (!this.eventBus?.publish) {
+      const err = new Error('eventBus no disponible para project.get.request');
+      err._code = 'UPSTREAM_UNREACHABLE';
+      throw err;
+    }
 
     const request_id = crypto.randomUUID();
     const basePath = await new Promise((resolve, reject) => {
@@ -830,95 +995,162 @@ class RecetasModule extends BaseModule {
         const err = new Error(`project.get timeout para ${project_id}`);
         err._code = 'UPSTREAM_TIMEOUT';
         reject(err);
-      }, 5000);
+      }, this.config.project_get_timeout_ms);
       this.pendingProject.set(request_id, { resolve, reject, timer });
-      this.eventBus.publish('project.get.request', { request_id, project_id });
+      this.eventBus.publish('project.get.request', { request_id, project_id }).catch(err => {
+        clearTimeout(timer);
+        this.pendingProject.delete(request_id);
+        err._code = err._code || 'UPSTREAM_UNREACHABLE';
+        reject(err);
+      });
     });
+
     this.projectBasePaths.set(project_id, basePath);
     return basePath;
   }
 
-  /**
-   * Wrapper de dispatch: recibe evento del bus, normaliza project_id ->
-   * proyecto_id, llama al handler de tool por nombre, publica response.
-   */
-  async _toolDispatch(toolName, event) {
-    const data = event.data || event;
-    const { request_id, project_id, ...rest } = data;
-    const params = { ...rest, proyecto_id: project_id ?? rest.proyecto_id };
-    const handlerName = TOOL_HANDLERS[toolName];
-    if (!handlerName) {
-      this.logger.warn('recetas.tool.unknown', { tool: toolName });
-      this.metrics?.increment('recetas.error', { kind: 'dispatch', code: 'INVALID_INPUT' });
-      await this.eventBus.publish(`${toolName}.response`, {
-        request_id,
-        error: { code: 'INVALID_INPUT', message: `unknown tool ${toolName}` }
-      });
-      return;
-    }
+  async _loadStore(basePath) {
+    const absPath = `${basePath}/recetas.json`.replace(/\/+/g, '/');
+    const content = await this._readFile(absPath);
+    if (!content) return this._emptyStore();
     try {
-      const result = await this[handlerName](params);
-      await this.eventBus.publish(`${toolName}.response`, { request_id, result });
+      const parsed = JSON.parse(content);
+      if (!Array.isArray(parsed.recetas))               parsed.recetas = [];
+      if (!Array.isArray(parsed.ingredientes_catalogo)) parsed.ingredientes_catalogo = [];
+      this._migrateStoreInPlace(parsed);
+      return parsed;
     } catch (err) {
-      const code = err._code || this._classifyHandlerError(err);
-      this.logger.error('recetas.tool.failed', { tool: toolName, error: err.message, code });
-      this.metrics?.increment('recetas.error', { kind: 'dispatch', code });
-      await this.eventBus.publish(`${toolName}.response`, {
-        request_id,
-        error: { code, message: err.message }
-      });
+      this.logger?.warn(`${this.name}.persist.parse_error`, { abs_path: absPath, error_message: err.message });
+      return this._emptyStore();
     }
   }
 
   /**
-   * Wrapper de UI: traduce firma HTTP -> firma de tool, captura excepciones
-   * y devuelve shape canonico.
+   * Migracion en lectura para storage legacy:
+   *  - estado: 'activa' (v3) -> estado_operativo: 'en_servicio' (v4 canon).
+   *  - estado_operativo faltante: copiar de 'estado' legacy si existe.
+   *  - timestamps numericos epoch ms -> ISO 8601 string.
+   *  - history.{_archived_at, created_at, updated_at} idem.
+   *  - ingredientes_catalogo timestamps idem.
    */
-  async _uiAdapt(handlerName, request) {
-    const params = { ...request, proyecto_id: request.project_id ?? request.proyecto_id };
-    try {
-      return await this[handlerName](params);
-    } catch (err) {
-      return this._handleHandlerError(`ui.${handlerName}`, err, 'ui');
+  _migrateStoreInPlace(store) {
+    const toIso = (v) => {
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        try { return new Date(v).toISOString(); } catch { return v; }
+      }
+      return v;
+    };
+    const normEstado = (v) => (v === 'activa' ? ESTADOS.EN_SERVICIO : v);
+    for (const r of store.recetas) {
+      if (!r.estado_operativo && r.estado) r.estado_operativo = r.estado;
+      r.estado_operativo = normEstado(r.estado_operativo) || ESTADOS.EN_SERVICIO;
+      delete r.estado;
+      r.created_at = toIso(r.created_at);
+      r.updated_at = toIso(r.updated_at);
+      if (Array.isArray(r.history)) {
+        for (const h of r.history) {
+          if (h.estado === 'activa') h.estado = ESTADOS.EN_SERVICIO;
+          h._archived_at = toIso(h._archived_at);
+          h.created_at = toIso(h.created_at);
+          h.updated_at = toIso(h.updated_at);
+        }
+      }
+    }
+    for (const i of store.ingredientes_catalogo) {
+      i.created_at = toIso(i.created_at);
+      i.updated_at = toIso(i.updated_at);
     }
   }
 
-  // ============================================================
-  // Privados — utilidades fs sin side effects observables fuera del modulo.
-  // Resuelven la pareja de filesystem.* request/response correlacionada
-  // por request_id contra this.pendingFs.
-  // ============================================================
-
-  _pathFor(basePath) {
-    return `${basePath}/recetas.json`;
+  async _saveStore(basePath, store) {
+    const absPath = `${basePath}/recetas.json`.replace(/\/+/g, '/');
+    store._version    = this.version;
+    store._updated_at = new Date().toISOString();
+    await this._writeFile(absPath, JSON.stringify(store, null, 2));
   }
 
-  async _readFile(slug) {
+  _emptyStore() {
+    return {
+      _version:    this.version,
+      _updated_at: null,
+      recetas:                [],
+      ingredientes_catalogo:  []
+    };
+  }
+
+  async _withStore(project_id, mutator) {
+    const basePath = await this._basePathForProject(project_id);
+
+    const prev = this.writeQueues.get(project_id) || Promise.resolve();
+    const next = prev
+      .catch(() => {})
+      .then(async () => {
+        const store  = await this._loadStore(basePath);
+        const result = await mutator(store);
+        if (!result || result.status === undefined || result.status < 400) {
+          await this._saveStore(basePath, store);
+        }
+        return result;
+      });
+
+    this.writeQueues.set(project_id, next);
+    try {
+      return await next;
+    } finally {
+      if (this.writeQueues.get(project_id) === next) this.writeQueues.delete(project_id);
+    }
+  }
+
+  async _readOnly(project_id, reader) {
+    const basePath = await this._basePathForProject(project_id);
+    const store    = await this._loadStore(basePath);
+    return reader(store);
+  }
+
+  async _readFile(absPath) {
+    if (!this.eventBus?.publish) {
+      const err = new Error('eventBus no disponible para fs.read.request');
+      err._code = 'UPSTREAM_UNREACHABLE';
+      throw err;
+    }
     const request_id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingFs.delete(request_id);
-        const err = new Error(`fs.read timeout: ${slug}`);
+        const err = new Error(`fs.read timeout para ${absPath}`);
         err._code = 'UPSTREAM_TIMEOUT';
         reject(err);
-      }, 8000);
+      }, this.config.fs_request_timeout_ms);
       this.pendingFs.set(request_id, { resolve, reject, timer, op: 'read' });
-      this.eventBus.publish('fs.read.request', { request_id, path: this._pathFor(slug) });
+      this.eventBus.publish('fs.read.request', { request_id, path: absPath, encoding: 'utf-8' }).catch(err => {
+        clearTimeout(timer);
+        this.pendingFs.delete(request_id);
+        err._code = err._code || 'UPSTREAM_UNREACHABLE';
+        reject(err);
+      });
     });
   }
 
-  async _writeFile(slug, content) {
+  async _writeFile(absPath, content) {
+    if (!this.eventBus?.publish) {
+      const err = new Error('eventBus no disponible para fs.write.request');
+      err._code = 'UPSTREAM_UNREACHABLE';
+      throw err;
+    }
     const request_id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingFs.delete(request_id);
-        const err = new Error(`fs.write timeout: ${slug}`);
+        const err = new Error(`fs.write timeout para ${absPath}`);
         err._code = 'UPSTREAM_TIMEOUT';
         reject(err);
-      }, 8000);
+      }, this.config.fs_request_timeout_ms);
       this.pendingFs.set(request_id, { resolve, reject, timer, op: 'write' });
-      this.eventBus.publish('fs.write.request', {
-        request_id, path: this._pathFor(slug), content, encoding: 'utf-8'
+      this.eventBus.publish('fs.write.request', { request_id, path: absPath, content, encoding: 'utf-8', atomic: true }).catch(err => {
+        clearTimeout(timer);
+        this.pendingFs.delete(request_id);
+        err._code = err._code || 'UPSTREAM_UNREACHABLE';
+        reject(err);
       });
     });
   }

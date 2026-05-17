@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/pase.sustitucion.registrada.schema.json",
+  "title": "pase.sustitucion.registrada — payload schema",
+  "description": "Evento emitido por pase-cocina cuando el cocinero registra una sustitucion de emergencia en una ficha de pase (sin albaca, usa cilantro). NO modifica la receta canonica — la sustitucion vive en la ficha de pase y queda en historial para que el chef pueda decidir si la incorpora.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "ficha_pase_id",
+    "ingrediente_original",
+    "ingrediente_sustituto",
+    "motivo",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":        { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":            { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":               { "$ref": "_common.schema.json#/$defs/user_id" },
+    "ficha_pase_id":         { "$ref": "_common.schema.json#/$defs/ficha_pase_id" },
+    "ingrediente_original":  { "$ref": "_common.schema.json#/$defs/ingrediente_nombre" },
+    "ingrediente_sustituto": { "$ref": "_common.schema.json#/$defs/ingrediente_nombre" },
+    "cantidad":              { "type": "number", "minimum": 0 },
+    "unidad":                { "$ref": "_common.schema.json#/$defs/unidad" },
+    "motivo":                { "$ref": "_common.schema.json#/$defs/motivo" },
+    "timestamp":             { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

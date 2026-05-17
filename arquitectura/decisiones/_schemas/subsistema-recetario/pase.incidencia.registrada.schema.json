@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/pase.incidencia.registrada.schema.json",
+  "title": "pase.incidencia.registrada — payload schema",
+  "description": "Evento emitido por pase-cocina cuando el cocinero reporta una incidencia durante el servicio (rotura de plato, queja, falta de genero, error de coccion, etc.). Queda en historial del servicio. Pase-cocina NO toma decisiones reactivas — solo registra; el chef/jefe lo revisan post-servicio.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "incidencia_id",
+    "tipo",
+    "ficha_pase_id",
+    "descripcion",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "incidencia_id":  { "$ref": "_common.schema.json#/$defs/incidencia_id" },
+    "tipo": {
+      "enum": [
+        "rotura_genero",
+        "rotura_equipamiento",
+        "queja_cliente",
+        "falta_ingrediente",
+        "error_coccion",
+        "tiempo_excedido",
+        "alergia_no_declarada",
+        "otro"
+      ]
+    },
+    "ficha_pase_id":  { "$ref": "_common.schema.json#/$defs/ficha_pase_id" },
+    "descripcion":    { "type": "string", "minLength": 1 },
+    "severidad":      { "enum": ["baja", "media", "alta", "critica"] },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

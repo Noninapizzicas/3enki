@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/escandallo.alerta.schema.json",
+  "title": "escandallo.alerta — payload schema",
+  "description": "Evento emitido por escandallo cuando se cruza un umbral relevante (food_cost > 35%, margen negativo, ingrediente faltante, etc.). DRIFT DE NAMING CONOCIDO: el shape canonico segun naming.contract deberia ser <prefix>.<entity>.<verb>; aqui 'alerta' aparece como verb pero es noun. Se anota como drift_a_cerrar en trabajo_pendiente del sub-contrato; el rename a 'escandallo.alerta.detectada' es responsabilidad de quien reescriba escandallo siguiendo module-rewrite.contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "tipo",
+    "receta_id",
+    "nombre",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "tipo":           { "$ref": "_common.schema.json#/$defs/alerta_tipo" },
+    "receta_id":      { "$ref": "_common.schema.json#/$defs/receta_id" },
+    "nombre":         { "$ref": "_common.schema.json#/$defs/receta_nombre" },
+    "valor_observado": { "type": ["number", "null"], "description": "Valor que disparo la alerta (porcentaje, importe, conteo). null si la alerta es booleana (ingrediente_faltante)." },
+    "umbral":         { "type": ["number", "null"] },
+    "detalle":        { "type": "string", "minLength": 1 },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

@@ -1,0 +1,961 @@
+{
+  "_doc": "Sub-contrato que formaliza el SUBSISTEMA RECETARIO del sistema event-core. Captura la particion canonica del subsistema en N modulos backend acotados (recetas como core; escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina como satelites especializados) mas UN modulo frontend (frontend-recetario) que compone las tres vistas operativas (chef / jefe / pase) sin contener logica de dominio. Define los 20 eventos canonicos del subsistema con shape estricto (schemas AJV strict additionalProperties:false), el principio una-receta-tres-vistas-un-dueno-del-dato, las prohibiciones cross-modulo que sostienen la independencia, los drifts heredados del estado actual y el catalogo de modulos nuevos a anadir. No deriva de companero-viaje (que gobierna el subsistema chat/LLM/agentes) sino que es un subsistema paralelo de DOMINIO; se relaciona con companero-viaje porque expone tools al LLM. El validator subsistema-recetario.validate.js cruza module.json/audits/codigo de los modulos del subsistema con los schemas declarados aqui y detecta drift estructural ANTES de produccion. Lectura obligatoria antes de anadir o reescribir cualquier modulo del subsistema.",
+  "id": "subsistema-recetario",
+  "version": "1.0.0",
+  "creada": "2026-05-17",
+  "supersedes_nota": "v1.0.0: Primera version del sub-contrato. Cierra una ambiguedad arquitectonica historica del modulo recetas: tres responsabilidades distintas (CRUD canonico, escandallo de coste, ficha de pase) operando dentro de UN modulo. La resolucion canonica es una-receta-tres-vistas-un-dueno-del-dato: el dato es de recetas, las capas derivadas (coste, prototipos, escalado, ficha de pase) viven en modulos satelite que escuchan receta.* y publican lo suyo; el frontend agrupa las vistas. No cierra los drifts existentes de escandallo (alerta/comparativa rompen naming) — los anota en trabajo_pendiente para que los cierre quien reescriba escandallo siguiendo module-rewrite.contract. Tampoco cierra el drift de project_id vs proyecto_id en publishes de recetas — anotado igual.",
+
+  "deriva_de": null,
+  "relacion_con_otros_contratos": {
+    "companero-viaje": "El subsistema-recetario expone tools al LLM (recetas.crear, recetas.escalar, pase.sustituir, etc.) que el companero invoca via ai-gateway. Esas tools forman parte del modelo de extension tipo 'tool' del documento maestro, pero su shape (input parameters, retorno) lo define tools.contract.json — no este sub-contrato.",
+    "multi-tenancy": "Todos los eventos del subsistema-recetario incluyen project_id obligatorio. Hereda la directriz v1.1.0 (project_id siempre string, nunca null).",
+    "errors": "Errores de dominio del subsistema usan codes_dominio del catalogo (RECIPE_NOT_FOUND, INGREDIENT_PRICE_MISSING, RECIPE_INCOMPLETE, INVALID_STATE_TRANSITION, etc.). El sub-contrato lista los codigos que introduce y registra en errors.json.",
+    "naming": "Todos los eventos canonicos del subsistema cumplen <prefix>.<entity>.<verb> con verbo del whitelist es. Los drifts heredados (escandallo.alerta, escandallo.comparativa) estan listados como trabajo_pendiente.",
+    "glossary": "Introduce 6 conceptos nuevos al glossary (recipe-prototype, culinary-technique, mise-en-place, pass-card, recipe-substitution, kitchen-incident). El alta en glossary.json es trabajo_pendiente de prioridad alta — el validator de glossary detectara los conceptos faltantes en cuanto los modulos nuevos existan.",
+    "frontend": "El modulo frontend-recetario es un tipo de modulo permitido del subsistema. Sus reglas internas (no logica de dominio, composicion de vistas, etc.) viven en este contrato. Detalles de UI (estructura de paginas, tema, accesibilidad) heredan de frontend.contract."
+  },
+
+  "objetivo": "Producir 20 JSON Schemas estrictos (uno por evento canonico + _common.schema.json) que formalizan el shape de los eventos del subsistema-recetario, mas el catalogo de modulos canonicos del subsistema con sus responsabilidades acotadas y prohibiciones cruzadas. Validable mecanicamente cruzando module.json y audits modulo-completo de los modulos del subsistema (recetas, escandallo y futuros tecnicas, recetario-creativo, mise-en-place, pase-cocina, frontend-recetario) contra los schemas. El validator detecta: drift de campos polisemicos, drift de doble-escritura de dato canonico, drift de logica de dominio en frontend, drift de payloads sin correlation_id, drift de modulos del subsistema sin schema_ref declarado, y cualquier publish con shape no canonico.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/events.contract.json (principios generales del bus)",
+      "arquitectura/decisiones/_contratos/naming.contract.json (forma <prefix>.<entity>.<verb> + whitelist verbos es)",
+      "arquitectura/decisiones/_contratos/multi-tenancy.contract.json (project_id obligatorio)",
+      "arquitectura/decisiones/_contratos/errors.contract.json (catalogo de error.code)",
+      "arquitectura/decisiones/_outputs/events.json (catalogo canonico del repo)",
+      "arquitectura/convenciones/_outputs/naming.json (whitelist verbos)",
+      "arquitectura/convenciones/_outputs/glossary.json (canon de conceptos cross-modulo)"
+    ],
+    "obligatorios_si_existen": [
+      "arquitectura/auditoria/_outputs/modulo-completo/recetas.json",
+      "arquitectura/auditoria/_outputs/modulo-completo/escandallo.json",
+      "arquitectura/auditoria/_outputs/modulo-completo/tecnicas.json",
+      "arquitectura/auditoria/_outputs/modulo-completo/recetario-creativo.json",
+      "arquitectura/auditoria/_outputs/modulo-completo/mise-en-place.json",
+      "arquitectura/auditoria/_outputs/modulo-completo/pase-cocina.json",
+      "arquitectura/auditoria/_outputs/modulo-completo/frontend-recetario.json"
+    ],
+    "opcionales_para_contexto": [
+      "modules/recetas/index.js (publishes actuales — referencia de drift a cerrar)",
+      "modules/escandallo/index.js (publishes actuales)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "UNA RECETA, TRES VISTAS, UN DUENO DEL DATO. La misma receta puede mostrarse como tarjeta creativa al chef, como ficha de escandallo al jefe y como ficha minimalista al cocinero. Pero el DATO CANONICO de la receta lo posee UN solo modulo (recetas). Los otros producen capas derivadas referenciadas por receta_id. Doble-escritura es drift.",
+
+    "GRANULARIDAD ACOTADA SOBRE AHORRO DE ARCHIVOS. El subsistema se descompone en 6 modulos backend mas 1 frontend porque cada uno hace una cosa bien. No se fusionan en un mega-modulo 'gestor-de-recetas' aunque pareciera mas simple — la claridad inmediata del nombre vale mas que el conteo de archivos.",
+
+    "EL FRONTEND NO TIENE LOGICA DE DOMINIO. El frontend-recetario es un compositor de vistas: consume tools y eventos, NO calcula coste, NO decide escalado, NO archiva recetas. Tres modos visuales (chef/jefe/pase) son presentacion del mismo dato, no estados persistidos.",
+
+    "EL ESTADO OPERATIVO ES DEL DOMINIO, NO DEL UI. Una receta puede estar borrador, en_servicio o archivada. mise-en-place y pase-cocina SOLO trabajan con en_servicio. Cambiar de estado es un evento de dominio (receta.estado.actualizada), no una accion del frontend que oculte/muestre.",
+
+    "LAS CAPAS NUEVAS NO ROMPEN LAS EXISTENTES. Anadir manana un modulo 'nutricion' que calcule informacion nutricional NO requiere tocar recetas ni escandallo ni el frontend — solo escuchar receta.* y publicar nutricion.calculada. El frontend lo recoge sin reescribirse. Esta es la modularidad infinita del paradigma.",
+
+    "LA RECETA CANONICA ES UN AGGREGATE ROOT, NO UN GOD OBJECT. La receta tiene nombre, ingredientes, instrucciones, porciones, tiempo, dificultad, estado_operativo. NO tiene coste (eso lo calcula escandallo y persiste por separado), NO tiene ficha de pase (esa la materializa pase-cocina), NO tiene perfil sensorial (eso vive en recetario-creativo). Si la receta crece en campos, es porque pertenecen a SU dominio canonico, no porque otros modulos no quepan en si mismos.",
+
+    "EL FRONTEND ELIGE QUE PEDIR, NO QUE EXISTIR. El usuario en modo chef abre la receta y pide al frontend la vista creativa; el frontend invoca recetas.obtener + creativo.prototipos.por_receta + tecnicas.referenciadas_en. En modo jefe pide recetas.obtener + escandallo.por_receta + mise-en-place.planes_que_la_incluyen. En modo pase pide pase-cocina.ficha_activa. Los modulos backend son agnosticos del modo de vista — entregan su dato sin saber a quien.",
+
+    "INGREDIENTE_NOMBRE ES LA CLAVE, NO INGREDIENTE_ID. recetas usa nombre como identidad del ingrediente en el catalogo del proyecto para que el JSON sea legible. Si en el futuro se internacionaliza, el rename es un horizontal, no una decision de este contrato.",
+
+    "EL CONTRATO ES INMUTABLE FRENTE A AHORROS TACTICOS. Si en una sesion futura alguien sugiere 'mejor que escandallo guarde el coste dentro de la receta porque es mas comodo', la regla 'un dueno del dato' lo prohibe. El comoda del momento es la tentacion clasica de redescubrir mal el modelo."
+  ],
+
+  "principios": [
+    {
+      "id": "shape_estricto_validable_con_ajv",
+      "regla": "Cada uno de los 19 eventos canonicos tiene UN JSON Schema 2020-12 strict (additionalProperties:false en todos los niveles). Cualquier modulo del subsistema que publique uno cumple el schema EXACTO.",
+      "razon": "Sin schema estricto, cada modulo anade su propio campo extra y se acumula drift. additionalProperties:false convierte anadir un campo en una decision consciente."
+    },
+    {
+      "id": "campos_canonicos_obligatorios",
+      "regla": "Todo evento del subsistema incluye OBLIGATORIAMENTE: correlation_id, project_id, user_id, timestamp. Los eventos sobre una receta concreta incluyen ademas receta_id (excepto produccion.compra.calculada que agrega multiples) y nombre denormalizado.",
+      "razon": "correlation_id habilita la observabilidad end-to-end. project_id sostiene multi-tenancy. user_id habilita aislamiento por usuario. timestamp en ISO 8601 da orden cronologico. Sin estos, las garantias del modelo se rompen."
+    },
+    {
+      "id": "una_receta_un_dueno_del_dato",
+      "regla": "El dato canonico de la receta (nombre, ingredientes, instrucciones, porciones, estado_operativo, history) lo POSEE exclusivamente el modulo recetas. Ningun otro modulo del subsistema lo lee directamente del disco ni lo modifica. Los otros modulos lo CONSULTAN via la tool recetas.obtener o REACCIONAN a eventos receta.*.",
+      "razon": "Doble dueno = drift garantizado. Cuando dos modulos pueden modificar la misma cosa, las versiones divergen y no hay verdad. Un solo dueno hace que las capas derivadas sean siempre referenciables y refrescables."
+    },
+    {
+      "id": "capas_derivadas_referenciadas_por_id",
+      "regla": "escandallo, recetario-creativo, mise-en-place, pase-cocina persisten su dato propio (calculos, prototipos, planes, fichas) referenciando receta_id. NO duplican campos de la receta canonica salvo nombre (denormalizado por usabilidad).",
+      "razon": "Si los satelites duplican datos, cuando la receta cambia las copias se desactualizan. Referenciar por id obliga a refrescar al consumir, garantizando frescura."
+    },
+    {
+      "id": "frontend_sin_logica_de_dominio",
+      "regla": "El modulo frontend-recetario NO realiza calculos ni toma decisiones de dominio. Solo INVOCA tools del backend y AGREGA eventos. Cambiar de modo (chef/jefe/pase) es cambio de presentacion, no de estado persistido.",
+      "razon": "Si la logica vive en el frontend, otras vias de entrada (LLM, telegram, voz) no la tienen. Repite drift en cada canal. La logica vive en backend; el frontend es UNA forma de invocarla."
+    },
+    {
+      "id": "estado_operativo_dominio",
+      "regla": "La transicion borrador<->en_servicio<->archivada es un evento del dominio (receta.estado.actualizada). mise-en-place y pase-cocina SOLO actuan sobre recetas en_servicio. recetario-creativo actua sobre borrador y en_servicio. recetas mantiene el estado autoritativo.",
+      "razon": "Si el frontend filtra por 'modo activo' sin estado en backend, los otros consumers no saben cuando empezar/parar. Un estado canonico evita filtrado especulativo en cada modulo."
+    },
+    {
+      "id": "el_validator_cruza_audit_y_schemas",
+      "regla": "subsistema-recetario.validate.js detecta drift cruzando: (a) module.json publishes/subscribes de modulos del subsistema con la presencia de schema_ref apuntando al schema oficial; (b) campos_visibles de audits con campos obligatorios del schema; (c) prohibiciones cross-modulo (escandallo no escribe en recetas.json; frontend no contiene calculos; etc.).",
+      "razon": "Sin esta validacion, los schemas existen pero nadie los aplica. El cross-check mecaniza la disciplina."
+    },
+    {
+      "id": "extensibilidad_via_eventos_canonicos",
+      "regla": "Anadir un modulo nuevo al subsistema (nutricion, sumiller, alergenos-extendido, etc.) NO requiere tocar ningun modulo existente — basta con que el nuevo modulo escuche eventos receta.* y publique sus propios eventos de dominio.",
+      "razon": "Si anadir capacidad requiere modificar los modulos existentes, el sistema no es modular. Los puntos de extension explicitos hacen que el subsistema crezca sin romper."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "particion_en_seis_modulos_backend",
+      "decision": "Descomponer el subsistema en 6 modulos backend acotados: recetas (core), escandallo (coste), tecnicas (libreria), recetario-creativo (prototipos), mise-en-place (produccion), pase-cocina (servicio).",
+      "alternativa_descartada": "Mantener todo en un unico modulo 'recetas' o fusionar en un 'gestor-de-recetario'.",
+      "razon": "Cada uno hace UNA cosa bien (regla maestra del repo). Un mega-modulo acumula drift, mezcla R&D con produccion con pase y crece de forma inestable. La granularidad acotada cuesta archivos pero gana claridad permanente."
+    },
+    {
+      "id": "frontend_unico_para_tres_vistas",
+      "decision": "Un solo modulo frontend-recetario que compone las tres vistas operativas (chef / jefe / pase) consumiendo los 6 modulos backend.",
+      "alternativa_descartada": "Tres frontends separados (frontend-chef, frontend-jefe, frontend-pase).",
+      "razon": "La complejidad de UX no es proporcional a la complejidad de dominio. Tres frontends triplican mantenimiento, comparten 70% del codigo (auth, layout, navegacion, tema) y obligan al usuario a saber 'que app abrir'. Un frontend con tres modos resuelve la UX como una. La descomposicion ya esta en backend, que es donde aporta."
+    },
+    {
+      "id": "project_id_canonico_ingles_aunque_modulo_es",
+      "decision": "El campo canonico del payload se llama 'project_id' (ingles) en TODOS los eventos del subsistema, aunque el modulo emisor sea language=es.",
+      "alternativa_descartada": "Cada modulo usa el campo en su propio idioma ('proyecto_id' en recetas, 'project_id' en chat-flow).",
+      "razon": "project_id es un campo transversal multi-tenancy compartido con chat-flow, agent-flow, llm-flow. Tener dos formas duplica el mantenimiento. El glossary canoniza 'project' solo en EN. La regla 'modulo monolingue' aplica a verbos del modulo, no a campos cross-modulo. El drift actual ('proyecto_id' en recetas) se cierra cuando recetas se reescriba siguiendo module-rewrite.contract."
+    },
+    {
+      "id": "ingrediente_clave_por_nombre_no_id",
+      "decision": "Los ingredientes del catalogo del proyecto se identifican por nombre, no por id. Eventos como ingrediente.precio.actualizado usan nombre como clave.",
+      "alternativa_descartada": "Asignar id (UUID) a cada ingrediente.",
+      "razon": "El JSON del proyecto se edita a mano en el bootstrap; nombres son legibles, ids no. La internacionalizacion futura requeriria reasignar ids igualmente — el rename desde nombre a id sera un horizontal separado. Por ahora, nombre como clave canonica."
+    },
+    {
+      "id": "estado_operativo_triple",
+      "decision": "Solo tres estados operativos canonicos: borrador, en_servicio, archivada. Transiciones validas: borrador<->en_servicio, en_servicio->archivada, archivada->en_servicio.",
+      "alternativa_descartada": "Mas estados granulares (en_revision, pendiente_aprobacion, etc.).",
+      "razon": "Los estados sirven para que mise-en-place y pase-cocina sepan que recetas tomar. Mas estados aumentan el switch en consumers sin valor operativo claro. El 'en_revision' del chef vive en recetario-creativo (prototipos), no en recetas."
+    },
+    {
+      "id": "sustituciones_no_modifican_la_receta",
+      "decision": "Las sustituciones de emergencia en pase (pase.sustitucion.registrada) NO modifican la receta canonica. Viven en la ficha de pase y quedan como senal para que el chef decida si incorporarlas.",
+      "alternativa_descartada": "Que pase-cocina emita receta.actualizada cuando se sustituye un ingrediente.",
+      "razon": "Una sustitucion de emergencia (sin albaca, usa cilantro hoy) no debe cambiar la receta canonica que se reproducira manana. El cocinero no es el dueno de la receta. Sustituciones se quedan en pase; el chef las revisa post-servicio."
+    },
+    {
+      "id": "frontend_lee_via_tools_no_via_archivos",
+      "decision": "El frontend-recetario lee TODO via tools del bus. Nunca abre archivos JSON de proyecto directamente.",
+      "alternativa_descartada": "El frontend lee data/projects/{slug}/recetas.json para velocidad.",
+      "razon": "Multi-tenancy y aislamiento: el frontend no debe conocer la estructura de disco. Acceso via tools garantiza que la respuesta este filtrada por project_id activo. Si manana cambiamos persistencia (SQL, S3, lo que sea), el frontend no se entera."
+    },
+    {
+      "id": "publica_recetas_no_consume_escandallo",
+      "decision": "recetas NO escucha eventos de los modulos derivados (no se entera de escandallo.calculado, no reacciona a pase.incidencia.registrada). recetas es FUENTE, no consumidora del subsistema (salvo que sea de otro subsistema externo, como facturas.linea.detectada para precios).",
+      "alternativa_descartada": "recetas escucha escandallo.alerta y marca la receta con un flag de 'rentabilidad baja'.",
+      "razon": "Si recetas escucha a sus consumidores, hay ciclo de dependencia y la jerarquia se vuelve circular. La rentabilidad es UN dato derivado que pertenece a escandallo o al frontend, no al aggregate root."
+    }
+  ],
+
+  "tipos_canonicos_de_modulo_del_subsistema": {
+    "descripcion": "El subsistema-recetario contiene 6 modulos backend mas 1 frontend. Cada uno tiene un tipo canonico con responsabilidad acotada, dueño de dato definido y prohibiciones cruzadas.",
+    "modulos": [
+      {
+        "slug": "recetas",
+        "tipo": "core_de_dominio",
+        "estado": "existente_a_refactorizar",
+        "language": "es",
+        "dueño_de": ["la receta canonica", "el catalogo de ingredientes del proyecto"],
+        "responsabilidad": "CRUD de recetas + catalogo de ingredientes. History de versiones. Transiciones de estado_operativo. Fuente autoritativa del dato canonico.",
+        "publica_canonicamente": ["receta.creada", "receta.actualizada", "receta.eliminada", "receta.estado.actualizada", "ingrediente.precio.actualizado"],
+        "consume_canonicamente": [],
+        "tools_que_expone": ["recetas.crear", "recetas.listar", "recetas.obtener", "recetas.buscar", "recetas.actualizar", "recetas.historial", "recetas.revertir", "recetas.eliminar", "recetas.estadisticas", "recetas.ingredientes", "recetas.actualizar_precio", "recetas.cambiar_estado"],
+        "persistencia": "data/projects/{slug}/recetas.json (un archivo por proyecto via fs.read.request/fs.write.request)",
+        "prohibido_para_este_modulo": [
+          "Escuchar eventos de los modulos derivados (escandallo, mise-en-place, pase-cocina, etc.)",
+          "Persistir coste de recetas (eso es escandallo)",
+          "Persistir prototipos (eso es recetario-creativo)",
+          "Persistir fichas de pase (eso es pase-cocina)"
+        ]
+      },
+      {
+        "slug": "escandallo",
+        "tipo": "derivado_de_coste",
+        "estado": "existente_a_refactorizar",
+        "language": "es",
+        "dueño_de": ["calculos de coste por receta", "alertas de margen", "comparativas precio_catalogo vs precio_compra"],
+        "responsabilidad": "Calcular coste de recetas cruzando ingredientes con precio_mercado. Emitir alertas cuando se cruza umbral. Comparar con precio_compra real desde facturas.",
+        "publica_canonicamente": ["escandallo.calculado", "escandallo.alerta", "escandallo.comparativa"],
+        "consume_canonicamente": ["receta.creada", "receta.actualizada", "ingrediente.precio.actualizado"],
+        "tools_que_expone": ["escandallo.receta", "escandallo.global", "escandallo.comparar_precios", "escandallo.simular_precio"],
+        "persistencia": "in-memory cache invalidado por eventos. Sin persistencia propia hoy; puede tener json-per-project si crece.",
+        "prohibido_para_este_modulo": [
+          "Escribir en data/projects/{slug}/recetas.json directamente",
+          "Modificar la receta canonica (solo lee)",
+          "Persistir datos canonicos de receta (solo coste derivado)"
+        ]
+      },
+      {
+        "slug": "tecnicas",
+        "tipo": "libreria_reutilizable",
+        "estado": "nuevo",
+        "language": "es",
+        "dueño_de": ["la libreria de tecnicas codificadas del proyecto"],
+        "responsabilidad": "Mantener una libreria reusable de tecnicas culinarias (esferificacion, confitar, etc.) con parametros (temperatura, tiempo, materiales). Cada tecnica es referenciable desde recetas y prototipos por tecnica_id.",
+        "publica_canonicamente": ["tecnica.creada", "tecnica.actualizada"],
+        "consume_canonicamente": [],
+        "tools_que_expone": ["tecnicas.codificar", "tecnicas.listar", "tecnicas.obtener", "tecnicas.actualizar", "tecnicas.parametros"],
+        "persistencia": "data/projects/{slug}/tecnicas.json (JSON por proyecto via filesystem).",
+        "prohibido_para_este_modulo": [
+          "Modificar recetas ni prototipos (las referencias son por id, no por valor)",
+          "Persistir contenido de recetas"
+        ]
+      },
+      {
+        "slug": "recetario-creativo",
+        "tipo": "anotacion_creativa",
+        "estado": "nuevo",
+        "language": "es",
+        "dueño_de": ["prototipos del chef", "iteraciones anotadas por prototipo", "manifiesto creativo del proyecto", "scoring de alineacion entre receta/prototipo y manifiesto"],
+        "responsabilidad": "Soporte al proceso creativo: el chef explora ideas como prototipos (no son recetas todavia), anota iteraciones, valida alineacion con el manifiesto. Promociona prototipos a recetas canonicas via recetas.crear cuando madura.",
+        "publica_canonicamente": ["creativo.prototipo.creado", "creativo.iteracion.registrada", "creativo.alineacion.validada"],
+        "consume_canonicamente": ["receta.creada", "receta.actualizada"],
+        "tools_que_expone": ["creativo.prototipo.crear", "creativo.prototipo.iterar", "creativo.alineacion.evaluar", "creativo.manifiesto.actualizar"],
+        "persistencia": "data/projects/{slug}/recetario-creativo.json.",
+        "prohibido_para_este_modulo": [
+          "Modificar recetas canonicas (escribe en su propio archivo)",
+          "Persistir coste (es de escandallo)",
+          "Persistir fichas de pase (es de pase-cocina)"
+        ]
+      },
+      {
+        "slug": "mise-en-place",
+        "tipo": "derivado_de_produccion",
+        "estado": "nuevo",
+        "language": "es",
+        "dueño_de": ["escalados", "listas de compra consolidadas", "planes de produccion"],
+        "responsabilidad": "Calcular escalados, consolidar listas de compra agregando ingredientes con merma, publicar planes de produccion semanales/diarios. Solo opera con recetas en_servicio.",
+        "publica_canonicamente": ["produccion.escalado.calculado", "produccion.compra.calculada", "produccion.plan.publicado"],
+        "consume_canonicamente": ["receta.estado.actualizada", "receta.actualizada"],
+        "tools_que_expone": ["mise.escalar", "mise.compra.consolidar", "mise.plan.publicar", "mise.plan.listar"],
+        "persistencia": "data/projects/{slug}/mise-en-place.json.",
+        "prohibido_para_este_modulo": [
+          "Operar con recetas en estado borrador o archivada",
+          "Modificar la receta canonica"
+        ]
+      },
+      {
+        "slug": "pase-cocina",
+        "tipo": "servicio_operativo",
+        "estado": "nuevo",
+        "language": "es",
+        "dueño_de": ["fichas de pase activas", "sustituciones aplicadas en servicio", "incidencias del servicio"],
+        "responsabilidad": "Materializar fichas de pase (version operativa de receta en_servicio) para el cocinero. Registrar sustituciones de emergencia. Registrar incidencias del servicio.",
+        "publica_canonicamente": ["pase.ficha.creada", "pase.sustitucion.registrada", "pase.incidencia.registrada"],
+        "consume_canonicamente": ["receta.estado.actualizada", "produccion.plan.publicado"],
+        "tools_que_expone": ["pase.ficha.activar", "pase.ficha.obtener", "pase.sustituir", "pase.incidencia.reportar", "pase.servicio.resumen"],
+        "persistencia": "data/projects/{slug}/pase-cocina.json + posiblemente registro por servicio.",
+        "prohibido_para_este_modulo": [
+          "Modificar la receta canonica (sustituciones NO emiten receta.actualizada)",
+          "Operar sobre recetas no en_servicio"
+        ]
+      },
+      {
+        "slug": "frontend-recetario",
+        "tipo": "canal_ui",
+        "estado": "nuevo",
+        "language": "es",
+        "dueño_de": ["nada (read-only desde la perspectiva del subsistema)"],
+        "responsabilidad": "Componer las tres vistas operativas (chef/jefe/pase) consumiendo tools y eventos de los 6 modulos backend. El usuario elige modo; el frontend invoca las tools correspondientes y agrega los eventos al render.",
+        "publica_canonicamente": [],
+        "consume_canonicamente": [
+          "receta.creada",
+          "receta.actualizada",
+          "receta.eliminada",
+          "receta.estado.actualizada",
+          "ingrediente.precio.actualizado",
+          "escandallo.calculado",
+          "escandallo.alerta",
+          "tecnica.creada",
+          "tecnica.actualizada",
+          "creativo.prototipo.creado",
+          "creativo.iteracion.registrada",
+          "creativo.alineacion.validada",
+          "produccion.escalado.calculado",
+          "produccion.compra.calculada",
+          "produccion.plan.publicado",
+          "pase.ficha.creada",
+          "pase.sustitucion.registrada",
+          "pase.incidencia.registrada"
+        ],
+        "tools_que_expone": [],
+        "persistencia": "ninguna en el subsistema. Estado UI local (zoom, scroll, filtros activos) vive en localStorage del navegador.",
+        "prohibido_para_este_modulo": [
+          "Calcular coste, escalado, food cost, alergenos: TODO eso lo pide al backend",
+          "Mantener cache de dato canonico mas alla del render actual",
+          "Persistir estado de dominio (cambiar de modo NO altera dato)",
+          "Acceder a archivos JSON del proyecto directamente",
+          "Tener handlers que tomen decisiones de dominio (ifs sobre coste, validaciones de receta, etc.) — eso lo decide el backend"
+        ]
+      }
+    ]
+  },
+
+  "eventos": [
+    {
+      "id": "receta.creada",
+      "name": "receta.creada",
+      "publicado_por": "recetas",
+      "consumido_por": "escandallo (invalida cache; calcula coste si receta queda en_servicio), recetario-creativo (puede crear contexto creativo asociado), frontend-recetario (refresca listas)",
+      "proposito": "Una receta nueva ha sido persistida en el archivo del proyecto. Es el TRIGGER del enriquecimiento del subsistema.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/receta.creada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "receta_id", "nombre", "version", "estado_operativo", "timestamp"],
+        "opcionales":   ["incompleta", "campos_pendientes"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "Hoy recetas publica con campo 'proyecto_id' (es) en lugar de 'project_id' (canonico).",
+        "Hoy recetas NO incluye correlation_id en el payload.",
+        "Hoy recetas NO incluye user_id en el payload.",
+        "Hoy recetas NO incluye estado_operativo en el payload.",
+        "Hoy recetas publica timestamp como epoch ms (Date.now()) en lugar de ISO 8601.",
+        "Cierres: trabajo de reescritura de recetas siguiendo module-rewrite.contract."
+      ]
+    },
+    {
+      "id": "receta.actualizada",
+      "name": "receta.actualizada",
+      "publicado_por": "recetas",
+      "consumido_por": "escandallo (invalida cache de coste de esa receta), mise-en-place (recalcula planes que la incluyan si en_servicio), pase-cocina (refresca fichas activas si en_servicio), frontend-recetario",
+      "proposito": "El contenido de una receta ha cambiado (campos modificados directamente o por revertir a version anterior).",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/receta.actualizada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "receta_id", "nombre", "version", "timestamp"],
+        "opcionales":   ["campos_actualizados", "motivo", "incompleta", "campos_pendientes"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "Drifts identicos a receta.creada (proyecto_id, sin correlation_id, sin user_id, timestamp epoch).",
+        "campos_actualizados es NUEVO — no se emite hoy. Permite a consumers decidir si su capa derivada se afecta sin re-obtener la receta entera."
+      ]
+    },
+    {
+      "id": "receta.eliminada",
+      "name": "receta.eliminada",
+      "publicado_por": "recetas",
+      "consumido_por": "escandallo (descarta cache), mise-en-place (retira de planes futuros), pase-cocina (cierra fichas activas), frontend-recetario",
+      "proposito": "Una receta ha sido archivada logicamente (no borrada). Consumers retiran su capa derivada del servicio activo pero conservan auditoria.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/receta.eliminada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "receta_id", "nombre", "timestamp"],
+        "opcionales":   ["motivo"]
+      },
+      "notas_de_drift_a_cerrar": ["Drifts identicos a receta.creada."]
+    },
+    {
+      "id": "receta.estado.actualizada",
+      "name": "receta.estado.actualizada",
+      "publicado_por": "recetas",
+      "consumido_por": "mise-en-place (activa/desactiva la receta del scope de planes), pase-cocina (activa/desactiva fichas de pase), frontend-recetario",
+      "proposito": "Una receta ha cambiado de estado operativo (borrador<->en_servicio<->archivada). Distinto de receta.actualizada porque el cambio activa o desactiva CAPAS ENTERAS del subsistema.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/receta.estado.actualizada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "receta_id", "nombre", "estado_anterior", "estado_nuevo", "version", "timestamp"],
+        "opcionales":   ["motivo"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "Evento NUEVO. No emitido hoy.",
+        "Requiere anadir estado_operativo como campo persistido y wireado en recetas (hoy hay un campo 'estado' con valores activa/archivada/borrador parcialmente alineado — se canoniza a borrador/en_servicio/archivada)."
+      ]
+    },
+    {
+      "id": "ingrediente.precio.actualizado",
+      "name": "ingrediente.precio.actualizado",
+      "publicado_por": "recetas (cuando el chef o el LLM actualizan precio via tool). Tambien puede publicarlo facturas (cross-vertical) si detecta nuevo precio en factura procesada.",
+      "consumido_por": "escandallo (invalida cache de coste de todas las recetas que usan ese ingrediente), frontend-recetario",
+      "proposito": "El precio_mercado de un ingrediente en el catalogo del proyecto ha cambiado. Implica recalcular coste de todas las recetas que lo usan.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/ingrediente.precio.actualizado.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "nombre", "precio_mercado", "timestamp"],
+        "opcionales":   ["unidad", "categoria", "fuente"]
+      },
+      "notas_de_drift_a_cerrar": ["Drifts identicos a receta.creada (proyecto_id, sin correlation_id, sin user_id, timestamp epoch)."]
+    },
+    {
+      "id": "escandallo.calculado",
+      "name": "escandallo.calculado",
+      "publicado_por": "escandallo",
+      "consumido_por": "frontend-recetario (refresca panel jefe), agentes especialistas si escandallo-analyzer esta activo",
+      "proposito": "El coste de una receta ha sido calculado (a peticion o reactivo a cambio relevante).",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/escandallo.calculado.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "receta_id", "nombre", "coste_total", "coste_por_porcion", "coste_es_real", "timestamp"],
+        "opcionales":   ["food_cost_pct", "ingredientes_sin_precio"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "Hoy escandallo publica el evento con payload 'variable' (segun audit). El shape canonico fija la lista de campos minima.",
+        "Hoy no incluye correlation_id ni project_id ni user_id.",
+        "Cierres: trabajo de reescritura de escandallo siguiendo module-rewrite.contract."
+      ]
+    },
+    {
+      "id": "escandallo.alerta",
+      "name": "escandallo.alerta",
+      "publicado_por": "escandallo",
+      "consumido_por": "frontend-recetario (notifica al jefe), agentes (analizan tendencias)",
+      "proposito": "Se ha cruzado un umbral relevante (food_cost alto, margen negativo, ingrediente faltante, etc.).",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/escandallo.alerta.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "tipo", "receta_id", "nombre", "timestamp"],
+        "opcionales":   ["valor_observado", "umbral", "detalle"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "DRIFT NAMING CONOCIDO: nombre del evento rompe <prefix>.<entity>.<verb> — 'alerta' es noun, no verb. Rename canonico futuro: escandallo.alerta.detectada. Cerrarlo es responsabilidad de quien reescriba escandallo + naming validator."
+      ]
+    },
+    {
+      "id": "escandallo.comparativa",
+      "name": "escandallo.comparativa",
+      "publicado_por": "escandallo",
+      "consumido_por": "frontend-recetario (vista comparativa precio catalogo vs compra), agentes",
+      "proposito": "Comparativa precio_mercado del catalogo vs precio_compra real (cross-cruce con facturas).",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/escandallo.comparativa.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "lineas", "timestamp"],
+        "opcionales":   ["ingredientes_sin_compra_real"]
+      },
+      "notas_de_drift_a_cerrar": [
+        "DRIFT NAMING CONOCIDO: 'comparativa' es noun. Rename canonico futuro: escandallo.comparativa.calculada."
+      ]
+    },
+    {
+      "id": "tecnica.creada",
+      "name": "tecnica.creada",
+      "publicado_por": "tecnicas",
+      "consumido_por": "frontend-recetario (indexa para autocompletar en editor de recetas), recetario-creativo (referencia desde prototipos)",
+      "proposito": "Una tecnica reutilizable nueva ha sido codificada en la libreria del proyecto.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/tecnica.creada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "tecnica_id", "nombre", "timestamp"],
+        "opcionales":   ["categoria"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO — modulo tecnicas todavia no existe."]
+    },
+    {
+      "id": "tecnica.actualizada",
+      "name": "tecnica.actualizada",
+      "publicado_por": "tecnicas",
+      "consumido_por": "frontend-recetario",
+      "proposito": "Parametros de una tecnica han cambiado. Las recetas/prototipos que la referencian NO se actualizan automaticamente (referencia por id, no por valor).",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/tecnica.actualizada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "tecnica_id", "nombre", "timestamp"],
+        "opcionales":   ["campos_actualizados"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO."]
+    },
+    {
+      "id": "creativo.prototipo.creado",
+      "name": "creativo.prototipo.creado",
+      "publicado_por": "recetario-creativo",
+      "consumido_por": "frontend-recetario (modo chef)",
+      "proposito": "El chef abre una nueva exploracion creativa que aun no es receta canonica.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/creativo.prototipo.creado.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "prototipo_id", "nombre", "timestamp"],
+        "opcionales":   ["tags_creativos", "receta_id_origen"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO — modulo recetario-creativo todavia no existe."]
+    },
+    {
+      "id": "creativo.iteracion.registrada",
+      "name": "creativo.iteracion.registrada",
+      "publicado_por": "recetario-creativo",
+      "consumido_por": "frontend-recetario",
+      "proposito": "El chef anota una iteracion sobre un prototipo (lo que cambio, que funciono).",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/creativo.iteracion.registrada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "prototipo_id", "iteracion_id", "anotacion", "timestamp"],
+        "opcionales":   ["resultado"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO."]
+    },
+    {
+      "id": "creativo.alineacion.validada",
+      "name": "creativo.alineacion.validada",
+      "publicado_por": "recetario-creativo",
+      "consumido_por": "frontend-recetario, agentes (curador-creativo si activo)",
+      "proposito": "Resultado del cruce entre una receta/prototipo y el manifiesto creativo del proyecto.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/creativo.alineacion.validada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "objeto_tipo", "objeto_id", "score", "timestamp"],
+        "opcionales":   ["disuenan", "resaltan"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO."]
+    },
+    {
+      "id": "produccion.escalado.calculado",
+      "name": "produccion.escalado.calculado",
+      "publicado_por": "mise-en-place",
+      "consumido_por": "frontend-recetario (modo jefe), pase-cocina (informa fichas)",
+      "proposito": "Escalado de una receta para X porciones ha sido calculado. NO modifica la receta canonica.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/produccion.escalado.calculado.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "receta_id", "porciones_origen", "porciones_destino", "ingredientes_escalados", "timestamp"],
+        "opcionales":   ["factor"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO."]
+    },
+    {
+      "id": "produccion.compra.calculada",
+      "name": "produccion.compra.calculada",
+      "publicado_por": "mise-en-place",
+      "consumido_por": "frontend-recetario, agentes (asistente-compras si activo)",
+      "proposito": "Lista de compra consolidada para un horizonte temporal.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/produccion.compra.calculada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "horizonte", "items", "timestamp"],
+        "opcionales":   ["recetas_consideradas"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO."]
+    },
+    {
+      "id": "produccion.plan.publicado",
+      "name": "produccion.plan.publicado",
+      "publicado_por": "mise-en-place",
+      "consumido_por": "pase-cocina (prepara fichas), frontend-recetario",
+      "proposito": "Un plan de produccion (semanal/diario) ha sido publicado y entra en servicio.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/produccion.plan.publicado.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "plan_id", "horizonte_desde", "horizonte_hasta", "lineas", "timestamp"],
+        "opcionales":   []
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO."]
+    },
+    {
+      "id": "pase.ficha.creada",
+      "name": "pase.ficha.creada",
+      "publicado_por": "pase-cocina",
+      "consumido_por": "frontend-recetario (modo pase)",
+      "proposito": "Una ficha de pase ha sido materializada para una receta en_servicio en un servicio concreto.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/pase.ficha.creada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "ficha_pase_id", "receta_id", "version_receta", "timestamp"],
+        "opcionales":   ["nombre", "servicio"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO."]
+    },
+    {
+      "id": "pase.sustitucion.registrada",
+      "name": "pase.sustitucion.registrada",
+      "publicado_por": "pase-cocina",
+      "consumido_por": "frontend-recetario, recetario-creativo (post-servicio: chef revisa para decidir si incorpora)",
+      "proposito": "El cocinero registra una sustitucion de emergencia en una ficha de pase. NO modifica la receta canonica.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/pase.sustitucion.registrada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "ficha_pase_id", "ingrediente_original", "ingrediente_sustituto", "motivo", "timestamp"],
+        "opcionales":   ["cantidad", "unidad"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO."]
+    },
+    {
+      "id": "pase.incidencia.registrada",
+      "name": "pase.incidencia.registrada",
+      "publicado_por": "pase-cocina",
+      "consumido_por": "frontend-recetario, agentes (analista-postservicio si activo)",
+      "proposito": "Incidencia del servicio reportada por el cocinero. Queda en historial; revision post-servicio decide acciones.",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/pase.incidencia.registrada.schema.json",
+      "shape_resumen": {
+        "obligatorios": ["correlation_id", "project_id", "user_id", "incidencia_id", "tipo", "ficha_pase_id", "descripcion", "timestamp"],
+        "opcionales":   ["severidad"]
+      },
+      "notas_de_drift_a_cerrar": ["Evento NUEVO."]
+    }
+  ],
+
+  "campos_canonicos_compartidos": {
+    "descripcion": "Campos que aparecen en multiples eventos del subsistema. Definidos UNA VEZ en _common.schema.json; los schemas individuales los referencian por $ref. Los transversales (correlation_id, project_id, user_id, timestamp) tienen el mismo shape que en chat-flow / agent-flow / llm-flow. Los de dominio (receta_id, ingrediente_nombre, etc.) son nuevos del subsistema.",
+    "transversales": {
+      "correlation_id":  { "type": "string", "minLength": 1, "descripcion": "Hilo causal generado por el originador, propagado sin modificar." },
+      "project_id":      { "type": "string", "minLength": 1, "descripcion": "Proyecto activo. Multi-tenancy obligatorio." },
+      "user_id":         { "type": "string", "minLength": 1, "descripcion": "Identifica al humano. 'default' en single-user." },
+      "timestamp":       { "type": "string", "format": "date-time", "descripcion": "ISO 8601. Drift conocido: hoy emisores usan epoch ms." }
+    },
+    "dominio": {
+      "receta_id":               { "type": "string", "minLength": 1, "descripcion": "UUID inmutable de la receta." },
+      "receta_nombre":           { "type": "string", "minLength": 1, "descripcion": "Nombre denormalizado en eventos." },
+      "receta_version":          { "type": "integer", "minimum": 1, "descripcion": "Monotonica. Nunca se recicla." },
+      "receta_estado_operativo": { "enum": ["borrador", "en_servicio", "archivada"] },
+      "ingrediente_nombre":      { "type": "string", "minLength": 1, "descripcion": "Clave canonica del ingrediente en el catalogo." },
+      "unidad":                  { "type": "string", "minLength": 1 },
+      "precio_mercado":          { "type": "number", "minimum": 0 },
+      "tecnica_id":              { "type": "string", "minLength": 1 },
+      "prototipo_id":            { "type": "string", "minLength": 1 },
+      "ficha_pase_id":           { "type": "string", "minLength": 1 },
+      "incidencia_id":           { "type": "string", "minLength": 1 },
+      "motivo":                  { "type": "string", "minLength": 1 },
+      "alerta_tipo":             { "enum": ["food_cost_alto", "food_cost_bajo", "margen_negativo", "ingrediente_faltante", "precio_obsoleto"] }
+    }
+  },
+
+  "transiciones_de_significado_eliminadas": [
+    {
+      "campo_polisemico_anterior": "proyecto_id (modulo recetas) vs project_id (resto del sistema)",
+      "significados_distintos_anteriores": [
+        "En eventos publicados por recetas: 'proyecto_id' (string, identificador del proyecto en es).",
+        "En eventos publicados por chat-flow, agent-flow, llm-flow: 'project_id' (string, identificador del proyecto en en)."
+      ],
+      "resolucion_canonica": "El campo cross-modulo se llama 'project_id' (en) en TODOS los eventos del sistema, incluido el subsistema-recetario. Aunque recetas sea language=es, el campo project_id es transversal multi-tenancy y se canoniza en una sola forma. Drift abierto: hoy recetas emite 'proyecto_id' — cierre con reescritura de recetas."
+    },
+    {
+      "campo_polisemico_anterior": "estado (modulo recetas)",
+      "significados_distintos_anteriores": [
+        "Valores observados en campo 'estado' del JSON de receta: 'activa', 'archivada', 'borrador'.",
+        "Mezcla operativo con persistencia: 'activa' agrupa borrador-listo-para-servicio y receta-en-servicio."
+      ],
+      "resolucion_canonica": "Renombrado a 'estado_operativo' con triple valor canonico borrador / en_servicio / archivada. 'activa' se elimina. mise-en-place y pase-cocina solo operan con en_servicio. Drift abierto: el JSON de proyectos existentes tiene 'estado:activa' — migracion data al primer arranque tras reescritura."
+    },
+    {
+      "campo_polisemico_anterior": "timestamp (modulo recetas y escandallo)",
+      "significados_distintos_anteriores": [
+        "En publishes de recetas: epoch ms (Date.now()).",
+        "En el resto del sistema (chat-flow, agent-flow): ISO 8601 (Date.toISOString())."
+      ],
+      "resolucion_canonica": "ISO 8601 en todos los eventos del subsistema. Drift abierto."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "campo_extra_fuera_del_schema",
+      "regla": "Ningun publish de evento del subsistema-recetario incluye un campo que no este en el schema oficial.",
+      "enforce": "additionalProperties:false en todos los schemas. AJV strict en tests por handler rechaza el payload."
+    },
+    {
+      "id": "doble_escritura_del_dato_canonico_de_receta",
+      "regla": "Ningun modulo distinto de recetas escribe en data/projects/{slug}/recetas.json ni modifica la receta canonica.",
+      "enforce": "Validador inspecciona codigo de modulos del subsistema (excepto recetas) buscando fs.write.request con path matching recetas.json — drift error."
+    },
+    {
+      "id": "frontend_con_logica_de_dominio",
+      "regla": "frontend-recetario NO realiza calculos de dominio (coste, escalado, food cost, alergenos, validaciones de campos) en cliente. Todo se pide al backend.",
+      "enforce": "Validador inspecciona codigo del modulo frontend-recetario buscando: funciones que hagan aritmetica sobre precio/cantidad, funciones que decidan estado_operativo, validators de receta. Drift warning (heuristico)."
+    },
+    {
+      "id": "frontend_persiste_dato_de_dominio",
+      "regla": "frontend-recetario NO persiste dato de dominio (recetas, ingredientes, escandallos). Solo cache UI volatil en memoria + estado UI en localStorage (zoom, filtros, modo activo).",
+      "enforce": "Validador inspecciona codigo: indexedDB de recetas, localStorage de objetos receta — drift warning."
+    },
+    {
+      "id": "modulo_recetas_consume_eventos_de_sus_satelites",
+      "regla": "recetas NO se suscribe a eventos de escandallo, mise-en-place, pase-cocina, recetario-creativo, tecnicas. El flujo es unidireccional: recetas emite, satelites escuchan.",
+      "enforce": "Validador inspecciona module.json de recetas y rechaza subscribes que apunten a eventos publicados por modulos satelite."
+    },
+    {
+      "id": "modificar_receta_canonica_desde_satelites",
+      "regla": "Ningun modulo satelite emite receta.creada/actualizada/eliminada/estado.actualizada. Esos eventos son exclusivos de recetas.",
+      "enforce": "Validador inspecciona publishes en module.json de los satelites y rechaza eventos del namespace receta.*."
+    },
+    {
+      "id": "publish_subsistema_sin_correlation_id",
+      "regla": "Ningun publish de eventos del subsistema-recetario omite correlation_id.",
+      "enforce": "Validador inspecciona campos_visibles de publishes en audits modulo-completo. Drift warning."
+    },
+    {
+      "id": "publish_subsistema_sin_project_id",
+      "regla": "Ningun publish de eventos del subsistema-recetario omite project_id. proyecto_id (es) como nombre del campo es drift, no opcion canonica.",
+      "enforce": "Validador inspecciona publishes y warnea cuando campos_visibles tiene 'proyecto_id' (con 'y') y no 'project_id'."
+    },
+    {
+      "id": "pase_cocina_modifica_receta",
+      "regla": "pase-cocina NO emite receta.actualizada cuando registra una sustitucion. La sustitucion vive en su propio dominio (pase.sustitucion.registrada).",
+      "enforce": "Validador inspecciona module.json de pase-cocina y rechaza publish de receta.*."
+    },
+    {
+      "id": "mise_en_place_opera_sobre_recetas_no_en_servicio",
+      "regla": "mise-en-place SOLO procesa recetas con estado_operativo='en_servicio'. Si recibe peticion sobre una receta en borrador o archivada, devuelve error RECIPE_NOT_IN_SERVICE.",
+      "enforce": "Validador inspecciona errores canonicos del modulo + tests/handlers."
+    },
+    {
+      "id": "tools_que_devuelven_dato_de_otro_modulo",
+      "regla": "Ningun modulo expone tools que devuelvan el dato canonico de la receta (eso es recetas.obtener). Los satelites exponen sus derivados (escandallo.por_receta, mise.escalado.por_receta), no la receta entera.",
+      "enforce": "Validador inspecciona retornos de tools de los satelites y warnea cuando incluyen los campos canonicos de receta (instrucciones, ingredientes con cantidades, etc.)."
+    },
+    {
+      "id": "creacion_de_eventos_fuera_del_catalogo",
+      "regla": "Ningun modulo del subsistema introduce eventos del namespace receta.* / ingrediente.* / escandallo.* / tecnica.* / creativo.* / produccion.* / pase.* que NO esten en el catalogo del sub-contrato.",
+      "enforce": "Validador cruza publishes con catalogo. Drift error: 'evento del namespace del subsistema no canonizado'."
+    }
+  ],
+
+  "output_shape_resumen": "El sub-contrato no produce un _outputs/subsistema-recetario.json — el output autoritativo son los 20 schemas en _schemas/subsistema-recetario/ (19 eventos + _common.schema.json) mas el comportamiento del validator subsistema-recetario.validate.js. Un consumidor del contrato (un modulo del subsistema, un test) carga el schema oficial con AJV strict y valida payloads. El validator emite PASS si los schemas compilan, todos los module.json del subsistema declaran schema_ref para los eventos que publican/consumen, ningun modulo viola las prohibiciones cross-modulo (doble-escritura, frontend con logica, etc.), y el codigo no emite eventos del namespace fuera del catalogo.",
+
+  "reglas_de_extraccion": [
+    "1. Compilar los 20 schemas (19 eventos + _common) con AJV strict 2020-12. Si alguno no compila, FAIL inmediato.",
+    "2. Verificar que el contrato existe y es JSON valido. Si no, FAIL.",
+    "3. Verificar que el catalogo de eventos del contrato (19) coincide con los schemas presentes (19). Si hay deriva, ERROR.",
+    "4. Iterar audits modulo-completo de los modulos del subsistema declarados (recetas, escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina, frontend-recetario). Para cada publish/subscribe de evento del subsistema, verificar que module.json declara schema_ref apuntando al schema oficial.",
+    "5. Cruzar publishes en audits con catalogo del contrato. Eventos del namespace receta.* / ingrediente.* / escandallo.* / tecnica.* / creativo.* / produccion.* / pase.* emitidos por modulos del subsistema pero NO en catalogo = drift error.",
+    "6. Cruzar publishes con campos canonicos obligatorios del schema. Faltantes = drift warning. Extras = drift error.",
+    "7. Inspeccionar publishes en audit de recetas: si campos_visibles incluye 'proyecto_id' y no 'project_id', drift warning (rename pendiente).",
+    "8. Inspeccionar subscribes en module.json de recetas: si declara subscribe a eventos de los satelites, drift error (rompe principio de aggregate root unidireccional).",
+    "9. Inspeccionar publishes en module.json de satelites: si declaran receta.* o ingrediente.precio.actualizado, drift error (solo recetas y facturas emiten estos).",
+    "10. Inspeccionar codigo de modulos no-recetas buscando fs.write.request con path matching 'recetas.json': drift error (doble-escritura del dato canonico).",
+    "11. Para frontend-recetario (cuando exista): inspeccionar codigo buscando heuristicas de logica de dominio (aritmetica sobre precio*cantidad, validators con reglas de receta) — drift warning.",
+    "12. Reportar PASS/FAIL siguiendo formato comun de validators del repo: banner colorizado + findings agrupados por severidad con archivo:linea cuando aplique."
+  ],
+
+  "derivaciones": [
+    {
+      "tipo": "schemas",
+      "ubicacion": "arquitectura/decisiones/_schemas/subsistema-recetario/",
+      "items": [
+        "_common.schema.json",
+        "receta.creada.schema.json",
+        "receta.actualizada.schema.json",
+        "receta.eliminada.schema.json",
+        "receta.estado.actualizada.schema.json",
+        "ingrediente.precio.actualizado.schema.json",
+        "escandallo.calculado.schema.json",
+        "escandallo.alerta.schema.json",
+        "escandallo.comparativa.schema.json",
+        "tecnica.creada.schema.json",
+        "tecnica.actualizada.schema.json",
+        "creativo.prototipo.creado.schema.json",
+        "creativo.iteracion.registrada.schema.json",
+        "creativo.alineacion.validada.schema.json",
+        "produccion.escalado.calculado.schema.json",
+        "produccion.compra.calculada.schema.json",
+        "produccion.plan.publicado.schema.json",
+        "pase.ficha.creada.schema.json",
+        "pase.sustitucion.registrada.schema.json",
+        "pase.incidencia.registrada.schema.json"
+      ],
+      "regla": "Cualquier cambio en el catalogo de eventos del contrato (campo nuevo, evento nuevo, evento retirado) requiere regenerar/actualizar los schemas en bloque y actualizar el catalogo del sub-contrato simultaneamente. Validator falla si hay deriva."
+    },
+    {
+      "tipo": "validator",
+      "ubicacion": "arquitectura/decisiones/_validators/subsistema-recetario.validate.js",
+      "regla": "Implementa los cross-checks listados en validaciones_cross_realizadas_por_validator. Cada nueva regla cross-modulo del subsistema se anade aqui."
+    },
+    {
+      "tipo": "modulos_consumidores",
+      "items": [
+        "modules/recetas (existente, a refactorizar)",
+        "modules/escandallo (existente, a refactorizar)",
+        "modules/tecnicas (nuevo)",
+        "modules/recetario-creativo (nuevo)",
+        "modules/mise-en-place (nuevo)",
+        "modules/pase-cocina (nuevo)",
+        "modules/frontend-recetario (nuevo)"
+      ],
+      "regla": "Cada modulo publica o consume al menos uno de los 19 eventos del subsistema. Su module.json declara schema_ref. Su codigo cumple shape canonico."
+    },
+    {
+      "tipo": "tests",
+      "items": [
+        "tests/unit/recetas.test.js (existente, a ampliar para validar payload contra schema)",
+        "tests/unit/escandallo.test.js (a crear/ampliar)",
+        "tests/unit/tecnicas.test.js (nuevo)",
+        "tests/unit/recetario-creativo.test.js (nuevo)",
+        "tests/unit/mise-en-place.test.js (nuevo)",
+        "tests/unit/pase-cocina.test.js (nuevo)",
+        "tests/unit/frontend-recetario.test.js (nuevo)"
+      ],
+      "regla": "Cada test carga el JSON Schema oficial con AJV y valida los payloads que el handler publica. El contrato ejecuta como invariante de runtime."
+    },
+    {
+      "tipo": "drift_baseline",
+      "ubicacion": "drift-baseline.json (seccion subsistema-recetario)",
+      "regla": "Warnings conocidos (recetas con proyecto_id, escandallo con alerta/comparativa no canonico, etc.) quedan registrados aqui. Drift NUEVO bloquea CI."
+    },
+    {
+      "tipo": "glossary_pendiente",
+      "ubicacion": "arquitectura/convenciones/_outputs/glossary.json",
+      "regla": "Anadir conceptos del subsistema que cruzan dos o mas modulos: recipe-prototype, culinary-technique, mise-en-place, pass-card, recipe-substitution, kitchen-incident, recipe-operative-state. Tarea de glosario, no de este sub-contrato — anotada como trabajo_pendiente."
+    },
+    {
+      "tipo": "errors_pendiente",
+      "ubicacion": "arquitectura/decisiones/_outputs/errors.json",
+      "regla": "Anadir codes_dominio: RECIPE_NOT_FOUND, RECIPE_INCOMPLETE, INVALID_STATE_TRANSITION, RECIPE_NOT_IN_SERVICE, INGREDIENT_PRICE_MISSING, INGREDIENT_NOT_IN_CATALOG, TECHNIQUE_NOT_FOUND, PROTOTYPE_NOT_FOUND, PASSCARD_NOT_FOUND, COMPRA_HORIZONTE_INVALIDO. Cuando los modulos satelites se implementen, sus error.code deben venir de este catalogo."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "subsistema_recetario_schemas_compile_ok",
+      "regla": "Los 20 schemas (19 eventos + _common) compilan con AJV strict 2020-12.",
+      "como_detectar": "AJV strict load + compile.",
+      "severidad": "error"
+    },
+    {
+      "id": "subsistema_recetario_catalogo_coincide_con_schemas",
+      "regla": "El catalogo de eventos del contrato lista los 19 eventos canonicos y existe un schema por cada uno.",
+      "como_detectar": "Cargar contrato + listar archivos en _schemas/subsistema-recetario; cruzar.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_modulo_subsistema_sin_schema_ref",
+      "regla": "Cualquier modulo del subsistema que publique o consuma un evento canonico declara request_schema_ref / response_schema_ref en su module.json apuntando al schema oficial.",
+      "como_detectar": "Cruzar module.json events.publishes/subscribes con catalogo. Si el modulo declara el evento y NO tiene schema_ref, drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_publish_subsistema_sin_correlation_id",
+      "regla": "Todo publish de evento del subsistema incluye correlation_id en campos_visibles.",
+      "como_detectar": "Inspeccionar publishes en audit modulo-completo (campos_visibles).",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_publish_subsistema_sin_project_id",
+      "regla": "Todo publish de evento del subsistema incluye project_id en campos_visibles (no proyecto_id).",
+      "como_detectar": "Inspeccionar publishes en audit. Si campos_visibles tiene 'proyecto_id' y no 'project_id', drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_evento_subsistema_no_canonizado",
+      "regla": "Ningun modulo del subsistema emite eventos de los namespaces receta.*, ingrediente.*, escandallo.*, tecnica.*, creativo.*, produccion.*, pase.* fuera del catalogo del sub-contrato.",
+      "como_detectar": "Iterar publishes; si nombre coincide con namespace del subsistema pero no esta en catalogo, drift.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_recetas_consume_eventos_de_satelites",
+      "regla": "recetas no se suscribe a eventos publicados por sus satelites (escandallo, mise-en-place, pase-cocina, recetario-creativo, tecnicas).",
+      "como_detectar": "Inspeccionar module.json de recetas. Si declara subscribe a escandallo.*, mise.*, pase.*, creativo.*, tecnica.*, drift.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_satelite_publica_evento_de_recetas",
+      "regla": "Los modulos satelite (escandallo, mise-en-place, pase-cocina, recetario-creativo, tecnicas, frontend-recetario) no publican eventos del namespace receta.* ni ingrediente.precio.actualizado (eso es exclusivo de recetas y, para precios, opcionalmente facturas).",
+      "como_detectar": "Inspeccionar publishes en module.json de satelites.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_doble_escritura_recetas_json",
+      "regla": "Ningun modulo distinto de recetas escribe en data/projects/{slug}/recetas.json.",
+      "como_detectar": "Regex en codigo de modulos del subsistema (no recetas) buscando fs.write.request con path matching recetas.json.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_frontend_con_logica_de_dominio",
+      "regla": "frontend-recetario no contiene funciones que calculen coste, escalado, food cost, etc. Solo invoca tools.",
+      "como_detectar": "Heuristico: buscar en codigo del frontend funciones con nombre calcular*/computar*/escalar*/foodCost*/etc. Drift warning (heuristico).",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_module_completeness_audit",
+      "regla": "Los audits modulo-completo de los modulos del subsistema tienen los campos visibles de los publishes detallados.",
+      "como_detectar": "Inspeccionar audit; campos_visibles vacio en publishes del subsistema. Severidad info.",
+      "severidad": "info"
+    }
+  ],
+
+  "salida_validador": "PASS si los 20 schemas compilan Y el catalogo de eventos del contrato coincide con los schemas presentes Y todos los modulos del subsistema declarados declaran schema_ref correctamente Y el codigo no viola las prohibiciones cross-modulo. Errores cross-system bloquean PASS — doble-escritura de recetas.json es ERROR (rompe principio de un dueno del dato), satelite emitiendo evento de recetas es ERROR (rompe jerarquia). Warnings son drift visible que no bloquea (publish sin correlation_id, proyecto_id en lugar de project_id, frontend con funciones sospechosas de dominio). Info son heuristicas (audit incompleto). Formato coherente con los demas validators: banner PASS/FAIL + findings agrupados por severidad con archivo:linea cuando aplique.",
+
+  "convenciones_complementarias": {
+    "naming": "Los nombres de los 19 eventos canonicos cumplen la forma <module-prefix>.<entity>.<verb> definida en naming.contract.json salvo los 2 drifts heredados (escandallo.alerta, escandallo.comparativa) anotados en trabajo_pendiente. Verbos del whitelist es: creada, actualizada, eliminada, calculado, publicado, registrada, validada (formas femeninas del verbo canonico cuando la entidad es femenina; el validator de naming acepta ambas variantes de genero como cumplimiento del whitelist).",
+    "glossary": "Las entidades cross-modulo del payload (receta, ingrediente, tecnica, prototipo, ficha-pase, sustitucion, incidencia) deben tener entrada canonica en glossary.json. recipe e ingredient ya estan. recipe-prototype, culinary-technique, mise-en-place, pass-card, recipe-substitution, kitchen-incident, recipe-operative-state son trabajo_pendiente.",
+    "events": "Hereda los principios generales: publish-subscribe asincrono, no esperar respuesta del propio publish, payloads serializables JSON. Este sub-contrato concreta el shape para los 19 eventos del subsistema sin contradecir events.contract.",
+    "errors": "Errores de dominio del subsistema usan codes_dominio (RECIPE_NOT_FOUND, etc.). El catalogo completo se anade a errors.json como trabajo_pendiente. Errores de infraestructura (timeout fs, project-manager caido) usan codes_infrastructure existentes (UPSTREAM_TIMEOUT, RESOURCE_NOT_FOUND, etc.).",
+    "observability": "Cada publish de evento del subsistema loguea con metadata correlation_id + project_id + (receta_id cuando aplique). El handler emisor cumple observability.contract con event_name = '<modulo>.<accion>'.",
+    "lifecycle": "Modulos del subsistema declaran sus subscribes en module.json para auto-wire en onLoad. Cumplen el patron onLoad/onUnload con limpieza de pendings y cache. Persistencia exclusivamente via fs.read.request/fs.write.request a filesystem; sin DB propia salvo recetas y eventual mise-en-place.",
+    "persistence": "Patron canonico del subsistema: json-per-project. Cada modulo tiene su archivo data/projects/{slug}/<modulo>.json. recetas y tecnicas y recetario-creativo y mise-en-place y pase-cocina siguen este patron. escandallo es cache in-memory invalidado por eventos. frontend no persiste dato de dominio.",
+    "http": "Ningun modulo backend del subsistema expone HTTP. La fachada externa es frontend-recetario (web UI). Cualquier modulo backend que en el futuro necesite endpoints HTTP cumplira http.contract — pero el patron canonico es publicacion via MQTT/eventBus al frontend, no HTTP directo.",
+    "multi-tenancy": "project_id obligatorio en todos los eventos. Cada modulo del subsistema persiste por proyecto (data/projects/{slug}/). Cross-project leak = bug arquitectonico.",
+    "module-rewrite": "recetas y escandallo, al refactorizarse, siguen module-rewrite.contract. El monolito previo se archiva en _legacy/; el nuevo cumple el shape POC2 (5 helpers, error.code canonico, tests por capas).",
+    "frontend": "El modulo frontend-recetario sigue frontend.contract para el shape general de modulo UI (subscribes via MQTT, render, lifecycle del client). Las prohibiciones especificas del subsistema (no logica de dominio, no persistencia de dato canonico) son ADICIONALES a frontend.contract.",
+    "tools": "Las tools que cada modulo del subsistema expone al LLM siguen tools.contract.json (shape tool.declaration en module.json + retorno canonico {status, data | error}). Naming kebab-case <module-prefix>.<entity> ya canonizado."
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "anadir_conceptos_al_glossary",
+      "estado": "abierto",
+      "naturaleza": "transversal",
+      "descripcion": "Anadir a glossary.json los 7 conceptos cross-modulo del subsistema: recipe-prototype (es: prototipo), culinary-technique (es: tecnica), mise-en-place (es: mise-en-place), pass-card (es: ficha-pase), recipe-substitution (es: sustitucion), kitchen-incident (es: incidencia), recipe-operative-state (es: estado_operativo).",
+      "criterio_de_cierre": "Los 7 conceptos presentes en glossary.json con forma canonica es y en + notes + industry_reference. glossary.validate.js verde.",
+      "bloqueado_por": null,
+      "fecha_anotacion": "2026-05-17"
+    },
+    {
+      "id": "anadir_codes_dominio_a_errors",
+      "estado": "abierto",
+      "naturaleza": "transversal",
+      "descripcion": "Anadir a errors.json los codes_dominio del subsistema: RECIPE_NOT_FOUND, RECIPE_INCOMPLETE, INVALID_STATE_TRANSITION, RECIPE_NOT_IN_SERVICE, INGREDIENT_PRICE_MISSING, INGREDIENT_NOT_IN_CATALOG, TECHNIQUE_NOT_FOUND, PROTOTYPE_NOT_FOUND, PASSCARD_NOT_FOUND, COMPRA_HORIZONTE_INVALIDO. Con definicion canonica de mensaje.",
+      "criterio_de_cierre": "Los 10 codigos presentes en errors.json. errors.validate.js verde.",
+      "bloqueado_por": null,
+      "fecha_anotacion": "2026-05-17"
+    },
+    {
+      "id": "cerrar_drift_proyecto_id_en_recetas",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Renombrar 'proyecto_id' a 'project_id' en todos los publishes de recetas (receta.creada, receta.actualizada, receta.eliminada, ingrediente.precio.actualizado). Tambien anadir correlation_id, user_id, estado_operativo, timestamp ISO 8601.",
+      "criterio_de_cierre": "Audit modulo-completo de recetas refleja shape canonico. Tests AJV strict del modulo verdes contra los schemas del subsistema. subsistema-recetario.validate.js sin warnings de project_id ni correlation_id para recetas.",
+      "bloqueado_por": "Trabajo de reescritura de recetas siguiendo module-rewrite.contract.",
+      "fecha_anotacion": "2026-05-17"
+    },
+    {
+      "id": "cerrar_drift_naming_escandallo_alerta_comparativa",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Renombrar escandallo.alerta a escandallo.alerta.detectada y escandallo.comparativa a escandallo.comparativa.calculada para cumplir <prefix>.<entity>.<verb>. Migracion: introducir nuevos nombres en paralelo, mantener antiguos durante un sprint con warn de compat, retirar al final.",
+      "criterio_de_cierre": "Eventos antiguos eliminados de modules/escandallo. naming.validate.js sin warnings para esos eventos.",
+      "bloqueado_por": "Reescritura de escandallo (module-rewrite).",
+      "fecha_anotacion": "2026-05-17"
+    },
+    {
+      "id": "implementar_modulo_tecnicas",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Crear modules/tecnicas siguiendo el patron POC2 (module-rewrite.contract). Publica tecnica.creada, tecnica.actualizada. Persistencia json-per-project. Tools: codificar/listar/obtener/actualizar/parametros.",
+      "criterio_de_cierre": "Modulo cargado en config. module.json con schema_ref a los schemas del subsistema. Audit modulo-completo generado. tests/unit/tecnicas.test.js verde.",
+      "bloqueado_por": "Inventario de transversales pendientes cerrado (CLAUDE.md disciplina). Cierre de los puntos 1 y 2 (glossary + errors).",
+      "fecha_anotacion": "2026-05-17"
+    },
+    {
+      "id": "implementar_modulo_recetario_creativo",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Crear modules/recetario-creativo. Publica creativo.prototipo.creado, creativo.iteracion.registrada, creativo.alineacion.validada. Tools: prototipo.crear, prototipo.iterar, alineacion.evaluar, manifiesto.actualizar.",
+      "criterio_de_cierre": "Idem patron del item anterior.",
+      "bloqueado_por": "Idem item anterior.",
+      "fecha_anotacion": "2026-05-17"
+    },
+    {
+      "id": "implementar_modulo_mise_en_place",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Crear modules/mise-en-place. Publica produccion.escalado.calculado, produccion.compra.calculada, produccion.plan.publicado. Tools: escalar, compra.consolidar, plan.publicar, plan.listar.",
+      "criterio_de_cierre": "Idem.",
+      "bloqueado_por": "Idem.",
+      "fecha_anotacion": "2026-05-17"
+    },
+    {
+      "id": "implementar_modulo_pase_cocina",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Crear modules/pase-cocina. Publica pase.ficha.creada, pase.sustitucion.registrada, pase.incidencia.registrada. Tools: ficha.activar, ficha.obtener, sustituir, incidencia.reportar, servicio.resumen.",
+      "criterio_de_cierre": "Idem.",
+      "bloqueado_por": "Idem.",
+      "fecha_anotacion": "2026-05-17"
+    },
+    {
+      "id": "implementar_frontend_recetario",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Crear modules/frontend-recetario o pizzepos/frontend-recetario (ubicacion segun convenciones del repo). Compone las tres vistas (chef/jefe/pase) consumiendo tools y eventos del subsistema. Cumple las 5 prohibiciones del sub-contrato + frontend.contract.",
+      "criterio_de_cierre": "Modulo cargado. UI funcional con los tres modos. Tests de smoke (no logica de dominio). subsistema-recetario.validate.js sin drift de frontend.",
+      "bloqueado_por": "Implementacion de al menos un par de modulos backend nuevos (idealmente recetario-creativo + mise-en-place).",
+      "fecha_anotacion": "2026-05-17"
+    },
+    {
+      "id": "anadir_estado_operativo_a_recetas",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "En la reescritura de recetas, anadir campo estado_operativo (borrador/en_servicio/archivada), tool recetas.cambiar_estado, publish receta.estado.actualizada. Migrar JSONs existentes: estado='activa' -> estado_operativo='en_servicio', estado='borrador' -> estado_operativo='borrador', estado='archivada' -> estado_operativo='archivada'.",
+      "criterio_de_cierre": "Recetas existentes migradas. Tool y evento canonizado. Tests verdes.",
+      "bloqueado_por": "Reescritura de recetas.",
+      "fecha_anotacion": "2026-05-17"
+    }
+  ]
+}

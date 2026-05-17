@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/ingrediente.precio.actualizado.schema.json",
+  "title": "ingrediente.precio.actualizado — payload schema",
+  "description": "Evento emitido por recetas tras actualizar (o crear) el precio_mercado de un ingrediente en el catalogo del proyecto. Tambien puede emitirlo facturas (cross-vertical) cuando detecta nuevo precio en factura. Escandallo lo escucha para invalidar cache de coste de todas las recetas que usan ese ingrediente.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "nombre",
+    "precio_mercado",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "nombre":         { "$ref": "_common.schema.json#/$defs/ingrediente_nombre" },
+    "precio_mercado": { "$ref": "_common.schema.json#/$defs/precio_mercado" },
+    "unidad":         { "$ref": "_common.schema.json#/$defs/unidad" },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" },
+    "categoria":      { "type": "string", "minLength": 1 },
+    "fuente":         { "type": "string", "minLength": 1, "description": "Origen del precio (manual, factura, scraper, etc.)." }
+  }
+}

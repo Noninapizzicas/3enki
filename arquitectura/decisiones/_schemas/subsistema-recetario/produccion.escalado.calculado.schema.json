@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/produccion.escalado.calculado.schema.json",
+  "title": "produccion.escalado.calculado — payload schema",
+  "description": "Evento emitido por mise-en-place tras calcular el escalado de una receta para X porciones (o multiplos enteros con redondeo de unidades de venta). NO modifica la receta canonica — produce un calculo derivado que se persiste en mise-en-place y se referencia por id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "receta_id",
+    "porciones_origen",
+    "porciones_destino",
+    "ingredientes_escalados",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":       { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":           { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":              { "$ref": "_common.schema.json#/$defs/user_id" },
+    "receta_id":            { "$ref": "_common.schema.json#/$defs/receta_id" },
+    "porciones_origen":     { "type": "integer", "minimum": 1 },
+    "porciones_destino":    { "type": "integer", "minimum": 1 },
+    "factor":               { "type": "number", "minimum": 0, "description": "Ratio destino/origen." },
+    "ingredientes_escalados": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["nombre", "cantidad", "unidad"],
+        "properties": {
+          "nombre":   { "$ref": "_common.schema.json#/$defs/ingrediente_nombre" },
+          "cantidad": { "type": "number", "minimum": 0 },
+          "unidad":   { "$ref": "_common.schema.json#/$defs/unidad" }
+        }
+      }
+    },
+    "timestamp":            { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

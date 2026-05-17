@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/tecnica.actualizada.schema.json",
+  "title": "tecnica.actualizada — payload schema",
+  "description": "Evento emitido por el modulo tecnicas tras modificar parametros de una tecnica existente. Recetas y prototipos que la referencian no se ven afectados automaticamente (la referencia es por id, no por valor) — el chef decide si re-aplicar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "tecnica_id",
+    "nombre",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "tecnica_id":     { "$ref": "_common.schema.json#/$defs/tecnica_id" },
+    "nombre":         { "type": "string", "minLength": 1 },
+    "campos_actualizados": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

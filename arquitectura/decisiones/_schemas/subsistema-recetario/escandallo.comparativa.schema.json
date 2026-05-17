@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/escandallo.comparativa.schema.json",
+  "title": "escandallo.comparativa — payload schema",
+  "description": "Evento emitido por escandallo tras cruzar precio_mercado del catalogo con precio_compra real (facturas). DRIFT DE NAMING CONOCIDO: 'comparativa' aparece como verb pero es noun — rename canonico a 'escandallo.comparativa.calculada' anotado en trabajo_pendiente.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "lineas",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "lineas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ingrediente", "precio_catalogo", "precio_compra", "delta_pct"],
+        "properties": {
+          "ingrediente":     { "$ref": "_common.schema.json#/$defs/ingrediente_nombre" },
+          "precio_catalogo": { "type": ["number", "null"], "minimum": 0 },
+          "precio_compra":   { "type": ["number", "null"], "minimum": 0 },
+          "delta_pct":       { "type": ["number", "null"], "description": "Variacion porcentual catalogo vs compra. null si alguno de los dos lados no esta." }
+        }
+      }
+    },
+    "ingredientes_sin_compra_real": {
+      "type": "array",
+      "items": { "$ref": "_common.schema.json#/$defs/ingrediente_nombre" }
+    },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

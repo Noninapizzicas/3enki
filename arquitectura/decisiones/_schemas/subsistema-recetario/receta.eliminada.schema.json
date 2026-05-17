@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/receta.eliminada.schema.json",
+  "title": "receta.eliminada — payload schema",
+  "description": "Evento emitido por recetas tras archivar logicamente una receta (estado='archivada'). NO se borra del archivo — sigue accesible via recetas.listar con estado='archivada'. Consumers retiran su capa derivada del servicio activo pero conservan auditoria.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "receta_id",
+    "nombre",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "receta_id":      { "$ref": "_common.schema.json#/$defs/receta_id" },
+    "nombre":         { "$ref": "_common.schema.json#/$defs/receta_nombre" },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" },
+    "motivo": { "$ref": "_common.schema.json#/$defs/motivo" }
+  }
+}

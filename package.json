@@ -147,6 +147,8 @@
     "validate:scheduling:system": "node arquitectura/decisiones/_validators/scheduling.validate.js --check-system",
     "validate:resilience": "node arquitectura/decisiones/_validators/resilience.validate.js",
     "validate:resilience:system": "node arquitectura/decisiones/_validators/resilience.validate.js --check-system",
+    "validate:subsistema-recetario": "node arquitectura/decisiones/_validators/subsistema-recetario.validate.js",
+    "validate:subsistema-recetario:system": "node arquitectura/decisiones/_validators/subsistema-recetario.validate.js --check-system",
     "validate:all": "node scripts/validate-all.js",
     "validate:all:system": "node scripts/validate-all.js --check-system",
     "validate:ci": "node scripts/validate-all.js --check-system --baseline ./drift-baseline.json",

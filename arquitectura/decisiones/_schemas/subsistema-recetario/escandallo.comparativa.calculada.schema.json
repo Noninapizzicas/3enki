@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/escandallo.comparativa.schema.json",
-  "title": "escandallo.comparativa — payload schema",
-  "description": "Evento emitido por escandallo tras cruzar precio_mercado del catalogo con precio_compra real (facturas). DRIFT DE NAMING CONOCIDO: 'comparativa' aparece como verb pero es noun — rename canonico a 'escandallo.comparativa.calculada' anotado en trabajo_pendiente.",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/escandallo.comparativa.calculada.schema.json",
+  "title": "escandallo.comparativa.calculada — payload schema",
+  "description": "Evento emitido por escandallo tras cruzar precio_mercado del catalogo con precio_compra real. Naming canonico <prefix>.<entity>.<verb>. Drift de naming heredado (escandallo.comparativa sin verbo) cerrado en el refactor v3.0.0 → v4.0.0; el rename va acompasado con el bump de subsistema-recetario.contract a v1.0.2.",
   "type": "object",
   "additionalProperties": false,
   "required": [

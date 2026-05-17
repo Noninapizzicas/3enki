@@ -1,180 +1,262 @@
 {
   "name": "escandallo",
-  "version": "3.0.0",
-  "description": "Analisis de costes y escandallo de recetas. Calcula costes, margenes, food cost, comparativas mercado vs compra real, simulaciones de precio, impacto de ingredientes, optimizacion automatica y fichas tecnicas. Persiste en SQLite por proyecto.",
-  "author": "Event Core Team",
+  "version": "4.0.0",
+  "description": "Analisis de costes y escandallo de recetas. Calcula coste total, coste por porcion, food cost, margenes, comparativas precio_mercado vs precio_compra real, simulaciones de precio, impacto de ingredientes, optimizacion automatica y ficha tecnica. Satelite de recetas (subsistema-recetario): no duplica el dato de la receta, lo referencia por receta_id. El caller pasa los datos de la receta y los precios — el modulo no accede a otros modulos via cross-modulo.",
+  "author": "Enki",
   "language": "es",
-  "main": "index.js",
-  "intents": [
-    { "keywords": ["cuanto cuesta", "coste de", "coste receta", "escandallo de", "escandallo receta"], "action": "tool_call", "tool": "escandallo.receta", "description": "Calcular el escandallo completo de una receta" },
-    { "keywords": ["food cost", "margen", "rentabilidad", "a que precio vender", "precio de venta"], "action": "tool_call", "tool": "escandallo.receta", "description": "Calcular food cost y margen de una receta dado un precio de venta" },
-    { "keywords": ["simular precio", "simula precios", "si lo vendo a", "que pasa si precio"], "action": "tool_call", "tool": "escandallo.simular_precio", "description": "Simular diferentes precios de venta y su impacto en margen" },
-    { "keywords": ["comparar precios", "mercado vs compra", "diferencia precios", "precios reales vs estimados"], "action": "tool_call", "tool": "escandallo.comparar_precios", "description": "Comparar precios de mercado vs compra real" },
-    { "keywords": ["impacto ingrediente", "si sube precio", "que pasa si sube"], "action": "tool_call", "tool": "escandallo.ingrediente_impacto", "description": "Impacto de subida de precio de un ingrediente" },
-    { "keywords": ["optimizar costes", "como reducir coste", "sugerencias coste"], "action": "tool_call", "tool": "escandallo.optimizar", "description": "Sugerencias automaticas de optimizacion de costes" },
-    { "keywords": ["ficha tecnica", "ficha receta", "alergenos receta"], "action": "tool_call", "tool": "escandallo.ficha_tecnica", "description": "Genera ficha tecnica profesional de una receta" }
-  ],
+  "tier": "tier_4_dominio",
+
   "events": {
     "publishes": [
-      { "event": "escandallo.calculado",  "description": "Escandallo calculado exitosamente. Lleva project_id top-level + correlation_id + timestamp." },
-      { "event": "escandallo.alerta",     "description": "Food cost > 35% — alerta automatica con receta_id, food_cost, umbral, mensaje." },
-      { "event": "escandallo.comparativa", "description": "Comparativa precio_mercado vs compra real generada (ingrediente_impacto)." }
+      {
+        "event":               "escandallo.calculado",
+        "description":         "Escandallo de una receta calculado (coste_total, coste_por_porcion, coste_es_real, food_cost si hay PVP).",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/escandallo.calculado.schema.json"
+      },
+      {
+        "event":               "escandallo.alerta.detectada",
+        "description":         "Se cruzo un umbral relevante (food_cost > umbral_alerta, margen negativo, ingrediente faltante).",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/escandallo.alerta.detectada.schema.json"
+      },
+      {
+        "event":               "escandallo.comparativa.calculada",
+        "description":         "Comparativa precio_mercado del catalogo vs precio_compra real (precios pasados por el caller).",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/escandallo.comparativa.calculada.schema.json"
+      }
     ],
     "subscribes": [
-      { "event": "project.activated",              "handler": "onProjectActivated",              "description": "Set storagePath + load recetas/ingredientes desde disco." },
-      { "event": "project.deactivated",            "handler": "onProjectDeactivated",            "description": "No-op — preserva managers y cache." },
-      { "event": "receta.creada",                  "handler": "onRecetaCreada",                  "description": "Invalida cache del proyecto." },
-      { "event": "receta.actualizada",             "handler": "onRecetaActualizada",             "description": "Invalida cache del proyecto." },
-      { "event": "ingrediente.precio.actualizado", "handler": "onIngredientePrecioActualizado",  "description": "Invalida TODOS los caches — cambio cross-proyecto." }
+      { "event": "project.activated",              "handler": "onProjectActivated",            "description": "Cachea base_path del proyecto activado." },
+      { "event": "project.get.response",           "handler": "onProjectGetResponse",          "description": "Resuelve project.get pendiente por request_id." },
+      { "event": "fs.read.response",               "handler": "onFsReadResponse",              "description": "Resuelve lectura pendiente por request_id." },
+      { "event": "fs.write.response",              "handler": "onFsWriteResponse",             "description": "Resuelve escritura pendiente por request_id." },
+      { "event": "receta.creada",                  "handler": "onRecetaCreada",                "description": "Invalida cache de calculos del proyecto (receta nueva puede ser referencia)." },
+      { "event": "receta.actualizada",             "handler": "onRecetaActualizada",           "description": "Invalida cache de calculos del proyecto." },
+      { "event": "ingrediente.precio.actualizado", "handler": "onIngredientePrecioActualizado","description": "Invalida cache de calculos (cross-proyecto si el ingrediente es global)." },
+
+      { "event": "escandallo.calcular",            "handler": "onCalcular",                    "description": "Tool LLM: calcular escandallo de una receta." },
+      { "event": "escandallo.comparar.precios",    "handler": "onCompararPrecios",             "description": "Tool LLM: comparativa precio catalogo vs precio compra." },
+      { "event": "escandallo.simular.precio",      "handler": "onSimularPrecio",               "description": "Tool LLM: simular PVPs y calcular margen/food cost." },
+      { "event": "escandallo.ingrediente.impacto", "handler": "onIngredienteImpacto",          "description": "Tool LLM: impacto de subida de precio de un ingrediente." },
+      { "event": "escandallo.optimizar",           "handler": "onOptimizar",                   "description": "Tool LLM: sugerencias de optimizacion de costes." },
+      { "event": "escandallo.ficha.tecnica",       "handler": "onFichaTecnica",                "description": "Tool LLM: ficha tecnica formateada de la receta + escandallo." },
+      { "event": "escandallo.obtener",             "handler": "onObtener",                     "description": "Tool LLM: leer un snapshot persistido de escandallo." },
+      { "event": "escandallo.alertas.listar",      "handler": "onListarAlertas",               "description": "Tool LLM: listar alertas detectadas del proyecto (filtros opcionales)." }
     ]
   },
-  "ui_handlers": [
-    { "domain": "escandallo", "action": "receta",  "handler": "handleEscandalloReceta",  "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "escandallo", "action": "global",  "handler": "handleEscandalloGlobal",  "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "escandallo", "action": "compare", "handler": "handleComparativa",       "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "escandallo", "action": "stats",   "handler": "handleStats",             "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "escandallo", "action": "health",  "handler": "handleHealthCheck",       "type": "workspace_module", "zone": "barra_modulos" }
-  ],
+
+  "apis": [],
+
   "tools": [
     {
-      "name":        "escandallo.receta",
-      "description": "Escandallo completo de una receta: coste total, coste por porcion, desglose por ingrediente con porcentajes, insights heuristicos. Si se pasa precio_venta, calcula food cost, margen y multiplicador. Emite escandallo.calculado y opcionalmente escandallo.alerta.",
-      "handler":     "toolEscandalloReceta",
+      "name":        "escandallo.calcular",
+      "description": "Calcular el escandallo de una receta: coste total, coste por porcion, coste_es_real (true si todos los ingredientes tenian precio), food_cost si se pasa PVP. Si food_cost cruza el umbral configurado, emite tambien escandallo.alerta.detectada.",
+      "handler":     "onCalcular",
       "parameters": {
         "type": "object",
         "properties": {
-          "receta_id":           { "type": "string",  "description": "ID de la receta" },
-          "project_id":          { "type": "string",  "description": "ID del proyecto" },
-          "precio_venta":        { "type": "number",  "description": "Precio de venta para calcular margen (opcional)" },
-          "usar_precio_compra":  { "type": "boolean", "description": "Usar precio de compra real en lugar de mercado" }
+          "project_id":  { "type": "string", "description": "ID del proyecto activo." },
+          "receta_id":   { "type": "string", "description": "ID de la receta." },
+          "nombre":      { "type": "string", "description": "Nombre de la receta (denormalizado)." },
+          "porciones":   { "type": "integer", "minimum": 1, "description": "Porciones de la receta." },
+          "ingredientes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "nombre":   { "type": "string" },
+                "cantidad": { "type": "number", "minimum": 0 },
+                "unidad":   { "type": "string" }
+              },
+              "required": ["nombre", "cantidad", "unidad"]
+            },
+            "description": "Ingredientes de la receta para esas porciones."
+          },
+          "precios_catalogo": {
+            "type": "object",
+            "description": "Map { ingrediente_nombre: { precio_por_unidad: number, unidad: string } } del catalogo del proyecto. Si un ingrediente falta, se cuenta en ingredientes_sin_precio y coste_es_real=false."
+          },
+          "precio_venta": { "type": "number", "minimum": 0, "description": "PVP opcional. Si se pasa, se calcula food_cost_pct y se evalua umbral de alerta." },
+          "user_id":      { "type": "string", "description": "ID del usuario que lanza el calculo. Opcional." }
         },
-        "required": ["receta_id", "project_id"]
+        "required": ["project_id", "receta_id", "nombre", "porciones", "ingredientes", "precios_catalogo"]
       },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",      "cuando": "receta_id o project_id ausentes" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "no existe la receta" }
-      ]
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
     },
     {
-      "name":        "escandallo.global",
-      "description": "Escandallo global de todas las recetas del proyecto: rankings por coste, costes medios, top ingredientes por impacto, agregado por categoria.",
-      "handler":     "toolEscandalloGlobal",
+      "name":        "escandallo.comparar.precios",
+      "description": "Comparar precio_catalogo vs precio_compra real de un conjunto de ingredientes. Calcula delta_pct linea a linea. El caller pasa ambos sets de precios — el modulo NO accede a facturas via cross-modulo.",
+      "handler":     "onCompararPrecios",
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":     { "type": "string", "description": "ID del proyecto" },
-          "precios_venta":  { "type": "object", "description": "Map opcional receta_id → precio_venta para calcular margenes" }
+          "project_id": { "type": "string", "description": "ID del proyecto activo." },
+          "precios_catalogo": {
+            "type": "object",
+            "description": "Map { ingrediente: precio_catalogo } del catalogo."
+          },
+          "precios_compra": {
+            "type": "object",
+            "description": "Map { ingrediente: precio_compra_real } cruzado por el caller con datos de facturas."
+          },
+          "user_id":    { "type": "string", "description": "Opcional." }
         },
-        "required": ["project_id"]
+        "required": ["project_id", "precios_catalogo", "precios_compra"]
       },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
-      ]
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT"]
     },
     {
-      "name":        "escandallo.comparar_precios",
-      "description": "Compara precio_mercado vs precio_compra real de los ingredientes del catalogo. Calcula ahorro potencial total. Emite escandallo.comparativa.",
-      "handler":     "toolCompararPrecios",
+      "name":        "escandallo.simular.precio",
+      "description": "Simular varios PVPs para una receta. Retorna para cada PVP: food_cost_pct, margen_euro, multiplicador. Si food_cost_objetivo se pasa, calcula tambien el PVP necesario para alcanzarlo.",
+      "handler":     "onSimularPrecio",
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string" }
-        },
-        "required": ["project_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
-      ]
-    },
-    {
-      "name":        "escandallo.simular_precio",
-      "description": "Simula diferentes precios de venta para una receta y calcula margen + food_cost para cada uno. Si se pasa food_cost_objetivo, calcula tambien el precio necesario para alcanzarlo.",
-      "handler":     "toolSimularPrecio",
-      "parameters": {
-        "type": "object",
-        "properties": {
+          "project_id":         { "type": "string", "description": "ID del proyecto activo." },
           "receta_id":          { "type": "string" },
-          "project_id":         { "type": "string" },
-          "precios":            { "type": "array", "items": { "type": "number" }, "description": "Lista de precios a simular (default: 2.5x, 3x, 3.5x, 4x del coste)" },
-          "food_cost_objetivo": { "type": "number", "description": "Food cost objetivo en % (calcula precio necesario)" }
+          "coste_por_porcion":  { "type": "number", "minimum": 0, "description": "Coste/porcion ya calculado por el caller (de escandallo.calcular o equivalente)." },
+          "precios":            { "type": "array", "items": { "type": "number" }, "description": "Lista de PVPs a simular. Si se omite, usa 2.5x, 3x, 3.5x, 4x del coste." },
+          "food_cost_objetivo": { "type": "number", "minimum": 0, "maximum": 100, "description": "Food cost objetivo (%). Si se pasa, calcula PVP necesario." },
+          "user_id":            { "type": "string", "description": "Opcional." }
         },
-        "required": ["receta_id", "project_id"]
+        "required": ["project_id", "receta_id", "coste_por_porcion"]
       },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",      "cuando": "receta_id o project_id ausentes" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "no existe la receta" }
-      ]
+      "errores_conocidos": ["INVALID_INPUT"]
     },
     {
-      "name":        "escandallo.ingrediente_impacto",
-      "description": "Analiza el impacto de un ingrediente: en cuantas recetas aparece, coste total acumulado y simulacion de subida de precio porcentual.",
-      "handler":     "toolIngredienteImpacto",
+      "name":        "escandallo.ingrediente.impacto",
+      "description": "Calcular el impacto economico de una subida de precio de un ingrediente: en cuantas recetas aparece (input del caller), coste total acumulado, simulacion con subida_pct.",
+      "handler":     "onIngredienteImpacto",
       "parameters": {
         "type": "object",
         "properties": {
-          "ingrediente_nombre": { "type": "string", "description": "Nombre o sub-string del ingrediente" },
-          "project_id":         { "type": "string" },
-          "subida_porcentaje":  { "type": "number", "description": "Subida de precio en % para simular impacto" }
+          "project_id":         { "type": "string", "description": "ID del proyecto activo." },
+          "ingrediente_nombre": { "type": "string", "description": "Nombre del ingrediente." },
+          "precio_actual":      { "type": "number", "minimum": 0, "description": "Precio actual por unidad." },
+          "recetas_afectadas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "receta_id": { "type": "string" },
+                "nombre":    { "type": "string" },
+                "cantidad":  { "type": "number", "minimum": 0 },
+                "unidad":    { "type": "string" }
+              },
+              "required": ["receta_id", "nombre", "cantidad", "unidad"]
+            },
+            "description": "Recetas que usan el ingrediente (resueltas por el caller, no por el modulo)."
+          },
+          "subida_pct":         { "type": "number", "description": "Porcentaje de subida a simular (ej. 10 = +10%)." },
+          "user_id":            { "type": "string", "description": "Opcional." }
         },
-        "required": ["ingrediente_nombre", "project_id"]
+        "required": ["project_id", "ingrediente_nombre", "precio_actual", "recetas_afectadas"]
       },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",      "cuando": "ingrediente_nombre o project_id ausentes" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "el ingrediente no aparece en ninguna receta" }
-      ]
+      "errores_conocidos": ["INVALID_INPUT"]
     },
     {
       "name":        "escandallo.optimizar",
-      "description": "Genera sugerencias automaticas de optimizacion de costes: recetas con coste alto, ingredientes dominantes, stock variado, precios sin verificar.",
-      "handler":     "toolOptimizar",
+      "description": "Sugerencias automaticas de optimizacion de costes para un conjunto de recetas con sus calculos. Retorna recetas con food_cost > objetivo, ingredientes dominantes (Pareto), recetas con coste anomalo.",
+      "handler":     "onOptimizar",
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":       { "type": "string" },
-          "food_cost_maximo": { "type": "number", "description": "Food cost objetivo (default: 33%)" }
+          "project_id":       { "type": "string", "description": "ID del proyecto activo." },
+          "calculos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "receta_id":         { "type": "string" },
+                "nombre":            { "type": "string" },
+                "coste_por_porcion": { "type": "number", "minimum": 0 },
+                "food_cost_pct":     { "type": "number", "minimum": 0, "maximum": 100 }
+              },
+              "required": ["receta_id", "nombre", "coste_por_porcion"]
+            }
+          },
+          "food_cost_maximo": { "type": "number", "minimum": 0, "maximum": 100, "description": "Food cost objetivo (default segun config)." },
+          "user_id":          { "type": "string", "description": "Opcional." }
+        },
+        "required": ["project_id", "calculos"]
+      },
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name":        "escandallo.ficha.tecnica",
+      "description": "Generar ficha tecnica formateada de una receta + escandallo. Combina datos de la receta (caller) con el calculo ya hecho. El modulo formatea el bloque para presentacion.",
+      "handler":     "onFichaTecnica",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id":  { "type": "string", "description": "ID del proyecto activo." },
+          "receta_id":   { "type": "string" },
+          "nombre":      { "type": "string" },
+          "porciones":   { "type": "integer", "minimum": 1 },
+          "calculo":     {
+            "type": "object",
+            "description": "Resultado de escandallo.calcular (coste_total, coste_por_porcion, items, etc.) que el caller ya tiene.",
+            "properties": {
+              "coste_total":        { "type": "number", "minimum": 0 },
+              "coste_por_porcion":  { "type": "number", "minimum": 0 },
+              "food_cost_pct":      { "type": "number" }
+            },
+            "required": ["coste_total", "coste_por_porcion"]
+          },
+          "instrucciones": { "type": "string", "description": "Instrucciones de la receta." },
+          "alergenos":     { "type": "array", "items": { "type": "string" }, "description": "Lista de alergenos." },
+          "precio_venta":  { "type": "number", "minimum": 0, "description": "PVP opcional para incluir margen en la ficha." },
+          "user_id":       { "type": "string", "description": "Opcional." }
+        },
+        "required": ["project_id", "receta_id", "nombre", "porciones", "calculo"]
+      },
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name":        "escandallo.obtener",
+      "description": "Leer un snapshot persistido de escandallo por receta_id (el ultimo calculo guardado).",
+      "handler":     "onObtener",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto activo." },
+          "receta_id":  { "type": "string", "description": "ID de la receta." }
+        },
+        "required": ["project_id", "receta_id"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
+    },
+    {
+      "name":        "escandallo.alertas.listar",
+      "description": "Listar las alertas detectadas del proyecto. Filtros opcionales por receta_id o tipo.",
+      "handler":     "onListarAlertas",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto activo." },
+          "receta_id":  { "type": "string", "description": "Filtro opcional." },
+          "tipo":       { "type": "string", "description": "Filtro opcional por tipo de alerta." }
         },
         "required": ["project_id"]
       },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
-      ]
-    },
-    {
-      "name":        "escandallo.ficha_tecnica",
-      "description": "Genera ficha tecnica profesional de una receta: header, escandallo, margen (si hay precio_venta), ingredientes, elaboracion, alergenos, fuente.",
-      "handler":     "toolFichaTecnica",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "receta_id":    { "type": "string" },
-          "project_id":   { "type": "string" },
-          "precio_venta": { "type": "number", "description": "Precio de venta para calcular margen (opcional)" }
-        },
-        "required": ["receta_id", "project_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",      "cuando": "receta_id o project_id ausentes" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "no existe la receta" }
-      ]
+      "errores_conocidos": ["INVALID_INPUT"]
     }
   ],
+
   "config": {
-    "food_cost_umbral_alerta": 35,
-    "food_cost_umbral_bajo":   25,
-    "persistence": {
-      "type":  "mixed",
-      "owner": "EscandalloManager (SQLite por proyecto) + lectura JSON read-only de recetas/ingredientes",
-      "paths": [
-        "data/projects/<projectId>/storage/escandallos.db",
-        "data/projects/<projectId>/storage/recetas/recetas.json (lectura)",
-        "data/projects/<projectId>/storage/recetas/ingredientes.json (lectura)"
-      ],
-      "concurrency": "single-instance-per-project (manager por project_id)"
-    }
+    "data_file_pattern":         "data/projects/{slug}/escandallo.json",
+    "persistence":               "json-per-project",
+    "food_cost_umbral_alerta":   35,
+    "food_cost_umbral_bajo":     25,
+    "food_cost_default_maximo":  33,
+    "project_get_timeout_ms":    5000,
+    "fs_request_timeout_ms":     5000
   },
+
   "tracing": {
     "propaga_correlation_id": true
   },
+
   "observability": {
     "logging": {
       "level":          "info",
@@ -184,12 +266,22 @@
     "metrics": {
       "enabled": true,
       "counters": [
-        "escandallo.receta.calculated",
-        "escandallo.global.calculated",
-        "escandallo.comparativa.generated",
-        "escandallo.simulacion.run",
-        "escandallo.ficha.generated",
-        "escandallo.errors"
+        "escandallo.calcular.total",
+        "escandallo.comparar.precios.total",
+        "escandallo.simular.precio.total",
+        "escandallo.ingrediente.impacto.total",
+        "escandallo.optimizar.total",
+        "escandallo.ficha.tecnica.total",
+        "escandallo.alerta.detectada.total",
+        "escandallo.errors",
+        "escandallo.publish_error"
+      ],
+      "gauges": [
+        "escandallo.snapshots.count",
+        "escandallo.alertas.count"
+      ],
+      "timings": [
+        "escandallo.calcular.duration"
       ]
     }
   }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/escandallo.alerta.schema.json",
-  "title": "escandallo.alerta — payload schema",
-  "description": "Evento emitido por escandallo cuando se cruza un umbral relevante (food_cost > 35%, margen negativo, ingrediente faltante, etc.). DRIFT DE NAMING CONOCIDO: el shape canonico segun naming.contract deberia ser <prefix>.<entity>.<verb>; aqui 'alerta' aparece como verb pero es noun. Se anota como drift_a_cerrar en trabajo_pendiente del sub-contrato; el rename a 'escandallo.alerta.detectada' es responsabilidad de quien reescriba escandallo siguiendo module-rewrite.contract.",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/escandallo.alerta.detectada.schema.json",
+  "title": "escandallo.alerta.detectada — payload schema",
+  "description": "Evento emitido por escandallo cuando se cruza un umbral relevante (food_cost > 35%, margen negativo, ingrediente faltante, etc.). Naming canonico <prefix>.<entity>.<verb> con verbo del whitelist es. Drift de naming heredado (escandallo.alerta sin verbo) cerrado en el refactor v3.0.0 → v4.0.0 (commit 09f4a0d y siguientes); el rename va acompasado con el bump de subsistema-recetario.contract a v1.0.2.",
   "type": "object",
   "additionalProperties": false,
   "required": [

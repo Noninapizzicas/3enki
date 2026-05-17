@@ -1,16 +1,16 @@
 {
   "_doc": "Sub-contrato que formaliza el SUBSISTEMA RECETARIO del sistema event-core. Captura la particion canonica del subsistema en N modulos backend acotados (recetas como core; escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina como satelites especializados) mas UN modulo frontend (frontend-recetario) que compone las tres vistas operativas (chef / jefe / pase) sin contener logica de dominio. Define los 20 eventos canonicos del subsistema con shape estricto (schemas AJV strict additionalProperties:false), el principio una-receta-tres-vistas-un-dueno-del-dato, las prohibiciones cross-modulo que sostienen la independencia, los drifts heredados del estado actual y el catalogo de modulos nuevos a anadir. No deriva de companero-viaje (que gobierna el subsistema chat/LLM/agentes) sino que es un subsistema paralelo de DOMINIO; se relaciona con companero-viaje porque expone tools al LLM. El validator subsistema-recetario.validate.js cruza module.json/audits/codigo de los modulos del subsistema con los schemas declarados aqui y detecta drift estructural ANTES de produccion. Lectura obligatoria antes de anadir o reescribir cualquier modulo del subsistema.",
   "id": "subsistema-recetario",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "creada": "2026-05-17",
-  "supersedes_nota": "v1.0.1 (alineacion con canon real de errors.contract): la v1.0.0 listaba en trabajo_pendiente la introduccion de codigos por entidad (RECIPE_NOT_FOUND, TECHNIQUE_NOT_FOUND, PROTOTYPE_NOT_FOUND, PASSCARD_NOT_FOUND, RECIPE_NOT_IN_SERVICE, INGREDIENT_PRICE_MISSING, etc.). Esto VIOLA explicitamente la regla de codes_domain[RESOURCE_NOT_FOUND] que prohibe codigos por entidad y exige RESOURCE_NOT_FOUND + details.entity_type. Reemplazado por la formula canonica: RESOURCE_NOT_FOUND para 'no existe', PRECONDITION_FAILED para precondiciones de dominio, CONFLICT_STATE para transiciones invalidas, INVALID_INPUT para validaciones — todos con details.kind / details.entity_type apropiados. errors.json v1.5.0 documenta los entity_types y kinds del subsistema. Sin cambio en el catalogo de eventos, schemas ni validator del subsistema-recetario — esto es alineacion documental, no de shape.\n\nv1.0.0: Primera version del sub-contrato. Cierra una ambiguedad arquitectonica historica del modulo recetas: tres responsabilidades distintas (CRUD canonico, escandallo de coste, ficha de pase) operando dentro de UN modulo. La resolucion canonica es una-receta-tres-vistas-un-dueno-del-dato: el dato es de recetas, las capas derivadas (coste, prototipos, escalado, ficha de pase) viven en modulos satelite que escuchan receta.* y publican lo suyo; el frontend agrupa las vistas. No cierra los drifts existentes de escandallo (alerta/comparativa rompen naming) — los anota en trabajo_pendiente para que los cierre quien reescriba escandallo siguiendo module-rewrite.contract. Tampoco cierra el drift de project_id vs proyecto_id en publishes de recetas — anotado igual.",
+  "supersedes_nota": "v1.0.2 (cierre del drift de naming heredado de escandallo): renombra los 2 eventos del subsistema que rompian <prefix>.<entity>.<verb>: 'escandallo.alerta' → 'escandallo.alerta.detectada' y 'escandallo.comparativa' → 'escandallo.comparativa.calculada'. Los schemas oficiales tambien se renombran (con $id y title actualizados); los antiguos se eliminan. El trabajo_pendiente 'cerrar_drift_naming_escandallo_alerta_comparativa' pasa a estado 'cerrado'. Migracion coordinada con el refactor de escandallo v3.0.0 → v4.0.0 que aterriza el shape canonico de los 3 publishes (correlation_id, project_id, user_id, timestamp + campos especificos por evento). Sin cambios en el catalogo de eventos del subsistema (siguen siendo los mismos N eventos, solo renombrados los 2 con drift) ni en los principios/validaciones.\n\nv1.0.1 (alineacion con canon real de errors.contract): la v1.0.0 listaba en trabajo_pendiente la introduccion de codigos por entidad (RECIPE_NOT_FOUND, TECHNIQUE_NOT_FOUND, PROTOTYPE_NOT_FOUND, PASSCARD_NOT_FOUND, RECIPE_NOT_IN_SERVICE, INGREDIENT_PRICE_MISSING, etc.). Esto VIOLA explicitamente la regla de codes_domain[RESOURCE_NOT_FOUND] que prohibe codigos por entidad y exige RESOURCE_NOT_FOUND + details.entity_type. Reemplazado por la formula canonica: RESOURCE_NOT_FOUND para 'no existe', PRECONDITION_FAILED para precondiciones de dominio, CONFLICT_STATE para transiciones invalidas, INVALID_INPUT para validaciones — todos con details.kind / details.entity_type apropiados. errors.json v1.5.0 documenta los entity_types y kinds del subsistema. Sin cambio en el catalogo de eventos, schemas ni validator del subsistema-recetario — esto es alineacion documental, no de shape.\n\nv1.0.0: Primera version del sub-contrato. Cierra una ambiguedad arquitectonica historica del modulo recetas: tres responsabilidades distintas (CRUD canonico, escandallo de coste, ficha de pase) operando dentro de UN modulo. La resolucion canonica es una-receta-tres-vistas-un-dueno-del-dato: el dato es de recetas, las capas derivadas (coste, prototipos, escalado, ficha de pase) viven en modulos satelite que escuchan receta.* y publican lo suyo; el frontend agrupa las vistas. No cierra los drifts existentes de escandallo (alerta/comparativa rompen naming) — los anota en trabajo_pendiente para que los cierre quien reescriba escandallo siguiendo module-rewrite.contract. Tampoco cierra el drift de project_id vs proyecto_id en publishes de recetas — anotado igual.",
 
   "deriva_de": null,
   "relacion_con_otros_contratos": {
     "companero-viaje": "El subsistema-recetario expone tools al LLM (recetas.crear, recetas.escalar, pase.sustituir, etc.) que el companero invoca via ai-gateway. Esas tools forman parte del modelo de extension tipo 'tool' del documento maestro, pero su shape (input parameters, retorno) lo define tools.contract.json — no este sub-contrato.",
     "multi-tenancy": "Todos los eventos del subsistema-recetario incluyen project_id obligatorio. Hereda la directriz v1.1.0 (project_id siempre string, nunca null).",
     "errors": "Errores de dominio del subsistema NO introducen codigos por entidad — la regla canonica de codes_domain[RESOURCE_NOT_FOUND] prohibe explicitamente ese patron. Los modulos del subsistema usan codigos genericos del catalogo con details.entity_type y details.kind para especificar: RESOURCE_NOT_FOUND + entity_type:'recipe'|'recipe-prototype'|'culinary-technique'|'pass-card'|'ingredient' (para 'no existe'); PRECONDITION_FAILED + kind:'recipe_not_in_service'|'ingredient_price_missing' (para precondiciones de dominio); CONFLICT_STATE + kind:'invalid_state_transition' (para transiciones borrador/en_servicio/archivada invalidas); INVALID_INPUT + kind:'incomplete_recipe'|'invalid_purchase_horizon' (para validaciones). errors.json v1.5.0 documenta los entity_types y kinds del subsistema. Los entity_type coinciden 1:1 con los ids del glossary cross-modulo.",
-    "naming": "Todos los eventos canonicos del subsistema cumplen <prefix>.<entity>.<verb> con verbo del whitelist es. Los drifts heredados (escandallo.alerta, escandallo.comparativa) estan listados como trabajo_pendiente.",
+    "naming": "Todos los eventos canonicos del subsistema cumplen <prefix>.<entity>.<verb> con verbo del whitelist es. Los 2 drifts heredados (escandallo.alerta, escandallo.comparativa) cerrados en v1.0.2 via rename a escandallo.alerta.detectada y escandallo.comparativa.calculada.",
     "glossary": "Introduce 6 conceptos nuevos al glossary (recipe-prototype, culinary-technique, mise-en-place, pass-card, recipe-substitution, kitchen-incident). El alta en glossary.json es trabajo_pendiente de prioridad alta — el validator de glossary detectara los conceptos faltantes en cuanto los modulos nuevos existan.",
     "frontend": "El modulo frontend-recetario es un tipo de modulo permitido del subsistema. Sus reglas internas (no logica de dominio, composicion de vistas, etc.) viven en este contrato. Detalles de UI (estructura de paginas, tema, accesibilidad) heredan de frontend.contract."
   },
@@ -152,7 +152,7 @@
     {
       "id": "publica_recetas_no_consume_escandallo",
       "decision": "recetas NO escucha eventos de los modulos derivados (no se entera de escandallo.calculado, no reacciona a pase.incidencia.registrada). recetas es FUENTE, no consumidora del subsistema (salvo que sea de otro subsistema externo, como facturas.linea.detectada para precios).",
-      "alternativa_descartada": "recetas escucha escandallo.alerta y marca la receta con un flag de 'rentabilidad baja'.",
+      "alternativa_descartada": "recetas escucha escandallo.alerta.detectada y marca la receta con un flag de 'rentabilidad baja'.",
       "razon": "Si recetas escucha a sus consumidores, hay ciclo de dependencia y la jerarquia se vuelve circular. La rentabilidad es UN dato derivado que pertenece a escandallo o al frontend, no al aggregate root."
     }
   ],
@@ -185,7 +185,7 @@
         "language": "es",
         "dueño_de": ["calculos de coste por receta", "alertas de margen", "comparativas precio_catalogo vs precio_compra"],
         "responsabilidad": "Calcular coste de recetas cruzando ingredientes con precio_mercado. Emitir alertas cuando se cruza umbral. Comparar con precio_compra real desde facturas.",
-        "publica_canonicamente": ["escandallo.calculado", "escandallo.alerta", "escandallo.comparativa"],
+        "publica_canonicamente": ["escandallo.calculado", "escandallo.alerta.detectada", "escandallo.comparativa.calculada"],
         "consume_canonicamente": ["receta.creada", "receta.actualizada", "ingrediente.precio.actualizado"],
         "tools_que_expone": ["escandallo.receta", "escandallo.global", "escandallo.comparar_precios", "escandallo.simular_precio"],
         "persistencia": "in-memory cache invalidado por eventos. Sin persistencia propia hoy; puede tener json-per-project si crece.",
@@ -275,7 +275,7 @@
           "receta.estado.actualizada",
           "ingrediente.precio.actualizado",
           "escandallo.calculado",
-          "escandallo.alerta",
+          "escandallo.alerta.detectada",
           "tecnica.creada",
           "tecnica.actualizada",
           "creativo.prototipo.creado",
@@ -398,34 +398,30 @@
       ]
     },
     {
-      "id": "escandallo.alerta",
-      "name": "escandallo.alerta",
+      "id": "escandallo.alerta.detectada",
+      "name": "escandallo.alerta.detectada",
       "publicado_por": "escandallo",
       "consumido_por": "frontend-recetario (notifica al jefe), agentes (analizan tendencias)",
       "proposito": "Se ha cruzado un umbral relevante (food_cost alto, margen negativo, ingrediente faltante, etc.).",
-      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/escandallo.alerta.schema.json",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/escandallo.alerta.detectada.schema.json",
       "shape_resumen": {
         "obligatorios": ["correlation_id", "project_id", "user_id", "tipo", "receta_id", "nombre", "timestamp"],
         "opcionales":   ["valor_observado", "umbral", "detalle"]
       },
-      "notas_de_drift_a_cerrar": [
-        "DRIFT NAMING CONOCIDO: nombre del evento rompe <prefix>.<entity>.<verb> — 'alerta' es noun, no verb. Rename canonico futuro: escandallo.alerta.detectada. Cerrarlo es responsabilidad de quien reescriba escandallo + naming validator."
-      ]
+      "notas_de_drift_a_cerrar": []
     },
     {
-      "id": "escandallo.comparativa",
-      "name": "escandallo.comparativa",
+      "id": "escandallo.comparativa.calculada",
+      "name": "escandallo.comparativa.calculada",
       "publicado_por": "escandallo",
       "consumido_por": "frontend-recetario (vista comparativa precio catalogo vs compra), agentes",
       "proposito": "Comparativa precio_mercado del catalogo vs precio_compra real (cross-cruce con facturas).",
-      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/escandallo.comparativa.schema.json",
+      "schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/escandallo.comparativa.calculada.schema.json",
       "shape_resumen": {
         "obligatorios": ["correlation_id", "project_id", "user_id", "lineas", "timestamp"],
         "opcionales":   ["ingredientes_sin_compra_real"]
       },
-      "notas_de_drift_a_cerrar": [
-        "DRIFT NAMING CONOCIDO: 'comparativa' es noun. Rename canonico futuro: escandallo.comparativa.calculada."
-      ]
+      "notas_de_drift_a_cerrar": []
     },
     {
       "id": "tecnica.creada",
@@ -716,8 +712,8 @@
         "receta.estado.actualizada.schema.json",
         "ingrediente.precio.actualizado.schema.json",
         "escandallo.calculado.schema.json",
-        "escandallo.alerta.schema.json",
-        "escandallo.comparativa.schema.json",
+        "escandallo.alerta.detectada.schema.json",
+        "escandallo.comparativa.calculada.schema.json",
         "tecnica.creada.schema.json",
         "tecnica.actualizada.schema.json",
         "creativo.prototipo.creado.schema.json",
@@ -852,7 +848,7 @@
   "salida_validador": "PASS si los 20 schemas compilan Y el catalogo de eventos del contrato coincide con los schemas presentes Y todos los modulos del subsistema declarados declaran schema_ref correctamente Y el codigo no viola las prohibiciones cross-modulo. Errores cross-system bloquean PASS — doble-escritura de recetas.json es ERROR (rompe principio de un dueno del dato), satelite emitiendo evento de recetas es ERROR (rompe jerarquia). Warnings son drift visible que no bloquea (publish sin correlation_id, proyecto_id en lugar de project_id, frontend con funciones sospechosas de dominio). Info son heuristicas (audit incompleto). Formato coherente con los demas validators: banner PASS/FAIL + findings agrupados por severidad con archivo:linea cuando aplique.",
 
   "convenciones_complementarias": {
-    "naming": "Los nombres de los 19 eventos canonicos cumplen la forma <module-prefix>.<entity>.<verb> definida en naming.contract.json salvo los 2 drifts heredados (escandallo.alerta, escandallo.comparativa) anotados en trabajo_pendiente. Verbos del whitelist es: creada, actualizada, eliminada, calculado, publicado, registrada, validada (formas femeninas del verbo canonico cuando la entidad es femenina; el validator de naming acepta ambas variantes de genero como cumplimiento del whitelist).",
+    "naming": "Los nombres de los 19 eventos canonicos cumplen la forma <module-prefix>.<entity>.<verb> definida en naming.contract.json. Los 2 drifts heredados (escandallo.alerta, escandallo.comparativa) se cierran en v1.0.2 via rename a escandallo.alerta.detectada y escandallo.comparativa.calculada. Verbos del whitelist es: creada, actualizada, eliminada, calculado, calculada, publicado, registrada, validada, detectada (formas femeninas del verbo canonico cuando la entidad es femenina; el validator de naming acepta ambas variantes de genero como cumplimiento del whitelist).",
     "glossary": "Las entidades cross-modulo del payload (receta, ingrediente, tecnica, prototipo, ficha-pase, sustitucion, incidencia) deben tener entrada canonica en glossary.json. recipe e ingredient ya estan. recipe-prototype, culinary-technique, mise-en-place, pass-card, recipe-substitution, kitchen-incident, recipe-operative-state son trabajo_pendiente.",
     "events": "Hereda los principios generales: publish-subscribe asincrono, no esperar respuesta del propio publish, payloads serializables JSON. Este sub-contrato concreta el shape para los 19 eventos del subsistema sin contradecir events.contract.",
     "errors": "Errores de dominio del subsistema usan codes_dominio (RECIPE_NOT_FOUND, etc.). El catalogo completo se anade a errors.json como trabajo_pendiente. Errores de infraestructura (timeout fs, project-manager caido) usan codes_infrastructure existentes (UPSTREAM_TIMEOUT, RESOURCE_NOT_FOUND, etc.).",
@@ -900,12 +896,13 @@
     },
     {
       "id": "cerrar_drift_naming_escandallo_alerta_comparativa",
-      "estado": "abierto",
+      "estado": "cerrado",
       "naturaleza": "horizontal",
-      "descripcion": "Renombrar escandallo.alerta a escandallo.alerta.detectada y escandallo.comparativa a escandallo.comparativa.calculada para cumplir <prefix>.<entity>.<verb>. Migracion: introducir nuevos nombres en paralelo, mantener antiguos durante un sprint con warn de compat, retirar al final.",
-      "criterio_de_cierre": "Eventos antiguos eliminados de modules/escandallo. naming.validate.js sin warnings para esos eventos.",
-      "bloqueado_por": "Reescritura de escandallo (module-rewrite).",
-      "fecha_anotacion": "2026-05-17"
+      "descripcion": "Renombrar escandallo.alerta a escandallo.alerta.detectada y escandallo.comparativa a escandallo.comparativa.calculada para cumplir <prefix>.<entity>.<verb>. Migracion: rename directo (cero consumers cross-modulo verificados con grep antes del rename — solo escandallo emite estos eventos; el agente escandallo-analyzer no los escucha, solo escucha escandallo.calculado).",
+      "criterio_de_cierre": "Schemas oficiales renombrados (escandallo.alerta.detectada.schema.json, escandallo.comparativa.calculada.schema.json). Eventos antiguos eliminados del sub-contrato. Codigo de escandallo v4.0.0 publica con los nombres nuevos. naming.validate.js sin warnings.",
+      "fecha_anotacion": "2026-05-17",
+      "fecha_cierre": "2026-05-17",
+      "cerrado_en": "refactor de escandallo v3.0.0 → v4.0.0 (subsistema-recetario.contract v1.0.2)"
     },
     {
       "id": "implementar_modulo_tecnicas",

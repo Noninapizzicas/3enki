@@ -192,7 +192,7 @@ Drift heredado del legacy de `recetas` (que aun publica `proyecto_id`). Se cierr
 **M1**. `_classifyHandlerError` mapea `msg.includes('no encontrad')` (espanol) → `RESOURCE_NOT_FOUND` (`index.js:1042-1045`). BaseModule canonico hereda con keywords ingles + respeta `err._code` asignado en throws.
 - **Fix**: eliminar el override entero (heredar de BaseModule); asignar `err._code` en throws.
 
-## Decisiones clave del refactor (consolidadas)
+## Acuerdos clave del refactor (consolidados)
 
 ### 1. Naming canonico (rename)
 - `escandallo.alerta` → `escandallo.alerta.detectada`. Schema renombrado.

@@ -1,15 +1,15 @@
 {
   "_doc": "Sub-contrato que formaliza el SUBSISTEMA RECETARIO del sistema event-core. Captura la particion canonica del subsistema en N modulos backend acotados (recetas como core; escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina como satelites especializados) mas UN modulo frontend (frontend-recetario) que compone las tres vistas operativas (chef / jefe / pase) sin contener logica de dominio. Define los 20 eventos canonicos del subsistema con shape estricto (schemas AJV strict additionalProperties:false), el principio una-receta-tres-vistas-un-dueno-del-dato, las prohibiciones cross-modulo que sostienen la independencia, los drifts heredados del estado actual y el catalogo de modulos nuevos a anadir. No deriva de companero-viaje (que gobierna el subsistema chat/LLM/agentes) sino que es un subsistema paralelo de DOMINIO; se relaciona con companero-viaje porque expone tools al LLM. El validator subsistema-recetario.validate.js cruza module.json/audits/codigo de los modulos del subsistema con los schemas declarados aqui y detecta drift estructural ANTES de produccion. Lectura obligatoria antes de anadir o reescribir cualquier modulo del subsistema.",
   "id": "subsistema-recetario",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "creada": "2026-05-17",
-  "supersedes_nota": "v1.0.0: Primera version del sub-contrato. Cierra una ambiguedad arquitectonica historica del modulo recetas: tres responsabilidades distintas (CRUD canonico, escandallo de coste, ficha de pase) operando dentro de UN modulo. La resolucion canonica es una-receta-tres-vistas-un-dueno-del-dato: el dato es de recetas, las capas derivadas (coste, prototipos, escalado, ficha de pase) viven en modulos satelite que escuchan receta.* y publican lo suyo; el frontend agrupa las vistas. No cierra los drifts existentes de escandallo (alerta/comparativa rompen naming) — los anota en trabajo_pendiente para que los cierre quien reescriba escandallo siguiendo module-rewrite.contract. Tampoco cierra el drift de project_id vs proyecto_id en publishes de recetas — anotado igual.",
+  "supersedes_nota": "v1.0.1 (alineacion con canon real de errors.contract): la v1.0.0 listaba en trabajo_pendiente la introduccion de codigos por entidad (RECIPE_NOT_FOUND, TECHNIQUE_NOT_FOUND, PROTOTYPE_NOT_FOUND, PASSCARD_NOT_FOUND, RECIPE_NOT_IN_SERVICE, INGREDIENT_PRICE_MISSING, etc.). Esto VIOLA explicitamente la regla de codes_domain[RESOURCE_NOT_FOUND] que prohibe codigos por entidad y exige RESOURCE_NOT_FOUND + details.entity_type. Reemplazado por la formula canonica: RESOURCE_NOT_FOUND para 'no existe', PRECONDITION_FAILED para precondiciones de dominio, CONFLICT_STATE para transiciones invalidas, INVALID_INPUT para validaciones — todos con details.kind / details.entity_type apropiados. errors.json v1.5.0 documenta los entity_types y kinds del subsistema. Sin cambio en el catalogo de eventos, schemas ni validator del subsistema-recetario — esto es alineacion documental, no de shape.\n\nv1.0.0: Primera version del sub-contrato. Cierra una ambiguedad arquitectonica historica del modulo recetas: tres responsabilidades distintas (CRUD canonico, escandallo de coste, ficha de pase) operando dentro de UN modulo. La resolucion canonica es una-receta-tres-vistas-un-dueno-del-dato: el dato es de recetas, las capas derivadas (coste, prototipos, escalado, ficha de pase) viven en modulos satelite que escuchan receta.* y publican lo suyo; el frontend agrupa las vistas. No cierra los drifts existentes de escandallo (alerta/comparativa rompen naming) — los anota en trabajo_pendiente para que los cierre quien reescriba escandallo siguiendo module-rewrite.contract. Tampoco cierra el drift de project_id vs proyecto_id en publishes de recetas — anotado igual.",
 
   "deriva_de": null,
   "relacion_con_otros_contratos": {
     "companero-viaje": "El subsistema-recetario expone tools al LLM (recetas.crear, recetas.escalar, pase.sustituir, etc.) que el companero invoca via ai-gateway. Esas tools forman parte del modelo de extension tipo 'tool' del documento maestro, pero su shape (input parameters, retorno) lo define tools.contract.json — no este sub-contrato.",
     "multi-tenancy": "Todos los eventos del subsistema-recetario incluyen project_id obligatorio. Hereda la directriz v1.1.0 (project_id siempre string, nunca null).",
-    "errors": "Errores de dominio del subsistema usan codes_dominio del catalogo (RECIPE_NOT_FOUND, INGREDIENT_PRICE_MISSING, RECIPE_INCOMPLETE, INVALID_STATE_TRANSITION, etc.). El sub-contrato lista los codigos que introduce y registra en errors.json.",
+    "errors": "Errores de dominio del subsistema NO introducen codigos por entidad — la regla canonica de codes_domain[RESOURCE_NOT_FOUND] prohibe explicitamente ese patron. Los modulos del subsistema usan codigos genericos del catalogo con details.entity_type y details.kind para especificar: RESOURCE_NOT_FOUND + entity_type:'recipe'|'recipe-prototype'|'culinary-technique'|'pass-card'|'ingredient' (para 'no existe'); PRECONDITION_FAILED + kind:'recipe_not_in_service'|'ingredient_price_missing' (para precondiciones de dominio); CONFLICT_STATE + kind:'invalid_state_transition' (para transiciones borrador/en_servicio/archivada invalidas); INVALID_INPUT + kind:'incomplete_recipe'|'invalid_purchase_horizon' (para validaciones). errors.json v1.5.0 documenta los entity_types y kinds del subsistema. Los entity_type coinciden 1:1 con los ids del glossary cross-modulo.",
     "naming": "Todos los eventos canonicos del subsistema cumplen <prefix>.<entity>.<verb> con verbo del whitelist es. Los drifts heredados (escandallo.alerta, escandallo.comparativa) estan listados como trabajo_pendiente.",
     "glossary": "Introduce 6 conceptos nuevos al glossary (recipe-prototype, culinary-technique, mise-en-place, pass-card, recipe-substitution, kitchen-incident). El alta en glossary.json es trabajo_pendiente de prioridad alta — el validator de glossary detectara los conceptos faltantes en cuanto los modulos nuevos existan.",
     "frontend": "El modulo frontend-recetario es un tipo de modulo permitido del subsistema. Sus reglas internas (no logica de dominio, composicion de vistas, etc.) viven en este contrato. Detalles de UI (estructura de paginas, tema, accesibilidad) heredan de frontend.contract."
@@ -672,7 +672,7 @@
     },
     {
       "id": "mise_en_place_opera_sobre_recetas_no_en_servicio",
-      "regla": "mise-en-place SOLO procesa recetas con estado_operativo='en_servicio'. Si recibe peticion sobre una receta en borrador o archivada, devuelve error RECIPE_NOT_IN_SERVICE.",
+      "regla": "mise-en-place SOLO procesa recetas con estado_operativo='en_servicio'. Si recibe peticion sobre una receta en borrador o archivada, devuelve PRECONDITION_FAILED con details.kind='recipe_not_in_service' (canon errors.contract; nunca un codigo por entidad).",
       "enforce": "Validador inspecciona errores canonicos del modulo + tests/handlers."
     },
     {
@@ -774,9 +774,9 @@
       "regla": "Anadir conceptos del subsistema que cruzan dos o mas modulos: recipe-prototype, culinary-technique, mise-en-place, pass-card, recipe-substitution, kitchen-incident, recipe-operative-state. Tarea de glosario, no de este sub-contrato — anotada como trabajo_pendiente."
     },
     {
-      "tipo": "errors_pendiente",
-      "ubicacion": "arquitectura/decisiones/_outputs/errors.json",
-      "regla": "Anadir codes_dominio: RECIPE_NOT_FOUND, RECIPE_INCOMPLETE, INVALID_STATE_TRANSITION, RECIPE_NOT_IN_SERVICE, INGREDIENT_PRICE_MISSING, INGREDIENT_NOT_IN_CATALOG, TECHNIQUE_NOT_FOUND, PROTOTYPE_NOT_FOUND, PASSCARD_NOT_FOUND, COMPRA_HORIZONTE_INVALIDO. Cuando los modulos satelites se implementen, sus error.code deben venir de este catalogo."
+      "tipo": "errors_vocabulario",
+      "ubicacion": "arquitectura/decisiones/_outputs/errors.json (v1.5.0)",
+      "regla": "El vocabulario de errores del subsistema NO introduce codigos nuevos — usa los codigos genericos del catalogo (RESOURCE_NOT_FOUND, INVALID_INPUT, CONFLICT_STATE, PRECONDITION_FAILED, PERMISSION_DENIED, ...) con details.entity_type y details.kind apropiados. Los entity_type del subsistema (recipe, recipe-prototype, culinary-technique, pass-card, ingredient, recipe-substitution, kitchen-incident) estan en entity_type.valores_comunes. Los kinds especificos (recipe_not_in_service, ingredient_price_missing, invalid_state_transition, incomplete_recipe, invalid_purchase_horizon) estan documentados en las descripciones de los codigos correspondientes. Cuando los modulos del subsistema se implementen, sus respuestas de error deben cumplir este vocabulario."
     }
   ],
 
@@ -869,19 +869,23 @@
   "trabajo_pendiente": [
     {
       "id": "anadir_conceptos_al_glossary",
-      "estado": "abierto",
+      "estado": "cerrado",
+      "cerrado_en": "2026-05-17",
       "naturaleza": "transversal",
-      "descripcion": "Anadir a glossary.json los 7 conceptos cross-modulo del subsistema: recipe-prototype (es: prototipo), culinary-technique (es: tecnica), mise-en-place (es: mise-en-place), pass-card (es: ficha-pase), recipe-substitution (es: sustitucion), kitchen-incident (es: incidencia), recipe-operative-state (es: estado_operativo).",
+      "descripcion": "Anadir a glossary.json los 7 conceptos cross-modulo del subsistema: recipe-prototype (es: prototipo), culinary-technique (es: tecnica), mise-en-place (es: mise-en-place), pass-card (es: ficha-pase), recipe-substitution (es: sustitucion), kitchen-incident (es: incidencia), recipe-operative-state (es: estado-operativo).",
       "criterio_de_cierre": "Los 7 conceptos presentes en glossary.json con forma canonica es y en + notes + industry_reference. glossary.validate.js verde.",
+      "cerrado_con": "glossary.json v1.1.0 (commit que precede este patch). glossary.validate.js PASS estructural.",
       "bloqueado_por": null,
       "fecha_anotacion": "2026-05-17"
     },
     {
-      "id": "anadir_codes_dominio_a_errors",
-      "estado": "abierto",
+      "id": "ampliar_vocabulario_de_errors",
+      "estado": "cerrado",
+      "cerrado_en": "2026-05-17",
       "naturaleza": "transversal",
-      "descripcion": "Anadir a errors.json los codes_dominio del subsistema: RECIPE_NOT_FOUND, RECIPE_INCOMPLETE, INVALID_STATE_TRANSITION, RECIPE_NOT_IN_SERVICE, INGREDIENT_PRICE_MISSING, INGREDIENT_NOT_IN_CATALOG, TECHNIQUE_NOT_FOUND, PROTOTYPE_NOT_FOUND, PASSCARD_NOT_FOUND, COMPRA_HORIZONTE_INVALIDO. Con definicion canonica de mensaje.",
-      "criterio_de_cierre": "Los 10 codigos presentes en errors.json. errors.validate.js verde.",
+      "descripcion": "Ampliar el vocabulario de errors.json para el subsistema-recetario respetando el canon (sin codigos por entidad). Concretamente: anadir a entity_type.valores_comunes los 6 entity_types nuevos (recipe-prototype, culinary-technique, pass-card, ingredient, recipe-substitution, kitchen-incident — recipe ya estaba) y documentar 5 details.kind nuevos en las descripciones de los codes correspondientes (INVALID_INPUT: incomplete_recipe, invalid_purchase_horizon; CONFLICT_STATE: invalid_state_transition; PRECONDITION_FAILED: recipe_not_in_service, ingredient_price_missing).",
+      "criterio_de_cierre": "errors.json v1.5.0 publicado con los 6 entity_type + 5 kinds. errors.validate.js verde.",
+      "cerrado_con": "errors.json v1.5.0 (commit que acompana este patch). errors.validate.js PASS estructural.",
       "bloqueado_por": null,
       "fecha_anotacion": "2026-05-17"
     },

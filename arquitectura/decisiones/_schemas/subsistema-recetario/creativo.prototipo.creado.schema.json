@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/creativo.prototipo.creado.schema.json",
+  "title": "creativo.prototipo.creado — payload schema",
+  "description": "Evento emitido por recetario-creativo cuando el chef abre una nueva exploracion (todavia no es receta — es prototipo). Un prototipo se puede iterar varias veces hasta promocionarlo a receta canonica (referenciando receta_id del modulo recetas).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "prototipo_id",
+    "nombre",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "prototipo_id":   { "$ref": "_common.schema.json#/$defs/prototipo_id" },
+    "nombre":         { "type": "string", "minLength": 1 },
+    "tags_creativos": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Tags libres del chef (concepto, perfil sensorial, inspiracion, etc.)."
+    },
+    "receta_id_origen": {
+      "$ref": "_common.schema.json#/$defs/receta_id",
+      "description": "Opcional: si el prototipo parte de una receta existente como punto de partida."
+    },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

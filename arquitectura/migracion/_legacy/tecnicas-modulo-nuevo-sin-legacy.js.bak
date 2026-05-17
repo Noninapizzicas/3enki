@@ -1,0 +1,24 @@
+/**
+ * PLACEHOLDER — no hay monolito legacy de `tecnicas`.
+ *
+ * El modulo `tecnicas` v1.0.0 nace POC2 desde el primer commit como parte
+ * del horizontal del subsistema-recetario (ver
+ * arquitectura/decisiones/_contratos/subsistema-recetario.contract.json
+ * v1.0.1, principio "tipos_canonicos_de_modulo_del_subsistema").
+ *
+ * El validator `module-rewrite.validate.js` exige que cada modulo migrado
+ * tenga su monolito archivado en este directorio. La regla aplica a modulos
+ * que existian antes y se reescribieron. Para modulos NUEVOS del horizontal
+ * (tecnicas, recetario-creativo, mise-en-place, pase-cocina, frontend-recetario)
+ * NO hay monolito previo — este archivo es marcador para satisfacer la
+ * heuristica del validator sin engaño: el cumplimiento del canon POC2
+ * se evalua igual via tests + validate:ci + module-rewrite.contract.
+ *
+ * Si en el futuro el validator distingue formalmente "modulo nuevo" de
+ * "modulo migrado" (por presencia en migracion/_outputs/modulos-roadmap.json
+ * o un flag en module.json), este placeholder puede retirarse.
+ *
+ * Mapa del modulo: arquitectura/migracion/notas/tecnicas-mapa.md (PASO 0).
+ */
+
+// Modulo nuevo POC2 — no aplica codigo legacy archivado.

@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "errors",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "creado_en": "2026-05-02",
     "contrato_referencia": "arquitectura/decisiones/_contratos/errors.contract.json",
-    "supersedes_nota": "v1.4.0 (POC2 ai-gateway, finding F6): añadida internal_vs_canonical_shapes que documenta el patron 'shape interno {ok,...} en API privada del modulo, shape canonico {status, data|error} en frontera externa'. Sin esta clarificacion, el patron parecia drift cuando es disciplina sana de encapsulacion. Validado en ai-gateway-poc (DeepSeekClient interno vs onLlmCompleteRequest publicando al bus).\n\nv1.3.0 (POC2 F2): build_success_response.\n\nv1.2.0 (POC2 F3): RESOURCE_NOT_FOUND + 8 UPSTREAM_*.\n\nv1.1.0 (POC1): _buildErrorResponse + field/all_errors."
+    "supersedes_nota": "v1.5.0 (cierre transversal del subsistema-recetario): ampliacion del vocabulario sin introducir codigos nuevos — la regla canonica de codes_domain[RESOURCE_NOT_FOUND] PROHIBE codigos por entidad (RECIPE_NOT_FOUND, TECHNIQUE_NOT_FOUND, etc.), todos van con RESOURCE_NOT_FOUND + details.entity_type. Aqui se anaden 6 valores canonicos a entity_type.valores_comunes (recipe-prototype, culinary-technique, pass-card, ingredient, recipe-substitution, kitchen-incident; recipe ya estaba) y se documentan 5 details.kind nuevos en las descripciones de INVALID_INPUT (incomplete_recipe, invalid_purchase_horizon), CONFLICT_STATE (invalid_state_transition) y PRECONDITION_FAILED (recipe_not_in_service, ingredient_price_missing). El subsistema-recetario.contract v1.0.1 referencia este vocabulario.\n\nv1.4.0 (POC2 ai-gateway, finding F6): añadida internal_vs_canonical_shapes que documenta el patron 'shape interno {ok,...} en API privada del modulo, shape canonico {status, data|error} en frontera externa'. Sin esta clarificacion, el patron parecia drift cuando es disciplina sana de encapsulacion. Validado en ai-gateway-poc (DeepSeekClient interno vs onLlmCompleteRequest publicando al bus).\n\nv1.3.0 (POC2 F2): build_success_response.\n\nv1.2.0 (POC2 F3): RESOURCE_NOT_FOUND + 8 UPSTREAM_*.\n\nv1.1.0 (POC1): _buildErrorResponse + field/all_errors."
   },
 
   "regla": "Toda respuesta sigue { status, data?, error? } — mutuamente excluyentes data y error. Status HTTP-like (4xx dominio, 5xx infraestructura). error.code en UPPER_SNAKE_CASE de lista cerrada. Cada error genera log + métrica automáticos. Stack jamás en respuesta. Sin secretos en mensajes. Describir, no instruir.",
@@ -55,13 +55,13 @@
 
   "codes_domain": [
     { "code": "RESOURCE_NOT_FOUND",      "status_typical": 404, "descripcion": "Recurso del dominio no encontrado. Usar SIEMPRE este código junto a details.entity_type para indicar el tipo concreto.", "ejemplo_uso": "{ code: 'RESOURCE_NOT_FOUND', message: 'Recipe X not found', details: { entity_type: 'recipe', entity_id: 'X' } }. NO crear códigos por entidad (RECIPE_NOT_FOUND, AGENT_NOT_FOUND, CREDENTIAL_NOT_FOUND) — usar este genérico + entity_type." },
-    { "code": "INVALID_INPUT",           "status_typical": 400, "descripcion": "Input semántica o sintácticamente inválido. Cubre todos los subcasos: campo ausente, formato inválido, tipo incorrecto, longitud excedida, version no semver, etc. Usar details.kind ('missing'|'too_long'|'invalid_format'|'invalid_version') + details.field para especificar.", "ejemplo_uso": "{ code: 'INVALID_INPUT', message: 'name required', details: { kind: 'missing', field: 'name' } }" },
+    { "code": "INVALID_INPUT",           "status_typical": 400, "descripcion": "Input semántica o sintácticamente inválido. Cubre todos los subcasos: campo ausente, formato inválido, tipo incorrecto, longitud excedida, version no semver, receta sin campos esenciales, horizonte de compra mal formado, etc. Usar details.kind ('missing'|'too_long'|'invalid_format'|'invalid_version'|'incomplete_recipe'|'invalid_purchase_horizon') + details.field para especificar.", "ejemplo_uso": "{ code: 'INVALID_INPUT', message: 'name required', details: { kind: 'missing', field: 'name' } }" },
     { "code": "ALREADY_EXISTS",          "status_typical": 409, "descripcion": "Ya existe un recurso con la clave proporcionada (duplicado por creación).",   "ejemplo_uso": "Crear proyecto con nombre que ya existe." },
-    { "code": "CONFLICT_STATE",          "status_typical": 409, "descripcion": "El estado actual del recurso no permite la operación. Cubre también version_conflict (optimistic lock) — usar details.kind para distinguir.", "ejemplo_uso": "Cobrar un pedido ya pagado; update con version=2 cuando el servidor tiene 3 (details.kind:'version_conflict')." },
+    { "code": "CONFLICT_STATE",          "status_typical": 409, "descripcion": "El estado actual del recurso no permite la operación. Cubre también version_conflict (optimistic lock) y transiciones de estado invalidas (invalid_state_transition) — usar details.kind para distinguir.", "ejemplo_uso": "Cobrar un pedido ya pagado; update con version=2 cuando el servidor tiene 3 (details.kind:'version_conflict'); pasar receta de archivada a borrador directamente sin paso intermedio (details.kind:'invalid_state_transition', details.from:'archivada', details.to:'borrador')." },
     { "code": "PERMISSION_DENIED",       "status_typical": 403, "descripcion": "El caller autenticado no tiene permiso para esta operación.",        "ejemplo_uso": "Usuario sin role de admin intenta eliminar." },
     { "code": "AUTHENTICATION_REQUIRED", "status_typical": 401, "descripcion": "Falta credencial o credencial inválida.",                           "ejemplo_uso": "Request sin token o con token expirado." },
     { "code": "RATE_LIMITED",            "status_typical": 429, "descripcion": "Cuota de requests excedida o capacidad de recurso saturada. Usar details.kind ('requests'|'quota') si la fuente importa.", "ejemplo_uso": "El caller hizo demasiados requests; max_concurrent_builds alcanzado." },
-    { "code": "PRECONDITION_FAILED",     "status_typical": 422, "descripcion": "Una precondición lógica no se cumple (más específica que INVALID_INPUT). Cubre min_version_not_met y similares — usar details.kind.", "ejemplo_uso": "Trigger-ota sin firmware en catálogo; min_version 2.0 pero device en 1.5 (details.kind:'min_version')." }
+    { "code": "PRECONDITION_FAILED",     "status_typical": 422, "descripcion": "Una precondición lógica no se cumple (más específica que INVALID_INPUT). Cubre min_version_not_met, receta no en servicio (recipe_not_in_service), precio de ingrediente ausente del catalogo (ingredient_price_missing) y similares — usar details.kind.", "ejemplo_uso": "Trigger-ota sin firmware en catálogo; min_version 2.0 pero device en 1.5 (details.kind:'min_version'); mise-en-place.escalar sobre receta en estado borrador (details.kind:'recipe_not_in_service'); escandallo.calcular cuando uno o mas ingredientes no tienen precio_mercado (details.kind:'ingredient_price_missing', details.missing:['albahaca','perejil'])." }
   ],
 
   "codes_infrastructure": [
@@ -94,8 +94,8 @@
     "entity_type": {
       "politica": "recomendado",
       "formato": "string corto identificando el tipo de entidad afectada",
-      "valores_comunes": ["recipe", "project", "device", "credential", "module", "user", "nota"],
-      "nota": "Útil cuando el error se refiere a una entidad concreta del dominio. Sustituye a códigos específicos como RECIPE_NOT_FOUND — siempre RESOURCE_NOT_FOUND + entity_type."
+      "valores_comunes": ["recipe", "recipe-prototype", "culinary-technique", "pass-card", "ingredient", "recipe-substitution", "kitchen-incident", "project", "device", "credential", "module", "user", "nota"],
+      "nota": "Útil cuando el error se refiere a una entidad concreta del dominio. Sustituye a códigos específicos como RECIPE_NOT_FOUND — siempre RESOURCE_NOT_FOUND + entity_type. Los entity_type del subsistema-recetario (recipe-prototype, culinary-technique, pass-card, ingredient, recipe-substitution, kitchen-incident) coinciden 1:1 con los ids del glossary cross-modulo."
     },
     "entity_id": {
       "politica": "recomendado",

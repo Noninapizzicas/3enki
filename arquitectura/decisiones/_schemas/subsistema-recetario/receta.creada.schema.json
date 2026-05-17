@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/receta.creada.schema.json",
+  "title": "receta.creada — payload schema",
+  "description": "Evento emitido por recetas tras persistir una receta nueva en el JSON del proyecto. Es el TRIGGER del enriquecimiento del subsistema: escandallo calcula coste, recetario-creativo crea contexto creativo si aplica, mise-en-place ignora hasta que pase a en_servicio.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "receta_id",
+    "nombre",
+    "version",
+    "estado_operativo",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":   { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":       { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":          { "$ref": "_common.schema.json#/$defs/user_id" },
+    "receta_id":        { "$ref": "_common.schema.json#/$defs/receta_id" },
+    "nombre":           { "$ref": "_common.schema.json#/$defs/receta_nombre" },
+    "version":          { "$ref": "_common.schema.json#/$defs/receta_version" },
+    "estado_operativo": { "$ref": "_common.schema.json#/$defs/receta_estado_operativo" },
+    "timestamp":        { "$ref": "_common.schema.json#/$defs/timestamp" },
+    "incompleta": {
+      "type": "boolean",
+      "description": "True si la receta se creo con campos esenciales pendientes (ingredientes/porciones/instrucciones). Permite a consumers decidir si actuar ahora o esperar a actualizacion."
+    },
+    "campos_pendientes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Lista de campos pendientes cuando incompleta=true."
+    }
+  }
+}

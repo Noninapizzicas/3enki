@@ -6,9 +6,9 @@
   "enabled": true,
   "prompt_file": "prompts/escandallo-analyzer.json",
   "tools": [
-    "escandallo.receta",
-    "escandallo.ficha_tecnica",
-    "escandallo.ingrediente_impacto"
+    "escandallo.calcular",
+    "escandallo.ficha.tecnica",
+    "escandallo.ingrediente.impacto"
   ],
   "provider": "auto",
   "temperature": 0.3,
@@ -19,21 +19,26 @@
   "event_listener": {
     "event": "escandallo.calculado",
     "context_mapping": {
-      "escandallo_id": "$.escandallo_id",
+      "correlation_id": "$.correlation_id",
+      "project_id": "$.project_id",
+      "user_id": "$.user_id",
       "receta_id": "$.receta_id",
-      "projectId": "$.projectId",
+      "nombre": "$.nombre",
       "coste_total": "$.coste_total",
-      "coste_porcion": "$.coste_porcion",
-      "precios_no_encontrados": "$.precios_no_encontrados",
+      "coste_por_porcion": "$.coste_por_porcion",
+      "coste_es_real": "$.coste_es_real",
+      "food_cost_pct": "$.food_cost_pct",
+      "ingredientes_sin_precio": "$.ingredientes_sin_precio",
       "timestamp": "$.timestamp"
     }
   },
   "publish_on_success": {
     "event": "escandallo.analysis.completed",
     "payload_template": {
-      "escandallo_id": "$.context.escandallo_id",
+      "correlation_id": "$.context.correlation_id",
+      "project_id": "$.context.project_id",
+      "user_id": "$.context.user_id",
       "receta_id": "$.context.receta_id",
-      "projectId": "$.context.projectId",
       "analisis": "$.result.analisis",
       "anomalias": "$.result.anomalias",
       "recomendaciones": "$.result.recomendaciones",
@@ -44,9 +49,10 @@
   "publish_on_failure": {
     "event": "escandallo.analysis.failed",
     "payload_template": {
-      "escandallo_id": "$.context.escandallo_id",
+      "correlation_id": "$.context.correlation_id",
+      "project_id": "$.context.project_id",
+      "user_id": "$.context.user_id",
       "receta_id": "$.context.receta_id",
-      "projectId": "$.context.projectId",
       "error": "$.error.message",
       "timestamp": "$.timestamp"
     }

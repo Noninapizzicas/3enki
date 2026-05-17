@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/receta.actualizada.schema.json",
+  "title": "receta.actualizada — payload schema",
+  "description": "Evento emitido por recetas tras aplicar un diff sobre una receta existente. Tambien emitido al revertir a una version anterior (con campo motivo='revertir'). Escandallo invalida cache; mise-en-place y pase-cocina recalculan dependencias si la receta esta en_servicio.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "receta_id",
+    "nombre",
+    "version",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":        { "$ref": "_common.schema.json#/$defs/user_id" },
+    "receta_id":      { "$ref": "_common.schema.json#/$defs/receta_id" },
+    "nombre":         { "$ref": "_common.schema.json#/$defs/receta_nombre" },
+    "version":        { "$ref": "_common.schema.json#/$defs/receta_version" },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" },
+    "campos_actualizados": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Lista de claves modificadas (sin el detalle del diff). Permite a consumers decidir si su capa derivada se ve afectada sin pedir la receta entera."
+    },
+    "motivo": {
+      "$ref": "_common.schema.json#/$defs/motivo"
+    },
+    "incompleta": { "type": "boolean" },
+    "campos_pendientes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

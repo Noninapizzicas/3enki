@@ -1,0 +1,162 @@
+{
+  "name": "pase-cocina",
+  "version": "1.0.0",
+  "description": "Modulo cara-al-servicio: materializa fichas de pase (snapshot operativo de la receta para el servicio en curso), registra incidencias y sustituciones. NO toma decisiones reactivas — solo registra; chef/jefe revisan post-servicio. Modulo del subsistema-recetario (ver arquitectura/decisiones/_contratos/subsistema-recetario.contract.json).",
+  "author": "Enki",
+  "language": "es",
+  "tier": "tier_4_dominio",
+
+  "events": {
+    "publishes": [
+      {
+        "event":               "pase.ficha.creada",
+        "description":         "Se materializa una ficha de pase para una receta en_servicio.",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/pase.ficha.creada.schema.json"
+      },
+      {
+        "event":               "pase.incidencia.registrada",
+        "description":         "El cocinero reporta una incidencia durante el servicio.",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/pase.incidencia.registrada.schema.json"
+      },
+      {
+        "event":               "pase.sustitucion.registrada",
+        "description":         "Sustitucion de emergencia de un ingrediente en una ficha de pase.",
+        "response_schema_ref": "arquitectura/decisiones/_schemas/subsistema-recetario/pase.sustitucion.registrada.schema.json"
+      }
+    ],
+    "subscribes": [
+      { "event": "project.activated",            "handler": "onProjectActivated",      "description": "Cachea base_path del proyecto activado." },
+      { "event": "project.get.response",         "handler": "onProjectGetResponse",    "description": "Resuelve project.get pendiente por request_id." },
+      { "event": "fs.read.response",             "handler": "onFsReadResponse",        "description": "Resuelve lectura pendiente por request_id." },
+      { "event": "fs.write.response",            "handler": "onFsWriteResponse",       "description": "Resuelve escritura pendiente por request_id." },
+
+      { "event": "pase.ficha.crear",             "handler": "onCrearFicha",            "description": "Tool LLM: materializar ficha de pase." },
+      { "event": "pase.incidencia.registrar",    "handler": "onRegistrarIncidencia",   "description": "Tool LLM: registrar incidencia del servicio." },
+      { "event": "pase.sustitucion.registrar",   "handler": "onRegistrarSustitucion",  "description": "Tool LLM: registrar sustitucion de ingrediente." },
+      { "event": "pase.ficha.obtener",           "handler": "onObtenerFicha",          "description": "Tool LLM: leer ficha de pase por id." },
+      { "event": "pase.fichas.listar",           "handler": "onListarFichas",          "description": "Tool LLM: listar fichas del proyecto." }
+    ]
+  },
+
+  "apis": [],
+
+  "tools": [
+    {
+      "name":        "pase.ficha.crear",
+      "description": "Materializar una ficha de pase a partir de una receta en_servicio. La ficha es snapshot de la receta al momento de creacion (version_receta) y vive durante el servicio. El caller debe pasar receta_id, version_receta y nombre — el modulo NO accede a recetas via cross-modulo.",
+      "handler":     "onCrearFicha",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id":     { "type": "string", "description": "ID del proyecto activo." },
+          "receta_id":      { "type": "string", "description": "ID de la receta canonica." },
+          "version_receta": { "type": "integer", "minimum": 1, "description": "Version de la receta capturada en este snapshot." },
+          "nombre":         { "type": "string", "description": "Nombre de la receta (denormalizado, 1-200 chars)." },
+          "servicio":       { "type": "string", "description": "Etiqueta del servicio (ej. '2026-05-17-cena', 1-100 chars)." },
+          "user_id":        { "type": "string", "description": "ID del usuario que materializa la ficha. Opcional." }
+        },
+        "required": ["project_id", "receta_id", "version_receta", "nombre", "servicio"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name":        "pase.incidencia.registrar",
+      "description": "Registrar una incidencia del servicio (rotura, queja, falta de genero, error de coccion, etc.). Tipo del enum canonico. Queda en historial de la ficha de pase.",
+      "handler":     "onRegistrarIncidencia",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id":    { "type": "string", "description": "ID del proyecto activo." },
+          "ficha_pase_id": { "type": "string", "description": "ID de la ficha de pase activa." },
+          "tipo": {
+            "type": "string",
+            "enum": ["rotura_genero", "rotura_equipamiento", "queja_cliente", "falta_ingrediente", "error_coccion", "tiempo_excedido", "alergia_no_declarada", "otro"],
+            "description": "Categoria canonica de la incidencia."
+          },
+          "descripcion":   { "type": "string", "description": "Texto libre de la incidencia (1-1000 chars)." },
+          "severidad":     { "type": "string", "enum": ["baja", "media", "alta", "critica"], "description": "Severidad. Opcional." },
+          "user_id":       { "type": "string", "description": "Opcional." }
+        },
+        "required": ["project_id", "ficha_pase_id", "tipo", "descripcion"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
+    },
+    {
+      "name":        "pase.sustitucion.registrar",
+      "description": "Registrar una sustitucion de emergencia de un ingrediente en una ficha de pase activa. NO modifica la receta canonica — solo anota en la ficha para que el chef pueda decidir si incorpora la sustitucion al recetario post-servicio.",
+      "handler":     "onRegistrarSustitucion",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id":            { "type": "string", "description": "ID del proyecto activo." },
+          "ficha_pase_id":         { "type": "string", "description": "ID de la ficha de pase activa." },
+          "ingrediente_original":  { "type": "string", "description": "Nombre del ingrediente original (1-100 chars)." },
+          "ingrediente_sustituto": { "type": "string", "description": "Nombre del ingrediente sustituto (1-100 chars)." },
+          "motivo":                { "type": "string", "description": "Razon de la sustitucion (1-500 chars)." },
+          "cantidad":              { "type": "number", "minimum": 0, "description": "Cantidad del ingrediente sustituto. Opcional." },
+          "unidad":                { "type": "string", "description": "Unidad de la cantidad. Opcional." },
+          "user_id":               { "type": "string", "description": "Opcional." }
+        },
+        "required": ["project_id", "ficha_pase_id", "ingrediente_original", "ingrediente_sustituto", "motivo"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
+    },
+    {
+      "name":        "pase.ficha.obtener",
+      "description": "Obtener una ficha de pase completa (con incidencias y sustituciones).",
+      "handler":     "onObtenerFicha",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id":    { "type": "string", "description": "ID del proyecto activo." },
+          "ficha_pase_id": { "type": "string", "description": "ID de la ficha." }
+        },
+        "required": ["project_id", "ficha_pase_id"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND"]
+    },
+    {
+      "name":        "pase.fichas.listar",
+      "description": "Listar fichas de pase del proyecto. Acepta filtros opcionales por servicio o estado.",
+      "handler":     "onListarFichas",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto activo." },
+          "servicio":   { "type": "string", "description": "Filtro opcional por etiqueta de servicio." },
+          "estado":     { "type": "string", "enum": ["activa", "cerrada"], "description": "Filtro opcional por estado." }
+        },
+        "required": ["project_id"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT"]
+    }
+  ],
+
+  "config": {
+    "data_file_pattern":         "data/projects/{slug}/pase-cocina.json",
+    "persistence":               "json-per-project",
+    "max_nombre_length":         200,
+    "max_servicio_length":       100,
+    "max_descripcion_length":    1000,
+    "max_motivo_length":         500,
+    "max_ingrediente_length":    100,
+    "project_get_timeout_ms":    5000,
+    "fs_request_timeout_ms":     5000
+  },
+
+  "observability": {
+    "metrics": {
+      "counters": [
+        "pase-cocina.ficha.creada.total",
+        "pase-cocina.incidencia.registrada.total",
+        "pase-cocina.sustitucion.registrada.total",
+        "pase-cocina.errors",
+        "pase-cocina.publish_error"
+      ],
+      "gauges": [
+        "pase-cocina.fichas.activas.count"
+      ],
+      "timings": []
+    }
+  }
+}

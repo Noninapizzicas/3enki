@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/subsistema-recetario/receta.estado.actualizada.schema.json",
+  "title": "receta.estado.actualizada — payload schema",
+  "description": "Evento emitido por recetas cuando una receta transita de estado operativo (borrador<->en_servicio<->archivada). Separado de receta.actualizada porque el cambio de estado activa o desactiva CAPAS ENTERAS del subsistema (mise-en-place y pase-cocina solo trabajan con recetas en_servicio). Consumers deciden activarse/desactivarse segun el estado nuevo.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "correlation_id",
+    "project_id",
+    "user_id",
+    "receta_id",
+    "nombre",
+    "estado_anterior",
+    "estado_nuevo",
+    "version",
+    "timestamp"
+  ],
+  "properties": {
+    "correlation_id":  { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "project_id":      { "$ref": "_common.schema.json#/$defs/project_id" },
+    "user_id":         { "$ref": "_common.schema.json#/$defs/user_id" },
+    "receta_id":       { "$ref": "_common.schema.json#/$defs/receta_id" },
+    "nombre":          { "$ref": "_common.schema.json#/$defs/receta_nombre" },
+    "estado_anterior": { "$ref": "_common.schema.json#/$defs/receta_estado_operativo" },
+    "estado_nuevo":    { "$ref": "_common.schema.json#/$defs/receta_estado_operativo" },
+    "version":         { "$ref": "_common.schema.json#/$defs/receta_version" },
+    "timestamp":       { "$ref": "_common.schema.json#/$defs/timestamp" },
+    "motivo": { "$ref": "_common.schema.json#/$defs/motivo" }
+  }
+}

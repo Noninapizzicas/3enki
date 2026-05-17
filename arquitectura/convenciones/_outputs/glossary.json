@@ -1,10 +1,10 @@
 {
   "_meta": {
     "convencion": "glossary",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "creado_en": "2026-04-30",
     "contrato_referencia": "arquitectura/convenciones/_contratos/glossary.contract.json",
-    "supersedes_nota": null
+    "supersedes_nota": "v1.1.0 (cierre transversal del subsistema-recetario): anadidos 7 conceptos cross-modulo del subsistema (recipe-prototype, culinary-technique, mise-en-place, pass-card, recipe-substitution, kitchen-incident, recipe-operative-state). Estos terminos cruzan entre recetas, escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina y frontend-recetario; sin entrada canonica, cada modulo redescubriria su naming. recipe y ingredient ya estaban (v1.0.0). Mantiene el criterio: solo terminos cross-modulo, sinonimos prohibidos, forma canonica unica por idioma."
   },
 
   "scope": "Términos cross-módulo del sistema event-core. Solo entran conceptos compartidos entre dos o más módulos. Las entidades internas de un único módulo no entran. Sinónimos prohibidos.",
@@ -282,6 +282,62 @@
       "es": null,
       "en": "project",
       "notes": "Proyecto multi-tenant del sistema. Solo EN.",
+      "industry_reference": null
+    },
+    {
+      "id": "recipe-prototype",
+      "domain": "horeca",
+      "es": "prototipo",
+      "en": "recipe-prototype",
+      "notes": "Exploracion creativa del chef que aun no es receta canonica. Vive en recetario-creativo; cuando madura, se promociona a recipe (modulo recetas) preservando la historia de iteraciones. EN industria profesional 'recipe prototype' / 'recipe development entry'.",
+      "industry_reference": "Recipe development platforms (Apicbase, MarketMan): 'recipe prototype'."
+    },
+    {
+      "id": "culinary-technique",
+      "domain": "horeca",
+      "es": "tecnica",
+      "en": "culinary-technique",
+      "notes": "Tecnica codificada y reutilizable de la libreria del proyecto (esferificacion, confitar, marinada de 24h). Referenciable desde recetas y prototipos por id. ES sin tilde.",
+      "industry_reference": "Culinary education / pro-kitchen libraries."
+    },
+    {
+      "id": "mise-en-place",
+      "domain": "horeca",
+      "es": "mise-en-place",
+      "en": "mise-en-place",
+      "notes": "Termino frances universalmente adoptado en HORECA profesional. Captura la fase entre receta canonica y servicio: escalados, listas de compra, plan de produccion. Sin traduccion natural ni a ES ni a EN — se mantiene la forma original como canonica en ambos idiomas.",
+      "industry_reference": "Industria HORECA global (CIA, Le Cordon Bleu, BCC)."
+    },
+    {
+      "id": "pass-card",
+      "domain": "horeca",
+      "es": "ficha-pase",
+      "en": "pass-card",
+      "notes": "Version operativa de una receta en_servicio para un servicio concreto, con sustituciones y notas aplicadas. La consulta el cocinero en el pase; es read-only desde la perspectiva de la receta canonica. Distinto de kitchen-ticket (que es la comanda del cliente).",
+      "industry_reference": "Pro-kitchen ops (BlueCart, Apicbase): 'pass sheet' / 'service sheet'."
+    },
+    {
+      "id": "recipe-substitution",
+      "domain": "horeca",
+      "es": "sustitucion",
+      "en": "substitution",
+      "notes": "Reemplazo de emergencia de un ingrediente en una pass-card durante el servicio (sin albaca, usa cilantro). NO modifica la receta canonica — vive en la ficha de pase y queda en historial para revision post-servicio del chef. ES sin tilde.",
+      "industry_reference": "POS/KDS industry: 'substitution' / 'sub'."
+    },
+    {
+      "id": "kitchen-incident",
+      "domain": "horeca",
+      "es": "incidencia",
+      "en": "incident",
+      "notes": "Evento no-rutinario reportado durante el servicio (rotura, queja de cliente, falta de genero, error de coccion). Pase-cocina solo registra; el chef/jefe revisan post-servicio. Distinto de fallo de sistema (esos son eventos de observability/log-entry).",
+      "industry_reference": "Restaurant ops literature: 'service incident'."
+    },
+    {
+      "id": "recipe-operative-state",
+      "domain": "horeca",
+      "es": "estado-operativo",
+      "en": "operative-state",
+      "notes": "Estado canonico triple de una receta: borrador, en_servicio, archivada. Determina que modulos del subsistema-recetario operan sobre ella (mise-en-place y pase-cocina solo procesan en_servicio). Distinto del 'estado' UI o de cualquier flag interno; este es el unico estado autoritativo del dominio.",
       "industry_reference": null
     }
   ]

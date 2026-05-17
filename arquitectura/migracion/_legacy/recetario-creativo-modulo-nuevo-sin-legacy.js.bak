@@ -1,0 +1,10 @@
+/**
+ * PLACEHOLDER — no hay monolito legacy de `recetario-creativo`.
+ *
+ * El modulo nace POC2 v1.0.0 como segundo modulo nuevo del horizontal del
+ * subsistema-recetario (despues de tecnicas). Sin legacy que archivar.
+ *
+ * Ver: arquitectura/migracion/notas/recetario-creativo-mapa.md (PASO 0).
+ * Mismo patron documental que tecnicas-modulo-nuevo-sin-legacy.js.bak.
+ */
+// Modulo nuevo POC2 — no aplica codigo legacy archivado.

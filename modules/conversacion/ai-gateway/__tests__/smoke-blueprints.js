@@ -1,5 +1,5 @@
 /**
- * Smoke test de blueprint-driven modules (piloto).
+ * Smoke test de blueprint-driven modules.
  *
  * Cubre lo que ai-gateway anyade para soportar modulos blueprint:
  *  - _loadBlueprints() descubre modulos con manifest.blueprint_driven=true,
@@ -8,14 +8,13 @@
  *  - _composeBlueprintSystemPrompt() compone padre + hijo como string que
  *    se inyecta al system prompt cuando el chat es blueprint-driven.
  *  - _getTools(page_id) devuelve SOLO las 2 tools universales cuando page_id
- *    coincide con un target_page_id de blueprintModules.
+ *    coincide con un target_page_id de blueprintModules. Otros page_id no
+ *    blueprint siguen recibiendo el catalogo polyfunctional clasico.
  *  - _executeUniversalBusTool('bus.publish', ...) publica al bus + retorna ok.
  *  - _executeUniversalBusTool('bus.publishAndWait', ...) publica + espera
  *    response correlacionada por request_id.
  *  - bus.publishAndWait con timeout corto → UPSTREAM_TIMEOUT.
  *  - bus.publish del nombre de la tool como evento → INVALID_INPUT (defensa).
- *
- * NO ejecuta el LLM real — eso vive en scripts/audit-helpers/test-blueprint-*
  */
 
 const path = require('path');
@@ -23,6 +22,9 @@ const Mod = require('../index.js');
 
 // ---------- Mock moduleLoader con un modulo blueprint-driven ----------
 const blueprintDir = path.resolve(__dirname, '..', '..', '..', '_recetas-blueprint');
+// El blueprint declara target_page_id="recetas" (reemplaza la UX del modulo
+// recetas legacy en el chat). El modulo recetas legacy puede seguir cargado
+// pero el LLM no ve sus tools cuando el chat opera en page_id="recetas".
 const fakeModules = new Map([
   ['_recetas-blueprint', {
     manifest: {
@@ -30,17 +32,19 @@ const fakeModules = new Map([
       blueprint_driven: true,
       blueprint_path: 'recetas.blueprint.json',
       blueprint_parent_path: 'subsistema-recetario.modulo-base.blueprint.json',
-      target_page_id: 'recetas-blueprint'
+      target_page_id: 'recetas'
     },
     path: blueprintDir,
     blueprint_driven: true
   }],
-  ['recetas', {
-    manifest: { name: 'recetas', tools: [{ name: 'recetas.crear' }] }
+  // Modulo cualquiera para testear que _getTools sigue devolviendo polyfunctional
+  // cuando el page_id no es blueprint.
+  ['otro-modulo', {
+    manifest: { name: 'otro-modulo', tools: [{ name: 'otro.tool' }] }
   }]
 ]);
 
-const allTools = [{ name: 'recetas.crear', description: '' }];
+const allTools = [{ name: 'otro.tool', description: '' }];
 
 const moduleLoader = {
   loadedModules: fakeModules,
@@ -94,11 +98,11 @@ async function main() {
   // ============================================================
   // [1] _loadBlueprints descubre y carga padre + hijo
   // ============================================================
-  console.log('\n[1] _loadBlueprints descubre el modulo _recetas-blueprint');
+  console.log('\n[1] _loadBlueprints descubre _recetas-blueprint con target_page_id="recetas"');
   mod._loadBlueprints();
   assert(mod.blueprintModules.size === 1, 'blueprintModules tiene 1 entrada');
-  assert(mod.blueprintModules.has('recetas-blueprint'), 'indexado por target_page_id');
-  const bp = mod.blueprintModules.get('recetas-blueprint');
+  assert(mod.blueprintModules.has('recetas'), 'indexado por target_page_id="recetas"');
+  const bp = mod.blueprintModules.get('recetas');
   assert(bp.parent?.id === 'subsistema-recetario.modulo-base', 'padre cargado');
   assert(bp.child?.id === 'recetas', 'hijo cargado');
   assert(typeof bp.systemPrompt === 'string' && bp.systemPrompt.length > 1000, 'systemPrompt compuesto (>1000 chars)');
@@ -115,25 +119,25 @@ async function main() {
   assert(sp.includes('subsistema-recetario.modulo-base'), 'incluye id del padre');
 
   // ============================================================
-  // [3] _getTools(page_id) devuelve solo las 2 tools universales
+  // [3] _getTools(page_id="recetas") = 2 tools universales
   // ============================================================
-  console.log('\n[3] _getTools(page_id="recetas-blueprint") = 2 tools universales');
-  const tools = mod._getTools('recetas-blueprint');
+  console.log('\n[3] _getTools(page_id="recetas") = 2 tools universales (reemplaza al legacy)');
+  const tools = mod._getTools('recetas');
   const names = tools.map(t => t.name).sort();
   assert(tools.length === 2, 'exactamente 2 tools');
   assert(names[0] === 'bus.publish' && names[1] === 'bus.publishAndWait', 'son bus.publish y bus.publishAndWait');
   assert(tools[0].parameters?.required?.includes('event'), 'bus.publish requires event');
   assert(tools[1].parameters?.required?.includes('event'), 'bus.publishAndWait requires event');
 
-  // Otro page_id no afecta — sigue devolviendo polyfunctional
-  const toolsLegacy = mod._getTools('recetas');
-  assert(toolsLegacy.map(t => t.name).includes('recetas.crear'), 'page_id legacy aun expone tools polyfunctional');
-  assert(!toolsLegacy.map(t => t.name).includes('bus.publish'), 'page_id legacy NO expone bus.publish');
+  // Otros page_id no blueprint siguen recibiendo polyfunctional clasico.
+  const toolsOtro = mod._getTools('otro-modulo');
+  assert(toolsOtro.map(t => t.name).includes('otro.tool'), 'page_id no blueprint sigue exponiendo polyfunctional');
+  assert(!toolsOtro.map(t => t.name).includes('bus.publish'), 'page_id no blueprint NO expone bus.publish');
 
   // ============================================================
   // [4] bus.publish — fire-and-forget
   // ============================================================
-  console.log('\n[4] bus.publish publica el evento y devuelve ok');
+  console.log('\n[4] bus.publish publica el evento y devuelve ack');
   published.length = 0;
   const r1 = await mod._executeUniversalBusTool('bus.publish',
     { event: 'receta.creada', payload: { id: 'r-1', nombre: 'Pizza' } },
@@ -154,7 +158,6 @@ async function main() {
   // ============================================================
   console.log('\n[5] bus.publishAndWait publica + espera response correlacionada');
   published.length = 0;
-  // Listener simulado que responde fs.read.request → fs.read.response
   eventBus.subscribe('fs.read.request', (payload) => {
     setImmediate(() => {
       eventBus.publish('fs.read.response', {
@@ -180,7 +183,6 @@ async function main() {
   // [6] bus.publishAndWait con response_event implicito (.request → .response)
   // ============================================================
   console.log('\n[6] bus.publishAndWait infiere response_event = event.replace(.request, .response)');
-  // Ya validado en [5] (no se paso response_event explicito).
   assert(true, 'inferencia .request→.response funciono (caso [5])');
 
   // ============================================================

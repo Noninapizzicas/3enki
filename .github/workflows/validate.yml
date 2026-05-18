@@ -59,6 +59,9 @@ jobs:
       - name: Run smoke tests (ai-gateway — bus-only tool invocation)
         run: npm run test:ai-gateway-smoke-tools
 
+      - name: Run smoke tests (ai-gateway — blueprint-driven modules pilot)
+        run: npm run test:ai-gateway-smoke-blueprints
+
       - name: Run POC tests (cocina-poc)
         run: npm run test:cocina-poc
 

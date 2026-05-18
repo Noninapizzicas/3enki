@@ -1,0 +1,13 @@
+{
+  "_doc": "Manifest del modulo blueprint-driven recetas (piloto). NO tiene index.js — el LLM ES el runtime y ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Coexiste con recetas v4.0.0 (legacy polyfunctional) — se activa via page_id='recetas-blueprint' sin desplazar el flujo actual.",
+
+  "name": "_recetas-blueprint",
+  "version": "0.1.0",
+  "description": "Piloto blueprint-driven del modulo recetas. El LLM lee el blueprint (padre + hijo) como system prompt y publica eventos al bus directamente via bus.publish / bus.publishAndWait (las 2 tools universales expuestas por ai-gateway). NO existe codigo JS del modulo.",
+  "language": "es",
+
+  "blueprint_driven": true,
+  "blueprint_path": "recetas.blueprint.json",
+  "blueprint_parent_path": "subsistema-recetario.modulo-base.blueprint.json",
+  "target_page_id": "recetas-blueprint"
+}

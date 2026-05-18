@@ -95,7 +95,7 @@
     "bus.publish": {
       "args": "{ event: string, payload: object }",
       "comportamiento": "Publica el evento al bus. No espera respuesta. Util para eventos de dominio (receta.creada) y para evento de respuesta al caller (<modulo>.<operacion>.response).",
-      "devuelve": "{ ok: true } inmediatamente"
+      "devuelve": "{ published: true, event: <nombre> } inmediatamente"
     },
     "bus.publishAndWait": {
       "args": "{ event: string, payload: object, response_event?: string, timeout_ms?: number }",

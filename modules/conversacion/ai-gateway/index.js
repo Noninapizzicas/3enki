@@ -15,6 +15,7 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 
 const DeepSeekProvider  = require('./providers/deepseek-provider');
@@ -41,6 +42,14 @@ class AiGatewayModule extends BaseModule {
     this.pendingFsReads = new Map();     // request_id → { resolve, reject, timeout }
     // Cache de prefijos por page_id, poblado lazy por _buildPagePrefixes()
     this.pagePrefixes = null;            // Map<page_id, Set<prefix>>
+    // Mapa target_page_id → { manifest, parentBlueprint, childBlueprint, systemPrompt }
+    // poblado por _loadBlueprints() al arrancar. Cuando el chat tiene page_id
+    // que esta en este mapa, ai-gateway:
+    //   1. Inyecta el systemPrompt al sistema (concatena padre + hijo)
+    //   2. Expone bus.publish y bus.publishAndWait al LLM (2 tools universales)
+    //   3. El LLM lee el pseudocodigo del blueprint y publica eventos al bus
+    //      directamente via las 2 tools — sin runtime intermedio.
+    this.blueprintModules = new Map();
   }
 
   // ============================================================
@@ -54,7 +63,11 @@ class AiGatewayModule extends BaseModule {
     this.moduleLoader = context.moduleLoader || null;
 
     await this._initializeProviders();
-    this.logger.info('ai-gateway.loaded', { providers: this.providers.size });
+    this._loadBlueprints();
+    this.logger.info('ai-gateway.loaded', {
+      providers: this.providers.size,
+      blueprints: this.blueprintModules.size
+    });
   }
 
   async onUnload() {
@@ -160,6 +173,12 @@ class AiGatewayModule extends BaseModule {
   _getTools(page_id) {
     if (!this.moduleLoader) return [];
     const all = this.moduleLoader.getToolsForAI?.() || [];
+    // Blueprint-driven pages: catalogo = solo las 2 tools universales.
+    // No mezclamos con polyfunctional para mantener el modelo declarativo puro
+    // (el LLM solo debe usar publish/publishAndWait segun el pseudocodigo).
+    if (page_id && this.blueprintModules.has(page_id)) {
+      return this._getBlueprintUniversalTools();
+    }
     if (!page_id) return all;
     // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
     // se invoca, se escanean todos los módulos cargados y se cachea.
@@ -218,6 +237,145 @@ class AiGatewayModule extends BaseModule {
       if (b.name === 'invoke_agent') return 1;
       return 0;
     });
+  }
+
+  // ============================================================
+  // Blueprint-driven modules (piloto)
+  // ============================================================
+  //
+  // Modelo declarativo: el modulo es un JSON (blueprint) leido por el LLM
+  // como contrato + pseudocodigo. NO hay codigo JS del modulo. El LLM publica
+  // eventos al bus via 2 tools universales (bus.publish, bus.publishAndWait).
+  //
+  // Convivencia: la coexistencia con tools polyfunctional es por page_id.
+  //   page_id = 'recetas'           → tools legacy de recetas v4.0.0
+  //   page_id = 'recetas-blueprint' → blueprint + 2 tools universales
+  //
+  // Activacion: cada modulo blueprint declara en su module.json:
+  //   { "blueprint_driven": true,
+  //     "blueprint_path": "<file>.json",
+  //     "blueprint_parent_path": "<base>.json"?,
+  //     "target_page_id": "<page>" }
+  // El loader NO instancia index.js (no existe). ai-gateway escanea
+  // loadedModules al arrancar buscando blueprint_driven: true.
+
+  _loadBlueprints() {
+    this.blueprintModules.clear();
+    if (!this.moduleLoader?.loadedModules) {
+      this.logger.warn('ai-gateway.blueprints.unavailable', {
+        reason: 'moduleLoader.loadedModules no disponible'
+      });
+      return;
+    }
+    for (const [name, mod] of this.moduleLoader.loadedModules) {
+      const m = mod?.manifest;
+      if (!m || m.blueprint_driven !== true) continue;
+      const target = m.target_page_id || name;
+      try {
+        const childPath = path.resolve(mod.path, m.blueprint_path);
+        const child = JSON.parse(fs.readFileSync(childPath, 'utf8'));
+        let parent = null;
+        if (m.blueprint_parent_path) {
+          const parentPath = path.resolve(mod.path, m.blueprint_parent_path);
+          parent = JSON.parse(fs.readFileSync(parentPath, 'utf8'));
+        }
+        const systemPrompt = this._composeBlueprintSystemPrompt(parent, child);
+        this.blueprintModules.set(target, { manifest: m, parent, child, systemPrompt });
+        this.logger.info('ai-gateway.blueprint.loaded', {
+          module: name,
+          target_page_id: target,
+          version: child.version,
+          parent_id: parent?.id || null
+        });
+      } catch (err) {
+        this.logger.error('ai-gateway.blueprint.load.failed', {
+          module: name,
+          error: err.message
+        });
+      }
+    }
+  }
+
+  _composeBlueprintSystemPrompt(parent, child) {
+    const sections = [];
+    sections.push(
+      'Eres el RUNTIME de un modulo del subsistema-recetario declarado como blueprint JSON. ' +
+      'Tu trabajo es leer el blueprint (padre + hijo) como contrato + pseudocodigo y ejecutarlo ' +
+      'publicando eventos al bus mediante las 2 tools universales que tienes (bus.publish, bus.publishAndWait). ' +
+      'NO inventes operaciones que no esten en operaciones[]. NO inventes eventos que no esten en el blueprint. ' +
+      'Lee TU MISMO los pseudocodigos antes de actuar — siguelos literalmente paso a paso.'
+    );
+    if (parent) {
+      sections.push('# BLUEPRINT PADRE (abstracto, heredado)');
+      sections.push('```json\n' + JSON.stringify(parent, null, 2) + '\n```');
+    }
+    sections.push('# BLUEPRINT HIJO (concreto, lo que ejecutas)');
+    sections.push('```json\n' + JSON.stringify(child, null, 2) + '\n```');
+    sections.push(
+      '# REGLAS OPERATIVAS\n' +
+      '- Para CADA paso del pseudocodigo que diga `publishAndWait(...)` → llama bus.publishAndWait.\n' +
+      '- Para CADA paso que diga `publish(...)` → llama bus.publish.\n' +
+      '- Los pasos de normalizar / razonar / comparar los HACES TU mentalmente (no son tools).\n' +
+      '- Cuando termines, redacta UN mensaje al usuario describiendo lo que hiciste — no listes pasos internos.\n' +
+      '- Si una primitiva del bus devuelve error con `error.code` canonico, propagalo en tu response al caller.'
+    );
+    return sections.join('\n\n');
+  }
+
+  // Catalogo fijo de las 2 tools universales. Solo aparecen en el catalogo
+  // expuesto al LLM cuando el page_id activo es un modulo blueprint-driven.
+  // No estan disponibles cuando se opera con tools polyfunctional clasicas.
+  _getBlueprintUniversalTools() {
+    return [
+      {
+        name: 'bus.publish',
+        description: 'Publica un evento al bus sin esperar respuesta. Util para eventos de dominio (ej. receta.creada) y para el evento de respuesta canonica al caller (<modulo>.<operacion>.response). El payload debe incluir los campos canonicos del subsistema (project_id, user_id, correlation_id, timestamp, request_id cuando aplique).',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            event: {
+              type: 'string',
+              description: 'Nombre canonico del evento (ej. receta.creada, recetas.crear.response, fs.write.request).'
+            },
+            payload: {
+              type: 'object',
+              description: 'Payload del evento. Incluye campos canonicos + datos del dominio.'
+            }
+          },
+          required: ['event', 'payload']
+        }
+      },
+      {
+        name: 'bus.publishAndWait',
+        description: 'Publica un evento al bus (un request) y espera la response correlacionada por request_id. Usar para invocar primitivas del bus (fs.read.request, fs.write.request, project.get.request, llm.complete.request, etc.). Devuelve el payload del evento de respuesta. Si no llega en timeout_ms (default 10000), devuelve error UPSTREAM_TIMEOUT.',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            event: {
+              type: 'string',
+              description: 'Nombre canonico del evento request (ej. fs.read.request).'
+            },
+            payload: {
+              type: 'object',
+              description: 'Payload del request. DEBE incluir request_id (uuid generado por ti) para correlacionar la response.'
+            },
+            response_event: {
+              type: 'string',
+              description: 'Opcional. Nombre del evento response. Si se omite, se infiere reemplazando .request por .response al final.'
+            },
+            timeout_ms: {
+              type: 'integer',
+              minimum: 100,
+              maximum: 60000,
+              description: 'Timeout en milisegundos. Default 10000.'
+            }
+          },
+          required: ['event', 'payload']
+        }
+      }
+    ];
   }
 
   /**
@@ -327,8 +485,113 @@ class AiGatewayModule extends BaseModule {
   // Ejecución de tool calls (event-driven)
   // ============================================================
 
+  // Tools universales del modelo blueprint-driven. El LLM las invoca para
+  // empujar/leer del bus desde el pseudocodigo del blueprint. NO publican
+  // 'bus.publish' como evento — actuan directamente sobre el eventBus.
+  //
+  // bus.publish:
+  //   args: { event, payload }
+  //   side-effect: publish(event, payload). Devuelve { ok: true } inmediato.
+  //
+  // bus.publishAndWait:
+  //   args: { event, payload, response_event?, timeout_ms? }
+  //   side-effect: publish(event, payload) + subscribe(response_event) hasta
+  //   recibir payload con request_id === payload.request_id. Devuelve el
+  //   payload de la response. Timeout default 10000ms → UPSTREAM_TIMEOUT.
+  async _executeUniversalBusTool(toolName, rawArgs, ctx) {
+    const args = (rawArgs && typeof rawArgs === 'object') ? rawArgs : {};
+    const ev = args.event;
+    const payload = (args.payload && typeof args.payload === 'object') ? args.payload : {};
+    if (typeof ev !== 'string' || ev.length === 0) {
+      const err = new Error("missing 'event' (string) in bus tool args");
+      err.code = 'INVALID_INPUT';
+      throw err;
+    }
+    // Defensa contra recursion: el LLM no debe publicar los nombres de las tools
+    // universales como eventos (el bus no tiene oyentes para esos nombres porque
+    // son tools del ai-gateway, no eventos del subsistema).
+    if (ev === 'bus.publish' || ev === 'bus.publishAndWait') {
+      const err = new Error(`'${ev}' es el nombre de una tool, no de un evento del bus`);
+      err.code = 'INVALID_INPUT';
+      throw err;
+    }
+
+    // Inyeccion de contexto del chat al payload. El LLM no siempre rellena
+    // project_id/user_id/correlation_id aunque el blueprint padre se lo diga
+    // (es probabilistico). Aqui los rellenamos si faltan — manteniendo lo
+    // que el LLM puso si vino con valor explicito. timestamp si falta lo
+    // generamos como ISO 8601 actual.
+    const enrichedPayload = {
+      project_id:     payload.project_id     ?? ctx.project_id     ?? null,
+      user_id:        payload.user_id        ?? ctx.user_id        ?? 'system',
+      correlation_id: payload.correlation_id ?? ctx.correlation_id ?? ctx.conversation_id ?? null,
+      timestamp:      payload.timestamp      ?? new Date().toISOString(),
+      ...payload
+    };
+
+    if (toolName === 'bus.publish') {
+      try {
+        this.eventBus.publish(ev, enrichedPayload);
+        // Ack canonico al LLM: shape simple, intencion "publicacion completada".
+        // No es un handler de dominio — es un side-effect ack para que el LLM
+        // sepa que el publish salio sin error y siga con su pseudocodigo.
+        const ack = { published: true, event: ev };
+        return ack;
+      } catch (err) {
+        const e = new Error(`bus.publish failed: ${err.message}`);
+        e.code = 'UNKNOWN_ERROR';
+        throw e;
+      }
+    }
+
+    // bus.publishAndWait
+    const responseEvent = typeof args.response_event === 'string' && args.response_event.length > 0
+      ? args.response_event
+      : (ev.endsWith('.request') ? ev.slice(0, -('.request'.length)) + '.response' : `${ev}.response`);
+    const timeoutMs = Math.min(60000, Math.max(100, Number(args.timeout_ms) || 10000));
+
+    // request_id: el LLM puede mandarlo o no. Si no lo manda, generamos uno.
+    // El subscribe filtra por este request_id para correlacionar.
+    if (!enrichedPayload.request_id) enrichedPayload.request_id = crypto.randomUUID();
+    const reqId = enrichedPayload.request_id;
+
+    return new Promise((resolve, reject) => {
+      let unsub = null;
+      const timeout = setTimeout(() => {
+        if (unsub) unsub();
+        const err = new Error(`bus.publishAndWait timeout: ${ev} (${timeoutMs}ms)`);
+        err.code = 'UPSTREAM_TIMEOUT';
+        reject(err);
+      }, timeoutMs);
+      try {
+        unsub = this.eventBus.subscribe(responseEvent, (event) => {
+          const data = (event && typeof event === 'object' && 'data' in event) ? event.data : event;
+          if (!data || data.request_id !== reqId) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          resolve(data);
+        });
+        this.eventBus.publish(ev, enrichedPayload);
+      } catch (err) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        const e = new Error(`bus.publishAndWait failed: ${err.message}`);
+        e.code = 'UNKNOWN_ERROR';
+        reject(e);
+      }
+    });
+  }
+
   async _executeToolCall(toolName, args, chatContext) {
     const ctx = chatContext || {};
+    // bus.publish / bus.publishAndWait — las 2 tools universales del modelo
+    // blueprint-driven. Se interceptan ANTES del path canonico por bus porque
+    // su semantica es "actuar SOBRE el bus", no "invocar via bus". El nombre
+    // de la tool nunca se publica como evento del bus — los publish/subscribe
+    // los hace este metodo directamente.
+    if (toolName === 'bus.publish' || toolName === 'bus.publishAndWait') {
+      return this._executeUniversalBusTool(toolName, args, ctx);
+    }
     // Enriquecemos args con los 9 campos del contrato chat-io. Los args que
     // venían del LLM (tool_call.arguments) tienen prioridad — solo rellenamos
     // los que no estén ya en args. Esto garantiza que cualquier handler de
@@ -394,13 +657,21 @@ class AiGatewayModule extends BaseModule {
   // Privados — Nucleo: _executeLLM (agentic loop compartido)
   // ============================================================
 
-  async _executeLLM({ system, messages, tools, settings, attachments, project_id, conversation_id, page_id, context, prompt, intencion, providerName }) {
+  async _executeLLM({ system, messages, tools, settings, attachments, project_id, user_id, conversation_id, correlation_id, page_id, context, prompt, intencion, providerName }) {
     const desiredProvider = providerName ?? settings?.provider ?? null;
     const { name: providerNameUsed, provider } = await this._selectProvider(desiredProvider, project_id);
 
+    // Blueprint-driven page: inyectamos el blueprint (padre + hijo) como system
+    // prompt. Si el caller ya envio un system propio, va detras como nota — el
+    // blueprint manda primero por contrato del modelo de ejecucion.
+    const blueprintCtx = page_id ? this.blueprintModules.get(page_id) : null;
+    const effectiveSystem = blueprintCtx
+      ? (system ? `${blueprintCtx.systemPrompt}\n\n# CONTEXTO ADICIONAL DEL CALLER\n${system}` : blueprintCtx.systemPrompt)
+      : system;
+
     // Resolver attachments y mezclarlos con el último mensaje user
     const resolvedAtt = await this._resolveAttachments(project_id, attachments);
-    let workingMessages = [{ role: 'system', content: system }, ...messages];
+    let workingMessages = [{ role: 'system', content: effectiveSystem }, ...messages];
     workingMessages = this._injectAttachmentsInMessages(workingMessages, resolvedAtt);
 
     const translatedTools = tools && tools.length > 0
@@ -422,7 +693,7 @@ class AiGatewayModule extends BaseModule {
     // a cada tool call. Cualquier handler de tool de un módulo lo recibe en sus
     // args y puede propagarlo al evento agent.execute.request si invoca un agente.
     const chatContext = {
-      project_id, page_id, conversation_id,
+      project_id, user_id, page_id, conversation_id, correlation_id,
       settings, attachments, prompt, intencion, context
     };
 
@@ -566,7 +837,9 @@ class AiGatewayModule extends BaseModule {
         settings,
         attachments,
         project_id,
+        user_id,
         conversation_id,
+        correlation_id,
         page_id,
         prompt: systemPrompt,
         intencion
@@ -683,7 +956,7 @@ class AiGatewayModule extends BaseModule {
     const data = event.data || event;
     const {
       request_id, correlation_id, system, messages, tools, settings,
-      attachments, project_id, conversation_id, page_id, provider: providerName
+      attachments, project_id, user_id, conversation_id, page_id, provider: providerName
     } = data;
 
     if (!request_id) {
@@ -697,7 +970,7 @@ class AiGatewayModule extends BaseModule {
     try {
       const result = await this._executeLLM({
         system, messages, tools, settings, attachments,
-        project_id, conversation_id, page_id, providerName
+        project_id, user_id, conversation_id, correlation_id: cid, page_id, providerName
       });
 
       await this._publicarEvento('llm.complete.response', {

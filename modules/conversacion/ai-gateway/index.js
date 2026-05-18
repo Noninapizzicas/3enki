@@ -173,6 +173,21 @@ class AiGatewayModule extends BaseModule {
   _getTools(page_id) {
     if (!this.moduleLoader) return [];
     const all = this.moduleLoader.getToolsForAI?.() || [];
+    // Lazy-scan de blueprintModules. ai-gateway puede haberse cargado ANTES
+    // que los modulos blueprint-driven en el orden del loader: si el modulo
+    // blueprint no aparece en config.modules.enabled, va al final del loadAll
+    // (despues de ai-gateway). El _loadBlueprints() de onLoad no los encuentra
+    // entonces. La primera llamada a _getTools sucede cuando llega un chat,
+    // momento en que ya estan todos los modulos cargados.
+    // Solo re-scaneamos si no hay nada en el mapa Y hay candidatos en
+    // loadedModules — evita coste de I/O cuando no hay blueprints.
+    if (this.blueprintModules.size === 0 && this.moduleLoader.loadedModules) {
+      let hasBp = false;
+      for (const [, mod] of this.moduleLoader.loadedModules) {
+        if (mod?.manifest?.blueprint_driven === true) { hasBp = true; break; }
+      }
+      if (hasBp) this._loadBlueprints();
+    }
     // Blueprint-driven pages: catalogo = solo las 2 tools universales.
     // No mezclamos con polyfunctional para mantener el modelo declarativo puro
     // (el LLM solo debe usar publish/publishAndWait segun el pseudocodigo).

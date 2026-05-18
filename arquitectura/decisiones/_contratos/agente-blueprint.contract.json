@@ -1,0 +1,485 @@
+{
+  "_doc": "Contrato TRANSVERSAL que captura el patron 'agente como modulo blueprint'. Define que un agente del sistema deja de ser un archivo JSON+md cargado por ai-agent-framework y pasa a ser un modulo blueprint independiente con las 5 piezas canonicas (contrato propio, blueprint que extiende padre-base, pseudocodigo, clase OOP filosofica, JSON). Espejo de modulo-clase-robusta.contract.json (que aplica a modulos JS legacy) y modulo-rewrite.contract.json (que aplica a modulos POC2). Aqui aplica a los 30 agentes que viven hoy en modules/conversacion/ai-agent-framework/agents/ y que migraran horizontalmente uno a uno.\n\nUn AGENTE-BLUEPRINT comparte forma con un MODULO-BLUEPRINT (ambos son las 5 piezas) pero preserva su naturaleza propia: razonamiento sobre un dominio, sin persistencia propia, cardinalidad N por dominio. La distincion ontologica (operacion del dominio vs razonamiento sobre el dominio) se mantiene aunque el formato se unifique.",
+  "id": "agente-blueprint",
+  "version": "1.0.0",
+  "creada": "2026-05-18",
+  "supersedes_nota": "Primera version. Coexiste con agents-config.contract.json (que cubre los 30 agentes legacy en agents/*.json + prompts/*.md). agents-config aplica al modelo VIEJO (archivos en ai-agent-framework); agente-blueprint aplica al modelo NUEVO (modulos blueprint independientes). Convivencia transitoria durante el horizontal de migracion (ver agentes-roadmap.md). Cuando la carpeta agents/ quede vacia, agents-config se archiva.",
+
+  "deriva_de": "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json — categoria 'agentes_especialistas' del mapa_al_sistema_actual",
+
+  "objetivo": "Producir UN JSON output (_outputs/agente-blueprint.json) y UN JSON Schema estricto (agente-blueprint.schema.json) que formaliza el shape de cada modulo agente-blueprint del repo. Validable mecanicamente cruzando contra los modulos existentes en modules/<agente>/. Aplicable: cualquier agente migrado al patron declara su contrato propio, su blueprint que extiende agente-base, su system prompt en .md, y cumple este shape.",
+
+  "inputs": {
+    "obligatorios": [
+      "arquitectura/decisiones/_contratos/agente-blueprint.contract.json (este archivo)",
+      "arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json (documento maestro del paradigma)",
+      "arquitectura/decisiones/_contratos/companero-viaje.contract.json (tipo canonico 'agente' del companero)",
+      "arquitectura/decisiones/_contratos/agent-flow.contract.json (eventos canonicos del flujo de agentes: request/response/failed/progress)",
+      "arquitectura/decisiones/_contratos/llm-flow.contract.json (llm.complete.* que el agente invoca via ai-gateway)",
+      "arquitectura/decisiones/_contratos/tools.contract.json (catalogo de tools que el agente puede referenciar)",
+      "modules/_agentes-blueprint/agente-base.blueprint.json (blueprint padre del que heredan los hijos)",
+      "arquitectura/decisiones/_outputs/naming.json (idioma del modulo, verbos canonicos)",
+      "arquitectura/decisiones/_outputs/glossary.json (entidades cross-modulo en forma canonica)"
+    ],
+    "obligatorios_si_existen": [
+      "modules/<agente>/module.json (declaracion del modulo agente-blueprint)",
+      "modules/<agente>/<agente>.blueprint.json (blueprint hijo que extiende agente-base)",
+      "modules/<agente>/<agente>-system.md (system prompt del agente)",
+      "arquitectura/decisiones/_contratos/<agente>.contract.json (contrato propio derivado)"
+    ],
+    "opcionales_para_contexto": [
+      "arquitectura/decisiones/_contratos/agents-config.contract.json (contrato del modelo legacy, para cruzar migracion)",
+      "arquitectura/migracion/notas/agentes-roadmap.md (plan de migracion horizontal)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL AGENTE-BLUEPRINT ES UN MODULO DEL SISTEMA, NO UN ARCHIVO DE CONFIGURACION. Vive en modules/<agente>/ como ciudadano de primera. Lo carga el loader normal del sistema. NO requiere un framework intermedio que lo registre desde un directorio agents/. Esta a la altura de cualquier otro modulo blueprint del sistema (recetas, escandallo, etc.).",
+
+    "EL AGENTE-BLUEPRINT CONSERVA SU NATURALEZA AUNQUE COMPARTA FORMATO. Mismo formato que un modulo blueprint del dominio (las 5 piezas) PERO con naturaleza opuesta: es razonamiento sobre el dominio, no operacion del dominio. Esta distincion se preserva via blueprint padre distinto (agente-base, no subsistema-recetario.modulo-base), via patron_de_operacion declarativo distinto (recibe task en lenguaje natural, no <modulo>.<operacion>.request estructurado), y via ausencia de estado_persistente propio.",
+
+    "EL AGENTE-BLUEPRINT NO TIENE PERSISTENCIA PROPIA. Stateless. Cada invocacion es independiente. Si necesita continuidad, viene via conversation_id en el agent.execute.request — el agente no memoriza por su cuenta. Si necesita datos del dominio (recetas, escandallos), los pide via bus.publishAndWait a los modulos del dominio. NO escribe en filesystem ni en SQLite a su nombre.",
+
+    "EL AGENTE-BLUEPRINT TIENE PERSONALIDAD. El system prompt define la identidad del agente: nombre, rol, tono, restricciones eticas, voz. No es generico ('eres un asistente'). Es especifico ('eres el escandallo-analyzer, especialista en costes de receta del proyecto pizzepos, hablas con precision de chef tecnico'). Esta personalidad la lee el LLM y la encarna durante la ejecucion del blueprint.",
+
+    "EL AGENTE-BLUEPRINT TIENE TOOLS ACOTADAS A SU ROL. NO acceso a todas las tools del sistema. Solo a las que su mision justifica. Un escandallo-analyzer-blueprint necesita acceder a la operacion <recetas>.obtener via bus.publishAndWait — declarado como dependencia, no como tool global. Si el agente declara una tool fantasma o fuera de rol, drift critico detectado por validator.",
+
+    "EL AGENTE-BLUEPRINT ES INVOCADO VIA EVENTO CANONICO. agent.execute.request es la unica via de invocacion (espejo del modulo-blueprint que se invoca via <modulo>.<operacion>.request). No hay tool especial invoke_agent del LLM principal — el LLM principal publica el evento al bus y espera la response. ai-gateway dentro de su tool flow expone bus.publish/bus.publishAndWait que es lo que el LLM usa.",
+
+    "EL AGENTE-BLUEPRINT HEREDA DE AGENTE-BASE.BLUEPRINT.JSON. Igual que un modulo del subsistema-recetario hereda de subsistema-recetario.modulo-base. El blueprint hijo declara solo su delta: rol especifico, operacion principal, tools necesarias, secciones de razonamiento. El padre define modelo de ejecucion, contexto inyectado, primitivas del bus, tools universales, helpers built-in, limite del modulo.",
+
+    "EL CONTRATO PROPIO ES OBLIGATORIO. Cada agente-blueprint tiene su <agente>.contract.json en arquitectura/decisiones/_contratos/. Captura lo invariante: rol, garantias de naturaleza-de-razonamiento, errores que devuelve, eventos que publica/escucha (heredados de agent-flow), version. Sin contrato, el agente no es un agente-blueprint canonico — es un blueprint suelto.",
+
+    "EL AGENTE-BLUEPRINT NO TIENE INDEX.JS NI CODIGO PROCEDURAL. El module.json declara el modulo sin main, sin class. El blueprint hijo declara el comportamiento via pseudocodigo. El LLM (motor del modulo) ejecuta el pseudocodigo via las tools universales del bus. NO hay handler JS de eventos. NO hay BaseModule extendido. NO hay onLoad/onUnload con logica propia (el modulo es declarativo, no vive).",
+
+    "EL AGENTE-BLUEPRINT ES CARDINALIDAD N POR DOMINIO. Un dominio (recetas) puede tener varios agentes-blueprint distintos (recipe-analyzer, recipe-chef-advisor, recipe-researcher). Esto NO viola event-core: cada agente es UN modulo con identidad propia y blueprint propio. Lo que NO esta permitido es duplicar el ROL — dos agentes con el mismo rol y dominio es drift de diseño.",
+
+    "LA OPERACION CANONICA DEL AGENTE ES UN VERBO. Cada agente-blueprint declara una operacion_canonica que es el verbo de su rol: 'analizar', 'componer', 'validar', 'investigar', 'planificar', 'enrutar'. Esta operacion es lo que el agente HACE como nucleo. Otras operaciones secundarias pueden existir pero la principal es UNA — es el rol del agente."
+  ],
+
+  "principios": [
+    {
+      "id": "agente_blueprint_es_modulo_independiente",
+      "regla": "Cada agente-blueprint vive en su propio directorio modules/<agente>/ con module.json declarativo, <agente>.blueprint.json (hijo de agente-base), <agente>-system.md (system prompt). NO existe en agents/<agente>.json dentro de otro modulo cargador. NO comparte carpeta con otros agentes.",
+      "razon": "Modularidad real. Cada agente es ciudadano de primera del sistema, cargado por el loader normal. El cargador no necesita conocer su existencia ni leerlo desde un directorio especial. Si se anyade un agente, se anyade un directorio modules/<nombre>/ y el loader lo descubre."
+    },
+    {
+      "id": "agente_blueprint_extiende_agente_base",
+      "regla": "El <agente>.blueprint.json declara extends_blueprint_abstract: 'agente-base' (o el id canonico de modules/_agentes-blueprint/agente-base.blueprint.json). Hereda modelo_de_ejecucion, contexto_inyectado, primitivas_universales_del_bus, tools_universales, helpers_built_in, manejo_de_errores, naming_canonico_de_eventos. El hijo declara solo su delta.",
+      "razon": "DRY. Si todos los agentes-blueprint repitieran modelo_de_ejecucion y primitivas_bus, mantener 30 copias seria insostenible. Herencia (filosofica) deja al padre lo comun y al hijo lo especifico."
+    },
+    {
+      "id": "agente_blueprint_no_tiene_index_js",
+      "regla": "modules/<agente>/ NO contiene index.js ni archivos .js. El module.json no declara main. El comportamiento del agente vive enteramente en el blueprint + system prompt. El LLM lo ejecuta via tools universales del bus.",
+      "razon": "Coherencia con el paradigma blueprint-driven. Si hubiera JS, sea agente o modulo, deja de ser blueprint puro y vuelve a JS procedural. La gracia del paradigma es eliminar el JS — si vuelve a aparecer, el paradigma fracasa."
+    },
+    {
+      "id": "agente_blueprint_tiene_contrato_propio",
+      "regla": "Existe arquitectura/decisiones/_contratos/<agente>.contract.json derivado de agente-blueprint.contract.json. Captura rol, garantias propias del agente, errores especificos, version.",
+      "razon": "El contrato es la frontera publica del agente. Sin contrato, los consumers (otros modulos, otros agentes, el LLM principal) no saben que esperar. Con contrato hay disciplina mecanica."
+    },
+    {
+      "id": "agente_blueprint_tiene_system_prompt_md",
+      "regla": "Existe modules/<agente>/<agente>-system.md con el system prompt en markdown puro, h1 con nombre legible del agente, sin frontmatter YAML, longitud minima 200 caracteres. Es leido por el LLM via ai-gateway al iniciar la ejecucion del agente.",
+      "razon": "Coherencia con agents-config (modelo legacy). El system prompt en .md es legible para humano y para LLM, validable con linter de markdown, sin friccion con JSON Schema. Reglas identicas a las que aplican al legacy."
+    },
+    {
+      "id": "agente_blueprint_declara_operacion_canonica",
+      "regla": "El <agente>.blueprint.json declara un campo operacion_canonica que es el verbo nucleo del rol del agente. Ej: escandallo-analyzer → 'analizar'; cartadigital-composer → 'componer'; menu-validator → 'validar'.",
+      "razon": "Hace explicito el rol. Permite a otros modulos / al LLM principal entender que hace un agente sin leer su prompt entero. Tambien sirve para metricas (agrupar por operacion canonica) y para validar que el rol no se duplica en otro agente."
+    },
+    {
+      "id": "agente_blueprint_declara_dominios_que_consulta",
+      "regla": "El <agente>.blueprint.json declara dominios_consultados[] con los modulos del sistema cuyos eventos publica via bus.publishAndWait. Ej: escandallo-analyzer-blueprint declara dominios_consultados: ['recetas', 'ingredientes-catalogo']. Cada entrada del array debe ser un modulo existente del repo.",
+      "razon": "Hace explicitas las dependencias. Sin esto, las dependencias del agente solo se descubren leyendo el pseudocodigo. Declararlo permite validar (modulo existe) y visualizar el grafo de dependencias del subsistema."
+    },
+    {
+      "id": "agente_blueprint_no_tiene_estado_persistente",
+      "regla": "El <agente>.blueprint.json NO declara estado_persistente (a diferencia de los modulos-blueprint del dominio). Si lo declara, drift critico de naturaleza ('agente con persistencia propia' = modulo del dominio, no agente).",
+      "razon": "La distincion ontologica. Un agente razona sobre el dominio; no es duenyo de ninguna data del dominio. Si necesita persistir algo, lo hace via el modulo del dominio correspondiente publicando al bus. Persistencia del agente = drift que disuelve la distincion."
+    },
+    {
+      "id": "agente_blueprint_id_y_name_y_filename_coinciden",
+      "regla": "agent.id === agent.name === filename del directorio === filename del blueprint sin extension === filename del system.md sin '-system.md'. UNA sola cadena identificadora cross-archivos. Kebab-case.",
+      "razon": "Espejo de agents-config (modelo legacy). Multi-naming confunde a logs, metricas, trazas. Una unica cadena (kebab-case) elimina ambigüedad."
+    },
+    {
+      "id": "agente_blueprint_provider_de_lista_canonica_o_auto",
+      "regla": "agent.provider en el module.json (o en el blueprint hijo) es uno de {auto, deepseek, anthropic, openai, groq, gemini, ollama, claude-cli}. 'auto' es lo recomendado salvo justificacion explicita.",
+      "razon": "Lista cerrada coherente con ai-gateway. Lock-in a provider concreto es drift de resilience.contract. 'auto' permite fallback automatico."
+    },
+    {
+      "id": "agente_blueprint_temperature_max_tokens_son_numeros",
+      "regla": "agent.temperature es number 0-2. agent.max_tokens es integer positivo. agent.timeout_ms es integer positivo. agent.max_retries es integer 0-N. NO strings, NO booleanos.",
+      "razon": "Coherencia con agents-config legacy. Tipos correctos evitan errores en runtime con providers estrictos."
+    },
+    {
+      "id": "agente_blueprint_context_enabled_decide_si_recibe_chat_history",
+      "regla": "agent.context_enabled es boolean. Si true, ai-agent-framework (o el dispatcher equivalente) pasa el FIFO de la conversation al agente. Si false, single-turn limpio. Default false.",
+      "razon": "La mayoria de agentes son single-turn dispatchers. Default false reduce coste de tokens. Override explicito cuando el rol lo justifica."
+    },
+    {
+      "id": "agente_blueprint_disabled_lleva_razon",
+      "regla": "Si el agente esta desactivado (enabled:false en el module.json o en el contrato propio), el contrato declara disabled_reason con la causa (ej: 'rol obsoleto tras tabula rasa de recetas v2', 'tools fantasma pendientes de implementar').",
+      "razon": "Disabled sin razon documentada es ruido. Documentar la razon permite decidir despues si reactivar o eliminar. Trazabilidad del por que."
+    },
+    {
+      "id": "agente_blueprint_un_rol_por_agente",
+      "regla": "Dos agentes-blueprint distintos NO comparten exactamente la misma operacion_canonica + el mismo dominio. Si dos agentes hacen lo mismo, drift de diseño (uno sobra o son el mismo agente).",
+      "razon": "Cardinalidad N por dominio NO significa duplicacion. N agentes en un dominio = N roles distintos. Dos analyzers de recetas no es 'dos analyzers'; es uno bien hecho o dos roles distintos que no son ambos 'analizar'."
+    }
+  ],
+
+  "decisiones_arquitectonicas": [
+    {
+      "id": "agentes_son_modulos_no_archivos_de_otro_modulo",
+      "decision": "Cada agente-blueprint vive en su propio modules/<agente>/ como modulo independiente del sistema, cargado por el loader normal. NO en modules/conversacion/ai-agent-framework/agents/<agente>.json.",
+      "razon": "Modularidad real. El loader del sistema ya sabe cargar modulos blueprint (lo hace con recetas-blueprint via target_page_id). Reusar esa infraestructura en lugar de mantener un loader paralelo (ai-agent-framework) elimina codigo. El framework se queda solo con la responsabilidad de dispatching de invocaciones (si sobrevive)."
+    },
+    {
+      "id": "blueprint_padre_separado_del_subsistema_recetario",
+      "decision": "Los agentes-blueprint heredan de _agentes-blueprint/agente-base.blueprint.json (nuevo). NO heredan de subsistema-recetario.modulo-base aunque un agente sea del subsistema recetas.",
+      "razon": "Los blueprints padres reflejan NATURALEZA, no dominio. subsistema-recetario.modulo-base es 'operacion del dominio con persistencia'. agente-base es 'razonamiento sin persistencia'. Un agente del subsistema recetas tiene la naturaleza de agente, no la de modulo del dominio. Heredar del padre correcto preserva la distincion ontologica."
+    },
+    {
+      "id": "agente_invocado_solo_via_agent_execute_request",
+      "decision": "La invocacion canonica de un agente-blueprint es publicar agent.execute.request al bus con {agent_name, task, context}. La tool invoke_agent del LLM principal sigue siendo valida durante la transicion pero NO es necesaria — el LLM puede publicar el evento directamente via bus.publish/bus.publishAndWait.",
+      "razon": "Coherencia con agent-flow.contract. Reduccion del catalogo de tools del LLM principal. Si el LLM puede publicar al bus directamente, no necesita una tool especifica para invocar agentes — son eventos como cualquier otro."
+    },
+    {
+      "id": "contrato_propio_obligatorio_no_opcional",
+      "decision": "Cada agente-blueprint tiene su contrato propio en arquitectura/decisiones/_contratos/<agente>.contract.json. NO es opcional. Sin contrato, el modulo no es agente-blueprint canonico.",
+      "razon": "Disciplina. Los modulos blueprint del dominio (recetas, escandallo) tienen contrato propio. Tratar a los agentes distinto seria romper la coherencia. El contrato hace explicita la frontera publica del agente."
+    },
+    {
+      "id": "system_prompt_md_en_la_carpeta_del_modulo",
+      "decision": "El system prompt vive en modules/<agente>/<agente>-system.md. NO en modules/conversacion/ai-agent-framework/prompts/. Coherencia: todo lo del agente vive en su propio modulo.",
+      "razon": "Cohesion. Si el system prompt esta en otro modulo, el agente esta dividido. Encapsulacion correcta: el modulo del agente es duenyo de todo lo que define al agente."
+    },
+    {
+      "id": "operacion_canonica_es_verbo_imperativo",
+      "decision": "operacion_canonica es un verbo imperativo en infinitivo, idioma del modulo (es: 'analizar', 'componer', 'validar'; en: 'analyze', 'compose', 'validate'). NO sustantivos ('analysis'), NO adjetivos.",
+      "razon": "El agente HACE algo — verbo. Coherente con naming.contract (verbos canonicos por idioma). Documenta el rol como accion, no como cosa."
+    },
+    {
+      "id": "dominios_consultados_array_de_nombres_de_modulos",
+      "decision": "dominios_consultados[] es array de strings que son nombres de modulos existentes del repo. Validable cruzando con la lista de modules/<x>/module.json del repo.",
+      "razon": "Como tools[] en agents-config: declarar dependencias por nombre permite validacion estatica. Si un agente declara un dominio inexistente, drift detectado antes de runtime."
+    },
+    {
+      "id": "tools_universales_del_padre_no_se_repiten_en_hijo",
+      "decision": "El blueprint hijo NO redeclara bus.publish, bus.publishAndWait, llm.complete.request — vienen del padre via herencia. El hijo declara solo eventos del bus especificos que invoca via publishAndWait, no la tool generica.",
+      "razon": "DRY. Si las tools universales se repitieran en cada blueprint hijo, mantenerlas sincronizadas seria imposible. El padre es la fuente unica."
+    },
+    {
+      "id": "blueprint_hijo_declara_eventos_que_invoca_via_publishandwait",
+      "decision": "El blueprint hijo declara eventos_que_invoca[] con los eventos del bus que el agente envia via bus.publishAndWait durante su pseudocodigo. Ej: escandallo-analyzer declara invoca: ['recetas.obtener.request', 'ingredientes-catalogo.consultar.request'].",
+      "razon": "Hace explicitas las interacciones con el bus. Sin esto, las dependencias del agente solo se descubren leyendo el pseudocodigo. Declararlo permite validar (evento existe en el contrato del modulo destino) y visualizar el grafo del subsistema."
+    },
+    {
+      "id": "agente_blueprint_no_emite_eventos_de_dominio",
+      "decision": "Un agente-blueprint NO publica eventos de dominio (entidad.accion). Esos los publican los modulos del dominio cuando el agente les pide accion via su <modulo>.<operacion>.request. El agente solo publica su agent.execute.response al terminar.",
+      "razon": "Preservar la distincion ontologica: el agente no es duenyo de entidades del dominio. Si publicara 'receta.creada', usurparia la autoridad del modulo recetas. El agente PIDE al modulo del dominio que cree la receta — el modulo publica el evento de dominio."
+    },
+    {
+      "id": "agente_blueprint_response_es_estructurada_y_natural",
+      "decision": "agent.execute.response.result contiene tanto un campo estructurado (datos del analisis) como un campo content en lenguaje natural (la explicacion legible para el chat). agent-observer convierte el content a chat.assistant.saved.",
+      "razon": "El agente sirve a dos lectores: otros modulos que necesitan datos (estructurado) y el usuario que necesita explicacion (natural). Ambos en la misma response evita doble inferencia."
+    }
+  ],
+
+  "prohibido": [
+    {
+      "id": "agente_blueprint_con_index_js",
+      "regla": "modules/<agente>/ NO contiene index.js ni archivos .js de logica del agente. Si los tiene, es modulo JS, no agente-blueprint.",
+      "viola_garantias": ["paradigma_blueprint_puro"],
+      "como_detectar": "Validator: ls modules/<agente>/*.js debe devolver vacio. Si hay archivos .js, drift critico.",
+      "alternativa_correcta": "Mover toda la logica al pseudocodigo del blueprint. Si algo no se puede expresar declarativamente (caso real raro), el agente no es candidato a blueprint — mantener en JS y excluir de la lista de candidatos."
+    },
+    {
+      "id": "agente_blueprint_con_estado_persistente",
+      "regla": "El <agente>.blueprint.json NO declara campo estado_persistente. Si lo hace, esta usurpando autoridad de un modulo del dominio.",
+      "viola_garantias": ["distincion_ontologica_agente_vs_modulo"],
+      "como_detectar": "Validator: parsear blueprint, buscar campo estado_persistente. Si existe y no esta vacio, drift critico.",
+      "alternativa_correcta": "Si el agente necesita data persistente, identificar el modulo del dominio que debe ser duenyo. Crear evento en ese modulo. Agente pide via bus.publishAndWait."
+    },
+    {
+      "id": "agente_blueprint_emite_evento_de_dominio",
+      "regla": "El pseudocodigo del agente NO publica eventos de dominio tipo <entidad>.<accion>. Solo invoca <modulo>.<operacion>.request al bus y deja que el modulo destino publique el evento de dominio.",
+      "viola_garantias": ["event_core_authority"],
+      "como_detectar": "Heuristica: regex sobre pseudocodigo del blueprint buscando publish('<x>.<y>.<z>') donde el ultimo segmento es verbo en participio (creada, actualizado, eliminado). Si aparece, drift.",
+      "alternativa_correcta": "Cambiar publish a publishAndWait con el <modulo>.<operacion>.request correspondiente. El modulo destino se ocupa de publicar el evento de dominio."
+    },
+    {
+      "id": "agente_blueprint_referencia_tool_inexistente",
+      "regla": "El blueprint hijo NO referencia tools que no existen en el catalogo del repo. Cada referencia a un evento publishAndWait corresponde a un evento real declarado en algun contrato del repo.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator: cruzar eventos_que_invoca[] del blueprint con el catalogo de eventos canonicos. Strings huerfanos = drift critico.",
+      "alternativa_correcta": "Antes de declarar la referencia, asegurarse que el modulo destino existe y declara el evento en su contrato. Si no, primero crear el evento en el modulo destino."
+    },
+    {
+      "id": "agente_blueprint_sin_contrato_propio",
+      "regla": "Cada agente-blueprint tiene arquitectura/decisiones/_contratos/<agente>.contract.json. Sin contrato, el agente no es canonico.",
+      "viola_garantias": ["frontera_publica_explicita"],
+      "como_detectar": "Validator: para cada modules/<agente>/<agente>.blueprint.json, comprobar existencia de _contratos/<agente>.contract.json.",
+      "alternativa_correcta": "Crear el contrato propio derivado de agente-blueprint.contract.json con secciones: rol, garantias, errores, version."
+    },
+    {
+      "id": "agente_blueprint_id_distinto_de_directorio",
+      "regla": "agent.id === nombre del directorio === filename del blueprint sin extension. Divergencia = drift de identidad multiple.",
+      "viola_garantias": ["observabilidad_end_to_end"],
+      "como_detectar": "Validator: para cada modules/<X>/module.json, comprobar module.id === X.",
+      "alternativa_correcta": "Renombrar directorio o renombrar id para alinear. Aplicar cross-archivos en mismo commit."
+    },
+    {
+      "id": "agente_blueprint_provider_no_canonico",
+      "regla": "agent.provider es uno de {auto, deepseek, anthropic, openai, groq, gemini, ollama, claude-cli}.",
+      "viola_garantias": ["resiliencia_a_cambios_de_proveedor_llm"],
+      "como_detectar": "schema strict (enum). AJV rechaza valores fuera.",
+      "alternativa_correcta": "Usar el name canonico del provider en ai-gateway providers list."
+    },
+    {
+      "id": "agente_blueprint_disabled_sin_razon",
+      "regla": "Si el agente esta enabled:false, el contrato declara disabled_reason con la causa. Disabled sin razon = drift de documentacion.",
+      "viola_garantias": ["trazabilidad_decisional"],
+      "como_detectar": "Validator: para cada agente con enabled:false, verificar disabled_reason en el contrato.",
+      "alternativa_correcta": "Documentar la razon. Si no hay razon valida, eliminar el agente directamente."
+    },
+    {
+      "id": "dos_agentes_blueprint_con_mismo_rol_y_dominio",
+      "regla": "Para un dominio X, dos agentes-blueprint distintos NO tienen la misma operacion_canonica. Drift de diseño.",
+      "viola_garantias": ["un_rol_un_agente"],
+      "como_detectar": "Validator: agrupar agentes por (dominio, operacion_canonica). Si N>1 en algun grupo, drift.",
+      "alternativa_correcta": "Fusionar los dos agentes o diferenciar la operacion canonica de uno de ellos."
+    },
+    {
+      "id": "agente_blueprint_system_prompt_inline_en_json",
+      "regla": "El system prompt NO va embebido como string en module.json o en el blueprint. Va en <agente>-system.md, referenciado por system_prompt_file.",
+      "viola_garantias": ["modularidad_real_no_solo_declarada"],
+      "como_detectar": "Validator: blueprint o module.json con campo system_prompt o prompt_content que sea string >100 chars = drift.",
+      "alternativa_correcta": "Mover contenido a <agente>-system.md, dejar system_prompt_file en el blueprint."
+    }
+  ],
+
+  "output_shape_resumen": "_outputs/agente-blueprint.json contiene: { id: 'agente-blueprint', version, schema_files: ['agente-blueprint.schema.json'], total_agentes_blueprint_in_repo: N, agentes_by_dominio: { <dominio>: [...names...] }, agentes_enabled: M, agentes_disabled: K, drifts_observed_baseline: { sin_contrato_propio: N1, con_index_js: N2, sin_extends_padre: N3, con_estado_persistente: N4, id_directorio_divergente: N5, tools_fantasma: N6, system_prompt_inexistente: N7, system_prompt_demasiado_corto: N8, disabled_sin_razon: N9, dos_agentes_mismo_rol_y_dominio: N10, ... }, agentes_alineados: [...], agentes_con_drift: [...] }. Snapshot del estado de los agentes-blueprint del repo.",
+
+  "reglas_de_extraccion": [
+    "El validator escanea modules/<X>/ buscando <X>.blueprint.json con extends_blueprint_abstract === 'agente-base'.",
+    "Para cada match, carga module.json + blueprint + system.md + contrato propio (en arquitectura/decisiones/_contratos/<X>.contract.json).",
+    "Cruza eventos_que_invoca[] del blueprint con catalogo de eventos canonicos del repo.",
+    "Cruza dominios_consultados[] con lista de modulos del repo.",
+    "Verifica presencia de contrato propio y validacion contra agente-blueprint.schema.json.",
+    "Verifica que system_prompt_file existe y cumple reglas (h1, sin frontmatter, longitud minima).",
+    "Verifica que module.json NO declara main + que no existen .js dentro del directorio.",
+    "Verifica que blueprint NO declara estado_persistente.",
+    "Agrupa por (dominio, operacion_canonica) y detecta duplicaciones de rol.",
+    "El output _outputs/agente-blueprint.json es snapshot con drift counts por tipo."
+  ],
+
+  "derivaciones": [
+    {
+      "documento": "arquitectura/decisiones/_schemas/agente-blueprint/agente-blueprint.schema.json",
+      "rol": "Schema canonico de cada <agente>.blueprint.json. Required: id, version, extends_blueprint_abstract, rol, operacion_canonica, system_prompt_file, dominios_consultados, eventos_que_invoca, llm_settings, pseudocodigo. PROHIBIDO: estado_persistente, main, system_prompt (inline)."
+    },
+    {
+      "documento": "arquitectura/decisiones/_schemas/agente-blueprint/<agente>.contract.schema.json",
+      "rol": "Schema del contrato propio de cada agente. Required: id, version, rol, garantiza, no_garantiza, errores_posibles, eventos_publicados, eventos_escuchados. Opcionales: disabled_reason, supersedes_nota."
+    },
+    {
+      "documento": "arquitectura/decisiones/_validators/agente-blueprint.validate.js",
+      "rol": "Compila schema + cross-checks: agentes existentes en modules/, contrato propio presente, system prompt valido, blueprint extiende agente-base, eventos invocados existen, dominios consultados existen, no JS en directorio, no estado_persistente, un rol por dominio."
+    },
+    {
+      "documento": "arquitectura/decisiones/_outputs/agente-blueprint.json",
+      "rol": "Snapshot del catalogo de agentes-blueprint del repo con drift counts por tipo."
+    },
+    {
+      "documento": "modules/_agentes-blueprint/agente-base.blueprint.json",
+      "rol": "Blueprint padre del que heredan todos los agentes-blueprint. Captura modelo_de_ejecucion, contexto_inyectado, primitivas_universales, tools_universales, helpers_built_in, manejo_de_errores, naming_canonico_de_eventos, limite_del_agente."
+    }
+  ],
+
+  "validaciones_cross_realizadas_por_validator": [
+    {
+      "id": "agente_blueprint_schema_compile_ok",
+      "regla": "agente-blueprint.schema.json compila AJV strict 2020-12 con additionalProperties:false.",
+      "como_detectar": "Compilacion AJV en arranque del validator.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agente_no_cumple_schema",
+      "regla": "Cada modules/<agente>/<agente>.blueprint.json valida contra el schema. Required presentes, tipos correctos.",
+      "como_detectar": "Para cada blueprint, ajv validate.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agente_sin_contrato_propio",
+      "regla": "Para cada agente-blueprint, existe arquitectura/decisiones/_contratos/<agente>.contract.json.",
+      "como_detectar": "fs.existsSync sobre el path esperado.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agente_con_index_js",
+      "regla": "modules/<agente>/ NO contiene archivos .js.",
+      "como_detectar": "Glob de *.js en el directorio. Si match, drift critico.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agente_module_json_declara_main",
+      "regla": "module.json del agente NO declara main.",
+      "como_detectar": "Parsear module.json, comprobar presencia de campo main.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agente_no_extiende_padre",
+      "regla": "El blueprint declara extends_blueprint_abstract: 'agente-base' o el id canonico equivalente.",
+      "como_detectar": "Parsear blueprint, comprobar campo. Si vacio o distinto, drift.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agente_con_estado_persistente",
+      "regla": "El blueprint NO declara estado_persistente con contenido.",
+      "como_detectar": "Parsear blueprint, comprobar presencia y vacuidad.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agente_id_directorio_divergente",
+      "regla": "agent.id === nombre del directorio === filename del blueprint sin extension.",
+      "como_detectar": "Para cada modules/<X>/, comprobar X === id.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agente_eventos_que_invoca_fantasma",
+      "regla": "Cada string en eventos_que_invoca[] corresponde a un evento canonico del repo (declarado en algun contrato).",
+      "como_detectar": "Cargar catalogo de eventos canonicos. Cruzar. Strings huerfanos = drift critico.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agente_dominio_consultado_inexistente",
+      "regla": "Cada string en dominios_consultados[] corresponde a un modulo existente del repo.",
+      "como_detectar": "Cargar lista de modules/<X>/. Cruzar.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agente_system_prompt_inexistente",
+      "regla": "system_prompt_file apunta a <agente>-system.md que existe.",
+      "como_detectar": "fs.existsSync.",
+      "severidad": "error"
+    },
+    {
+      "id": "drift_agente_system_prompt_demasiado_corto",
+      "regla": "El .md tiene al menos 200 caracteres trimmed.",
+      "como_detectar": "Leer archivo, trim, contar.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agente_system_prompt_sin_h1",
+      "regla": "El .md tiene h1 en las primeras 10 lineas no vacias.",
+      "como_detectar": "Regex /^# / sobre primeras lineas.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agente_system_prompt_con_frontmatter_yaml",
+      "regla": "El .md NO empieza con --- (frontmatter YAML).",
+      "como_detectar": "Primera linea === '---'.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agente_provider_no_canonico",
+      "regla": "agent.provider en {auto, deepseek, anthropic, openai, groq, gemini, ollama, claude-cli}.",
+      "como_detectar": "schema strict (enum).",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agente_disabled_sin_razon",
+      "regla": "Si enabled:false, contrato declara disabled_reason.",
+      "como_detectar": "Cruzar enabled y disabled_reason.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_dos_agentes_mismo_rol_y_dominio",
+      "regla": "Para cada (dominio, operacion_canonica), N agentes en N=1.",
+      "como_detectar": "Agrupar por par. N>1 = drift.",
+      "severidad": "warning"
+    },
+    {
+      "id": "drift_agente_publica_evento_de_dominio",
+      "regla": "El pseudocodigo NO contiene publish('<entidad>.<verbo_participio>') (heuristica).",
+      "como_detectar": "Regex sobre pseudocodigo buscando patrones publish('X.Y') donde Y es participio (creada, actualizado, eliminado, etc.).",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_agente_demasiados_eventos_que_invoca",
+      "regla": "eventos_que_invoca[] tiene <=20 entradas como umbral conservador.",
+      "como_detectar": "Contar. >20 = info para revision (puede ser legitimo en orquestadores).",
+      "severidad": "info"
+    },
+    {
+      "id": "drift_agente_idioma_inconsistente_con_modulo",
+      "regla": "system_prompt.md y rol estan en module.language. Heuristica lexica.",
+      "como_detectar": "Detectar palabras del otro idioma.",
+      "severidad": "info"
+    }
+  ],
+
+  "salida_validador": "PASS si schema compila, todos los agentes-blueprint validan, contratos propios existen, no JS en directorios de agentes, no estado_persistente. Errors bloquean (drift critico). Warnings listados pero no bloquean — quedan en baseline. Info son heuristicas para revision manual.",
+
+  "convenciones_complementarias": [
+    "naming.contract: agent.id, name, directorio son kebab-case. operacion_canonica es verbo en idioma del modulo. Coherencia con naming.json.",
+    "glossary.contract: las entidades en dominios_consultados[] y eventos_que_invoca[] usan la forma canonica del glossary del idioma del modulo.",
+    "events.contract: el agente NO publica eventos de dominio. Solo publica agent.execute.response (heredado de agent-flow) y eventos a otros modulos via publishAndWait (request).",
+    "errors.contract: los errores que el agente devuelve en agent.execute.failed son del catalogo canonico. Categorias propias de agentes: AGENT_TIMEOUT, AGENT_TOOL_NOT_FOUND, AGENT_INVALID_RESPONSE, AGENT_UPSTREAM_FAILURE.",
+    "lifecycle.contract: el modulo del agente declara onLoad: 'no-op' y onUnload: 'no-op' — es declarativo, no vive. El loader del sistema solo registra el blueprint en su catalogo y dispatching de invocaciones.",
+    "observability.contract: cada agent.execute.request emite metric con labels {agent_name, dominio, operacion_canonica, project_id?, eventos_invocados_count, status, duration_ms, tokens_total}.",
+    "persistence.contract: los archivos del agente (module.json, blueprint, system.md) viven en VCS. NO hay persistencia runtime del agente.",
+    "http.contract: el agente NO hace HTTP directo. Invoca eventos que pueden hacerlo (tools cumplen http.contract con timeouts y retries).",
+    "chat-flow.contract: el agente publica resultado via agent-observer que traduce a chat.assistant.saved con metadata.author={kind:'agent', name:<id>}.",
+    "agent-flow.contract: este contrato (agente-blueprint) FORMA el agente; agent-flow ORQUESTA su invocacion. Complementarios y obligatorios juntos.",
+    "llm-flow.contract: ai-gateway cuando ejecuta el blueprint del agente publica llm.complete.request con system_prompt = system.md del agente + tools = bus.publish/publishAndWait + llm settings del blueprint.",
+    "tools.contract: el agente NO declara catalogo de tools propias. Las tools que usa son las universales del padre (bus.publish, bus.publishAndWait). Los eventos que invoca via publishAndWait son referencias a operaciones de otros modulos — no tools propias.",
+    "frontend.contract: el agente se renderiza en el chat como tarjeta agent_intervention (definida en frontend.contract.bloques_canonicos_inline_render).",
+    "security.contract: el system prompt NO contiene credenciales. credential-manager resuelve via credential.resolve.request.",
+    "modulos-blueprint-driven.contract: agente-blueprint es UNA categoria del paradigma blueprint-driven — la categoria 'agentes_especialistas' del mapa_al_sistema_actual. Comparte las 5 piezas con modulos-blueprint del dominio pero preserva naturaleza propia.",
+    "modulo-clase-robusta.contract: agente-blueprint es ANALOGO en disciplina al de modulos JS pero distinto en forma: no hay clase JS, hay blueprint declarativo. La metafora OOP filosofica (encapsulacion, herencia, identidad) se preserva via el blueprint padre + hijo.",
+    "modulo-rewrite.contract: NO aplica a agentes-blueprint. modulo-rewrite cubre la migracion POC2 de modulos JS legacy. Los agentes-blueprint no son POC2 — son blueprint puro.",
+    "agents-config.contract: contrato del modelo VIEJO (agentes como archivos en ai-agent-framework/agents/). Coexiste durante la transicion. Cuando todos los agentes esten migrados, se archiva. Mientras tanto, los agentes legacy cumplen agents-config y los migrados cumplen agente-blueprint.",
+    "companero-viaje.contract: agentes son uno de los 5 tipos canonicos de extension del companero. agente-blueprint formaliza este tipo en su forma blueprint-driven.",
+    "extensibilidad-modular.contract: la extensibilidad del sistema garantiza que anadir un agente nuevo (como modulo blueprint) NO requiere tocar otros modulos. Coherente con el manifiesto de event-core."
+  ],
+
+  "trabajo_pendiente": [
+    {
+      "id": "implementar_validator_agente_blueprint",
+      "estado": "abierto",
+      "naturaleza": "transversal",
+      "descripcion": "Implementar arquitectura/decisiones/_validators/agente-blueprint.validate.js con los cross-checks declarados. Registrar en scripts/validate-all.js y en npm scripts. Wire al baseline.",
+      "criterio_de_cierre": "npm run validate:ci incluye agente-blueprint.validate.js. baseline tiene seccion agente_blueprint.",
+      "fecha_anotacion": "2026-05-18"
+    },
+    {
+      "id": "crear_schema_agente_blueprint",
+      "estado": "abierto",
+      "naturaleza": "transversal",
+      "descripcion": "Crear arquitectura/decisiones/_schemas/agente-blueprint/agente-blueprint.schema.json (strict 2020-12) y el schema del contrato propio.",
+      "criterio_de_cierre": "Schemas compilan AJV strict y validan al menos un ejemplo.",
+      "fecha_anotacion": "2026-05-18"
+    },
+    {
+      "id": "migrar_30_agentes_uno_por_uno",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Migrar los 30 agentes legacy en modules/conversacion/ai-agent-framework/agents/ uno por uno al patron agente-blueprint. Ver agentes-roadmap.md para orden propuesto.",
+      "criterio_de_cierre": "Carpeta agents/ vacia. Todos los agentes son modulos blueprint en modules/<agente>/. Validator pasa. agents-config.contract.json se archiva.",
+      "fecha_anotacion": "2026-05-18"
+    },
+    {
+      "id": "evaluar_ai_agent_framework_post_migracion",
+      "estado": "abierto",
+      "naturaleza": "horizontal",
+      "descripcion": "Una vez los 30 agentes son blueprint independientes, evaluar si ai-agent-framework sigue siendo util como dispatcher o desaparece completamente. La invocacion via agent.execute.request puede ser absorbida por ai-gateway directamente.",
+      "criterio_de_cierre": "Decision tomada: ai-agent-framework aligerado / fusionado / eliminado. Documentado en su propio commit.",
+      "fecha_anotacion": "2026-05-18"
+    }
+  ]
+}

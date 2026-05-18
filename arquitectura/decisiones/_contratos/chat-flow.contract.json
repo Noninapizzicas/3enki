@@ -216,7 +216,7 @@
       "schema_ref": "arquitectura/decisiones/_schemas/chat-flow/chat.prompt.ready.schema.json",
       "shape_resumen": {
         "obligatorios": ["correlation_id", "conversation_id", "project_id", "user_id", "channel", "channel_context", "message_id", "system_prompt", "messages", "timestamp"],
-        "opcionales":   ["tools_disponibles", "settings", "intencion", "attachments"]
+        "opcionales":   ["tools_disponibles", "settings", "intencion", "attachments", "page_id"]
       },
       "notas_de_drift_a_cerrar": [
         "El campo 'prompt' actual se renombra a 'system_prompt' (semantica clara: es el system prompt construido).",

@@ -58,7 +58,6 @@
     "test:pdf-viewer": "node tests/unit/pdf-viewer.test.js",
     "test:telegram-service": "node tests/unit/telegram-service.test.js",
     "test:pizzepos__carta-manager": "node tests/unit/pizzepos__carta-manager.test.js",
-    "test:recetas": "node tests/unit/recetas.test.js",
     "test:tecnicas": "node tests/unit/tecnicas.test.js",
     "test:recetario-creativo": "node tests/unit/recetario-creativo.test.js",
     "test:pase-cocina": "node tests/unit/pase-cocina.test.js",

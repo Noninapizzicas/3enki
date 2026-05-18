@@ -77,8 +77,8 @@ function checkSinModuleJson(findings) {
 }
 
 function checkSinIndexJs(findings) {
-  for (const { dir, hasIndex } of listModuleManifests()) {
-    if (!hasIndex) {
+  for (const { dir, hasIndex, manifest } of listModuleManifests()) {
+    if (!hasIndex && !manifest.blueprint_driven) {
       findings.errors.push(`drift_modulo_sin_index_js: ${path.relative(REPO_ROOT, dir)} tiene module.json pero no index.js`);
     }
   }

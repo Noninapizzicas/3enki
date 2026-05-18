@@ -1,19 +1,46 @@
 {
-  "_doc": "Blueprint ABSTRACTO del subsistema-recetario. Captura lo comun a todos los modulos del subsistema (recetas, escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina, viabilidad) que cada modulo concreto extiende declarando solo su delta. El LLM y el runtime leen esta jerarquia (padre + hijo) como una sola pieza coherente.",
+  "_doc": "Blueprint ABSTRACTO del subsistema-recetario. Captura lo comun a todos los modulos del subsistema (recetas, escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina, viabilidad). Cada modulo concreto extiende este declarando solo su delta. El LLM lee la jerarquia (padre + hijo) como su system prompt — el blueprint ES el modulo, no hay codigo JS auxiliar.",
 
   "id": "subsistema-recetario.modulo-base",
-  "version": "blueprint-0.1.0",
+  "version": "blueprint-0.2.0",
   "abstract": true,
 
-  "rol_generico": "Modulo del subsistema-recetario — descomponer una responsabilidad acotada del dominio de recetas en un blueprint declarativo + runtime determinista. Cada modulo concreto declara su 'rol' especifico (aggregate root, calculador de coste, libreria de tecnicas, etc.).",
+  "rol_generico": "Modulo del subsistema-recetario — encapsula una responsabilidad acotada del dominio de recetas como blueprint declarativo. El LLM es el runtime que lo ejecuta publicando eventos al bus directamente.",
 
-  "payload_canonico_de_eventos": {
-    "_descripcion": "TODOS los eventos publicados por modulos del subsistema-recetario llevan estos campos top-level. El runtime los enriquece automaticamente; no hay que declararlos en el pseudocodigo de cada operacion.",
+  "modelo_de_ejecucion": {
+    "_descripcion": "El LLM es el motor del modulo. ai-gateway expone 2 tools universales (bus.publish, bus.publishAndWait) que el LLM usa para emitir cualquier evento al bus segun el pseudocodigo del blueprint. NO hay tools especializadas por modulo. NO hay runtime intermedio. NO hay handlers JS del dominio.",
+    "secuencia": [
+      "1. El usuario envia un mensaje al chat ('guarda esta receta').",
+      "2. chat-io enriquece el contexto con project_id y user_id activos, lo pasa a ai-gateway via chat.prompt.ready.",
+      "3. ai-gateway invoca al LLM con: system prompt = blueprints del modulo activo (padre + hijo), tools = [bus.publish, bus.publishAndWait], user message = lo del usuario.",
+      "4. El LLM lee el blueprint, decide la operacion (ej. 'crear'), sigue su pseudocodigo:",
+      "   - cuando el pseudocodigo dice publishAndWait(event, payload) → el LLM llama la tool bus.publishAndWait → ai-gateway publica al bus + espera response correlacionada + devuelve al LLM",
+      "   - cuando el pseudocodigo dice publish(event, payload) → el LLM llama la tool bus.publish → ai-gateway publica al bus",
+      "   - cuando el pseudocodigo dice normalizar / razonar / comparar → el LLM lo hace mentalmente (no llama tool)",
+      "5. Al terminar el pseudocodigo, el LLM compone un mensaje natural para el usuario describiendo lo que paso.",
+      "6. ai-gateway publica ai.chat.response. chat-io lo persiste y el frontend lo muestra."
+    ],
+    "principio": "El LLM razona el dominio (interpretacion de lenguaje natural, normalizaciones, decisiones contextuales). El bus + sus modulos primitivas (filesystem, project-manager, etc.) hacen el trabajo deterministico (atomicidad, persistencia, distribucion). Cada cual en su zona."
+  },
+
+  "contexto_inyectado_por_el_orquestador": {
+    "_descripcion": "Hay campos que NO vienen del input crudo del usuario — los inyecta el orquestador del chat (chat-io / ai-gateway) automaticamente al armar el contexto del LLM. El pseudocodigo del blueprint los usa como variables disponibles, no como input.",
     "campos": {
-      "project_id":     "uuid del proyecto. Multi-tenancy obligatorio.",
-      "user_id":        "id del usuario que origino la accion. 'system' si proviene de cron/auto-reaccion.",
-      "correlation_id": "uuid de la cadena causal — propaga del evento entrante si existe, o uno nuevo.",
-      "timestamp":      "ISO 8601 del momento de publicacion."
+      "project_id":     "uuid del proyecto activo del chat. Viene de chat-io (sabe en que proyecto esta el usuario). El LLM nunca lo pide al usuario.",
+      "user_id":        "id del usuario que origino el chat. Viene del canal (telegram/web/etc.). 'system' si es cron/auto-reaccion sin usuario humano.",
+      "correlation_id": "uuid de la cadena causal del chat. Viene del mensaje entrante (chat.message.saved). El LLM lo PROPAGA en cada evento que publique."
+    },
+    "como_aparecen_en_el_pseudocodigo": "input.project_id, input.user_id, input.correlation_id — el LLM los lee como si fueran parte del input pero NUNCA los inventa ni se los pide al usuario."
+  },
+
+  "payload_canonico_de_eventos_publicados": {
+    "_descripcion": "TODOS los eventos publicados (request, response, dominio) DEBEN llevar estos campos top-level. El LLM los anyade explicitamente en cada bus.publish o bus.publishAndWait.",
+    "campos": {
+      "project_id":     "input.project_id (del contexto)",
+      "user_id":        "input.user_id (del contexto)",
+      "correlation_id": "input.correlation_id (propagado del chat) — NO un uuid nuevo",
+      "timestamp":      "ISO 8601 del momento (helper del runtime: nowISO())",
+      "request_id":     "uuid generado por el LLM para cada bus.publishAndWait — para correlacionar con la response"
     }
   },
 
@@ -29,7 +56,7 @@
   },
 
   "manejo_de_errores": {
-    "_descripcion": "Todos los modulos del subsistema usan el catalogo canonico de 13 codigos (errors.contract v1.5.0). Sin codigos inventados.",
+    "_descripcion": "Todos los modulos del subsistema usan el catalogo canonico de codigos (errors.contract v1.5.0). Sin codigos inventados. El LLM construye la response devuelta al caller con shape canonico.",
     "codigos_comunes": {
       "INVALID_INPUT":           "400 — falta campo requerido o tipo incorrecto",
       "RESOURCE_NOT_FOUND":      "404 — objeto no existe (entity_type en details)",
@@ -45,67 +72,84 @@
 
   "naming_canonico_de_eventos": {
     "request":  "<modulo>.<operacion>.request    — entrada de la operacion",
-    "response": "<modulo>.<operacion>.response   — salida de la operacion, correlacionada por request_id",
+    "response": "<modulo>.<operacion>.response   — salida correlacionada por request_id",
     "dominio":  "<entidad>.<accion>               — evento de dominio publicado tras completar (ej: receta.creada, escandallo.calculado)"
   },
 
-  "primitivas_universales": {
-    "_descripcion": "Eventos del bus que cualquier blueprint puede invocar. El runtime resuelve la espera de response automaticamente con timeout + correlation_id.",
+  "primitivas_universales_del_bus": {
+    "_descripcion": "Eventos del bus que cualquier blueprint puede invocar mediante la tool bus.publishAndWait (o bus.publish si es fire-and-forget). Los modulos que escuchan estos eventos ya existen en JS (filesystem, project-manager, ai-gateway, database-manager).",
     "filesystem": {
-      "fs.read.request":  "Leer archivo. Si 404, el runtime devuelve null al pseudocodigo (no es error).",
-      "fs.write.request": "Escribir archivo atomicamente."
+      "fs.read.request":  "Leer archivo. Response devuelve { status, content } o { status: 404 } si no existe.",
+      "fs.write.request": "Escribir archivo atomicamente. Response devuelve { status: 200 } o error."
     },
     "project_manager": {
-      "project.get.request": "Resolver project_id → { base_path, ... }. Usado por resolveBasePath()."
+      "project.get.request": "Resolver project_id → { base_path, name, ... }."
     },
     "ai_gateway": {
-      "llm.complete.request": "Invocar al LLM para una tarea acotada del dominio (e.g. normalizar texto libre, clasificar, resumir). Usar SOLO cuando el determinismo no aporta."
-    },
-    "database_manager": {
-      "db.query.request": "Query SQL. Solo modulos que persisten en SQLite (no aplica al subsistema-recetario; persistimos en JSON-per-project)."
+      "llm.complete.request": "Invocar al LLM para una sub-tarea acotada (e.g. clasificar, resumir, evaluar). El LLM principal puede delegar en sub-LLMs cuando aporta. Usar con criterio: si el LLM principal puede razonar la tarea, hacerlo directo."
     }
   },
 
-  "helpers_built_in_del_runtime": {
-    "uuid()":                              "Genera UUIDv4.",
-    "nowISO()":                            "Devuelve new Date().toISOString().",
-    "resolveBasePath(project_id)":         "Cache + fallback a project.get.request. El runtime serializa esperas pendientes por project_id.",
-    "publish(event, payload)":             "Publica al bus enriqueciendo automaticamente con payload_canonico_de_eventos. Es lo que cada modulo hacia con su _publicarEvento (deja de ser responsabilidad del modulo).",
-    "publishAndWait(event, payload, options)": "Publica request + espera response correlacionada. Timeout configurable, default 10s. Lanza UPSTREAM_TIMEOUT si no llega."
+  "tools_universales_expuestas_al_llm": {
+    "_descripcion": "Las UNICAS dos tools que ai-gateway expone al LLM cuando opera con un modulo blueprint. Reemplazan al catalogo polyfunctional anterior (50+ tools por modulo).",
+    "bus.publish": {
+      "args": "{ event: string, payload: object }",
+      "comportamiento": "Publica el evento al bus. No espera respuesta. Util para eventos de dominio (receta.creada) y para evento de respuesta al caller (<modulo>.<operacion>.response).",
+      "devuelve": "{ ok: true } inmediatamente"
+    },
+    "bus.publishAndWait": {
+      "args": "{ event: string, payload: object, response_event?: string, timeout_ms?: number }",
+      "comportamiento": "Publica el evento (un request) y espera la response correlacionada por request_id. Si no llega en timeout_ms (default 10s), devuelve error UPSTREAM_TIMEOUT.",
+      "devuelve": "el payload del evento de response (e.g. { status, content } para fs.read.response)"
+    }
+  },
+
+  "helpers_built_in_para_el_pseudocodigo": {
+    "_descripcion": "Funciones que el LLM puede asumir disponibles en el pseudocodigo. No son tools — son referencias semanticas que el LLM razona/calcula mentalmente.",
+    "uuid()":    "Genera un UUIDv4 nuevo. El LLM lo genera el mismo cuando lo necesita (para request_id, para nuevos objetos del dominio).",
+    "nowISO()":  "Devuelve la fecha-hora actual en ISO 8601. El LLM la pone literal en el payload.",
+    "JSON.stringify(obj, null, 2)": "Serializa un objeto a JSON con indentacion. El LLM lo escribe explicito en el payload de fs.write.request."
+  },
+
+  "limite_del_modulo": {
+    "_descripcion": "Que termina dentro del modulo y que es responsabilidad de otra capa.",
+    "el_modulo_HACE": [
+      "Validar input y aplicar reglas del dominio.",
+      "Leer/escribir su store persistente via fs.* primitivas.",
+      "Publicar eventos de dominio (<entidad>.<accion>).",
+      "Devolver al caller la response canonica via <modulo>.<operacion>.response."
+    ],
+    "el_modulo_NO_HACE": [
+      "Hablar al usuario directamente. El mensaje al usuario lo formula ai-gateway/chat-io en ai.chat.response, basandose en la response del modulo.",
+      "Resolver el project_id activo del chat. Eso lo hace chat-io ANTES de invocar al LLM.",
+      "Decidir el usuario_id. Eso viene del canal (telegram/web)."
+    ]
   },
 
   "estructura_blueprint_concreto": {
     "_descripcion": "Cada blueprint hijo declara estas secciones. Lo NO declarado se hereda de aqui.",
     "secciones_obligatorias": ["id", "extends_blueprint_abstract", "rol", "operaciones"],
-    "secciones_opcionales": ["garantiza", "no_garantiza", "estado_interno", "eventos_que_escucho", "polimorfismo_del_subsistema"],
-    "secciones_heredadas_no_repetir": ["payload_canonico_de_eventos", "manejo_de_errores", "naming_canonico_de_eventos", "primitivas_universales", "helpers_built_in_del_runtime"]
+    "secciones_opcionales":   ["garantiza", "no_garantiza", "estado_persistente", "eventos_que_escucho", "polimorfismo_del_subsistema"],
+    "secciones_heredadas_no_repetir": [
+      "modelo_de_ejecucion",
+      "contexto_inyectado_por_el_orquestador",
+      "payload_canonico_de_eventos_publicados",
+      "manejo_de_errores",
+      "naming_canonico_de_eventos",
+      "primitivas_universales_del_bus",
+      "tools_universales_expuestas_al_llm",
+      "helpers_built_in_para_el_pseudocodigo",
+      "limite_del_modulo"
+    ]
   },
 
   "patron_de_operacion": {
     "_descripcion": "Toda operacion declarada en un modulo concreto sigue este shape. El LLM la lee como funcion async.",
     "shape": {
-      "input": "string — descripcion del shape de entrada (campos obligatorios y opcionales).",
-      "pseudocodigo": "array de strings — el algoritmo en pseudocodigo legible por el LLM (no ejecutable mecanicamente).",
-      "reglas_clave":       "array — invariantes que el runtime DEBE enforcar.",
-      "primitivas_que_uso": "array — primitivas universales que esta operacion invoca (referencia, no implementacion).",
-      "helpers_del_dominio":"array — funciones JS especificas del modulo que el pseudocodigo usa (residen en modules/<modulo>/helpers.js).",
-      "errores_posibles":   "array — codigos canonicos que esta operacion puede devolver."
+      "input":         "string — descripcion del shape de entrada (campos obligatorios y opcionales). Incluye project_id, user_id, correlation_id (inyectados por el orquestador) + campos del input crudo del usuario.",
+      "pseudocodigo":  "array de strings — el algoritmo en pseudocodigo legible. El LLM lo razona como codigo. Usa publish/publishAndWait para eventos del bus, razona mentalmente normalizadores y reglas.",
+      "reglas_clave":      "array — invariantes del dominio que el LLM DEBE respetar (no duplicado, transiciones validas, etc.).",
+      "errores_posibles":  "array — codigos canonicos que esta operacion puede devolver."
     }
-  },
-
-  "modelo_de_ejecucion": {
-    "_descripcion": "Como se ejecuta una operacion en runtime — el reparto LLM vs runtime determinista.",
-    "secuencia": [
-      "1. Usuario envia request al modulo (e.g. 'guarda esta receta').",
-      "2. LLM razona el dominio: interpreta input ambiguo, normaliza, infiere campos. Construye un PAYLOAD CANONICO completo.",
-      "3. LLM publica <modulo>.<operacion>.request con el payload canonico.",
-      "4. Runtime del modulo recibe la request, lee el blueprint, ejecuta el pseudocodigo paso a paso:",
-      "   - primitivas → publish via bus + await response",
-      "   - reglas declaradas → evalua contra el state actual",
-      "   - helpers del dominio → llama a modules/<modulo>/helpers.js",
-      "5. Runtime publica <modulo>.<operacion>.response con shape canonico (status, data | error).",
-      "6. LLM recibe la response, formula mensaje al usuario."
-    ],
-    "principio": "El LLM hace lo que solo el LLM puede hacer (razonamiento contextual, lenguaje natural, normalizacion). El runtime hace lo que solo determinismo puede garantizar (atomicidad, idempotencia, enforcement, timeouts). Cada cual en su zona."
   }
 }

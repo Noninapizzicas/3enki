@@ -75,7 +75,7 @@ function makeMetrics() {
   const bus     = makeMockBus();
   const logger  = makeLogger();
   const metrics = makeMetrics();
-  const blueprintPath = path.join(__dirname, '../../modules/recetas-blueprint/recetas.blueprint.json');
+  const blueprintPath = path.join(__dirname, '../../modules/_recetas-blueprint/recetas.blueprint.json');
 
   const runtime = new RuntimeBlueprint({ logger, eventBus: bus, metrics }, blueprintPath);
   await runtime.load();

@@ -32,6 +32,9 @@ jobs:
       - name: Run unit tests (scheduler — migracion canonica)
         run: npm run test:scheduler
 
+      - name: Run unit tests (runtime-blueprint — piloto modelo declarativo)
+        run: npm run test:runtime-blueprint
+
       - name: Run unit tests (credential-manager — descomposicion canonica)
         run: npm run test:credential-manager
 

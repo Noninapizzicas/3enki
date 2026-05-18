@@ -340,6 +340,11 @@ class PromptBuilderModule extends BaseModule {
       channel: channel || 'web',
       channel_context: channel_context || {},
       message_id,
+      // page_id es necesario para que ai-gateway resuelva: catalogo de tools
+      // del modulo activo + inyeccion del system prompt blueprint cuando el
+      // page corresponde a un modulo blueprint-driven. Sin propagarlo,
+      // ai-gateway recibe page_id=undefined y cae al fallback polyfunctional.
+      page_id: page_id ?? undefined,
       system_prompt: systemPrompt,
       messages,
       // opcionales canonicos

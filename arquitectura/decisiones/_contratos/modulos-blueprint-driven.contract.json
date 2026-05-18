@@ -1,0 +1,71 @@
+{
+  "_doc": "Paradigma 'modulos blueprint-driven'. Captura la decision de mover un subconjunto del sistema (~13 de ~70 modulos) de codigo JS procedural a blueprint JSON declarativo ejecutado por el LLM via 2 tools universales (bus.publish, bus.publishAndWait). Aplica solo donde tiene sentido: modulos verticales cuyo dominio se razona con LLM/agentes.",
+  "id": "modulos-blueprint-driven",
+  "version": "1.0.0",
+  "creada": "2026-05-18",
+  "tipo": "documento_maestro",
+
+  "que_es_un_modulo_blueprint_driven": [
+    "Un blueprint JSON declarativo (contrato + pseudocodigo + estructura OOP) que el LLM ejecuta paso a paso publicando eventos al bus.",
+    "Sin index.js. Sin clase instanciada. Sin runtime intermedio.",
+    "El LLM razona el dominio. El bus + las primitivas (filesystem, project-manager, etc.) hacen el IO determinista."
+  ],
+
+  "las_cinco_piezas": {
+    "contrato":     "Lo invariante: qué garantiza el modulo, qué no, qué reglas respeta, qué errores devuelve, qué eventos publica/escucha.",
+    "blueprint":    "JSON con operaciones, pseudocodigo, normalizadores, estado persistente. Reemplaza al index.js.",
+    "pseudocodigo": "Lenguaje algoritmico con estructura (if/else, await) pero vocabulario natural. Bilingue humano-LLM.",
+    "clase_oop":    "Metafora estructural (encapsulacion, herencia padre-hijo, polimorfismo por page_id). Filosofia, no runtime.",
+    "json":         "Soporte fisico. Universal: LLM lo lee y lo escribe, AJV lo valida, humano lo entiende, Git lo diffea."
+  },
+
+  "criterios_de_aplicabilidad": {
+    "regla": "Las 4 condiciones SE CUMPLEN TODAS → candidato. Cualquier no → JS determinista.",
+    "1_dominio_razonable_en_lenguaje_natural": "Reglas expresables en pseudocodigo legible. No transformaciones matematicas, criptografia, parsing complejo.",
+    "2_su_trabajo_es_razonar_con_llm_o_agentes": "Su razon de ser es operar con LLM/agentes — interpretar, generar, coordinar, extraer/resumir/recuperar.",
+    "3_latencia_tolerable": "5-25s por operacion es aceptable. NO para UI reactiva, batch loops, transacciones POS.",
+    "4_coste_tolerable": "Decenas a miles de ops/dia bajo presupuesto razonable. NO para millones de ops o operaciones triviales."
+  },
+
+  "mapa_al_sistema_actual": {
+    "candidatos_a_blueprint": [
+      "recetas",
+      "escandallo",
+      "viabilidad",
+      "tecnicas",
+      "recetario-creativo",
+      "pase-cocina",
+      "mise-en-place",
+      "memory-user-profile",
+      "memory-conversation-summary",
+      "memory-rag",
+      "bot-manager",
+      "agent-observer",
+      "prompt-manager"
+    ],
+    "se_quedan_en_js_determinista": "Los ~57 modulos restantes: infraestructura del chat (ai-gateway, prompt-builder, chat-io, channel-manager, ai-agent-framework), infraestructura del sistema (filesystem, database-manager, project-manager, credential-manager, log-manager, scheduler, security-p2p, certificate-authority, gateway-manager, composition-manager, plugin-manager, system-inspector, metricas), frontend/UI (dashboard, admin-panel, text-editor, pdf-viewer, conversation-export), hardware/dispositivos (esp32-*, firmware-*, device-*, code-executor, perifericos, impresion), pizzepos completo (POS de alto volumen), facturacion y staff."
+  },
+
+  "lo_que_aporta": [
+    "Auto-documentacion: el blueprint ES el codigo Y la documentacion. Sin drift.",
+    "Editable sin programar: cambias JSON, reinicias, el LLM lo ejecuta nuevo.",
+    "Herencia natural: blueprint padre + hijo solo declara el delta.",
+    "Inspeccionable por humano + LLM + validador con cero traduccion."
+  ],
+
+  "lo_que_cuesta": [
+    "Latencia 5-25s por operacion (vs ~50ms de JS).",
+    "Coste de inferencia: centimos por operacion. Escala lineal con uso.",
+    "Indeterminismo: el LLM aluciña UUIDs, nombres de tools, hechos del sistema. No garantiza correctitud byte-a-byte.",
+    "Debugging sin stack trace: hay que reproducir el contexto del LLM.",
+    "Acoplamiento al provider: cambio de LLM puede requerir reajustar blueprint."
+  ],
+
+  "prohibido": [
+    "Coexistir index.js + blueprint en el mismo modulo: dos fuentes de verdad.",
+    "Mezclar catalogo polyfunctional + universales en el catalogo que ve el LLM: el LLM se salta el blueprint alucinando tools legacy.",
+    "Path absoluto del sistema en fs.*.request: filesystem duplica el prefijo. Usar path: '/recetas.json' relativo al base_path del proyecto.",
+    "Aplicar blueprint a modulos que fallan los 4 criterios: paga inferencia LLM por nada.",
+    "Usar uuid() generado por el LLM cuando la unicidad importa: aluciña patrones regulares. Usar primitiva del bus (pendiente)."
+  ]
+}

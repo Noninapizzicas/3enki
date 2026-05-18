@@ -1,0 +1,105 @@
+{
+  "_doc": "Blueprint CONCRETO del modulo recetas. Declara solo su delta sobre subsistema-recetario.modulo-base. Lo no declarado se hereda (payload canonico, manejo de errores, naming, primitivas, helpers built-in).",
+
+  "id": "recetas",
+  "version": "blueprint-0.4.0",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "language": "es",
+
+  "rol": "Aggregate root del subsistema-recetario. Custodio del dato canonico de cada receta del proyecto.",
+
+  "garantiza": [
+    "Cada receta tiene id (uuid), nombre, estado_operativo in {borrador|en_servicio|archivada}.",
+    "No hay duplicados activos: dos recetas no pueden tener el mismo nombre normalizado en estado_operativo=en_servicio simultaneamente.",
+    "Persistencia atomica en <base_path>/recetas.json (un archivo por proyecto).",
+    "Tras crear/actualizar/eliminar/cambiar_estado publica el evento canonico correspondiente."
+  ],
+
+  "no_garantiza": [
+    "Coste — escandallo escucha receta.creada/actualizada y calcula.",
+    "Viabilidad economica — viabilidad calcula.",
+    "Sugerencias culinarias — agentes recipe-curator/researcher/chef-advisor."
+  ],
+
+  "estado_interno": {
+    "_descripcion": "Cache no persistido del modulo. Se reconstruye al cargar.",
+    "writeQueues": "Map<project_id, Promise> — serializa escrituras al recetas.json del proyecto. El runtime gestiona la cola."
+  },
+
+  "operaciones": {
+
+    "crear": {
+      "input": "{ project_id (uuid, requerido), user_id?, nombre (requerido), ingredientes?, instrucciones?, porciones?, tiempo_min?, dificultad?, categorias?, etiquetas?, fuente?, notas?, correlation_id? }",
+
+      "pseudocodigo": [
+        "async crear(input):",
+        "  if (input.project_id is empty) return INVALID_INPUT('project_id required')",
+        "  if (input.nombre is empty)     return INVALID_INPUT('nombre required')",
+        "",
+        "  base_path = await resolveBasePath(input.project_id)",
+        "  store     = (await publishAndWait('fs.read.request', { path: base_path + '/recetas.json' })) || { _version: '1.0', recetas: [], ingredientes_catalogo: [] }",
+        "",
+        "  // regla del dominio: no duplicado activo",
+        "  if (store.recetas.find(r => r.nombre.toLowerCase().trim() === input.nombre.toLowerCase().trim() && r.estado_operativo === 'en_servicio')):",
+        "    return ALREADY_EXISTS with details { existing_id }",
+        "",
+        "  // construir la receta canonica",
+        "  receta = {",
+        "    id:                uuid(),",
+        "    nombre:            input.nombre.trim(),",
+        "    descripcion:       input.descripcion || null,",
+        "    ingredientes:      normalizarIngredientes(input.ingredientes),",
+        "    instrucciones:     normalizarInstrucciones(input.instrucciones),",
+        "    porciones:         input.porciones ?? null,",
+        "    tiempo_min:        input.tiempo_min ?? null,",
+        "    dificultad:        input.dificultad ?? null,",
+        "    categorias:        input.categorias || [],",
+        "    etiquetas:         input.etiquetas || [],",
+        "    fuente:            input.fuente || 'manual',",
+        "    notas:             input.notas || null,",
+        "    created_at:        nowISO(),",
+        "    updated_at:        nowISO(),",
+        "    version:           1,",
+        "    history:           []",
+        "  }",
+        "  receta.campos_pendientes = camposPendientes(receta)",
+        "  receta.incompleta        = receta.campos_pendientes.length > 0",
+        "  receta.estado_operativo  = receta.incompleta ? 'borrador' : 'en_servicio'",
+        "",
+        "  // persistir",
+        "  store.recetas.push(receta)",
+        "  store._updated_at = nowISO()",
+        "  await publishAndWait('fs.write.request', { path: base_path + '/recetas.json', content: JSON.stringify(store, null, 2) })",
+        "",
+        "  // publicar evento canonico (el runtime enriquece con project_id, user_id, correlation_id, timestamp)",
+        "  publish('receta.creada', {",
+        "    id: receta.id,",
+        "    nombre: receta.nombre,",
+        "    version: 1,",
+        "    estado_operativo: receta.estado_operativo,",
+        "    incompleta: receta.incompleta,",
+        "    campos_pendientes: receta.campos_pendientes",
+        "  })",
+        "",
+        "  return 201 { id, nombre, status: 'creada', incompleta, campos_pendientes, version: 1 }"
+      ],
+
+      "reglas_clave": [
+        "No duplicado activo: nombre normalizado (toLowerCase + trim) + estado_operativo=en_servicio.",
+        "estado_operativo inicial = borrador si faltan campos minimos, en_servicio si no.",
+        "publish receta.creada SOLO si la persistencia tuvo exito (await publishAndWait completa OK)."
+      ],
+
+      "primitivas_que_uso": ["resolveBasePath", "fs.read.request", "fs.write.request", "publish"],
+
+      "helpers_del_dominio": [
+        "normalizarIngredientes(input)   — array canonico de { nombre, cantidad, unidad, notas? }. Acepta string libre, array de strings, array de objetos.",
+        "normalizarInstrucciones(input)  — array de strings. Splitea string por nueva linea o punto.",
+        "camposPendientes(receta)        — array de [ingredientes,porciones,instrucciones] que estan vacios/null/array-vacio."
+      ],
+
+      "errores_posibles": ["INVALID_INPUT", "ALREADY_EXISTS", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
+    }
+
+  }
+}

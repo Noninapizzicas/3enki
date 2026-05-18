@@ -1,0 +1,111 @@
+{
+  "_doc": "Blueprint ABSTRACTO del subsistema-recetario. Captura lo comun a todos los modulos del subsistema (recetas, escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina, viabilidad) que cada modulo concreto extiende declarando solo su delta. El LLM y el runtime leen esta jerarquia (padre + hijo) como una sola pieza coherente.",
+
+  "id": "subsistema-recetario.modulo-base",
+  "version": "blueprint-0.1.0",
+  "abstract": true,
+
+  "rol_generico": "Modulo del subsistema-recetario — descomponer una responsabilidad acotada del dominio de recetas en un blueprint declarativo + runtime determinista. Cada modulo concreto declara su 'rol' especifico (aggregate root, calculador de coste, libreria de tecnicas, etc.).",
+
+  "payload_canonico_de_eventos": {
+    "_descripcion": "TODOS los eventos publicados por modulos del subsistema-recetario llevan estos campos top-level. El runtime los enriquece automaticamente; no hay que declararlos en el pseudocodigo de cada operacion.",
+    "campos": {
+      "project_id":     "uuid del proyecto. Multi-tenancy obligatorio.",
+      "user_id":        "id del usuario que origino la accion. 'system' si proviene de cron/auto-reaccion.",
+      "correlation_id": "uuid de la cadena causal — propaga del evento entrante si existe, o uno nuevo.",
+      "timestamp":      "ISO 8601 del momento de publicacion."
+    }
+  },
+
+  "estado_operativo": {
+    "_descripcion": "Estado del ciclo de vida de un objeto del dominio (receta, prototipo, ficha, etc.). Solo modulos con objetos persistentes lo usan.",
+    "valores": ["borrador", "en_servicio", "archivada"],
+    "transiciones_validas": [
+      "borrador → en_servicio (cuando se completan los campos minimos)",
+      "en_servicio → borrador (cuando se editan campos minimos a vacio)",
+      "en_servicio → archivada (eliminar logico)",
+      "archivada → en_servicio (restaurar)"
+    ]
+  },
+
+  "manejo_de_errores": {
+    "_descripcion": "Todos los modulos del subsistema usan el catalogo canonico de 13 codigos (errors.contract v1.5.0). Sin codigos inventados.",
+    "codigos_comunes": {
+      "INVALID_INPUT":           "400 — falta campo requerido o tipo incorrecto",
+      "RESOURCE_NOT_FOUND":      "404 — objeto no existe (entity_type en details)",
+      "ALREADY_EXISTS":          "409 — duplicado por creacion",
+      "CONFLICT_STATE":          "409 — estado actual no permite la operacion",
+      "PRECONDITION_FAILED":     "422 — regla del dominio no cumple",
+      "UPSTREAM_TIMEOUT":        "504 — timeout esperando primitiva (fs, db, otro modulo)",
+      "UPSTREAM_UNREACHABLE":    "503 — primitiva no disponible",
+      "UNKNOWN_ERROR":           "500 — ultimo recurso"
+    },
+    "shape_canonico": "{ status, error: { code, message, details? } } o { status, data } — mutuamente excluyentes"
+  },
+
+  "naming_canonico_de_eventos": {
+    "request":  "<modulo>.<operacion>.request    — entrada de la operacion",
+    "response": "<modulo>.<operacion>.response   — salida de la operacion, correlacionada por request_id",
+    "dominio":  "<entidad>.<accion>               — evento de dominio publicado tras completar (ej: receta.creada, escandallo.calculado)"
+  },
+
+  "primitivas_universales": {
+    "_descripcion": "Eventos del bus que cualquier blueprint puede invocar. El runtime resuelve la espera de response automaticamente con timeout + correlation_id.",
+    "filesystem": {
+      "fs.read.request":  "Leer archivo. Si 404, el runtime devuelve null al pseudocodigo (no es error).",
+      "fs.write.request": "Escribir archivo atomicamente."
+    },
+    "project_manager": {
+      "project.get.request": "Resolver project_id → { base_path, ... }. Usado por resolveBasePath()."
+    },
+    "ai_gateway": {
+      "llm.complete.request": "Invocar al LLM para una tarea acotada del dominio (e.g. normalizar texto libre, clasificar, resumir). Usar SOLO cuando el determinismo no aporta."
+    },
+    "database_manager": {
+      "db.query.request": "Query SQL. Solo modulos que persisten en SQLite (no aplica al subsistema-recetario; persistimos en JSON-per-project)."
+    }
+  },
+
+  "helpers_built_in_del_runtime": {
+    "uuid()":                              "Genera UUIDv4.",
+    "nowISO()":                            "Devuelve new Date().toISOString().",
+    "resolveBasePath(project_id)":         "Cache + fallback a project.get.request. El runtime serializa esperas pendientes por project_id.",
+    "publish(event, payload)":             "Publica al bus enriqueciendo automaticamente con payload_canonico_de_eventos. Es lo que cada modulo hacia con su _publicarEvento (deja de ser responsabilidad del modulo).",
+    "publishAndWait(event, payload, options)": "Publica request + espera response correlacionada. Timeout configurable, default 10s. Lanza UPSTREAM_TIMEOUT si no llega."
+  },
+
+  "estructura_blueprint_concreto": {
+    "_descripcion": "Cada blueprint hijo declara estas secciones. Lo NO declarado se hereda de aqui.",
+    "secciones_obligatorias": ["id", "extends_blueprint_abstract", "rol", "operaciones"],
+    "secciones_opcionales": ["garantiza", "no_garantiza", "estado_interno", "eventos_que_escucho", "polimorfismo_del_subsistema"],
+    "secciones_heredadas_no_repetir": ["payload_canonico_de_eventos", "manejo_de_errores", "naming_canonico_de_eventos", "primitivas_universales", "helpers_built_in_del_runtime"]
+  },
+
+  "patron_de_operacion": {
+    "_descripcion": "Toda operacion declarada en un modulo concreto sigue este shape. El LLM la lee como funcion async.",
+    "shape": {
+      "input": "string — descripcion del shape de entrada (campos obligatorios y opcionales).",
+      "pseudocodigo": "array de strings — el algoritmo en pseudocodigo legible por el LLM (no ejecutable mecanicamente).",
+      "reglas_clave":       "array — invariantes que el runtime DEBE enforcar.",
+      "primitivas_que_uso": "array — primitivas universales que esta operacion invoca (referencia, no implementacion).",
+      "helpers_del_dominio":"array — funciones JS especificas del modulo que el pseudocodigo usa (residen en modules/<modulo>/helpers.js).",
+      "errores_posibles":   "array — codigos canonicos que esta operacion puede devolver."
+    }
+  },
+
+  "modelo_de_ejecucion": {
+    "_descripcion": "Como se ejecuta una operacion en runtime — el reparto LLM vs runtime determinista.",
+    "secuencia": [
+      "1. Usuario envia request al modulo (e.g. 'guarda esta receta').",
+      "2. LLM razona el dominio: interpreta input ambiguo, normaliza, infiere campos. Construye un PAYLOAD CANONICO completo.",
+      "3. LLM publica <modulo>.<operacion>.request con el payload canonico.",
+      "4. Runtime del modulo recibe la request, lee el blueprint, ejecuta el pseudocodigo paso a paso:",
+      "   - primitivas → publish via bus + await response",
+      "   - reglas declaradas → evalua contra el state actual",
+      "   - helpers del dominio → llama a modules/<modulo>/helpers.js",
+      "5. Runtime publica <modulo>.<operacion>.response con shape canonico (status, data | error).",
+      "6. LLM recibe la response, formula mensaje al usuario."
+    ],
+    "principio": "El LLM hace lo que solo el LLM puede hacer (razonamiento contextual, lenguaje natural, normalizacion). El runtime hace lo que solo determinismo puede garantizar (atomicidad, idempotencia, enforcement, timeouts). Cada cual en su zona."
+  }
+}

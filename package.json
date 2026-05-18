@@ -18,6 +18,7 @@
     "test:integration": "node tests/integration/full-stack.test.js",
     "test:ai-gateway-poc": "node tests/unit/ai-gateway-poc.test.js",
     "test:scheduler": "node tests/unit/scheduler.test.js",
+    "test:runtime-blueprint": "node tests/unit/runtime-blueprint.test.js",
     "test:credential-manager": "node tests/unit/credential-manager.test.js",
     "test:project-manager": "node tests/unit/project-manager.test.js",
     "test:database-manager": "node tests/unit/database-manager.test.js",

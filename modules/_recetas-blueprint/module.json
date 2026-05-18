@@ -2,7 +2,7 @@
   "_doc": "Manifest del modulo blueprint-driven recetas. NO tiene index.js — el LLM ES el runtime y ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Activable via page_id='recetas'. Reemplaza la UX del modulo recetas v4.0.0 en el chat — el modulo legacy queda cargado para listeners internos del bus pero el LLM ya no ve sus tools.",
 
   "name": "_recetas-blueprint",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Modulo recetas en modo blueprint-driven. El LLM lee el blueprint (padre + hijo) como system prompt y publica eventos al bus directamente via bus.publish / bus.publishAndWait (las 2 tools universales expuestas por ai-gateway). NO existe codigo JS del modulo.",
   "language": "es",
 

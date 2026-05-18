@@ -79,8 +79,8 @@
   "primitivas_universales_del_bus": {
     "_descripcion": "Eventos del bus que cualquier blueprint puede invocar mediante la tool bus.publishAndWait (o bus.publish si es fire-and-forget). Los modulos que escuchan estos eventos ya existen en JS (filesystem, project-manager, ai-gateway, database-manager).",
     "filesystem": {
-      "fs.read.request":  "Leer archivo. Response devuelve { status, content } o { status: 404 } si no existe.",
-      "fs.write.request": "Escribir archivo atomicamente. Response devuelve { status: 200 } o error."
+      "fs.read.request":  "Leer archivo. Convencion: path con leading-slash relativo al base_path del proyecto + project_id en el payload. Ejemplo: { project_id, path: '/recetas.json' }. Filesystem resuelve internamente — NO concatenar base_path absoluto del sistema (eso duplica el prefijo y corrompe el path). Response devuelve { status, content } o { status: 404 } si no existe.",
+      "fs.write.request": "Escribir archivo atomicamente. Misma convencion de paths que fs.read.request. Payload: { project_id, path: '/<archivo>', content: string, encoding: 'utf-8', atomic: true }. Response devuelve { status: 200 } o error."
     },
     "project_manager": {
       "project.get.request": "Resolver project_id → { base_path, name, ... }."

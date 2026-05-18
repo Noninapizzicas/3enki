@@ -1,0 +1,117 @@
+{
+  "_doc": "Piloto BLUEPRINT del modulo recetas — VERSION 0.3 (estructura clase + pseudocodigo). El pseudocodigo es texto estructurado que el LLM entiende como instrucciones operativas (no es ejecutable por una maquina — el LLM lo interpreta). La estructura de clase (abstract/concrete + herencia conceptual) aporta organizacion y polimorfismo entre modulos del subsistema, no OOP runtime.",
+
+  "id": "recetas",
+  "version": "blueprint-0.3.0",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+
+  "rol": "Aggregate root del subsistema-recetario. Custodio del dato canonico de cada receta del proyecto.",
+
+  "garantiza": [
+    "Cada receta tiene id (uuid), nombre, estado_operativo in {borrador, en_servicio, archivada}.",
+    "No hay duplicados activos: dos recetas no pueden tener el mismo nombre normalizado en estado_operativo=en_servicio simultaneamente.",
+    "Persistencia: <base_path>/recetas.json (un archivo por proyecto, via filesystem module).",
+    "Tras crear/actualizar/eliminar/cambiar_estado publica el evento canonico correspondiente del subsistema-recetario con shape AJV strict."
+  ],
+
+  "no_garantiza": [
+    "Coste — lo calcula escandallo escuchando receta.creada/actualizada.",
+    "Viabilidad economica — lo calcula viabilidad.",
+    "Calidad culinaria — la valoran los agentes recipe-curator/chef-advisor."
+  ],
+
+  "estado_interno": {
+    "projectBasePaths": "Map<project_id, base_path>  — cache poblado por project.activated + project.get.response",
+    "writeQueues":      "Map<project_id, Promise>     — serializa escrituras por proyecto"
+  },
+
+  "operaciones": {
+
+    "crear": {
+      "input": "{ project_id, user_id?, nombre, ingredientes?, instrucciones?, porciones?, tiempo_min?, dificultad?, categorias?, etiquetas?, fuente?, notas?, correlation_id? }",
+
+      "pseudocodigo": [
+        "async crear(input):",
+        "  if (input.project_id is empty) return INVALID_INPUT('project_id required')",
+        "  if (input.nombre is empty)     return INVALID_INPUT('nombre required')",
+        "",
+        "  base_path = await resolveBasePath(input.project_id)",
+        "  store     = await readStore(base_path)  // fs.read.request, si 404 → store vacio",
+        "",
+        "  // regla del dominio",
+        "  if (store.recetas.find(r => r.nombre.toLowerCase().trim() === input.nombre.toLowerCase().trim() && r.estado_operativo === 'en_servicio')):",
+        "    return ALREADY_EXISTS with details { existing_id }",
+        "",
+        "  // construir la receta canonica",
+        "  receta = {",
+        "    id:                uuid(),",
+        "    nombre:            input.nombre.trim(),",
+        "    descripcion:       input.descripcion || null,",
+        "    ingredientes:      normalizarIngredientes(input.ingredientes),",
+        "    instrucciones:     normalizarInstrucciones(input.instrucciones),",
+        "    porciones:         input.porciones ?? null,",
+        "    tiempo_min:        input.tiempo_min ?? null,",
+        "    dificultad:        input.dificultad ?? null,",
+        "    categorias:        input.categorias || [],",
+        "    etiquetas:         input.etiquetas || [],",
+        "    fuente:            input.fuente || 'manual',",
+        "    notas:             input.notas || null,",
+        "    created_at:        nowISO(),",
+        "    updated_at:        nowISO(),",
+        "    version:           1,",
+        "    history:           [],",
+        "  }",
+        "  receta.incompleta        = camposPendientes(receta).length > 0",
+        "  receta.campos_pendientes = camposPendientes(receta)",
+        "  receta.estado_operativo  = receta.incompleta ? 'borrador' : 'en_servicio'",
+        "",
+        "  // persistir",
+        "  store.recetas.push(receta)",
+        "  store._updated_at = nowISO()",
+        "  await writeStore(base_path, store)  // fs.write.request, atomico",
+        "",
+        "  // publicar evento canonico del subsistema",
+        "  publish receta.creada {",
+        "    project_id, user_id: input.user_id || 'system',",
+        "    id: receta.id, nombre: receta.nombre, version: 1,",
+        "    estado_operativo: receta.estado_operativo,",
+        "    incompleta: receta.incompleta,",
+        "    campos_pendientes: receta.campos_pendientes,",
+        "    correlation_id: input.correlation_id || uuid(),",
+        "    timestamp: nowISO()",
+        "  }",
+        "",
+        "  return 201 { id, nombre, status: 'creada', incompleta, campos_pendientes, version: 1 }"
+      ],
+
+      "reglas_clave": [
+        "No duplicado activo (nombre normalizado + estado_operativo=en_servicio).",
+        "estado_operativo inicial = borrador si faltan campos minimos (ingredientes, porciones, instrucciones), si no en_servicio.",
+        "Escritura atomica via fs.write — filesystem garantiza atomicidad.",
+        "publish receta.creada SOLO si la persistencia tuvo exito."
+      ],
+
+      "primitivas_que_uso": [
+        "resolveBasePath(project_id)  → encapsula project.get.request si no esta en cache",
+        "readStore(base_path)          → fs.read.request — si 404 devuelve store vacio canonico",
+        "writeStore(base_path, store)  → fs.write.request — atomico",
+        "publish(event, payload)       → bus.publish con correlation_id + timestamp",
+        "uuid(), nowISO()              → built-ins del runtime"
+      ],
+
+      "helpers_del_dominio": [
+        "normalizarIngredientes(input)   → array canonico de { nombre, cantidad, unidad, notas? }",
+        "normalizarInstrucciones(input)  → array de strings, splitea string por nueva linea o punto",
+        "camposPendientes(receta)        → list de [ingredientes,porciones,instrucciones] vacios"
+      ],
+
+      "errores_posibles": ["INVALID_INPUT", "ALREADY_EXISTS", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
+    }
+
+  },
+
+  "polimorfismo_del_subsistema": {
+    "_descripcion": "Todos los modulos del subsistema-recetario (recetas, escandallo, tecnicas, recetario-creativo, mise-en-place, pase-cocina, viabilidad) heredan del blueprint abstracto 'subsistema-recetario.modulo-base' que define: payload canonico (project_id, user_id, correlation_id, timestamp), estado_operativo, naming canonico de eventos, manejo de errores. Cada modulo concreto sobreescribe 'rol', 'garantiza', y aporta sus 'operaciones' especificas. El LLM razona la jerarquia leyendo abstract+concrete juntos.",
+    "ejemplo_polimorfico": "operacion 'crear' existe en recetas (crea receta), en escandallo (lanza calculo), en viabilidad (lanza evaluacion). Misma firma conceptual, comportamiento especifico del modulo. El LLM identifica el patron."
+  }
+}

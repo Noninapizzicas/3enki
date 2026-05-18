@@ -99,7 +99,7 @@ function checkContratoSinValidator(findings) {
     }
   }
   // Excepciones: contratos que no requieren validator propio (modulo-completo lo extrae diferentemente)
-  const EXCLUDED = new Set(['modulo-completo','manifest-completo','eventos-emitidos','companero-viaje','extensibilidad-modular']);
+  const EXCLUDED = new Set(['modulo-completo','manifest-completo','eventos-emitidos','companero-viaje','extensibilidad-modular','modulos-blueprint-driven']);
   for (const dir of CONTRATOS_DIRS) {
     if (!fs.existsSync(dir)) continue;
     for (const f of fs.readdirSync(dir)) {

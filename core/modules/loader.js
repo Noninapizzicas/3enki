@@ -295,6 +295,32 @@ class ModuleLoader {
         throw new Error(`Module ${moduleName} already loaded`);
       }
 
+      // Blueprint-driven module: declarativo puro, no hay index.js ni instancia.
+      // El LLM ejecuta el modulo via ai-gateway leyendo el blueprint JSON como
+      // system prompt + invocando bus.publish/bus.publishAndWait. Aqui solo lo
+      // registramos para que ai-gateway lo descubra al arrancar.
+      if (manifest.blueprint_driven === true) {
+        this.loadedModules.set(moduleName, {
+          manifest,
+          instance: null,
+          path: modulePath,
+          loadedAt: Date.now(),
+          blueprint_driven: true
+        });
+        if (this.logger) {
+          this.logger.info('module.loaded.blueprint', {
+            module: moduleName,
+            version: manifest.version,
+            blueprint_path: manifest.blueprint_path,
+            target_page_id: manifest.target_page_id
+          });
+        }
+        if (this.metrics) {
+          this.metrics.increment('modules.loaded.blueprint');
+        }
+        return null;
+      }
+
       // Cargar el módulo
       const indexPath = path.join(modulePath, 'index.js');
       if (!fs.existsSync(indexPath)) {
@@ -466,8 +492,9 @@ class ModuleLoader {
         }
       }
 
-      // Ejecutar onUnload si existe (solo para cleanup propio del módulo)
-      if (typeof moduleData.instance.onUnload === 'function') {
+      // Ejecutar onUnload si existe (solo para cleanup propio del módulo).
+      // Blueprint-driven modules no tienen instance — se saltan.
+      if (moduleData.instance && typeof moduleData.instance.onUnload === 'function') {
         await moduleData.instance.onUnload();
       }
 

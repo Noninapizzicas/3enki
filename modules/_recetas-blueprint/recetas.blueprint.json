@@ -1,8 +1,8 @@
 {
-  "_doc": "Blueprint CONCRETO del modulo recetas. Declara solo su delta sobre subsistema-recetario.modulo-base. Lo no declarado se hereda (payload canonico, manejo de errores, naming, primitivas, helpers built-in).",
+  "_doc": "Blueprint CONCRETO del modulo recetas. Declara solo su delta sobre subsistema-recetario.modulo-base. El LLM lee este blueprint (junto con el padre) como su contrato + pseudocodigo operativo. NO existe runtime intermedio: el LLM ES el runtime, publica eventos al bus directamente. NO existen funciones JS auxiliares: el LLM razona normalizadores y reglas el mismo (lenguaje natural + razonamiento contextual).",
 
   "id": "recetas",
-  "version": "blueprint-0.4.0",
+  "version": "blueprint-0.5.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
 
@@ -10,9 +10,9 @@
 
   "garantiza": [
     "Cada receta tiene id (uuid), nombre, estado_operativo in {borrador|en_servicio|archivada}.",
-    "No hay duplicados activos: dos recetas no pueden tener el mismo nombre normalizado en estado_operativo=en_servicio simultaneamente.",
-    "Persistencia atomica en <base_path>/recetas.json (un archivo por proyecto).",
-    "Tras crear/actualizar/eliminar/cambiar_estado publica el evento canonico correspondiente."
+    "No hay duplicados activos: dos recetas no pueden tener el mismo nombre normalizado (lowercase + trim) en estado_operativo=en_servicio simultaneamente.",
+    "Persistencia atomica en <base_path>/recetas.json (un archivo por proyecto, via filesystem).",
+    "Tras crear/actualizar/eliminar/cambiar_estado publica el evento canonico correspondiente del subsistema."
   ],
 
   "no_garantiza": [
@@ -21,9 +21,36 @@
     "Sugerencias culinarias — agentes recipe-curator/researcher/chef-advisor."
   ],
 
-  "estado_interno": {
-    "_descripcion": "Cache no persistido del modulo. Se reconstruye al cargar.",
-    "writeQueues": "Map<project_id, Promise> — serializa escrituras al recetas.json del proyecto. El runtime gestiona la cola."
+  "estado_persistente": {
+    "_descripcion": "El unico estado del modulo vive en disco. Estructura del recetas.json del proyecto.",
+    "ubicacion": "<base_path>/recetas.json",
+    "shape": {
+      "_version":              "string ('1.0')",
+      "_updated_at":           "ISO 8601",
+      "recetas":               "array de Receta",
+      "ingredientes_catalogo": "array de IngredienteCatalogado"
+    },
+    "shape_receta": {
+      "id":                "uuid v4",
+      "nombre":            "string trim",
+      "descripcion":       "string | null",
+      "ingredientes":      "array de { nombre, cantidad, unidad, notas? }",
+      "instrucciones":     "array de string (pasos)",
+      "porciones":         "number | null",
+      "tiempo_min":        "number | null",
+      "dificultad":        "number 1-10 | null",
+      "categorias":        "array de string",
+      "etiquetas":         "array de string",
+      "estado_operativo":  "borrador | en_servicio | archivada",
+      "fuente":            "string ('manual' por defecto)",
+      "notas":             "string | null",
+      "created_at":        "ISO 8601",
+      "updated_at":        "ISO 8601",
+      "version":           "number (1 al crear, +1 por update)",
+      "history":           "array de snapshots de versiones anteriores",
+      "incompleta":        "boolean (true si campos_pendientes.length > 0)",
+      "campos_pendientes": "array de [ingredientes,porciones,instrucciones] vacios"
+    }
   },
 
   "operaciones": {
@@ -33,23 +60,52 @@
 
       "pseudocodigo": [
         "async crear(input):",
-        "  if (input.project_id is empty) return INVALID_INPUT('project_id required')",
-        "  if (input.nombre is empty)     return INVALID_INPUT('nombre required')",
         "",
-        "  base_path = await resolveBasePath(input.project_id)",
-        "  store     = (await publishAndWait('fs.read.request', { path: base_path + '/recetas.json' })) || { _version: '1.0', recetas: [], ingredientes_catalogo: [] }",
+        "  // 1. Validacion minima",
+        "  if (input.project_id is empty) return INVALID_INPUT { field: 'project_id' }",
+        "  if (input.nombre is empty)     return INVALID_INPUT { field: 'nombre' }",
         "",
-        "  // regla del dominio: no duplicado activo",
-        "  if (store.recetas.find(r => r.nombre.toLowerCase().trim() === input.nombre.toLowerCase().trim() && r.estado_operativo === 'en_servicio')):",
-        "    return ALREADY_EXISTS with details { existing_id }",
+        "  // 2. Resolver base_path del proyecto.",
+        "  //    Publicas project.get.request, esperas project.get.response correlacionada por request_id.",
+        "  //    Si no responde en 5s → UPSTREAM_TIMEOUT.",
+        "  base_path = await publishAndWait('project.get.request', { project_id: input.project_id })",
         "",
-        "  // construir la receta canonica",
+        "  // 3. Leer el store (recetas.json del proyecto).",
+        "  //    Publicas fs.read.request con path = base_path + '/recetas.json'.",
+        "  //    Si status 404 → el archivo no existe → store vacio canonico.",
+        "  raw = await publishAndWait('fs.read.request', { path: base_path + '/recetas.json' })",
+        "  store = raw.status === 404",
+        "    ? { _version: '1.0', _updated_at: nowISO(), recetas: [], ingredientes_catalogo: [] }",
+        "    : JSON.parse(raw.content)",
+        "",
+        "  // 4. Regla del dominio: no duplicado activo.",
+        "  //    Buscas si existe en store.recetas alguna con nombre normalizado igual",
+        "  //    (lowercase + trim) Y estado_operativo === 'en_servicio'.",
+        "  duplicado = store.recetas.find(r =>",
+        "    r.nombre.toLowerCase().trim() === input.nombre.toLowerCase().trim()",
+        "    && r.estado_operativo === 'en_servicio')",
+        "  if (duplicado) return ALREADY_EXISTS with details { existing_id: duplicado.id }",
+        "",
+        "  // 5. Construir la receta canonica.",
+        "  //    TU (LLM) normalizas input.ingredientes a array canonico [{nombre, cantidad, unidad, notas?}].",
+        "  //    Acepta tres formas de entrada:",
+        "  //      a) string libre ('2 cucharadas de aceite') → parseas a un solo ingrediente con cantidad+unidad+nombre.",
+        "  //      b) array de strings (['patatas','huevos']) → cada uno como { nombre, cantidad: null, unidad: null }.",
+        "  //      c) array de objetos → mapeas sinonimos: name→nombre, quantity→cantidad, unit→unidad, notes→notas.",
+        "  //    Filtras al final los items sin nombre.",
+        "  //",
+        "  //    TU (LLM) normalizas input.instrucciones:",
+        "  //      - si es string, splitea por nueva linea o por '. ' (punto+espacio). Cada trozo es un paso.",
+        "  //      - si es array, trimea cada string y filtra los vacios.",
+        "  ingredientes_norm  = <tu normalizas input.ingredientes segun reglas arriba>",
+        "  instrucciones_norm = <tu normalizas input.instrucciones segun reglas arriba>",
+        "",
         "  receta = {",
         "    id:                uuid(),",
         "    nombre:            input.nombre.trim(),",
         "    descripcion:       input.descripcion || null,",
-        "    ingredientes:      normalizarIngredientes(input.ingredientes),",
-        "    instrucciones:     normalizarInstrucciones(input.instrucciones),",
+        "    ingredientes:      ingredientes_norm,",
+        "    instrucciones:     instrucciones_norm,",
         "    porciones:         input.porciones ?? null,",
         "    tiempo_min:        input.tiempo_min ?? null,",
         "    dificultad:        input.dificultad ?? null,",
@@ -62,16 +118,29 @@
         "    version:           1,",
         "    history:           []",
         "  }",
-        "  receta.campos_pendientes = camposPendientes(receta)",
+        "",
+        "  // 6. Calcular completitud + estado_operativo inicial.",
+        "  //    campos_pendientes = los de ['ingredientes', 'porciones', 'instrucciones'] que esten vacios",
+        "  //    (null, array vacio, o string vacio).",
+        "  receta.campos_pendientes = [campos de {ingredientes,porciones,instrucciones} en receta que esten vacios]",
         "  receta.incompleta        = receta.campos_pendientes.length > 0",
         "  receta.estado_operativo  = receta.incompleta ? 'borrador' : 'en_servicio'",
         "",
-        "  // persistir",
+        "  // 7. Anyadir al store + actualizar timestamp",
         "  store.recetas.push(receta)",
         "  store._updated_at = nowISO()",
-        "  await publishAndWait('fs.write.request', { path: base_path + '/recetas.json', content: JSON.stringify(store, null, 2) })",
         "",
-        "  // publicar evento canonico (el runtime enriquece con project_id, user_id, correlation_id, timestamp)",
+        "  // 8. Persistir atomicamente.",
+        "  //    fs.write hace escritura atomica (tempfile + rename) end-to-end.",
+        "  await publishAndWait('fs.write.request', {",
+        "    path: base_path + '/recetas.json',",
+        "    content: JSON.stringify(store, null, 2),",
+        "    encoding: 'utf-8'",
+        "  })",
+        "",
+        "  // 9. Publicar evento canonico del subsistema-recetario.",
+        "  //    Los campos project_id, user_id, correlation_id, timestamp se enriquecen automaticamente",
+        "  //    segun payload_canonico_de_eventos del blueprint padre (modulo-base).",
         "  publish('receta.creada', {",
         "    id: receta.id,",
         "    nombre: receta.nombre,",
@@ -81,24 +150,24 @@
         "    campos_pendientes: receta.campos_pendientes",
         "  })",
         "",
-        "  return 201 { id, nombre, status: 'creada', incompleta, campos_pendientes, version: 1 }"
+        "  // 10. Responder al caller con shape canonico { status, data }",
+        "  return {",
+        "    status: 201,",
+        "    data: {",
+        "      id: receta.id, nombre: receta.nombre, status: 'creada',",
+        "      incompleta: receta.incompleta, campos_pendientes: receta.campos_pendientes,",
+        "      version: 1",
+        "    }",
+        "  }"
       ],
 
       "reglas_clave": [
         "No duplicado activo: nombre normalizado (toLowerCase + trim) + estado_operativo=en_servicio.",
-        "estado_operativo inicial = borrador si faltan campos minimos, en_servicio si no.",
-        "publish receta.creada SOLO si la persistencia tuvo exito (await publishAndWait completa OK)."
+        "estado_operativo inicial = 'borrador' si faltan campos minimos, 'en_servicio' si no.",
+        "publish receta.creada SOLO si la persistencia (paso 8) tuvo exito. Si falla, devuelve UPSTREAM_TIMEOUT/UNREACHABLE sin publicar el evento."
       ],
 
-      "primitivas_que_uso": ["resolveBasePath", "fs.read.request", "fs.write.request", "publish"],
-
-      "helpers_del_dominio": [
-        "normalizarIngredientes(input)   — array canonico de { nombre, cantidad, unidad, notas? }. Acepta string libre, array de strings, array de objetos.",
-        "normalizarInstrucciones(input)  — array de strings. Splitea string por nueva linea o punto.",
-        "camposPendientes(receta)        — array de [ingredientes,porciones,instrucciones] que estan vacios/null/array-vacio."
-      ],
-
-      "errores_posibles": ["INVALID_INPUT", "ALREADY_EXISTS", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
+      "errores_posibles": ["INVALID_INPUT", "ALREADY_EXISTS", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
     }
 
   }

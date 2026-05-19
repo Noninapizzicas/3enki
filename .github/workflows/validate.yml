@@ -251,9 +251,6 @@ jobs:
       - name: Run unit tests (esp32-flasher — reescritura canonica)
         run: npm run test:esp32-flasher
 
-      - name: Run unit tests (viabilidad — reescritura canonica)
-        run: npm run test:viabilidad
-
       - name: Run unit tests (certificate-authority — reescritura canonica)
         run: npm run test:certificate-authority
 

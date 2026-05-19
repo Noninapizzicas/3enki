@@ -91,7 +91,6 @@
     "test:pizzepos__variaciones": "node tests/unit/pizzepos__variaciones.test.js",
     "test:pizzepos__cuentas-canales": "node tests/unit/pizzepos__cuentas-canales.test.js",
     "test:esp32-flasher": "node tests/unit/esp32-flasher.test.js",
-    "test:viabilidad": "node tests/unit/viabilidad.test.js",
     "test:certificate-authority": "node tests/unit/certificate-authority.test.js",
     "test:security-p2p": "node tests/unit/security-p2p.test.js",
     "test:dashboard": "node tests/unit/dashboard.test.js",

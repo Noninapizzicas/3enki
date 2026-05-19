@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/mercadona-api/mercadona.producto.obtener.response.schema.json",
+  "title": "mercadona.producto.obtener.response — payload schema",
+  "description": "Response success correlacionada por request_id. Payload del evento mercadona.producto.obtener.response.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "data"],
+  "properties": {
+    "status":         { "type": "integer", "const": 200 },
+    "data":           { "$ref": "_common.schema.json#/$defs/producto" },
+    "request_id":     { "$ref": "_common.schema.json#/$defs/request_id" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" },
+    "timestamp":      { "$ref": "_common.schema.json#/$defs/timestamp" }
+  }
+}

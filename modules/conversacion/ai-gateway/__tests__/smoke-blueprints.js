@@ -21,14 +21,14 @@ const path = require('path');
 const Mod = require('../index.js');
 
 // ---------- Mock moduleLoader con un modulo blueprint-driven ----------
-const blueprintDir = path.resolve(__dirname, '..', '..', '..', '_recetas-blueprint');
-// El blueprint declara target_page_id="recetas" (reemplaza la UX del modulo
-// recetas legacy en el chat). El modulo recetas legacy puede seguir cargado
-// pero el LLM no ve sus tools cuando el chat opera en page_id="recetas".
+const blueprintDir = path.resolve(__dirname, '..', '..', '..', 'pizzepos', 'recetas');
+// El blueprint declara target_page_id="recetas". El modulo recetas legacy
+// fue eliminado (los precios polifuncionales ya no existen); este blueprint
+// es la unica via del LLM hacia el dominio recetas via bus.publish/publishAndWait.
 const fakeModules = new Map([
-  ['_recetas-blueprint', {
+  ['recetas', {
     manifest: {
-      name: '_recetas-blueprint',
+      name: 'recetas',
       blueprint_driven: true,
       blueprint_path: 'recetas.blueprint.json',
       blueprint_parent_path: 'subsistema-recetario.modulo-base.blueprint.json',
@@ -98,7 +98,7 @@ async function main() {
   // ============================================================
   // [1] _loadBlueprints descubre y carga padre + hijo
   // ============================================================
-  console.log('\n[1] _loadBlueprints descubre _recetas-blueprint con target_page_id="recetas"');
+  console.log('\n[1] _loadBlueprints descubre modules/pizzepos/recetas con target_page_id="recetas"');
   mod._loadBlueprints();
   assert(mod.blueprintModules.size === 1, 'blueprintModules tiene 1 entrada');
   assert(mod.blueprintModules.has('recetas'), 'indexado por target_page_id="recetas"');

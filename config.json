@@ -107,7 +107,8 @@
       "tarifas",
       "recetas",
       "escandallo",
-      "viabilidad"
+      "viabilidad",
+      "mercadona-api"
     ],
     "disabled": [
       "conversation-manager",

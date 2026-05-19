@@ -1,0 +1,320 @@
+{
+  "_doc": "Blueprint del modulo viabilidad. Hijo de subsistema-recetario.modulo-base. Evaluador previo: dado una receta o propuesta, invoca escandallo para el coste y aplica reglas de food cost para emitir veredicto economico (viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo). Persiste expediente por evaluacion como audit trail (el chef quiere recordar 'evalue X con PVP Y y no salia rentable'). Decisiones cualitativas (diferenciacion comercial, estilo, encaje en carta) NO son del modulo — las decide el LLM principal en el chat tras leer el veredicto.",
+
+  "id": "viabilidad",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "version": "blueprint-1.0.0",
+  "language": "es",
+
+  "rol": "Evaluador economico previo del subsistema-recetario. Combina coste de escandallo + PVP objetivo (o PVP sugerido si no se pasa) para emitir veredicto. Persiste expediente por evaluacion en viabilidad.json del proyecto.",
+
+  "garantiza": [
+    "Cada evaluacion produce expediente persistido en viabilidad.json con id, fecha, input (receta_id o propuesta), coste, PVP, food_cost_pct, veredicto, advertencias.",
+    "Veredicto canonico del enum: viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo.",
+    "Reglas de food cost (sobre PVP sin IVA): <25% → viable; 25-35% → viable_con_advertencias (margen razonable); 35-45% → viable_con_advertencias (margen apretado, alerta_margen_critico); >=45% → no_viable_economicamente.",
+    "Si no se pasa PVP objetivo, el blueprint calcula pvp_sugerido para food cost objetivo (default 30%) y emite veredicto 'sin_pvp_objetivo' indicando que el veredicto es orientativo.",
+    "Cada evaluacion publica viabilidad.evaluacion.completada (evento de dominio canonico) con expediente_id + project_id + correlation_id + veredicto + coste_total + pvp_efectivo + food_cost_pct.",
+    "Descartar un expediente publica viabilidad.evaluacion.descartada y marca estado='descartado' con motivo opcional. NO se borra del archivo (audit trail).",
+    "Persistencia atomica via fs.write.request — el blueprint NO toca disco directamente."
+  ],
+
+  "no_garantiza": [
+    "Coste real preciso — depende de escandallo y mercadona-api (precios orientativos).",
+    "Veredicto cualitativo (diferenciacion en mercado, encaje en carta) — eso lo razona el LLM principal en el chat.",
+    "Re-evaluacion automatica cuando los precios suben — un expediente es snapshot del momento. Si se quiere re-evaluar, se invoca evaluar de nuevo.",
+    "Umbrales de food cost universales — los defaults (25/35/45) son razonables en hosteleria espanola pero pueden ajustarse por proyecto en el futuro (trabajo_pendiente)."
+  ],
+
+  "estado_persistente": {
+    "_descripcion": "Archivo unico por proyecto con la lista de expedientes de evaluacion.",
+    "path_relativo": "/viabilidad.json",
+    "shape": {
+      "_version": "1.0",
+      "_updated_at": "ISO 8601",
+      "expedientes": [
+        {
+          "id": "uuid",
+          "fecha_evaluacion": "ISO 8601",
+          "estado": "activo|descartado",
+          "motivo_descarte": "string|null",
+          "fecha_descarte": "ISO 8601|null",
+          "input": {
+            "receta_id": "uuid|null (si era propuesta)",
+            "nombre": "string (snapshot del nombre)",
+            "porciones": "number",
+            "ingredientes": "array (snapshot de ingredientes evaluados)",
+            "pvp_objetivo": "number|null"
+          },
+          "calculo": {
+            "coste_total": "number",
+            "coste_porcion": "number",
+            "ingredientes_detalle": "array (de escandallo)",
+            "ingredientes_sin_precio": "array",
+            "postcode_usado": "string"
+          },
+          "pvp_efectivo": "number (el pvp_objetivo o el sugerido)",
+          "pvp_sugerido": "number (si no habia pvp_objetivo, este es el calculado para food cost 30%)",
+          "food_cost_pct": "number 0-100",
+          "margen_porcion": "number",
+          "veredicto": "viable|viable_con_advertencias|no_viable_economicamente|sin_pvp_objetivo",
+          "advertencias": "array de strings (alerta_margen_critico, ingredientes_sin_precio, etc.)"
+        }
+      ]
+    }
+  },
+
+  "eventos_publicados": [
+    "viabilidad.evaluar.response",
+    "viabilidad.evaluar.failed",
+    "viabilidad.obtener.response",
+    "viabilidad.obtener.failed",
+    "viabilidad.listar.response",
+    "viabilidad.listar.failed",
+    "viabilidad.descartar.response",
+    "viabilidad.descartar.failed",
+    "viabilidad.evaluacion.completada",
+    "viabilidad.evaluacion.descartada"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "operaciones": {
+    "evaluar": {
+      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, user_id?, receta_id? (uuid, alternativa a ingredientes+porciones), nombre? (string, requerido si propuesta), ingredientes? (array {nombre, cantidad, unidad}, alternativa a receta_id), porciones? (number > 0, requerido si propuesta), pvp_objetivo? (number > 0, opcional), food_cost_objetivo_pct? (number 0-100, default 30) }",
+      "pseudocodigo": [
+        "async evaluar(input):",
+        "  // 1. Validacion minima.",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.receta_id && (!Array.isArray(input.ingredientes) || !input.porciones || !input.nombre)) {",
+        "    return INVALID_INPUT { hint: 'pasar receta_id O { nombre, ingredientes, porciones }' }",
+        "  }",
+        "  if (input.pvp_objetivo !== undefined && input.pvp_objetivo <= 0) {",
+        "    return INVALID_INPUT { field: 'pvp_objetivo', hint: 'debe ser > 0 si se pasa' }",
+        "  }",
+        "  food_cost_obj = (input.food_cost_objetivo_pct >= 1 && input.food_cost_objetivo_pct < 100) ? input.food_cost_objetivo_pct : 30",
+        "",
+        "  // 2. Obtener coste via escandallo (TU delegas, no calculas el mismo).",
+        "  escandallo_input = input.receta_id",
+        "    ? { project_id: input.project_id, receta_id: input.receta_id }",
+        "    : { project_id: input.project_id, ingredientes: input.ingredientes, porciones: input.porciones }",
+        "  esc_resp = await publishAndWait('escandallo.calcular.request', {",
+        "    ...escandallo_input, request_id: uuid(), correlation_id: input.correlation_id",
+        "  })",
+        "  if (esc_resp.status >= 400) return esc_resp  // propagar tal cual",
+        "  calculo = esc_resp.data  // { coste_total, coste_porcion, porciones, ingredientes_detalle, ingredientes_sin_precio, postcode_usado, fecha_calculo }",
+        "",
+        "  // 3. Resolver pvp_efectivo + pvp_sugerido + food_cost_pct.",
+        "  pvp_sugerido = calculo.coste_porcion > 0 ? round(calculo.coste_porcion / (food_cost_obj / 100), 2) : null",
+        "  if (input.pvp_objetivo) {",
+        "    pvp_efectivo = input.pvp_objetivo",
+        "    food_cost_pct = round((calculo.coste_porcion / pvp_efectivo) * 100, 1)",
+        "  } else {",
+        "    pvp_efectivo = pvp_sugerido  // operativo para el calculo, no decisional",
+        "    food_cost_pct = food_cost_obj  // por construccion",
+        "  }",
+        "  margen_porcion = round(pvp_efectivo - calculo.coste_porcion, 2)",
+        "",
+        "  // 4. Veredicto canonico.",
+        "  advertencias = []",
+        "  if (calculo.ingredientes_sin_precio.length > 0) {",
+        "    advertencias.push('ingredientes_sin_precio: ' + calculo.ingredientes_sin_precio.join(', '))",
+        "  }",
+        "  veredicto = null",
+        "  if (!input.pvp_objetivo) {",
+        "    veredicto = 'sin_pvp_objetivo'",
+        "    advertencias.push('veredicto_orientativo: se uso pvp_sugerido al ' + food_cost_obj + '% food cost')",
+        "  } else if (food_cost_pct < 25) {",
+        "    veredicto = 'viable'",
+        "  } else if (food_cost_pct < 35) {",
+        "    veredicto = 'viable_con_advertencias'",
+        "  } else if (food_cost_pct < 45) {",
+        "    veredicto = 'viable_con_advertencias'",
+        "    advertencias.push('alerta_margen_critico: food cost ' + food_cost_pct + '% por encima de 35%')",
+        "  } else {",
+        "    veredicto = 'no_viable_economicamente'",
+        "  }",
+        "",
+        "  // 5. Construir expediente.",
+        "  expediente = {",
+        "    id: uuid(),",
+        "    fecha_evaluacion: nowISO(),",
+        "    estado: 'activo',",
+        "    motivo_descarte: null,",
+        "    fecha_descarte: null,",
+        "    input: {",
+        "      receta_id: input.receta_id || null,",
+        "      nombre: input.nombre || <leer nombre de la receta cargada en paso 2 si no se paso>,",
+        "      porciones: calculo.porciones,",
+        "      ingredientes: <ingredientes evaluados — snapshot>,",
+        "      pvp_objetivo: input.pvp_objetivo || null",
+        "    },",
+        "    calculo: {",
+        "      coste_total: calculo.coste_total,",
+        "      coste_porcion: calculo.coste_porcion,",
+        "      ingredientes_detalle: calculo.ingredientes_detalle,",
+        "      ingredientes_sin_precio: calculo.ingredientes_sin_precio,",
+        "      postcode_usado: calculo.postcode_usado",
+        "    },",
+        "    pvp_efectivo: pvp_efectivo,",
+        "    pvp_sugerido: pvp_sugerido,",
+        "    food_cost_pct: food_cost_pct,",
+        "    margen_porcion: margen_porcion,",
+        "    veredicto: veredicto,",
+        "    advertencias: advertencias",
+        "  }",
+        "",
+        "  // 6. Leer + append + write atomico de viabilidad.json.",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/viabilidad.json' })",
+        "  store = raw.status === 404",
+        "    ? { _version: '1.0', _updated_at: nowISO(), expedientes: [] }",
+        "    : JSON.parse(raw.content)",
+        "  store.expedientes.push(expediente)",
+        "  store._updated_at = nowISO()",
+        "  write_resp = await publishAndWait('fs.write.request', {",
+        "    project_id: input.project_id, path: '/viabilidad.json',",
+        "    content: JSON.stringify(store, null, 2), encoding: 'utf-8', atomic: true",
+        "  })",
+        "  if (write_resp.status >= 400) return write_resp",
+        "",
+        "  // 7. Publicar evento de dominio + response al caller.",
+        "  await publish('viabilidad.evaluacion.completada', {",
+        "    project_id: input.project_id, expediente_id: expediente.id,",
+        "    receta_id: expediente.input.receta_id, nombre: expediente.input.nombre,",
+        "    veredicto: veredicto, coste_total: calculo.coste_total,",
+        "    coste_porcion: calculo.coste_porcion, pvp_efectivo: pvp_efectivo,",
+        "    food_cost_pct: food_cost_pct, margen_porcion: margen_porcion,",
+        "    correlation_id: input.correlation_id, timestamp: nowISO()",
+        "  })",
+        "  return { status: 201, data: expediente }"
+      ],
+      "reglas_clave": [
+        "Coste lo provee escandallo via publishAndWait — viabilidad NO lo calcula el mismo.",
+        "Veredicto del enum cerrado — NO inventar etiquetas nuevas.",
+        "Umbrales canonicos: <25 viable, 25-35 viable_con_advertencias, 35-45 viable_con_advertencias+alerta, >=45 no_viable.",
+        "Si no hay pvp_objetivo, el veredicto es 'sin_pvp_objetivo' (informativo) y se calcula pvp_sugerido para food cost objetivo.",
+        "advertencias acumula motivos legibles — ingredientes_sin_precio se hereda de escandallo.",
+        "expediente.input.ingredientes es snapshot — preserva los datos del momento aunque la receta cambie despues."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT — project_id ausente, o ni receta_id ni propuesta completa, o pvp_objetivo <= 0.",
+        "RESOURCE_NOT_FOUND — receta_id no existe (heredado de escandallo→recetas).",
+        "PRECONDITION_FAILED — receta sin ingredientes (heredado de escandallo).",
+        "UPSTREAM_TIMEOUT / UPSTREAM_UNREACHABLE / UPSTREAM_INVALID_RESPONSE — upstream (escandallo, fs, recetas) no responde correctamente."
+      ]
+    },
+
+    "obtener": {
+      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, expediente_id (uuid, req) }",
+      "pseudocodigo": [
+        "async obtener(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.expediente_id) return INVALID_INPUT { field: 'expediente_id' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/viabilidad.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'expediente' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "  expediente = store.expedientes.find(e => e.id === input.expediente_id)",
+        "  if (!expediente) return RESOURCE_NOT_FOUND { entity_type: 'expediente', id: input.expediente_id }",
+        "  return { status: 200, data: expediente }"
+      ],
+      "reglas_clave": [
+        "Lectura pura — no muta el store.",
+        "Devuelve expediente tanto activo como descartado."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "listar": {
+      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, estado? ('activo'|'descartado'|'todos', default 'activo'), veredicto? (filtra por veredicto canonico), receta_id? (filtra evaluaciones de una receta concreta) }",
+      "pseudocodigo": [
+        "async listar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/viabilidad.json' })",
+        "  if (raw.status === 404) return { status: 200, data: [] }  // sin expedientes aun",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  estado_filtro = input.estado || 'activo'",
+        "  resultados = store.expedientes",
+        "  if (estado_filtro !== 'todos') resultados = resultados.filter(e => e.estado === estado_filtro)",
+        "  if (input.veredicto) resultados = resultados.filter(e => e.veredicto === input.veredicto)",
+        "  if (input.receta_id) resultados = resultados.filter(e => e.input.receta_id === input.receta_id)",
+        "",
+        "  // Ordenar por fecha_evaluacion descendente (mas recientes primero).",
+        "  resultados.sort((a, b) => b.fecha_evaluacion.localeCompare(a.fecha_evaluacion))",
+        "",
+        "  return { status: 200, data: resultados }"
+      ],
+      "reglas_clave": [
+        "Lectura pura.",
+        "Default estado='activo' (oculta descartados salvo que se pidan explicitamente).",
+        "Sin paginacion v1 — el catalogo de evaluaciones por proyecto es del orden de docenas."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
+    },
+
+    "descartar": {
+      "input": "{ project_id (uuid, req), request_id (uuid, req), correlation_id?, user_id?, expediente_id (uuid, req), motivo? (string, opcional pero recomendado) }",
+      "pseudocodigo": [
+        "async descartar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.expediente_id) return INVALID_INPUT { field: 'expediente_id' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/viabilidad.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'expediente' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "  idx = store.expedientes.findIndex(e => e.id === input.expediente_id)",
+        "  if (idx < 0) return RESOURCE_NOT_FOUND { entity_type: 'expediente', id: input.expediente_id }",
+        "",
+        "  expediente = store.expedientes[idx]",
+        "  if (expediente.estado === 'descartado') {",
+        "    return CONFLICT_STATE { hint: 'expediente ya descartado' }",
+        "  }",
+        "  expediente.estado = 'descartado'",
+        "  expediente.motivo_descarte = input.motivo || 'descartado por el usuario'",
+        "  expediente.fecha_descarte = nowISO()",
+        "  store._updated_at = nowISO()",
+        "",
+        "  write_resp = await publishAndWait('fs.write.request', {",
+        "    project_id: input.project_id, path: '/viabilidad.json',",
+        "    content: JSON.stringify(store, null, 2), encoding: 'utf-8', atomic: true",
+        "  })",
+        "  if (write_resp.status >= 400) return write_resp",
+        "",
+        "  await publish('viabilidad.evaluacion.descartada', {",
+        "    project_id: input.project_id, expediente_id: expediente.id,",
+        "    receta_id: expediente.input.receta_id, motivo: expediente.motivo_descarte,",
+        "    correlation_id: input.correlation_id, timestamp: nowISO()",
+        "  })",
+        "  return { status: 200, data: expediente }"
+      ],
+      "reglas_clave": [
+        "Soft delete — el expediente sigue accesible (history).",
+        "Doble descarte → CONFLICT_STATE (no idempotente, es transicion controlada).",
+        "Motivo opcional pero recomendado — mejora trazabilidad del por que."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    }
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "umbrales_food_cost_por_proyecto",
+      "estado": "abierto",
+      "descripcion": "Hoy los umbrales (25/35/45) son hardcoded en el blueprint. Hosteleria espanola estandar. Algunos proyectos (alta cocina, pizzeria gourmet) pueden tener objetivos distintos. Cuando aparezca el caso, mover los umbrales a configuracion por proyecto (project.metadata o un archivo viabilidad-config.json)."
+    },
+    {
+      "id": "re_evaluar_expediente_existente",
+      "estado": "abierto",
+      "descripcion": "Operacion 'evaluar' siempre crea expediente nuevo aunque sea la misma receta. No hay 'volver a evaluar con precios actuales'. Si se quiere, se invoca evaluar otra vez y queda historial paralelo. Posible v2: viabilidad.reevaluar(expediente_id) que reusa el input original con precios frescos."
+    },
+    {
+      "id": "operacion_simular_precio_o_ingrediente_impacto",
+      "estado": "abierto",
+      "descripcion": "Las operaciones simular.precio e ingrediente.impacto del legacy escandallo encajan mejor en viabilidad. Pendientes hasta tener demanda real."
+    }
+  ]
+}

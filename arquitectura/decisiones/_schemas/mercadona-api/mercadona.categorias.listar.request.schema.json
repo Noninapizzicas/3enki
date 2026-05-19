@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/mercadona-api/mercadona.categorias.listar.request.schema.json",
+  "title": "mercadona.categorias.listar.request — payload schema",
+  "description": "Request para listar categorias de Mercadona. Sin parent_id devuelve top-level; con parent_id devuelve esa categoria con sus subcategorias + productos.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "parent_id":      { "$ref": "_common.schema.json#/$defs/categoria_id" },
+    "postcode":       { "$ref": "_common.schema.json#/$defs/postcode" },
+    "project_id":     { "$ref": "_common.schema.json#/$defs/project_id" },
+    "request_id":     { "$ref": "_common.schema.json#/$defs/request_id" },
+    "correlation_id": { "$ref": "_common.schema.json#/$defs/correlation_id" }
+  }
+}

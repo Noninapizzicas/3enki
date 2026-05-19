@@ -1,0 +1,13 @@
+{
+  "_doc": "Manifest del modulo viabilidad. NO tiene index.js — el LLM ES el runtime y ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Activable via page_id='viabilidad'. Sustituye al modulo viabilidad v1.0.0 legacy JS (borrado en este commit). 4 operaciones (evaluar, obtener, listar, descartar). Persistencia: expedientes de evaluacion en data/projects/{slug}/viabilidad.json (audit trail). Combina escandallo (coste) + PVP objetivo para emitir veredicto economico canonico.",
+
+  "name": "viabilidad",
+  "version": "1.0.0",
+  "description": "Modulo viabilidad en modo blueprint-driven. Evaluador economico previo: recibe receta o propuesta + PVP objetivo opcional, invoca escandallo para el coste, aplica reglas de food cost para emitir veredicto (viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo). Persiste expediente por evaluacion como audit trail.",
+  "language": "es",
+
+  "blueprint_driven": true,
+  "blueprint_path": "viabilidad.blueprint.json",
+  "blueprint_parent_path": "subsistema-recetario.modulo-base.blueprint.json",
+  "target_page_id": "viabilidad"
+}

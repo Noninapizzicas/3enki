@@ -282,16 +282,26 @@ class AiGatewayModule extends BaseModule {
       });
       return;
     }
+    // Heuristica de path: si empieza con 'arquitectura/' o 'modules/', es
+    // relativo al repo root (padre unico compartido). Si no, relativo al
+    // directorio del modulo (legacy: padre copiado dentro del modulo).
+    const REPO_ROOT = path.resolve(__dirname, '../../..');
+    const resolveBlueprintPath = (modPath, bpPath) => {
+      if (bpPath && (bpPath.startsWith('arquitectura/') || bpPath.startsWith('modules/'))) {
+        return path.resolve(REPO_ROOT, bpPath);
+      }
+      return path.resolve(modPath, bpPath);
+    };
     for (const [name, mod] of this.moduleLoader.loadedModules) {
       const m = mod?.manifest;
       if (!m || m.blueprint_driven !== true) continue;
       const target = m.target_page_id || name;
       try {
-        const childPath = path.resolve(mod.path, m.blueprint_path);
+        const childPath = resolveBlueprintPath(mod.path, m.blueprint_path);
         const child = JSON.parse(fs.readFileSync(childPath, 'utf8'));
         let parent = null;
         if (m.blueprint_parent_path) {
-          const parentPath = path.resolve(mod.path, m.blueprint_parent_path);
+          const parentPath = resolveBlueprintPath(mod.path, m.blueprint_parent_path);
           parent = JSON.parse(fs.readFileSync(parentPath, 'utf8'));
         }
         const systemPrompt = this._composeBlueprintSystemPrompt(parent, child);

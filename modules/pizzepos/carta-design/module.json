@@ -1,16 +1,13 @@
 {
   "_doc": "Manifest del modulo carta-design. Blueprint-driven. 6 operaciones de gestion de designs (HTML) y profiles (estilos). NO genera HTML — eso lo hace un agente. 5 profiles built-in en design-profiles/ (NO modificables). Custom profiles + designs en data/projects/{slug}/carta-design/.",
-
   "name": "carta-design",
   "version": "1.0.0",
   "description": "Modulo carta-design en modo blueprint-driven. Estudio de diseno de cartas impresas. Gestiona archivos: cargar carta para disenar, guardar HTML generado, biblioteca de profiles reutilizables (built-in + custom).",
   "language": "es",
-
   "blueprint_driven": true,
   "blueprint_path": "carta-design.blueprint.json",
-  "blueprint_parent_path": "subsistema-recetario.modulo-base.blueprint.json",
+  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
   "target_page_id": "carta-design",
-
   "config": {
     "persistence": {
       "pattern": "json-files-per-project-plus-builtin-resources",

@@ -1,13 +1,11 @@
 {
   "_doc": "Manifest del modulo tecnicas. NO tiene index.js — el LLM ES el runtime y ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Activable via page_id='tecnicas'. Sustituye al modulo tecnicas v1.0.0 legacy JS (borrado en este commit). 5 operaciones (codificar, obtener, listar, actualizar, parametros). Persistencia: tecnicas.json del proyecto con history. Sin consumidores externos del legacy (no hay agentes con tools tecnicas.*).",
-
   "name": "tecnicas",
   "version": "1.0.0",
   "description": "Modulo tecnicas en modo blueprint-driven. Libreria de tecnicas culinarias codificadas del proyecto (esferificacion, confitar, marinada, ahumado, etc.) con parametros tecnicos. Aggregate root con persistencia + history en data/projects/{slug}/tecnicas.json. Sin razonamiento de dominio mas alla de normalizar inputs en lenguaje natural y prevenir duplicados.",
   "language": "es",
-
   "blueprint_driven": true,
   "blueprint_path": "tecnicas.blueprint.json",
-  "blueprint_parent_path": "subsistema-recetario.modulo-base.blueprint.json",
+  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
   "target_page_id": "tecnicas"
 }

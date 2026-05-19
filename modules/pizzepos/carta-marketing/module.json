@@ -1,20 +1,19 @@
 {
   "_doc": "Manifest del modulo carta-marketing. Blueprint-driven. 4 operaciones: get_perfil, update_perfil, completar_onboarding (delega a agente), actividad (stub hasta integrar agent-observer). Persistencia: marca.json del proyecto.",
-
   "name": "carta-marketing",
   "version": "1.0.0",
   "description": "Modulo carta-marketing en modo blueprint-driven. Perfil de marca del proyecto + orquestador de agentes de marketing (copywriter, strategist, brand-keeper, onboarding).",
   "language": "es",
-
   "blueprint_driven": true,
   "blueprint_path": "carta-marketing.blueprint.json",
-  "blueprint_parent_path": "subsistema-recetario.modulo-base.blueprint.json",
+  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
   "target_page_id": "carta-marketing",
-
   "config": {
     "persistence": {
       "pattern": "single-json-per-project",
-      "paths": ["data/projects/{slug}/storage/config/marca.json"],
+      "paths": [
+        "data/projects/{slug}/storage/config/marca.json"
+      ],
       "atomicidad": "fs.write.request atomic:true",
       "concurrencia": "single-writer"
     }

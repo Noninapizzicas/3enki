@@ -1,13 +1,11 @@
 {
   "_doc": "Manifest del modulo recetas. NO tiene index.js — el LLM ES el runtime y ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Activable via page_id='recetas'. Sustituye al modulo recetas v4.0.0 legacy JS (borrado) — cobertura funcional 100% (14 operaciones + 5 eventos de dominio). Ubicacion dentro de modules/pizzepos/ porque recetas es parte del vertical POS pizzepos.",
-
   "name": "recetas",
   "version": "1.0.0",
   "description": "Modulo recetas en modo blueprint-driven. El LLM lee el blueprint (padre + hijo) como system prompt y publica eventos al bus directamente via bus.publish / bus.publishAndWait (las 2 tools universales expuestas por ai-gateway). NO existe codigo JS del modulo.",
   "language": "es",
-
   "blueprint_driven": true,
   "blueprint_path": "recetas.blueprint.json",
-  "blueprint_parent_path": "subsistema-recetario.modulo-base.blueprint.json",
+  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
   "target_page_id": "recetas"
 }

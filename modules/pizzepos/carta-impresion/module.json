@@ -1,16 +1,13 @@
 {
   "_doc": "Manifest del modulo carta-impresion. Blueprint-driven. 3 operaciones (get, generar, save_html). NO genera HTML — delega a agente impresion-architect/builder. Templates built-in en templates/. Persistencia en data/projects/{slug}/cartas-impresion/.",
-
   "name": "carta-impresion",
   "version": "1.0.0",
   "description": "Modulo carta-impresion en modo blueprint-driven. Genera versiones imprimibles de cartas en HTML print-ready delegando al agente impresor.",
   "language": "es",
-
   "blueprint_driven": true,
   "blueprint_path": "carta-impresion.blueprint.json",
-  "blueprint_parent_path": "subsistema-recetario.modulo-base.blueprint.json",
+  "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
   "target_page_id": "carta-impresion",
-
   "config": {
     "persistence": {
       "pattern": "json-html-per-carta",
@@ -18,7 +15,9 @@
         "data/projects/{slug}/cartas-impresion/<carta_id>.html",
         "data/projects/{slug}/cartas-impresion/<carta_id>.meta.json"
       ],
-      "paths_modulo": ["modules/pizzepos/carta-impresion/templates/* (built-in)"],
+      "paths_modulo": [
+        "modules/pizzepos/carta-impresion/templates/* (built-in)"
+      ],
       "atomicidad": "fs.write.request atomic:true",
       "concurrencia": "single-writer"
     }

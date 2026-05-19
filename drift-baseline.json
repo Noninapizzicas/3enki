@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-19T09:37:03.437Z",
-  "total": 1964,
+  "generated_at": "2026-05-19T13:30:04.848Z",
+  "total": 1965,
   "by_validator": {
     "naming": 39,
     "events": 185,
@@ -19,7 +19,7 @@
     "security": 1,
     "testing": 45,
     "multi-tenancy": 217,
-    "documentation": 86,
+    "documentation": 87,
     "versionado": 1,
     "deployment": 4,
     "module-loading": 4,
@@ -27,7 +27,7 @@
     "scheduling": 1
   },
   "by_severity": {
-    "warning": 1793,
+    "warning": 1794,
     "info": 107,
     "error": 92
   },
@@ -219,6 +219,7 @@
     "deployment|drift_install_script_no_ejecutable|scripts/install-linux.sh sin bit ejecutable (chmod +x necesario para usuarios)",
     "deployment|drift_install_script_no_ejecutable|scripts/install-termux.sh sin bit ejecutable (chmod +x necesario para usuarios)",
     "documentation|drift_contrato_sin_validator|agente-blueprint sin validator en _validators/agente-blueprint.validate.js",
+    "documentation|drift_contrato_sin_validator|llm-runtime-discipline sin validator en _validators/llm-runtime-discipline.validate.js",
     "documentation|drift_contrato_sin_validator|project-identity sin validator en _validators/project-identity.validate.js",
     "documentation|drift_contratos_sin_indice_en_claudemd|contrato \"bus-transport\" no aparece referenciado en CLAUDE.md (sesion futura no lo descubrira)",
     "documentation|drift_contratos_sin_indice_en_claudemd|contrato \"deployment\" no aparece referenciado en CLAUDE.md (sesion futura no lo descubrira)",

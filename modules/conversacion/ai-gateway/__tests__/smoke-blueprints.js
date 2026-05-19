@@ -31,7 +31,7 @@ const fakeModules = new Map([
       name: 'recetas',
       blueprint_driven: true,
       blueprint_path: 'recetas.blueprint.json',
-      blueprint_parent_path: 'subsistema-recetario.modulo-base.blueprint.json',
+      blueprint_parent_path: 'arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json',
       target_page_id: 'recetas'
     },
     path: blueprintDir,

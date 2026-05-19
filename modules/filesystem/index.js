@@ -348,6 +348,22 @@ class FilesystemModule extends BaseModule {
     const inputPath = userPath || '/';
     let resolved;
 
+    // Defensa contra paths absolutos del sistema. Antes de esta defensa, un caller
+    // que construia path = base_path + '/archivo.json' (ej: '/opt/enki/data/projects/p1/recetas.json')
+    // hacia que validatePath strip-eara el '/' inicial y resolviera el resto como
+    // sub-path del activeProjectPath — produciendo paths duplicados tipo
+    // /opt/enki/data/projects/p1/opt/enki/data/projects/p1/recetas.json.
+    // Bug observado en la auditoria del piloto blueprint (2026-05-18).
+    // Convencion canonica: paths con leading-slash son relativos al base_path
+    // del proyecto. Si el caller pasa un path absoluto del sistema, es bug.
+    const SYSTEM_PATH_PREFIXES = ['/opt/', '/home/', '/var/', '/usr/', '/etc/', '/tmp/', '/root/', '/srv/', '/mnt/', '/dev/', '/proc/', '/sys/'];
+    if (SYSTEM_PATH_PREFIXES.some(p => inputPath === p.slice(0, -1) || inputPath.startsWith(p))) {
+      const error = new Error(`Absolute system path rejected: '${inputPath}'. Use a project-relative path like '/recetas.json' — filesystem resuelve internamente con el project_id del payload.`);
+      error._code = 'INVALID_INPUT';
+      error._details = { kind: 'absolute_system_path', requested: inputPath };
+      throw error;
+    }
+
     if (inputPath.startsWith('@/') || inputPath === '@') {
       const relativePart = inputPath === '@' ? '' : inputPath.slice(2);
       const normalized = path.normalize(relativePart).replace(/^\/+/, '');

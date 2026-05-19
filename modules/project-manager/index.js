@@ -336,6 +336,16 @@ class ProjectManagerModule extends BaseModule {
   // ==========================================
 
   async _createProject({ name, description = '', metadata = {}, correlation_id, options = {} }) {
+    // Defensa: name obligatorio + no vacio. Sin esta validacion, callers que envian
+    // name=undefined/null/'' producian un directorio fantasma 'undefined/' en disco
+    // (bug observado 2026-05-18 — /opt/enki/data/projects/undefined). Validamos
+    // ANTES de cualquier IO o lookup para fallar barato.
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      throw Object.assign(new Error('name is required and must be a non-empty string'),
+        { _code: 'INVALID_INPUT', _details: { field: 'name', received: typeof name === 'string' ? '(empty)' : typeof name } });
+    }
+    name = name.trim();
+
     if (await this._projectNameExists(name)) {
       throw Object.assign(new Error(`Project with name "${name}" already exists`),
         { _code: 'CONFLICT_STATE', _details: { kind: 'domain', field: 'name' } });

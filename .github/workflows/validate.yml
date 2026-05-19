@@ -164,6 +164,9 @@ jobs:
       - name: Run unit tests (mise-en-place — modulo nuevo del subsistema-recetario)
         run: npm run test:mise-en-place
 
+      - name: Run unit tests (mercadona-api — cliente HTTP no oficial)
+        run: npm run test:mercadona-api
+
       - name: Run unit tests (perifericos — reescritura canonica)
         run: npm run test:perifericos
 

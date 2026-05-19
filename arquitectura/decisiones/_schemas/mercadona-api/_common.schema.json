@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/mercadona-api/_common.schema.json",
+  "title": "mercadona-api — campos compartidos",
+  "description": "Definiciones reusables ($defs) para los schemas de mercadona-api. Referenciadas via $ref desde cada schema concreto.",
+  "$defs": {
+    "correlation_id": {
+      "type": ["string", "null"],
+      "description": "UUID propagado del caller para trazabilidad cross-modulo."
+    },
+    "project_id": {
+      "type": ["string", "null"],
+      "description": "UUID del proyecto que origina la consulta. Null si la consulta no esta ligada a un proyecto."
+    },
+    "request_id": {
+      "type": ["string", "null"],
+      "description": "UUID del request original para correlacionar response con su request."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 del momento en que se publico el evento."
+    },
+    "postcode": {
+      "type": "string",
+      "pattern": "^\\d{5}$",
+      "description": "Codigo postal espanol de 5 digitos. Determina warehouse + precios de Mercadona."
+    },
+    "producto_id": {
+      "type": "string",
+      "pattern": "^\\d+$",
+      "description": "ID numerico del producto en Mercadona (como string para evitar pierdas de precision)."
+    },
+    "categoria_id": {
+      "type": ["string", "null"],
+      "pattern": "^\\d+$",
+      "description": "ID numerico de categoria en Mercadona."
+    },
+    "producto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producto_id", "nombre", "disponible"],
+      "properties": {
+        "producto_id":       { "$ref": "#/$defs/producto_id" },
+        "nombre":            { "type": "string", "minLength": 1 },
+        "marca":             { "type": ["string", "null"] },
+        "formato":           { "type": ["string", "null"], "description": "Formato/packaging del producto (ej. 'paquete 500 g')." },
+        "precio_unidad":     { "type": ["number", "null"], "minimum": 0, "description": "Precio del producto tal cual se vende (paquete, botella, etc.)." },
+        "precio_kg":         { "type": ["number", "null"], "minimum": 0, "description": "Precio por kg si el producto se vende a granel o tiene equivalencia por peso." },
+        "precio_referencia": { "type": ["number", "null"], "minimum": 0, "description": "Precio de referencia (equivalente normalizado segun unidad_referencia)." },
+        "unidad_referencia": { "type": ["string", "null"], "description": "Unidad usada para precio_referencia (ej. 'kg', 'l', '100 g')." },
+        "imagen_url":        { "type": ["string", "null"], "format": "uri" },
+        "categoria_id":      { "$ref": "#/$defs/categoria_id" },
+        "disponible":        { "type": "boolean", "description": "False si Mercadona marca el producto como no publicado en esa zona." }
+      },
+      "description": "Producto normalizado tras parsing del JSON crudo de Mercadona."
+    },
+    "categoria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["categoria_id", "nombre", "subcategorias"],
+      "properties": {
+        "categoria_id":  { "type": "string", "pattern": "^\\d+$" },
+        "nombre":        { "type": "string", "minLength": 1 },
+        "orden":         { "type": ["integer", "null"] },
+        "subcategorias": { "type": "array", "items": { "$ref": "#/$defs/categoria" } },
+        "productos": {
+          "type": "array",
+          "description": "Solo presente cuando se pide categoria con parent_id (hojas con productos).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["producto_id", "nombre"],
+            "properties": {
+              "producto_id": { "$ref": "#/$defs/producto_id" },
+              "nombre":      { "type": "string", "minLength": 1 },
+              "marca":       { "type": ["string", "null"] },
+              "thumbnail":   { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    },
+    "error_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "INVALID_INPUT",
+            "RESOURCE_NOT_FOUND",
+            "RATE_LIMITED",
+            "UPSTREAM_TIMEOUT",
+            "UPSTREAM_UNREACHABLE",
+            "UPSTREAM_INVALID_RESPONSE",
+            "UNKNOWN_ERROR"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1 },
+        "details": { "type": "object" }
+      }
+    }
+  }
+}

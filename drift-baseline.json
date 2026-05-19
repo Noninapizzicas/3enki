@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-18T23:48:38.610Z",
-  "total": 1989,
+  "generated_at": "2026-05-19T00:54:08.380Z",
+  "total": 1993,
   "by_validator": {
     "naming": 39,
     "events": 185,
@@ -12,9 +12,9 @@
     "chat-flow": 2,
     "agent-flow": 7,
     "llm-flow": 1,
-    "tools": 75,
+    "tools": 77,
     "agents-config": 110,
-    "module-rewrite": 71,
+    "module-rewrite": 73,
     "frontend": 374,
     "security": 1,
     "testing": 45,
@@ -27,8 +27,8 @@
     "scheduling": 1
   },
   "by_severity": {
-    "warning": 1876,
-    "info": 112,
+    "warning": 1877,
+    "info": 115,
     "error": 29
   },
   "signatures": [
@@ -1316,6 +1316,7 @@
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|firmware-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|gateway-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|log-manager — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
+    "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|mercadona-api — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|metricas — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|mise-en-place — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|pase-cocina — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
@@ -1345,6 +1346,7 @@
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|tecnicas — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|text-editor — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
     "module-rewrite|drift_modulo_migrado_sin_helper_auxiliar|viabilidad — no se detecto ningun helper auxiliar del dominio (_fetchWithTimeout, _slugify, _maskApiKey, _classifyExecutionError, _publishUIState)",
+    "module-rewrite|drift_modulo_migrado_sin_legacy_archivado|mercadona-api — no se encontró archivo en arquitectura/migracion/_legacy/ con prefijo \"mercadona-api\". Si la reescritura es del POC2, archivar monolito.",
     "module-rewrite|drift_modulo_migrado_sin_legacy_archivado|scheduler — no se encontró archivo en arquitectura/migracion/_legacy/ con prefijo \"scheduler\". Si la reescritura es del POC2, archivar monolito.",
     "module-rewrite|drift_modulo_migrado_tests_sin_capas|esp32-dev — tests/unit/esp32-dev.test.js tiene 0 'Group N:' banners (recomendado >=3)",
     "modulo-clase-robusta|drift_metodo_bus_sin_naming_canonico|conversation-export/module.json — subscribe handler \"_bufferActivity\" no empieza con \"on\"",
@@ -2014,6 +2016,8 @@
     "tools|drift_tool_handler_que_devuelve_valor_pelado|facturas tool \"facturas.listar\" en modules/facturas/index.js:514 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|filesystem tool \"fs.list\" en modules/filesystem/index.js:403 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|filesystem tool \"fs.stats\" en modules/filesystem/index.js:808 — algun return no parece shape canonico {status, data|error}",
+    "tools|drift_tool_handler_que_devuelve_valor_pelado|mercadona-api tool \"mercadona.categorias.listar\" en modules/mercadona-api/index.js:402 — algun return no parece shape canonico {status, data|error}",
+    "tools|drift_tool_handler_que_devuelve_valor_pelado|mercadona-api tool \"mercadona.producto.obtener\" en modules/mercadona-api/index.js:346 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pdf-viewer tool \"pdf.create\" en modules/pdf-viewer/index.js:343 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|scheduler tool \"scheduler.create_job\" en modules/scheduler/index.js:757 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|scheduler tool \"scheduler.trigger_job\" en modules/scheduler/index.js:761 — algun return no parece shape canonico {status, data|error}",

@@ -1,0 +1,120 @@
+{
+  "name": "mercadona-api",
+  "version": "1.0.0",
+  "description": "Cliente HTTP no oficial de la API de tienda.mercadona.es. Provee precios y catalogo de productos del supermercado para que escandallo y otros modulos del subsistema-recetario puedan estimar coste de receta sin tener catalogo de precios propio. Infraestructura JS deterministica (NO blueprint): IO HTTP externa, latencia <1s requerida, sin razonamiento del dominio. Postcode default 30840 (Murcia). Cache en memoria TTL 48h. Throttle interno max 2 req/s + backoff exponencial sobre HTTP 429. NO requiere credenciales (la API es publica de facto aunque no oficial).",
+  "author": "2enki Team",
+  "language": "es",
+  "main": "index.js",
+
+  "config": {
+    "postcode_default": "30840",
+    "warehouse_default": null,
+    "cache_ttl_hours": 48,
+    "throttle_rps": 2,
+    "base_url": "https://tienda.mercadona.es/api",
+    "timeout_ms": 10000,
+    "max_retries": 2,
+    "persistence": "in-memory (cache TTL configurable, sin disco). Si el modulo se reinicia, el cache se rehidrata desde Mercadona en el primer acceso a cada producto/categoria."
+  },
+
+  "events": {
+    "publishes": [
+      {
+        "event": "mercadona.precio.obtenido",
+        "description": "Precio de un producto resuelto desde la API. Otros modulos pueden cachearlo. Payload: { producto_id, nombre, marca, formato, precio_unidad, precio_kg, postcode, project_id, correlation_id, timestamp }."
+      }
+    ],
+    "subscribes": [
+      { "event": "project.activated",                "handler": "onProjectActivated",   "description": "Cachea project activo + lee postcode del proyecto si lo tiene en su metadata." },
+      { "event": "project.deactivated",              "handler": "onProjectDeactivated", "description": "No-op (multi-tenant: cache se preserva en memoria)." },
+      { "event": "mercadona.producto.obtener.request",   "handler": "onProductoObtener",    "description": "Tool LLM: detalle de un producto por id. Devuelve mercadona.producto.obtener.response o .failed." },
+      { "event": "mercadona.categorias.listar.request",  "handler": "onCategoriasListar",   "description": "Tool LLM: arbol de categorias (todas o hijas de parent_id). Devuelve mercadona.categorias.listar.response o .failed." }
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "mercadona.producto.obtener",
+      "description": "Obtiene el detalle de un producto de Mercadona por su id (numerico). Devuelve nombre, marca, formato (paquete/peso), precio_unidad, precio_kg, alergenos, imagen_url, categoria. Si el postcode no se pasa, usa el del proyecto activo o el default (30840). Si Mercadona no tiene el producto en esa zona, devuelve RESOURCE_NOT_FOUND.",
+      "handler": "onProductoObtener",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "producto_id": { "type": "string", "description": "ID numerico del producto (ej. '34180')" },
+          "postcode":    { "type": "string", "description": "Codigo postal de 5 digitos (opcional, default 30840)" },
+          "project_id":  { "type": "string", "description": "Proyecto que origina la consulta (opcional, default ultimo activo)" }
+        },
+        "required": ["producto_id"]
+      },
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "RATE_LIMITED",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_INVALID_RESPONSE"
+      ]
+    },
+    {
+      "name": "mercadona.categorias.listar",
+      "description": "Lista las categorias de la tienda de Mercadona. Sin argumentos devuelve el arbol top-level. Con parent_id devuelve subcategorias + productos de esa categoria (con nombre y id de cada producto, sin precios — para precios usar mercadona.producto.obtener por cada id). Util para que el LLM navegue el catalogo cuando busca un ingrediente por nombre.",
+      "handler": "onCategoriasListar",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "parent_id":  { "type": "string", "description": "ID de la categoria cuyas hijas listar (opcional — sin argumento devuelve top-level)" },
+          "postcode":   { "type": "string", "description": "Codigo postal de 5 digitos (opcional, default 30840)" },
+          "project_id": { "type": "string", "description": "Proyecto que origina la consulta (opcional)" }
+        }
+      },
+      "errores_conocidos": [
+        "RESOURCE_NOT_FOUND",
+        "RATE_LIMITED",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_INVALID_RESPONSE"
+      ]
+    }
+  ],
+
+  "observability": {
+    "metrics": [
+      { "name": "mercadona.producto.obtener.total",      "labels": ["project_id", "status"] },
+      { "name": "mercadona.producto.obtener.duration_ms","labels": ["project_id"] },
+      { "name": "mercadona.categorias.listar.total",     "labels": ["project_id", "status"] },
+      { "name": "mercadona.categorias.listar.duration_ms","labels": ["project_id"] },
+      { "name": "mercadona.cache.hit",                   "labels": ["operation"] },
+      { "name": "mercadona.cache.miss",                  "labels": ["operation"] },
+      { "name": "mercadona.upstream.errors",             "labels": ["code"] },
+      { "name": "mercadona.throttle.queued",             "labels": [] }
+    ]
+  },
+
+  "tracing": {
+    "propaga_correlation_id": true,
+    "evidencia": "Cada request HTTP a Mercadona y cada response publicada al bus lleva el correlation_id del caller via _publicarEvento."
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "implementar_mercadona_buscar_via_algolia",
+      "estado": "abierto",
+      "descripcion": "La API directa de Mercadona no expone endpoint de busqueda por nombre — su web usa Algolia (https://7uzjkl1dj0-dsn.algolia.net/...) con clave publica embebida en su HTML. Mientras se decide si integrar Algolia o seguir con navegacion por categorias, mercadona.buscar NO se declara. El LLM en escandallo blueprint usa mercadona.categorias.listar + heuristica para encontrar productos por nombre.",
+      "fecha_anotacion": "2026-05-19"
+    },
+    {
+      "id": "resolver_warehouse_desde_postcode",
+      "estado": "abierto",
+      "descripcion": "Mercadona usa codigos de warehouse (ej. 'vlc1' para Valencia) que no son evidentes desde el postcode. En arranque del modulo, hacer una request de descubrimiento (postcode -> warehouse) y cachear el mapeo. Mientras tanto, el modulo pasa el postcode tal cual y Mercadona resuelve internamente.",
+      "fecha_anotacion": "2026-05-19"
+    },
+    {
+      "id": "persistir_cache_a_disco",
+      "estado": "abierto",
+      "descripcion": "Cache es in-memory; al reiniciar el modulo se pierde. Si los precios fueran criticos para auditoria, persistir en data/projects/{slug}/mercadona-cache.json. Mientras los precios sean 'orientativos' (segun decision del usuario), in-memory basta.",
+      "fecha_anotacion": "2026-05-19"
+    }
+  ],
+
+  "tier": "tier_3_core"
+}

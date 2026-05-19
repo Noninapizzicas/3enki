@@ -1,0 +1,129 @@
+{
+  "_doc": "Blueprint del modulo carta-marketing. Hijo de subsistema-recetario.modulo-base. Equipo de marketing silencioso del proyecto: gestiona perfil de marca + dispara agentes especializados (marketing-copywriter, marketing-strategist, marketing-brand-keeper, marketing-onboarding) cuando el usuario o un evento upstream lo justifica. 4 operaciones (get_perfil, update_perfil, completar_onboarding, actividad).",
+
+  "id": "carta-marketing",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "version": "blueprint-1.0.0",
+  "language": "es",
+
+  "rol": "Gestor del perfil de marca del proyecto + orquestador de agentes de marketing. NO genera copy ni estrategia — eso lo hacen marketing-copywriter / strategist / brand-keeper. El blueprint persiste perfil y consulta actividad reciente de los agentes.",
+
+  "garantiza": [
+    "perfil de marca persistido en /storage/config/marca.json del proyecto.",
+    "get_perfil devuelve el perfil o un default vacio si no existe (no error).",
+    "update_perfil hace merge de campos sobre el perfil persistido.",
+    "completar_onboarding delega al agente marketing-onboarding via agent.execute.request para guiar al usuario en la creacion inicial del perfil.",
+    "actividad devuelve un resumen reciente de las invocaciones a agentes de marketing (lectura del log de agentes — TRABAJO_PENDIENTE: hoy es snapshot fijo, falta integracion con agent-observer)."
+  ],
+
+  "no_garantiza": [
+    "Generacion de copy o estrategia — esos son los agentes.",
+    "Onboarding interactivo — el agente marketing-onboarding maneja la conversacion.",
+    "Reaccion automatica a carta.actualizada — el blueprint no es reactivo; el agente o el LLM principal disparan cuando aplica."
+  ],
+
+  "estado_persistente": {
+    "paths_relativos": {
+      "perfil_marca": "/storage/config/marca.json"
+    },
+    "shape_perfil": "{ _version, _updated_at, nombre_marca, lema?, tono_voz, valores: [...], publico_objetivo, diferenciacion, restricciones?, idiomas: [...], onboarding_completado: boolean }"
+  },
+
+  "eventos_publicados": [
+    "marketing.get_perfil.response", "marketing.get_perfil.failed",
+    "marketing.update_perfil.response", "marketing.update_perfil.failed",
+    "marketing.completar_onboarding.response", "marketing.completar_onboarding.failed",
+    "marketing.actividad.response", "marketing.actividad.failed",
+    "marketing.perfil.actualizado", "marketing.onboarding.completado"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "operaciones": {
+    "get_perfil": {
+      "input": "{ project_id (req), request_id (req), correlation_id? }",
+      "pseudocodigo": [
+        "async get_perfil(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/storage/config/marca.json' })",
+        "  if (raw.status === 404) {",
+        "    return { status: 200, data: { _version: '1.0', _updated_at: nowISO(), nombre_marca: '', tono_voz: '', valores: [], publico_objetivo: '', idiomas: ['es'], onboarding_completado: false } }",
+        "  }",
+        "  if (raw.status >= 400) return raw",
+        "  return { status: 200, data: JSON.parse(raw.content) }"
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "update_perfil": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, campos (req — object con nombre_marca?, lema?, tono_voz?, valores?, publico_objetivo?, diferenciacion?, restricciones?, idiomas?) }",
+      "pseudocodigo": [
+        "async update_perfil(input):",
+        "  if (!input.project_id || !input.campos || Object.keys(input.campos).length === 0) return INVALID_INPUT",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/storage/config/marca.json' })",
+        "  perfil = raw.status === 404 ? { _version: '1.0', _updated_at: nowISO(), nombre_marca: '', tono_voz: '', valores: [], publico_objetivo: '', idiomas: ['es'], onboarding_completado: false } : JSON.parse(raw.content)",
+        "  for (const [k, v] of Object.entries(input.campos)) {",
+        "    if (v !== undefined) perfil[k] = v",
+        "  }",
+        "  perfil._updated_at = nowISO()",
+        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/storage/config/marca.json', content: JSON.stringify(perfil, null, 2), encoding: 'utf-8', atomic: true })",
+        "  await publish('marketing.perfil.actualizado', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  return { status: 200, data: perfil }"
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "completar_onboarding": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, datos_iniciales? (opcional — kickoff con info ya conocida) }",
+      "pseudocodigo": [
+        "async completar_onboarding(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  // Delegar al agente marketing-onboarding.",
+        "  agent_resp = await publishAndWait('agent.execute.request', {",
+        "    request_id: uuid(), correlation_id: input.correlation_id,",
+        "    agent_name: 'marketing-onboarding',",
+        "    task: 'Guiar al usuario en la creacion del perfil de marca completo',",
+        "    context: { project_id: input.project_id, datos_iniciales: input.datos_iniciales || null }",
+        "  })",
+        "  if (agent_resp.status >= 400) return agent_resp",
+        "  // El agente devuelve el perfil completo en agent_resp.result.content (JSON string) o estructurado.",
+        "  perfil_propuesto = typeof agent_resp.result?.content === 'string' ? JSON.parse(agent_resp.result.content) : agent_resp.result?.content",
+        "  if (!perfil_propuesto) return INVALID_INPUT { hint: 'agente no devolvio perfil' }",
+        "  perfil_propuesto.onboarding_completado = true",
+        "  perfil_propuesto._updated_at = nowISO()",
+        "  await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/storage/config/marca.json', content: JSON.stringify(perfil_propuesto, null, 2), encoding: 'utf-8', atomic: true })",
+        "  await publish('marketing.onboarding.completado', { project_id: input.project_id, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  return { status: 200, data: perfil_propuesto }"
+      ],
+      "reglas_clave": ["Delegacion al agente onboarding. El agente devuelve perfil propuesto, se persiste con onboarding_completado:true."],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "actividad": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, ventana_dias? (default 7) }",
+      "pseudocodigo": [
+        "async actividad(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  // TRABAJO_PENDIENTE: hoy devolvemos snapshot vacio.",
+        "  // Cuando agent-observer exponga consulta de invocaciones recientes filtradas por scope='marketing',",
+        "  // hacer publishAndWait('agent-observer.consultar.request', {scope: 'marketing', ventana_dias, ...}).",
+        "  return { status: 200, data: { ventana_dias: input.ventana_dias || 7, invocaciones: [], nota: 'agent-observer integracion pendiente — actividad temporalmente vacia' } }"
+      ],
+      "reglas_clave": ["Operacion stub hasta integrar agent-observer."],
+      "errores_posibles": ["INVALID_INPUT"]
+    }
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "integracion_agent_observer",
+      "estado": "abierto",
+      "descripcion": "actividad hoy devuelve array vacio. Cuando agent-observer exponga consulta filtrada por scope, integrar."
+    },
+    {
+      "id": "subscriber_carta_actualizada",
+      "estado": "abierto",
+      "descripcion": "Legacy escuchaba carta.actualizada para disparar agentes automaticamente. Blueprint no reactivo; los agentes se invocan a demanda."
+    }
+  ]
+}

@@ -1,0 +1,238 @@
+{
+  "_doc": "Blueprint del modulo carta-scheduler. Hijo de subsistema-recetario.modulo-base. Programacion conversacional de cambios de carta por canal con confirmacion humana previa. Detecta conflictos entre reglas, calcula proximos cambios, persiste reglas activas + lista de cambios pendientes de confirmar. NO incluye el ejecutor de cron (cuando scheduler.job.triggered llega) — eso queda como JS aparte (trabajo_pendiente).",
+
+  "id": "carta-scheduler",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "version": "blueprint-1.0.0",
+  "language": "es",
+
+  "rol": "Programador de cambios de carta por canal con guardrail de confirmacion humana. Reglas (cron expression + canal + carta_id) + pendientes (cambios calculados que esperan OK del usuario).",
+
+  "garantiza": [
+    "Cada regla tiene id, canal, carta_id_destino, cron_expression, etiquetas?, prioridad?, created_at.",
+    "Reglas persistidas en /carta-scheduler-reglas.json del proyecto.",
+    "Pendientes persistidos en /carta-scheduler-pendientes.json del proyecto.",
+    "detectar_conflictos compara dos reglas y reporta si tienen colision de canal+franja temporal.",
+    "confirmar aplica un pendiente: publica carta-scheduler.cambio.aplicado y elimina el pendiente.",
+    "rechazar descarta un pendiente: publica carta-scheduler.cambio.rechazado."
+  ],
+
+  "no_garantiza": [
+    "Ejecucion automatica de reglas — eso requiere un cron worker JS que escuche scheduler.job.triggered y publique las operaciones del blueprint. Mientras no exista, las reglas viven en disco pero solo se procesan cuando el LLM en la page carta-scheduler revisa proximos_cambios.",
+    "Validez sintactica de cron expressions complejas — la validacion basica es 'no esta vacia y tiene 5-6 campos'. Validacion avanzada queda al cron worker cuando aplique."
+  ],
+
+  "estado_persistente": {
+    "paths_relativos": {
+      "reglas": "/carta-scheduler-reglas.json",
+      "pendientes": "/carta-scheduler-pendientes.json"
+    },
+    "shape_reglas": "{ _version, _updated_at, reglas: [{id, canal, carta_id_destino, cron_expression, etiquetas, prioridad, descripcion, activa, created_at, updated_at}] }",
+    "shape_pendientes": "{ _version, _updated_at, pendientes: [{id, regla_id, canal, carta_id_destino, carta_id_anterior?, fecha_objetivo, estado, motivo?, created_at}] }"
+  },
+
+  "eventos_publicados": [
+    "carta-scheduler.crear_regla.response", "carta-scheduler.crear_regla.failed",
+    "carta-scheduler.listar_reglas.response", "carta-scheduler.listar_reglas.failed",
+    "carta-scheduler.eliminar_regla.response", "carta-scheduler.eliminar_regla.failed",
+    "carta-scheduler.detectar_conflictos.response", "carta-scheduler.detectar_conflictos.failed",
+    "carta-scheduler.proximos_cambios.response", "carta-scheduler.proximos_cambios.failed",
+    "carta-scheduler.confirmar.response", "carta-scheduler.confirmar.failed",
+    "carta-scheduler.rechazar.response", "carta-scheduler.rechazar.failed",
+    "carta-scheduler.regla.creada", "carta-scheduler.regla.actualizada", "carta-scheduler.regla.eliminada",
+    "carta-scheduler.cambio.aplicado", "carta-scheduler.cambio.rechazado"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "operaciones": {
+    "crear_regla": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, canal (req — string), carta_id_destino (req — uuid), cron_expression (req — string), etiquetas?, prioridad? (number), descripcion? }",
+      "pseudocodigo": [
+        "async crear_regla(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  for (const f of ['canal','carta_id_destino','cron_expression']) if (!input[f]) return INVALID_INPUT { field: f }",
+        "  partes = input.cron_expression.trim().split(/\\s+/)",
+        "  if (partes.length < 5 || partes.length > 6) return INVALID_INPUT { field: 'cron_expression', hint: '5 o 6 campos' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-scheduler-reglas.json' })",
+        "  store = raw.status === 404 ? { _version: '1.0', _updated_at: nowISO(), reglas: [] } : JSON.parse(raw.content)",
+        "  regla = { id: uuid(), canal: input.canal, carta_id_destino: input.carta_id_destino, cron_expression: input.cron_expression.trim(), etiquetas: Array.isArray(input.etiquetas) ? input.etiquetas : [], prioridad: typeof input.prioridad === 'number' ? input.prioridad : 100, descripcion: input.descripcion || '', activa: true, created_at: nowISO(), updated_at: nowISO() }",
+        "  store.reglas.push(regla)",
+        "  store._updated_at = nowISO()",
+        "  write_resp = await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/carta-scheduler-reglas.json', content: JSON.stringify(store, null, 2), encoding: 'utf-8', atomic: true })",
+        "  if (write_resp.status >= 400) return write_resp",
+        "  await publish('carta-scheduler.regla.creada', { project_id: input.project_id, regla_id: regla.id, canal: regla.canal, carta_id_destino: regla.carta_id_destino, cron_expression: regla.cron_expression, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  return { status: 201, data: regla }"
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "listar_reglas": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, canal? (filtro), activa? (boolean filtro, default true) }",
+      "pseudocodigo": [
+        "async listar_reglas(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-scheduler-reglas.json' })",
+        "  if (raw.status === 404) return { status: 200, data: [] }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "  activa_filtro = input.activa === false ? false : true",
+        "  resultados = store.reglas.filter(r => r.activa === activa_filtro)",
+        "  if (input.canal) resultados = resultados.filter(r => r.canal === input.canal)",
+        "  return { status: 200, data: resultados }"
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "eliminar_regla": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, regla_id (req) }",
+      "pseudocodigo": [
+        "async eliminar_regla(input):",
+        "  if (!input.project_id || !input.regla_id) return INVALID_INPUT",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-scheduler-reglas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'regla' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "  idx = store.reglas.findIndex(r => r.id === input.regla_id)",
+        "  if (idx < 0) return RESOURCE_NOT_FOUND { entity_type: 'regla', id: input.regla_id }",
+        "  store.reglas[idx].activa = false  // soft delete",
+        "  store.reglas[idx].updated_at = nowISO()",
+        "  store._updated_at = nowISO()",
+        "  write_resp = await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/carta-scheduler-reglas.json', content: JSON.stringify(store, null, 2), encoding: 'utf-8', atomic: true })",
+        "  if (write_resp.status >= 400) return write_resp",
+        "  await publish('carta-scheduler.regla.eliminada', { project_id: input.project_id, regla_id: input.regla_id, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  return { status: 200, data: { regla_id: input.regla_id, activa: false } }"
+      ],
+      "reglas_clave": ["Soft delete: activa=false. La regla queda en el archivo para audit trail."],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "detectar_conflictos": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, regla_a (req — id de regla), regla_b? (id; si ausente, comprueba regla_a contra TODAS las activas) }",
+      "pseudocodigo": [
+        "async detectar_conflictos(input):",
+        "  if (!input.project_id || !input.regla_a) return INVALID_INPUT",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-scheduler-reglas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'regla' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "  reglas_activas = store.reglas.filter(r => r.activa)",
+        "  r_a = reglas_activas.find(r => r.id === input.regla_a)",
+        "  if (!r_a) return RESOURCE_NOT_FOUND { entity_type: 'regla', id: input.regla_a }",
+        "  comparar_contra = input.regla_b ? reglas_activas.filter(r => r.id === input.regla_b) : reglas_activas.filter(r => r.id !== input.regla_a)",
+        "",
+        "  conflictos = []",
+        "  for (r_b of comparar_contra) {",
+        "    if (r_a.canal !== r_b.canal) continue  // sin conflicto si canales distintos",
+        "    // TU razonas: las dos cron_expression cubren franja temporal solapada?",
+        "    //  Para casos comunes (mismo cron, misma hora distinto canal): solapan.",
+        "    //  Para casos sutiles, TU explicas el por que.",
+        "    solapan = <TU evaluas si solapan las dos cron expressions, considerando canal compartido>",
+        "    if (solapan) conflictos.push({ regla_a: r_a.id, regla_b: r_b.id, motivo: 'mismo_canal_franja_solapada', explicacion: '<TU resumes en lenguaje natural>' })",
+        "  }",
+        "  return { status: 200, data: { conflictos } }"
+      ],
+      "reglas_clave": ["El LLM razona sobre solapamiento de cron expressions. Sin libreria interna — depende del razonamiento."],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "proximos_cambios": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, ventana_horas? (number, default 24) }",
+      "pseudocodigo": [
+        "async proximos_cambios(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  raw_reglas = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-scheduler-reglas.json' })",
+        "  if (raw_reglas.status === 404) return { status: 200, data: { pendientes: [], proyecciones: [] } }",
+        "  if (raw_reglas.status >= 400) return raw_reglas",
+        "  reglas_activas = JSON.parse(raw_reglas.content).reglas.filter(r => r.activa)",
+        "",
+        "  raw_pend = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-scheduler-pendientes.json' })",
+        "  pendientes = raw_pend.status === 200 ? JSON.parse(raw_pend.content).pendientes : []",
+        "  pendientes = pendientes.filter(p => p.estado === 'pendiente')",
+        "",
+        "  ventana = (input.ventana_horas || 24) * 3600 * 1000",
+        "  ahora = Date.now()",
+        "  proyecciones = []",
+        "  for (r of reglas_activas) {",
+        "    // TU calculas la proxima ejecucion del cron_expression a partir de ahora.",
+        "    //  Para casos comunes (diario a hora fija, semanal en dia), razonas con normalidad.",
+        "    proxima_iso = <TU calculas next-fire del cron, formato ISO 8601>",
+        "    if (!proxima_iso) continue",
+        "    delta_ms = new Date(proxima_iso).getTime() - ahora",
+        "    if (delta_ms <= ventana && delta_ms > 0) {",
+        "      proyecciones.push({ regla_id: r.id, canal: r.canal, carta_id_destino: r.carta_id_destino, fecha_proxima: proxima_iso, dentro_de_minutos: Math.round(delta_ms / 60000) })",
+        "    }",
+        "  }",
+        "  proyecciones.sort((a,b) => a.fecha_proxima.localeCompare(b.fecha_proxima))",
+        "  return { status: 200, data: { pendientes, proyecciones } }"
+      ],
+      "reglas_clave": ["El LLM razona el next-fire del cron. Ventana default 24h. Si no entiende el cron, omite (no inventa)."],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "confirmar": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, pendiente_id (req) }",
+      "pseudocodigo": [
+        "async confirmar(input):",
+        "  if (!input.project_id || !input.pendiente_id) return INVALID_INPUT",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-scheduler-pendientes.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'pendiente' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "  idx = store.pendientes.findIndex(p => p.id === input.pendiente_id)",
+        "  if (idx < 0) return RESOURCE_NOT_FOUND { entity_type: 'pendiente', id: input.pendiente_id }",
+        "  if (store.pendientes[idx].estado !== 'pendiente') return CONFLICT_STATE { hint: 'pendiente ya ' + store.pendientes[idx].estado }",
+        "",
+        "  pend = store.pendientes[idx]",
+        "  pend.estado = 'aplicado'",
+        "  pend.aplicado_at = nowISO()",
+        "  store._updated_at = nowISO()",
+        "  write_resp = await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/carta-scheduler-pendientes.json', content: JSON.stringify(store, null, 2), encoding: 'utf-8', atomic: true })",
+        "  if (write_resp.status >= 400) return write_resp",
+        "  await publish('carta-scheduler.cambio.aplicado', { project_id: input.project_id, pendiente_id: pend.id, canal: pend.canal, carta_id_destino: pend.carta_id_destino, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  return { status: 200, data: pend }"
+      ],
+      "reglas_clave": ["Solo cambia estado a 'aplicado'. La aplicacion real (publicar carta a canal) la hace OTRO modulo escuchando carta-scheduler.cambio.aplicado (tarifas?)."],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "rechazar": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, pendiente_id (req), motivo? }",
+      "pseudocodigo": [
+        "async rechazar(input):",
+        "  if (!input.project_id || !input.pendiente_id) return INVALID_INPUT",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-scheduler-pendientes.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'pendiente' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "  idx = store.pendientes.findIndex(p => p.id === input.pendiente_id)",
+        "  if (idx < 0) return RESOURCE_NOT_FOUND { entity_type: 'pendiente', id: input.pendiente_id }",
+        "  if (store.pendientes[idx].estado !== 'pendiente') return CONFLICT_STATE { hint: 'pendiente ya ' + store.pendientes[idx].estado }",
+        "  pend = store.pendientes[idx]",
+        "  pend.estado = 'rechazado'",
+        "  pend.motivo_rechazo = input.motivo || 'rechazado por usuario'",
+        "  pend.rechazado_at = nowISO()",
+        "  store._updated_at = nowISO()",
+        "  write_resp = await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/carta-scheduler-pendientes.json', content: JSON.stringify(store, null, 2), encoding: 'utf-8', atomic: true })",
+        "  if (write_resp.status >= 400) return write_resp",
+        "  await publish('carta-scheduler.cambio.rechazado', { project_id: input.project_id, pendiente_id: pend.id, motivo: pend.motivo_rechazo, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  return { status: 200, data: pend }"
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    }
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "cron_worker_separado",
+      "estado": "abierto",
+      "descripcion": "El legacy escuchaba scheduler.job.triggered (cron del sistema) para detectar reglas cuya hora llegaba, crear el pendiente automaticamente y notificar al usuario. El blueprint puro NO puede ser reactivo en background — el LLM no esta always-on. Solucion futura: modulo JS aparte (ej. carta-scheduler-cron-worker, ~50 lineas) que escuche scheduler.job.triggered, lea reglas activas, identifique las cuya hora llega en la ventana, publique carta-scheduler.crear_pendiente.request (o el agente scheduler-dispatcher del ai-agent-framework cuando se migre). De momento, el LLM revisa proximos_cambios solo cuando esta en page=carta-scheduler."
+    },
+    {
+      "id": "validacion_avanzada_cron",
+      "estado": "abierto",
+      "descripcion": "Hoy solo se valida que cron_expression tiene 5-6 campos. Validacion completa (rangos, sintaxis @yearly/@daily, etc.) queda al cron worker cuando se implemente."
+    }
+  ]
+}

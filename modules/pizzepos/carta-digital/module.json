@@ -1,136 +1,28 @@
 {
+  "_doc": "Manifest del modulo carta-digital. NO tiene index.js (blueprint-driven). 4 operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta). Persistencia: carta-digital.json del proyecto. Composicion real (PWA build, ofertas, copy) delegada a agentes via agent.execute.request. El directorio incluye artefactos NO blueprint (cf-worker/, export-cli.js, static-template.js, context.json, prompt.json) que son tooling de deploy de la PWA publica y coexisten con el blueprint sin conflicto.",
+
   "name": "carta-digital",
-  "version": "3.0.0",
-  "description": "Backoffice de la carta publica. Configura branding, compone carta final (datos + marketing + ofertas), genera PWA. Los agentes hacen el trabajo.",
-  "author": "Pizzepos Team",
+  "version": "1.0.0",
+  "description": "Modulo carta-digital en modo blueprint-driven. Backoffice de la carta publica: branding del proyecto + carta compuesta lista para servir al cliente.",
   "language": "es",
-  "main": "index.js",
-  "events": {
-    "publishes": [
-      {
-        "event":              "agent.execute.request",
-        "response_schema_ref":"arquitectura/decisiones/_schemas/agent-flow/agent.execute.request.schema.json",
-        "description":        "Invoca al agente cartadigital-composer para recomponer la carta publica tras cambios (sub-contrato agent-flow). El composer responde via tool cartadigital.set_carta_compuesta."
-      }
-    ],
-    "subscribes": [
-      { "event": "project.activated",          "handler": "onProjectActivated",   "description": "Registra path del proyecto y carga config persistida." },
-      { "event": "project.deactivated",        "handler": "onProjectDeactivated", "description": "Multi-tenant — preserva estado para reactivacion." },
-      { "event": "carta.actualizada",          "handler": "onCartaActualizada",   "description": "Invalida cache + dispatch agente composer para recomponer." },
-      { "event": "tarifas.config.actualizada", "handler": "onTarifasActualizada", "description": "Invalida cache + dispatch agente composer (cambio de canal/carta)." }
-    ]
-  },
-  "ui_handlers": [
-    { "domain": "carta-digital", "action": "config",        "handler": "handleGetConfig",       "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "carta-digital", "action": "update-config", "handler": "handleUpdateConfig",    "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "carta-digital", "action": "carta-publica", "handler": "handleGetCartaPublica", "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "carta-digital", "action": "health",        "handler": "handleHealth",          "type": "workspace_module", "zone": "barra_modulos" }
-  ],
-  "tools": [
-    {
-      "name":        "cartadigital.get_config",
-      "description": "Devuelve la configuracion de branding de la carta publica del proyecto: colores, WhatsApp, features.",
-      "handler":     "toolGetConfig",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "project_id": { "type": "string", "description": "ID del proyecto activo" }
-        },
-        "required": ["project_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
-      ]
-    },
-    {
-      "name":        "cartadigital.update_config",
-      "description": "Actualiza branding (parche parcial): whatsapp_telefono, nombre_negocio, moneda, tema (deep-merge), funcionalidades (deep-merge).",
-      "handler":     "toolUpdateConfig",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "project_id":        { "type": "string",  "description": "ID del proyecto activo" },
-          "whatsapp_telefono": { "type": "string",  "description": "Telefono WhatsApp con codigo internacional" },
-          "nombre_negocio":    { "type": "string",  "description": "Nombre comercial mostrado en la carta" },
-          "moneda":            { "type": "string",  "description": "Simbolo de moneda (€, $, ...)" },
-          "mensaje_header":    { "type": "string",  "description": "Mensaje al iniciar pedido" },
-          "tema":              { "type": "object",  "description": "Colores y emoji logo (deep-merge)" },
-          "funcionalidades":   { "type": "object",  "description": "Features booleanas (deep-merge)" }
-        },
-        "required": ["project_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",    "cuando": "project_id ausente" },
-        { "code": "UNKNOWN_ERROR", "cuando": "fallo al persistir config" }
-      ]
-    },
-    {
-      "name":        "cartadigital.get_carta_publica",
-      "description": "Devuelve la carta publica compuesta (cacheada). Si no hay composicion previa, devuelve solo config + null.",
-      "handler":     "toolGetCartaPublica",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "project_id": { "type": "string" }
-        },
-        "required": ["project_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "project_id ausente" }
-      ]
-    },
-    {
-      "name":        "cartadigital.set_carta_compuesta",
-      "description": "Guarda la carta compuesta en cache. Lo usa el agente cartadigital-composer al terminar.",
-      "handler":     "toolSetCartaCompuesta",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "project_id":      { "type": "string" },
-          "carta_compuesta": { "type": "object", "description": "Carta final compuesta (datos + marketing + ofertas + config)" }
-        },
-        "required": ["project_id", "carta_compuesta"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "project_id o carta_compuesta ausentes" }
-      ]
-    }
-  ],
-  "agents": {
-    "cartadigital-composer":     "Compone carta final: carta-manager + marketing + ofertas + config",
-    "cartadigital-pwa-builder":  "Genera export PWA (HTML + service worker + manifest)",
-    "cartadigital-ofertas":      "Gestiona ofertas y combos",
-    "cartadigital-reviewer":     "Revisa completitud: imagenes, descripciones, alergenos, precios"
-  },
+
+  "blueprint_driven": true,
+  "blueprint_path": "carta-digital.blueprint.json",
+  "blueprint_parent_path": "subsistema-recetario.modulo-base.blueprint.json",
+  "target_page_id": "carta-digital",
+
   "config": {
     "persistence": {
-      "type":   "json-file",
-      "atomic": true,
-      "paths": [
-        "data/projects/<projectId>/storage/pizzepos/carta-digital.json"
-      ],
-      "concurrency": "single-writer-per-project",
-      "owner":       "modules/pizzepos/carta-digital",
-      "notes":       "Config de branding por proyecto. La carta compuesta vive solo en cache (composer la regenera bajo demanda)."
-    }
-  },
-  "tracing": {
-    "propaga_correlation_id": true
-  },
-  "observability": {
-    "logging": {
-      "level":          "info",
-      "structured":     true,
-      "correlation_id": true
+      "pattern": "json-file-per-project",
+      "paths": ["data/projects/{slug}/carta-digital.json"],
+      "atomicidad": "fs.write.request atomic:true",
+      "concurrencia": "single-writer (blueprint serializa via publishAndWait)"
     },
-    "metrics": {
-      "enabled": true,
-      "counters": [
-        "carta-digital.recompose.triggered",
-        "carta-digital.config.updated",
-        "carta-digital.carta_compuesta.set",
-        "carta-digital.errors"
-      ]
-    }
+    "artefactos_deploy_extras": [
+      "cf-worker/ — Cloudflare Worker que sirve la carta publica al cliente final",
+      "export-cli.js — CLI para exportar carta compuesta a deploy",
+      "static-template.js — template HTML de la PWA",
+      "context.json, prompt.json — contexto LLM legacy (revisable)"
+    ]
   }
 }

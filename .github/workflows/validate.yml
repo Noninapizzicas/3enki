@@ -149,9 +149,6 @@ jobs:
       - name: Run unit tests (telegram-service — reescritura canonica)
         run: npm run test:telegram-service
 
-      - name: Run unit tests (pizzepos/carta-manager — reescritura canonica)
-        run: npm run test:pizzepos__carta-manager
-
       - name: Run unit tests (recetario-creativo — modulo nuevo del subsistema-recetario)
         run: npm run test:recetario-creativo
 
@@ -167,9 +164,6 @@ jobs:
       - name: Run unit tests (perifericos — reescritura canonica)
         run: npm run test:perifericos
 
-      - name: Run unit tests (pizzepos/carta-design — reescritura canonica)
-        run: npm run test:pizzepos__carta-design
-
       - name: Run unit tests (facturas — reescritura canonica)
         run: npm run test:facturas
 
@@ -182,14 +176,8 @@ jobs:
       - name: Run unit tests (pizzepos/persistencia-comandero — reescritura canonica)
         run: npm run test:pizzepos__persistencia-comandero
 
-      - name: Run unit tests (pizzepos/carta-digital — reescritura canonica)
-        run: npm run test:pizzepos__carta-digital
-
       - name: Run unit tests (pizzepos/impresion — reescritura canonica)
         run: npm run test:pizzepos__impresion
-
-      - name: Run unit tests (pizzepos/carta-impresion — reescritura canonica)
-        run: npm run test:pizzepos__carta-impresion
 
       - name: Run unit tests (pizzepos/categorias — reescritura canonica)
         run: npm run test:pizzepos__categorias
@@ -221,17 +209,11 @@ jobs:
       - name: Run unit tests (pizzepos/pedidos — reescritura canonica)
         run: npm run test:pizzepos__pedidos
 
-      - name: Run unit tests (pizzepos/carta-scheduler — reescritura canonica)
-        run: npm run test:pizzepos__carta-scheduler
-
       - name: Run unit tests (pizzepos/productos — reescritura canonica)
         run: npm run test:pizzepos__productos
 
       - name: Run unit tests (pizzepos/tarifas — reescritura canonica)
         run: npm run test:pizzepos__tarifas
-
-      - name: Run unit tests (pizzepos/carta-marketing — reescritura canonica)
-        run: npm run test:pizzepos__carta-marketing
 
       - name: Run unit tests (pizzepos/menu-generator — reescritura canonica)
         run: npm run test:pizzepos__menu-generator

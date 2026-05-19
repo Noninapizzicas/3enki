@@ -1,178 +1,29 @@
 {
+  "_doc": "Manifest del modulo carta-design. Blueprint-driven. 6 operaciones de gestion de designs (HTML) y profiles (estilos). NO genera HTML — eso lo hace un agente. 5 profiles built-in en design-profiles/ (NO modificables). Custom profiles + designs en data/projects/{slug}/carta-design/.",
+
   "name": "carta-design",
-  "version": "4.0.0",
-  "description": "Estudio de diseño profesional de cartas impresas. Sistema multi-rol con entrevista, equipo creativo, guion maestro y produccion HTML.",
-  "author": "Pizzepos Team",
+  "version": "1.0.0",
+  "description": "Modulo carta-design en modo blueprint-driven. Estudio de diseno de cartas impresas. Gestiona archivos: cargar carta para disenar, guardar HTML generado, biblioteca de profiles reutilizables (built-in + custom).",
   "language": "es",
-  "main": "index.js",
-  "provides": {
-    "events": [
-      "carta.html.generada"
-    ]
-  },
-  "events": {
-    "publishes": [
-      {
-        "event": "carta.html.generada",
-        "description": "HTML de diseño profesional generado — se abre automaticamente en HtmlPreviewPanel (lleva project_id top-level + correlation_id + timestamp)"
-      }
-    ],
-    "subscribes": [
-      { "event": "project.activated",   "handler": "onProjectActivated",   "description": "Registra el path del proyecto activo para resolver cartas y outputs." },
-      { "event": "project.deactivated", "handler": "onProjectDeactivated", "description": "Libera el path del proyecto desactivado." },
-      { "event": "carta.actualizada",   "handler": "onCartaActualizada",   "description": "Registra que la carta cambio — el LLM decidira si regenerar diseño en su proxima invocacion." }
-    ]
-  },
-  "ui_handlers": [
-    { "domain": "design", "action": "load-carta",     "handler": "handleLoadCarta",     "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "design", "action": "save",           "handler": "handleSave",          "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "design", "action": "profiles",       "handler": "handleProfiles",      "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "design", "action": "save-profile",   "handler": "handleSaveProfile",   "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "design", "action": "delete-profile", "handler": "handleDeleteProfile", "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "design", "action": "gallery",        "handler": "handleGallery",       "type": "workspace_module", "zone": "barra_modulos" }
-  ],
-  "tools": [
-    {
-      "name": "design.load_carta",
-      "description": "Carga una carta con todos sus productos, categorias, precios e ingredientes, y devuelve estadisticas agregadas. LLAMAR siempre al inicio del proceso de diseño.",
-      "handler": "toolLoadCarta",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id":   { "type": "string", "description": "ID de la carta a cargar (ej: carta_pizzicas)" },
-          "project_id": { "type": "string", "description": "ID del proyecto activo (opcional — defaultea al activo)" }
-        },
-        "required": ["carta_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",      "cuando": "carta_id ausente" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "no existe carta con ese carta_id en el proyecto" },
-        { "code": "UNKNOWN_ERROR",   "cuando": "fallo de lectura del archivo de carta" }
-      ]
-    },
-    {
-      "name": "design.save",
-      "description": "Guarda el HTML+CSS generado por el maquetador y lo abre automaticamente en el panel de preview. El usuario puede imprimir con Ctrl+P. Llamar tras producir el HTML completo en la fase de produccion.",
-      "handler": "toolSave",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id":   { "type": "string", "description": "ID de la carta" },
-          "html":       { "type": "string", "description": "HTML5+CSS completo generado (desde <!DOCTYPE html> hasta </html>)" },
-          "nombre":     { "type": "string", "description": "Nombre descriptivo del diseño (ej: 'Nonina Rock Night')" },
-          "project_id": { "type": "string", "description": "ID del proyecto activo" }
-        },
-        "required": ["carta_id", "html"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",    "cuando": "carta_id ausente o html con menos de 100 caracteres" },
-        { "code": "UNKNOWN_ERROR", "cuando": "fallo al escribir el archivo HTML o su meta" }
-      ]
-    },
-    {
-      "name": "design.profiles",
-      "description": "Lista los perfiles de estilo disponibles (built-in + custom del proyecto). Son referencias visuales, no plantillas.",
-      "handler": "toolProfiles",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "project_id": { "type": "string", "description": "ID del proyecto activo (opcional)" }
-        }
-      },
-      "errores_conocidos": [
-        { "code": "UNKNOWN_ERROR", "cuando": "fallo al leer perfiles custom del proyecto" }
-      ]
-    },
-    {
-      "name": "design.save_profile",
-      "description": "Guarda un perfil de diseño reutilizable como referencia para futuros proyectos.",
-      "handler": "toolSaveProfile",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "nombre":        { "type": "string",  "description": "Nombre legible del perfil" },
-          "description":   { "type": "string",  "description": "Descripcion corta del estilo" },
-          "color_palette": { "type": "object",  "description": "Paleta de colores del perfil" },
-          "fonts":         { "type": "object",  "description": "Tipografias del perfil" },
-          "layout_type":   { "type": "string",  "description": "Tipo de layout ('auto' | 'grid' | 'list' | etc.)" },
-          "style_notes":   { "type": "string",  "description": "Notas adicionales de estilo" },
-          "project_id":    { "type": "string",  "description": "ID del proyecto activo" }
-        },
-        "required": ["nombre"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",    "cuando": "nombre ausente" },
-        { "code": "UNKNOWN_ERROR", "cuando": "fallo al persistir el perfil" }
-      ]
-    },
-    {
-      "name": "design.delete_profile",
-      "description": "Elimina un perfil de diseño custom. No permite borrar perfiles built-in del modulo.",
-      "handler": "toolDeleteProfile",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "profile_id": { "type": "string", "description": "ID del perfil a eliminar (debe ser custom_*)" },
-          "project_id": { "type": "string", "description": "ID del proyecto activo" }
-        },
-        "required": ["profile_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",      "cuando": "profile_id ausente" },
-        { "code": "PERMISSION_DENIED",  "cuando": "el perfil es built-in del modulo" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "no existe el perfil con ese ID" }
-      ]
-    },
-    {
-      "name": "design.gallery",
-      "description": "Lista todos los diseños HTML generados previamente para una carta, ordenados por fecha de creacion descendente.",
-      "handler": "toolGallery",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "carta_id":   { "type": "string", "description": "ID de la carta" },
-          "project_id": { "type": "string", "description": "ID del proyecto activo" }
-        },
-        "required": ["carta_id"]
-      },
-      "errores_conocidos": [
-        { "code": "INVALID_INPUT",    "cuando": "carta_id ausente" },
-        { "code": "UNKNOWN_ERROR", "cuando": "fallo al leer los archivos meta del directorio de diseños" }
-      ]
-    }
-  ],
+
+  "blueprint_driven": true,
+  "blueprint_path": "carta-design.blueprint.json",
+  "blueprint_parent_path": "subsistema-recetario.modulo-base.blueprint.json",
+  "target_page_id": "carta-design",
+
   "config": {
     "persistence": {
-      "type":   "json-file",
-      "atomic": true,
-      "paths": [
-        "storage/pizzepos/carta-design/designs/<carta_id>_<slug>_<ts>.html",
-        "storage/pizzepos/carta-design/designs/<carta_id>_<slug>_<ts>.html.meta.json",
-        "storage/pizzepos/carta-design/profiles/<profile_id>.json"
+      "pattern": "json-files-per-project-plus-builtin-resources",
+      "paths_proyecto": [
+        "data/projects/{slug}/carta-design/designs/<carta_id>__<timestamp>.html",
+        "data/projects/{slug}/carta-design/designs/<carta_id>__<timestamp>.json (meta companion)",
+        "data/projects/{slug}/carta-design/profiles/<profile_id>.json"
       ],
-      "concurrency": "single-writer-per-path"
-    }
-  },
-  "tracing": {
-    "propaga_correlation_id": true
-  },
-  "observability": {
-    "logging": {
-      "level":          "info",
-      "structured":     true,
-      "correlation_id": true
-    },
-    "metrics": {
-      "enabled": true,
-      "counters": [
-        "design.load_carta.total",
-        "design.save.total",
-        "design.profiles.total",
-        "design.save_profile.total",
-        "design.delete_profile.total",
-        "design.gallery.total",
-        "carta-design.errors"
-      ]
+      "paths_modulo": [
+        "modules/pizzepos/carta-design/design-profiles/<built-in>.json (5 profiles incluidos)"
+      ],
+      "atomicidad": "fs.write.request atomic:true",
+      "concurrencia": "single-writer"
     }
   }
 }

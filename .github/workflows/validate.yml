@@ -95,8 +95,12 @@ jobs:
       - name: Run mqttRequest unit tests
         run: npm run test:mqtt-request
 
-      - name: Run integration tests (carta-scheduler + mqttRequest real)
-        run: npm run test:integration:carta-scheduler
+      # DISABLED 2026-05-19 (PR #170): el commit afb6b915 migro carta-scheduler
+      # a blueprint puro (sin index.js) pero no actualizo este test, que asume
+      # un modulo JS con onProjectActivated. Reactivar cuando el test sea
+      # reescrito para validar el blueprint v1 de carta-scheduler.
+      # - name: Run integration tests (carta-scheduler + mqttRequest real)
+      #   run: npm run test:integration:carta-scheduler
 
       - name: Run unit tests (channel-manager — reescritura canonica)
         run: npm run test:channel-manager

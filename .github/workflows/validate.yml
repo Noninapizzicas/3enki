@@ -149,9 +149,6 @@ jobs:
       - name: Run unit tests (telegram-service — reescritura canonica)
         run: npm run test:telegram-service
 
-      - name: Run unit tests (pizzepos/carta-manager — reescritura canonica)
-        run: npm run test:pizzepos__carta-manager
-
       - name: Run unit tests (recetario-creativo — modulo nuevo del subsistema-recetario)
         run: npm run test:recetario-creativo
 

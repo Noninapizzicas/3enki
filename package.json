@@ -62,7 +62,6 @@
     "test:mise-en-place": "node tests/unit/mise-en-place.test.js",
     "test:mercadona-api": "node tests/unit/mercadona-api.test.js",
     "test:perifericos": "node tests/unit/perifericos.test.js",
-    "test:pizzepos__carta-design": "node tests/unit/pizzepos__carta-design.test.js",
     "test:facturas": "node tests/unit/facturas.test.js",
     "test:staff-manager": "node tests/unit/staff-manager.test.js",
     "test:pizzepos__cuentas": "node tests/unit/pizzepos__cuentas.test.js",

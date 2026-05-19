@@ -1,0 +1,132 @@
+{
+  "_doc": "Blueprint del modulo carta-digital. Hijo de subsistema-recetario.modulo-base. Backoffice de la carta publica: branding del proyecto + carta compuesta (datos de carta-manager + ofertas + marketing). 4 operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta). Composicion real (PWA build, ensamblaje de ofertas con copy) la disparan agentes via agent.execute.request — el blueprint solo gestiona la config y el estado compuesto persistido.",
+
+  "id": "carta-digital",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "version": "blueprint-1.0.0",
+  "language": "es",
+
+  "rol": "Backoffice de la carta publica del cliente. Custodio del archivo de config (branding, dominio publico, opciones) + la carta compuesta final (snapshot listo para servir). NO compone — eso lo hacen los agentes cartadigital-composer / ofertas / reviewer cuando el LLM les delega via agent.execute.request.",
+
+  "garantiza": [
+    "Config de carta digital persistida en /carta-digital.json del proyecto.",
+    "get_config / update_config son CRUD sobre ese archivo.",
+    "set_carta_compuesta guarda el snapshot final (compuesto por agentes) listo para servir.",
+    "get_carta_publica devuelve el snapshot compuesto tal cual."
+  ],
+
+  "no_garantiza": [
+    "Composicion creativa — eso lo hace el agente cartadigital-composer.",
+    "Generacion PWA build — eso lo hace cartadigital-pwa-builder (agente).",
+    "Generacion de ofertas — agente cartadigital-ofertas.",
+    "Reaccion automatica a carta.actualizada / tarifas.config.actualizada — el blueprint no es reactivo en background. El LLM en page=carta-digital decide cuando recomponer."
+  ],
+
+  "estado_persistente": {
+    "paths_relativos": {
+      "config": "/carta-digital.json"
+    },
+    "shape_config": "{ _version, _updated_at, branding: {nombre, lema, colores, logo_url, fuente, ...}, dominio_publico, contacto: {telefono, email, web, redes}, opciones_visualizacion, carta_compuesta: {meta, categorias, productos, ofertas, generado_at, generado_por} }"
+  },
+
+  "eventos_publicados": [
+    "cartadigital.get_config.response", "cartadigital.get_config.failed",
+    "cartadigital.update_config.response", "cartadigital.update_config.failed",
+    "cartadigital.get_carta_publica.response", "cartadigital.get_carta_publica.failed",
+    "cartadigital.set_carta_compuesta.response", "cartadigital.set_carta_compuesta.failed",
+    "cartadigital.config.actualizada", "cartadigital.carta_publica.actualizada"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "operaciones": {
+    "get_config": {
+      "input": "{ project_id (req), request_id (req), correlation_id? }",
+      "pseudocodigo": [
+        "async get_config(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-digital.json' })",
+        "  if (raw.status === 404) return { status: 200, data: { _version: '1.0', _updated_at: nowISO(), branding: {}, opciones_visualizacion: {}, carta_compuesta: null } }",
+        "  if (raw.status >= 400) return raw",
+        "  return { status: 200, data: JSON.parse(raw.content) }"
+      ],
+      "reglas_clave": ["Sin config → devuelve config-vacia default (no error)."],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "update_config": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, campos (req — object con branding/dominio/contacto/opciones a modificar) }",
+      "pseudocodigo": [
+        "async update_config(input):",
+        "  if (!input.project_id || !input.campos || Object.keys(input.campos).length === 0) return INVALID_INPUT",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-digital.json' })",
+        "  config = raw.status === 404 ? { _version: '1.0', _updated_at: nowISO(), branding: {}, opciones_visualizacion: {}, carta_compuesta: null } : JSON.parse(raw.content)",
+        "  // Merge superficial campos (top-level) o profundo en sub-objetos como branding.",
+        "  for (const k of Object.keys(input.campos)) {",
+        "    if (typeof input.campos[k] === 'object' && input.campos[k] !== null && !Array.isArray(input.campos[k]) && typeof config[k] === 'object') {",
+        "      config[k] = { ...(config[k] || {}), ...input.campos[k] }",
+        "    } else { config[k] = input.campos[k] }",
+        "  }",
+        "  config._updated_at = nowISO()",
+        "  write_resp = await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/carta-digital.json', content: JSON.stringify(config, null, 2), encoding: 'utf-8', atomic: true })",
+        "  if (write_resp.status >= 400) return write_resp",
+        "  await publish('cartadigital.config.actualizada', { project_id: input.project_id, campos_modificados: Object.keys(input.campos), correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  return { status: 200, data: config }"
+      ],
+      "reglas_clave": ["Merge profundo en sub-objetos (branding, contacto). Si el campo es array o primitivo, reemplaza."],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "get_carta_publica": {
+      "input": "{ project_id (req), request_id (req), correlation_id? }",
+      "pseudocodigo": [
+        "async get_carta_publica(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-digital.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'carta_publica', hint: 'aun no hay carta compuesta — el LLM debe delegar a cartadigital-composer primero' }",
+        "  if (raw.status >= 400) return raw",
+        "  config = JSON.parse(raw.content)",
+        "  if (!config.carta_compuesta) return RESOURCE_NOT_FOUND { entity_type: 'carta_publica', hint: 'config existe pero carta_compuesta es null — delegar a composer' }",
+        "  return { status: 200, data: { branding: config.branding, contacto: config.contacto, carta: config.carta_compuesta } }"
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+
+    "set_carta_compuesta": {
+      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_compuesta (req — objeto producido por cartadigital-composer), generado_por? (string id de agente) }",
+      "pseudocodigo": [
+        "async set_carta_compuesta(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.carta_compuesta || typeof input.carta_compuesta !== 'object') return INVALID_INPUT { field: 'carta_compuesta' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/carta-digital.json' })",
+        "  config = raw.status === 404 ? { _version: '1.0', _updated_at: nowISO(), branding: {}, opciones_visualizacion: {}, carta_compuesta: null } : JSON.parse(raw.content)",
+        "  config.carta_compuesta = {",
+        "    ...input.carta_compuesta,",
+        "    generado_at: nowISO(),",
+        "    generado_por: input.generado_por || 'unknown'",
+        "  }",
+        "  config._updated_at = nowISO()",
+        "  write_resp = await publishAndWait('fs.write.request', { project_id: input.project_id, path: '/carta-digital.json', content: JSON.stringify(config, null, 2), encoding: 'utf-8', atomic: true })",
+        "  if (write_resp.status >= 400) return write_resp",
+        "  await publish('cartadigital.carta_publica.actualizada', { project_id: input.project_id, generado_at: config.carta_compuesta.generado_at, generado_por: config.carta_compuesta.generado_por, correlation_id: input.correlation_id, timestamp: nowISO() })",
+        "  return { status: 200, data: config.carta_compuesta }"
+      ],
+      "reglas_clave": ["Reemplaza la carta_compuesta entera (no merge — el agente compositor genera completa).", "Anyade generado_at + generado_por automaticamente."],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    }
+  },
+
+  "trabajo_pendiente": [
+    {
+      "id": "subscribers_carta_actualizada_y_tarifas_config",
+      "estado": "abierto",
+      "descripcion": "El legacy se subscribia a carta.actualizada y tarifas.config.actualizada para invalidar la carta_compuesta cuando los datos upstream cambiaban. El blueprint no es reactivo. Posible solucion: marcar la carta_compuesta como 'desfasada' en update_config cuando llegan ciertos eventos via agente observer, o que el LLM al entrar a page=carta-digital verifique fechas (carta.meta.updated_at vs carta_compuesta.generado_at) y proponga recomponer."
+    },
+    {
+      "id": "schemas_oficiales_carta_digital",
+      "estado": "abierto",
+      "descripcion": "Eventos cartadigital.config.actualizada y cartadigital.carta_publica.actualizada no tienen schemas oficiales. Crear cuando el subsistema-carta tenga sus schemas formales."
+    }
+  ]
+}

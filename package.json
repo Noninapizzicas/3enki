@@ -75,7 +75,6 @@
     "test:pizzepos__categorias": "node tests/unit/pizzepos__categorias.test.js",
     "test:pizzepos__comandero": "node tests/unit/pizzepos__comandero.test.js",
     "test:pizzepos__ingredientes": "node tests/unit/pizzepos__ingredientes.test.js",
-    "test:escandallo": "node tests/unit/escandallo.test.js",
     "test:pizzepos__cocina": "node tests/unit/pizzepos__cocina.test.js",
     "test:conversacion__agent-observer": "node tests/unit/conversacion__agent-observer.test.js",
     "test:conversacion__memory-user-profile": "node tests/unit/conversacion__memory-user-profile.test.js",

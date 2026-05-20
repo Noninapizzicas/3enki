@@ -1,0 +1,98 @@
+{
+  "_doc": "Bridge ligero de lecturas para el dominio recetas. Lee /recetas.json del proyecto activo via fs.read.request y expone slices ordenados via tools canonicas. Sirve la pagina frontend [project_id]/recetas/ con latencia <50ms en lugar de los 5-25s del LLM-runtime del blueprint. El blueprint del modulo recetas (modules/pizzepos/recetas/) sigue siendo runtime LLM para operaciones complejas (crear, validar, editar, eliminar) — este bridge es solo lecto-puro. tools.contract v1.2: una declaracion (tools[]) → tres destinos (LLM, bus, uiHandler) auto-wired por el loader.",
+  "name": "recetas-api",
+  "version": "1.0.0",
+  "description": "Bridge lecto-puro del store de recetas. Lee /recetas.json y devuelve slices ordenados para el frontend.",
+  "author": "2enki Team",
+  "language": "es",
+  "main": "index.js",
+
+  "config": {
+    "fs_request_timeout_ms": 10000,
+    "default_list_limit": 100
+  },
+
+  "events": {
+    "subscribes": [
+      {
+        "event": "fs.read.response",
+        "handler": "onFsReadResponse",
+        "description": "Respuesta de fs.read.request publicada por filesystem. El handler resuelve la promesa pendiente correlacionada por request_id en pendingFs."
+      }
+    ]
+  },
+
+  "tools": [
+    {
+      "name": "recetas.listar",
+      "description": "Lista las recetas del proyecto desde /recetas.json. Devuelve resumen por receta (id, nombre, porciones, dificultad, estado_operativo, incompleta, campos_pendientes, version, updated_at, ingredientes_count derivado). Soporta filtro por estado_operativo y limit. Ordenado por updated_at descendente. Lecto-puro.",
+      "handler": "handleListar",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto activo" },
+          "estado_operativo": { "type": "string", "enum": ["borrador", "en_servicio", "archivada"], "description": "Filtro opcional por estado" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "description": "Maximo de items a devolver (default 100)" }
+        },
+        "required": ["project_id"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "recetas.obtener",
+      "description": "Devuelve UNA receta completa por id (UUID). Si no existe el archivo o la receta, RESOURCE_NOT_FOUND.",
+      "handler": "handleObtener",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "UUID de la receta" },
+          "project_id": { "type": "string", "description": "ID del proyecto activo" }
+        },
+        "required": ["id", "project_id"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "recetas.ingredientes",
+      "description": "Devuelve el catalogo de ingredientes del proyecto desde /recetas.json[ingredientes_catalogo]. Ordenado alfabeticamente por nombre. Lecto-puro.",
+      "handler": "handleIngredientes",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto activo" }
+        },
+        "required": ["project_id"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "recetas.estadisticas",
+      "description": "Estadisticas agregadas del store: total_recetas, por_estado {borrador, en_servicio, archivada}, incompletas, ingredientes_catalogo (count), ingredientes_usados_unicos. Lecto-puro.",
+      "handler": "handleEstadisticas",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "ID del proyecto activo" }
+        },
+        "required": ["project_id"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "observability": {
+    "metrics": [
+      { "name": "recetas-api.listar.total",        "labels": ["project_id", "status"] },
+      { "name": "recetas-api.obtener.total",       "labels": ["project_id", "status"] },
+      { "name": "recetas-api.ingredientes.total",  "labels": ["project_id", "status"] },
+      { "name": "recetas-api.estadisticas.total",  "labels": ["project_id", "status"] }
+    ]
+  },
+
+  "tracing": {
+    "propaga_correlation_id": true,
+    "evidencia": "Los handlers no publican eventos propios (lecto-puros). La trazabilidad upstream va via correlation_id del fs.read.request que el filesystem propaga en fs.read.response."
+  },
+
+  "tier": "tier_3_core"
+}

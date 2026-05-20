@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-20T08:48:19.002Z",
-  "total": 2396,
+  "generated_at": "2026-05-20T09:34:15.100Z",
+  "total": 2389,
   "by_validator": {
     "naming": 39,
     "events": 185,
@@ -13,7 +13,7 @@
     "agent-flow": 7,
     "llm-flow": 1,
     "tools": 484,
-    "agents-config": 173,
+    "agents-config": 166,
     "module-rewrite": 65,
     "frontend": 374,
     "security": 1,
@@ -29,7 +29,7 @@
   "by_severity": {
     "warning": 2128,
     "info": 107,
-    "error": 189
+    "error": 182
   },
   "signatures": [
     "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-digital publica agent.execute.request en modules/pizzepos/carta-digital/index.js:120 — payload.campos_visibles no incluye correlation_id",
@@ -177,20 +177,13 @@
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/menu-validator.json — tool \"carta.get\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/menu-validator.json — tool \"carta.stats\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-analyzer.json — tool \"recetas.analizar\" no esta registrada en ningun module.json del repo",
-    "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-analyzer.json — tool \"recetas.ingredientes\" no esta registrada en ningun module.json del repo",
-    "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-analyzer.json — tool \"recetas.obtener\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-chef-advisor.json — tool \"recetas.actualizar\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-chef-advisor.json — tool \"recetas.buscar\" no esta registrada en ningun module.json del repo",
-    "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-chef-advisor.json — tool \"recetas.obtener\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-completer.json — tool \"recetas.actualizar\" no esta registrada en ningun module.json del repo",
-    "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-completer.json — tool \"recetas.listar\" no esta registrada en ningun module.json del repo",
-    "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-completer.json — tool \"recetas.obtener\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-curator.json — tool \"recetas.actualizar\" no esta registrada en ningun module.json del repo",
-    "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-curator.json — tool \"recetas.obtener\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-researcher.json — tool \"recetas.buscar\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-researcher.json — tool \"recetas.crear\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-researcher.json — tool \"recetas.investigar_receta\" no esta registrada en ningun module.json del repo",
-    "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/recipe-structurer.json — tool \"recetas.obtener\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/scheduler-dispatcher.json — tool \"carta-scheduler.confirmar\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/scheduler-dispatcher.json — tool \"carta-scheduler.proximos_cambios\" no esta registrada en ningun module.json del repo",
     "agents-config|drift_agent_tools_fantasma|conversacion__ai-agent-framework/agents/scheduler-dispatcher.json — tool \"carta-scheduler.rechazar\" no esta registrada en ningun module.json del repo",
@@ -875,7 +868,7 @@
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/project/ProjectPanel.svelte:357 — #0d0d0d fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/prompts/PromptsPanel.svelte:797 — #1a1d24 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/provider/ProviderPanel.svelte:125 — #a3a3a3 fuera de paleta canonica",
-    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/recetas/RecetasPanel.svelte:83 — #f59e0b fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/recetas/RecetasPanel.svelte:77 — #f59e0b fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/viabilidad/ViabilidadBrowser.svelte:83 — #059669 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/viabilidad/ViabilidadCard.svelte:113 — #e5e7eb fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/viabilidad/ViabilidadDetail.svelte:239 — #6b7280 fuera de paleta canonica",

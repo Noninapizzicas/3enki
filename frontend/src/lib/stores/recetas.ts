@@ -1,12 +1,19 @@
 /**
- * Recetas Store - MQTT Request/Response + Real-time Events
+ * Recetas Store — MQTT Request/Response + Real-time Events
  *
- * Gestión de recetas con ingredientes, cantidades y precios de mercado:
- * - List/Get/Create via mqttRequest('recetas', action)
- * - Real-time updates via receta.creada, receta.actualizada, receta.eliminada
+ * Las lecturas (listar / obtener / ingredientes / estadisticas) van al modulo
+ * backend `recetas-api` (bridge lecto-puro de /recetas.json). Las operaciones
+ * complejas (crear / editar / eliminar) las hace el blueprint del modulo
+ * `recetas` ejecutado por el LLM via el chat — no se exponen desde esta pagina.
+ *
+ * Shape canonico: el del blueprint del subsistema-recetario (estado_operativo,
+ * dificultad, incompleta, campos_pendientes). NO contiene `categoria`,
+ * `coste_total` ni `coste_porcion` — esos datos NO viven en /recetas.json
+ * (escandallo es stateless on-demand). Si el usuario quiere coste, lo pide
+ * al chat — esa es la decision arquitectonica vigente.
  */
 
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 import {
   mqttRequest,
@@ -14,64 +21,72 @@ import {
   MqttRequestError
 } from '$lib/ui-core/mqtt-request';
 import { activeProjectId } from './projects';
+import { get } from 'svelte/store';
 
 // =============================================================================
-// TYPES
+// TYPES — shape canonico del blueprint recetas
 // =============================================================================
+
+export type EstadoOperativo = 'borrador' | 'en_servicio' | 'archivada';
+export type Dificultad = 'baja' | 'media' | 'alta';
 
 export interface RecetaIngrediente {
-  ingrediente_id: string;
   nombre: string;
   cantidad: number;
-  unidad: string;
-  precio_mercado: number;
-  precio_compra: number | null;
+  unidad?: string;
+  // Campos opcionales — el blueprint puede no rellenarlos todos.
+  ingrediente_id?: string;
   notas?: string;
 }
 
 export interface Receta {
   id: string;
   nombre: string;
-  descripcion: string;
-  categoria: string;
-  tags: string[];
   porciones: number;
-  tiempo_preparacion: number | null;
-  dificultad: 'baja' | 'media' | 'alta';
-  ingredientes: RecetaIngrediente[];
-  elaboracion: string[];
-  notas: string;
-  fuente: string;
-  coste_total: number;
-  coste_porcion: number;
-  proyecto_id: string;
-  created_at: string;
+  dificultad: Dificultad;
+  estado_operativo: EstadoOperativo;
+  incompleta: boolean;
+  campos_pendientes: string[];
+  version: number;
   updated_at: string;
+  ingredientes: RecetaIngrediente[];
+  ingredientes_count: number;
+  // Campos extra que el blueprint pueda añadir en el futuro:
+  descripcion?: string;
+  tags?: string[];
+  elaboracion?: string[];
+  notas?: string;
 }
 
 export interface RecetaResumen {
   id: string;
   nombre: string;
-  categoria: string;
   porciones: number;
+  dificultad: Dificultad;
+  estado_operativo: EstadoOperativo;
+  incompleta: boolean;
+  campos_pendientes: string[];
+  version: number;
+  updated_at: string;
   ingredientes_count: number;
-  coste_total: number;
-  coste_porcion: number;
-  created_at: string;
 }
 
 export interface CatalogoIngrediente {
-  id: string;
   nombre: string;
-  categoria: string;
-  unidad_base: string;
-  precio_mercado_kg: number;
-  precio_compra_kg: number | null;
-  fuente_precio: string;
-  alergenos: string[];
-  proveedor: string | null;
-  recetas_count: number;
-  updated_at: string;
+  unidad?: string;
+  precio_mercado?: number;
+  // Campos opcionales que el blueprint pueda rellenar:
+  alergenos?: string[];
+  proveedor?: string;
+  updated_at?: string;
+}
+
+export interface RecetasStats {
+  total_recetas: number;
+  por_estado: { borrador: number; en_servicio: number; archivada: number };
+  incompletas: number;
+  ingredientes_catalogo: number;
+  ingredientes_usados_unicos: number;
 }
 
 export interface RecetasState {
@@ -85,28 +100,14 @@ export interface RecetasState {
   stats: RecetasStats | null;
 }
 
-export interface RecetasStats {
-  total_recetas: number;
-  total_ingredientes: number;
-  coste_porcion?: {
-    medio: number;
-    minimo: number;
-    maximo: number;
-  };
-  por_categoria?: Record<string, { count: number; coste_medio: number }>;
-  top_ingredientes?: { nombre: string; recetas: number }[];
-}
-
 interface ListResponse {
-  recetas: RecetaResumen[];
   total: number;
-  categorias: string[];
+  recetas: RecetaResumen[];
 }
 
 interface IngredientesResponse {
-  ingredientes: CatalogoIngrediente[];
   total: number;
-  categorias: string[];
+  ingredientes: CatalogoIngrediente[];
 }
 
 // =============================================================================
@@ -131,19 +132,20 @@ const initialState: RecetasState = {
 export const recetasStore = writable<RecetasState>(initialState);
 
 // =============================================================================
-// ACTIONS
+// ACTIONS (vía mqttRequest → bridge recetas-api)
 // =============================================================================
 
-export async function loadRecetas(categoria?: string): Promise<void> {
+export async function loadRecetas(estado?: EstadoOperativo): Promise<void> {
   recetasStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const data: Record<string, string> = {};
     const pid = get(activeProjectId);
-    if (pid) data.project_id = pid;
-    if (categoria) data.categoria = categoria;
+    if (!pid) throw new Error('No hay proyecto activo');
 
-    const response = await mqttRequest<ListResponse>('recetas', 'list', data);
+    const args: Record<string, unknown> = { project_id: pid };
+    if (estado) args.estado_operativo = estado;
+
+    const response = await mqttRequest<ListResponse>('recetas', 'listar', args);
 
     recetasStore.update(s => ({
       ...s,
@@ -164,8 +166,10 @@ export async function getReceta(id: string): Promise<Receta | null> {
 
   try {
     const pid = get(activeProjectId);
-    const response = await mqttRequest<Receta>('recetas', 'get', { id, project_id: pid });
-    const receta = response.data as Receta;
+    if (!pid) throw new Error('No hay proyecto activo');
+
+    const response = await mqttRequest<Receta>('recetas', 'obtener', { id, project_id: pid });
+    const receta = response.data;
 
     recetasStore.update(s => ({
       ...s,
@@ -184,16 +188,14 @@ export async function getReceta(id: string): Promise<Receta | null> {
   }
 }
 
-export async function loadIngredientes(categoria?: string): Promise<void> {
+export async function loadIngredientes(): Promise<void> {
   recetasStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const data: Record<string, string> = {};
     const pid = get(activeProjectId);
-    if (pid) data.project_id = pid;
-    if (categoria) data.categoria = categoria;
+    if (!pid) throw new Error('No hay proyecto activo');
 
-    const response = await mqttRequest<IngredientesResponse>('recetas', 'ingredientes', data);
+    const response = await mqttRequest<IngredientesResponse>('recetas', 'ingredientes', { project_id: pid });
 
     recetasStore.update(s => ({
       ...s,
@@ -211,7 +213,9 @@ export async function loadIngredientes(categoria?: string): Promise<void> {
 export async function loadStats(): Promise<void> {
   try {
     const pid = get(activeProjectId);
-    const response = await mqttRequest<RecetasStats>('recetas', 'stats', { project_id: pid });
+    if (!pid) return;
+
+    const response = await mqttRequest<RecetasStats>('recetas', 'estadisticas', { project_id: pid });
 
     recetasStore.update(s => ({
       ...s,
@@ -246,82 +250,74 @@ export function clearError(): void {
 // =============================================================================
 // REAL-TIME SUBSCRIPTIONS
 // =============================================================================
+//
+// Los eventos receta.creada / receta.actualizada / receta.eliminada los publica
+// el blueprint del modulo recetas tras ejecutar las operaciones via LLM. El
+// payload es la receta canonica (shape Receta). Aqui solo actualizamos el
+// estado local — la fuente de verdad sigue siendo /recetas.json (lectura via
+// recetas-api).
 
 let cleanupFns: (() => void)[] = [];
+
+function recetaToResumen(r: Receta): RecetaResumen {
+  return {
+    id: r.id,
+    nombre: r.nombre,
+    porciones: r.porciones,
+    dificultad: r.dificultad,
+    estado_operativo: r.estado_operativo,
+    incompleta: r.incompleta,
+    campos_pendientes: r.campos_pendientes || [],
+    version: r.version,
+    updated_at: r.updated_at,
+    ingredientes_count: Array.isArray(r.ingredientes) ? r.ingredientes.length : 0
+  };
+}
 
 export function initRecetasSubscriptions(): () => void {
   cleanupFns.forEach(fn => fn());
   cleanupFns = [];
 
-  // Receta creada
   cleanupFns.push(
     mqttSubscribe('receta.creada', (_topic, payload) => {
       const receta = payload as Receta;
-      if (receta?.id) {
-        console.log('[Recetas] Receta creada:', receta.nombre);
-        recetasStore.update(s => ({
-          ...s,
-          recetas: [
-            {
-              id: receta.id,
-              nombre: receta.nombre,
-              categoria: receta.categoria,
-              porciones: receta.porciones,
-              ingredientes_count: receta.ingredientes?.length || 0,
-              coste_total: receta.coste_total,
-              coste_porcion: receta.coste_porcion,
-              created_at: receta.created_at
-            },
-            ...s.recetas
-          ]
-        }));
-      }
+      if (!receta?.id) return;
+      console.log('[Recetas] Receta creada:', receta.nombre);
+      recetasStore.update(s => ({
+        ...s,
+        recetas: [recetaToResumen(receta), ...s.recetas]
+      }));
     })
   );
 
-  // Receta actualizada
   cleanupFns.push(
     mqttSubscribe('receta.actualizada', (_topic, payload) => {
       const receta = payload as Receta;
-      if (receta?.id) {
-        console.log('[Recetas] Receta actualizada:', receta.nombre);
-        recetasStore.update(s => ({
-          ...s,
-          recetas: s.recetas.map(r =>
-            r.id === receta.id
-              ? {
-                  ...r,
-                  nombre: receta.nombre,
-                  categoria: receta.categoria,
-                  coste_total: receta.coste_total,
-                  coste_porcion: receta.coste_porcion,
-                  ingredientes_count: receta.ingredientes?.length || r.ingredientes_count
-                }
-              : r
-          ),
-          selectedReceta: s.selectedId === receta.id ? receta : s.selectedReceta
-        }));
-      }
+      if (!receta?.id) return;
+      console.log('[Recetas] Receta actualizada:', receta.nombre);
+      recetasStore.update(s => ({
+        ...s,
+        recetas: s.recetas.map(r => r.id === receta.id ? recetaToResumen(receta) : r),
+        selectedReceta: s.selectedId === receta.id ? receta : s.selectedReceta
+      }));
     })
   );
 
-  // Receta eliminada
   cleanupFns.push(
     mqttSubscribe('receta.eliminada', (_topic, payload) => {
       const data = payload as { receta_id: string };
-      if (data?.receta_id) {
-        console.log('[Recetas] Receta eliminada:', data.receta_id);
-        recetasStore.update(s => ({
-          ...s,
-          recetas: s.recetas.filter(r => r.id !== data.receta_id),
-          selectedReceta: s.selectedId === data.receta_id ? null : s.selectedReceta,
-          selectedId: s.selectedId === data.receta_id ? null : s.selectedId
-        }));
-      }
+      if (!data?.receta_id) return;
+      console.log('[Recetas] Receta eliminada:', data.receta_id);
+      recetasStore.update(s => ({
+        ...s,
+        recetas: s.recetas.filter(r => r.id !== data.receta_id),
+        selectedReceta: s.selectedId === data.receta_id ? null : s.selectedReceta,
+        selectedId: s.selectedId === data.receta_id ? null : s.selectedId
+      }));
     })
   );
 
-  // Load initial data
+  // Carga inicial
   loadRecetas();
   loadStats();
 
@@ -348,13 +344,12 @@ function getErrorMessage(error: unknown): string {
 
 export const sortedRecetas = derived(recetasStore, $s =>
   [...$s.recetas].sort((a, b) =>
-    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
   )
 );
 
 export const selectedReceta = derived(recetasStore, $s => $s.selectedReceta);
-export const recetasActiveTab = derived(recetasStore, $s => $s.activeTab);
+export const recetasStats = derived(recetasStore, $s => $s.stats);
 export const recetasLoading = derived(recetasStore, $s => $s.loading);
 export const recetasError = derived(recetasStore, $s => $s.error);
-export const recetasStats = derived(recetasStore, $s => $s.stats);
 export const recetasIngredientes = derived(recetasStore, $s => $s.ingredientes);

@@ -22,7 +22,67 @@
     { "domain": "variaciones", "action": "health",          "handler": "handleHealthCheck",            "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "variaciones", "action": "metrics",         "handler": "handleGetMetrics",             "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "tools": [],
+  "tools": [
+    {
+      "name": "variaciones.get",
+      "description": "Obtiene la configuracion de variaciones de un producto: ingredientes que se pueden quitar, si permite anadir extras, sugerencias y maximo de extras.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "producto_id": { "type": "string", "description": "Identificador del producto." }
+        },
+        "required": ["producto_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleGetVariacionesProducto",
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "variaciones.validar",
+      "description": "Valida una variacion concreta: comprueba que los ingredientes a quitar esten permitidos y que los extras respeten el limite del producto.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "producto_id":          { "type": "string", "description": "Identificador del producto." },
+          "ingredientes_quitar":  { "type": "array",  "items": { "type": "string" }, "description": "IDs de ingredientes a quitar." },
+          "ingredientes_anadir":  { "type": "array",  "items": { "type": "object" }, "description": "Lista de extras (cada item con ingrediente_id y cantidad)." }
+        },
+        "required": ["producto_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleValidarVariacion",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "variaciones.calcular_precio",
+      "description": "Calcula el precio total de un producto con variaciones (precio base + suma de extras consultados al modulo ingredientes).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "producto_id":         { "type": "string", "description": "Identificador del producto." },
+          "ingredientes_anadir": { "type": "array",  "items": { "type": "object" }, "description": "Lista de extras (ingrediente_id, cantidad)." }
+        },
+        "required": ["producto_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleCalcularPrecio",
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "variaciones.health",
+      "description": "Health check del modulo variaciones: estado del modulo, version y total de productos configurados.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleHealthCheck",
+      "errores_conocidos": []
+    },
+    {
+      "name": "variaciones.metrics",
+      "description": "Metricas operativas del modulo variaciones (counters de variaciones validadas/rechazadas y gauges).",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleGetMetrics",
+      "errores_conocidos": []
+    }
+  ],
   "dependencies": ["ingredientes"],
   "tracing": {
     "propaga_correlation_id": true

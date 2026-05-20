@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-20T14:13:58.308Z",
-  "total": 2397,
+  "generated_at": "2026-05-20T16:48:55.790Z",
+  "total": 2392,
   "by_validator": {
     "naming": 39,
     "events": 185,
@@ -12,7 +12,7 @@
     "chat-flow": 2,
     "agent-flow": 7,
     "llm-flow": 1,
-    "tools": 484,
+    "tools": 479,
     "agents-config": 173,
     "module-rewrite": 65,
     "frontend": 375,
@@ -29,7 +29,7 @@
   "by_severity": {
     "warning": 2129,
     "info": 107,
-    "error": 189
+    "error": 184
   },
   "signatures": [
     "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-digital publica agent.execute.request en modules/pizzepos/carta-digital/index.js:120 — payload.campos_visibles no incluye correlation_id",
@@ -1755,9 +1755,9 @@
     "observability|drift_metrica_sin_prefix_modulo|pizzepos/cuentas modules/pizzepos/cuentas/index.js:1007 — métrica \"cuenta.por_estado.${estado}\" no empieza con prefijo del módulo",
     "observability|drift_metrica_sin_prefix_modulo|pizzepos/cuentas modules/pizzepos/cuentas/index.js:1009 — métrica \"cuenta.alertas.count\" no empieza con prefijo del módulo",
     "observability|drift_metrica_sin_prefix_modulo|pizzepos/cuentas modules/pizzepos/cuentas/index.js:988 — métrica \"cuenta.activas.count\" no empieza con prefijo del módulo",
-    "observability|drift_metrica_sin_prefix_modulo|pizzepos/variaciones modules/pizzepos/variaciones/index.js:175 — métrica \"variacion.productos_configurados.count\" no empieza con prefijo del módulo",
-    "observability|drift_metrica_sin_prefix_modulo|pizzepos/variaciones modules/pizzepos/variaciones/index.js:259 — métrica \"variacion.validada.total\" no empieza con prefijo del módulo",
-    "observability|drift_metrica_sin_prefix_modulo|pizzepos/variaciones modules/pizzepos/variaciones/index.js:262 — métrica \"variacion.rechazada.total\" no empieza con prefijo del módulo",
+    "observability|drift_metrica_sin_prefix_modulo|pizzepos/variaciones modules/pizzepos/variaciones/index.js:149 — métrica \"variacion.productos_configurados.count\" no empieza con prefijo del módulo",
+    "observability|drift_metrica_sin_prefix_modulo|pizzepos/variaciones modules/pizzepos/variaciones/index.js:233 — métrica \"variacion.validada.total\" no empieza con prefijo del módulo",
+    "observability|drift_metrica_sin_prefix_modulo|pizzepos/variaciones modules/pizzepos/variaciones/index.js:236 — métrica \"variacion.rechazada.total\" no empieza con prefijo del módulo",
     "observability|drift_severity_invertida|esp32-flasher modules/esp32-flasher/index.js:449 — \"flash.cancelled\" sugiere fallo pero level=info",
     "persistence|drift_cross_module_persistence_access|facturacion/asesoria modules/facturacion/asesoria/index.js:490 — accede a path de \"metricas\" (data)",
     "persistence|drift_cross_module_persistence_access|facturas modules/facturas/index.js:279 — accede a path de \"metricas\" (data)",
@@ -2030,11 +2030,6 @@
     "tools|drift_modulo_con_uihandler_register_manual|modules/pizzepos/productos/index.js:195 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",
     "tools|drift_modulo_con_uihandler_register_manual|modules/pizzepos/productos/index.js:196 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",
     "tools|drift_modulo_con_uihandler_register_manual|modules/pizzepos/productos/index.js:197 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",
-    "tools|drift_modulo_con_uihandler_register_manual|modules/pizzepos/variaciones/index.js:119 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",
-    "tools|drift_modulo_con_uihandler_register_manual|modules/pizzepos/variaciones/index.js:120 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",
-    "tools|drift_modulo_con_uihandler_register_manual|modules/pizzepos/variaciones/index.js:121 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",
-    "tools|drift_modulo_con_uihandler_register_manual|modules/pizzepos/variaciones/index.js:122 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",
-    "tools|drift_modulo_con_uihandler_register_manual|modules/pizzepos/variaciones/index.js:123 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",
     "tools|drift_modulo_con_uihandler_register_manual|modules/security-p2p/index.js:457 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",
     "tools|drift_modulo_con_uihandler_register_manual|modules/security-p2p/index.js:458 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",
     "tools|drift_modulo_con_uihandler_register_manual|modules/security-p2p/index.js:459 — usa uiHandler.register(...) manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler con domain/action derivados del name.",

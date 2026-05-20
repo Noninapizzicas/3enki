@@ -972,8 +972,13 @@ class ModuleLoader {
       // Registrar siempre el schema para que el LLM conozca la tool.
       // La ejecución va por eventos — el handler es opcional.
       const handlerName = tool.handler || tool.name.split('.')[1];
-      const handler = instance?.[handlerName];
-      const boundHandler = typeof handler === 'function' ? handler.bind(instance) : null;
+      // tools.contract v1.2: handler puede ser un path con puntos para resolver
+      // metodos anidados (ej. 'strategies.mesa.handleAbrirMesa'). Caso comun
+      // para modulos con patron Strategy donde los handlers viven en
+      // sub-componentes accesibles desde la instance principal. Para handlers
+      // sin punto el comportamiento es identico a instance[handlerName].
+      const { fn: handler, owner: handlerOwner } = this._resolveHandlerByPath(instance, handlerName);
+      const boundHandler = typeof handler === 'function' ? handler.bind(handlerOwner) : null;
 
       const entry = {
         name: tool.name,
@@ -1044,6 +1049,38 @@ class ModuleLoader {
    * @param {string} toolName
    * @returns {{domain: string, action: string} | null}
    */
+  /**
+   * Resuelve un handler segun su string declarado en module.json.tools[].handler.
+   *
+   * Soporta dos formas:
+   *   - 'handleX'                       → instance.handleX           (caso default)
+   *   - 'strategies.mesa.handleAbrirMesa' → instance.strategies.mesa.handleAbrirMesa
+   *
+   * Para que `this` se enlace correctamente al objeto duenyo cuando el method
+   * vive en un sub-componente, devolvemos { fn, owner } y el caller hace
+   * fn.bind(owner). Sin esto, un metodo de MesaStrategy bindeado al modulo
+   * padre perderia acceso a this.mesasActivas, this.modulo, etc.
+   *
+   * @private
+   * @param {Object} instance
+   * @param {string} path
+   * @returns {{fn: Function|undefined, owner: Object}}
+   */
+  _resolveHandlerByPath(instance, path) {
+    if (!path || typeof path !== 'string') return { fn: undefined, owner: instance };
+    if (!path.includes('.')) {
+      return { fn: instance?.[path], owner: instance };
+    }
+    const parts = path.split('.');
+    let owner = instance;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (owner == null) return { fn: undefined, owner: instance };
+      owner = owner[parts[i]];
+    }
+    if (owner == null) return { fn: undefined, owner: instance };
+    return { fn: owner[parts[parts.length - 1]], owner };
+  }
+
   _deriveUiKeyFromToolName(toolName) {
     if (typeof toolName !== 'string') return null;
     const firstDot = toolName.indexOf('.');

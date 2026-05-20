@@ -47,9 +47,9 @@
     },
     "handler": {
       "type": "string",
-      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*$",
       "minLength": 1,
-      "maxLength": 80,
+      "maxLength": 120,
       "description": "Nombre del metodo del modulo que implementa la tool. El framework lo invoca via this[handler](args). Ej: 'handleExtractPdf', 'crearRegla', 'toolGenerate'. NO incluye parentesis ni argumentos."
     },
     "errores_conocidos": {

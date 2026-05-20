@@ -144,13 +144,9 @@ class CuentasCanalesModule extends BaseModule {
       await strategy.subscribeToEvents(this.eventBus);
     }
 
-    // UI Handlers especificos por canal. Las 3 entries 'canales.{list,health,metrics}'
-    // del modulo padre las auto-wirea el loader desde tools[] (tools.contract v1.2).
-    if (this.uiHandler) {
-      for (const strategy of Object.values(this.strategies)) {
-        strategy.registerUIHandlers(this.uiHandler);
-      }
-    }
+    // tools.contract v1.2: el loader auto-wirea TODAS las tools[] del module.json
+    // (tanto las del padre 'canales.*' como las 60 de strategies/* con handlers
+    // tipo 'strategies.<canal>.handleX') a uiHandler. No registro manual.
 
     this.iniciarReseoDiario();
 
@@ -168,12 +164,8 @@ class CuentasCanalesModule extends BaseModule {
       this._resetInterval = null;
     }
 
-    if (this.uiHandler) {
-      for (const strategy of Object.values(this.strategies)) {
-        strategy.unregisterUIHandlers(this.uiHandler);
-      }
-      // El loader desregistra 'canales.{list,health,metrics}' automaticamente.
-    }
+    // El loader desregistra todas las tools[] (incluidas las de strategies/*)
+    // automaticamente via unregisterToolsForAI.
 
     for (const strategy of Object.values(this.strategies)) {
       strategy.cleanup();

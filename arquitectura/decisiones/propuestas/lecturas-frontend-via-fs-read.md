@@ -188,12 +188,12 @@ mqttSubscribe('receta.eliminada', () => loadRecetas());
 |---|---|---|---|
 | recetas | `/recetas.json` (blueprint) | ✅ | **Hecho** en este branch (commit 72019d2) |
 | carta-marketing | `/storage/config/marca.json` | ✅ | **Hecho** — incluye escritura directa (update_perfil cumple condiciones §5b). Sin listeners de `marketing.perfil.actualizado` hoy. |
-| escandallo | — (stateless on-demand) | ❌ | Necesita decidir persistencia primero. Si escandallo se vuelve stateful y escribe `coste_*` en `/recetas.json`, el patrón aplica con el mismo archivo de recetas. |
+| escandallo | — (stateless on-demand) | ❌ | **Bloqueado por decisión arquitectónica.** El blueprint actual NO persiste — cada invocación calcula fresco. Para que el frontend muestre costes sin esperar 5-25s al LLM, hay que bumpear el blueprint a stateful: que escuche `recetas.creada/modificada` y `mercadona.precio.obtenido`, recalcule, y escriba `coste_total`+`coste_porcion` en el record de cada receta dentro de `/recetas.json`. Una vez persistido, el frontend ya lee los costes desde la misma página de recetas — cero cambios adicionales aquí. |
 | viabilidad | `/viabilidad.json` | ✅ | **Hecho** — store dead-code eliminado (nadie lo importaba). ViabilidadPanel cargaba via `fetch('/api/viabilidad/*')` (HTTP REST a endpoints inexistentes — siempre estuvo roto). Migrado a `fs.read` directo, expedientes del blueprint expuestos como lista. Recomendaciones/historico: vacios hasta que escandallo persista historico. |
 | carta-digital | `/carta-digital.json` | ✅ | **Hecho** — store + 3 paneles (config, preview, stats). Stats convertido a placeholder hasta analytics persistido. Forzar composición eliminado (pídeselo al chat). |
 | carta-impresion | `/cartas-impresion/<id>.html` + `.meta.json` | ✅ | **Hecho** — `loadImpresion` lee ambos archivos en paralelo. `generarImpresion` se queda como hint al chat (requiere agente impresor). |
 | carta-design | `/carta-design/profiles/*.json` + built-ins inline | ✅ | **Hecho** — built-ins (5) inline en el store como constante (lista cerrada, source en `modules/pizzepos/carta-design/design-profiles/*.json`, sync manual). Custom via fs.list+fs.read. Gallery via fs.list de `/carta-design/designs/`. Save/delete via fs.write/fs.delete. Carta a diseñar leida directo de `/cartas/<id>.json` (carta-manager storage). |
-| pdf-viewer | — (consume servicios `local.pdfjs/sharp/google-vision`) | ❌ | No es lectura de storage; necesita handlers dedicados o resolver vía servicios canonicos del repo |
+| pdf-viewer | — (consume servicios `local.pdfjs/sharp/google-vision` via `ServiceExecutor`) | ❌ | **Categoría distinta — no es storage**. El módulo `pdf-viewer` ya tiene `index.js` con tools `pdf.create/list/metadata/extract` declaradas como `tools[]` en su `module.json`. Con el auto-wire del v1.2 esas tools quedan invocables como `mqttRequest('pdf','create'/'list'/...)`. Lo que pide el frontend (`pdfjs.info`/`pdfjs.render`) NO matchea esas tools — es de un servicio distinto (`local.pdfjs` via ServiceExecutor) que no está expuesto. Soluciones: (a) declarar `pdfjs.info`/`pdfjs.render` como tools[] en algún módulo que envuelva ServiceExecutor, (b) actualizar el frontend para usar `pdf.create/list/metadata` que sí existen, (c) crear puente JS si la lógica es no-trivial. Decisión deferida — el caso de uso real del frontend pdf-viewer no está claro. |
 
 ---
 
@@ -230,13 +230,27 @@ Si alguno de estos cambia, el patrón hay que revisarlo.
 
 ## 10 · Estado y propuestas de evolución
 
-- **Hoy**: probado en recetas (`72019d2`). Pendiente probar en navegador
-  con un proyecto real.
-- **Próximo**: aplicar a viabilidad y carta-* tras verificar que cada
-  uno tiene archivo de storage. Escandallo y pdf-viewer requieren
-  decisión arquitectónica adicional (no son trivialmente migrables).
-- **Si el patrón se confirma** tras los 8 dominios: subir la regla a
+- **Aplicado** (rama `claude/review-tools-architecture-Xm3bZ`) a 6 de los
+  8 dominios rotos:
+  - recetas (`72019d2`)
+  - carta-marketing (`3316810`) — escrituras incluidas (§5b)
+  - carta-digital (`27cd15e`) — 3 paneles + store
+  - viabilidad (`b4d0aa7`) — store muerto borrado, panel migrado
+  - carta-impresion + carta-design (`bd24526`) — multi-file con
+    `fs.list`+`fs.read`, built-ins inline en el store
+- **Bloqueados / categoría distinta**:
+  - escandallo: requiere bumpear blueprint a stateful (persistir costes
+    en `/recetas.json`) antes de poder aplicar el patrón.
+  - pdf-viewer: no es lectura de storage, decisión deferida sobre cómo
+    exponer servicios `local.pdfjs`/`sharp`/`google-vision` (frontend
+    actual llama tools que no existen — drift previo a esta rama).
+- **Próximo natural**: probar en navegador con un proyecto real las 6
+  páginas migradas. Si todas funcionan end-to-end, subir la regla a
   `frontend.contract.json` como principio canónico con su cross-check
   en el validator (ej: "página con `mqttRequest('<dominio>', ...)` sin
   tool registrada en el repo → drift; reemplazar por `fs.read` directo
   o crear handler dedicado intencional").
+- **Beneficio observado**: la rama tiene **menos código que cuando
+  empezó** — borrados `modules/pizzepos/recetas-api/` entero,
+  `frontend/src/lib/stores/viabilidad.ts` (dead code), y simplificación
+  en stores de cartas. Cero módulos backend nuevos.

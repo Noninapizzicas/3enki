@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-20T11:56:20.863Z",
+  "generated_at": "2026-05-20T14:13:58.308Z",
   "total": 2397,
   "by_validator": {
     "naming": 39,
@@ -870,7 +870,7 @@
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/menu-generate/GeneratePanel.svelte:205 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/menu-generator/MenuGeneratorPanel.svelte:110 — #f59e0b fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/menu-ocr/OcrPanel.svelte:172 — #e5e5e5 fuera de paleta canonica",
-    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/menu-pdf2img/Pdf2ImgPanel.svelte:141 — #e5e5e5 fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/menu-pdf2img/Pdf2ImgPanel.svelte:142 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/menu-prepare/PreparePanel.svelte:128 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/project/ProjectPanel.svelte:357 — #0d0d0d fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/prompts/PromptsPanel.svelte:797 — #1a1d24 fuera de paleta canonica",
@@ -1845,8 +1845,8 @@
     "persistence|drift_silent_io_failure|pdf-viewer modules/pdf-viewer/index.js:306 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|pdf-viewer modules/pdf-viewer/index.js:324 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|pdf-viewer modules/pdf-viewer/index.js:405 — catch sin this.logger en bloque que envuelve I/O",
-    "persistence|drift_silent_io_failure|pdf-viewer modules/pdf-viewer/index.js:530 — catch sin this.logger en bloque que envuelve I/O",
-    "persistence|drift_silent_io_failure|pdf-viewer modules/pdf-viewer/index.js:546 — catch sin this.logger en bloque que envuelve I/O",
+    "persistence|drift_silent_io_failure|pdf-viewer modules/pdf-viewer/index.js:628 — catch sin this.logger en bloque que envuelve I/O",
+    "persistence|drift_silent_io_failure|pdf-viewer modules/pdf-viewer/index.js:644 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|pizzepos/cocina modules/pizzepos/cocina/index.js:183 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|pizzepos/cocina modules/pizzepos/cocina/index.js:184 — catch sin this.logger en bloque que envuelve I/O",
     "persistence|drift_silent_io_failure|pizzepos/cocina modules/pizzepos/cocina/index.js:193 — catch sin this.logger en bloque que envuelve I/O",

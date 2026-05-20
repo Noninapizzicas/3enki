@@ -59,7 +59,17 @@
       "incompleta":        "boolean (true si campos_pendientes.length > 0)",
       "campos_pendientes": "array — campos de {nombre, ingredientes, instrucciones, porciones} que esten vacios",
       "created_at":        "ISO 8601",
-      "updated_at":        "ISO 8601"
+      "updated_at":        "ISO 8601",
+      "_campos_escritos_por_escandallo": {
+        "_descripcion": "Campos OPCIONALES escritos por el modulo escandallo (blueprint-2.0.0) cuando se calcula y persiste el coste de esta receta. recetas blueprint NO los toca — los preserva tal cual durante mutaciones (no los borra al hacer update). Si no se ha calculado nunca, ausentes. La pagina de recetas los muestra cuando estan.",
+        "coste_total":              "number — suma de valor_calculado de ingredientes con precio (eur).",
+        "coste_porcion":            "number — coste_total / porciones, 2 decimales.",
+        "coste_actualizado_at":     "ISO 8601 — timestamp del ultimo calculo de escandallo.",
+        "postcode_usado":           "string (5 digitos) — postcode con el que se consultaron precios.",
+        "fuentes_precios":          "array de strings ⊆ {mercadona, estimado_llm, no_disponible}.",
+        "ingredientes_detalle":     "array — desglose por linea con precio_unitario, precio_unidad, precio_kg, valor_calculado, fuente, mercadona_producto_id.",
+        "ingredientes_sin_precio":  "array de strings (nombres) que no se pudieron valorar."
+      }
     },
     "shape_ingrediente_catalogado": {
       "nombre":         "string trim — clave logica (lookup case-insensitive)",

@@ -177,6 +177,11 @@
               <div class="card-meta">
                 <span>{receta.ingredientes_count} ingrediente{receta.ingredientes_count !== 1 ? 's' : ''}</span>
                 <span>{receta.porciones} porci{receta.porciones === 1 ? 'on' : 'ones'}</span>
+                {#if typeof receta.coste_porcion === 'number'}
+                  <span class="card-coste">
+                    {receta.coste_porcion.toFixed(2)}€/porc{#if receta.coste_incompleto}<span class="coste-asterisco" title="Coste parcial — hay ingredientes sin precio">*</span>{/if}
+                  </span>
+                {/if}
               </div>
               {#if receta.incompleta && receta.campos_pendientes.length > 0}
                 <div class="card-pendientes">
@@ -226,6 +231,56 @@
             </ul>
             <p class="hint">Usa el chat para completar lo que falte.</p>
           </div>
+        {/if}
+
+        {#if typeof selected.coste_total === 'number'}
+          <div class="coste-box">
+            <div class="coste-summary">
+              <span class="coste-label">Coste total</span>
+              <span class="coste-value">{selected.coste_total.toFixed(2)}€</span>
+            </div>
+            {#if typeof selected.coste_porcion === 'number'}
+              <div class="coste-summary">
+                <span class="coste-label">Coste/porción</span>
+                <span class="coste-value">{selected.coste_porcion.toFixed(2)}€</span>
+              </div>
+            {/if}
+            {#if selected.ingredientes_sin_precio && selected.ingredientes_sin_precio.length > 0}
+              <div class="coste-warn">
+                ⚠ Sin precio: {selected.ingredientes_sin_precio.join(', ')}
+              </div>
+            {/if}
+            {#if selected.fuentes_precios && selected.fuentes_precios.length > 0}
+              <div class="coste-fuentes">
+                Fuentes: {selected.fuentes_precios.join(' + ')}
+                {#if selected.postcode_usado} · CP {selected.postcode_usado}{/if}
+                {#if selected.coste_actualizado_at} · {new Date(selected.coste_actualizado_at).toLocaleDateString()}{/if}
+              </div>
+            {/if}
+          </div>
+
+          {#if selected.ingredientes_detalle && selected.ingredientes_detalle.length > 0}
+            <h4>Desglose</h4>
+            <div class="ing-table">
+              {#each selected.ingredientes_detalle as det}
+                <div class="ing-row det">
+                  <span class="ing-name">{det.nombre}</span>
+                  <span class="ing-qty">{det.cantidad}{det.unidad ? ' ' + det.unidad : ''}</span>
+                  <span class="ing-precio" class:est={det.fuente === 'estimado_llm'} class:nd={det.fuente === 'no_disponible'}>
+                    {#if det.valor_calculado !== null && det.valor_calculado !== undefined}
+                      {det.valor_calculado.toFixed(2)}€
+                    {:else}
+                      —
+                    {/if}
+                  </span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {:else}
+          <p class="hint chat-hint">
+            Sin coste calculado todavía. Pídele al chat <em>"calcula el coste de esta receta"</em>.
+          </p>
         {/if}
 
         <!-- INGREDIENTES -->
@@ -430,6 +485,17 @@
     gap: 12px;
     font-size: 11px;
     color: var(--text-secondary, #a1a1aa);
+    align-items: center;
+  }
+  .card-coste {
+    margin-left: auto;
+    font-family: monospace;
+    font-weight: 600;
+    color: var(--accent-color, #60a5fa);
+  }
+  .coste-asterisco {
+    color: #f59e0b;
+    margin-left: 1px;
   }
   .card-pendientes {
     margin-top: 6px;
@@ -437,6 +503,45 @@
     color: #f59e0b;
     font-style: italic;
   }
+  .coste-box {
+    margin: 12px 0;
+    padding: 10px 12px;
+    background: rgba(96, 165, 250, 0.06);
+    border: 1px solid rgba(96, 165, 250, 0.2);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .coste-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .coste-label { font-size: 12px; color: var(--text-secondary, #a1a1aa); }
+  .coste-value { font-family: monospace; font-weight: 700; color: var(--accent-color, #60a5fa); font-size: 14px; }
+  .coste-warn {
+    margin-top: 4px;
+    padding: 4px 6px;
+    background: rgba(245, 158, 11, 0.1);
+    border-radius: 4px;
+    font-size: 11px;
+    color: #f59e0b;
+  }
+  .coste-fuentes {
+    font-size: 10px;
+    color: var(--text-secondary, #71717a);
+    font-style: italic;
+  }
+  .ing-row.det .ing-precio {
+    font-family: monospace;
+    color: var(--accent-color, #60a5fa);
+    font-weight: 600;
+    min-width: 60px;
+    text-align: right;
+  }
+  .ing-row.det .ing-precio.est { color: #f59e0b; }
+  .ing-row.det .ing-precio.nd { color: var(--text-secondary, #71717a); font-style: italic; }
 
   .back-btn {
     background: none;

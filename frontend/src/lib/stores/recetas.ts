@@ -45,6 +45,21 @@ export interface RecetaIngrediente {
   notas?: string;
 }
 
+export type FuentePrecio = 'mercadona' | 'estimado_llm' | 'no_disponible';
+
+export interface IngredienteDetalle {
+  nombre: string;
+  cantidad: number;
+  unidad: string;
+  precio_unitario: number | null;
+  valor_calculado: number | null;
+  fuente: FuentePrecio;
+  precio_unidad?: number | null;
+  precio_kg?: number | null;
+  mercadona_producto_id?: string;
+  mercadona_nombre?: string;
+}
+
 export interface Receta {
   id: string;
   nombre: string;
@@ -61,6 +76,14 @@ export interface Receta {
   tags?: string[];
   elaboracion?: string[];
   notas?: string;
+  // Campos escritos por escandallo (blueprint-2.0.0). Ausentes si nunca corrio.
+  coste_total?: number;
+  coste_porcion?: number;
+  coste_actualizado_at?: string;
+  postcode_usado?: string;
+  fuentes_precios?: FuentePrecio[];
+  ingredientes_detalle?: IngredienteDetalle[];
+  ingredientes_sin_precio?: string[];
 }
 
 export interface RecetaResumen {
@@ -74,6 +97,13 @@ export interface RecetaResumen {
   version: number;
   updated_at: string;
   ingredientes_count: number;
+  // Surface del coste persistido (si escandallo ya corrio).
+  coste_total?: number;
+  coste_porcion?: number;
+  coste_actualizado_at?: string;
+  fuentes_precios?: FuentePrecio[];
+  // Flag derivado: true si hay ingredientes_sin_precio. UI puede mostrar asterisco.
+  coste_incompleto?: boolean;
 }
 
 export interface CatalogoIngrediente {
@@ -163,6 +193,7 @@ async function readRecetasStore(): Promise<RecetasStore | null> {
 }
 
 function summarize(r: Receta): RecetaResumen {
+  const sinPrecio = Array.isArray(r.ingredientes_sin_precio) ? r.ingredientes_sin_precio : [];
   return {
     id: r.id,
     nombre: r.nombre,
@@ -173,7 +204,12 @@ function summarize(r: Receta): RecetaResumen {
     campos_pendientes: Array.isArray(r.campos_pendientes) ? r.campos_pendientes : [],
     version: r.version,
     updated_at: r.updated_at,
-    ingredientes_count: Array.isArray(r.ingredientes) ? r.ingredientes.length : 0
+    ingredientes_count: Array.isArray(r.ingredientes) ? r.ingredientes.length : 0,
+    coste_total: typeof r.coste_total === 'number' ? r.coste_total : undefined,
+    coste_porcion: typeof r.coste_porcion === 'number' ? r.coste_porcion : undefined,
+    coste_actualizado_at: r.coste_actualizado_at,
+    fuentes_precios: r.fuentes_precios,
+    coste_incompleto: sinPrecio.length > 0
   };
 }
 

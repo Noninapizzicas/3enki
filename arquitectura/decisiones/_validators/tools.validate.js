@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Validador del contrato transversal tools v1.0.0.
+ * Validador del contrato transversal tools v1.2.0.
  *
  * Uso:
- *   node tools.validate.js                # valida los 2 JSON Schemas estructuralmente
+ *   node tools.validate.js                # valida los 3 JSON Schemas estructuralmente
  *   node tools.validate.js --check-system # adicional: cross-checks contra modulos del repo
  *
- * Cross-checks (14):
- *   1. tools_schemas_compile_ok                            (error)   — los 2 schemas compilan AJV strict.
+ * Cross-checks (18):
+ *   1. tools_schemas_compile_ok                            (error)   — los 3 schemas compilan AJV strict.
  *   2. drift_tool_name_sin_prefijo_de_modulo               (warning) — name fuera de patron <prefix>.<entity>.
  *   3. drift_tool_parameters_no_jsonschema_valido          (warning) — parameters no compila AJV.
  *   4. drift_tool_sin_handler_o_handler_inexistente        (warning) — handler no encontrado en codigo.
@@ -21,6 +21,10 @@
  *  12. drift_tool_declaration_no_cumple_schema             (warning) — entry de tools[] no valida contra declaration schema.
  *  13. drift_tool_handler_que_devuelve_valor_pelado        (info)    — handler con returns no canonicos.
  *  14. drift_invocacion_directa_de_tool_fuera_del_framework (error) — toolsRegistry.handler(...) o moduleLoader.executeTool(...) fuera de core/ (v1.1).
+ *  15. drift_modulo_con_uihandler_register_manual         (error)   — uiHandler.register() llamado en codigo de modulo (v1.2).
+ *  16. drift_ui_handlers_con_shape_de_dispatch            (warning) — ui_handlers[i] con campo 'domain' o top-level 'uiActions'/'handlers' como dispatch (v1.2).
+ *  17. drift_tool_http_sin_url_o_method                   (warning) — tools_http[i] no cumple tool.http.declaration.schema (v1.2).
+ *  18. drift_dos_tools_con_misma_clave_ui_derivada        (error)   — colision en (domain, action) derivado del name (v1.2).
  */
 
 'use strict';
@@ -220,6 +224,36 @@ function gatherAllTools() {
   return out;
 }
 
+/**
+ * Igual que gatherAllTools pero para module.json.tools_http[] (v1.2).
+ * Devuelve solo modulos que declaran tools_http no vacio.
+ */
+function gatherAllToolsHttp() {
+  const out = [];
+  for (const { dir, slug } of listModulesWithManifest()) {
+    const m = readManifest(dir);
+    if (!m) continue;
+    const toolsHttp = m.tools_http || [];
+    if (!Array.isArray(toolsHttp) || toolsHttp.length === 0) continue;
+    out.push({ slug, dir, language: m.language || 'en', tools_http: toolsHttp });
+  }
+  return out;
+}
+
+/**
+ * Recoge para CADA modulo su manifest completo (para auditar ui_handlers,
+ * uiActions, handlers como keys top-level — necesario para check 16).
+ */
+function gatherAllManifests() {
+  const out = [];
+  for (const { dir, slug } of listModulesWithManifest()) {
+    const m = readManifest(dir);
+    if (!m) continue;
+    out.push({ slug, dir, manifest: m });
+  }
+  return out;
+}
+
 function checkAll(findings) {
   const all = gatherAllTools();
   const errorCodes = loadCanonicalErrorCodes();
@@ -393,6 +427,33 @@ function checkAll(findings) {
   // fuera del bus canonico. La unica home valida de estos patrones es
   // core/modules/loader.js (framework). En modules/ es error.
   scanDirectToolInvocation(findings);
+
+  // 15. drift_modulo_con_uihandler_register_manual (v1.2)
+  // Scan modules/*.js para llamadas uiHandler.register(). La unica home valida
+  // de esa primitiva es core/ui/UIRequestHandler.js (define) y
+  // core/modules/loader.js (la framework la invoca derivada de tools[]).
+  // En modules/ es error: el modulo no declara handlers UI manualmente.
+  scanManualUiHandlerRegister(findings);
+
+  // 16. drift_ui_handlers_con_shape_de_dispatch (v1.2)
+  // Scan manifests para detectar ui_handlers[] con shape de dispatch legacy
+  // (campo 'domain' presente) o top-level 'uiActions'/'handlers' como aliases
+  // del normalizeUIHandlers del loader (loader.js:879). v1.2 fuerza tools[]
+  // como unico origen de dispatch — ui_handlers queda como surface metadata.
+  scanLegacyUiHandlersShape(findings);
+
+  // 17. drift_tool_http_sin_url_o_method (v1.2)
+  // Validar cada entry de module.json.tools_http[] contra el schema canonico
+  // tool.http.declaration.schema.json. Cross-check adicional: si auth_type
+  // distinto de 'none' y credential_id ausente, warning.
+  scanToolsHttpShape(findings, schemaAjv);
+
+  // 18. drift_dos_tools_con_misma_clave_ui_derivada (v1.2)
+  // Build map global derivedDomain.derivedAction -> [origenes]. Si una clave
+  // tiene 2+ origenes (tools[] o tools_http[] de modulos distintos, o mezcla
+  // tools+tools_http del mismo modulo), drift error: la segunda registracion
+  // sobrescribe la primera con un warn en uiHandler.
+  scanUiKeyCollisions(findings);
 }
 
 function scanDirectToolInvocation(findings) {
@@ -442,6 +503,156 @@ function scanDirectToolInvocation(findings) {
         );
       }
     }
+  }
+}
+
+// ---- v1.2 cross-checks ----
+
+function scanManualUiHandlerRegister(findings) {
+  // Mismo walk que scanDirectToolInvocation: *.js bajo modules/, excluyendo
+  // node_modules/, _legacy/, __tests__/, dirs ocultas.
+  const filesToScan = [];
+  function walk(dir) {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === '_legacy' || entry.name === '__tests__' ||
+            entry.name.startsWith('.')) continue;
+        walk(full);
+      } else if (entry.isFile() && entry.name.endsWith('.js')) {
+        filesToScan.push(full);
+      }
+    }
+  }
+  walk(MODULES_DIR);
+
+  // Patron: (this.)?uiHandler.register(...)
+  // No usamos uiHandler.unregister porque es legitimo en cleanup; solo register.
+  const re = /\b(?:this\.)?uiHandler\s*\.\s*register\s*\(/g;
+
+  for (const file of filesToScan) {
+    let content;
+    try { content = fs.readFileSync(file, 'utf-8'); } catch (_) { continue; }
+    const rel = path.relative(REPO_ROOT, file);
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(content)) !== null) {
+      const line = lineOfOffset(content, m.index);
+      findings.errors.push(
+        `drift_modulo_con_uihandler_register_manual: ${rel}:${line} — usa uiHandler.register(...) ` +
+        `manualmente. tools.contract v1.2: el dispatch UI se deriva automaticamente de tools[]/tools_http[] ` +
+        `en core/modules/loader.js::registerToolsForAI. Migracion: mover el handler a module.json.tools[] ` +
+        `con name '<modulo>.<accion>' y handler apuntando al metodo. El loader lo registrara en uiHandler ` +
+        `con domain/action derivados del name.`
+      );
+    }
+  }
+}
+
+function scanLegacyUiHandlersShape(findings) {
+  // ui_handlers[i] con campo 'domain' = shape de dispatch legacy.
+  // top-level 'uiActions' o 'handlers' (aliases que normalizeUIHandlers acepta) = drift.
+  for (const { slug, manifest } of gatherAllManifests()) {
+    const ui = manifest.ui_handlers;
+    if (Array.isArray(ui)) {
+      ui.forEach((entry, idx) => {
+        if (entry && typeof entry === 'object' && typeof entry.domain === 'string') {
+          findings.warnings.push(
+            `drift_ui_handlers_con_shape_de_dispatch: ${slug} ui_handlers[${idx}] tiene campo 'domain' ` +
+            `(${entry.domain}). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface ` +
+            `metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva ` +
+            `domain/action automaticamente del tool name).`
+          );
+        }
+      });
+    }
+    // Aliases legacy top-level
+    for (const alias of ['uiActions', 'handlers']) {
+      const raw = manifest[alias];
+      if (!Array.isArray(raw)) continue;
+      const hasDispatchShape = raw.some(e => e && typeof e === 'object' &&
+        typeof e.domain === 'string' && typeof e.action === 'string');
+      if (hasDispatchShape) {
+        findings.warnings.push(
+          `drift_ui_handlers_con_shape_de_dispatch: ${slug} declara top-level '${alias}' con shape de dispatch ` +
+          `{domain, action, handler}. tools.contract v1.2: migrar a module.json.tools[]. loader.normalizeUIHandlers ` +
+          `(loader.js:879) sigue aceptando este alias como compat transitoria — eliminar tras migrar todos los modulos.`
+        );
+      }
+    }
+  }
+}
+
+function scanToolsHttpShape(findings, schemaAjv) {
+  const validateHttp = schemaAjv.getSchema('tool.http.declaration.schema.json');
+  if (!validateHttp) return; // schema no disponible en este AJV — abort silencioso
+
+  for (const { slug, tools_http } of gatherAllToolsHttp()) {
+    tools_http.forEach((entry, idx) => {
+      if (typeof entry !== 'object' || entry === null) {
+        findings.warnings.push(`drift_tool_http_sin_url_o_method: ${slug} tools_http[${idx}] — entry no es objeto`);
+        return;
+      }
+      const ok = validateHttp(entry);
+      if (!ok) {
+        const errs = (validateHttp.errors || []).map(e => `${e.instancePath || '/'} ${e.message}`).join('; ');
+        const name = entry.name || `<index ${idx}>`;
+        findings.warnings.push(`drift_tool_http_sin_url_o_method: ${slug} tools_http "${name}" — ${errs}`);
+      }
+      // Cross-check security: si auth_type !== 'none' y credential_id ausente, warning especifico.
+      const authType = entry.http && entry.http.auth_type;
+      if (authType && authType !== 'none' && !entry.http.credential_id) {
+        const name = entry.name || `<index ${idx}>`;
+        findings.warnings.push(
+          `drift_tool_http_sin_url_o_method: ${slug} tools_http "${name}" declara auth_type='${authType}' ` +
+          `pero NO declara credential_id. security.contract: credenciales solo via credential-manager, ` +
+          `nunca env vars ni inline.`
+        );
+      }
+    });
+  }
+}
+
+function scanUiKeyCollisions(findings) {
+  // Build map global derivedDomain.derivedAction -> [origenes]
+  // Mismo split que core/modules/loader.js::_deriveUiKeyFromToolName: primer punto.
+  const uiKeyMap = new Map(); // 'domain.action' -> [{slug, source, name}]
+
+  function addEntry(slug, source, name) {
+    if (typeof name !== 'string' || name.length === 0) return;
+    const firstDot = name.indexOf('.');
+    if (firstDot < 1 || firstDot === name.length - 1) return; // mismo guard que el loader
+    const domain = name.substring(0, firstDot);
+    const action = name.substring(firstDot + 1);
+    const key = `${domain}.${action}`;
+    if (!uiKeyMap.has(key)) uiKeyMap.set(key, []);
+    uiKeyMap.get(key).push({ slug, source, name });
+  }
+
+  for (const { slug, tools } of gatherAllTools()) {
+    for (const tool of tools) {
+      if (tool && typeof tool.name === 'string') addEntry(slug, 'tools[]', tool.name);
+    }
+  }
+  for (const { slug, tools_http } of gatherAllToolsHttp()) {
+    for (const entry of tools_http) {
+      if (entry && typeof entry.name === 'string') addEntry(slug, 'tools_http[]', entry.name);
+    }
+  }
+
+  for (const [key, origins] of uiKeyMap) {
+    if (origins.length < 2) continue;
+    // Si todas las origenes son del MISMO slug+source con el MISMO name, no es colision real
+    // (puede pasar con manifests con duplicados — drift de otro tipo, no de este check).
+    const distinct = [...new Set(origins.map(o => `${o.slug}:${o.source}:${o.name}`))];
+    if (distinct.length < 2) continue;
+    const desc = origins.map(o => `${o.slug} (${o.source}: "${o.name}")`).join(' vs ');
+    findings.errors.push(
+      `drift_dos_tools_con_misma_clave_ui_derivada: clave UI "${key}" producida por ${origins.length} fuentes: ${desc}. ` +
+      `El segundo register en uiHandler sobrescribira el primero con warn 'ui.request.handler.overwrite'. ` +
+      `Cada tool debe producir una clave (domain, action) unica cross-repo.`
+    );
   }
 }
 

@@ -966,6 +966,7 @@ class ModuleLoader {
    */
   registerToolsForAI(moduleName, tools, instance) {
     const bus = this.core?.eventBus || null;
+    const uiHandler = this.core?.uiHandler || null;
 
     for (const tool of tools) {
       // Registrar siempre el schema para que el LLM conozca la tool.
@@ -982,11 +983,26 @@ class ModuleLoader {
         module: moduleName,
         confirmation: tool.confirmation || false,
         event_based: true,
-        _busUnsub: null
+        _busUnsub: null,
+        _uiKey: null
       };
 
       if (boundHandler && bus) {
         entry._busUnsub = this._wireToolBusSubscription(tool.name, boundHandler, bus);
+      }
+
+      // tools.contract v1.2: una declaracion, tres destinos.
+      // Auto-registrar en uiHandler con domain = parte antes del primer punto,
+      // action = resto (puntos preservados). Ej: 'mercadona.producto.obtener' →
+      // domain='mercadona', action='producto.obtener'. UIRequestHandler tolera
+      // action con puntos porque parsea ui/request/{domain}/{action} con split
+      // limitado al primer slash de los path segments.
+      if (boundHandler && uiHandler) {
+        const uiKey = this._deriveUiKeyFromToolName(tool.name);
+        if (uiKey) {
+          uiHandler.register(uiKey.domain, uiKey.action, boundHandler);
+          entry._uiKey = uiKey;
+        }
       }
 
       this.toolsRegistry.set(tool.name, entry);
@@ -996,7 +1012,8 @@ class ModuleLoader {
           module: moduleName,
           tool: tool.name,
           confirmation: tool.confirmation || false,
-          bus_wired: entry._busUnsub != null
+          bus_wired: entry._busUnsub != null,
+          ui_wired: entry._uiKey != null
         });
       }
     }
@@ -1007,6 +1024,34 @@ class ModuleLoader {
         count: tools.length
       });
     }
+  }
+
+  /**
+   * Deriva el par {domain, action} para el uiHandler a partir del tool name.
+   * Split en el PRIMER punto: parte anterior = domain, resto = action.
+   *
+   *   'pdf.extract'                    → { domain: 'pdf',             action: 'extract' }
+   *   'carta-scheduler.crear_regla'    → { domain: 'carta-scheduler', action: 'crear_regla' }
+   *   'mercadona.producto.obtener'     → { domain: 'mercadona',       action: 'producto.obtener' }
+   *
+   * Devuelve null si el name no tiene punto, empieza/acaba en punto, o tiene
+   * domain vacio — en esos casos la tool no se auto-registra en uiHandler
+   * (sigue siendo invocable por bus y por LLM normalmente).
+   *
+   * Ver tools.contract.json::principios.ui_request_topic_derivado_del_name.
+   *
+   * @private
+   * @param {string} toolName
+   * @returns {{domain: string, action: string} | null}
+   */
+  _deriveUiKeyFromToolName(toolName) {
+    if (typeof toolName !== 'string') return null;
+    const firstDot = toolName.indexOf('.');
+    if (firstDot < 1 || firstDot === toolName.length - 1) return null;
+    const domain = toolName.substring(0, firstDot);
+    const action = toolName.substring(firstDot + 1);
+    if (!domain || !action) return null;
+    return { domain, action };
   }
 
   /**
@@ -1061,11 +1106,15 @@ class ModuleLoader {
    */
   unregisterToolsForAI(moduleName) {
     const toDelete = [];
+    const uiHandler = this.core?.uiHandler || null;
 
     for (const [toolName, tool] of this.toolsRegistry) {
       if (tool.module === moduleName) {
         if (typeof tool._busUnsub === 'function') {
           try { tool._busUnsub(); } catch (_) { /* ignore */ }
+        }
+        if (tool._uiKey && uiHandler) {
+          try { uiHandler.unregister(tool._uiKey.domain, tool._uiKey.action); } catch (_) { /* ignore */ }
         }
         toDelete.push(toolName);
       }

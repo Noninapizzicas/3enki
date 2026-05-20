@@ -26,6 +26,7 @@
     "test:plugin-manager": "node tests/unit/plugin-manager.test.js",
     "test:conversacion__ai-gateway": "node tests/unit/conversacion__ai-gateway.test.js",
     "test:core-module-loader-tool-bus": "node tests/unit/core-module-loader-tool-bus.test.js",
+    "test:core-module-loader-tool-ui": "node tests/unit/core-module-loader-tool-ui.test.js",
     "test:ai-gateway-smoke-tools": "node modules/conversacion/ai-gateway/__tests__/smoke-tools.js",
     "test:ai-gateway-smoke-blueprints": "node modules/conversacion/ai-gateway/__tests__/smoke-blueprints.js",
     "test:cocina-poc": "node tests/unit/cocina-poc.test.js",

@@ -56,6 +56,9 @@ jobs:
       - name: Run unit tests (core/modules/loader — tool bus auto-subscription)
         run: npm run test:core-module-loader-tool-bus
 
+      - name: Run unit tests (core/modules/loader — tool ui auto-registration)
+        run: npm run test:core-module-loader-tool-ui
+
       - name: Run smoke tests (ai-gateway — bus-only tool invocation)
         run: npm run test:ai-gateway-smoke-tools
 

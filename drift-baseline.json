@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-20T10:52:11.705Z",
+  "generated_at": "2026-05-20T11:32:22.844Z",
   "total": 2396,
   "by_validator": {
     "naming": 39,
@@ -864,8 +864,8 @@
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/html-preview/HtmlPreviewPanel.svelte:83 — #1e1e1e fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/impresion-cartas/CartasImpresionPanel.svelte:214 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/impresion/ImpresionPanel.svelte:577 — #e5e5e5 fuera de paleta canonica",
-    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/marketing-actividad/ActividadPanel.svelte:141 — #e5e5e5 fuera de paleta canonica",
-    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/marketing-perfil/PerfilPanel.svelte:223 — #e5e5e5 fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/marketing-actividad/ActividadPanel.svelte:156 — #e5e5e5 fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/marketing-perfil/PerfilPanel.svelte:272 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/menu-cartas/CartasPanel.svelte:179 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/menu-generate/GeneratePanel.svelte:205 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/menu-generator/MenuGeneratorPanel.svelte:110 — #f59e0b fuera de paleta canonica",

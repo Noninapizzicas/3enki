@@ -1,6 +1,11 @@
 <script lang="ts">
   /**
-   * ActividadPanel — Muestra la actividad de marketing en el proyecto
+   * ActividadPanel — Muestra el estado del marketing en el proyecto.
+   *
+   * Shape canonico del blueprint carta-marketing. La "actividad" como tal
+   * (invocaciones a agentes marketing-*) esta TRABAJO_PENDIENTE hasta que
+   * agent-observer exponga consulta filtrada — por ahora el panel muestra
+   * solo el resumen del perfil y el estado del onboarding.
    */
   import { onMount } from 'svelte';
   import {
@@ -17,13 +22,18 @@
   $: p = $perfil;
   $: completado = $onboardingCompletado;
 
-  let refreshTimer: any = null;
+  let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
   onMount(() => {
     loadPerfil();
     loadActividad();
-    refreshTimer = setInterval(loadActividad, 30000);
-    return () => clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => {
+      loadPerfil();
+      loadActividad();
+    }, 30000);
+    return () => {
+      if (refreshTimer) clearInterval(refreshTimer);
+    };
   });
 
   function formatDate(s: string | null | undefined): string {
@@ -38,8 +48,8 @@
 <div class="panel-body">
   <div class="stats-grid">
     <div class="stat">
-      <span class="stat-value">{act?.cartas_procesadas ?? 0}</span>
-      <span class="stat-label">Cartas procesadas</span>
+      <span class="stat-value">{act?.invocaciones?.length ?? 0}</span>
+      <span class="stat-label">Invocaciones ({act?.ventana_dias ?? 7}d)</span>
     </div>
 
     <div class="stat">
@@ -58,35 +68,39 @@
         {completado ? 'Completado' : 'Pendiente'}
       </span>
     </div>
-    {#if p?.nombre}
+    {#if p?.nombre_marca}
       <div class="info-row">
         <span class="info-label">Nombre</span>
-        <span class="info-value">{p.nombre}</span>
+        <span class="info-value">{p.nombre_marca}</span>
       </div>
     {/if}
-    {#if p?.tono}
+    {#if p?.tono_voz}
       <div class="info-row">
         <span class="info-label">Tono</span>
-        <span class="info-value">{p.tono}</span>
+        <span class="info-value">{p.tono_voz}</span>
       </div>
     {/if}
-    {#if p?.created_at}
+    {#if p?.idiomas && p.idiomas.length > 0}
       <div class="info-row">
-        <span class="info-label">Creado</span>
-        <span class="info-value date">{formatDate(p.created_at)}</span>
+        <span class="info-label">Idiomas</span>
+        <span class="info-value">{p.idiomas.join(', ')}</span>
       </div>
     {/if}
-    {#if p?.updated_at}
+    {#if p?._updated_at}
       <div class="info-row">
         <span class="info-label">Actualizado</span>
-        <span class="info-value date">{formatDate(p.updated_at)}</span>
+        <span class="info-value date">{formatDate(p._updated_at)}</span>
       </div>
     {/if}
   </div>
 
+  {#if act?.nota}
+    <div class="note">{act.nota}</div>
+  {/if}
+
   {#if !completado}
     <div class="hint">
-      💬 Para activar marketing automático, completa el onboarding via chat.
+      💬 Para configurar marketing, completa el onboarding via chat.
     </div>
   {:else}
     <div class="hint ok">
@@ -117,6 +131,7 @@
   .stat-label {
     font-size: 0.6rem; color: var(--color-text-muted, #888);
     text-transform: uppercase; letter-spacing: 0.05em;
+    text-align: center;
   }
 
   .info-section {
@@ -141,6 +156,16 @@
   .info-value { font-size: 0.75rem; color: var(--color-text, #e5e5e5); }
   .info-value.ok { color: var(--color-success, #22c55e); }
   .info-value.date { font-family: monospace; font-size: 0.7rem; }
+
+  .note {
+    padding: 0.4rem 0.6rem;
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 0.375rem;
+    font-size: 0.7rem;
+    color: var(--color-text-muted, #888);
+    font-style: italic;
+  }
 
   .hint {
     padding: 0.5rem;

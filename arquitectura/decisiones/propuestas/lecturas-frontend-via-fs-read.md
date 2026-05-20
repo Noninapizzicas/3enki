@@ -1,10 +1,11 @@
 # Lecturas frontend via fs.read directo
 
-> **Patrón canónico** para que el frontend lea el storage de módulos
-> blueprint-driven sin código backend dedicado. Apareció orgánicamente al
-> resolver el caso recetas en la rama `claude/review-tools-architecture-Xm3bZ`
-> (mayo 2026). **Supersede el enfoque "plugin/bridge layer"** que se proponía
-> en `capa-unica-tools-via-plugins.md`.
+> **Patrón canónico** para que el frontend lea (y a veces escriba) el storage
+> de módulos blueprint-driven sin código backend dedicado. Apareció
+> orgánicamente al resolver el caso recetas en la rama
+> `claude/review-tools-architecture-Xm3bZ` (mayo 2026). **Supersede el
+> enfoque "plugin/bridge layer"** que se proponía en
+> `capa-unica-tools-via-plugins.md`.
 
 Fecha: 2026-05-20.
 
@@ -89,16 +90,56 @@ Tres condiciones que deben cumplirse:
 
 - ❌ Crear un módulo `<dominio>-api` con `tools[]` que duplica
   read+filter+sort cuando esa lógica solo la consume el frontend.
-- ❌ Escribir desde el frontend con `fs.write` directo a archivos que el
-  blueprint también modifica. Las escrituras pasan por el blueprint
-  (validación + invariantes + eventos canónicos del dominio) o por
-  handlers dedicados con validación. **Solo lecturas son seguras de
-  hacer directas.**
+- ❌ Escribir desde el frontend a archivos cuando el blueprint del dominio
+  tiene **listeners reales** del evento canónico de mutación
+  (`<dominio>.<accion>.actualizado`). En ese caso la escritura debe
+  pasar por el blueprint o por un handler dedicado que emita el evento.
+  Para detectar: `grep -rn "<dominio>.<evento>" modules/` — si solo el
+  propio blueprint declara publicar el evento y nadie lo escucha, escribir
+  directo es seguro (ver §5b).
 - ❌ Duplicar la lógica de transformación en bridge + store. La
   transformación vive UNA vez, en el consumer.
 - ❌ Confiar en el payload de los eventos `<dominio>.creada/actualizada/
   eliminada` para mantener el estado UI. **El archivo es la fuente de
   verdad** — los eventos solo disparan un `loadX()` que relee del archivo.
+
+### 5b · Cuándo SÍ se puede escribir directo (extensión del patrón)
+
+Algunos dominios tienen operaciones de mutación triviales con shape de
+"merge superficial sobre object plano" (ej. `carta-marketing.update_perfil`).
+El blueprint hace:
+
+```
+read /storage/config/marca.json (fallback a default)
+merge input.campos sobre el object
+write atomic
+publish marketing.perfil.actualizado
+```
+
+Las primeras 3 operaciones las puede hacer el frontend trivialmente con
+`fs.read` + `fs.write`. La cuarta (publish) tiene valor SOLO si alguien
+escucha. Si nadie escucha, escribir directo es funcionalmente equivalente.
+
+**Condiciones acumulativas para escritura directa:**
+
+1. La operación es **merge trivial** (un nivel de profundidad, sin
+   validaciones cruzadas, sin invariantes computados, sin side effects
+   en otros archivos).
+2. El evento canónico (`<dominio>.<x>.actualizado`) **no tiene listeners
+   activos** en el repo (verificable con grep cross-modulo).
+3. La operación **no dispara workflows downstream** (ej: si tras
+   `update_perfil` un scheduler reanaliza la marca, escribir directo
+   salta ese workflow — NO aplica).
+
+**Si las 3 se cumplen**, el frontend escribe con
+`mqttRequest('fs','write',{path,content})` y actualiza su estado local.
+**Si alguna falla**, la escritura va por el blueprint via chat (ej.
+"actualiza el tono de la marca a familiar") o se mantiene un handler
+backend dedicado.
+
+**Re-evaluación obligatoria** cuando se añade un listener al evento
+canónico: hay que migrar la escritura del frontend a invocación
+backend (o aceptar la limitación documentándola).
 
 ---
 
@@ -146,11 +187,11 @@ mqttSubscribe('receta.eliminada', () => loadRecetas());
 | Dominio | Storage | Aplica patrón | Notas |
 |---|---|---|---|
 | recetas | `/recetas.json` (blueprint) | ✅ | **Hecho** en este branch (commit 72019d2) |
+| carta-marketing | `/storage/config/marca.json` | ✅ | **Hecho** — incluye escritura directa (update_perfil cumple condiciones §5b). Sin listeners de `marketing.perfil.actualizado` hoy. |
 | escandallo | — (stateless on-demand) | ❌ | Necesita decidir persistencia primero. Si escandallo se vuelve stateful y escribe `coste_*` en `/recetas.json`, el patrón aplica con el mismo archivo de recetas. |
 | viabilidad | `/viabilidad.json` (TBD) | ⚠️ | Revisar blueprint para confirmar archivo |
 | carta-digital | `/carta-digital/<session>.json` o similar | ⚠️ | Revisar blueprint |
 | carta-impresion | depende — puede ser stateless | ⚠️ | Revisar blueprint |
-| carta-marketing | `/carta-marketing.json` (TBD) | ⚠️ | Revisar blueprint |
 | carta-design | `/carta-design/profiles/*.json` (per-profile) | ⚠️ | Probablemente sí, pero con multiple files |
 | pdf-viewer | — (consume servicios `local.pdfjs/sharp/google-vision`) | ❌ | No es lectura de storage; necesita handlers dedicados o resolver vía servicios canonicos del repo |
 

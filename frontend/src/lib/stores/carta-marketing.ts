@@ -1,37 +1,47 @@
 /**
- * Carta Marketing Store — Perfil de marca + actividad
+ * Carta Marketing Store — perfil de marca + actividad, lecturas+escrituras directas.
  *
- * El perfil se construye conversando con el agente onboarding.
- * Este store expone vistas de lectura y ediciones puntuales.
+ * El blueprint del modulo carta-marketing (modules/pizzepos/carta-marketing/)
+ * persiste el perfil en /storage/config/marca.json del proyecto activo.
+ * Operaciones simples (get/update/actividad) van directo via fs.read/fs.write.
+ * Operaciones que requieren razonamiento del LLM (completar_onboarding) las
+ * pide el usuario al chat — el blueprint sigue siendo el runtime para eso.
+ *
+ * Patron documentado en arquitectura/decisiones/propuestas/
+ * lecturas-frontend-via-fs-read.md (con extension para escrituras triviales
+ * sin listeners del evento canonico).
  */
 
-import { writable, derived } from 'svelte/store';
-import { mqttRequest, MqttTimeoutError, MqttRequestError } from '$lib/ui-core/mqtt-request';
+import { writable, derived, get } from 'svelte/store';
+import {
+  mqttRequest,
+  MqttTimeoutError,
+  MqttRequestError
+} from '$lib/ui-core/mqtt-request';
 import { getActiveProject } from '$lib/stores/workspace';
 
 // =============================================================================
-// TYPES
+// TYPES — shape canonico del blueprint carta-marketing
 // =============================================================================
 
 export interface PerfilMarca {
-  nombre: string | null;
-  tono: string | null;
-  idioma: string;
-  publico: string | null;
-  valores: string | null;
-  colores: Record<string, string>;
-  prohibido: string | null;
-  referencia_visual: string | null;
-  notas: string[];
+  _version?: string;
+  _updated_at?: string;
+  nombre_marca: string;
+  lema?: string;
+  tono_voz: string;
+  valores: string[];
+  publico_objetivo: string;
+  diferenciacion?: string;
+  restricciones?: string;
+  idiomas: string[];
   onboarding_completado: boolean;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface MarketingActividad {
-  project_id: string;
-  cartas_procesadas: number;
-  perfil_completado: boolean;
+  ventana_dias: number;
+  invocaciones: unknown[];
+  nota?: string;
 }
 
 export interface MarketingState {
@@ -41,6 +51,18 @@ export interface MarketingState {
   saving: boolean;
   error: string | null;
 }
+
+const PERFIL_PATH = '/storage/config/marca.json';
+
+const DEFAULT_PERFIL: PerfilMarca = {
+  _version: '1.0',
+  nombre_marca: '',
+  tono_voz: '',
+  valores: [],
+  publico_objetivo: '',
+  idiomas: ['es'],
+  onboarding_completado: false
+};
 
 // =============================================================================
 // STORE
@@ -57,17 +79,41 @@ const initial: MarketingState = {
 export const marketingStore = writable<MarketingState>(initial);
 
 // =============================================================================
+// PRIMITIVAS — fs.read / fs.write directos
+// =============================================================================
+
+async function readPerfil(): Promise<PerfilMarca | null> {
+  try {
+    const res = await mqttRequest<{ content: string }>('fs', 'read', { path: PERFIL_PATH });
+    const content = res.data?.content;
+    if (typeof content !== 'string') return null;
+    return JSON.parse(content) as PerfilMarca;
+  } catch (err) {
+    if (err instanceof MqttRequestError && err.code === 'RESOURCE_NOT_FOUND') return null;
+    throw err;
+  }
+}
+
+async function writePerfil(perfil: PerfilMarca): Promise<void> {
+  await mqttRequest('fs', 'write', {
+    path: PERFIL_PATH,
+    content: JSON.stringify(perfil, null, 2)
+  });
+}
+
+// =============================================================================
 // ACTIONS
 // =============================================================================
 
 export async function loadPerfil(): Promise<void> {
   marketingStore.update(s => ({ ...s, loading: true, error: null }));
   try {
-    const project = getActiveProject();
-    const res = await mqttRequest<PerfilMarca>('carta-marketing', 'perfil', {
-      project_id: project?.id
-    });
-    marketingStore.update(s => ({ ...s, perfil: res.data, loading: false }));
+    const perfil = await readPerfil();
+    marketingStore.update(s => ({
+      ...s,
+      perfil: perfil ?? { ...DEFAULT_PERFIL, _updated_at: new Date().toISOString() },
+      loading: false
+    }));
   } catch (error) {
     marketingStore.update(s => ({
       ...s, loading: false, error: getErrorMessage(error)
@@ -76,30 +122,42 @@ export async function loadPerfil(): Promise<void> {
 }
 
 export async function loadActividad(): Promise<void> {
-  try {
-    const project = getActiveProject();
-    const res = await mqttRequest<MarketingActividad>('carta-marketing', 'actividad', {
-      project_id: project?.id
-    });
-    marketingStore.update(s => ({ ...s, actividad: res.data }));
-  } catch (error) {
-    console.error('[Marketing] Actividad failed:', getErrorMessage(error));
-  }
+  // El blueprint hoy devuelve placeholder fijo (TRABAJO_PENDIENTE — agent-
+  // observer integration). Lo sintetizamos local para evitar un round-trip
+  // a backend que devuelve constante. Cuando agent-observer tenga endpoint
+  // de consulta filtrado por scope='marketing', sustituimos por una lectura
+  // real (probablemente fs.read de un log o mqttRequest a una tool nueva).
+  marketingStore.update(s => ({
+    ...s,
+    actividad: {
+      ventana_dias: 7,
+      invocaciones: [],
+      nota: 'agent-observer integracion pendiente — actividad temporalmente vacia'
+    }
+  }));
 }
 
 export async function updatePerfil(campos: Partial<PerfilMarca>): Promise<boolean> {
   marketingStore.update(s => ({ ...s, saving: true, error: null }));
   try {
-    const project = getActiveProject();
-    // La tool del backend es via agente, pero aquí actualizamos vía request directo
-    // El backend expone marketing.update_perfil como tool; tampoco hay UI handler directo.
-    // Usamos el handler genérico invocando el tool a través del bus.
-    await mqttRequest('carta-marketing', 'update-perfil', {
-      project_id: project?.id,
-      ...campos
-    });
-    await loadPerfil();
-    marketingStore.update(s => ({ ...s, saving: false }));
+    // Read current (con fallback si no existe)
+    const current = (await readPerfil()) ?? { ...DEFAULT_PERFIL };
+
+    // Merge: solo campos definidos sobreescriben
+    const next: PerfilMarca = { ...current };
+    for (const [k, v] of Object.entries(campos)) {
+      if (v !== undefined) (next as Record<string, unknown>)[k] = v;
+    }
+    next._updated_at = new Date().toISOString();
+
+    // Write atomic
+    await writePerfil(next);
+
+    marketingStore.update(s => ({
+      ...s,
+      perfil: next,
+      saving: false
+    }));
     return true;
   } catch (error) {
     marketingStore.update(s => ({

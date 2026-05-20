@@ -190,7 +190,7 @@ mqttSubscribe('receta.eliminada', () => loadRecetas());
 | carta-marketing | `/storage/config/marca.json` | ✅ | **Hecho** — incluye escritura directa (update_perfil cumple condiciones §5b). Sin listeners de `marketing.perfil.actualizado` hoy. |
 | escandallo | — (stateless on-demand) | ❌ | Necesita decidir persistencia primero. Si escandallo se vuelve stateful y escribe `coste_*` en `/recetas.json`, el patrón aplica con el mismo archivo de recetas. |
 | viabilidad | `/viabilidad.json` (TBD) | ⚠️ | Revisar blueprint para confirmar archivo |
-| carta-digital | `/carta-digital/<session>.json` o similar | ⚠️ | Revisar blueprint |
+| carta-digital | `/carta-digital.json` | ✅ | **Hecho** — store + 3 paneles (config, preview, stats). Stats convertido a placeholder hasta analytics persistido. Forzar composición eliminado (pídeselo al chat). |
 | carta-impresion | depende — puede ser stateless | ⚠️ | Revisar blueprint |
 | carta-design | `/carta-design/profiles/*.json` (per-profile) | ⚠️ | Probablemente sí, pero con multiple files |
 | pdf-viewer | — (consume servicios `local.pdfjs/sharp/google-vision`) | ❌ | No es lectura de storage; necesita handlers dedicados o resolver vía servicios canonicos del repo |

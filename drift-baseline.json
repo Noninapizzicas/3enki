@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-20T11:32:22.844Z",
+  "generated_at": "2026-05-20T11:47:02.886Z",
   "total": 2396,
   "by_validator": {
     "naming": 39,
@@ -840,10 +840,10 @@
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/staff/FichajeBoard.svelte:182 — #f3f4f6 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/staff/NfcCardModal.svelte:104 — #141414 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/components/staff/StaffScreen.svelte:66 — #0a0a0a fuera de paleta canonica",
-    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/carta-config/CartaConfigPanel.svelte:27 — #f59e0b fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/carta-config/CartaConfigPanel.svelte:30 — #f59e0b fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/carta-export/CartaExportPanel.svelte:108 — #e5e5e5 fuera de paleta canonica",
-    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/carta-preview/CartaPreviewPanel.svelte:93 — #f59e0b fuera de paleta canonica",
-    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/carta-stats/CartaStatsPanel.svelte:113 — #e5e5e5 fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/carta-preview/CartaPreviewPanel.svelte:101 — #f59e0b fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/carta-stats/CartaStatsPanel.svelte:43 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/certificate-authority/CertificateAuthorityPanel.svelte:183 — #f59e0b fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/conversations/ChatTab.svelte:158 — #e5e5e5 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/conversations/ConfigTab.svelte:348 — #e5e5e5 fuera de paleta canonica",

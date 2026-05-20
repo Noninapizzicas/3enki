@@ -209,7 +209,8 @@
       "data": "{ request_id, ...payload }",
       "metadata": "{}"
     },
-    "correlation": "Cada par request/response correlaciona por request_id en data."
+    "correlation": "Cada par request/response correlaciona por request_id en data.",
+    "_ver_tambien": "Para el nivel bajo (cuando los helpers no bastan): manual-mqtt-conexion-directa.contract.json cubre topics UI directos vs eventbus canonica, probes forenses, errores clasicos de clientes ad-hoc, snippet de referencia minimo."
   },
 
   "patron_de_uso_completo": {

@@ -1,19 +1,27 @@
 /**
- * Recetas Store — MQTT Request/Response + Real-time Events
+ * Recetas Store — lecturas directas via fs.read del proyecto activo.
  *
- * Las lecturas (listar / obtener / ingredientes / estadisticas) van al modulo
- * backend `recetas-api` (bridge lecto-puro de /recetas.json). Las operaciones
- * complejas (crear / editar / eliminar) las hace el blueprint del modulo
- * `recetas` ejecutado por el LLM via el chat — no se exponen desde esta pagina.
+ * Arquitectura "sin backend dedicado":
+ *   - El modulo `filesystem` expone fs.read como tool[] (modules/filesystem/
+ *     module.json). El loader (core/modules/loader.js v1.2) auto-registra
+ *     esa tool en uiHandler con domain='fs', action='read', asi que el
+ *     frontend la invoca via mqttRequest('fs', 'read', {path}). Filesystem
+ *     resuelve el path relativo contra el storage del proyecto activo.
+ *   - Este store lee /recetas.json una vez por operacion y transforma
+ *     localmente: filter por estado, sort por updated_at, slice por limit,
+ *     derivar ingredientes_count.
+ *   - No hay modulo backend dedicado al dominio recetas — el blueprint del
+ *     modulo recetas (modules/pizzepos/recetas/) sigue siendo runtime LLM
+ *     para crear/editar/eliminar via chat, y este store sirve las lecturas
+ *     del catalogo directamente sobre el archivo.
  *
- * Shape canonico: el del blueprint del subsistema-recetario (estado_operativo,
- * dificultad, incompleta, campos_pendientes). NO contiene `categoria`,
- * `coste_total` ni `coste_porcion` — esos datos NO viven en /recetas.json
- * (escandallo es stateless on-demand). Si el usuario quiere coste, lo pide
- * al chat — esa es la decision arquitectonica vigente.
+ * Shape canonico: del blueprint del subsistema-recetario (estado_operativo,
+ * dificultad, incompleta, campos_pendientes). Sin `categoria`, `coste_total`
+ * ni `coste_porcion` — esos datos no viven en /recetas.json hoy (escandallo
+ * es stateless on-demand). Si el usuario quiere coste, lo pide al chat.
  */
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 import {
   mqttRequest,
@@ -21,7 +29,6 @@ import {
   MqttRequestError
 } from '$lib/ui-core/mqtt-request';
 import { activeProjectId } from './projects';
-import { get } from 'svelte/store';
 
 // =============================================================================
 // TYPES — shape canonico del blueprint recetas
@@ -34,7 +41,6 @@ export interface RecetaIngrediente {
   nombre: string;
   cantidad: number;
   unidad?: string;
-  // Campos opcionales — el blueprint puede no rellenarlos todos.
   ingrediente_id?: string;
   notas?: string;
 }
@@ -51,7 +57,6 @@ export interface Receta {
   updated_at: string;
   ingredientes: RecetaIngrediente[];
   ingredientes_count: number;
-  // Campos extra que el blueprint pueda añadir en el futuro:
   descripcion?: string;
   tags?: string[];
   elaboracion?: string[];
@@ -75,7 +80,6 @@ export interface CatalogoIngrediente {
   nombre: string;
   unidad?: string;
   precio_mercado?: number;
-  // Campos opcionales que el blueprint pueda rellenar:
   alergenos?: string[];
   proveedor?: string;
   updated_at?: string;
@@ -100,15 +104,19 @@ export interface RecetasState {
   stats: RecetasStats | null;
 }
 
-interface ListResponse {
-  total: number;
-  recetas: RecetaResumen[];
+// =============================================================================
+// INTERNAL — shape de /recetas.json en disco
+// =============================================================================
+
+interface RecetasStore {
+  _version?: string;
+  _updated_at?: string;
+  recetas?: Receta[];
+  ingredientes_catalogo?: CatalogoIngrediente[];
 }
 
-interface IngredientesResponse {
-  total: number;
-  ingredientes: CatalogoIngrediente[];
-}
+const STORE_PATH = '/recetas.json';
+const DEFAULT_LIST_LIMIT = 100;
 
 // =============================================================================
 // INITIAL STATE
@@ -125,35 +133,82 @@ const initialState: RecetasState = {
   stats: null
 };
 
-// =============================================================================
-// STORE
-// =============================================================================
-
 export const recetasStore = writable<RecetasState>(initialState);
 
 // =============================================================================
-// ACTIONS (vía mqttRequest → bridge recetas-api)
+// HELPERS — fs.read directo + transformacion local
 // =============================================================================
 
-export async function loadRecetas(estado?: EstadoOperativo): Promise<void> {
+/**
+ * Lee /recetas.json del proyecto activo via mqttRequest('fs', 'read').
+ * Devuelve el objeto parseado o null si el archivo no existe (RESOURCE_NOT_FOUND).
+ * Throws con error legible para otros errores.
+ */
+async function readRecetasStore(): Promise<RecetasStore | null> {
+  try {
+    const res = await mqttRequest<{ content: string }>('fs', 'read', { path: STORE_PATH });
+    const content = res.data?.content;
+    if (typeof content !== 'string') return null;
+    try {
+      return JSON.parse(content) as RecetasStore;
+    } catch (parseErr) {
+      throw new Error(`${STORE_PATH} no parseable: ${(parseErr as Error).message}`);
+    }
+  } catch (err) {
+    if (err instanceof MqttRequestError && err.code === 'RESOURCE_NOT_FOUND') {
+      return null;
+    }
+    throw err;
+  }
+}
+
+function summarize(r: Receta): RecetaResumen {
+  return {
+    id: r.id,
+    nombre: r.nombre,
+    porciones: r.porciones,
+    dificultad: r.dificultad,
+    estado_operativo: r.estado_operativo,
+    incompleta: r.incompleta === true,
+    campos_pendientes: Array.isArray(r.campos_pendientes) ? r.campos_pendientes : [],
+    version: r.version,
+    updated_at: r.updated_at,
+    ingredientes_count: Array.isArray(r.ingredientes) ? r.ingredientes.length : 0
+  };
+}
+
+// =============================================================================
+// ACTIONS
+// =============================================================================
+
+export async function loadRecetas(estado?: EstadoOperativo, limit: number = DEFAULT_LIST_LIMIT): Promise<void> {
   recetasStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
     const pid = get(activeProjectId);
     if (!pid) throw new Error('No hay proyecto activo');
 
-    const args: Record<string, unknown> = { project_id: pid };
-    if (estado) args.estado_operativo = estado;
+    const store = await readRecetasStore();
+    if (!store) {
+      recetasStore.update(s => ({ ...s, recetas: [], loading: false }));
+      return;
+    }
 
-    const response = await mqttRequest<ListResponse>('recetas', 'listar', args);
+    let items = Array.isArray(store.recetas) ? store.recetas : [];
+    if (estado) items = items.filter(r => r && r.estado_operativo === estado);
+    const sorted = items
+      .slice()
+      .sort((a, b) => String(b?.updated_at || '').localeCompare(String(a?.updated_at || '')))
+      .slice(0, limit)
+      .map(summarize);
 
     recetasStore.update(s => ({
       ...s,
-      recetas: response.data.recetas || [],
+      recetas: sorted,
       loading: false
     }));
 
-    console.log('[Recetas] Loaded:', response.data.total, 'recetas');
+    console.log('[Recetas] Loaded:', items.length, 'recetas');
   } catch (error) {
     const msg = getErrorMessage(error);
     recetasStore.update(s => ({ ...s, loading: false, error: msg }));
@@ -165,21 +220,33 @@ export async function getReceta(id: string): Promise<Receta | null> {
   recetasStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const pid = get(activeProjectId);
-    if (!pid) throw new Error('No hay proyecto activo');
+    const store = await readRecetasStore();
+    if (!store) {
+      recetasStore.update(s => ({ ...s, loading: false, error: 'No hay recetas todavia' }));
+      return null;
+    }
 
-    const response = await mqttRequest<Receta>('recetas', 'obtener', { id, project_id: pid });
-    const receta = response.data;
+    const items = Array.isArray(store.recetas) ? store.recetas : [];
+    const receta = items.find(r => r && r.id === id);
+    if (!receta) {
+      recetasStore.update(s => ({ ...s, loading: false, error: `Receta ${id} no encontrada` }));
+      return null;
+    }
+
+    const enriched: Receta = {
+      ...receta,
+      ingredientes_count: Array.isArray(receta.ingredientes) ? receta.ingredientes.length : 0
+    };
 
     recetasStore.update(s => ({
       ...s,
-      selectedReceta: receta,
+      selectedReceta: enriched,
       selectedId: id,
       loading: false,
       activeTab: 'detalle'
     }));
 
-    return receta;
+    return enriched;
   } catch (error) {
     const msg = getErrorMessage(error);
     recetasStore.update(s => ({ ...s, loading: false, error: msg }));
@@ -192,18 +259,19 @@ export async function loadIngredientes(): Promise<void> {
   recetasStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const pid = get(activeProjectId);
-    if (!pid) throw new Error('No hay proyecto activo');
-
-    const response = await mqttRequest<IngredientesResponse>('recetas', 'ingredientes', { project_id: pid });
+    const store = await readRecetasStore();
+    const items = store && Array.isArray(store.ingredientes_catalogo) ? store.ingredientes_catalogo : [];
+    const sorted = items.slice().sort((a, b) =>
+      String(a?.nombre || '').localeCompare(String(b?.nombre || ''))
+    );
 
     recetasStore.update(s => ({
       ...s,
-      ingredientes: response.data.ingredientes || [],
+      ingredientes: sorted,
       loading: false
     }));
 
-    console.log('[Recetas] Ingredientes loaded:', response.data.total);
+    console.log('[Recetas] Ingredientes loaded:', items.length);
   } catch (error) {
     const msg = getErrorMessage(error);
     recetasStore.update(s => ({ ...s, loading: false, error: msg }));
@@ -212,14 +280,47 @@ export async function loadIngredientes(): Promise<void> {
 
 export async function loadStats(): Promise<void> {
   try {
-    const pid = get(activeProjectId);
-    if (!pid) return;
+    const store = await readRecetasStore();
+    if (!store) {
+      recetasStore.update(s => ({
+        ...s,
+        stats: {
+          total_recetas: 0,
+          por_estado: { borrador: 0, en_servicio: 0, archivada: 0 },
+          incompletas: 0,
+          ingredientes_catalogo: 0,
+          ingredientes_usados_unicos: 0
+        }
+      }));
+      return;
+    }
 
-    const response = await mqttRequest<RecetasStats>('recetas', 'estadisticas', { project_id: pid });
+    const recetas = Array.isArray(store.recetas) ? store.recetas : [];
+    const por_estado = { borrador: 0, en_servicio: 0, archivada: 0 };
+    let incompletas = 0;
+    const usados = new Set<string>();
+    for (const r of recetas) {
+      if (!r) continue;
+      if (r.estado_operativo && Object.prototype.hasOwnProperty.call(por_estado, r.estado_operativo)) {
+        por_estado[r.estado_operativo]++;
+      }
+      if (r.incompleta) incompletas++;
+      if (Array.isArray(r.ingredientes)) {
+        for (const ing of r.ingredientes) {
+          if (ing && typeof ing.nombre === 'string') usados.add(ing.nombre.toLowerCase());
+        }
+      }
+    }
 
     recetasStore.update(s => ({
       ...s,
-      stats: response.data
+      stats: {
+        total_recetas: recetas.length,
+        por_estado,
+        incompletas,
+        ingredientes_catalogo: Array.isArray(store.ingredientes_catalogo) ? store.ingredientes_catalogo.length : 0,
+        ingredientes_usados_unicos: usados.size
+      }
     }));
   } catch (error) {
     console.error('[Recetas] Stats failed:', getErrorMessage(error));
@@ -252,74 +353,57 @@ export function clearError(): void {
 // =============================================================================
 //
 // Los eventos receta.creada / receta.actualizada / receta.eliminada los publica
-// el blueprint del modulo recetas tras ejecutar las operaciones via LLM. El
-// payload es la receta canonica (shape Receta). Aqui solo actualizamos el
-// estado local — la fuente de verdad sigue siendo /recetas.json (lectura via
-// recetas-api).
+// el blueprint del modulo recetas tras ejecutar operaciones via LLM. Aqui solo
+// recargamos del store (siempre fuente de verdad) tras el evento — no
+// confiamos en el payload del evento para mantener consistencia.
 
 let cleanupFns: (() => void)[] = [];
-
-function recetaToResumen(r: Receta): RecetaResumen {
-  return {
-    id: r.id,
-    nombre: r.nombre,
-    porciones: r.porciones,
-    dificultad: r.dificultad,
-    estado_operativo: r.estado_operativo,
-    incompleta: r.incompleta,
-    campos_pendientes: r.campos_pendientes || [],
-    version: r.version,
-    updated_at: r.updated_at,
-    ingredientes_count: Array.isArray(r.ingredientes) ? r.ingredientes.length : 0
-  };
-}
 
 export function initRecetasSubscriptions(): () => void {
   cleanupFns.forEach(fn => fn());
   cleanupFns = [];
 
-  cleanupFns.push(
-    mqttSubscribe('receta.creada', (_topic, payload) => {
-      const receta = payload as Receta;
-      if (!receta?.id) return;
-      console.log('[Recetas] Receta creada:', receta.nombre);
-      recetasStore.update(s => ({
-        ...s,
-        recetas: [recetaToResumen(receta), ...s.recetas]
-      }));
-    })
-  );
+  const refresh = () => {
+    loadRecetas();
+    loadStats();
+  };
 
-  cleanupFns.push(
-    mqttSubscribe('receta.actualizada', (_topic, payload) => {
-      const receta = payload as Receta;
-      if (!receta?.id) return;
-      console.log('[Recetas] Receta actualizada:', receta.nombre);
-      recetasStore.update(s => ({
-        ...s,
-        recetas: s.recetas.map(r => r.id === receta.id ? recetaToResumen(receta) : r),
-        selectedReceta: s.selectedId === receta.id ? receta : s.selectedReceta
-      }));
-    })
-  );
+  cleanupFns.push(mqttSubscribe('receta.creada', () => {
+    console.log('[Recetas] Receta creada → refresh');
+    refresh();
+  }));
 
-  cleanupFns.push(
-    mqttSubscribe('receta.eliminada', (_topic, payload) => {
-      const data = payload as { receta_id: string };
-      if (!data?.receta_id) return;
-      console.log('[Recetas] Receta eliminada:', data.receta_id);
-      recetasStore.update(s => ({
-        ...s,
-        recetas: s.recetas.filter(r => r.id !== data.receta_id),
-        selectedReceta: s.selectedId === data.receta_id ? null : s.selectedReceta,
-        selectedId: s.selectedId === data.receta_id ? null : s.selectedId
-      }));
-    })
-  );
+  cleanupFns.push(mqttSubscribe('receta.actualizada', (_topic, payload) => {
+    const data = payload as { id?: string };
+    console.log('[Recetas] Receta actualizada → refresh');
+    refresh();
+    // Si la actualizada es la seleccionada, releer detalle.
+    const state = get(recetasStore);
+    if (data?.id && state.selectedId === data.id) {
+      getReceta(data.id);
+    }
+  }));
+
+  cleanupFns.push(mqttSubscribe('receta.eliminada', (_topic, payload) => {
+    const data = payload as { receta_id?: string };
+    console.log('[Recetas] Receta eliminada → refresh');
+    refresh();
+    // Si la eliminada era la seleccionada, limpiar.
+    if (data?.receta_id) {
+      const state = get(recetasStore);
+      if (state.selectedId === data.receta_id) {
+        recetasStore.update(s => ({
+          ...s,
+          selectedReceta: null,
+          selectedId: null,
+          activeTab: 'recetas'
+        }));
+      }
+    }
+  }));
 
   // Carga inicial
-  loadRecetas();
-  loadStats();
+  refresh();
 
   return () => {
     cleanupFns.forEach(fn => fn());

@@ -11,10 +11,10 @@
   "properties": {
     "name": {
       "type": "string",
-      "pattern": "^[a-z0-9-]+\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "pattern": "^[a-z0-9-]+\\.[a-z0-9_-]+(\\.[a-z0-9_-]+)*$",
       "minLength": 3,
       "maxLength": 80,
-      "description": "Nombre canonico de la tool. Forma <module-prefix>.<entity>(.verb)? en kebab-case. Ej: 'pdf.extract', 'tarifas.assign', 'carta-scheduler.crear_regla'. Prefijo del modulo obligatorio para disambiguacion cross-modulo."
+      "description": "Nombre canonico de la tool. Forma <module-prefix>.<entity>(.verb)? en kebab-case (los segmentos siguientes admiten kebab o snake_case por compat con el catalogo existente). Ej: 'pdf.extract', 'tarifas.assign', 'carta-scheduler.crear_regla', 'cocina.mark-ready'. Prefijo del modulo obligatorio para disambiguacion cross-modulo."
     },
     "description": {
       "type": "string",

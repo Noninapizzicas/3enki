@@ -46,7 +46,7 @@ const YEL   = '\x1b[33m';
 const CYAN  = '\x1b[36m';
 const RST   = '\x1b[0m';
 
-const NAME_RE = /^[a-z0-9-]+\.[a-z0-9_]+(\.[a-z0-9_]+)*$/;
+const NAME_RE = /^[a-z0-9-]+\.[a-z0-9_-]+(\.[a-z0-9_-]+)*$/;
 const LLM_HOSTS = [
   'api.openai.com',
   'api.anthropic.com',

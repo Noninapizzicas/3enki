@@ -144,14 +144,12 @@ class CuentasCanalesModule extends BaseModule {
       await strategy.subscribeToEvents(this.eventBus);
     }
 
-    // UI Handlers específicos por canal + agregados
+    // UI Handlers especificos por canal. Las 3 entries 'canales.{list,health,metrics}'
+    // del modulo padre las auto-wirea el loader desde tools[] (tools.contract v1.2).
     if (this.uiHandler) {
       for (const strategy of Object.values(this.strategies)) {
         strategy.registerUIHandlers(this.uiHandler);
       }
-      this.uiHandler.register('canales', 'health', this.handleHealthCheck.bind(this));
-      this.uiHandler.register('canales', 'metrics', this.handleGetMetrics.bind(this));
-      this.uiHandler.register('canales', 'list', this.handleGetCanales.bind(this));
     }
 
     this.iniciarReseoDiario();
@@ -174,9 +172,7 @@ class CuentasCanalesModule extends BaseModule {
       for (const strategy of Object.values(this.strategies)) {
         strategy.unregisterUIHandlers(this.uiHandler);
       }
-      this.uiHandler.unregister('canales', 'health');
-      this.uiHandler.unregister('canales', 'metrics');
-      this.uiHandler.unregister('canales', 'list');
+      // El loader desregistra 'canales.{list,health,metrics}' automaticamente.
     }
 
     for (const strategy of Object.values(this.strategies)) {

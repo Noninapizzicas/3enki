@@ -68,7 +68,139 @@
     { "domain": "cocina", "action": "health",             "handler": "handleHealthCheck",      "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "cocina", "action": "metrics",            "handler": "handleGetMetrics",       "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "tools": [],
+  "tools": [
+    {
+      "name": "cocina.list-active",
+      "description": "Lista pedidos activos en cocina (no terminados) con sus items y devices asignados.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleGetActivos",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cocina.get",
+      "description": "Obtiene un pedido de cocina por pedido_id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pedido_id": { "type": "string", "description": "Identificador del pedido." }
+        },
+        "required": ["pedido_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleGetPedido",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cocina.history",
+      "description": "Devuelve el historial de pedidos preparados (ultimos N, max 50).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer", "description": "Cantidad maxima a devolver (default 20)." }
+        },
+        "additionalProperties": false
+      },
+      "handler": "handleGetHistorial",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cocina.prepare-item",
+      "description": "Marca un item como preparando o avanza de fase (multi-estacion). Asigna device color y emite cocina.item_preparando / item_avanzado / item_preparado.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "item_id":   { "type": "string", "description": "Identificador del item." },
+          "device_id": { "type": "string", "description": "Device de cocina que toma el item (opcional)." }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "handler": "handlePrepararItem",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cocina.mark-ready",
+      "description": "Marca el pedido completo como listo. Emite cocina.pedido_listo.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pedido_id": { "type": "string", "description": "Identificador del pedido." }
+        },
+        "required": ["pedido_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleMarcarListo",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cocina.register-device",
+      "description": "Registra un device fisico de cocina con color asignado, estacion, tipo y filtros de familias. Si ya existe lo actualiza.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device_id":     { "type": "string", "description": "Identificador del device." },
+          "nombre":        { "type": "string", "description": "Nombre legible." },
+          "estacion":      { "type": "string", "description": "Estacion asignada." },
+          "filtros":       { "type": "object", "description": "Filtros de familias del device." },
+          "tipo_estacion": { "type": "string", "description": "Tipo de estacion (general, horno, ...)." },
+          "impresora":     { "type": "string", "description": "Impresora asociada al device (opcional)." }
+        },
+        "required": ["device_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleRegisterDevice",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cocina.unregister-device",
+      "description": "Quita un device fisico de cocina. Emite cocina.device_unregistered.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "device_id": { "type": "string", "description": "Identificador del device." }
+        },
+        "required": ["device_id"],
+        "additionalProperties": false
+      },
+      "handler": "handleUnregisterDevice",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cocina.list-devices",
+      "description": "Lista los devices fisicos de cocina registrados con sus colores y estaciones.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleListDevices",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cocina.list-station-types",
+      "description": "Lista los tipos de estacion configurados (general, horno, etc.) con sus pase_minimo y reglas.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleListTiposEstacion",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cocina.list-displays",
+      "description": "Lista los displays externos (TV, LED, tablet) registrados.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleListarDisplays",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cocina.health",
+      "description": "Health check del modulo cocina.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleHealthCheck",
+      "errores_conocidos": []
+    },
+    {
+      "name": "cocina.metrics",
+      "description": "Metricas operativas de cocina (counters, gauges, timings).",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleGetMetrics",
+      "errores_conocidos": []
+    }
+  ],
   "dependencies": [],
   "tracing": {
     "propaga_correlation_id": true

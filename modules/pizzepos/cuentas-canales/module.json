@@ -284,7 +284,29 @@
     { "domain": "canales", "action": "health",  "handler": "handleHealthCheck", "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "canales", "action": "metrics", "handler": "handleGetMetrics",  "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "tools": [],
+  "tools": [
+    {
+      "name": "canales.list",
+      "description": "Lista los canales registrados con sus prefijos, ui_domain y acciones declaradas.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleGetCanales",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "canales.health",
+      "description": "Health check agregado del modulo cuentas-canales (strategies activas, canales registrados).",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleHealthCheck",
+      "errores_conocidos": []
+    },
+    {
+      "name": "canales.metrics",
+      "description": "Metricas agregadas de los canales (counters, gauges y tiempos).",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleGetMetrics",
+      "errores_conocidos": []
+    }
+  ],
   "dependencies": ["cuentas"],
   "observability": {
     "logging": {

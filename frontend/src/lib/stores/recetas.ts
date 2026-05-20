@@ -433,6 +433,7 @@ export const sortedRecetas = derived(recetasStore, $s =>
 );
 
 export const selectedReceta = derived(recetasStore, $s => $s.selectedReceta);
+export const recetasActiveTab = derived(recetasStore, $s => $s.activeTab);
 export const recetasStats = derived(recetasStore, $s => $s.stats);
 export const recetasLoading = derived(recetasStore, $s => $s.loading);
 export const recetasError = derived(recetasStore, $s => $s.error);

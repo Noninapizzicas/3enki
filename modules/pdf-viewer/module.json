@@ -276,6 +276,55 @@
           "filePath"
         ]
       }
+    },
+    {
+      "name": "pdf.info",
+      "description": "Lee informacion estructural de un PDF (numero de paginas, metadata, dimensiones). Envuelve el servicio local.pdfjs.info. Acepta path absoluto al PDF.",
+      "handler": "handleToolInfo",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pdf": {
+            "type": "string",
+            "description": "Ruta absoluta al archivo PDF en disco."
+          }
+        },
+        "required": [
+          "pdf"
+        ]
+      }
+    },
+    {
+      "name": "pdf.render",
+      "description": "Renderiza una pagina de un PDF a imagen PNG. Util para pasar a OCR, mostrar previa visual, o convertir paginas a imagenes individuales. Envuelve el servicio local.pdfjs.render.",
+      "handler": "handleToolRender",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pdf": {
+            "type": "string",
+            "description": "Ruta absoluta al archivo PDF en disco."
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Numero de pagina a renderizar (1-based)."
+          },
+          "scale": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 4.0,
+            "default": 2.0,
+            "description": "Factor de escala (1.0 = tamaño original, 2.0 = recomendado para OCR)."
+          }
+        },
+        "required": [
+          "pdf",
+          "page"
+        ]
+      }
     }
   ],
   "config": {

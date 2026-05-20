@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
-   * Pdf2ImgPanel - Convierte una pagina de PDF a imagen PNG
+   * Pdf2ImgPanel - Convierte una pagina de PDF a imagen PNG.
    *
-   * Usa el provider local.pdfjs.render para renderizar una pagina
-   * del PDF como imagen, lista para preparar y pasar por OCR.
+   * Usa las tools del modulo pdf-viewer (pdf.info, pdf.render) que internamente
+   * envuelven el servicio local.pdfjs via bus. Auto-wireadas al uiHandler por
+   * tools.contract v1.2 — frontend las invoca via mqttRequest('pdf', 'info'|'render').
    */
 
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
@@ -26,7 +27,7 @@
     error = '';
 
     try {
-      const res = await mqttRequest<any>('pdfjs', 'info', { pdf: filePath.trim() });
+      const res = await mqttRequest<any>('pdf', 'info', { pdf: filePath.trim() });
       totalPages = res.data?.pages || 0;
       page = 1;
     } catch (err: any) {
@@ -41,7 +42,7 @@
     resultImage = '';
 
     try {
-      const res = await mqttRequest<any>('pdfjs', 'render', {
+      const res = await mqttRequest<any>('pdf', 'render', {
         pdf: filePath.trim(),
         page,
         scale

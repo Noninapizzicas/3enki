@@ -451,6 +451,104 @@ class PdfViewerModule extends BaseModule {
     }
   }
 
+  async handleToolInfo(args) {
+    const { pdf } = args || {};
+    if (!pdf) return this._errorResponse(400, 'INVALID_INPUT', 'pdf path is required');
+    this.logger.info('pdf-viewer.tool.info.start', { pdf });
+    try {
+      const result = await this._callPdfjsService('info', { pdf });
+      if (result === null) {
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'local.pdfjs service did not respond');
+      }
+      if (result.error) {
+        const code = result.error.code || 'UNKNOWN_ERROR';
+        const status = CODE_TO_STATUS[code] || 500;
+        return this._errorResponse(status, code, result.error.message || 'local.pdfjs.info failed');
+      }
+      this.metrics?.increment('pdf-viewer.tool.info.success');
+      return { status: 200, data: result };
+    } catch (error) {
+      return this._handleHandlerError('pdf-viewer.tool.info', error, 'tool.info');
+    }
+  }
+
+  async handleToolRender(args) {
+    const { pdf, page, scale } = args || {};
+    if (!pdf) return this._errorResponse(400, 'INVALID_INPUT', 'pdf path is required');
+    if (typeof page !== 'number' || page < 1) {
+      return this._errorResponse(400, 'INVALID_INPUT', 'page must be a positive integer');
+    }
+    const effectiveScale = (typeof scale === 'number' && scale >= 0.5 && scale <= 4.0) ? scale : 2.0;
+    this.logger.info('pdf-viewer.tool.render.start', { pdf, page, scale: effectiveScale });
+    try {
+      const result = await this._callPdfjsService('render', { pdf, page, scale: effectiveScale }, 20000);
+      if (result === null) {
+        return this._errorResponse(504, 'UPSTREAM_TIMEOUT', 'local.pdfjs.render timeout (PDFs grandes pueden tardar)');
+      }
+      if (result.error) {
+        const code = result.error.code || 'UNKNOWN_ERROR';
+        const status = CODE_TO_STATUS[code] || 500;
+        return this._errorResponse(status, code, result.error.message || 'local.pdfjs.render failed');
+      }
+      this.metrics?.increment('pdf-viewer.tool.render.success');
+      return { status: 200, data: result };
+    } catch (error) {
+      return this._handleHandlerError('pdf-viewer.tool.render', error, 'tool.render');
+    }
+  }
+
+  /**
+   * Helper privado: invoca un servicio local.pdfjs.<action> via bus
+   * (publish local.pdfjs.<action>.request → wait local.pdfjs.<action>.response).
+   * Mismo patron que createViaProvider pero generico para info/render.
+   *
+   * @param {string} action - 'info' | 'render' | 'extract'
+   * @param {Object} payload - input del servicio
+   * @param {number} [timeoutMs=8000] - timeout en ms
+   * @returns {Promise<Object|null>} - data del response, o null en timeout/no bus
+   */
+  async _callPdfjsService(action, payload, timeoutMs = 8000) {
+    if (!this.eventBus) return null;
+    return new Promise((resolve) => {
+      const requestId = `pdfjs_${action}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const respEvent = `local.pdfjs.${action}.response`;
+      const reqEvent = `local.pdfjs.${action}.request`;
+      let unsub = null;
+      const safeUnsub = () => {
+        if (!unsub) return;
+        try { unsub(); }
+        catch (e) { this.logger?.debug?.('pdf-viewer.pdfjs.unsub.failed', { action, error: e?.message }); }
+      };
+      const timeout = setTimeout(() => {
+        safeUnsub();
+        resolve(null);
+      }, timeoutMs);
+      this.eventBus.subscribe(respEvent, (event) => {
+        const data = event.data || event;
+        if (data.request_id !== requestId) return;
+        clearTimeout(timeout);
+        safeUnsub();
+        // ServiceExecutor responses use { success, data, error } shape
+        if (data.success === false) {
+          resolve({ error: data.error || { code: 'UNKNOWN_ERROR', message: 'service failed' } });
+        } else {
+          resolve(data.data || data);
+        }
+      }).then((u) => {
+        unsub = u;
+        this.eventBus.publish(reqEvent, { request_id: requestId, ...payload }).catch((err) => {
+          this.logger?.error?.('pdf-viewer.pdfjs.publish.failed', { action, error: err?.message });
+          clearTimeout(timeout);
+          safeUnsub();
+          resolve(null);
+        });
+      }).catch((err) => {
+        this.logger?.error?.('pdf-viewer.pdfjs.subscribe.failed', { action, error: err?.message });
+        resolve(null);
+      });
+    });
+  }
+
   // === Domain Helpers ===
 
   async getBasePath(project_id) {

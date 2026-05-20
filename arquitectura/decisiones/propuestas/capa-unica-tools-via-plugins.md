@@ -1,5 +1,30 @@
 # Capa única de tools via plugins — apuntes de retomar
 
+> **⚠️ Documento superseded (mayo 2026).** El enfoque "plugin layer" descrito
+> aquí (resucitar calling-generator, crear plugins JSON declarativos) se
+> evaluó en la rama `claude/review-tools-architecture-Xm3bZ` y se descartó
+> a favor de una solución MÁS SIMPLE: el frontend lee directamente via
+> `mqttRequest('fs','read',{path})` la primitiva que `filesystem` ya expone,
+> habilitado por el auto-wire de `tools[]` al `uiHandler` que añade
+> `tools.contract` v1.2.
+>
+> **Patrón canónico documentado en**:
+> [`lecturas-frontend-via-fs-read.md`](./lecturas-frontend-via-fs-read.md).
+>
+> Lo que SÍ se conservó de esta propuesta original: el bump de
+> `tools.contract` a v1.2 (una declaración → tres destinos), el cambio en
+> `core/modules/loader.js::registerToolsForAI` para auto-wire al uiHandler,
+> y los 4 cross-checks nuevos del validator. Lo que SE DESCARTÓ: crear
+> módulos bridge (`-api`, `-plugin-runtime`) o resucitar calling-generator.
+> El backend canónico ya tenía suficiente — solo faltaba el atajo correcto
+> entre frontend y filesystem.
+>
+> Este documento queda aquí como **registro histórico** del diagnóstico
+> del problema operativo y el camino seguido. La solución final es más
+> conservadora de lo que el cuerpo de este doc anticipaba.
+
+---
+
 > **Documento de retomar.** Escrito al final de una sesión larga para que la
 > próxima conversación arranque con todo el contexto sin tener que reconstruirlo.
 > Si lees esto: las decisiones aquí NO están implementadas todavía — son

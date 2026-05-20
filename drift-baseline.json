@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-20T11:51:06.610Z",
-  "total": 2396,
+  "generated_at": "2026-05-20T11:56:20.863Z",
+  "total": 2397,
   "by_validator": {
     "naming": 39,
     "events": 185,
@@ -15,7 +15,7 @@
     "tools": 484,
     "agents-config": 173,
     "module-rewrite": 65,
-    "frontend": 374,
+    "frontend": 375,
     "security": 1,
     "testing": 45,
     "multi-tenancy": 217,
@@ -27,7 +27,7 @@
     "scheduling": 1
   },
   "by_severity": {
-    "warning": 2128,
+    "warning": 2129,
     "info": 107,
     "error": 189
   },
@@ -881,6 +881,7 @@
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/viabilidad/ViabilidadDetail.svelte:239 — #6b7280 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/viabilidad/ViabilidadPanel.svelte:174 — #fee2e2 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/modules/viabilidad/ViabilidadRecomendaciones.svelte:18 — #dc2626 fuera de paleta canonica",
+    "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/stores/carta-design.ts:87 — #1a1a1a fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/stores/cocina.ts:152 — #94a3b8 fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/stores/cuentas.ts:69 — #f59e0b fuera de paleta canonica",
     "frontend|drift_color_hex_custom_en_frontend_src|frontend/src/lib/stores/theme.ts:60 — #121212 fuera de paleta canonica",

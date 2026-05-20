@@ -191,8 +191,8 @@ mqttSubscribe('receta.eliminada', () => loadRecetas());
 | escandallo | — (stateless on-demand) | ❌ | Necesita decidir persistencia primero. Si escandallo se vuelve stateful y escribe `coste_*` en `/recetas.json`, el patrón aplica con el mismo archivo de recetas. |
 | viabilidad | `/viabilidad.json` | ✅ | **Hecho** — store dead-code eliminado (nadie lo importaba). ViabilidadPanel cargaba via `fetch('/api/viabilidad/*')` (HTTP REST a endpoints inexistentes — siempre estuvo roto). Migrado a `fs.read` directo, expedientes del blueprint expuestos como lista. Recomendaciones/historico: vacios hasta que escandallo persista historico. |
 | carta-digital | `/carta-digital.json` | ✅ | **Hecho** — store + 3 paneles (config, preview, stats). Stats convertido a placeholder hasta analytics persistido. Forzar composición eliminado (pídeselo al chat). |
-| carta-impresion | depende — puede ser stateless | ⚠️ | Revisar blueprint |
-| carta-design | `/carta-design/profiles/*.json` (per-profile) | ⚠️ | Probablemente sí, pero con multiple files |
+| carta-impresion | `/cartas-impresion/<id>.html` + `.meta.json` | ✅ | **Hecho** — `loadImpresion` lee ambos archivos en paralelo. `generarImpresion` se queda como hint al chat (requiere agente impresor). |
+| carta-design | `/carta-design/profiles/*.json` + built-ins inline | ✅ | **Hecho** — built-ins (5) inline en el store como constante (lista cerrada, source en `modules/pizzepos/carta-design/design-profiles/*.json`, sync manual). Custom via fs.list+fs.read. Gallery via fs.list de `/carta-design/designs/`. Save/delete via fs.write/fs.delete. Carta a diseñar leida directo de `/cartas/<id>.json` (carta-manager storage). |
 | pdf-viewer | — (consume servicios `local.pdfjs/sharp/google-vision`) | ❌ | No es lectura de storage; necesita handlers dedicados o resolver vía servicios canonicos del repo |
 
 ---

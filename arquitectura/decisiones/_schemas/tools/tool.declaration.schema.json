@@ -62,6 +62,11 @@
       "uniqueItems": true,
       "description": "Codigos que el handler PUEDE emitir bajo sus condiciones de error normales. Refleja la realidad del codigo. Si el handler nunca emite error, puede estar vacio o ausente."
     },
+    "confirmation": {
+      "type": "boolean",
+      "default": false,
+      "description": "Cuando true, la UI / ai-gateway pide confirmacion explicita del usuario antes de invocar la tool. Reservado para operaciones destructivas o de alto impacto (ej. fs.delete, shell.exec). El loader lo expone via toolsRegistry.get(name).confirmation."
+    },
     "response_schema_ref": {
       "type": "string",
       "minLength": 1,

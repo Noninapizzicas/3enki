@@ -13,15 +13,45 @@
       }
     ],
     "subscribes": [
-      { "event": "project.activated",        "handler": "onProjectActivated",   "description": "Cache base_path + carga config del proyecto." },
-      { "event": "project.deactivated",      "handler": "onProjectDeactivated", "description": "No-op multi-tenant: preserva config en memoria." },
-      { "event": "tarifas.config.solicitada", "handler": "onConfigSolicitada",   "description": "Otro modulo pide snapshot del estado actual. Re-publica tarifas.config.actualizada con tipo=snapshot para cada proyecto conocido (o uno especifico si trae project_id)." }
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated",
+        "description": "Cache base_path + carga config del proyecto."
+      },
+      {
+        "event": "project.deactivated",
+        "handler": "onProjectDeactivated",
+        "description": "No-op multi-tenant: preserva config en memoria."
+      },
+      {
+        "event": "tarifas.config.solicitada",
+        "handler": "onConfigSolicitada",
+        "description": "Otro modulo pide snapshot del estado actual. Re-publica tarifas.config.actualizada con tipo=snapshot para cada proyecto conocido (o uno especifico si trae project_id)."
+      }
     ]
   },
   "ui_handlers": [
-    { "domain": "tarifas", "action": "get",    "handler": "handleGet",    "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "tarifas", "action": "assign", "handler": "toolAssign",   "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "tarifas", "action": "health", "handler": "handleHealth", "type": "workspace_module", "zone": "barra_modulos" }
+    {
+      "domain": "tarifas",
+      "action": "get",
+      "handler": "handleGet",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "tarifas",
+      "action": "assign",
+      "handler": "toolAssign",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "tarifas",
+      "action": "health",
+      "handler": "handleHealth",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ],
   "tools": [
     {
@@ -31,14 +61,22 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id":   { "type": "string", "description": "ID de la carta general" },
-          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta general"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto (default: ultimo activo)"
+          }
         },
-        "required": ["carta_id"]
+        "required": [
+          "carta_id"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",     "cuando": "carta_id o project_id ausentes" },
-        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura del archivo de config" }
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
       ]
     },
     {
@@ -48,15 +86,34 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "canal":      { "type": "string", "enum": ["mesa", "llevar", "telefono", "whatsapp", "glovo", "llevadoo"], "description": "Canal de venta" },
-          "carta_id":   { "type": "string", "description": "ID de carta a asignar (null = usar general)" },
-          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+          "canal": {
+            "type": "string",
+            "enum": [
+              "mesa",
+              "llevar",
+              "telefono",
+              "whatsapp",
+              "glovo",
+              "llevadoo"
+            ],
+            "description": "Canal de venta"
+          },
+          "carta_id": {
+            "type": "string",
+            "description": "ID de carta a asignar (null = usar general)"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto (default: ultimo activo)"
+          }
         },
-        "required": ["canal"]
+        "required": [
+          "canal"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",     "cuando": "canal ausente o no esta en la lista de canales validos" },
-        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura del archivo de config" }
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
       ]
     },
     {
@@ -66,7 +123,10 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto (default: ultimo activo)"
+          }
         }
       },
       "errores_conocidos": []
@@ -78,18 +138,42 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "carta_id":      { "type": "string", "description": "ID de la carta variante" },
-          "base_carta_id": { "type": "string", "description": "ID de la carta base de la que se derivo" },
-          "nombre":        { "type": "string", "description": "Nombre descriptivo de la variante" },
-          "canales":       { "type": "array", "items": { "type": "string" }, "description": "Canales que usan esta variante" },
-          "reglas":        { "type": "object", "description": "Reglas de la variante en lenguaje natural." },
-          "project_id":    { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+          "carta_id": {
+            "type": "string",
+            "description": "ID de la carta variante"
+          },
+          "base_carta_id": {
+            "type": "string",
+            "description": "ID de la carta base de la que se derivo"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre descriptivo de la variante"
+          },
+          "canales": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Canales que usan esta variante"
+          },
+          "reglas": {
+            "type": "object",
+            "description": "Reglas de la variante en lenguaje natural."
+          },
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto (default: ultimo activo)"
+          }
         },
-        "required": ["carta_id", "base_carta_id"]
+        "required": [
+          "carta_id",
+          "base_carta_id"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",     "cuando": "carta_id o base_carta_id ausentes" },
-        { "code": "UNKNOWN_ERROR",  "cuando": "fallo de escritura del archivo de config" }
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
       ]
     },
     {
@@ -99,7 +183,10 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+          "project_id": {
+            "type": "string",
+            "description": "ID del proyecto (default: ultimo activo)"
+          }
         }
       },
       "errores_conocidos": []

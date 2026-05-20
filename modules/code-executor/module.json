@@ -44,10 +44,7 @@
       "name": "shell.exec",
       "description": "Ejecuta un comando shell. Retorna stdout, stderr y exitCode. Timeout por defecto: 30s.",
       "handler": "handleToolExec",
-      "requires_confirmation": true,
-      "permissions": [
-        "execute"
-      ],
+      "confirmation": true,
       "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
@@ -78,10 +75,7 @@
       "name": "shell.script",
       "description": "Ejecuta un archivo de script (bash, python, node). Detecta intérprete automáticamente.",
       "handler": "handleToolScript",
-      "requires_confirmation": true,
-      "permissions": [
-        "execute"
-      ],
+      "confirmation": true,
       "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT"],
       "parameters": {
         "type": "object",
@@ -116,10 +110,7 @@
       "name": "shell.background",
       "description": "Inicia un proceso en segundo plano (ej: servidor dev). Retorna PID para control.",
       "handler": "handleToolBackground",
-      "requires_confirmation": true,
-      "permissions": [
-        "execute"
-      ],
+      "confirmation": true,
       "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "RATE_LIMITED"],
       "parameters": {
         "type": "object",

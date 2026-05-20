@@ -1,14 +1,17 @@
 /**
- * Carta Impresion Store — versiones imprimibles de cartas
+ * Carta Impresion Store — versiones imprimibles de cartas.
  *
- * Consume: impresion.get, impresion.generar
- * Escucha: carta.impresion.lista para refrescar al terminar generación
+ * Lecturas directas via fs.read sobre /cartas-impresion/<carta_id>.html
+ * y /cartas-impresion/<carta_id>.meta.json (patron lecturas-frontend-via-
+ * fs-read). La generacion de un imprimible la hace el agente impresor
+ * (impresion-architect) — operacion compleja del blueprint, se pide al
+ * chat. El frontend solo escucha carta.impresion.lista para refrescar
+ * cuando llegue el aviso de que el archivo esta listo.
  */
 
 import { writable, derived } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 import { mqttRequest, MqttTimeoutError, MqttRequestError } from '$lib/ui-core/mqtt-request';
-import { getActiveProject } from '$lib/stores/workspace';
 
 // =============================================================================
 // TYPES
@@ -55,19 +58,38 @@ export const impresionStore = writable<ImpresionState>(initial);
 // ACTIONS
 // =============================================================================
 
+async function readFileOrNull(path: string): Promise<string | null> {
+  try {
+    const res = await mqttRequest<{ content: string }>('fs', 'read', { path });
+    const content = res.data?.content;
+    return typeof content === 'string' ? content : null;
+  } catch (err) {
+    if (err instanceof MqttRequestError && err.code === 'RESOURCE_NOT_FOUND') return null;
+    throw err;
+  }
+}
+
 export async function loadImpresion(cartaId: string): Promise<ImpresionItem | null> {
   impresionStore.update(s => ({ ...s, loading: true, error: null }));
   try {
-    const project = getActiveProject();
-    const res = await mqttRequest<any>('carta-impresion', 'get', {
-      project_id: project?.id,
-      carta_id: cartaId
-    });
+    const htmlPath = `/cartas-impresion/${cartaId}.html`;
+    const metaPath = `/cartas-impresion/${cartaId}.meta.json`;
+
+    const [html, metaRaw] = await Promise.all([
+      readFileOrNull(htmlPath),
+      readFileOrNull(metaPath)
+    ]);
+
+    let metadata: ImpresionMeta | null = null;
+    if (metaRaw) {
+      try { metadata = JSON.parse(metaRaw); } catch { metadata = null; }
+    }
+
     const item: ImpresionItem = {
       carta_id: cartaId,
-      html: res.data.html,
-      metadata: res.data.metadata,
-      filePath: res.data.filePath
+      html,
+      metadata,
+      filePath: html ? htmlPath : undefined
     };
     impresionStore.update(s => {
       const items = new Map(s.items);
@@ -83,31 +105,31 @@ export async function loadImpresion(cartaId: string): Promise<ImpresionItem | nu
   }
 }
 
+/**
+ * Generar un imprimible no se puede hacer desde el frontend — requiere
+ * orquestar el agente impresor (impresion-architect) que compone el HTML
+ * print-ready leyendo la carta + aplicando branding. Es una operacion
+ * del blueprint que el LLM ejecuta cuando se le pide en el chat.
+ *
+ * El frontend marca el cartaId como 'generating' como hint visual; el
+ * usuario debe abrir el chat y pedir "genera el imprimible de la carta
+ * X". Cuando llegue el evento carta.impresion.lista, el listener
+ * deshace el flag y recarga.
+ */
 export async function generarImpresion(cartaId: string): Promise<boolean> {
   impresionStore.update(s => {
     const gen = new Set(s.generating);
     gen.add(cartaId);
-    return { ...s, generating: gen, error: null };
+    return {
+      ...s,
+      generating: gen,
+      error: `Pídeselo al chat: "genera el imprimible de la carta ${cartaId}". El agente impresor lo compone y al terminar dispara carta.impresion.lista — el panel se refresca solo.`
+    };
   });
-
-  try {
-    const project = getActiveProject();
-    await mqttRequest('carta-impresion', 'generar', {
-      project_id: project?.id,
-      carta_id: cartaId
-    });
-    // El evento carta.impresion.lista nos avisará cuando termine
-    return true;
-  } catch (error) {
-    impresionStore.update(s => {
-      const gen = new Set(s.generating);
-      gen.delete(cartaId);
-      return {
-        ...s, generating: gen, error: getErrorMessage(error)
-      };
-    });
-    return false;
-  }
+  // Devolvemos false porque NO completamos la generacion aqui — solo dejamos
+  // hint y marcamos generating. El listener carta.impresion.lista hara el
+  // refresh real cuando el agente termine.
+  return false;
 }
 
 export function selectCarta(cartaId: string | null): void {

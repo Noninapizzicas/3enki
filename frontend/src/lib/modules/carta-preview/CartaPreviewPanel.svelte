@@ -8,14 +8,15 @@
    */
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { mqttRequest } from '$lib/ui-core/mqtt-request';
+  import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request';
 
   export let panelId: string = '';
 
   $: projectId = $page.params.project_id;
 
+  const CARTA_DIGITAL_PATH = '/carta-digital.json';
+
   let loading = true;
-  let composing = false;
   let error = '';
   let cartaCompuesta: any = null;
   let config: any = null;
@@ -27,29 +28,36 @@
     loading = true;
     error = '';
     try {
-      const res = await mqttRequest<any>('carta-digital', 'carta-publica', { project_id: projectId });
-      const data = res.data || res;
-      cartaCompuesta = data.carta || null;
-      config = data.config || null;
+      let store: Record<string, any> | null = null;
+      try {
+        const res = await mqttRequest<{ content: string }>('fs', 'read', { path: CARTA_DIGITAL_PATH });
+        const content = res.data?.content;
+        store = typeof content === 'string' ? JSON.parse(content) : null;
+      } catch (err) {
+        if (err instanceof MqttRequestError && err.code === 'RESOURCE_NOT_FOUND') {
+          store = null;
+        } else {
+          throw err;
+        }
+      }
+      cartaCompuesta = store?.carta_compuesta || null;
+      // Config: el frontend escribe su shape directo (tema, moneda, etc.).
+      // Si solo existe el shape del blueprint (branding/contacto), mapear minimo.
+      if (store) {
+        config = {
+          tema: store.tema || null,
+          nombre_negocio: store.nombre_negocio || store.branding?.nombre || '',
+          moneda: store.moneda || '€',
+          funcionalidades: store.funcionalidades || {},
+          whatsapp_telefono: store.whatsapp_telefono || store.contacto?.telefono || ''
+        };
+      } else {
+        config = null;
+      }
     } catch (err: any) {
       error = err.message || 'Error cargando carta';
     } finally {
       loading = false;
-    }
-  }
-
-  async function composerCarta() {
-    composing = true;
-    error = '';
-    try {
-      // Publicar evento para que carta-digital dispare el composer
-      // El backend lo hace automáticamente con carta.actualizada, pero forzamos aquí
-      await mqttRequest('carta-digital', 'carta-publica', { project_id: projectId, force: true });
-      // Esperar y recargar
-      setTimeout(() => loadCarta(), 2000);
-    } catch (err: any) {
-      error = err.message || 'Error componiendo carta';
-      composing = false;
     }
   }
 
@@ -80,10 +88,10 @@
     <div class="state-msg">
       <div class="empty-icon">📋</div>
       <p>La carta no se ha compuesto todavía.</p>
-      <p class="small">El agente composer la genera cuando cambia la carta base.</p>
-      <button class="btn-action" on:click={composerCarta} disabled={composing}>
-        {composing ? 'Componiendo...' : 'Forzar composición'}
-      </button>
+      <p class="small">
+        El agente composer genera la carta cuando cambia la carta base.
+        Pídeselo al chat: <em>"compón la carta digital del proyecto"</em>.
+      </p>
     </div>
   {:else}
     <div class="preview-container" class:mobile={viewMode === 'mobile'}>

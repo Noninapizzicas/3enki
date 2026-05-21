@@ -526,7 +526,8 @@ class AiGatewayModule extends BaseModule {
   async _executeUniversalBusTool(toolName, rawArgs, ctx) {
     const args = (rawArgs && typeof rawArgs === 'object') ? rawArgs : {};
     const ev = args.event;
-    const payload = (args.payload && typeof args.payload === 'object') ? args.payload : {};
+    const payloadProvided = args.payload && typeof args.payload === 'object' && !Array.isArray(args.payload);
+    const payload = payloadProvided ? args.payload : {};
     if (typeof ev !== 'string' || ev.length === 0) {
       const err = new Error("missing 'event' (string) in bus tool args");
       err.code = 'INVALID_INPUT';
@@ -538,6 +539,25 @@ class AiGatewayModule extends BaseModule {
     if (ev === 'bus.publish' || ev === 'bus.publishAndWait') {
       const err = new Error(`'${ev}' es el nombre de una tool, no de un evento del bus`);
       err.code = 'INVALID_INPUT';
+      throw err;
+    }
+    // Validacion de payload: el schema de la tool universal declara
+    // payload como required (ver tool definitions arriba: required:['event','payload']),
+    // pero hay LLMs (anthropic claude-sonnet-4-6 observado, deepseek en bucle silencioso)
+    // que omiten el campo payload entero al emitir tool calls cuando el contenido
+    // a serializar es grande — devuelven solo {event:'fs.write.request'}.
+    // Sin esta validacion, llegaba un payload solo con auto-injectados
+    // (project_id/user_id/correlation_id/timestamp) al receptor del bus, que respondia
+    // INVALID_INPUT '<campo> is required' y el LLM reintentaba con el mismo defecto.
+    // Detectarlo aqui y devolver un error EXPLICITO al LLM lo obliga a reconstruir
+    // el tool call con payload completo en la siguiente iteracion en vez de
+    // bucle de retry infinito.
+    if (!payloadProvided) {
+      const err = new Error(
+        `args.payload ausente o no es objeto en ${toolName} (event='${ev}', args_keys=[${Object.keys(args).join(',')}])`
+      );
+      err.code = 'INVALID_INPUT';
+      err.details = { kind: 'domain', event: ev, args_keys: Object.keys(args), field: 'payload' };
       throw err;
     }
 
@@ -753,10 +773,59 @@ class AiGatewayModule extends BaseModule {
         // y la persistencia de chat-io reciban el shape canonico completo
         // (chat-flow.contract: tool_calls_executed[].args). Sin esto el LLM
         // que audita post-hoc no sabe con que parametros se llamo al tool.
+        // Parseo de tc.arguments con preservacion del raw cuando falla.
+        // Bug observado en audit recetas 2026-05-20 y demo Mordisco 2026-05-21:
+        // tanto deepseek como anthropic emiten ocasionalmente tool calls con
+        // JSON corrupto/incompleto cuando un campo (content/payload) iba a ser
+        // grande (varios KB). El catch silencioso anterior convertia args en {}
+        // perdiendo el diagnostico. Ahora preservamos el raw_arguments_failed
+        // y devolvemos error explicito al LLM para que reintente con args
+        // bien formados en vez de bucle silencioso.
         let args = {};
+        let argsParseError = null;
+        let rawArgsForError = null;
         try {
-          args = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : (tc.arguments || {});
-        } catch { args = {}; }
+          if (typeof tc.arguments === 'string') {
+            args = JSON.parse(tc.arguments);
+          } else {
+            args = tc.arguments || {};
+          }
+        } catch (parseErr) {
+          argsParseError = parseErr;
+          rawArgsForError = typeof tc.arguments === 'string'
+            ? tc.arguments
+            : JSON.stringify(tc.arguments);
+          this.logger.warn('ai-gateway.tool_call.args_parse_failed', {
+            tool_name: tc.name,
+            tool_call_id: tc.id,
+            parse_error: parseErr.message,
+            raw_args_length: rawArgsForError.length,
+            raw_args_preview: rawArgsForError.slice(0, 300),
+            iteration
+          });
+        }
+        if (argsParseError) {
+          // No invocar el tool con args={}. Devolver error explicito al LLM
+          // (sustituye el catch silencioso previo que convertia args en {} y
+          // resultaba en invocaciones del tool con campos requeridos ausentes).
+          toolResults.push({
+            tool_call_id: tc.id, name: tc.name, args: {},
+            status: 'error',
+            error: {
+              code: 'INVALID_INPUT',
+              message: `arguments JSON invalido en tool_call '${tc.name}': ${argsParseError.message} (raw_length=${rawArgsForError.length})`,
+              details: {
+                kind: 'domain',
+                tool_name: tc.name,
+                field: 'arguments',
+                parse_error: argsParseError.message,
+                raw_args_length: rawArgsForError.length,
+                raw_args_preview: rawArgsForError.slice(0, 200)
+              }
+            }
+          });
+          continue;
+        }
         try {
           const result = await this._executeToolCall(tc.name, args, chatContext);
           toolResults.push({ tool_call_id: tc.id, name: tc.name, args, status: 'success', result });

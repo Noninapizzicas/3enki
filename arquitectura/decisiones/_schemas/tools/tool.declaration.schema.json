@@ -11,10 +11,10 @@
   "properties": {
     "name": {
       "type": "string",
-      "pattern": "^[a-z0-9-]+\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "pattern": "^[a-z0-9-]+\\.[a-z0-9_-]+(\\.[a-z0-9_-]+)*$",
       "minLength": 3,
       "maxLength": 80,
-      "description": "Nombre canonico de la tool. Forma <module-prefix>.<entity>(.verb)? en kebab-case. Ej: 'pdf.extract', 'tarifas.assign', 'carta-scheduler.crear_regla'. Prefijo del modulo obligatorio para disambiguacion cross-modulo."
+      "description": "Nombre canonico de la tool. Forma <module-prefix>.<entity>(.verb)? en kebab-case (los segmentos siguientes admiten kebab o snake_case por compat con el catalogo existente). Ej: 'pdf.extract', 'tarifas.assign', 'carta-scheduler.crear_regla', 'cocina.mark-ready'. Prefijo del modulo obligatorio para disambiguacion cross-modulo."
     },
     "description": {
       "type": "string",
@@ -47,9 +47,9 @@
     },
     "handler": {
       "type": "string",
-      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*$",
       "minLength": 1,
-      "maxLength": 80,
+      "maxLength": 120,
       "description": "Nombre del metodo del modulo que implementa la tool. El framework lo invoca via this[handler](args). Ej: 'handleExtractPdf', 'crearRegla', 'toolGenerate'. NO incluye parentesis ni argumentos."
     },
     "errores_conocidos": {
@@ -61,6 +61,11 @@
       },
       "uniqueItems": true,
       "description": "Codigos que el handler PUEDE emitir bajo sus condiciones de error normales. Refleja la realidad del codigo. Si el handler nunca emite error, puede estar vacio o ausente."
+    },
+    "confirmation": {
+      "type": "boolean",
+      "default": false,
+      "description": "Cuando true, la UI / ai-gateway pide confirmacion explicita del usuario antes de invocar la tool. Reservado para operaciones destructivas o de alto impacto (ej. fs.delete, shell.exec). El loader lo expone via toolsRegistry.get(name).confirmation."
     },
     "response_schema_ref": {
       "type": "string",

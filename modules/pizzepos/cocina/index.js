@@ -86,7 +86,7 @@ class CocinaModule extends BaseModule {
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
     this._registerSchemas();
-    this._registerUIHandlers();
+    // tools.contract v1.2: el loader auto-wirea tools[] del module.json a uiHandler.
 
     this._snapshotFile = path.join('.', 'data', 'current', 'cocina_snapshot.json');
     const restoredFromSnapshot = await this._restaurarSnapshot();
@@ -106,12 +106,7 @@ class CocinaModule extends BaseModule {
       try { await this._saveSnapshot(); } catch (_) { /* best-effort */ }
     }
 
-    if (this.uiHandler) {
-      for (const action of UI_ACTIONS) {
-        this.uiHandler.unregister('cocina', action);
-      }
-    }
-
+    // El loader desregistra uiHandler entries automaticamente via unregisterToolsForAI.
     this.pedidosActivos.clear();
     this.historial = [];
     this.tiemposPreparacion = [];
@@ -298,40 +293,6 @@ class CocinaModule extends BaseModule {
       });
     }
     return null;
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  _registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('cocina.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    const map = {
-      'list-active': this.handleGetActivos,
-      'get': this.handleGetPedido,
-      'history': this.handleGetHistorial,
-      'prepare-item': this.handlePrepararItem,
-      'mark-ready': this.handleMarcarListo,
-      'health': this.handleHealthCheck,
-      'metrics': this.handleGetMetrics,
-      'register-device': this.handleRegisterDevice,
-      'unregister-device': this.handleUnregisterDevice,
-      'list-devices': this.handleListDevices,
-      'list-station-types': this.handleListTiposEstacion,
-      'list-displays': this.handleListarDisplays
-    };
-
-    for (const [action, fn] of Object.entries(map)) {
-      this.uiHandler.register('cocina', action, fn.bind(this));
-    }
-
-    this.logger.info('cocina.ui_handlers.registered', {
-      handlers: Object.keys(map)
-    });
   }
 
   // ==========================================

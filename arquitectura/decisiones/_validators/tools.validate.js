@@ -46,7 +46,7 @@ const YEL   = '\x1b[33m';
 const CYAN  = '\x1b[36m';
 const RST   = '\x1b[0m';
 
-const NAME_RE = /^[a-z0-9-]+\.[a-z0-9_]+(\.[a-z0-9_]+)*$/;
+const NAME_RE = /^[a-z0-9-]+\.[a-z0-9_-]+(\.[a-z0-9_-]+)*$/;
 const LLM_HOSTS = [
   'api.openai.com',
   'api.anthropic.com',
@@ -115,7 +115,9 @@ function readSourceFiles(dir) {
   const acc = [];
   const idx = path.join(dir, 'index.js');
   if (fs.existsSync(idx)) acc.push(idx);
-  for (const sub of ['lib', 'services', 'providers']) {
+  // 'strategies' cubre el patron Strategy (ej. cuentas-canales/strategies/*.js)
+  // donde tools.contract v1.2 permite handler path 'strategies.<name>.<method>'.
+  for (const sub of ['lib', 'services', 'providers', 'strategies']) {
     const sd = path.join(dir, sub);
     if (fs.existsSync(sd)) walkJs(sd, acc);
   }
@@ -308,7 +310,13 @@ function checkAll(findings) {
       // 4 + 5. handler existe + async
       const handlerName = tool.handler;
       if (typeof handlerName === 'string' && handlerName.length > 0) {
-        const def = findHandlerDef(sources, handlerName);
+        // tools.contract v1.2: handler puede ser un path con puntos para resolver
+        // metodos en sub-componentes (ej. 'strategies.mesa.handleAbrirMesa'). El
+        // grep heuristico solo necesita el ultimo segmento (el method name).
+        const methodName = handlerName.includes('.')
+          ? handlerName.split('.').pop()
+          : handlerName;
+        const def = findHandlerDef(sources, methodName);
         if (!def) {
           findings.warnings.push(`drift_tool_sin_handler_o_handler_inexistente: ${slug} tool "${name}" — handler "${handlerName}" no encontrado en codigo`);
         } else {

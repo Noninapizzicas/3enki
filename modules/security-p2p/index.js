@@ -21,7 +21,6 @@ const CryptoHandshake = require('./crypto-handshake');
 
 const BaseModule = require('../_shared/base-module');
 const MAX_SHARED_SECRETS_DEFAULT = 100;
-const UI_ACTIONS = ['status', 'public-key', 'trust-peer', 'revoke-peer', 'trusted-peers', 'health'];
 
 class SecurityP2PModule extends BaseModule {
   constructor() {
@@ -84,9 +83,7 @@ class SecurityP2PModule extends BaseModule {
       core.mqtt.on('message', this._mqttMessageHandler);
     }
 
-    if (core.uiHandler) {
-      this._registerUIHandlers(core.uiHandler);
-    }
+    // tools.contract v1.2: the loader auto-wires module.json.tools[] to uiHandler.
 
     this.logger?.info?.('module.loaded', {
       module: this.name,
@@ -120,11 +117,7 @@ class SecurityP2PModule extends BaseModule {
       this._mqttMessageHandler = null;
     }
 
-    if (this.core?.uiHandler) {
-      for (const action of UI_ACTIONS) {
-        try { this.core.uiHandler.unregister('security-p2p', action); } catch (_) { /* ignore */ }
-      }
-    }
+    // The loader auto-unregisters tools[] entries from uiHandler on unload.
 
     this._sharedSecrets.clear();
     this.cryptoHandshake = null;
@@ -452,15 +445,6 @@ class SecurityP2PModule extends BaseModule {
   // ==========================================
   // Internal
   // ==========================================
-
-  _registerUIHandlers(uiHandler) {
-    uiHandler.register('security-p2p', 'status', this.handleStatus.bind(this));
-    uiHandler.register('security-p2p', 'public-key', this.handleGetPublicKey.bind(this));
-    uiHandler.register('security-p2p', 'trust-peer', this.handleTrustPeer.bind(this));
-    uiHandler.register('security-p2p', 'revoke-peer', this.handleRevokePeer.bind(this));
-    uiHandler.register('security-p2p', 'trusted-peers', this.handleListTrustedPeers.bind(this));
-    uiHandler.register('security-p2p', 'health', this.handleHealthCheck.bind(this));
-  }
 
   _handleMqttMessage(topic, message) {
     try {

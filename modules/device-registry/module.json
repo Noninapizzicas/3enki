@@ -51,11 +51,31 @@
     ]
   },
   "ui_handlers": [
-    { "domain": "devices", "action": "list",       "handler": "handleList" },
-    { "domain": "devices", "action": "get",        "handler": "handleGet" },
-    { "domain": "devices", "action": "register",   "handler": "handleRegister" },
-    { "domain": "devices", "action": "unregister", "handler": "handleUnregister" },
-    { "domain": "devices", "action": "stats",      "handler": "handleStats" }
+    {
+      "domain": "devices",
+      "action": "list",
+      "handler": "handleList"
+    },
+    {
+      "domain": "devices",
+      "action": "get",
+      "handler": "handleGet"
+    },
+    {
+      "domain": "devices",
+      "action": "register",
+      "handler": "handleRegister"
+    },
+    {
+      "domain": "devices",
+      "action": "unregister",
+      "handler": "handleUnregister"
+    },
+    {
+      "domain": "devices",
+      "action": "stats",
+      "handler": "handleStats"
+    }
   ],
   "tools": [
     {
@@ -65,13 +85,22 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":  { "type": "string",  "description": "Filtrar por proyecto (opcional)" },
-          "type":        { "type": "string",  "description": "Filtrar por tipo de driver (ej: print-proxy)" },
-          "online_only": { "type": "boolean", "description": "Solo dispositivos online" }
+          "project_id": {
+            "type": "string",
+            "description": "Filtrar por proyecto (opcional)"
+          },
+          "type": {
+            "type": "string",
+            "description": "Filtrar por tipo de driver (ej: print-proxy)"
+          },
+          "online_only": {
+            "type": "boolean",
+            "description": "Solo dispositivos online"
+          }
         }
       },
       "errores_conocidos": [
-        { "code": "UNKNOWN_ERROR", "cuando": "fallo inesperado al iterar el registry" }
+        "UNKNOWN_ERROR"
       ]
     },
     {
@@ -81,13 +110,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "device_id": { "type": "string" }
+          "device_id": {
+            "type": "string"
+          }
         },
-        "required": ["device_id"]
+        "required": [
+          "device_id"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",  "cuando": "device_id ausente" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "no existe dispositivo con ese device_id" }
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND"
       ]
     },
     {
@@ -99,7 +132,7 @@
         "properties": {}
       },
       "errores_conocidos": [
-        { "code": "UNKNOWN_ERROR", "cuando": "fallo inesperado al iterar el registry" }
+        "UNKNOWN_ERROR"
       ]
     }
   ],

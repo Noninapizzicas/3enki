@@ -19,8 +19,8 @@
     { "domain": "fs", "action": "append",     "handler": "handleAppend" },
     { "domain": "fs", "action": "cleanup",    "handler": "handleCleanup" },
     { "domain": "fs", "action": "stats",      "handler": "handleStats" },
-    { "domain": "fs", "action": "setWorkDir", "handler": "handleSetWorkDir" },
-    { "domain": "fs", "action": "getWorkDir", "handler": "handleGetWorkDir" }
+    { "domain": "fs", "action": "set_work_dir", "handler": "handleSetWorkDir" },
+    { "domain": "fs", "action": "get_work_dir", "handler": "handleGetWorkDir" }
   ],
 
   "tools": [
@@ -162,7 +162,7 @@
       "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
-      "name": "fs.setWorkDir",
+      "name": "fs.set_work_dir",
       "description": "Cambia el directorio de trabajo actual. Las rutas relativas se resuelven desde aqui.",
       "handler": "handleSetWorkDir",
       "parameters": {
@@ -173,7 +173,7 @@
       "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
-      "name": "fs.getWorkDir",
+      "name": "fs.get_work_dir",
       "description": "Devuelve el directorio de trabajo actual y contexto del proyecto activo.",
       "handler": "handleGetWorkDir",
       "parameters": { "type": "object", "properties": {} },

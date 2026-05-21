@@ -31,7 +31,115 @@
     { "domain": "cobro", "action": "health",          "handler": "handleHealthCheck",     "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "cobro", "action": "metrics",         "handler": "handleGetMetrics",      "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "tools": [],
+  "tools": [
+    {
+      "name": "cobro.create",
+      "description": "Crea un cobro nuevo para una cuenta con metodo de pago, monto, propina opcional y desglose (para mixto). Idempotente por cuenta_id (rechaza si ya hay cobro pendiente/procesando/completado).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cuenta_id":      { "type": "string", "description": "Identificador de la cuenta a cobrar (no admite cuentas llevadoo_*)." },
+          "pedido_ids":     { "type": "array",  "items": { "type": "string" }, "description": "IDs de pedidos asociados (opcional)." },
+          "monto":          { "type": "number", "description": "Monto total a cobrar (> 0)." },
+          "metodo_pago":    { "type": "string", "enum": ["efectivo", "tarjeta", "bizum", "transferencia", "mixto", "link_pago", "qr"], "description": "Metodo de pago." },
+          "propina":        { "type": "number", "description": "Propina opcional." },
+          "monto_recibido": { "type": "number", "description": "Monto recibido en efectivo (para calcular cambio)." },
+          "desglose":       { "type": "object", "description": "Desglose por metodo en pagos mixtos." }
+        },
+        "required": ["cuenta_id", "monto", "metodo_pago"],
+        "additionalProperties": false
+      },
+      "handler": "handleCreateCobro",
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cobro.list",
+      "description": "Lista cobros con filtros opcionales por cuenta_id, estado y metodo_pago. Orden descendente por fecha de creacion.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cuenta_id":   { "type": "string", "description": "Filtro por cuenta." },
+          "estado":      { "type": "string", "description": "Filtro por estado." },
+          "metodo_pago": { "type": "string", "description": "Filtro por metodo de pago." }
+        },
+        "additionalProperties": false
+      },
+      "handler": "handleListCobros",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cobro.get",
+      "description": "Obtiene un cobro por id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Identificador del cobro." }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "handler": "handleGetCobro",
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cobro.confirm",
+      "description": "Confirma un cobro pendiente o procesando. Emite cobro.procesado, abre cajon en efectivo y registra metricas.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id":               { "type": "string", "description": "Identificador del cobro." },
+          "referencia_pago":  { "type": "string", "description": "Referencia opcional del pago externo." }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "handler": "handleConfirmarCobro",
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cobro.refund",
+      "description": "Reembolsa un cobro completado. Emite cobro.reembolsado.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id":     { "type": "string", "description": "Identificador del cobro." },
+          "motivo": { "type": "string", "description": "Motivo del reembolso (opcional)." }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "handler": "handleReembolsarCobro",
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cobro.payment-methods",
+      "description": "Lista los 7 metodos de pago canonicos disponibles con su nombre legible.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleGetMetodosPago",
+      "errores_conocidos": []
+    },
+    {
+      "name": "cobro.list-cajones",
+      "description": "Lista los cajones de dinero conectados (consulta a perifericos).",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleListarCajones",
+      "errores_conocidos": ["UNKNOWN_ERROR"]
+    },
+    {
+      "name": "cobro.health",
+      "description": "Health check del modulo cobros.",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleHealthCheck",
+      "errores_conocidos": []
+    },
+    {
+      "name": "cobro.metrics",
+      "description": "Metricas operativas de cobros (counters y gauges).",
+      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "handler": "handleGetMetrics",
+      "errores_conocidos": []
+    }
+  ],
   "dependencies": ["perifericos"],
   "tracing": {
     "propaga_correlation_id": true

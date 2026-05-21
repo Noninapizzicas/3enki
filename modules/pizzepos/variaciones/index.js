@@ -85,8 +85,8 @@ class VariacionesModule extends BaseModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Event subscriptions are auto-wired from module.json by the loader.
-    this.registerUIHandlers();
+    // Event subscriptions y tools[] son auto-wireados desde module.json por el loader
+    // (tools.contract v1.2: una declaracion, tres destinos).
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
   }
@@ -94,37 +94,11 @@ class VariacionesModule extends BaseModule {
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    if (this.uiHandler) {
-      const actions = ['get', 'validar', 'calcular_precio', 'health', 'metrics'];
-      for (const action of actions) {
-        this.uiHandler.unregister('variaciones', action);
-      }
-    }
-
+    // El loader desregistra automaticamente bus subs y uiHandler entries de tools[]
+    // via unregisterToolsForAI. Aqui solo limpiamos estado del modulo.
     this.configuraciones.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('variaciones.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    this.uiHandler.register('variaciones', 'get', this.handleGetVariacionesProducto.bind(this));
-    this.uiHandler.register('variaciones', 'validar', this.handleValidarVariacion.bind(this));
-    this.uiHandler.register('variaciones', 'calcular_precio', this.handleCalcularPrecio.bind(this));
-    this.uiHandler.register('variaciones', 'health', this.handleHealthCheck.bind(this));
-    this.uiHandler.register('variaciones', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.logger.info('variaciones.ui_handlers.registered', {
-      handlers: ['get', 'validar', 'calcular_precio', 'health', 'metrics']
-    });
   }
 
   // ==========================================

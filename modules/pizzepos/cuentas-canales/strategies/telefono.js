@@ -50,28 +50,8 @@ class TelefonoStrategy {
     await this.restaurarDesdeArchivo();
   }
 
-  registerUIHandlers(uiHandler) {
-    uiHandler.register('telefono', 'llamada', this.handleLlamadaEntrante.bind(this));
-    uiHandler.register('telefono', 'crear_pedido', this.handleCrearPedido.bind(this));
-    uiHandler.register('telefono', 'pendientes', this.handleGetPendientes.bind(this));
-    uiHandler.register('telefono', 'get', this.handleGetPedido.bind(this));
-    uiHandler.register('telefono', 'marcar_listo', this.handleMarcarListo.bind(this));
-    uiHandler.register('telefono', 'marcar_recogido', this.handleMarcarRecogido.bind(this));
-    uiHandler.register('telefono', 'contactos', this.handleGetContactos.bind(this));
-    uiHandler.register('telefono', 'guardar_contacto', this.handleGuardarContacto.bind(this));
-    uiHandler.register('telefono', 'health', this.handleHealthCheck.bind(this));
-    uiHandler.register('telefono', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.modulo.logger.info('canal.telefono.ui_handlers.registered', {
-      handlers: this._uiActions
-    });
-  }
-
-  unregisterUIHandlers(uiHandler) {
-    for (const action of this._uiActions) {
-      uiHandler.unregister('telefono', action);
-    }
-  }
+  // tools.contract v1.2: el loader auto-wirea las 10 tools 'telefono.*' a uiHandler
+  // (handlers 'strategies.telefono.handleX' resueltos por path en el loader).
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));

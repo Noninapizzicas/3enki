@@ -15,26 +15,99 @@
   },
   "events": {
     "publishes": [
-      { "event": "factura.recibida",              "description": "Factura aceptada como entrada del pipeline (lleva project_id top-level + correlation_id + timestamp)." },
-      { "event": "factura.procesada",             "description": "Pipeline completo OK. Lleva factura_id si aplica + duplicate flag." },
-      { "event": "factura.error",                 "description": "Pipeline fallido o archivo de entrada invalido. Lleva code canonico + message." },
-      { "event": "factura.exportada",             "description": "CSV fiscal generado y persistido. Lleva project_id + total + ruta del archivo." },
-      { "event": "telegram.send_message.request", "description": "Notificacion fire-and-forget al chat de Telegram que envio la factura. Consumido por telegram-service." }
+      {
+        "event": "factura.recibida",
+        "description": "Factura aceptada como entrada del pipeline (lleva project_id top-level + correlation_id + timestamp)."
+      },
+      {
+        "event": "factura.procesada",
+        "description": "Pipeline completo OK. Lleva factura_id si aplica + duplicate flag."
+      },
+      {
+        "event": "factura.error",
+        "description": "Pipeline fallido o archivo de entrada invalido. Lleva code canonico + message."
+      },
+      {
+        "event": "factura.exportada",
+        "description": "CSV fiscal generado y persistido. Lleva project_id + total + ruta del archivo."
+      },
+      {
+        "event": "telegram.send_message.request",
+        "description": "Notificacion fire-and-forget al chat de Telegram que envio la factura. Consumido por telegram-service."
+      }
     ],
     "subscribes": [
-      { "event": "factura.entrada", "handler": "onFacturaEntrada", "description": "Entrada al pipeline desde fuentes externas (telegram, gmail, manual, etc.)." }
+      {
+        "event": "factura.entrada",
+        "handler": "onFacturaEntrada",
+        "description": "Entrada al pipeline desde fuentes externas (telegram, gmail, manual, etc.)."
+      }
     ]
   },
   "ui_handlers": [
-    { "domain": "facturas", "action": "procesar",         "handler": "handleProcesar",         "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "facturas", "action": "subir",            "handler": "handleSubir",            "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "facturas", "action": "reprocesar",       "handler": "handleReprocesar",       "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "facturas", "action": "listar",           "handler": "handleListar",           "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "facturas", "action": "obtener",          "handler": "handleObtener",          "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "facturas", "action": "actualizar",       "handler": "handleActualizar",       "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "facturas", "action": "estadisticas",     "handler": "handleEstadisticas",     "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "facturas", "action": "exportar",         "handler": "handleExportar",         "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "facturas", "action": "pipeline-metrics", "handler": "handlePipelineMetrics",  "type": "workspace_module", "zone": "barra_modulos" }
+    {
+      "domain": "facturas",
+      "action": "procesar",
+      "handler": "handleProcesar",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "facturas",
+      "action": "subir",
+      "handler": "handleSubir",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "facturas",
+      "action": "reprocesar",
+      "handler": "handleReprocesar",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "facturas",
+      "action": "listar",
+      "handler": "handleListar",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "facturas",
+      "action": "obtener",
+      "handler": "handleObtener",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "facturas",
+      "action": "actualizar",
+      "handler": "handleActualizar",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "facturas",
+      "action": "estadisticas",
+      "handler": "handleEstadisticas",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "facturas",
+      "action": "exportar",
+      "handler": "handleExportar",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "facturas",
+      "action": "pipeline-metrics",
+      "handler": "handlePipelineMetrics",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ],
   "tools": [
     {
@@ -44,17 +117,35 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "projectId": { "type": "string", "description": "ID del proyecto" },
-          "filePath":  { "type": "string", "description": "Ruta absoluta al archivo (PDF, JPG, PNG, WebP, TIFF)" },
-          "source":    { "type": "string", "enum": ["telegram", "gmail", "manual"], "default": "manual", "description": "Origen del archivo" }
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Ruta absoluta al archivo (PDF, JPG, PNG, WebP, TIFF)"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "telegram",
+              "gmail",
+              "manual"
+            ],
+            "default": "manual",
+            "description": "Origen del archivo"
+          }
         },
-        "required": ["projectId", "filePath"]
+        "required": [
+          "projectId",
+          "filePath"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",      "cuando": "projectId o filePath ausentes" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "el archivo no existe en la ruta dada" },
-        { "code": "UPSTREAM_TIMEOUT",            "cuando": "alguno de los pasos del pipeline supera su timeout" },
-        { "code": "UPSTREAM_INVALID_RESPONSE","cuando": "fallo de OCR o de la IA estructuradora" }
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_INVALID_RESPONSE"
       ]
     },
     {
@@ -64,15 +155,34 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "projectId": { "type": "string", "description": "ID del proyecto" },
-          "estado":    { "type": "string", "enum": ["pendiente", "procesando", "procesada", "error", "exportada"], "description": "Filtrar por estado" },
-          "limit":     { "type": "number", "default": 50, "description": "Maximo de resultados" }
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "procesando",
+              "procesada",
+              "error",
+              "exportada"
+            ],
+            "description": "Filtrar por estado"
+          },
+          "limit": {
+            "type": "number",
+            "default": 50,
+            "description": "Maximo de resultados"
+          }
         },
-        "required": ["projectId"]
+        "required": [
+          "projectId"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",         "cuando": "projectId ausente" },
-        { "code": "UPSTREAM_UNREACHABLE","cuando": "el provider local.facturas-db no responde" }
+        "INVALID_INPUT",
+        "UPSTREAM_UNREACHABLE"
       ]
     },
     {
@@ -82,43 +192,60 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "projectId": { "type": "string", "description": "ID del proyecto" }
+          "projectId": {
+            "type": "string",
+            "description": "ID del proyecto"
+          }
         },
-        "required": ["projectId"]
+        "required": [
+          "projectId"
+        ]
       },
       "errores_conocidos": [
-        { "code": "INVALID_INPUT",         "cuando": "projectId ausente" },
-        { "code": "UPSTREAM_UNREACHABLE","cuando": "el provider local.facturas-db no responde" }
+        "INVALID_INPUT",
+        "UPSTREAM_UNREACHABLE"
       ]
     }
   ],
   "config": {
     "ocr": {
-      "provider":  "local.google-vision",
-      "hint":      "DOCUMENT_TEXT_DETECTION",
-      "languages": ["es", "en"]
+      "provider": "local.google-vision",
+      "hint": "DOCUMENT_TEXT_DETECTION",
+      "languages": [
+        "es",
+        "en"
+      ]
     },
     "ai": {
-      "providers":   ["deepseek", "anthropic", "openai", "gemini"],
+      "providers": [
+        "deepseek",
+        "anthropic",
+        "openai",
+        "gemini"
+      ],
       "temperature": 0.1,
-      "maxTokens":   2000
+      "maxTokens": 2000
     },
     "processing": {
-      "dpi":       300,
-      "maxWidth":  2400,
+      "dpi": 300,
+      "maxWidth": 2400,
       "maxHeight": 3200,
-      "sharp":     { "grayscale": true, "normalize": true, "sharpen": true }
+      "sharp": {
+        "grayscale": true,
+        "normalize": true,
+        "sharpen": true
+      }
     },
     "timeouts": {
       "pdfConvert": 60000,
-      "sharp":      30000,
-      "ocr":        60000,
-      "ai":         60000,
-      "db":         30000
+      "sharp": 30000,
+      "ocr": 60000,
+      "ai": 60000,
+      "db": 30000
     },
     "persistence": {
-      "type":   "mixed",
-      "owner":  "DB de facturas via provider local.facturas-db (ServiceExecutor.call); archivos de entrada y CSV export en filesystem del proyecto.",
+      "type": "mixed",
+      "owner": "DB de facturas via provider local.facturas-db (ServiceExecutor.call); archivos de entrada y CSV export en filesystem del proyecto.",
       "paths": [
         "data/projects/<projectId>/storage/pendientes/<ts>_<safe_name>",
         "data/projects/<projectId>/storage/export/facturas_<yyyymmdd>.csv"
@@ -131,8 +258,8 @@
   },
   "observability": {
     "logging": {
-      "level":          "info",
-      "structured":     true,
+      "level": "info",
+      "structured": true,
       "correlation_id": true
     },
     "metrics": {

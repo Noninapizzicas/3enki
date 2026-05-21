@@ -197,8 +197,8 @@ Core filesystem operations for the entire system
 - `fs.info`: Obtiene informacion de un archivo o carpeta
 - `fs.cleanup`: Limpia archivos temporales del directorio temp que tengan más de N horas
 - `fs.stats`: Obtiene estadísticas de uso del storage (tamaño total, conteo de archivos)
-- `fs.setWorkDir`: Cambia el directorio de trabajo actual. Las rutas relativas se resolverán desde este directorio.
-- `fs.getWorkDir`: Obtiene información del directorio de trabajo actual y contexto del proyecto activo
+- `fs.set_work_dir`: Cambia el directorio de trabajo actual. Las rutas relativas se resolverán desde este directorio.
+- `fs.get_work_dir`: Obtiene información del directorio de trabajo actual y contexto del proyecto activo
 
 ---
 

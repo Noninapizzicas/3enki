@@ -264,6 +264,56 @@ async function main() {
   assert(!published.find(p => p.event === 'bus.publish'), 'bus.publish NO se publica como evento');
   assert(published.find(p => p.event === 'test.evento'), 'test.evento si se publica');
 
+  // ============================================================
+  // [12] payload omitido entero → INVALID_INPUT (defensa anti-LLM-lazy)
+  //
+  // Reproduce el bug observado en el audit de recetas 2026-05-20:
+  // anthropic claude-sonnet-4-6 (y deepseek en bucle silencioso) emitian
+  // tool calls con solo {event:'fs.write.request'} omitiendo payload entero
+  // cuando el content a serializar era grande. Antes del fix, el publish
+  // salia al bus con payload solo auto-injectado (sin path/content), el
+  // receptor respondia INVALID_INPUT, y el LLM reintentaba con el mismo
+  // defecto. El fix detecta args.payload undefined y lanza INVALID_INPUT
+  // con mensaje explicito para que el LLM reconstruya el tool call.
+  // ============================================================
+  console.log('\n[12] bus.publishAndWait sin args.payload (omitido) → INVALID_INPUT con mensaje al LLM');
+  for (const tool of ['bus.publish', 'bus.publishAndWait']) {
+    let threwNoPayload = false, codeNoPayload = null, msgNoPayload = '';
+    try {
+      await mod._executeUniversalBusTool(tool, { event: 'fs.write.request' }, {});
+    } catch (e) {
+      threwNoPayload = true;
+      codeNoPayload = e.code;
+      msgNoPayload = e.message;
+    }
+    assert(threwNoPayload, `${tool}: lanza error sin payload`);
+    assert(codeNoPayload === 'INVALID_INPUT', `${tool}: e.code === 'INVALID_INPUT' (got ${codeNoPayload})`);
+    assert(msgNoPayload.includes('payload'), `${tool}: mensaje menciona 'payload' (got: ${msgNoPayload.slice(0,80)})`);
+    assert(msgNoPayload.includes("'fs.write.request'") || msgNoPayload.includes('fs.write.request'), `${tool}: mensaje menciona el event name para orientar al LLM`);
+  }
+  // Tambien payload=null y payload=string (LLM mal formado)
+  for (const badPayload of [null, 'string mal puesto', 42, []]) {
+    let threwBad = false, codeBad = null;
+    try {
+      await mod._executeUniversalBusTool('bus.publishAndWait',
+        { event: 'fs.read.request', payload: badPayload }, {});
+    } catch (e) { threwBad = true; codeBad = e.code; }
+    assert(threwBad, `payload=${JSON.stringify(badPayload)}: lanza error`);
+    assert(codeBad === 'INVALID_INPUT', `payload=${JSON.stringify(badPayload)}: code===INVALID_INPUT (got ${codeBad})`);
+  }
+  // payload={} (vacio pero objeto) SI debe pasar — es valido como anti-bug-test
+  // (filesystem decidira si rechazar por falta de campos del dominio).
+  let acceptedEmpty = false;
+  try {
+    eventBus.subscribe('test.empty.payload.request', (p) => {
+      eventBus.publish('test.empty.payload.response', { request_id: p.request_id, ok: true });
+    });
+    const r = await mod._executeUniversalBusTool('bus.publishAndWait',
+      { event: 'test.empty.payload.request', payload: {}, timeout_ms: 1000 }, {});
+    acceptedEmpty = r && r.ok === true;
+  } catch {}
+  assert(acceptedEmpty, 'payload:{} (vacio pero objeto) acepta y publica — solo undefined/null/non-object falla');
+
   console.log(`\n══════════════════════════════════════════`);
   console.log(`Resultado: ${passed} pasaron, ${failed} fallaron`);
   console.log(`══════════════════════════════════════════`);

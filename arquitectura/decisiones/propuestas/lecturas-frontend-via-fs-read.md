@@ -193,7 +193,7 @@ mqttSubscribe('receta.eliminada', () => loadRecetas());
 | carta-digital | `/carta-digital.json` | ✅ | **Hecho** — store + 3 paneles (config, preview, stats). Stats convertido a placeholder hasta analytics persistido. Forzar composición eliminado (pídeselo al chat). |
 | carta-impresion | `/cartas-impresion/<id>.html` + `.meta.json` | ✅ | **Hecho** — `loadImpresion` lee ambos archivos en paralelo. `generarImpresion` se queda como hint al chat (requiere agente impresor). |
 | carta-design | `/carta-design/profiles/*.json` + built-ins inline | ✅ | **Hecho** — built-ins (5) inline en el store como constante (lista cerrada, source en `modules/pizzepos/carta-design/design-profiles/*.json`, sync manual). Custom via fs.list+fs.read. Gallery via fs.list de `/carta-design/designs/`. Save/delete via fs.write/fs.delete. Carta a diseñar leida directo de `/cartas/<id>.json` (carta-manager storage). |
-| pdf-viewer | — (consume servicios `local.pdfjs/sharp/google-vision` via `ServiceExecutor`) | ❌ | **Categoría distinta — no es storage**. El módulo `pdf-viewer` ya tiene `index.js` con tools `pdf.create/list/metadata/extract` declaradas como `tools[]` en su `module.json`. Con el auto-wire del v1.2 esas tools quedan invocables como `mqttRequest('pdf','create'/'list'/...)`. Lo que pide el frontend (`pdfjs.info`/`pdfjs.render`) NO matchea esas tools — es de un servicio distinto (`local.pdfjs` via ServiceExecutor) que no está expuesto. Soluciones: (a) declarar `pdfjs.info`/`pdfjs.render` como tools[] en algún módulo que envuelva ServiceExecutor, (b) actualizar el frontend para usar `pdf.create/list/metadata` que sí existen, (c) crear puente JS si la lógica es no-trivial. Decisión deferida — el caso de uso real del frontend pdf-viewer no está claro. |
+| pdf-viewer | — (categoría distinta, expone servicio `local.pdfjs` via tools[]) | ✅ | **Hecho** — añadidas 2 tools al módulo pdf-viewer: `pdf.info` y `pdf.render` que envuelven el servicio `local.pdfjs` via bus (`local.pdfjs.<action>.request/response`). Helper privado `_callPdfjsService` (pendingRequest pattern). El frontend ahora invoca `mqttRequest('pdf','info')` y `mqttRequest('pdf','render')` — el auto-wire del v1.2 las registra en uiHandler. Cero módulo nuevo, solo extensión del módulo existente. |
 
 ---
 
@@ -230,20 +230,19 @@ Si alguno de estos cambia, el patrón hay que revisarlo.
 
 ## 10 · Estado y propuestas de evolución
 
-- **Aplicado** (rama `claude/review-tools-architecture-Xm3bZ`) a 6 de los
-  8 dominios rotos:
+- **Aplicado** (rama `claude/review-tools-architecture-Xm3bZ`) a los 8
+  dominios rotos:
   - recetas (`72019d2`)
   - carta-marketing (`3316810`) — escrituras incluidas (§5b)
   - carta-digital (`27cd15e`) — 3 paneles + store
   - viabilidad (`b4d0aa7`) — store muerto borrado, panel migrado
   - carta-impresion + carta-design (`bd24526`) — multi-file con
     `fs.list`+`fs.read`, built-ins inline en el store
-- **Bloqueados / categoría distinta**:
-  - escandallo: requiere bumpear blueprint a stateful (persistir costes
-    en `/recetas.json`) antes de poder aplicar el patrón.
-  - pdf-viewer: no es lectura de storage, decisión deferida sobre cómo
-    exponer servicios `local.pdfjs`/`sharp`/`google-vision` (frontend
-    actual llama tools que no existen — drift previo a esta rama).
+  - escandallo (`b37cd7e`) — blueprint v2.0.0 persiste costes en
+    `/recetas.json[r]`. Variante del patrón: escritura via blueprint
+    (no via frontend directo).
+  - pdf-viewer (commit este) — variante del patrón: extender módulo
+    existente con tools que envuelven un servicio (`local.pdfjs`).
 - **Próximo natural**: probar en navegador con un proyecto real las 6
   páginas migradas. Si todas funcionan end-to-end, subir la regla a
   `frontend.contract.json` como principio canónico con su cross-check

@@ -98,14 +98,16 @@ function publishedOf(mocks, name) {
   console.log('pizzepos__productos — reescritura canonica (POC2)\n');
 
   // Group 1: Lifecycle
-  await testAsync('onLoad inicializa estado limpio + registra ui_handlers', async () => {
+  await testAsync('onLoad inicializa estado limpio sin tocar uiHandler (v1.2: el loader auto-wirea tools[])', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'productos');
     assert.strictEqual(m.version, '3.0.0');
     assert.strictEqual(m.productosPerProject.size, 0);
     assert.strictEqual(m.categoriasPerProject.size, 0);
-    assert.strictEqual(mocks.uiRegistered.length, 13);
+    // tools.contract v1.2: el modulo NO debe registrar manualmente en uiHandler.
+    // El loader auto-wirea tools[] del module.json a uiHandler en registerToolsForAI.
+    assert.strictEqual(mocks.uiRegistered.length, 0);
     await m.onUnload();
   });
 

@@ -16,10 +16,6 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const BaseModule = require('../../_shared/base-module');
-const UI_ACTIONS = [
-  'list', 'get', 'create', 'add-item', 'update-item', 'delete-item',
-  'send-kitchen', 'complete', 'cancel', 'total', 'health'
-];
 
 class PedidosModule extends BaseModule {
   constructor() {
@@ -47,7 +43,7 @@ class PedidosModule extends BaseModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    this._registerUIHandlers();
+    // tools.contract v1.2: el loader auto-wirea tools[] del module.json a uiHandler.
     await this._restaurarDesdeArchivo();
 
     this.logger.info('module.loaded', { module: this.name, version: this.version });
@@ -56,12 +52,7 @@ class PedidosModule extends BaseModule {
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    if (this.uiHandler) {
-      for (const action of UI_ACTIONS) {
-        this.uiHandler.unregister('pedido', action);
-      }
-    }
-
+    // El loader desregistra uiHandler entries automaticamente.
     this.pedidos.clear();
     this.pedidosPorCuenta.clear();
     this.productosCache.clear();
@@ -134,37 +125,6 @@ class PedidosModule extends BaseModule {
       });
       return null;
     }
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  _registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('pedidos.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    const map = {
-      'list': this.handleListPedidos,
-      'get': this.handleGetPedido,
-      'create': this.handleCreatePedido,
-      'add-item': this.handleAgregarItem,
-      'update-item': this.handleActualizarItem,
-      'delete-item': this.handleEliminarItem,
-      'send-kitchen': this.handleEnviarCocina,
-      'complete': this.handleCompletarPedido,
-      'cancel': this.handleCancelarPedido,
-      'total': this.handleCalcularTotal,
-      'health': this.handleHealthCheck
-    };
-
-    for (const [action, fn] of Object.entries(map)) {
-      this.uiHandler.register('pedido', action, fn.bind(this));
-    }
-
-    this.logger.info('pedidos.ui_handlers.registered', { handlers: Object.keys(map) });
   }
 
   // ==========================================

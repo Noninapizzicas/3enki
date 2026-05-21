@@ -61,8 +61,8 @@ class CobrosModule extends BaseModule {
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
-    // Event subscriptions are auto-wired from module.json by the loader.
-    this.registerUIHandlers();
+    // Event subscriptions y tools[] (incluyendo registro en uiHandler) son
+    // auto-wireados desde module.json por el loader. tools.contract v1.2.
 
     this.logger.info('module.loaded', {
       module: this.name,
@@ -74,43 +74,10 @@ class CobrosModule extends BaseModule {
   async onUnload() {
     this.logger.info('module.unloading', { module: this.name });
 
-    if (this.uiHandler) {
-      const actions = [
-        'create', 'list', 'get', 'confirm', 'refund',
-        'payment-methods', 'health', 'metrics'
-      ];
-      for (const action of actions) {
-        this.uiHandler.unregister('cobro', action);
-      }
-    }
-
+    // El loader desregistra bus subs y uiHandler entries automaticamente.
     this.cobros.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
-  }
-
-  // ==========================================
-  // UI Handler Registration
-  // ==========================================
-
-  registerUIHandlers() {
-    if (!this.uiHandler) {
-      this.logger.warn('cobros.uiHandler.not_available', { module: this.name });
-      return;
-    }
-
-    this.uiHandler.register('cobro', 'create', this.handleCreateCobro.bind(this));
-    this.uiHandler.register('cobro', 'list', this.handleListCobros.bind(this));
-    this.uiHandler.register('cobro', 'get', this.handleGetCobro.bind(this));
-    this.uiHandler.register('cobro', 'confirm', this.handleConfirmarCobro.bind(this));
-    this.uiHandler.register('cobro', 'refund', this.handleReembolsarCobro.bind(this));
-    this.uiHandler.register('cobro', 'payment-methods', this.handleGetMetodosPago.bind(this));
-    this.uiHandler.register('cobro', 'health', this.handleHealthCheck.bind(this));
-    this.uiHandler.register('cobro', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.logger.info('cobros.ui_handlers.registered', {
-      handlers: ['create', 'list', 'get', 'confirm', 'refund', 'payment-methods', 'health', 'metrics']
-    });
   }
 
   // ==========================================

@@ -147,7 +147,9 @@ function makePedidoEvent(overrides = {}) {
     assert.strictEqual(m.devices.size, 0);
     assert.strictEqual(m.historial.length, 0);
     assert.strictEqual(m.tiemposPreparacion.length, 0);
-    assert.ok(mocks.uiRegistered.length === 12, `expected 12 ui_handlers, got ${mocks.uiRegistered.length}`);
+    // tools.contract v1.2: el modulo NO debe registrar manualmente en uiHandler.
+    // El loader auto-wirea tools[] del module.json a uiHandler en registerToolsForAI.
+    assert.strictEqual(mocks.uiRegistered.length, 0);
     await m.onUnload();
   });
 

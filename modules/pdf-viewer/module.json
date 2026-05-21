@@ -142,9 +142,9 @@
       "description": "Crea un archivo PDF desde texto plano. IMPORTANTE: usa texto plano corto (máx 3000 caracteres). NO envíes HTML largo ni contenido extenso — el JSON se truncará y fallará. Si el contenido es largo, resúmelo antes de llamar a esta tool. Usa el campo 'title' para el encabezado.",
       "handler": "handleToolCreate",
       "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "filename o content no provistos" },
-        { "code": "UPSTREAM_UNREACHABLE", "cuando": "pdfkit no instalado y provider no disponible" },
-        { "code": "UNKNOWN_ERROR", "cuando": "error al escribir en disco" }
+        "INVALID_INPUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
       ],
       "parameters": {
         "type": "object",
@@ -201,8 +201,8 @@
       "description": "Lista todos los archivos PDF en un proyecto.",
       "handler": "handleToolList",
       "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "projectId no provisto" },
-        { "code": "UNKNOWN_ERROR", "cuando": "error de lectura del directorio" }
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
       ],
       "parameters": {
         "type": "object",
@@ -222,10 +222,9 @@
       "description": "Obtiene metadata de un archivo PDF (tamaño, fecha, etc.).",
       "handler": "handleToolMetadata",
       "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "projectId o filePath no provistos" },
-        { "code": "INVALID_INPUT", "cuando": "el archivo no es un PDF" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "el archivo no existe" },
-        { "code": "PERMISSION_DENIED", "cuando": "path fuera del directorio del proyecto" }
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PERMISSION_DENIED"
       ],
       "parameters": {
         "type": "object",
@@ -250,10 +249,9 @@
       "description": "Extrae texto de un archivo PDF. Puede extraer una página específica o todo el documento.",
       "handler": "handleToolExtract",
       "errores_conocidos": [
-        { "code": "INVALID_INPUT", "cuando": "projectId o filePath no provistos" },
-        { "code": "INVALID_INPUT", "cuando": "el archivo no es un PDF" },
-        { "code": "RESOURCE_NOT_FOUND", "cuando": "el archivo no existe" },
-        { "code": "PERMISSION_DENIED", "cuando": "path fuera del directorio del proyecto" }
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PERMISSION_DENIED"
       ],
       "parameters": {
         "type": "object",
@@ -274,6 +272,67 @@
         "required": [
           "projectId",
           "filePath"
+        ]
+      }
+    },
+    {
+      "name": "pdf.info",
+      "description": "Lee informacion estructural de un PDF (numero de paginas, metadata, dimensiones). Envuelve el servicio local.pdfjs.info. Acepta path absoluto al PDF.",
+      "handler": "handleToolInfo",
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_TIMEOUT",
+        "UNKNOWN_ERROR"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pdf": {
+            "type": "string",
+            "description": "Ruta absoluta al archivo PDF en disco."
+          }
+        },
+        "required": [
+          "pdf"
+        ]
+      }
+    },
+    {
+      "name": "pdf.render",
+      "description": "Renderiza una pagina de un PDF a imagen PNG. Util para pasar a OCR, mostrar previa visual, o convertir paginas a imagenes individuales. Envuelve el servicio local.pdfjs.render.",
+      "handler": "handleToolRender",
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_TIMEOUT",
+        "UNKNOWN_ERROR"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pdf": {
+            "type": "string",
+            "description": "Ruta absoluta al archivo PDF en disco."
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Numero de pagina a renderizar (1-based)."
+          },
+          "scale": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 4,
+            "default": 2,
+            "description": "Factor de escala (1.0 = tamaño original, 2.0 = recomendado para OCR)."
+          }
+        },
+        "required": [
+          "pdf",
+          "page"
         ]
       }
     }

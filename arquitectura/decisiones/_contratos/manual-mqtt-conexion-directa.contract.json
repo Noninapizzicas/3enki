@@ -1,11 +1,380 @@
 {
-  "_doc": "Manual operativo de la conexion MQTT directa al bus de Enki. Cubre el protocolo, el patron de topics (publish vs subscribe), el envelope canonico, la correlacion request/response, las secuencias canonicas para operar el sistema sin pasar por helpers, las probes de diagnostico forense que se aplican cuando los helpers de audit-module se quedan cortos, el catalogo de eventos seguros para clientes externos, y los errores clasicos que aparecen al construir clientes ad-hoc. Documento de referencia operativa — sin validator, sin valoraciones, solo procedimientos. Hermano de manual-audit-module-y-helpers.contract.json: si los helpers no bastan, este manual te baja un nivel.",
-
+  "_doc": "Manual operativo de conexion MQTT directa al sistema Enki SIN scripts. Incluye datos de conexion, patrones de topics, envelope canonico, secuencia completa para iniciar y mantener una conversacion (project.list → conversation.create → conversation.send → escuchar response), y shapes reales de los 5 eventos canonicos del flujo chat (chat.message.saved, chat.context.enriched, chat.prompt.ready, ai.chat.response, ai.chat.failed) extraidos del codigo. Permite conectarse desde cualquier cliente MQTT (mqttx, MQTT Explorer, librerias en otros lenguajes) sin depender de los helpers JS del repo. Tambien recoge el patron generico request/response correlacionado por request_id, secuencias canonicas adicionales para operaciones de dominio, probes de diagnostico forense aplicables cuando los helpers se quedan cortos, catalogo de eventos read-only seguros para clientes externos, errores clasicos al construir clientes ad-hoc, implementacion de referencia minima en Node.js, y relacion explicita con otros contratos del sistema.",
   "id": "manual-mqtt-conexion-directa",
   "version": "1.0.0",
   "creada": "2026-05-20",
   "tipo": "manual_operativo",
-
+  "conexion": {
+    "url": "wss://enki-ai.online/mqtt",
+    "protocolo": "MQTT v3.1.1 sobre WebSocket Secure",
+    "host": "enki-ai.online",
+    "puerto": 443,
+    "path": "/mqtt",
+    "tls": true,
+    "auth": "ninguna — el broker no exige usuario/password. El token EXPORT_TOKEN solo aplica al endpoint HTTP /api/conversation-export, no al MQTT.",
+    "client_id": "Cualquier string unico por cliente (ej: 'mqttx-1234', 'mi-app-abc'). Si se repite con otro cliente conectado, el broker cierra la conexion anterior.",
+    "keepalive_recomendado_seg": 60,
+    "ejemplo_clientes_compatibles": [
+      "MQTT Explorer",
+      "mqttx (CLI o desktop)",
+      "mqtt.js (Node)",
+      "paho-mqtt (Python)",
+      "MQTT.fx",
+      "wscat para inspeccion raw"
+    ]
+  },
+  "topics": {
+    "_doc": "Dos familias de topics: (a) eventos del bus interno con patron core/<core_id>/events/<event_type_with_slashes>, (b) UI request/response con patron ui/request/<dominio>/<accion> y ui/response/<request_id>.",
+    "patron_eventos_bus": {
+      "publish": "core/*/events/<event_type_con_slashes>",
+      "subscribe": "core/+/events/<event_type_con_slashes>",
+      "regla_conversion_event_type_a_topic": "Los puntos del event_type se convierten en slashes. Ejemplo: 'chat.message.saved' → 'chat/message/saved'. El topic completo: 'core/+/events/chat/message/saved'.",
+      "wildcards": {
+        "+": "comodin un nivel — usar siempre en subscribe en el segundo segmento (core_id variable)",
+        "#": "comodin recursivo — usar al final si quieres todos los sub-eventos"
+      }
+    },
+    "patron_ui_request_response": {
+      "publish_request": "ui/request/<dominio>/<accion>",
+      "subscribe_response": "ui/response/<request_id_del_payload>",
+      "ejemplos": [
+        "ui/request/conversation/create",
+        "ui/request/conversation/send",
+        "ui/response/<uuid_generado_por_ti>"
+      ]
+    },
+    "topics_utiles_para_debug": {
+      "todos_los_eventos_del_bus": "core/+/events/#",
+      "todas_las_responses_ui": "ui/response/+",
+      "solo_chat_flow": [
+        "core/+/events/chat/message/saved",
+        "core/+/events/chat/context/enriched",
+        "core/+/events/chat/prompt/ready",
+        "core/+/events/ai/chat/response",
+        "core/+/events/ai/chat/failed"
+      ],
+      "solo_subsistema_recetario": [
+        "core/+/events/receta/+",
+        "core/+/events/ingrediente/+/+",
+        "core/+/events/fs/+/+"
+      ]
+    }
+  },
+  "envelope_canonico_del_bus": {
+    "_doc": "Shape estandar de TODOS los eventos publicados en topics 'core/*/events/...'. El payload del MQTT (despues del JSON.stringify) es exactamente este shape.",
+    "shape": {
+      "event_id": "<uuid v4 — identificador unico del evento>",
+      "event_type": "<nombre.canonico.del.evento (con puntos)>",
+      "timestamp": "<ISO 8601: '2026-05-20T12:00:00.000Z'>",
+      "source": {
+        "core_id": "<string identificando el origen del evento>"
+      },
+      "data": {
+        "request_id": "<uuid v4 — solo cuando aplica request/response correlation>",
+        "...": "<resto del payload especifico del evento>"
+      },
+      "metadata": "{}"
+    },
+    "correlation": "El campo data.request_id correlaciona pares request/response. El campo data.correlation_id propaga la cadena causal por todo el flujo (lo lleva chat-io en chat.message.saved y se preserva en cada evento downstream del subsistema)."
+  },
+  "envelope_ui_request_response": {
+    "_doc": "Shape estandar para topics 'ui/request/...' y 'ui/response/...'. NO usa envelope del bus — es directo.",
+    "shape_request": {
+      "request_id": "<uuid v4>",
+      "data": {
+        "...": "<payload especifico de la accion>"
+      }
+    },
+    "shape_response": {
+      "request_id": "<mismo uuid del request>",
+      "success": "<true | false>",
+      "data": "<resultado de la accion>",
+      "error": "<presente solo si success=false>"
+    }
+  },
+  "secuencia_iniciar_conversacion": {
+    "_doc": "Pasos para crear conversacion y mandar primer mensaje desde MQTT directo, sin scripts.",
+    "paso_1_resolver_project_id": {
+      "objetivo": "Obtener el UUID del proyecto a partir de su nombre (si no lo tienes).",
+      "publish_topic": "core/*/events/project/list/request",
+      "publish_payload": {
+        "event_id": "<uuid generado por ti>",
+        "event_type": "project.list.request",
+        "timestamp": "<ISO 8601 actual>",
+        "source": {
+          "core_id": "mi-cliente"
+        },
+        "data": {
+          "request_id": "<uuid-A generado por ti>"
+        },
+        "metadata": {}
+      },
+      "subscribe_topic": "core/+/events/project/list/response",
+      "filtrar_por": "data.request_id === '<uuid-A>'",
+      "response_payload_data": {
+        "request_id": "<uuid-A>",
+        "success": true,
+        "projects": [
+          {
+            "id": "<project_uuid>",
+            "name": "<nombre>",
+            "base_path": "<ruta>",
+            "metadata": "{...}",
+            "is_active": "boolean"
+          }
+        ]
+      }
+    },
+    "paso_2_crear_conversacion": {
+      "objetivo": "Crear conversacion nueva, recibir su id.",
+      "publish_topic": "ui/request/conversation/create",
+      "publish_payload": {
+        "request_id": "<uuid-B generado por ti>",
+        "data": {
+          "project_id": "<project_uuid>",
+          "title": "<titulo libre>",
+          "user_id": "default"
+        }
+      },
+      "subscribe_topic": "ui/response/<uuid-B>",
+      "response_payload": {
+        "request_id": "<uuid-B>",
+        "success": true,
+        "data": {
+          "conversation_id": "<conv_uuid>",
+          "title": "<titulo>"
+        }
+      }
+    },
+    "paso_3_enviar_mensaje": {
+      "objetivo": "Enviar mensaje al assistant. Genera toda la cadena de eventos del flujo.",
+      "publish_topic": "ui/request/conversation/send",
+      "publish_payload": {
+        "request_id": "<uuid-C generado por ti>",
+        "data": {
+          "project_id": "<project_uuid>",
+          "conversation_id": "<conv_uuid>",
+          "message": "<texto del usuario>",
+          "user_id": "default",
+          "channel": "web",
+          "page_id": "<slug_del_modulo_activo o 'chat'>",
+          "settings": {
+            "provider": "<deepseek|anthropic|openai|kimi|... opcional>",
+            "model": "<id del modelo opcional>",
+            "thinking": {
+              "type": "<enabled|disabled opcional>"
+            }
+          },
+          "attachments": "<array opcional de paths>",
+          "intencion": "<string opcional>"
+        }
+      },
+      "respuesta_inmediata": {
+        "topic": "ui/response/<uuid-C>",
+        "payload": {
+          "request_id": "<uuid-C>",
+          "success": true,
+          "data": {
+            "conversation_id": "<...>",
+            "message_id": "<...>",
+            "correlation_id": "<...>"
+          }
+        },
+        "significado": "Confirma que el mensaje se persistio. La respuesta del LLM NO llega aqui — llega en los topics del flujo (paso 4)."
+      }
+    },
+    "paso_4_escuchar_respuesta_assistant": {
+      "objetivo": "Recibir la respuesta del LLM cuando el flujo termina.",
+      "subscribe_topics": [
+        "core/+/events/chat/assistant/saved",
+        "core/+/events/ai/chat/failed"
+      ],
+      "filtrar_por": "data.conversation_id === '<conv_uuid>'",
+      "nota": "data.message_id_assistant es el id del mensaje del assistant. Si recibes ai.chat.failed con data.error.code, hubo error LLM/credenciales/red."
+    },
+    "paso_5_continuar_conversacion": {
+      "objetivo": "Mandar el siguiente turno. El historial se persiste automaticamente.",
+      "accion": "Repetir paso 3 con el mismo conversation_id. NO tienes que reenviar contexto — chat-io lo recupera de la BD."
+    }
+  },
+  "eventos_canonicos_del_chat_flow": {
+    "_doc": "Los 5 eventos canonicos del flujo chat-flow (contrato chat-flow.contract.json). Shapes reales extraidos del codigo. Para seguir el flujo en tiempo real, suscribirse a estos 5 topics y filtrar por data.conversation_id.",
+    "1_chat_message_saved": {
+      "topic": "core/+/events/chat/message/saved",
+      "publicado_por": "chat-io",
+      "consumido_por": "prompt-builder, memorias modulares (memory-user-profile, memory-conversation-summary, memory-rag)",
+      "momento": "Inmediatamente despues de persistir el mensaje del usuario en BD.",
+      "data_shape": {
+        "correlation_id": "<uuid v4 — generado por chat-io>",
+        "conversation_id": "<conv_uuid>",
+        "project_id": "<project_uuid>",
+        "user_id": "default",
+        "channel": "web | telegram | api | ...",
+        "channel_context": "{}",
+        "message_id": "<uuid del mensaje>",
+        "user_message": "<texto del usuario tal cual>",
+        "attachments": "<array de paths o null>",
+        "intencion": "<string opcional>",
+        "settings": "<{provider, model, thinking} si vinieron>",
+        "page_id": "<slug del modulo activo>",
+        "prompt_id": "<uuid del prompt activo si aplica>",
+        "page_context": "<objeto con ctx extra si vino>",
+        "timestamp": "<ISO 8601>"
+      }
+    },
+    "2_chat_context_enriched": {
+      "topic": "core/+/events/chat/context/enriched",
+      "publicado_por": "Cualquier modulo de memoria (memory-user-profile, memory-rag, memory-conversation-summary, futuras memorias) — punto de extension abierto.",
+      "consumido_por": "prompt-builder",
+      "momento": "Tras chat.message.saved, las memorias razonan y enriquecen el contexto. Cada una publica este evento (0..N por turno).",
+      "data_shape": {
+        "correlation_id": "<heredado de chat.message.saved>",
+        "conversation_id": "<conv_uuid>",
+        "project_id": "<project_uuid>",
+        "user_id": "default",
+        "message_id": "<mismo que el de chat.message.saved>",
+        "source": "<nombre de la memoria: 'memory-user-profile', 'memory-rag', etc.>",
+        "context_addition": "<texto narrativo a inyectar en el system prompt>",
+        "priority": "<numero: 0-99 contexto base, 100-499 perfil, 500-999 RAG, 1000+ especulativa>",
+        "expires_at": "<ISO 8601 opcional — si el contexto caduca>",
+        "metadata": "<objeto libre>",
+        "timestamp": "<ISO 8601>"
+      },
+      "nota": "Multiples memorias publican multiples eventos enriched para el mismo message_id. prompt-builder los agrega ordenados por priority antes de publicar chat.prompt.ready."
+    },
+    "3_chat_prompt_ready": {
+      "topic": "core/+/events/chat/prompt/ready",
+      "publicado_por": "prompt-builder",
+      "consumido_por": "ai-gateway",
+      "momento": "Tras agregar todos los enrichments de memorias + el system prompt base. Indica que el LLM ya puede ser invocado.",
+      "data_shape": {
+        "correlation_id": "<heredado>",
+        "conversation_id": "<conv_uuid>",
+        "project_id": "<project_uuid>",
+        "user_id": "default",
+        "channel": "web",
+        "channel_context": "{}",
+        "message_id": "<id del mensaje del usuario>",
+        "system_prompt": "<string completo — incluye base + modulo activo + memorias agregadas>",
+        "messages": "<array de {role, content, ...} con el historial FIFO + el ultimo mensaje del usuario>",
+        "settings": "<{provider, model, thinking} si vino>",
+        "intencion": "<string opcional>",
+        "attachments": "<array opcional>",
+        "page_id": "<slug del modulo activo — tras PR #166 viaja aqui>",
+        "tools_disponibles": "<array opcional de tool definitions — si el caller las pre-poblo>",
+        "timestamp": "<ISO 8601>"
+      }
+    },
+    "4_ai_chat_response": {
+      "topic": "core/+/events/ai/chat/response",
+      "publicado_por": "ai-gateway",
+      "consumido_por": "chat-io (persiste y emite chat.assistant.saved hacia el frontend)",
+      "momento": "Tras agentic loop completo del LLM: tool calls iterativos + respuesta final.",
+      "data_shape": {
+        "correlation_id": "<heredado>",
+        "conversation_id": "<conv_uuid>",
+        "project_id": "<project_uuid>",
+        "user_id": "default",
+        "channel": "web",
+        "channel_context": "{}",
+        "message_id": "<id del mensaje del usuario que origino esto>",
+        "message_id_assistant": "<uuid nuevo — id del mensaje del assistant>",
+        "assistant_message": "<texto final del LLM al usuario>",
+        "model": "<modelo usado>",
+        "provider": "<provider usado>",
+        "tokens": {
+          "input": "N",
+          "output": "N",
+          "total": "N"
+        },
+        "duration_ms": "<latencia total>",
+        "timestamp": "<ISO 8601>",
+        "tool_calls_executed": [
+          {
+            "name": "<nombre de la tool>",
+            "args": "<objeto con argumentos del LLM>",
+            "result_status": "ok | error | timeout",
+            "duration_ms": "N",
+            "error_code": "<solo si error — ej. RESOURCE_NOT_FOUND, INVALID_INPUT>",
+            "error_message": "<solo si error>",
+            "error_details": "<solo si error>"
+          }
+        ],
+        "iterations": "<numero de turnos del agentic loop>",
+        "cost": "{ amount: N, currency: 'USD' }",
+        "finish_reason": "<stop | tool_calls | length | ...>"
+      }
+    },
+    "5_ai_chat_failed": {
+      "topic": "core/+/events/ai/chat/failed",
+      "publicado_por": "ai-gateway",
+      "consumido_por": "chat-io (informa fallo al usuario)",
+      "momento": "Si el agentic loop fallo por error LLM/credenciales/red/timeout.",
+      "data_shape": {
+        "correlation_id": "<heredado>",
+        "conversation_id": "<conv_uuid>",
+        "project_id": "<project_uuid>",
+        "user_id": "default",
+        "channel": "web",
+        "channel_context": "{}",
+        "message_id": "<id del mensaje del usuario>",
+        "error": {
+          "code": "<UPSTREAM_TIMEOUT | UPSTREAM_UNREACHABLE | UPSTREAM_INVALID_RESPONSE | RESOURCE_NOT_FOUND | UNKNOWN_ERROR>",
+          "message": "<descripcion humana>",
+          "details": "{}"
+        },
+        "duration_ms": "N",
+        "provider_attempted": "<provider que intento — null si no se selecciono ninguno>",
+        "timestamp": "<ISO 8601>"
+      }
+    },
+    "evento_adicional_chat_assistant_saved": {
+      "_doc": "NO es del chat-flow canonico — es interno de chat-io para notificar al frontend. Util para clientes externos que esperan respuesta tras 'send'.",
+      "topic": "core/+/events/chat/assistant/saved",
+      "publicado_por": "chat-io",
+      "data_shape": {
+        "correlation_id": "<heredado>",
+        "project_id": "<project_uuid>",
+        "conversation_id": "<conv_uuid>",
+        "message_id": "<message_id_assistant del ai.chat.response>",
+        "assistant_message": "<texto del LLM>",
+        "metadata": "<objeto con info adicional>",
+        "timestamp": "<ISO 8601>"
+      },
+      "uso_recomendado": "Si solo quieres escuchar 'respuesta final del LLM al usuario' sin preocuparte por tool_calls intermedios, suscribirse aqui. Si quieres detalle forense (tools invocadas, tokens, duracion), suscribirse a ai.chat.response."
+    }
+  },
+  "seguir_el_flujo_en_tiempo_real": {
+    "_doc": "Para depurar un turno completo, suscribirse a los 5 topics del flujo y filtrar por conversation_id. El orden cronologico es: chat.message.saved → 0..N chat.context.enriched → chat.prompt.ready → (intervalo donde el LLM ejecuta tool calls en otros topics del bus) → ai.chat.response | ai.chat.failed.",
+    "secuencia_temporal_observable": [
+      "1. ui/response/<request_id>   → chat-io confirma recibo del mensaje",
+      "2. core/+/events/chat/message/saved   → mensaje del usuario persistido",
+      "3. core/+/events/chat/context/enriched   → 0..N veces, una por memoria",
+      "4. core/+/events/chat/prompt/ready   → system prompt construido",
+      "5. (Durante agentic loop del LLM, eventos especificos del subsistema activo: por ejemplo, en page_id=recetas con blueprint veras fs.read.request/response, fs.write.request/response, receta.creada, etc.)",
+      "6. core/+/events/ai/chat/response   → respuesta final con tool_calls_executed",
+      "7. core/+/events/chat/assistant/saved   → persistencia del mensaje del assistant + notificacion al frontend"
+    ],
+    "subscripcion_completa_para_debug": {
+      "topic_unico": "core/+/events/#",
+      "uso": "Recibes TODO. Filtra del lado cliente por conversation_id si solo te interesa un turno. Si el volumen es alto (muchas conversaciones simultaneas o eventos de scheduler), conviene subscribirse a los 5 topics especificos del chat-flow."
+    },
+    "filtrar_un_turno_concreto": "Tras enviar ui/request/conversation/send con tu request_id, captura el correlation_id que devuelve chat-io en ui/response/<request_id>. Filtra todos los eventos posteriores por data.correlation_id === <ese valor> — eso te aisla exactamente el turno actual."
+  },
+  "errores_comunes": {
+    "wss_handshake_failed": "Revisar que el path sea exactamente '/mqtt' y el cliente soporte WebSocket sobre TLS.",
+    "client_id_duplicado": "Si el broker cierra la conexion al conectarte, otro cliente esta usando el mismo client_id. Usar uno unico (incluir timestamp o random).",
+    "no_recibo_responses": "Verificar que el subscribe se hizo ANTES de publicar el request. MQTT v3.1.1 con QoS 0 no encola — si publicas antes de tener el subscribe activo, te pierdes el response.",
+    "topic_mal_construido_por_puntos": "El event_type lleva puntos pero el topic lleva slashes. Ejemplo: NO 'core/+/events/chat.message.saved' sino 'core/+/events/chat/message/saved'.",
+    "payload_no_es_json": "El payload del MQTT siempre es JSON serializado como string. Si tu cliente lo envia binario o sin stringify, los modulos no lo parsean.",
+    "ui_request_topic_incorrecto": "Para conversation.create y conversation.send, el topic NO es 'core/...' — es 'ui/request/conversation/<accion>' (sin /events/). Confusion comun."
+  },
+  "ejemplo_mqttx_cli": {
+    "_doc": "Comandos copy-paste para mqttx CLI (https://mqttx.app/cli).",
+    "conectar_y_subscribir_todo": "mqttx sub -h enki-ai.online -p 443 -l wss -path /mqtt --client-id mi-debug-$(date +%s) -t 'core/+/events/#'",
+    "subscribir_solo_chat_flow": "mqttx sub -h enki-ai.online -p 443 -l wss -path /mqtt --client-id mi-debug-cf -t 'core/+/events/chat/message/saved' -t 'core/+/events/chat/prompt/ready' -t 'core/+/events/ai/chat/response' -t 'core/+/events/ai/chat/failed'",
+    "publicar_list_projects": "mqttx pub -h enki-ai.online -p 443 -l wss -path /mqtt --client-id mi-pub -t 'core/*/events/project/list/request' -m '{\"event_id\":\"<uuid>\",\"event_type\":\"project.list.request\",\"timestamp\":\"<iso>\",\"source\":{\"core_id\":\"mqttx\"},\"data\":{\"request_id\":\"<uuid>\"},\"metadata\":{}}'"
+  },
   "cuando_usar_este_manual": {
     "_doc": "Bajar a MQTT directo NO es lo habitual. Los helpers de audit-module cubren el 95% de casos. Recurrir a esto cuando:",
     "casos_legitimos": [
@@ -22,109 +391,9 @@
       "Mantener una conexion persistente como subscriber permanente. Los helpers usan reconnectPeriod=0 y se cierran tras la respuesta — clientes long-lived deben ser modulos del sistema, no scripts ad-hoc."
     ]
   },
-
-  "datos_de_conexion": {
-    "url": "wss://enki-ai.online/mqtt",
-    "override_env_var": "AUDIT_BROKER (todos los helpers de scripts/audit-helpers/ la respetan)",
-    "protocolo": "WebSocket sobre MQTT v3.1.1",
-    "libreria_cliente_recomendada": "mqtt.js (compatible nativa) — npm install mqtt",
-    "auth_mqtt": "ninguna (broker abierto para clientes con la URL conocida)",
-    "auth_http_para_export": "Bearer token en header Authorization (env EXPORT_TOKEN, fallback hardcoded 'nonina'). Solo aplica a la API HTTP de conversation-export, NO a MQTT.",
-    "client_id": "string unico cualquiera por conexion. Convencion: '<prefijo-corto>-<timestamp>' (ej. 'audit-1748123456789'). Reutilizar client_id entre clientes activos provoca desconexion del anterior.",
-    "opciones_recomendadas_mqtt_connect": {
-      "clientId": "string unico",
-      "connectTimeout": 8000,
-      "reconnectPeriod": 0,
-      "_nota_reconnect": "Scripts efimeros (audit, probes) DEBEN usar reconnectPeriod=0 para que el script termine cuando el broker se cierra. Solo modulos permanentes del sistema usan reconnect."
-    }
-  },
-
-  "convencion_de_topics": {
-    "_doc": "Hay DOS familias de topics. La mayoria del sistema usa la familia 'eventbus canonica' (core/*/events/...). Una minoria de operaciones del UI usa topics directos (ui/request/..., ui/response/...) que NO siguen el patron eventbus.",
-
-    "familia_eventbus_canonica": {
-      "topic_para_publish": "core/*/events/<event_type_with_slashes>",
-      "topic_para_subscribe": "core/+/events/<event_type_with_slashes>",
-      "razon_de_los_dos_patrones": "El asterisco '*' es un segmento LITERAL en el topic de publish (significa 'a todos los cores'). El '+' es el wildcard MQTT estandar que matchea cualquier valor del segmento (incluyendo el '*' literal). Por eso publish y subscribe difieren — el cliente publica 'a todos' y se suscribe 'de cualquiera'.",
-      "conversion_event_type_a_topic": {
-        "regla": "Los puntos del event_type se convierten a slashes, EXCEPTO que se mantienen agrupados los segmentos finales si el verbo es compuesto. En la practica: split por '.', primer segmento sin cambio, resto unido con '/' tras el primer punto.",
-        "implementacion_de_referencia": "const buildTopic = (et) => { const p = et.split('.'); return 'core/*/events/' + p[0] + (p.length > 1 ? '/' + p.slice(1).join('/') : ''); }",
-        "ejemplos": {
-          "chat.message.saved": "core/*/events/chat/message/saved",
-          "fs.read.request": "core/*/events/fs/read/request",
-          "fs.read.response": "core/*/events/fs/read/response",
-          "receta.creada": "core/*/events/receta/creada",
-          "receta.estado.actualizada": "core/*/events/receta/estado/actualizada",
-          "agent.execute.request": "core/*/events/agent/execute/request",
-          "ingrediente.precio.actualizado": "core/*/events/ingrediente/precio/actualizado"
-        }
-      },
-      "subscribir_a_familias_enteras": {
-        "_doc": "Usar wildcard '+' para escuchar todo un namespace.",
-        "ejemplos": {
-          "todos_los_eventos_de_fs": "core/+/events/fs/+/+ (cubre fs.read.request, fs.read.response, fs.write.request, fs.write.response, fs.file.created, etc.)",
-          "todos_los_eventos_de_recetas": "core/+/events/receta/+ y core/+/events/receta/+/+ (uno-segmento y dos-segmentos)",
-          "todo_lo_relacionado_con_agentes": "core/+/events/agent/+/+ (agent.execute.request, .response, .progress, .failed)"
-        }
-      }
-    },
-
-    "familia_ui_directa": {
-      "_doc": "Para iniciar acciones desde el UI. NO siguen el patron eventbus — son topics directos con par request/response acoplados por request_id en el topic.",
-      "topic_request": "ui/request/<dominio>/<accion>",
-      "topic_response": "ui/response/<request_id_uuid>",
-      "ejemplos_canonicos": {
-        "crear_conversacion": {
-          "publish": "ui/request/conversation/create",
-          "subscribe": "ui/response/<request_id>",
-          "shape_payload": "{ request_id, data: { project_id, title, user_id } }"
-        },
-        "enviar_mensaje_a_chat": {
-          "publish": "ui/request/conversation/send",
-          "subscribe_para_respuesta_asincrona": "core/+/events/chat/assistant/saved y core/+/events/ai/chat/failed (esto SI es eventbus canonico — la respuesta del LLM tarda y se publica como evento, no como response UI).",
-          "shape_payload": "{ request_id, data: { project_id, conversation_id, message, user_id, channel, page_id, settings: { provider?, model?, thinking? } } }"
-        }
-      },
-      "razon_de_existir_aparte": "El UI necesita un canal sincronico request/response por uuid sin depender del subscribe global del eventbus. Topics dedicados por request_id evitan el filtering que harias en eventbus.",
-      "no_inventarse_topics_ui": "Solo conversation/create y conversation/send estan documentados. Otros dominios del UI (project, prompt, etc.) van por eventbus canonico (project.create.request, etc.)."
-    }
-  },
-
-  "envelope_canonico": {
-    "_doc": "Estructura JSON del payload MQTT para topics de la familia eventbus. Los topics ui/request/* tienen shape diferente (mas plano, ver mas abajo).",
-
-    "shape_eventbus": {
-      "event_id": "uuid v4 — identificador unico del evento (no es el request_id; un mismo request_id puede tener N event_id en su lifecycle).",
-      "event_type": "string canonico — '<modulo>.<entidad>.<verbo>' o '<dominio>.<accion>.<request|response|failed>'. Debe coincidir con el topic (modulo si conversion_event_type_a_topic).",
-      "timestamp": "ISO 8601 — momento de publicacion.",
-      "source": {
-        "_doc": "Identifica quien publica. Util para tracing.",
-        "core_id": "string identificando el proceso emisor (ej. 'core-a', 'audit-helper', 'core-id-del-modulo')",
-        "module_id": "string opcional con el slug del modulo emisor (ej. 'recetas', 'chat-io')"
-      },
-      "data": {
-        "_doc": "Payload del evento. Aqui va el request_id y los campos de dominio.",
-        "request_id": "uuid v4 — REQUERIDO en cualquier par request/response. El emisor lo genera; el responder lo copia en su response.",
-        "correlation_id": "uuid opcional — propagacion causal a traves de cadenas de eventos. Se mantiene invariante por una accion de usuario completa.",
-        "...campos_de_dominio": "specificos del event_type (ej. para fs.write.request: { project_id, path, content, encoding, atomic })"
-      },
-      "metadata": "objeto vacio {} o con campos auxiliares de trazabilidad. NO meter dominio aqui — va en data."
-    },
-
-    "shape_ui_request": {
-      "_doc": "Topics ui/request/* usan shape mas plano. NO tienen event_id/event_type/timestamp/source/metadata.",
-      "request_id": "uuid",
-      "data": "{ ...payload de la accion }"
-    },
-
-    "implementacion_de_referencia_envelope": "const env = (et, d) => ({ event_id: crypto.randomUUID(), event_type: et, timestamp: new Date().toISOString(), source: { core_id: 'audit-helper' }, data: d, metadata: {} });"
-  },
-
   "correlacion_request_response": {
     "_doc": "Es la mecanica universal para parejas request/response sobre MQTT. Sin correlacion, los clientes no pueden distinguir su response de otras en vuelo.",
-
     "principio": "El cliente genera un request_id UUID antes de publicar y lo incluye en data.request_id. El responder copia ese mismo request_id en data.request_id de su response. El cliente filtra los mensajes entrantes por d.request_id === <su_uuid>.",
-
     "patron_canonico_de_implementacion": [
       "1. Generar r = crypto.randomUUID() ANTES de subscribir.",
       "2. Conectar al broker y esperar evento 'connect'.",
@@ -133,7 +402,6 @@
       "5. En el handler 'message', JSON.parse el payload y si data.request_id === r → resolver. Si no → ignorar (es de otro cliente o de una request anterior).",
       "6. Timeout de seguridad (15-30s tipicos) para evitar hangs eternos."
     ],
-
     "errores_de_correlacion_que_aparecen_facil": [
       "Generar el request_id DESPUES de publicar (race: la response llega antes de que filtres por uuid).",
       "Publicar ANTES de que el subscribe se haya completado (race: pierdes la response porque la subscripcion no estaba activa). Solucion: usar el callback (err, granted) => publish(...) del subscribe.",
@@ -141,10 +409,8 @@
       "Olvidar el setTimeout de seguridad y dejar el script colgado para siempre cuando el responder esta caido."
     ]
   },
-
   "secuencias_canonicas": {
     "_doc": "Las 4 secuencias que aparecen casi siempre en clientes ad-hoc. Implementaciones de referencia.",
-
     "listar_proyectos": {
       "objetivo": "Resolver nombre → uuid de proyecto, o inventariar lo que hay.",
       "publish": "core/*/events/project/list/request con data: { request_id }",
@@ -153,7 +419,6 @@
       "response_shape": "data: { request_id, projects: [{ id, name, base_path, description, metadata, created_at, ... }] }",
       "comportamiento_si_no_hay_proyectos": "Devuelve projects: [] (array vacio). No es error."
     },
-
     "crear_conversacion": {
       "objetivo": "Crear una conv para enviar mensajes despues.",
       "publish": "ui/request/conversation/create  (TOPIC DIRECTO, no eventbus)",
@@ -162,7 +427,6 @@
       "response_shape": "{ request_id, data: { conversation_id, ...resto } }",
       "alternativa_via_helper": "node scripts/audit-helpers/create-conversation.js <project_id|name> [title] — imprime solo el conversation_id"
     },
-
     "enviar_mensaje_y_esperar_respuesta": {
       "objetivo": "Mandar un mensaje al chat y capturar la respuesta del asistente.",
       "publish": "ui/request/conversation/send  (TOPIC DIRECTO)",
@@ -176,7 +440,6 @@
       "timeout_recomendado": "60-180s — los flujos con tool calls pueden iterar varias veces.",
       "alternativa_via_helper": "node scripts/audit-helpers/send-message.js <project> <conv> <page_id> 'msg' [wait_ms] [--provider] [--model] [--thinking]"
     },
-
     "publicar_evento_de_dominio_y_esperar_response": {
       "objetivo": "Patron generico request/response sobre eventbus (no UI).",
       "ejemplo_fs_read": {
@@ -191,47 +454,39 @@
       }
     }
   },
-
   "probes_de_diagnostico_forense": {
     "_doc": "Patrones aplicados en audits reales cuando los helpers se quedan cortos. Cada uno responde a una pregunta de diagnostico concreta.",
-
     "probe_1_verificar_persistencia_tras_timeout_silencioso": {
       "pregunta": "El LLM dijo haber creado/actualizado una receta pero el chat timed-out. ¿Llego el cambio a disco?",
       "metodo": "fs.read.request al path canonico del modulo (/recetas.json para recetas, /escandallos.json para escandallo, etc.). Parsear content. Comparar updated_at, version, presencia de la entidad nueva.",
       "snippet_de_referencia": "publish fs.read.request con {project_id, path: '/recetas.json'}, espera fs.read.response, JSON.parse(d.content), iterar j.recetas y verificar.",
       "interpretacion": "Si la entidad esta en disco pero el chat no respondio: bug en el chat-flow (no en el modulo ni en filesystem). Si la entidad NO esta en disco: el LLM no llego a publicar fs.write.request (bug del runtime LLM) o publico mal (revisar tool_calls en messages_raw[].metadata)."
     },
-
     "probe_2_aislar_si_filesystem_es_el_culpable": {
       "pregunta": "Las mutaciones cuelgan via chat. ¿Es el filesystem el que esta roto o es el LLM que llama mal?",
       "metodo": "Publicar fs.write.request directo al bus con payload conocido bueno (path + content valido). Esperar response. Si responde con created:true → filesystem OK, el bug esta en como el LLM construye el payload. Si timeout → filesystem caido.",
       "snippet_de_referencia": "publish fs.write.request con {project_id, path: '/_audit-probe.json', content: '{...}', encoding: 'utf-8', atomic: true}, espera fs.write.response, verificar created.",
       "advertencia": "Usar paths con prefijo `_audit-` o `_probe-` para distinguir de archivos del dominio. Limpiar despues si el proyecto esta vivo."
     },
-
     "probe_3_inspeccionar_tool_calls_del_llm": {
       "pregunta": "El LLM dice X pero no lo hizo. ¿Que tool calls emitio realmente?",
       "metodo": "Tras un export, leer messages_raw[i].metadata como JSON. Tiene { provider, model, iterations, tool_calls: [{ name, args, status, result }] }. Cada tool_call tiene los args literales que el LLM envio.",
       "como_detectar_payload_vacio": "Inspeccionar tool_calls[].args. Si es bus.publishAndWait, ver si args.payload existe y tiene los campos esperados. Bug observado en audit recetas 2026-05-20: anthropic publicaba fs.write.request con args = { event: 'fs.write.request' } y payload omitido entero.",
       "como_detectar_alucinacion": "Si tool_calls esta vacio (tools: []) y el assistant_message contiene afirmaciones sobre estado del dominio, comparar con fs.read.request directo. Si difieren, el LLM se invento la respuesta del contexto."
     },
-
     "probe_4_listening_en_vivo_de_un_subsistema": {
       "pregunta": "¿Que eventos del subsistema X estan ocurriendo mientras el usuario opera?",
       "metodo": "Conectar y subscribir broadly al namespace (ej. 'core/+/events/receta/+', 'core/+/events/agent/+/+'). Hacer la operacion en el chat. Capturar el stream cronologico.",
       "uso_tipico": "Verificar que un evento canonico se publica (ej. receta.creada tras crear); detectar eventos huerfanos sin handler; medir latencia entre request y response."
     },
-
     "probe_5_verificar_si_un_agente_se_invoca": {
       "pregunta": "Pedi al LLM que delegara al agente X. ¿Se invoco realmente?",
       "metodo": "Subscribir a core/+/events/agent/execute/+ ANTES de mandar el mensaje. Ver si llega un agent.execute.request con agent_name === <esperado>. Si no llega: el LLM no supo delegar (bug de prompt/catalogo) o el agente no esta en scope.",
       "diferenciar_de_chat_normal": "Si solo hay tool_calls de tipo bus.publishAndWait → fs.read.request, el LLM resolvio el problema sin agentes. Eso puede ser correcto (lectura simple) o un finding (deberia haber delegado para razonar)."
     }
   },
-
   "eventos_seguros_para_clientes_externos": {
     "_doc": "Catalogo de eventos que es razonable invocar desde un script ad-hoc para auditar o diagnosticar. NO es la API publica del sistema — es la lista de eventos que en la practica no rompen nada cuando los usas read-only.",
-
     "read_only_seguros": {
       "fs.read.request": "Leer cualquier archivo del proyecto via path con leading-slash. SAFE: no muta.",
       "fs.list.request": "Listar contenido de un directorio del proyecto. SAFE: no muta.",
@@ -240,12 +495,10 @@
       "project.get.request": "Detalles de un proyecto por id. SAFE: no muta.",
       "project.active.request": "Lista de proyectos activos. SAFE: no muta."
     },
-
     "mutaciones_aceptables_para_probes": {
       "_doc": "Mutaciones acotadas que un probe puede ejecutar siempre que use paths/keys claramente de prueba.",
       "fs.write.request_con_path_de_prueba": "Solo si el path empieza por '/_audit-' o '/_probe-'. NUNCA tocar /recetas.json, /escandallos.json, /tarifas.json, /carta-*.json, etc. directamente con un cliente externo."
     },
-
     "mutaciones_destructivas_evitar_desde_clientes_externos": [
       "project.delete.request (borra proyecto entero)",
       "project.update.request (modifica metadatos de proyectos en uso)",
@@ -255,49 +508,40 @@
       "Cualquier <modulo>.estado.actualizar.request sin pasar por la regla de transiciones del modulo (rompe history y estado_operativo)"
     ]
   },
-
   "errores_clasicos_de_clientes_ad_hoc": {
     "_doc": "Bugs frecuentes al construir un cliente MQTT directo. Aparecidos en audits reales.",
-
     "subscribe_publish_race": {
       "sintoma": "El publish funciona y el servidor responde, pero el cliente nunca recibe la response.",
       "causa": "El publish se ejecuto antes de que el subscribe estuviera completamente registrado en el broker. El response llego antes de que el cliente fuera subscriber.",
       "solucion": "Pasar callback al subscribe: c.subscribe(topic, (err, granted) => c.publish(topic2, payload)). El publish solo ocurre dentro del callback."
     },
-
     "client_id_duplicado": {
       "sintoma": "El cliente se conecta y se desconecta inmediatamente sin recibir mensajes.",
       "causa": "Otro cliente activo esta usando el mismo clientId. El broker desconecta al anterior.",
       "solucion": "Generar clientId unico cada vez: 'mi-prefijo-' + Date.now() o 'mi-prefijo-' + crypto.randomUUID().slice(0, 8)."
     },
-
     "olvidar_setTimeout_de_seguridad": {
       "sintoma": "El script cuelga indefinidamente si el bus no responde.",
       "solucion": "Siempre incluir: setTimeout(() => { console.error('TIMEOUT'); process.exit(2); }, 15000) en probes one-shot."
     },
-
     "no_filtrar_request_id": {
       "sintoma": "El cliente resuelve con la response de otro cliente o de una request previa.",
       "solucion": "Comparar siempre d.request_id === r dentro del handler 'message'. Si no matchea, return; (ignorar)."
     },
-
     "JSON_parse_sin_try_catch": {
       "sintoma": "El cliente crashea al recibir un mensaje no-JSON (raro pero posible si llega un retained vacio).",
       "solucion": "try { msg = JSON.parse(m.toString()); } catch (e) { return; }"
     },
-
     "subscribir_solo_a_response_sin_pensar_en_failed": {
       "sintoma": "El cliente espera fs.read.response pero el modulo respondio con fs.read.failed (no hay tal evento canonico — ejemplo conceptual: ai.chat.response vs ai.chat.failed).",
       "solucion": "Para pares request/response del sistema con par success/failure separado (ver no_silent_failures en CLAUDE.md), subscribir SIEMPRE a ambos: tanto <accion>.response como <accion>.failed correlacionados por request_id."
     },
-
     "asumir_que_el_payload_completo_esta_en_el_timeline_del_export": {
       "sintoma": "Tras un export, no encuentro los args con los que se publico un evento. Los internal_log del export solo tienen event_type y event_id.",
       "causa": "El timeline del conversation-export NO incluye el payload completo de cada evento del bus — solo metadatos minimos.",
       "solucion": "Para inspeccionar args reales del LLM, leer messages_raw[i].metadata (JSON con tool_calls). Para inspeccionar payloads del bus de dominio, hay que capturarlos en vivo (probe_4) o reproducir el flujo y subscribir broadly."
     }
   },
-
   "implementacion_de_referencia_minima": {
     "_doc": "Snippet completo Node.js para hacer un probe request/response. Pegable.",
     "snippet": [
@@ -334,7 +578,6 @@
       "setTimeout(() => { console.error('TIMEOUT'); process.exit(2); }, 15000);"
     ]
   },
-
   "relacion_con_otros_contratos": {
     "manual-audit-module-y-helpers": "Hermano. Cubre la skill audit-module v7 y los helpers atomicos en scripts/audit-helpers/. Cuando los helpers bastan, ese contrato es suficiente. Cuando hay que bajar a MQTT directo, este contrato continua la conversacion.",
     "events.contract": "Define la disciplina general de events del sistema (correlation_id, no_silent_failures, error.code canonico). El cliente directo DEBE respetar las garantias (no inyectar errores como texto en eventos de exito, etc.). No las puede romper publicando shapes mal formados.",
@@ -343,6 +586,5 @@
     "http.contract": "Para el endpoint HTTP de conversation-export (que NO va por MQTT). El bearer token y el shape del export estan ahi.",
     "llm-runtime-discipline.contract": "Las 10 reglas que el LLM-runtime sigue al ejecutar blueprints. Un cliente ad-hoc no es un LLM-runtime, pero si lo usas para emular un actor del sistema, respeta marcador_de_fuente_por_dato (source.core_id debe identificar quien eres) y confirmacion_antes_de_mutar_destructivo (no mutar produccion sin checks)."
   },
-
   "supersedes_nota": "v1.0.0 inicial — formaliza la conexion MQTT directa al bus de Enki como complemento al manual de audit-module/helpers. Cubre datos de conexion, topics de las dos familias (eventbus canonica + ui directa), envelope canonico, correlacion request/response, secuencias canonicas (listar proyectos, crear conv, enviar mensaje, par request/response generico), 5 probes de diagnostico forense aplicados en audits reales (audit recetas 2026-05-20 fue el caso testigo), catalogo de eventos seguros vs destructivos para clientes externos, errores clasicos al construir clientes ad-hoc, e implementacion de referencia minima pegable. Sin validator — es manual operativo, no contrato con enforcement mecanico."
 }

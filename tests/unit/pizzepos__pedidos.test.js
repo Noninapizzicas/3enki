@@ -93,7 +93,7 @@ function publishedOf(mocks, name) {
   console.log('pizzepos__pedidos — reescritura canonica (POC2)\n');
 
   // Group 1: Lifecycle
-  await testAsync('onLoad inicializa estado limpio + registra 11 ui_handlers', async () => {
+  await testAsync('onLoad inicializa estado limpio sin tocar uiHandler (v1.2: el loader auto-wirea tools[])', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'pedidos');
@@ -101,7 +101,7 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m.pedidos.size, 0);
     assert.strictEqual(m.pedidosPorCuenta.size, 0);
     assert.strictEqual(m.productosCache.size, 0);
-    assert.strictEqual(mocks.uiRegistered.length, 11);
+    assert.strictEqual(mocks.uiRegistered.length, 0);
     await m.onUnload();
   });
 

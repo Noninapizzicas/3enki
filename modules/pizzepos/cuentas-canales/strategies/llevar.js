@@ -49,26 +49,7 @@ class LlevarStrategy {
     await this.restaurarDesdeArchivo();
   }
 
-  registerUIHandlers(uiHandler) {
-    uiHandler.register('llevar', 'crear', this.handleCrearTicket.bind(this));
-    uiHandler.register('llevar', 'marcar_listo', this.handleMarcarListo.bind(this));
-    uiHandler.register('llevar', 'entregar', this.handleEntregar.bind(this));
-    uiHandler.register('llevar', 'activos', this.handleGetActivos.bind(this));
-    uiHandler.register('llevar', 'listos', this.handleGetListos.bind(this));
-    uiHandler.register('llevar', 'get', this.handleGetTicket.bind(this));
-    uiHandler.register('llevar', 'health', this.handleHealthCheck.bind(this));
-    uiHandler.register('llevar', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.modulo.logger.info('canal.llevar.ui_handlers.registered', {
-      handlers: this._uiActions
-    });
-  }
-
-  unregisterUIHandlers(uiHandler) {
-    for (const action of this._uiActions) {
-      uiHandler.unregister('llevar', action);
-    }
-  }
+  // tools.contract v1.2: el loader auto-wirea las 8 tools 'llevar.*' a uiHandler.
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));

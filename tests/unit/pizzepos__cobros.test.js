@@ -70,13 +70,13 @@ function publishedOf(mocks, name) {
   console.log('pizzepos__cobros — reescritura canonica (POC2)\n');
 
   // Group 1: Lifecycle
-  await testAsync('onLoad inicializa estado limpio + registra ui_handlers', async () => {
+  await testAsync('onLoad inicializa estado limpio sin tocar uiHandler (v1.2: el loader auto-wirea tools[])', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'cobros');
     assert.strictEqual(m.version, '3.0.0');
     assert.strictEqual(m.cobros.size, 0);
-    assert.ok(mocks.uiRegistered.length >= 8);
+    assert.strictEqual(mocks.uiRegistered.length, 0);
     await m.onUnload();
   });
 

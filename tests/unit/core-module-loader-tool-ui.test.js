@@ -292,6 +292,67 @@ async function testAsync(description, fn) {
     assert.deepStrictEqual(direct, viaUi, 'handler invocable via los 3 destinos devuelve lo mismo');
   });
 
+  // ---------- Group 4: handler path con puntos (tools.contract v1.2) ----------
+
+  await testAsync('_resolveHandlerByPath: nombre simple `handleX` → instance.handleX', async () => {
+    const loader = makeLoader();
+    const instance = { handleX: () => 'top' };
+    const { fn, owner } = loader._resolveHandlerByPath(instance, 'handleX');
+    assert.strictEqual(typeof fn, 'function');
+    assert.strictEqual(owner, instance);
+    assert.strictEqual(fn.call(owner), 'top');
+  });
+
+  await testAsync('_resolveHandlerByPath: path `strategies.mesa.handleAbrir` resuelve sub-componente y devuelve owner correcto', async () => {
+    const loader = makeLoader();
+    const mesaImpl = {
+      state: 'mesa-strategy-state',
+      handleAbrir() { return this.state; }
+    };
+    const instance = { strategies: { mesa: mesaImpl } };
+    const { fn, owner } = loader._resolveHandlerByPath(instance, 'strategies.mesa.handleAbrir');
+    assert.strictEqual(typeof fn, 'function');
+    assert.strictEqual(owner, mesaImpl, 'owner es la strategy, no el modulo padre — preserva this');
+    assert.strictEqual(fn.call(owner), 'mesa-strategy-state');
+  });
+
+  await testAsync('_resolveHandlerByPath: path inexistente devuelve fn:undefined sin lanzar', async () => {
+    const loader = makeLoader();
+    const { fn } = loader._resolveHandlerByPath({}, 'strategies.fantasma.handleX');
+    assert.strictEqual(fn, undefined);
+  });
+
+  await testAsync('registerToolsForAI: tool con handler path bindea this al sub-componente y los 3 destinos invocan el mismo metodo', async () => {
+    const bus = makeMiniBus();
+    const ui = makeMiniUiHandler();
+    const loader = makeLoader({ bus, uiHandler: ui });
+
+    // Modulo padre con strategies.mesa que tiene su estado propio.
+    const mesa = {
+      state: 'mesa-state-42',
+      async handleAbrirMesa(args) { return { status: 200, data: { from: this.state, args } }; }
+    };
+    const instance = { strategies: { mesa } };
+
+    loader.registerToolsForAI('cuentas-canales', [{
+      name: 'mesa.abrir',
+      description: 'Abre una mesa',
+      parameters: { type: 'object' },
+      handler: 'strategies.mesa.handleAbrirMesa'
+    }], instance);
+
+    assert.ok(loader.toolsRegistry.has('mesa.abrir'), 'tool registrada en registry');
+    assert.strictEqual(bus.listenerCount('mesa.abrir'), 1, 'bus event suscrito');
+    assert.ok(ui.handlers.has('mesa.abrir'), 'ui handler registrado');
+
+    // Invocacion via los 3 destinos preserva el this de la strategy.
+    const direct = await loader.toolsRegistry.get('mesa.abrir').handler({ x: 1 });
+    const viaUi = await ui.handlers.get('mesa.abrir')({ x: 1 });
+    assert.strictEqual(direct.data.from, 'mesa-state-42');
+    assert.strictEqual(viaUi.data.from, 'mesa-state-42');
+    assert.deepStrictEqual(direct, viaUi);
+  });
+
   console.log('\nTodos los tests pasaron.');
   process.exit(0);
 })().catch(err => { console.error('FATAL', err); process.exit(1); });

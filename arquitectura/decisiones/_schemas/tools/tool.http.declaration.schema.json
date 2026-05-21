@@ -11,10 +11,10 @@
   "properties": {
     "name": {
       "type": "string",
-      "pattern": "^[a-z0-9-]+\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "pattern": "^[a-z0-9-]+\\.[a-z0-9_-]+(\\.[a-z0-9_-]+)*$",
       "minLength": 3,
       "maxLength": 80,
-      "description": "Nombre canonico de la tool. Forma <module-prefix>.<entity>(.verb)? en kebab-case. Mismas reglas que tools[]. El loader deriva domain/action para uiHandler por split en el primer punto."
+      "description": "Nombre canonico de la tool. Forma <module-prefix>.<entity>(.verb)? en kebab-case (segmentos siguientes admiten kebab o snake). Mismas reglas que tools[]. El loader deriva domain/action para uiHandler por split en el primer punto."
     },
     "description": {
       "type": "string",

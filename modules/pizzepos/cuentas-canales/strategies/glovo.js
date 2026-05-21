@@ -61,29 +61,7 @@ class GlovoStrategy {
     await this.restaurarDesdeArchivo();
   }
 
-  registerUIHandlers(uiHandler) {
-    uiHandler.register('glovo', 'recibir', this.handleRecibirPedido.bind(this));
-    uiHandler.register('glovo', 'aceptar', this.handleAceptarPedido.bind(this));
-    uiHandler.register('glovo', 'rechazar', this.handleRechazarPedido.bind(this));
-    uiHandler.register('glovo', 'marcar_listo', this.handleMarcarListo.bind(this));
-    uiHandler.register('glovo', 'marcar_recogido', this.handleMarcarRecogido.bind(this));
-    uiHandler.register('glovo', 'activos', this.handleGetActivos.bind(this));
-    uiHandler.register('glovo', 'get', this.handleGetPedido.bind(this));
-    uiHandler.register('glovo', 'historial', this.handleGetHistorial.bind(this));
-    uiHandler.register('glovo', 'poll', this.handlePoll.bind(this));
-    uiHandler.register('glovo', 'health', this.handleHealthCheck.bind(this));
-    uiHandler.register('glovo', 'metrics', this.handleGetMetrics.bind(this));
-
-    this.modulo.logger.info('canal.glovo.ui_handlers.registered', {
-      handlers: this._uiActions
-    });
-  }
-
-  unregisterUIHandlers(uiHandler) {
-    for (const action of this._uiActions) {
-      uiHandler.unregister('glovo', action);
-    }
-  }
+  // tools.contract v1.2: el loader auto-wirea las 11 tools 'glovo.*' a uiHandler.
 
   async subscribeToEvents(eventBus) {
     await eventBus.subscribe('cocina.pedido_listo', this.onCocinaPedidoListo.bind(this));

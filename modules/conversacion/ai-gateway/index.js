@@ -554,12 +554,10 @@ class AiGatewayModule extends BaseModule {
     // bucle de retry infinito.
     if (!payloadProvided) {
       const err = new Error(
-        `bus.${toolName.split('.')[1]} requiere args.payload (objeto) con los campos canonicos del evento '${ev}'. ` +
-        `Recibido args.payload=${args.payload === undefined ? 'undefined' : JSON.stringify(args.payload)}. ` +
-        `Vuelve a emitir el tool call incluyendo payload con TODOS los campos requeridos por el evento.`
+        `args.payload ausente o no es objeto en ${toolName} (event='${ev}', args_keys=[${Object.keys(args).join(',')}])`
       );
       err.code = 'INVALID_INPUT';
-      err.details = { event: ev, args_keys: Object.keys(args) };
+      err.details = { kind: 'domain', event: ev, args_keys: Object.keys(args), field: 'payload' };
       throw err;
     }
 
@@ -808,17 +806,18 @@ class AiGatewayModule extends BaseModule {
         }
         if (argsParseError) {
           // No invocar el tool con args={}. Devolver error explicito al LLM
-          // — verá Error[INVALID_TOOL_ARGS] y podra reconstruir el tool call
-          // con args validos en la siguiente iteracion.
+          // (sustituye el catch silencioso previo que convertia args en {} y
+          // resultaba en invocaciones del tool con campos requeridos ausentes).
           toolResults.push({
             tool_call_id: tc.id, name: tc.name, args: {},
             status: 'error',
             error: {
               code: 'INVALID_INPUT',
-              message: `tool '${tc.name}' recibido con arguments JSON invalido: ${argsParseError.message}. ` +
-                       `El JSON tenia ${rawArgsForError.length} chars. ` +
-                       `Reemite el tool call con un objeto JSON valido y completo (no trunques campos grandes).`,
+              message: `arguments JSON invalido en tool_call '${tc.name}': ${argsParseError.message} (raw_length=${rawArgsForError.length})`,
               details: {
+                kind: 'domain',
+                tool_name: tc.name,
+                field: 'arguments',
                 parse_error: argsParseError.message,
                 raw_args_length: rawArgsForError.length,
                 raw_args_preview: rawArgsForError.slice(0, 200)

@@ -78,12 +78,19 @@ class AiGatewayModule extends BaseModule {
     this.eventBus = context.eventBus;
     this.config = context.moduleConfig || {};
     this.moduleLoader = context.moduleLoader || null;
+    // uiHandler para registrar handlers consumibles por el frontend via mqttRequest.
+    // No es obligatorio (solo afecta a Fase 5 bis nav tools); si no esta presente,
+    // las nav tools siguen disponibles al LLM pero no al frontend.
+    this.uiHandler = context.uiHandler || null;
+    this._uiRegistrations = []; // [{domain, action}] para onUnload
 
     await this._initializeProviders();
     this._loadBlueprints();
+    this._registerNavUiHandlers();
     this.logger.info('ai-gateway.loaded', {
       providers: this.providers.size,
-      blueprints: this.blueprintModules.size
+      blueprints: this.blueprintModules.size,
+      ui_handlers: this._uiRegistrations.length
     });
   }
 
@@ -98,6 +105,13 @@ class AiGatewayModule extends BaseModule {
     this.conversationCajones.clear();
     this.pageGraph.clear();
     this.conversationPageFoco.clear();
+    // Desregistrar uiHandlers que abrimos en onLoad.
+    if (this.uiHandler && Array.isArray(this._uiRegistrations)) {
+      for (const { domain, action } of this._uiRegistrations) {
+        try { this.uiHandler.unregister(domain, action); } catch (_) { /* ya limpiado */ }
+      }
+      this._uiRegistrations = [];
+    }
   }
 
   // ============================================================
@@ -782,6 +796,47 @@ class AiGatewayModule extends BaseModule {
     const err = new Error(`nav tool desconocida: ${toolName}`);
     err.code = 'INVALID_INPUT';
     throw err;
+  }
+
+  // Registra page.related y chat.cambiar_foco como uiHandlers para que el
+  // frontend pueda invocarlos via mqttRequest('page', 'related', {...}) y
+  // mqttRequest('chat', 'cambiar_foco', {...}). Llamado al final de onLoad.
+  // Idempotente: si ya estan registrados, se sobrescribe el handler.
+  _registerNavUiHandlers() {
+    if (!this.uiHandler || typeof this.uiHandler.register !== 'function') return;
+    const wrap = (toolName) => async (data) => {
+      // Adaptador: el handler de uiHandler recibe data plano. _executeNavTool
+      // espera (toolName, args, ctx). Para los uiHandlers el ctx viene del
+      // propio payload del frontend (conversation_id, project_id, etc.).
+      const ctx = {
+        conversation_id: data?.conversation_id || null,
+        project_id: data?.project_id || null,
+        user_id: data?.user_id || 'system',
+        page_id: data?.page_id || null,
+        correlation_id: data?.correlation_id || null
+      };
+      try {
+        return await this._executeNavTool(toolName, data || {}, ctx);
+      } catch (err) {
+        // UIRequestHandler espera throw con { status, code, message } para mapear a HTTP.
+        const status = err.code === 'INVALID_INPUT' ? 400
+                     : err.code === 'RESOURCE_NOT_FOUND' ? 404
+                     : 500;
+        throw { status, code: err.code || 'UNKNOWN_ERROR', message: err.message, details: err.details };
+      }
+    };
+    const entries = [
+      { domain: 'page', action: 'related',       handler: wrap('page.related') },
+      { domain: 'chat', action: 'cambiar_foco',  handler: wrap('chat.cambiar_foco') }
+    ];
+    for (const { domain, action, handler } of entries) {
+      try {
+        this.uiHandler.register(domain, action, handler);
+        this._uiRegistrations.push({ domain, action });
+      } catch (err) {
+        this.logger?.warn('ai-gateway.nav.ui-register.failed', { domain, action, error: err.message });
+      }
+    }
   }
 
   // Catalogo fijo de las 2 tools universales. Solo aparecen en el catalogo

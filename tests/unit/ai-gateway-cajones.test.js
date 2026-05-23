@@ -660,10 +660,16 @@ test('chat.cambiar_foco devuelve noop sin publicar si ya estaba en ese page', ()
 // 14. Integracion _getTools incluye nav tools en blueprints cajones
 // --------------------------------------------------
 
-test('_getTools incluye chat.cambiar_foco y page.related cuando cajones_enabled', () => {
+test('_getTools incluye chat.cambiar_foco y page.related cuando cajones_enabled (desde toolsRegistry)', () => {
   const m = makeInstance();
   m.blueprintModules.set('recetas', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: true });
-  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [] };
+  // Simular que el loader registro las nav tools (v1.2: declaradas en
+  // module.json.tools[] de ai-gateway, auto-registradas en toolsRegistry).
+  const registry = new Map([
+    ['page.related',     { name: 'page.related',     description: 'd1', parameters: { type: 'object' } }],
+    ['chat.cambiar_foco', { name: 'chat.cambiar_foco', description: 'd2', parameters: { type: 'object' } }]
+  ]);
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [], toolsRegistry: registry };
   const tools = m._getTools('recetas');
   const names = tools.map(t => t.name);
   assert.ok(names.includes('chat.cambiar_foco'), 'incluye chat.cambiar_foco');
@@ -671,14 +677,52 @@ test('_getTools incluye chat.cambiar_foco y page.related cuando cajones_enabled'
   assert.ok(names.includes('cajon.listar'), 'sigue incluyendo cajon.listar');
 });
 
+test('_getTools omite nav tools sin error si no estan registradas todavia en toolsRegistry', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('recetas', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: true });
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [], toolsRegistry: new Map() };
+  const tools = m._getTools('recetas');
+  const names = tools.map(t => t.name);
+  // Cajones + universales presentes; nav no porque el registro lo decide el loader runtime.
+  assert.ok(names.includes('cajon.abrir'));
+  assert.ok(names.includes('bus.publish'));
+  assert.ok(!names.includes('chat.cambiar_foco'));
+});
+
 test('_getTools NO incluye nav tools si cajones_enabled es false (modo legacy)', () => {
   const m = makeInstance();
   m.blueprintModules.set('recetas', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: false });
-  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [] };
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [], toolsRegistry: new Map() };
   const tools = m._getTools('recetas');
   const names = tools.map(t => t.name);
   assert.ok(!names.includes('chat.cambiar_foco'), 'NO incluye nav tools en legacy');
   assert.ok(!names.includes('page.related'), 'NO incluye nav tools en legacy');
+});
+
+test('module.json.tools[] declara page.related y chat.cambiar_foco con handler canonico (v1.2)', () => {
+  const manifest = require('../../modules/conversacion/ai-gateway/module.json');
+  const tools = manifest.tools || [];
+  const byName = Object.fromEntries(tools.map(t => [t.name, t]));
+  assert.ok(byName['page.related'], 'page.related declarada en module.json');
+  assert.strictEqual(byName['page.related'].handler, 'handlePageRelated');
+  assert.ok(byName['chat.cambiar_foco'], 'chat.cambiar_foco declarada en module.json');
+  assert.strictEqual(byName['chat.cambiar_foco'].handler, 'handleChatCambiarFoco');
+  assert.deepStrictEqual(byName['chat.cambiar_foco'].parameters.required, ['nuevo_page_id']);
+});
+
+test('handlers publicos handlePageRelated / handleChatCambiarFoco delegan a _executeNavTool', async () => {
+  const m = makeInstance();
+  m.eventBus = { publish() {} };
+  setupBlueprintsWithReferences(m);
+  m._buildPageGraph();
+  const r = await m.handlePageRelated({ page_id: 'escandallo' });
+  assert.strictEqual(r.page_id, 'escandallo');
+  assert.ok(Array.isArray(r.related));
+
+  m.blueprintModules.set('viabilidad', { child: {}, cajonesEnabled: true });
+  const r2 = await m.handleChatCambiarFoco({ nuevo_page_id: 'viabilidad', conversation_id: 'c1' });
+  assert.strictEqual(r2.status, 'ok');
+  assert.strictEqual(r2.nuevo_page_id, 'viabilidad');
 });
 
 // --------------------------------------------------

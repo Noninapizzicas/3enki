@@ -78,19 +78,12 @@ class AiGatewayModule extends BaseModule {
     this.eventBus = context.eventBus;
     this.config = context.moduleConfig || {};
     this.moduleLoader = context.moduleLoader || null;
-    // uiHandler para registrar handlers consumibles por el frontend via mqttRequest.
-    // No es obligatorio (solo afecta a Fase 5 bis nav tools); si no esta presente,
-    // las nav tools siguen disponibles al LLM pero no al frontend.
-    this.uiHandler = context.uiHandler || null;
-    this._uiRegistrations = []; // [{domain, action}] para onUnload
 
     await this._initializeProviders();
     this._loadBlueprints();
-    this._registerNavUiHandlers();
     this.logger.info('ai-gateway.loaded', {
       providers: this.providers.size,
-      blueprints: this.blueprintModules.size,
-      ui_handlers: this._uiRegistrations.length
+      blueprints: this.blueprintModules.size
     });
   }
 
@@ -105,13 +98,6 @@ class AiGatewayModule extends BaseModule {
     this.conversationCajones.clear();
     this.pageGraph.clear();
     this.conversationPageFoco.clear();
-    // Desregistrar uiHandlers que abrimos en onLoad.
-    if (this.uiHandler && Array.isArray(this._uiRegistrations)) {
-      for (const { domain, action } of this._uiRegistrations) {
-        try { this.uiHandler.unregister(domain, action); } catch (_) { /* ya limpiado */ }
-      }
-      this._uiRegistrations = [];
-    }
   }
 
   // ============================================================
@@ -230,9 +216,19 @@ class AiGatewayModule extends BaseModule {
     if (page_id && this.blueprintModules.has(page_id)) {
       const bp = this.blueprintModules.get(page_id);
       const universal = this._getBlueprintUniversalTools();
-      return bp.cajonesEnabled
-        ? [...this._getCajonesTools(), ...this._getNavTools(), ...universal]
-        : universal;
+      if (!bp.cajonesEnabled) return universal;
+      // Cajones-enabled: catalogo + nav tools (page.related, chat.cambiar_foco)
+      // + universales. Las nav vienen desde toolsRegistry (declaradas en
+      // module.json.tools[] de ai-gateway, single source v1.2) — no duplicamos
+      // shape inline. Si no estan registradas (loader aun no las wireó), seguimos
+      // sin ellas — el catalogo y las universales bastan.
+      const navTools = [];
+      const registry = this.moduleLoader?.toolsRegistry;
+      for (const navName of ['page.related', 'chat.cambiar_foco']) {
+        const entry = registry?.get?.(navName);
+        if (entry) navTools.push({ name: entry.name, description: entry.description, parameters: entry.parameters });
+      }
+      return [...this._getCajonesTools(), ...navTools, ...universal];
     }
     if (!page_id) return all;
     // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
@@ -689,36 +685,36 @@ class AiGatewayModule extends BaseModule {
     return PRIMITIVE.has(prefix);
   }
 
-  // Tools de Fase 5 bis. Mismo opt-in que cajones (solo blueprints con
-  // cajones_enabled). chat.cambiar_foco mueve la pagina activa de la
-  // conversacion; page.related devuelve el grafo de paginas relacionadas.
-  _getNavTools() {
-    return [
-      {
-        name: 'chat.cambiar_foco',
-        description: 'Mueve la pagina activa de esta conversacion a otro page_id cuando la conversacion claramente cambia de dominio (ej. estabas en recetas y el usuario pregunta algo de viabilidad). Publica chat.foco.cambiado al bus para que el frontend haga goto() y la barra lateral se actualice. UNA operacion por turno — no la encadenes con cajon.abrir ni bus.publish. Devuelve { status: "ok", nuevo_page_id }.',
-        parameters: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            nuevo_page_id: { type: 'string', description: 'page_id de destino. Debe corresponder a un modulo blueprint registrado.' },
-            motivo: { type: 'string', description: 'Opcional. 1 frase explicando por que cambias de foco. Se incluye en el banner del chat para transparencia.' }
-          },
-          required: ['nuevo_page_id']
-        }
-      },
-      {
-        name: 'page.related',
-        description: 'Devuelve las paginas relacionadas con un page_id (consumidas por el page y consumidoras del page) segun el grafo auto-extraido de los pseudocodigos de los blueprints + paginas_relacionadas declaradas. Lectura pura. Util para sugerir destinos cercanos cuando el usuario pregunta "donde puedo ver X".',
-        parameters: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            page_id: { type: 'string', description: 'page_id del que pedir relaciones. Si se omite, usa el de la conversacion activa.' }
-          }
-        }
-      }
-    ];
+  // Handlers PUBLICOS (declarados en module.json.tools[]) — el loader los
+  // auto-registra en moduleLoader.toolsRegistry, uiHandler (mqttRequest), y
+  // bus (auto-suscripcion al evento <toolName>.request). Single source of
+  // truth: el shape canonico de la tool vive en module.json, no inline.
+  //
+  // Reciben `data` plano del caller (LLM tool call, frontend mqttRequest,
+  // o evento del bus). _executeNavTool centraliza la logica + validacion.
+
+  async handlePageRelated(data) {
+    const args = (data && typeof data === 'object') ? data : {};
+    const ctx = {
+      conversation_id: args.conversation_id || null,
+      project_id: args.project_id || null,
+      user_id: args.user_id || 'system',
+      page_id: args.page_id || null,
+      correlation_id: args.correlation_id || null
+    };
+    return this._executeNavTool('page.related', args, ctx);
+  }
+
+  async handleChatCambiarFoco(data) {
+    const args = (data && typeof data === 'object') ? data : {};
+    const ctx = {
+      conversation_id: args.conversation_id || null,
+      project_id: args.project_id || null,
+      user_id: args.user_id || 'system',
+      page_id: args.page_id || null,
+      correlation_id: args.correlation_id || null
+    };
+    return this._executeNavTool('chat.cambiar_foco', args, ctx);
   }
 
   _executeNavTool(toolName, rawArgs, ctx) {
@@ -796,47 +792,6 @@ class AiGatewayModule extends BaseModule {
     const err = new Error(`nav tool desconocida: ${toolName}`);
     err.code = 'INVALID_INPUT';
     throw err;
-  }
-
-  // Registra page.related y chat.cambiar_foco como uiHandlers para que el
-  // frontend pueda invocarlos via mqttRequest('page', 'related', {...}) y
-  // mqttRequest('chat', 'cambiar_foco', {...}). Llamado al final de onLoad.
-  // Idempotente: si ya estan registrados, se sobrescribe el handler.
-  _registerNavUiHandlers() {
-    if (!this.uiHandler || typeof this.uiHandler.register !== 'function') return;
-    const wrap = (toolName) => async (data) => {
-      // Adaptador: el handler de uiHandler recibe data plano. _executeNavTool
-      // espera (toolName, args, ctx). Para los uiHandlers el ctx viene del
-      // propio payload del frontend (conversation_id, project_id, etc.).
-      const ctx = {
-        conversation_id: data?.conversation_id || null,
-        project_id: data?.project_id || null,
-        user_id: data?.user_id || 'system',
-        page_id: data?.page_id || null,
-        correlation_id: data?.correlation_id || null
-      };
-      try {
-        return await this._executeNavTool(toolName, data || {}, ctx);
-      } catch (err) {
-        // UIRequestHandler espera throw con { status, code, message } para mapear a HTTP.
-        const status = err.code === 'INVALID_INPUT' ? 400
-                     : err.code === 'RESOURCE_NOT_FOUND' ? 404
-                     : 500;
-        throw { status, code: err.code || 'UNKNOWN_ERROR', message: err.message, details: err.details };
-      }
-    };
-    const entries = [
-      { domain: 'page', action: 'related',       handler: wrap('page.related') },
-      { domain: 'chat', action: 'cambiar_foco',  handler: wrap('chat.cambiar_foco') }
-    ];
-    for (const { domain, action, handler } of entries) {
-      try {
-        this.uiHandler.register(domain, action, handler);
-        this._uiRegistrations.push({ domain, action });
-      } catch (err) {
-        this.logger?.warn('ai-gateway.nav.ui-register.failed', { domain, action, error: err.message });
-      }
-    }
   }
 
   // Catalogo fijo de las 2 tools universales. Solo aparecen en el catalogo

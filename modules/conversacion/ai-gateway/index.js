@@ -58,6 +58,15 @@ class AiGatewayModule extends BaseModule {
     // conversation_id → [{nombre, turn}] historial de cajones abiertos para ranking por recencia.
     // Limitado a CAJONES_HISTORY_MAX entries por conversacion (FIFO).
     this.conversationCajones = new Map();
+
+    // cajones Fase 5 bis (foco dinamico + grafo de paginas relacionadas)
+    // Grafo dirigido { page_id: { consumes: Set<page_id>, consumed_by: Set<page_id> } }
+    // construido al arrancar parseando publishAndWait('<mod>.<accion>.request', ...)
+    // en el pseudocodigo de los blueprints + paginas_relacionadas declarado en module.json.
+    this.pageGraph = new Map();
+    // conversation_id → page_id "foco" actualizado por chat.cambiar_foco. Si no hay
+    // entry, se respeta el page_id que viene en cada request del chat.
+    this.conversationPageFoco = new Map();
   }
 
   // ============================================================
@@ -87,6 +96,8 @@ class AiGatewayModule extends BaseModule {
     this.pendingFsReads.clear();
     this.cajonesCatalog.clear();
     this.conversationCajones.clear();
+    this.pageGraph.clear();
+    this.conversationPageFoco.clear();
   }
 
   // ============================================================
@@ -205,7 +216,9 @@ class AiGatewayModule extends BaseModule {
     if (page_id && this.blueprintModules.has(page_id)) {
       const bp = this.blueprintModules.get(page_id);
       const universal = this._getBlueprintUniversalTools();
-      return bp.cajonesEnabled ? [...this._getCajonesTools(), ...universal] : universal;
+      return bp.cajonesEnabled
+        ? [...this._getCajonesTools(), ...this._getNavTools(), ...universal]
+        : universal;
     }
     if (!page_id) return all;
     // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
@@ -290,6 +303,7 @@ class AiGatewayModule extends BaseModule {
   _loadBlueprints() {
     this.blueprintModules.clear();
     this.cajonesCatalog.clear();
+    this.pageGraph.clear();
     if (!this.moduleLoader?.loadedModules) {
       this.logger.warn('ai-gateway.blueprints.unavailable', {
         reason: 'moduleLoader.loadedModules no disponible'
@@ -345,6 +359,16 @@ class AiGatewayModule extends BaseModule {
           error: err.message
         });
       }
+    }
+    // Construir grafo de paginas relacionadas tras cargar todos los blueprints.
+    try {
+      this._buildPageGraph();
+      this.logger.info('ai-gateway.page-graph.built', {
+        nodes: this.pageGraph.size,
+        edges: Array.from(this.pageGraph.values()).reduce((s, v) => s + v.consumes.size, 0)
+      });
+    } catch (err) {
+      this.logger.warn('ai-gateway.page-graph.failed', { error: err.message });
     }
   }
 
@@ -585,6 +609,177 @@ class AiGatewayModule extends BaseModule {
     }
     // No deberia alcanzarse — _executeToolCall solo enruta cajon.listar/cajon.abrir.
     const err = new Error(`cajon tool desconocida: ${toolName}`);
+    err.code = 'INVALID_INPUT';
+    throw err;
+  }
+
+  // ============================================================
+  // cajones Fase 5 bis — grafo de paginas relacionadas + foco dinamico
+  // ============================================================
+
+  // Parsea pseudocodigo de todos los blueprints cargados, extrae referencias a
+  // publishAndWait('<mod>.<accion>.request', ...) — eso dice que el modulo
+  // CONSUME el mod referenciado. Override opcional via module.json.paginas_relacionadas.
+  // El grafo se sirve a la tool page.related y al frontend para la barra lateral.
+  _buildPageGraph() {
+    this.pageGraph.clear();
+    const PA_RE = /publishAndWait\s*\(\s*['"]([a-z][a-z0-9-]*)\.[\w.]+\.request['"]/gi;
+    const ensure = (page) => {
+      if (!this.pageGraph.has(page)) this.pageGraph.set(page, { consumes: new Set(), consumed_by: new Set() });
+      return this.pageGraph.get(page);
+    };
+    for (const [page_id, ctx] of this.blueprintModules.entries()) {
+      ensure(page_id);
+      // 1. Extraer referencias del pseudocodigo del child.
+      const ops = ctx.child?.operaciones || {};
+      for (const op of Object.values(ops)) {
+        const pseudo = op?.pseudocodigo;
+        if (!Array.isArray(pseudo)) continue;
+        for (const step of pseudo) {
+          if (typeof step !== 'string') continue;
+          PA_RE.lastIndex = 0;
+          let m;
+          while ((m = PA_RE.exec(step)) !== null) {
+            const target = m[1];
+            // Filtrar primitivas globales del bus (fs, project, llm, ai, agent...) — no
+            // son "paginas relacionadas", son utilidades transversales. Solo nos
+            // interesan modulos del dominio que el usuario navegaria.
+            if (this._isPrimitivePrefix(target)) continue;
+            if (target === page_id) continue;
+            ensure(page_id).consumes.add(target);
+            ensure(target).consumed_by.add(page_id);
+          }
+        }
+      }
+      // 2. Override declarativo: module.json.paginas_relacionadas anyade aristas
+      //    bidireccionales (afinidad tematica que no se infiere del codigo).
+      const declaradas = Array.isArray(ctx.manifest?.paginas_relacionadas) ? ctx.manifest.paginas_relacionadas : [];
+      for (const target of declaradas) {
+        if (typeof target !== 'string' || target === page_id) continue;
+        ensure(page_id).consumes.add(target);
+        ensure(target).consumed_by.add(page_id);
+      }
+    }
+  }
+
+  // Prefijos del bus que NO cuentan como "paginas" para el grafo (son primitivas
+  // o utilidades transversales que muchos modulos consumen, no destinos de
+  // navegacion del usuario).
+  _isPrimitivePrefix(prefix) {
+    const PRIMITIVE = new Set([
+      'fs', 'project', 'llm', 'ai', 'agent', 'credential', 'security',
+      'bus', 'cajon', 'chat', 'page', 'observability', 'metrics', 'log',
+      'plugin', 'device', 'channel', 'firmware', 'gateway', 'composition',
+      'database', 'scheduler', 'http', 'embedding'
+    ]);
+    return PRIMITIVE.has(prefix);
+  }
+
+  // Tools de Fase 5 bis. Mismo opt-in que cajones (solo blueprints con
+  // cajones_enabled). chat.cambiar_foco mueve la pagina activa de la
+  // conversacion; page.related devuelve el grafo de paginas relacionadas.
+  _getNavTools() {
+    return [
+      {
+        name: 'chat.cambiar_foco',
+        description: 'Mueve la pagina activa de esta conversacion a otro page_id cuando la conversacion claramente cambia de dominio (ej. estabas en recetas y el usuario pregunta algo de viabilidad). Publica chat.foco.cambiado al bus para que el frontend haga goto() y la barra lateral se actualice. UNA operacion por turno — no la encadenes con cajon.abrir ni bus.publish. Devuelve { status: "ok", nuevo_page_id }.',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            nuevo_page_id: { type: 'string', description: 'page_id de destino. Debe corresponder a un modulo blueprint registrado.' },
+            motivo: { type: 'string', description: 'Opcional. 1 frase explicando por que cambias de foco. Se incluye en el banner del chat para transparencia.' }
+          },
+          required: ['nuevo_page_id']
+        }
+      },
+      {
+        name: 'page.related',
+        description: 'Devuelve las paginas relacionadas con un page_id (consumidas por el page y consumidoras del page) segun el grafo auto-extraido de los pseudocodigos de los blueprints + paginas_relacionadas declaradas. Lectura pura. Util para sugerir destinos cercanos cuando el usuario pregunta "donde puedo ver X".',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            page_id: { type: 'string', description: 'page_id del que pedir relaciones. Si se omite, usa el de la conversacion activa.' }
+          }
+        }
+      }
+    ];
+  }
+
+  _executeNavTool(toolName, rawArgs, ctx) {
+    const args = (rawArgs && typeof rawArgs === 'object') ? rawArgs : {};
+    if (toolName === 'page.related') {
+      const target = (typeof args.page_id === 'string' && args.page_id.trim()) || ctx.page_id || null;
+      if (!target) {
+        const err = new Error("page.related requiere 'page_id' (o un page_id activo en la conversacion)");
+        err.code = 'INVALID_INPUT';
+        throw err;
+      }
+      const node = this.pageGraph.get(target);
+      if (!node) {
+        // No es un error duro — el page existe en el sistema pero sin aristas
+        // detectadas. Devolver lista vacia coherente con el shape esperado.
+        return { page_id: target, consumes: [], consumed_by: [], related: [] };
+      }
+      // Filtrar a solo paginas NAVEGABLES (blueprints registrados). El grafo
+      // tambien recoge nodos que aparecen en pseudocodigos pero no son
+      // blueprints (ej. eventos como 'mercadona.*' o 'carta.*' apuntan a un
+      // prefijo que no es un page_id navegable). Devolverlos al LLM lo lleva
+      // a intentar chat.cambiar_foco invalido. Mejor solo lo invocable.
+      const isNav = (p) => this.blueprintModules.has(p);
+      const consumes = Array.from(node.consumes).filter(isNav).sort();
+      const consumed_by = Array.from(node.consumed_by).filter(isNav).sort();
+      const related = Array.from(new Set([...consumes, ...consumed_by])).sort();
+      return { page_id: target, consumes, consumed_by, related };
+    }
+    if (toolName === 'chat.cambiar_foco') {
+      const nuevo = typeof args.nuevo_page_id === 'string' ? args.nuevo_page_id.trim() : '';
+      if (!nuevo) {
+        const err = new Error("chat.cambiar_foco requiere 'nuevo_page_id' (string no vacio)");
+        err.code = 'INVALID_INPUT';
+        throw err;
+      }
+      // Validar que el destino existe como blueprint registrado. Si no, devolver
+      // RESOURCE_NOT_FOUND para que el LLM se rectifique o pida confirmacion al
+      // usuario en lugar de mandarlo a un page fantasma.
+      if (!this.blueprintModules.has(nuevo)) {
+        const err = new Error(`page '${nuevo}' no esta registrado como modulo blueprint en este sistema`);
+        err.code = 'RESOURCE_NOT_FOUND';
+        err.details = { kind: 'domain', page_id: nuevo, available: Array.from(this.blueprintModules.keys()) };
+        throw err;
+      }
+      const anterior = this.conversationPageFoco.get(ctx.conversation_id) || ctx.page_id || null;
+      if (anterior === nuevo) {
+        // No-op observable: ya estamos en ese page. Devolver ok pero no
+        // publicar evento (el frontend no necesita rehacer goto).
+        return { status: 'noop', nuevo_page_id: nuevo, anterior, reason: 'foco ya estaba en ese page_id' };
+      }
+      this.conversationPageFoco.set(ctx.conversation_id, nuevo);
+      // Publish chat.foco.cambiado para que frontend reaccione (goto + UI banner).
+      // Sigue el shape canonico de events.contract: event_id+event_type+timestamp+
+      // source+data+metadata. data: campos del cambio + correlacion del chat.
+      const eventPayload = {
+        conversation_id: ctx.conversation_id || null,
+        project_id: ctx.project_id || null,
+        user_id: ctx.user_id || 'system',
+        anterior,
+        nuevo,
+        motivo: typeof args.motivo === 'string' && args.motivo.trim() ? args.motivo.trim() : null,
+        correlation_id: ctx.correlation_id || ctx.conversation_id || null,
+        request_id: crypto.randomUUID(),
+        timestamp: new Date().toISOString()
+      };
+      try {
+        this.eventBus.publish('chat.foco.cambiado', eventPayload);
+      } catch (err) {
+        // No revertir el cambio interno — el LLM ya tomo la decision y el frontend
+        // se sincronizara al siguiente turno. Logueamos y seguimos.
+        this.logger?.warn('ai-gateway.foco.publish.failed', { error: err.message });
+      }
+      return { status: 'ok', nuevo_page_id: nuevo, anterior, motivo: eventPayload.motivo };
+    }
+    const err = new Error(`nav tool desconocida: ${toolName}`);
     err.code = 'INVALID_INPUT';
     throw err;
   }
@@ -884,6 +1079,11 @@ class AiGatewayModule extends BaseModule {
     if (toolName === 'cajon.listar' || toolName === 'cajon.abrir') {
       return this._executeCajonTool(toolName, args, ctx);
     }
+    // cajones Fase 5 bis: chat.cambiar_foco publica evento al bus; page.related
+    // sirve del grafo en memoria. Interceptadas antes del path canonico.
+    if (toolName === 'chat.cambiar_foco' || toolName === 'page.related') {
+      return this._executeNavTool(toolName, args, ctx);
+    }
     // Enriquecemos args con los 9 campos del contrato chat-io. Los args que
     // venían del LLM (tool_call.arguments) tienen prioridad — solo rellenamos
     // los que no estén ya en args. Esto garantiza que cualquier handler de
@@ -958,10 +1158,16 @@ class AiGatewayModule extends BaseModule {
     // blueprint manda primero por contrato del modelo de ejecucion.
     // cajones-context-partitioning: si cajones_enabled, el system prompt se
     // construye por turno con catalogo rankeado en lugar del child entero.
-    const blueprintCtx = page_id ? this.blueprintModules.get(page_id) : null;
+    // Fase 5 bis: si en un turno previo el LLM cambio el foco via chat.cambiar_foco,
+    // ese page_id "pegajoso" tiene prioridad sobre el que viene en el request,
+    // hasta que el frontend lo sincronice (manda el page_id correcto) o el
+    // LLM lo vuelva a cambiar.
+    const focoPersistido = this.conversationPageFoco.get(conversation_id);
+    const effectivePageId = focoPersistido || page_id;
+    const blueprintCtx = effectivePageId ? this.blueprintModules.get(effectivePageId) : null;
     const blueprintPrompt = blueprintCtx
       ? (blueprintCtx.cajonesEnabled
-          ? this._buildCajonesSystemPrompt(blueprintCtx, conversation_id, page_id)
+          ? this._buildCajonesSystemPrompt(blueprintCtx, conversation_id, effectivePageId)
           : blueprintCtx.systemPrompt)
       : null;
     const effectiveSystem = blueprintPrompt
@@ -991,8 +1197,11 @@ class AiGatewayModule extends BaseModule {
     // Contexto completo del chat (9 campos del contrato chat-io) que se propaga
     // a cada tool call. Cualquier handler de tool de un módulo lo recibe en sus
     // args y puede propagarlo al evento agent.execute.request si invoca un agente.
+    // page_id efectivo (con foco persistido) tambien se propaga al chatContext
+    // para que cajon.*, page.related y chat.cambiar_foco operen sobre el page
+    // que el LLM realmente ve en su system prompt.
     const chatContext = {
-      project_id, user_id, page_id, conversation_id, correlation_id,
+      project_id, user_id, page_id: effectivePageId, conversation_id, correlation_id,
       settings, attachments, prompt, intencion, context
     };
 

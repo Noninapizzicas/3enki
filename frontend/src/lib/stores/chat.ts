@@ -10,6 +10,7 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
+import { goto } from '$app/navigation';
 import { publish, subscribe, mqttRequest } from '$lib/ui-core';
 import type { Message, Attachment } from '$lib/ui-core';
 import { openPanel } from '$lib/ui-core/registry';
@@ -488,6 +489,24 @@ export function initChatSubscriptions(): () => void {
   unsubs.push(subscribe('conversation/loaded', (_, payload) => {
     const data = payload as { messages: Message[] };
     messages.set(data.messages || []);
+  }));
+
+  // cajones Fase 5 bis: el LLM movio el foco a otro page_id (chat.foco.cambiado
+  // publicado por ai-gateway tras una tool call chat.cambiar_foco). Filtramos
+  // por conversation_id activa y hacemos goto a la ruta del nuevo page,
+  // manteniendo el segmento de proyecto de la URL actual.
+  unsubs.push(subscribe('chat.foco.cambiado', (envelope: unknown) => {
+    const data = (envelope as { data?: { conversation_id?: string; nuevo?: string; motivo?: string | null } })?.data;
+    if (!data?.nuevo) return;
+    const activeConv = get(conversationId);
+    if (!activeConv || data.conversation_id !== activeConv) return; // No es nuestra conversacion
+    // Conservar el primer segmento de la URL (project param) y reemplazar el segundo (page_id).
+    if (typeof window === 'undefined') return;
+    const segments = window.location.pathname.split('/').filter(Boolean);
+    const projectParam = segments[0] || '';
+    const href = projectParam ? `/${projectParam}/${data.nuevo}` : `/${data.nuevo}`;
+    if (data.motivo) notifyInfo(`moviendo a ${data.nuevo}: ${data.motivo}`);
+    goto(href);
   }));
 
   // Retornar cleanup

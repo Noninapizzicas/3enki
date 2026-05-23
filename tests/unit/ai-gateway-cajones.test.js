@@ -438,9 +438,291 @@ test('onUnload limpia cajonesCatalog y conversationCajones sin leak', async () =
   m.pendingFsReads = new Map();
   m.cajonesCatalog.set('x', [{}]);
   m.conversationCajones.set('c1', [{ nombre: 'x' }]);
+  m.pageGraph.set('x', { consumes: new Set(['y']), consumed_by: new Set() });
+  m.conversationPageFoco.set('c1', 'x');
   await m.onUnload();
   assert.strictEqual(m.cajonesCatalog.size, 0);
   assert.strictEqual(m.conversationCajones.size, 0);
+  assert.strictEqual(m.pageGraph.size, 0);
+  assert.strictEqual(m.conversationPageFoco.size, 0);
+});
+
+// --------------------------------------------------
+// 11. _buildPageGraph (Fase 5 bis)
+// --------------------------------------------------
+
+function setupBlueprintsWithReferences(m) {
+  // recetas: estado_persistente propio, no consume otros modulos via publishAndWait
+  m.blueprintModules.set('recetas', {
+    manifest: {},
+    child: { operaciones: { listar: { pseudocodigo: ["raw = await publishAndWait('fs.read.request', {...})"] } } },
+    parent: null, systemPrompt: '', cajonesEnabled: true
+  });
+  // escandallo consume recetas + mercadona-api
+  m.blueprintModules.set('escandallo', {
+    manifest: {},
+    child: { operaciones: { calcular: { pseudocodigo: [
+      "raw = await publishAndWait('recetas.obtener.request', {...})",
+      "prod = await publishAndWait('mercadona-api.precio.request', {...})"
+    ] } } },
+    parent: null, systemPrompt: '', cajonesEnabled: true
+  });
+  // viabilidad consume escandallo
+  m.blueprintModules.set('viabilidad', {
+    manifest: {},
+    child: { operaciones: { evaluar: { pseudocodigo: ["c = await publishAndWait('escandallo.calcular.request', {...})"] } } },
+    parent: null, systemPrompt: '', cajonesEnabled: true
+  });
+}
+
+test('_buildPageGraph extrae aristas correctas del pseudocodigo', () => {
+  const m = makeInstance();
+  setupBlueprintsWithReferences(m);
+  m._buildPageGraph();
+  // recetas: no consume nada (fs.* es primitiva, se filtra), pero es consumido por escandallo
+  const recetasNode = m.pageGraph.get('recetas');
+  assert.ok(recetasNode, 'recetas debe existir en grafo');
+  assert.strictEqual(recetasNode.consumes.size, 0, 'recetas no consume otros modulos (fs.* es primitiva)');
+  assert.ok(recetasNode.consumed_by.has('escandallo'), 'escandallo consume recetas');
+  // escandallo consume recetas y mercadona-api, consumido por viabilidad
+  const eNode = m.pageGraph.get('escandallo');
+  assert.ok(eNode.consumes.has('recetas'));
+  assert.ok(eNode.consumes.has('mercadona-api'));
+  assert.ok(eNode.consumed_by.has('viabilidad'));
+});
+
+test('_buildPageGraph filtra prefijos primitivos (fs, project, llm, ai, etc.)', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('test', {
+    manifest: {},
+    child: { operaciones: { x: { pseudocodigo: [
+      "await publishAndWait('fs.read.request', {...})",
+      "await publishAndWait('project.get.request', {...})",
+      "await publishAndWait('llm.complete.request', {...})",
+      "await publishAndWait('ai.chat.request', {...})",
+      "await publishAndWait('credential.resolve.request', {...})",
+      "await publishAndWait('agent.execute.request', {...})"
+    ] } } },
+    parent: null, systemPrompt: '', cajonesEnabled: true
+  });
+  m._buildPageGraph();
+  assert.strictEqual(m.pageGraph.get('test').consumes.size, 0, 'todas las refs son primitivas, no aristas de grafo');
+});
+
+test('_buildPageGraph respeta override paginas_relacionadas del manifest', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('a', {
+    manifest: { paginas_relacionadas: ['b', 'c'] },
+    child: { operaciones: {} },
+    parent: null, systemPrompt: '', cajonesEnabled: true
+  });
+  m.blueprintModules.set('b', { manifest: {}, child: { operaciones: {} }, parent: null, systemPrompt: '', cajonesEnabled: true });
+  m.blueprintModules.set('c', { manifest: {}, child: { operaciones: {} }, parent: null, systemPrompt: '', cajonesEnabled: true });
+  m._buildPageGraph();
+  assert.ok(m.pageGraph.get('a').consumes.has('b'));
+  assert.ok(m.pageGraph.get('a').consumes.has('c'));
+  assert.ok(m.pageGraph.get('b').consumed_by.has('a'), 'paginas_relacionadas crea aristas bidireccionales');
+});
+
+test('_buildPageGraph no crea self-edges aunque el pseudocodigo se autoreference', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('foo', {
+    manifest: {},
+    child: { operaciones: { x: { pseudocodigo: ["await publishAndWait('foo.bar.request', {...})"] } } },
+    parent: null, systemPrompt: '', cajonesEnabled: true
+  });
+  m._buildPageGraph();
+  assert.strictEqual(m.pageGraph.get('foo').consumes.size, 0, 'no self-edges');
+});
+
+// --------------------------------------------------
+// 12. _executeNavTool — page.related
+// --------------------------------------------------
+
+test('page.related devuelve consumes + consumed_by + related — solo NAVEGABLES (blueprints registrados)', () => {
+  const m = makeInstance();
+  setupBlueprintsWithReferences(m);
+  m._buildPageGraph();
+  const r = m._executeNavTool('page.related', { page_id: 'escandallo' }, { conversation_id: 'c1' });
+  assert.strictEqual(r.page_id, 'escandallo');
+  // mercadona-api no esta registrado como blueprint -> se filtra de consumes.
+  assert.deepStrictEqual(r.consumes, ['recetas']);
+  assert.deepStrictEqual(r.consumed_by, ['viabilidad']);
+  assert.ok(r.related.includes('recetas') && r.related.includes('viabilidad'));
+  assert.ok(!r.related.includes('mercadona-api'), 'no incluir nodos no navegables (no son blueprints registrados)');
+});
+
+test('page.related filtra prefijos del pseudocodigo que no son blueprints navegables', () => {
+  const m = makeInstance();
+  // foo (blueprint navegable) consume bar-no-blueprint via publishAndWait
+  m.blueprintModules.set('foo', {
+    manifest: {},
+    child: { operaciones: { x: { pseudocodigo: ["await publishAndWait('bar-no-blueprint.do.request', {...})"] } } },
+    parent: null, systemPrompt: '', cajonesEnabled: true
+  });
+  m._buildPageGraph();
+  // El grafo SI registra la arista (puede ser util para audit/tooling),
+  // pero page.related la filtra porque bar-no-blueprint no es invocable
+  // via chat.cambiar_foco.
+  assert.ok(m.pageGraph.get('foo').consumes.has('bar-no-blueprint'), 'grafo interno mantiene la arista');
+  const r = m._executeNavTool('page.related', { page_id: 'foo' }, { conversation_id: 'c1' });
+  assert.deepStrictEqual(r.consumes, [], 'page.related filtra no-navegables');
+  assert.deepStrictEqual(r.related, []);
+});
+
+test('page.related sin page_id en args usa ctx.page_id', () => {
+  const m = makeInstance();
+  setupBlueprintsWithReferences(m);
+  m._buildPageGraph();
+  const r = m._executeNavTool('page.related', {}, { page_id: 'viabilidad', conversation_id: 'c1' });
+  assert.strictEqual(r.page_id, 'viabilidad');
+  assert.ok(r.consumes.includes('escandallo'));
+});
+
+test('page.related con page_id sin aristas devuelve listas vacias coherentes', () => {
+  const m = makeInstance();
+  m.pageGraph = new Map();
+  const r = m._executeNavTool('page.related', { page_id: 'huerfano' }, { conversation_id: 'c1' });
+  assert.deepStrictEqual(r, { page_id: 'huerfano', consumes: [], consumed_by: [], related: [] });
+});
+
+test('page.related sin page_id ni ctx.page_id devuelve INVALID_INPUT', () => {
+  const m = makeInstance();
+  assert.throws(
+    () => m._executeNavTool('page.related', {}, { conversation_id: 'c1' }),
+    err => err.code === 'INVALID_INPUT'
+  );
+});
+
+// --------------------------------------------------
+// 13. _executeNavTool — chat.cambiar_foco
+// --------------------------------------------------
+
+test('chat.cambiar_foco valida nuevo_page_id presente', () => {
+  const m = makeInstance();
+  m.eventBus = { publish() {} };
+  assert.throws(
+    () => m._executeNavTool('chat.cambiar_foco', {}, { conversation_id: 'c1' }),
+    err => err.code === 'INVALID_INPUT'
+  );
+});
+
+test('chat.cambiar_foco devuelve RESOURCE_NOT_FOUND si destino no es blueprint registrado', () => {
+  const m = makeInstance();
+  m.eventBus = { publish() {} };
+  m.blueprintModules.set('recetas', { child: {}, cajonesEnabled: true });
+  assert.throws(
+    () => m._executeNavTool('chat.cambiar_foco', { nuevo_page_id: 'desconocido' }, { conversation_id: 'c1' }),
+    err => err.code === 'RESOURCE_NOT_FOUND'
+  );
+});
+
+test('chat.cambiar_foco actualiza conversationPageFoco + publica chat.foco.cambiado', () => {
+  const m = makeInstance();
+  const published = [];
+  m.eventBus = { publish(ev, p) { published.push({ ev, p }); } };
+  m.blueprintModules.set('recetas', { child: {}, cajonesEnabled: true });
+  m.blueprintModules.set('viabilidad', { child: {}, cajonesEnabled: true });
+  const r = m._executeNavTool('chat.cambiar_foco', { nuevo_page_id: 'viabilidad', motivo: 'pregunta de coste mensual' }, {
+    conversation_id: 'c1', page_id: 'recetas', project_id: 'p1', user_id: 'u1', correlation_id: 'corr-1'
+  });
+  assert.strictEqual(r.status, 'ok');
+  assert.strictEqual(r.nuevo_page_id, 'viabilidad');
+  assert.strictEqual(r.anterior, 'recetas');
+  assert.strictEqual(m.conversationPageFoco.get('c1'), 'viabilidad');
+  assert.strictEqual(published.length, 1);
+  assert.strictEqual(published[0].ev, 'chat.foco.cambiado');
+  const data = published[0].p;
+  assert.strictEqual(data.conversation_id, 'c1');
+  assert.strictEqual(data.anterior, 'recetas');
+  assert.strictEqual(data.nuevo, 'viabilidad');
+  assert.strictEqual(data.motivo, 'pregunta de coste mensual');
+  assert.strictEqual(data.project_id, 'p1');
+  assert.strictEqual(data.correlation_id, 'corr-1');
+  assert.ok(data.request_id, 'genera request_id');
+  assert.ok(data.timestamp, 'genera timestamp');
+});
+
+test('chat.cambiar_foco devuelve noop sin publicar si ya estaba en ese page', () => {
+  const m = makeInstance();
+  const published = [];
+  m.eventBus = { publish(ev, p) { published.push({ ev, p }); } };
+  m.blueprintModules.set('recetas', { child: {}, cajonesEnabled: true });
+  m.conversationPageFoco.set('c1', 'recetas');
+  const r = m._executeNavTool('chat.cambiar_foco', { nuevo_page_id: 'recetas' }, {
+    conversation_id: 'c1', page_id: 'recetas'
+  });
+  assert.strictEqual(r.status, 'noop');
+  assert.strictEqual(published.length, 0, 'no publica si no hay cambio efectivo');
+});
+
+// --------------------------------------------------
+// 14. Integracion _getTools incluye nav tools en blueprints cajones
+// --------------------------------------------------
+
+test('_getTools incluye chat.cambiar_foco y page.related cuando cajones_enabled (desde toolsRegistry)', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('recetas', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: true });
+  // Simular que el loader registro las nav tools (v1.2: declaradas en
+  // module.json.tools[] de ai-gateway, auto-registradas en toolsRegistry).
+  const registry = new Map([
+    ['page.related',     { name: 'page.related',     description: 'd1', parameters: { type: 'object' } }],
+    ['chat.cambiar_foco', { name: 'chat.cambiar_foco', description: 'd2', parameters: { type: 'object' } }]
+  ]);
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [], toolsRegistry: registry };
+  const tools = m._getTools('recetas');
+  const names = tools.map(t => t.name);
+  assert.ok(names.includes('chat.cambiar_foco'), 'incluye chat.cambiar_foco');
+  assert.ok(names.includes('page.related'), 'incluye page.related');
+  assert.ok(names.includes('cajon.listar'), 'sigue incluyendo cajon.listar');
+});
+
+test('_getTools omite nav tools sin error si no estan registradas todavia en toolsRegistry', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('recetas', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: true });
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [], toolsRegistry: new Map() };
+  const tools = m._getTools('recetas');
+  const names = tools.map(t => t.name);
+  // Cajones + universales presentes; nav no porque el registro lo decide el loader runtime.
+  assert.ok(names.includes('cajon.abrir'));
+  assert.ok(names.includes('bus.publish'));
+  assert.ok(!names.includes('chat.cambiar_foco'));
+});
+
+test('_getTools NO incluye nav tools si cajones_enabled es false (modo legacy)', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('recetas', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: false });
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [], toolsRegistry: new Map() };
+  const tools = m._getTools('recetas');
+  const names = tools.map(t => t.name);
+  assert.ok(!names.includes('chat.cambiar_foco'), 'NO incluye nav tools en legacy');
+  assert.ok(!names.includes('page.related'), 'NO incluye nav tools en legacy');
+});
+
+test('module.json.tools[] declara page.related y chat.cambiar_foco con handler canonico (v1.2)', () => {
+  const manifest = require('../../modules/conversacion/ai-gateway/module.json');
+  const tools = manifest.tools || [];
+  const byName = Object.fromEntries(tools.map(t => [t.name, t]));
+  assert.ok(byName['page.related'], 'page.related declarada en module.json');
+  assert.strictEqual(byName['page.related'].handler, 'handlePageRelated');
+  assert.ok(byName['chat.cambiar_foco'], 'chat.cambiar_foco declarada en module.json');
+  assert.strictEqual(byName['chat.cambiar_foco'].handler, 'handleChatCambiarFoco');
+  assert.deepStrictEqual(byName['chat.cambiar_foco'].parameters.required, ['nuevo_page_id']);
+});
+
+test('handlers publicos handlePageRelated / handleChatCambiarFoco delegan a _executeNavTool', async () => {
+  const m = makeInstance();
+  m.eventBus = { publish() {} };
+  setupBlueprintsWithReferences(m);
+  m._buildPageGraph();
+  const r = await m.handlePageRelated({ page_id: 'escandallo' });
+  assert.strictEqual(r.page_id, 'escandallo');
+  assert.ok(Array.isArray(r.related));
+
+  m.blueprintModules.set('viabilidad', { child: {}, cajonesEnabled: true });
+  const r2 = await m.handleChatCambiarFoco({ nuevo_page_id: 'viabilidad', conversation_id: 'c1' });
+  assert.strictEqual(r2.status, 'ok');
+  assert.strictEqual(r2.nuevo_page_id, 'viabilidad');
 });
 
 // --------------------------------------------------

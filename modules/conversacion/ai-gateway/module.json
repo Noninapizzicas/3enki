@@ -78,6 +78,47 @@
       "handler": "onFsReadResponse"
     }
   ],
+  "tools": [
+    {
+      "name": "page.related",
+      "description": "Devuelve las paginas relacionadas con un page_id (consumidas por el page y consumidoras del page) segun el grafo auto-extraido de los pseudocodigos de los blueprints + paginas_relacionadas declaradas. Lectura pura. Util para sugerir destinos cercanos cuando el usuario pregunta 'donde puedo ver X'.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page_id": {
+            "type": "string",
+            "description": "page_id del que pedir relaciones. Si se omite, usa el de la conversacion activa."
+          }
+        }
+      },
+      "handler": "handlePageRelated"
+    },
+    {
+      "name": "chat.cambiar_foco",
+      "description": "Mueve la pagina activa de esta conversacion a otro page_id cuando la conversacion claramente cambia de dominio (ej. estabas en recetas y el usuario pregunta algo de viabilidad). Publica chat.foco.cambiado al bus para que el frontend haga goto() y la barra lateral se actualice. UNA operacion por turno — no la encadenes con cajon.abrir ni bus.publish. Devuelve { status: 'ok', nuevo_page_id }.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nuevo_page_id": {
+            "type": "string",
+            "description": "page_id de destino. Debe corresponder a un modulo blueprint registrado."
+          },
+          "motivo": {
+            "type": "string",
+            "description": "Opcional. 1 frase explicando por que cambias de foco. Se incluye en el banner del chat para transparencia."
+          },
+          "conversation_id": {
+            "type": "string",
+            "description": "Opcional. Auto-rellenado por el chat al invocar; si se llama via mqttRequest desde el frontend, el caller lo pasa."
+          }
+        },
+        "required": ["nuevo_page_id"]
+      },
+      "handler": "handleChatCambiarFoco"
+    }
+  ],
   "config": {
     "providers": {
       "deepseek": {

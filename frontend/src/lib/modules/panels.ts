@@ -12,7 +12,7 @@ export interface PanelDef {
   icon: string;
   size: 'sm' | 'md' | 'lg';
   position?: 'top' | 'bottom' | 'left' | 'right' | 'center';
-  zone: 'work-bar' | 'chat-config' | 'chat-tools' | 'system-bar';
+  zone: 'work-bar' | 'chat-config' | 'chat-tools' | 'system-bar' | 'related-pages';
   order: number;
   // Si false, no muestra botón en la barra (solo accesible via openPanel)
   showInBar?: boolean;

@@ -355,6 +355,19 @@ test('_buildCajonesSystemPrompt contiene base + catalogo rankeado + reglas opera
   assert.ok(sp.includes('Una sola operacion por turno'), 'incluye principio una_operacion_por_turno');
 });
 
+test('_buildCajonesSystemPrompt incluye anti-patron observado en runtime: no invocar cajon.listar redundante', () => {
+  // Anti-patron real observado en audit Fase 5 (2026-05-23, deepseek): el LLM
+  // invocaba cajon.listar en T1 (chitchat "que puedes hacer") y antes de
+  // cajon.abrir en T4, aunque el catalogo ya estaba en el system prompt.
+  // La regla operativa lo desincentiva explicitamente.
+  const m = makeInstance();
+  setupBpWithCajones(m);
+  const ctx = { systemPrompt: 'BASE', parent: null, cajonesEnabled: true };
+  const sp = m._buildCajonesSystemPrompt(ctx, 'c1', 'recetas');
+  assert.ok(sp.includes('NO invoques cajon.listar'), 'la regla operativa debe desincentivar cajon.listar redundante');
+  assert.ok(sp.includes('zona'), 'la regla operativa debe explicar el unico uso valido (filtro por zona)');
+});
+
 test('_buildCajonesSystemPrompt avisa cuando el catalogo esta vacio', () => {
   const m = makeInstance();
   m.blueprintModules.set('empty', { child: { operaciones: {} }, cajonesEnabled: true });

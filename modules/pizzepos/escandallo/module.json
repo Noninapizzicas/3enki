@@ -1,11 +1,12 @@
 {
   "_doc": "Manifest del modulo escandallo. NO tiene index.js — el LLM ES el runtime y ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Activable via page_id='escandallo'. Sustituye al modulo escandallo v4.0.0 legacy JS (borrado en este commit) reduciendo de 8 operaciones a 1 sola (calcular). Stateless: cada invocacion es calculo fresco; los precios se cachean en mercadona-api (48h). Las otras 7 operaciones del legacy se pierden — algunas (simular.precio, ingrediente.impacto) pertenecen a viabilidad cuando se migre.",
   "name": "escandallo",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Modulo escandallo en modo blueprint-driven. Calcula coste de receta (existente o propuesta) consultando mercadona-api para precios reales o estimando con el LLM cuando Mercadona no tiene el producto. Devuelve coste_total + coste_porcion + desglose por ingrediente con fuente declarada por linea (mercadona|estimado_llm|no_disponible). Sin estado propio.",
   "language": "es",
   "blueprint_driven": true,
   "blueprint_path": "escandallo.blueprint.json",
   "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
-  "target_page_id": "escandallo"
+  "target_page_id": "escandallo",
+  "cajones_enabled": true
 }

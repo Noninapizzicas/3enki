@@ -1,7 +1,7 @@
 {
   "_doc": "Manifest del modulo carta-scheduler. NO tiene index.js — blueprint-driven. Programacion conversacional de cambios de carta por canal con confirmacion humana previa. 7 operaciones. Persistencia: reglas + pendientes en archivos JSON del proyecto. NO incluye ejecutor de cron (deuda explicita — sera modulo JS separado). Sustituye al modulo carta-scheduler legacy JS (603 lineas).",
   "name": "carta-scheduler",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Modulo carta-scheduler en modo blueprint-driven. Reglas (cron expression + canal + carta_id) + pendientes (cambios calculados esperando OK del usuario). El LLM en page=carta-scheduler revisa proximos_cambios, detecta conflictos, confirma o rechaza pendientes.",
   "language": "es",
   "blueprint_driven": true,
@@ -18,5 +18,6 @@
       "atomicidad": "fs.write.request atomic:true por cada operacion de mutacion",
       "concurrencia": "single-writer (el blueprint serializa via publishAndWait)"
     }
-  }
+  },
+  "cajones_enabled": true
 }

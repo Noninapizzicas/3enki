@@ -1,7 +1,7 @@
 {
   "_doc": "Manifest del modulo carta-digital. NO tiene index.js (blueprint-driven). 4 operaciones (get_config, update_config, get_carta_publica, set_carta_compuesta). Persistencia: carta-digital.json del proyecto. Composicion real (PWA build, ofertas, copy) delegada a agentes via agent.execute.request. El directorio incluye artefactos NO blueprint (cf-worker/, export-cli.js, static-template.js, context.json, prompt.json) que son tooling de deploy de la PWA publica y coexisten con el blueprint sin conflicto.",
   "name": "carta-digital",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Modulo carta-digital en modo blueprint-driven. Backoffice de la carta publica: branding del proyecto + carta compuesta lista para servir al cliente.",
   "language": "es",
   "blueprint_driven": true,
@@ -23,5 +23,6 @@
       "static-template.js — template HTML de la PWA",
       "context.json, prompt.json — contexto LLM legacy (revisable)"
     ]
-  }
+  },
+  "cajones_enabled": true
 }

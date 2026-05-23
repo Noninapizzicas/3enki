@@ -461,6 +461,7 @@ class AiGatewayModule extends BaseModule {
     sections.push(
       '# REGLAS OPERATIVAS\n' +
       '- Una sola operacion por turno: cajon.abrir + ejecutar pseudocodigo (publish/publishAndWait) + responder. NO encadenar varias.\n' +
+      '- El CATALOGO YA ESTA VISIBLE ARRIBA. NO invoques cajon.listar para listarlo de nuevo — usalo SOLO si necesitas refrescarlo con filtro de zona (cajon.listar({zona:"X"})). Si el usuario pregunta "que puedes hacer aqui", respondele desde el catalogo que ya ves, sin tool calls.\n' +
       '- Para CADA paso del pseudocodigo que diga `publishAndWait(...)` → llama bus.publishAndWait.\n' +
       '- Para CADA paso que diga `publish(...)` → llama bus.publish.\n' +
       '- Los pasos de normalizar / razonar / comparar los HACES TU mentalmente (no son tools).\n' +

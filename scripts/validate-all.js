@@ -56,7 +56,8 @@ const VALIDATORS = [
   { id: 'bus-transport', file: 'arquitectura/decisiones/_validators/bus-transport.validate.js' },
   { id: 'scheduling',    file: 'arquitectura/decisiones/_validators/scheduling.validate.js' },
   { id: 'resilience',    file: 'arquitectura/decisiones/_validators/resilience.validate.js' },
-  { id: 'subsistema-recetario', file: 'arquitectura/decisiones/_validators/subsistema-recetario.validate.js' }
+  { id: 'subsistema-recetario', file: 'arquitectura/decisiones/_validators/subsistema-recetario.validate.js' },
+  { id: 'cajones-context-partitioning', file: 'arquitectura/decisiones/_validators/cajones-context-partitioning.validate.js' }
 ];
 
 const RED   = '\x1b[31m';

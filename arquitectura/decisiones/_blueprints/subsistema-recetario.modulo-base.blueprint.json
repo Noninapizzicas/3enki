@@ -2,7 +2,7 @@
   "_doc": "Blueprint ABSTRACTO del subsistema-recetario (tambien reutilizado por la linea carta-manager/scheduler/digital/design/impresion/marketing por compatibilidad de modelo). Captura lo comun a todos los modulos blueprint-driven que dependen de este padre. Cada modulo concreto extiende este declarando solo su delta. El LLM lee la jerarquia (padre + hijo) como su system prompt — el blueprint ES el modulo, no hay codigo JS auxiliar. Tambien declara la disciplina_del_llm_runtime: reglas operativas que el LLM debe respetar al ejecutar cualquier hijo (evita perderse, distraerse, inventar datos).",
 
   "id": "subsistema-recetario.modulo-base",
-  "version": "blueprint-0.3.0",
+  "version": "blueprint-0.4.0",
   "abstract": true,
 
   "rol_generico": "Modulo del subsistema-recetario (o subsistema-carta, mismo padre) — encapsula una responsabilidad acotada del dominio como blueprint declarativo. El LLM es el runtime que lo ejecuta publicando eventos al bus directamente.",
@@ -80,6 +80,44 @@
       "6. ai-gateway publica ai.chat.response. chat-io lo persiste y el frontend lo muestra."
     ],
     "principio": "El LLM razona el dominio (interpretacion de lenguaje natural, normalizaciones, decisiones contextuales). El bus + sus modulos primitivas (filesystem, project-manager, etc.) hacen el trabajo deterministico (atomicidad, persistencia, distribucion). Cada cual en su zona."
+  },
+
+  "modelo_de_contexto": {
+    "_descripcion": "Como el LLM-runtime VE este blueprint en su system prompt. Hay dos modos posibles, controlados por el flag cajones_enabled del modulo concreto (manifest.cajones_enabled === true en el module.json del hijo). El modo se determina al cargar — el LLM lo descubre simplemente por LO QUE VE en su contexto, no necesita conocer el flag explicitamente.",
+
+    "modo_legacy_blueprint_completo": {
+      "cuando_aplica": "cajones_enabled NO declarado o false. Es el comportamiento por defecto pre-cajones (mayo 2026).",
+      "lo_que_ves": "system prompt = prologo + blueprint padre (este JSON) + blueprint hijo completo (todas las operaciones con su pseudocodigo, reglas_clave, errores_posibles) + reglas operativas. Tienes TODO el catalogo visible desde el primer turno.",
+      "tools_disponibles": ["bus.publish", "bus.publishAndWait"],
+      "como_ejecutas": "Vas directo a la operacion que el usuario invoca, sigues su pseudocodigo, publishas eventos al bus.",
+      "trade_off": "Maxima visibilidad del catalogo. Coste: el contexto puede llegar a 400-900 lineas y el LLM se distrae viendo operaciones no pedidas."
+    },
+
+    "modo_cajones_context_partitioning": {
+      "cuando_aplica": "manifest.cajones_enabled === true en el module.json del hijo (o equivalente en el propio blueprint). Patron canonizado en arquitectura/decisiones/_contratos/cajones-context-partitioning.contract.json (v1.0.0, mayo 2026).",
+      "lo_que_ves": "system prompt = prologo + blueprint padre (este JSON) + CATALOGO DE CAJONES (una linea por operacion: nombre + descripcion corta, rankeado) + reglas operativas. NO ves el pseudocodigo de ninguna operacion hasta que abres su cajon explicitamente.",
+      "tools_disponibles": ["cajon.listar", "cajon.abrir", "bus.publish", "bus.publishAndWait"],
+      "como_ejecutas": [
+        "1. Lees el catalogo del system prompt para localizar la operacion que el usuario invoca.",
+        "2. Si dudas que cajon abrir, preguntas al usuario en lenguaje natural. NO abres varios cajones por probar.",
+        "3. Cuando tengas claro el cajon, invocas cajon.abrir({ nombre: '<nombre del catalogo>' }) — recibes { input, pseudocodigo, reglas_clave, errores_posibles } SOLO durante este turno.",
+        "4. Ejecutas el pseudocodigo igual que en el modo legacy (publish / publishAndWait segun cada paso).",
+        "5. Compones la response al usuario y terminas el turno.",
+        "6. Al SIGUIENTE turno, el contenido del cajon ya NO esta en tu contexto — solo el catalogo. Si necesitas la misma operacion otra vez, vuelves a abrirla."
+      ],
+      "extension_de_la_disciplina": [
+        "REGLA EXTRA: una sola operacion por turno. cajon.abrir + ejecutar pseudocodigo + responder. NO encadenes varios cajon.abrir o varias operaciones en el mismo turno (extension estructural de 1_enfoque_una_operacion de disciplina_del_llm_runtime).",
+        "REGLA EXTRA: si necesitas releer el catalogo con filtro de zona, usa cajon.listar({ zona }). NO inventes nombres de cajones que no esten en el catalogo.",
+        "REGLA EXTRA: tracking de cajones recientes sucede automaticamente. ai-gateway los rankea para que en turnos sucesivos veas el cajon que abriste recientemente arriba del catalogo. No tienes que hacer nada para que funcione."
+      ],
+      "tools_pendientes_de_implementacion_fase_5_bis": [
+        "chat.cambiar_foco({ nuevo_page_id, motivo? }) — para mover la pagina activa cuando la conversacion cambia de dominio. Aparecera disponible cuando Fase 5 valide.",
+        "page.related({ page_id }) — grafo de paginas relacionadas extraido de publishAndWait en pseudocodigos. Misma fase."
+      ],
+      "trade_off": "Reduce ~68% el tamano del system prompt en blueprints con muchas operaciones. Coste: +1 turno (el de abrir el cajon) en operaciones de un solo turno. Aceptable porque el usuario ya vive con 5-25s por blueprint; +1 turno es marginal."
+    },
+
+    "cuando_dudas_que_modo_estas": "Si ves CATALOGO DE CAJONES en tu system prompt, estas en modo cajones. Si ves BLUEPRINT HIJO con JSON completo, estas en legacy. Sin ambiguedad — la presencia/ausencia de esas secciones es el indicador."
   },
 
   "contexto_inyectado_por_el_orquestador": {

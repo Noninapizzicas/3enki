@@ -1,11 +1,12 @@
 {
-  "_doc": "Manifest del modulo recetas. NO tiene index.js — el LLM ES el runtime y ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Activable via page_id='recetas'. Sustituye al modulo recetas v4.0.0 legacy JS (borrado) — cobertura funcional 100% (14 operaciones + 5 eventos de dominio). Ubicacion dentro de modules/pizzepos/ porque recetas es parte del vertical POS pizzepos.",
+  "_doc": "Manifest del modulo recetas. NO tiene index.js — el LLM ES el runtime y ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Activable via page_id='recetas'. Sustituye al modulo recetas v4.0.0 legacy JS (borrado) — cobertura funcional 100% (14 operaciones + 5 eventos de dominio). Ubicacion dentro de modules/pizzepos/ porque recetas es parte del vertical POS pizzepos. PILOTO cajones-context-partitioning v1.0.0 (Fase 5 del guion): cajones_enabled: true habilita el patron — ai-gateway expone catalogo rankeado + tools cajon.listar/cajon.abrir en lugar del blueprint hijo completo en cada turno.",
   "name": "recetas",
-  "version": "1.0.0",
-  "description": "Modulo recetas en modo blueprint-driven. El LLM lee el blueprint (padre + hijo) como system prompt y publica eventos al bus directamente via bus.publish / bus.publishAndWait (las 2 tools universales expuestas por ai-gateway). NO existe codigo JS del modulo.",
+  "version": "1.1.0",
+  "description": "Modulo recetas en modo blueprint-driven con cajones-context-partitioning. El LLM ve un CATALOGO de las 14 operaciones (snippet de 1 linea por cajon) en el system prompt. Para ejecutar una operacion, primero abre su cajon con cajon.abrir({nombre}) — recibe pseudocodigo+reglas+errores SOLO durante el turno actual. Al siguiente turno tiene que abrirlo de nuevo si lo necesita. Mantiene las 2 tools universales (bus.publish, bus.publishAndWait) para ejecutar el pseudocodigo del cajon abierto. NO existe codigo JS del modulo.",
   "language": "es",
   "blueprint_driven": true,
   "blueprint_path": "recetas.blueprint.json",
   "blueprint_parent_path": "arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json",
-  "target_page_id": "recetas"
+  "target_page_id": "recetas",
+  "cajones_enabled": true
 }

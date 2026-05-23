@@ -50,6 +50,14 @@ class AiGatewayModule extends BaseModule {
     //   3. El LLM lee el pseudocodigo del blueprint y publica eventos al bus
     //      directamente via las 2 tools — sin runtime intermedio.
     this.blueprintModules = new Map();
+
+    // cajones-context-partitioning v1.0.0
+    // target_page_id → [{nombre, descripcion}] del catalogo de cajones extraido del blueprint hijo.
+    // Solo se puebla para blueprints con cajones_enabled: true en su manifest.
+    this.cajonesCatalog = new Map();
+    // conversation_id → [{nombre, turn}] historial de cajones abiertos para ranking por recencia.
+    // Limitado a CAJONES_HISTORY_MAX entries por conversacion (FIFO).
+    this.conversationCajones = new Map();
   }
 
   // ============================================================
@@ -77,6 +85,8 @@ class AiGatewayModule extends BaseModule {
     this.pendingCredentials.clear();
     for (const { timeout } of this.pendingFsReads.values()) clearTimeout(timeout);
     this.pendingFsReads.clear();
+    this.cajonesCatalog.clear();
+    this.conversationCajones.clear();
   }
 
   // ============================================================
@@ -188,11 +198,14 @@ class AiGatewayModule extends BaseModule {
       }
       if (hasBp) this._loadBlueprints();
     }
-    // Blueprint-driven pages: catalogo = solo las 2 tools universales.
-    // No mezclamos con polyfunctional para mantener el modelo declarativo puro
-    // (el LLM solo debe usar publish/publishAndWait segun el pseudocodigo).
+    // Blueprint-driven pages: catalogo = solo las 2 tools universales (+ 2 de
+    // cajones si el blueprint tiene cajones_enabled). No mezclamos con
+    // polyfunctional para mantener el modelo declarativo puro (el LLM solo
+    // debe usar publish/publishAndWait segun el pseudocodigo).
     if (page_id && this.blueprintModules.has(page_id)) {
-      return this._getBlueprintUniversalTools();
+      const bp = this.blueprintModules.get(page_id);
+      const universal = this._getBlueprintUniversalTools();
+      return bp.cajonesEnabled ? [...this._getCajonesTools(), ...universal] : universal;
     }
     if (!page_id) return all;
     // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
@@ -276,6 +289,7 @@ class AiGatewayModule extends BaseModule {
 
   _loadBlueprints() {
     this.blueprintModules.clear();
+    this.cajonesCatalog.clear();
     if (!this.moduleLoader?.loadedModules) {
       this.logger.warn('ai-gateway.blueprints.unavailable', {
         reason: 'moduleLoader.loadedModules no disponible'
@@ -304,13 +318,26 @@ class AiGatewayModule extends BaseModule {
           const parentPath = resolveBlueprintPath(mod.path, m.blueprint_parent_path);
           parent = JSON.parse(fs.readFileSync(parentPath, 'utf8'));
         }
-        const systemPrompt = this._composeBlueprintSystemPrompt(parent, child);
-        this.blueprintModules.set(target, { manifest: m, parent, child, systemPrompt });
+        // cajones-context-partitioning: si cajones_enabled, el systemPrompt
+        // precalculado solo lleva padre + reglas + placeholder; el catalogo
+        // rankeado se inyecta por turno en _executeLLM via _buildCajonesSystemPrompt.
+        const cajonesEnabled = m.cajones_enabled === true || child.cajones_enabled === true;
+        let catalogo = null;
+        if (cajonesEnabled) {
+          catalogo = this._extractCajones(child);
+          this.cajonesCatalog.set(target, catalogo);
+        }
+        const systemPrompt = cajonesEnabled
+          ? this._composeBlueprintSystemPrompt(parent, child, { cajones_only_base: true })
+          : this._composeBlueprintSystemPrompt(parent, child);
+        this.blueprintModules.set(target, { manifest: m, parent, child, systemPrompt, cajonesEnabled });
         this.logger.info('ai-gateway.blueprint.loaded', {
           module: name,
           target_page_id: target,
           version: child.version,
-          parent_id: parent?.id || null
+          parent_id: parent?.id || null,
+          cajones_enabled: cajonesEnabled,
+          cajones_count: catalogo ? catalogo.length : 0
         });
       } catch (err) {
         this.logger.error('ai-gateway.blueprint.load.failed', {
@@ -321,7 +348,7 @@ class AiGatewayModule extends BaseModule {
     }
   }
 
-  _composeBlueprintSystemPrompt(parent, child) {
+  _composeBlueprintSystemPrompt(parent, child, opts = {}) {
     const sections = [];
     sections.push(
       'Eres el RUNTIME de un modulo del subsistema-recetario declarado como blueprint JSON. ' +
@@ -334,6 +361,10 @@ class AiGatewayModule extends BaseModule {
       sections.push('# BLUEPRINT PADRE (abstracto, heredado)');
       sections.push('```json\n' + JSON.stringify(parent, null, 2) + '\n```');
     }
+    // cajones_only_base: prompt base sin inyectar el child entero ni reglas
+    // operativas — el catalogo rankeado + reglas de cajones se inyectan
+    // por turno en _buildCajonesSystemPrompt.
+    if (opts.cajones_only_base) return sections.join('\n\n');
     sections.push('# BLUEPRINT HIJO (concreto, lo que ejecutas)');
     sections.push('```json\n' + JSON.stringify(child, null, 2) + '\n```');
     sections.push(
@@ -345,6 +376,216 @@ class AiGatewayModule extends BaseModule {
       '- Si una primitiva del bus devuelve error con `error.code` canonico, propagalo en tu response al caller.'
     );
     return sections.join('\n\n');
+  }
+
+  // ============================================================
+  // cajones-context-partitioning (v1.0.0)
+  // ============================================================
+  //
+  // Patron Google search-style aplicado al system prompt de blueprints:
+  //   - El LLM ve un CATALOGO rankeado (snippet de 1 linea por operacion).
+  //   - Para ejecutar una operacion, invoca cajon.abrir({nombre}) -> recibe
+  //     pseudocodigo + reglas + errores como contexto del turno actual.
+  //   - Al siguiente turno solo persiste el catalogo (cierre automatico).
+  //
+  // Activacion por blueprint: manifest.cajones_enabled === true.
+  // Contrato: arquitectura/decisiones/_contratos/cajones-context-partitioning.contract.json
+
+  // Limite de historial por conversacion para ranking de recencia (decision 5.2
+  // del contrato: ranking simple). 20 = holgura sobre los 3-5 turnos efectivos.
+  static get CAJONES_HISTORY_MAX() { return 20; }
+  static get CAJONES_RANK_LOOKBACK_TURNS() { return 5; }
+
+  _extractCajones(child) {
+    const ops = (child && typeof child.operaciones === 'object' && child.operaciones) || {};
+    const cajones = [];
+    for (const [nombre, op] of Object.entries(ops)) {
+      if (!op || typeof op !== 'object') continue;
+      let descripcion;
+      const override = typeof op.cajon_descripcion === 'string' ? op.cajon_descripcion.trim() : '';
+      if (override) {
+        descripcion = override;
+      } else {
+        // Auto-derivacion: usar op.descripcion si existe; si no, derivar del
+        // input. Maximo 200 chars para que el catalogo no infle el prompt.
+        const auto = (typeof op.descripcion === 'string' && op.descripcion.trim())
+          || (typeof op.input === 'string' && `input ${op.input}`)
+          || '';
+        descripcion = String(auto).split('\n')[0].slice(0, 200) || '(sin descripcion)';
+      }
+      cajones.push({ nombre, descripcion });
+    }
+    return cajones.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }
+
+  _rankCajones(catalogo, page_id_activo, conversation_id) {
+    if (!Array.isArray(catalogo) || catalogo.length === 0) return [];
+    const historial = this.conversationCajones.get(conversation_id) || [];
+    const lookback = AiGatewayModule.CAJONES_RANK_LOOKBACK_TURNS;
+    const recientes = historial.slice(-lookback).map(h => h.nombre);
+    const scorePage = (c) => (page_id_activo && c.nombre.startsWith(page_id_activo + '.')) ? 1 : 0;
+    const scoreRecencia = (c) => {
+      const idx = recientes.lastIndexOf(c.nombre);
+      return idx >= 0 ? (idx + 1) : 0;
+    };
+    return catalogo.slice().sort((a, b) => {
+      const pa = scorePage(a), pb = scorePage(b);
+      if (pa !== pb) return pb - pa;
+      const ra = scoreRecencia(a), rb = scoreRecencia(b);
+      if (ra !== rb) return rb - ra;
+      return a.nombre.localeCompare(b.nombre);
+    });
+  }
+
+  // Devuelve el system prompt completo para un turno cuando el blueprint
+  // tiene cajones_enabled. Combina prompt-base precalculado (padre + prologo)
+  // con catalogo rankeado del turno + reglas operativas del patron cajones.
+  _buildCajonesSystemPrompt(blueprintCtx, conversation_id, page_id_activo) {
+    const catalogo = this.cajonesCatalog.get(page_id_activo) || [];
+    const rankeado = this._rankCajones(catalogo, page_id_activo, conversation_id);
+    const sections = [];
+    sections.push(blueprintCtx.systemPrompt); // padre + prologo
+    sections.push(`# CATALOGO DE CAJONES — ${page_id_activo}`);
+    sections.push(
+      'Cada cajon corresponde a una operacion del blueprint. Para ejecutar una operacion, ' +
+      'primero abre su cajon con la tool cajon.abrir({nombre}). El cajon devuelve ' +
+      'pseudocodigo + reglas + errores y se mantiene en contexto SOLO durante este turno. ' +
+      'Si necesitas releer el catalogo o consultar zonas, usa cajon.listar({zona?}). ' +
+      'No tienes el pseudocodigo de ninguna operacion hasta que abras su cajon.'
+    );
+    if (rankeado.length === 0) {
+      sections.push('(catalogo vacio — el blueprint no declara operaciones)');
+    } else {
+      sections.push(rankeado.map(c => `- ${c.nombre} -> ${c.descripcion}`).join('\n'));
+    }
+    sections.push(
+      '# REGLAS OPERATIVAS\n' +
+      '- Una sola operacion por turno: cajon.abrir + ejecutar pseudocodigo (publish/publishAndWait) + responder. NO encadenar varias.\n' +
+      '- Para CADA paso del pseudocodigo que diga `publishAndWait(...)` → llama bus.publishAndWait.\n' +
+      '- Para CADA paso que diga `publish(...)` → llama bus.publish.\n' +
+      '- Los pasos de normalizar / razonar / comparar los HACES TU mentalmente (no son tools).\n' +
+      '- Cuando termines, redacta UN mensaje al usuario describiendo lo que hiciste — no listes pasos internos.\n' +
+      '- Si una primitiva del bus devuelve error con `error.code` canonico, propagalo en tu response al caller.\n' +
+      '- Si dudas que cajon abrir, pregunta al usuario en lenguaje natural (no abras varios por probar).'
+    );
+    return sections.join('\n\n');
+  }
+
+  // Tools del subsistema cajones expuestas al LLM cuando el blueprint activo
+  // tiene cajones_enabled. Se SUMAN a las 2 universales (bus.publish, bus.publishAndWait).
+  _getCajonesTools() {
+    return [
+      {
+        name: 'cajon.listar',
+        description: 'Devuelve el catalogo de cajones disponibles para el modulo activo, rankeado por relevancia (cajones del page activo primero, luego abiertos recientemente, luego alfabetico). Lectura pura — no publica eventos de dominio.',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            zona: {
+              type: 'string',
+              description: 'Opcional. Filtra el catalogo por prefijo de nombre (ej. "recetas" devuelve solo cajones recetas.*).'
+            }
+          }
+        }
+      },
+      {
+        name: 'cajon.abrir',
+        description: 'Abre un cajon (operacion del blueprint). Devuelve { pseudocodigo, reglas_clave, errores_posibles, input } para inyectar en este turno. El cajon SOLO permanece en tu contexto durante este turno — al siguiente tienes que abrirlo de nuevo si lo necesitas. Solo abre UN cajon por turno (regla una_operacion_por_turno del contrato).',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            nombre: {
+              type: 'string',
+              description: 'Nombre canonico del cajon tal como aparece en el catalogo (ej. "recetas.crear", "escandallo.calcular").'
+            }
+          },
+          required: ['nombre']
+        }
+      }
+    ];
+  }
+
+  // Resuelve un cajon por su nombre en el page_id activo. Soporta nombre con o
+  // sin prefijo de page (acepta "crear" y "recetas.crear" si page_id="recetas").
+  _resolveCajon(page_id_activo, nombre) {
+    const blueprintCtx = this.blueprintModules.get(page_id_activo);
+    if (!blueprintCtx || !blueprintCtx.cajonesEnabled) return null;
+    const ops = blueprintCtx.child?.operaciones || {};
+    if (ops[nombre]) return { nombre, op: ops[nombre] };
+    const prefix = page_id_activo + '.';
+    if (nombre.startsWith(prefix)) {
+      const bare = nombre.slice(prefix.length);
+      if (ops[bare]) return { nombre: `${page_id_activo}.${bare}`, op: ops[bare] };
+    } else if (ops[nombre.replace(/^[^.]+\./, '')]) {
+      // nombre traido con prefijo de OTRO modulo — no resolver.
+      return null;
+    }
+    return null;
+  }
+
+  // Registra un cajon abierto en el historial de la conversacion (para ranking
+  // por recencia en turnos futuros). FIFO con limite CAJONES_HISTORY_MAX.
+  _trackCajonOpened(conversation_id, nombre) {
+    if (!conversation_id) return;
+    const arr = this.conversationCajones.get(conversation_id) || [];
+    arr.push({ nombre, turn: Date.now() });
+    const max = AiGatewayModule.CAJONES_HISTORY_MAX;
+    const trimmed = arr.length > max ? arr.slice(-max) : arr;
+    this.conversationCajones.set(conversation_id, trimmed);
+  }
+
+  // Handler de cajon.listar / cajon.abrir invocados como tool calls por el LLM.
+  // Se ejecuta dentro de _executeToolCall (interceptado antes del path bus).
+  _executeCajonTool(toolName, rawArgs, ctx) {
+    const args = (rawArgs && typeof rawArgs === 'object') ? rawArgs : {};
+    const page_id = ctx.page_id;
+    if (!page_id || !this.blueprintModules.has(page_id)) {
+      const err = new Error(`cajones no disponibles: page_id activo (${page_id || 'null'}) no es un blueprint`);
+      err.code = 'INVALID_INPUT';
+      throw err;
+    }
+    if (!this.blueprintModules.get(page_id).cajonesEnabled) {
+      const err = new Error(`cajones no habilitados para page_id ${page_id} (manifest.cajones_enabled !== true)`);
+      err.code = 'INVALID_INPUT';
+      throw err;
+    }
+    if (toolName === 'cajon.listar') {
+      const catalogo = this.cajonesCatalog.get(page_id) || [];
+      const rankeado = this._rankCajones(catalogo, page_id, ctx.conversation_id);
+      const zona = typeof args.zona === 'string' && args.zona.trim() ? args.zona.trim() : null;
+      const filtrado = zona ? rankeado.filter(c => c.nombre.startsWith(zona + '.') || c.nombre === zona) : rankeado;
+      return { page_id, count: filtrado.length, cajones: filtrado };
+    }
+    if (toolName === 'cajon.abrir') {
+      const nombre = typeof args.nombre === 'string' ? args.nombre.trim() : '';
+      if (!nombre) {
+        const err = new Error("cajon.abrir requiere 'nombre' (string no vacio)");
+        err.code = 'INVALID_INPUT';
+        throw err;
+      }
+      const resolved = this._resolveCajon(page_id, nombre);
+      if (!resolved) {
+        const err = new Error(`cajon '${nombre}' no encontrado en el blueprint ${page_id}`);
+        err.code = 'RESOURCE_NOT_FOUND';
+        err.details = { kind: 'domain', page_id, requested: nombre };
+        throw err;
+      }
+      this._trackCajonOpened(ctx.conversation_id, resolved.nombre);
+      const op = resolved.op;
+      return {
+        nombre: resolved.nombre,
+        input: op.input || null,
+        pseudocodigo: op.pseudocodigo || null,
+        reglas_clave: op.reglas_clave || null,
+        errores_posibles: op.errores_posibles || null
+      };
+    }
+    // No deberia alcanzarse — _executeToolCall solo enruta cajon.listar/cajon.abrir.
+    const err = new Error(`cajon tool desconocida: ${toolName}`);
+    err.code = 'INVALID_INPUT';
+    throw err;
   }
 
   // Catalogo fijo de las 2 tools universales. Solo aparecen en el catalogo
@@ -637,6 +878,11 @@ class AiGatewayModule extends BaseModule {
     if (toolName === 'bus.publish' || toolName === 'bus.publishAndWait') {
       return this._executeUniversalBusTool(toolName, args, ctx);
     }
+    // cajones-context-partitioning: cajon.listar / cajon.abrir actuan sobre
+    // catalogo + blueprints cargados en memoria. No publican al bus.
+    if (toolName === 'cajon.listar' || toolName === 'cajon.abrir') {
+      return this._executeCajonTool(toolName, args, ctx);
+    }
     // Enriquecemos args con los 9 campos del contrato chat-io. Los args que
     // venían del LLM (tool_call.arguments) tienen prioridad — solo rellenamos
     // los que no estén ya en args. Esto garantiza que cualquier handler de
@@ -709,9 +955,16 @@ class AiGatewayModule extends BaseModule {
     // Blueprint-driven page: inyectamos el blueprint (padre + hijo) como system
     // prompt. Si el caller ya envio un system propio, va detras como nota — el
     // blueprint manda primero por contrato del modelo de ejecucion.
+    // cajones-context-partitioning: si cajones_enabled, el system prompt se
+    // construye por turno con catalogo rankeado en lugar del child entero.
     const blueprintCtx = page_id ? this.blueprintModules.get(page_id) : null;
-    const effectiveSystem = blueprintCtx
-      ? (system ? `${blueprintCtx.systemPrompt}\n\n# CONTEXTO ADICIONAL DEL CALLER\n${system}` : blueprintCtx.systemPrompt)
+    const blueprintPrompt = blueprintCtx
+      ? (blueprintCtx.cajonesEnabled
+          ? this._buildCajonesSystemPrompt(blueprintCtx, conversation_id, page_id)
+          : blueprintCtx.systemPrompt)
+      : null;
+    const effectiveSystem = blueprintPrompt
+      ? (system ? `${blueprintPrompt}\n\n# CONTEXTO ADICIONAL DEL CALLER\n${system}` : blueprintPrompt)
       : system;
 
     // Resolver attachments y mezclarlos con el último mensaje user

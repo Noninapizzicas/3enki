@@ -25,6 +25,7 @@
     "test:gateway-manager": "node tests/unit/gateway-manager.test.js",
     "test:plugin-manager": "node tests/unit/plugin-manager.test.js",
     "test:conversacion__ai-gateway": "node tests/unit/conversacion__ai-gateway.test.js",
+    "test:ai-gateway-cajones": "node tests/unit/ai-gateway-cajones.test.js",
     "test:core-module-loader-tool-bus": "node tests/unit/core-module-loader-tool-bus.test.js",
     "test:core-module-loader-tool-ui": "node tests/unit/core-module-loader-tool-ui.test.js",
     "test:core-module-loader-tools-http": "node tests/unit/core-module-loader-tools-http.test.js",

@@ -9,7 +9,11 @@
 > primero la capa única de tools, vivir 2-4 semanas con ella, después los
 > cajones con datos reales de qué duele.
 
-Fecha: 2026-05-19.
+Fecha: 2026-05-19. **Ampliado 2026-05-22** con la sección 5.5 (foco dinámico
+de conversación + barra lateral de destinos relacionados), que **suma** a lo
+anterior sin restarlo. Lo que ya estaba decidido sigue decidido — la
+ampliación añade un eje nuevo de UX/UI sobre el mismo motor.
+
 Documento hermano: `capa-unica-tools-via-plugins.md`.
 
 ---
@@ -217,6 +221,172 @@ Ejemplo:
 
 ---
 
+## 5.5 · Ampliación (2026-05-22): foco dinámico + barra lateral de destinos
+
+### 5.5.1 Por qué se añade esto
+
+Probando el sistema en uso real, el usuario detectó un patrón de **confusión
+contextual**: está en `page=recetas` charlando del escandallo, y de repente
+pregunta algo de `menu-generator` o de `viabilidad`. El LLM responde como si
+siguiera en recetas (ve el catálogo de recetas), o ejecuta una operación que
+no corresponde a la página activa. La página activa no acompaña a la
+conversación.
+
+La evolución natural de los cajones, ya que la metáfora es **espacial**, es
+hacer que el sistema **siga al usuario espacialmente**:
+
+1. **Cambio dinámico de página**: si la conversación claramente se mueve a
+   otro dominio, la página activa se mueve con ella. El LLM detecta el
+   cambio de foco y emite un evento que el frontend escucha para hacer
+   `goto()`. El catálogo de cajones del nuevo `page_id` se recompone
+   automáticamente.
+2. **Barra lateral de destinos relacionados**: en todas las páginas con chat
+   hay una barra lateral nueva que muestra **links** a otras páginas del
+   sistema relacionadas con la activa. Permite al usuario navegar
+   manualmente sin perder la conversación.
+
+Las dos mecánicas son **complementarias**, no alternativas. Una es
+automática (LLM detecta foco), la otra es manual (usuario clica un link).
+Ambas comparten **el mismo grafo de relaciones** auto-construido.
+
+### 5.5.2 Grafo de relaciones auto-construido desde blueprints
+
+El sistema ya tiene la información necesaria gratis: cada blueprint hijo
+contiene en su pseudocódigo referencias a otros módulos vía
+`publishAndWait('<modulo>.<accion>.request', ...)`. Extrayendo esas
+referencias se obtiene un grafo dirigido:
+
+```
+recetas        ← (consultado por) escandallo, menu-generator, mise-en-place
+escandallo     ← viabilidad, pase-cocina
+viabilidad     ← (raíz, no consumida)
+menu-generator ← carta-manager
+carta-manager  ← (raíz)
+mercadona-api  ← escandallo
+```
+
+**Construcción**: al arrancar, ai-gateway (o un módulo nuevo `page-graph`)
+parsea todos los blueprints, recoge `publishAndWait` y `publish`, deduce qué
+módulo consume qué módulo. El grafo se sirve vía tool `page.related({page_id})`
+o vía evento `page.graph.request`/`page.graph.response`.
+
+**Cero mantenimiento manual**: si añades un módulo blueprint, sus relaciones
+aparecen solas en el grafo y por tanto en la barra lateral de las páginas
+relacionadas. Mismo principio que el catálogo de cajones (5.1).
+
+**Override opcional**: cada `module.json` puede declarar
+`paginas_relacionadas: [...]` para añadir relaciones que no se infieren del
+pseudocódigo (ej. afinidad temática, no técnica).
+
+### 5.5.3 Cambio dinámico de foco — flujo
+
+```
+USUARIO en page=recetas
+  "oye y cuánto saldría producir 50 unidades de esta receta al mes"
+                        │
+                        ▼
+LLM razona:
+  "Esto ya no es recetas. Es viabilidad (proyección coste / volumen)."
+                        │
+                        ▼
+LLM invoca tool nueva:
+  chat.cambiar_foco({
+    nuevo_page_id: "viabilidad",
+    motivo: "la pregunta es de proyección de coste mensual"
+  })
+                        │
+                        ▼
+ai-gateway publica evento:
+  chat.foco.cambiado { conversation_id, anterior, nuevo, motivo }
+                        │
+                        ▼
+Frontend escucha vía mqttClient:
+  navegar con goto('/viabilidad'), recargar panels de esa zona,
+  actualizar barra lateral (ahora muestra destinos de viabilidad)
+                        │
+                        ▼
+ai-gateway recompone el system prompt:
+  catálogo de cajones = cajones de viabilidad (rankeados)
+                        │
+                        ▼
+LLM responde al usuario YA en contexto viabilidad
+  "Para 50 unidades/mes el coste mensual sería..."
+```
+
+**Punto crítico**: la decisión de cambiar foco vive en el LLM (autónoma),
+NO en un router externo, por las mismas razones que la decisión 6.3 (LLM
+autónomo > orquestador). El LLM tiene mejor matching semántico que cualquier
+heurística.
+
+**Anti-distracción**: el cambio de foco se considera UNA operación al estilo
+de `cajon.abrir` — no puede coexistir con otras tool calls en el mismo
+turno. El principio `enfoque_una_operacion` de `llm-runtime-discipline`
+aplica igual.
+
+### 5.5.4 Barra lateral de destinos — diseño
+
+**Vestigio en el frontend**: el `grep` no encontró nada explícito
+(`destinos`, `paginas-relacionadas`, `related-pages`, etc.). Pero la
+**infraestructura está perfecta**:
+
+- `frontend/src/lib/modules/panels.ts` declara zonas:
+  `'work-bar' | 'chat-config' | 'chat-tools' | 'system-bar'`.
+- Añadir una zona nueva `'related-pages'` es 1 línea + 1 componente.
+- `WorkBar.svelte` es el patrón a imitar: layout vertical, lista de items
+  con icono + título, click dispara acción.
+
+**Componente nuevo `RelatedPagesBar.svelte`**:
+
+- Suscrito al store de página activa (Svelte store o derivado del
+  `$page.url.pathname` de SvelteKit).
+- Llama a `page.related({ page_id: activa })` (tool nueva o store derivado
+  del grafo precargado).
+- Renderiza una lista de links a otras páginas. Cada link:
+  - Icono (del `module.json.icon` o del `panels.ts`).
+  - Título corto (del `module.json.name` o `panels.ts.title`).
+  - Click → `goto('/<page_id>')` de SvelteKit.
+  - Hover → tooltip con la razón de la relación ("consume recetas",
+    "alimentado por escandallo").
+
+**Reglas de UI**:
+- Máximo ~5-7 destinos visibles. Si hay más, "ver todos" expande.
+- Orden = mismo ranking que cajones: cercanía en el grafo (1 salto > 2
+  saltos) + page más recientemente visitado.
+- Sin notificaciones, sin badges, sin presión visual. Es navegación
+  ambiental, no alerta.
+
+### 5.5.5 Lo que NO se añade (importante)
+
+Para evitar el malentendido previo:
+
+- **NO hay "botón por cajón"**. Los cajones se abren vía tool call del LLM,
+  no vía UI manual. Era un error de dictado capturado por accidente.
+- **NO se duplica la operativa**: la barra lateral apunta a **páginas**, no
+  a cajones. Cajón = unidad de razonamiento del LLM. Página = unidad de
+  navegación del usuario.
+- **NO sustituye al chat**: la barra lateral es ambiente, no protagonista.
+  El driver primario sigue siendo la conversación.
+
+### 5.5.6 Cómo se suma a lo anterior (resta cero)
+
+| Pieza ya decidida en 5.1-5.4 | Cambia con 5.5? |
+|---|---|
+| Catálogo mixto auto + override (5.1) | No. Se reusa el mismo patrón para `paginas_relacionadas`. |
+| Ranking simple recencia + page activo (5.2) | No. Se reusa para ordenar destinos de la barra. |
+| Patrón Google search-style (5.3) | No. Sigue siendo el motor. La barra es UI sobre ese motor. |
+| Tools `cajon.listar` / `cajon.abrir` (5.4) | No. Se añaden tools nuevas para foco y grafo, sin tocar las anteriores. |
+| Inline en blueprints (6.5 propuesto) | No. El grafo se extrae del mismo lugar. |
+
+**Tools adicionales sobre las 2 originales**:
+
+- `chat.cambiar_foco({ nuevo_page_id, motivo? })` — cambio dinámico.
+- `page.related({ page_id })` — consulta del grafo (LLM y frontend).
+
+Total: **4 tools nuevas en ai-gateway**, todas auto-wireables vía
+`tools.contract v1.2` ya canónico en main.
+
+---
+
 ## 6 · Decisiones AÚN abiertas (a resolver en próxima sesión)
 
 ### 6.1 Persistencia del cajón entre turnos
@@ -268,6 +438,63 @@ catálogo en el system prompt — solo los rápidos.
 
 **Recomendación pendiente de validar**: empezar **sin niveles**. Si el
 catálogo crece a más de ~30 cajones, introducir niveles.
+
+### 6.4 bis Detector de foco — autonomía del LLM (añadido 2026-05-22)
+
+¿Quién decide que el foco ha cambiado?
+
+- **Opción A — LLM autónomo**: el LLM invoca `chat.cambiar_foco` cuando
+  detecta semánticamente que la pregunta es de otro dominio. Más simple,
+  +1 turno de latencia. Coherente con la decisión 6.3 para cajones.
+- **Opción B — Router intermedio**: un módulo nuevo (`chat-router` o
+  similar) clasifica el mensaje antes del LLM principal. Menos latencia,
+  más complejidad, requiere modelo clasificador adicional.
+- **Opción C — Manual por click**: solo cambia foco si el usuario clica un
+  destino en la barra lateral. El LLM nunca cambia foco solo.
+- **Opción D — Híbrida A+C**: el LLM puede cambiar foco pero antes manda
+  un aviso ("voy a moverte a viabilidad — ¿ok?"). El usuario confirma o
+  reorienta.
+
+**Recomendación pendiente de validar**: empezar con **A** (LLM autónomo)
+en piloto. Si la tasa de cambios equivocados es > 10%, evolucionar a D.
+
+### 6.4 ter Ayudas de UI residual al cambio de foco (añadido 2026-05-22)
+
+Cuando el LLM cambia la página automáticamente, ¿cómo se entera el usuario?
+
+- **Nada**: la página cambia silenciosamente. Mínima fricción, máximo
+  riesgo de confusión ("¿quién movió la página?").
+- **Banner en el chat**: el LLM antepone un párrafo como
+  "*(moviéndote a viabilidad porque la pregunta es de coste mensual)*".
+  Coste cero, máxima transparencia.
+- **Toast / notificación efímera**: el frontend muestra un toast
+  "Cambiando a viabilidad" durante 2s.
+- **Breadcrumb persistente**: encima del chat, una línea
+  "recetas → viabilidad" con flecha para volver.
+- **Confirmación previa**: como Opción D de 6.4 bis. Máxima seguridad,
+  rompe el flujo.
+
+**Recomendación pendiente de validar**: **banner en el chat** (mínimo
+viable). Si confunde, añadir breadcrumb.
+
+### 6.4 quater Archivadores / cajones anidados (añadido 2026-05-22)
+
+Relacionado con 6.4 pero específico a la metáfora del usuario: ¿los
+cajones pueden tener archivadores dentro? Ejemplos:
+
+- `recetas.crear` → archivador "Pizzas" / archivador "Postres" / etc.
+- `escandallo.calcular` → archivador "Por receta" / "Por carta" / "Por
+  proyecto".
+
+- **Opción A — Jerarquía estricta** declarada en el blueprint:
+  `archivadores: { pizzas: {...}, postres: {...} }`.
+- **Opción B — Tags / labels** asociados a cada cajón, búsqueda por
+  intersección.
+- **Opción C — Plano (sin niveles)**: lo que ya hay en 5.4. El LLM razona
+  el agrupamiento mental.
+
+**Recomendación pendiente de validar**: **C** (plano) en v1, ver si
+duele, evolucionar a B si hace falta.
 
 ### 6.5 Almacenamiento físico de los cajones
 
@@ -384,6 +611,61 @@ Medir:
 - Cuántos `cajon.abrir` invoca el LLM por turno (sanity check).
 - Si el LLM se distrae menos.
 
+### Fase 5 bis — Foco dinámico + barra lateral (3-5h, añadido 2026-05-22)
+
+**Solo si la Fase 5 valida** que los cajones funcionan. Esto añade UX/UI
+sobre el motor estable.
+
+#### 5 bis.1 Grafo de relaciones (1h, backend)
+
+- Nueva función en ai-gateway o módulo `page-graph`:
+  `_buildPageGraph(blueprints)` parsea todos los blueprints cargados,
+  extrae `publishAndWait('<mod>.<accion>.request', ...)` del pseudocódigo
+  → graph dirigido `{ <page_id>: { consumes: [...], consumed_by: [...] } }`.
+- Añadir override opcional `module.json.paginas_relacionadas: [...]`.
+- Tool nueva auto-wireada `page.related({ page_id }) → { related: [...] }`
+  con ranking (saltos en grafo + recencia).
+
+#### 5 bis.2 Tool de cambio de foco (1h, backend)
+
+- Tool nueva `chat.cambiar_foco({ nuevo_page_id, motivo? })`. Handler en
+  ai-gateway:
+  - Valida que `nuevo_page_id` existe en `paginas` registradas.
+  - Publica evento `chat.foco.cambiado { conversation_id, anterior, nuevo, motivo, request_id }`.
+  - Devuelve `{ status: "ok", nuevo_page_id }` para que el LLM continúe
+    el turno con el nuevo catálogo de cajones.
+- Modificar `_composeBlueprintSystemPrompt`: el catálogo se compone con el
+  `page_id` actual de la conversación (no del request), que el handler
+  acaba de actualizar.
+
+#### 5 bis.3 Listener en frontend (1h)
+
+- En `frontend/src/lib/services/mqttClient.ts` (o equivalente), suscribir
+  a `chat.foco.cambiado` filtrado por `conversation_id` activa.
+- Al recibir: `goto('/<nuevo_page_id>')` de SvelteKit y opcionalmente
+  toast / banner según decisión 6.4 ter.
+
+#### 5 bis.4 Componente `RelatedPagesBar.svelte` (1-2h)
+
+- Añadir zona `'related-pages'` en `frontend/src/lib/modules/panels.ts`
+  (1 línea en el type union).
+- Crear `frontend/src/lib/components/layout/RelatedPagesBar.svelte`
+  siguiendo el patrón de `WorkBar.svelte`:
+  - Suscrito a `$page.url.pathname` (page activa).
+  - Llama a `page.related({ page_id })` vía `mqttRequest` o store
+    derivado del grafo precargado.
+  - Lista vertical de links con icono + título. Click → `goto(...)`.
+- Decidir layout: ¿flotante a la derecha del chat, panel apilable en
+  `system-bar`, o nueva zona dedicada? Pendiente de mockup.
+
+#### 5 bis.5 Tests + validación
+
+- Test del parser de grafo (`_buildPageGraph` con blueprints sintéticos).
+- Test de la tool `chat.cambiar_foco` (valida que cambia el `page_id`
+  asociado a la conversación y publica el evento canónico).
+- Smoke E2E: usuario en `/recetas`, pregunta de viabilidad, página
+  cambia, barra lateral se actualiza.
+
 ### Fase 6 — Migrar resto de módulos blueprint (~2h)
 
 Si el piloto recetas funciona, activar cajones para los 10 módulos
@@ -446,6 +728,10 @@ aunque pesados — viven bien hasta que toque optimizar.
 | Ejemplo de blueprint grande | `modules/pizzepos/carta-manager/carta-manager.blueprint.json` (13 operaciones) | Caso de prueba ideal para cajones |
 | Contrato disciplina LLM | `arquitectura/decisiones/_contratos/llm-runtime-discipline.contract.json` | Las 10 reglas que coexisten con los cajones |
 | Paradigma blueprint | `arquitectura/decisiones/_contratos/modulos-blueprint-driven.contract.json` | Donde se aplica el patrón |
+| Zonas del frontend | `frontend/src/lib/modules/panels.ts` (line 15: type union de zonas) | Donde añadir `'related-pages'` para la barra lateral |
+| Patrón de barra a imitar | `frontend/src/lib/components/layout/WorkBar.svelte` | Plantilla para `RelatedPagesBar.svelte` |
+| Tools.contract canónico | `arquitectura/decisiones/_contratos/tools.contract.json` v1.2 | Auto-wire de tools en ai-gateway + uiHandler |
+| Disciplina event-core | `CLAUDE.md` (raíz del repo) | "Emite evento. Quien sabe, hace." — aplica a `chat.foco.cambiado` |
 
 ---
 
@@ -456,3 +742,14 @@ abre solo el cajón que necesita, lo cierra al siguiente turno. Catálogo
 auto-generado con override opcional. Ranking simple por recencia + page
 activo. Implementación: 2 tools nuevas en ai-gateway, cero cambios en los
 blueprints existentes. Tras la capa única de tools, no antes.**
+
+**Ampliación 2026-05-22 (5.5)**: encima del motor de cajones, dos
+mecánicas espaciales — foco dinámico (el LLM mueve la página cuando la
+conversación cambia de dominio, vía `chat.cambiar_foco` + evento
+`chat.foco.cambiado`) y barra lateral de destinos relacionados (nueva
+zona `'related-pages'` en frontend, componente `RelatedPagesBar.svelte`
+siguiendo patrón WorkBar, alimentada por un grafo de relaciones
+auto-construido desde las referencias `publishAndWait` del pseudocódigo
+de los blueprints). Total: **4 tools** (2 originales + 2 nuevas), todas
+auto-wireables vía `tools.contract v1.2`. **Cero refactor**, suma sobre
+lo anterior, resta cero.

@@ -150,9 +150,37 @@ canonicos del propio repo antes de declarar drift.
 
 ---
 
-### 2.4 · Deuda escandallo + recetas + viabilidad (PRIORIDAD ALTA, ALTO RIESGO)
+### 2.4 · Deuda escandallo + recetas + viabilidad (PRIORIDAD ALTA, RIESGO ALTO — REQUIERE DECISION ARQUITECTURAL PREVIA)
 
-**Contexto**: escandallo viola `no_explorar_estado_ajeno` con **4 ocurrencias reales** (3 lecturas y 1 escritura) directas al store `/recetas.json` que pertenece al modulo recetas. Documento detallado en `arquitectura/decisiones/propuestas/escandallo-aislamiento-store.md` (commit `285df6c`).
+> **Correccion 2026-05-24 (tercer hallazgo de atribucion)**: el doc
+> `escandallo-aislamiento-store.md` (commit `285df6c`) presento esto como
+> "deuda silenciosa". **INCORRECTO**. El blueprint de escandallo declara
+> EXPLICITAMENTE en su `estado_persistente`:
+>
+> > *"Escandallo NO tiene archivo propio. Persiste los campos de coste
+> > DENTRO del archivo del modulo recetas (/recetas.json). Decision
+> > arquitectonica: una sola fuente de verdad por receta — todos los
+> > modulos leen del mismo sitio."*
+>
+> Es decir: **excepcion consciente documentada**, no deuda oculta. Y
+> existe **disonancia real** con el contrato `llm-runtime-discipline.contract.json::no_explorar_estado_ajeno`
+> que cita TEXTUALMENTE como anti-patron *"Leer /recetas.json desde el
+> blueprint de escandallo. Lo correcto es publishAndWait('recetas.obtener.request', ...)"*.
+> Es decir, contrato y blueprint estan en oposicion explicita.
+>
+> **Antes de tocar codigo, hay que resolver la disonancia**:
+> - **Opcion A — enmendar el contrato**: anyadir salvedad para "archivo
+>   compartido por decision arquitectonica documentada con `_descripcion`
+>   en `estado_persistente`". Escandallo queda como esta. Mas conservador.
+> - **Opcion B — refactorizar escandallo**: revertir la decision del
+>   blueprint y forzar fanout via `recetas.actualizar_coste`. Coherente
+>   con el contrato. Mas trabajo. Plan en `escandallo-aislamiento-store.md`.
+>
+> **NO empezar Fase 1-5 sin haber elegido A o B**. El doc
+> `escandallo-aislamiento-store.md` asume B implicitamente — es solo
+> uno de los dos caminos posibles.
+
+**Contexto original (sigue valido como diagnostico de la disonancia)**: escandallo invoca `fs.read.request '/recetas.json'` (3 ocurrencias) y `fs.write.request '/recetas.json'` (1 ocurrencia) en su pseudocodigo. Documento detallado del refactor (opcion B) en `arquitectura/decisiones/propuestas/escandallo-aislamiento-store.md`.
 
 **Bloqueo descubierto en la sesion**: `recetas.actualizar` tiene un whitelist limitado (`nombre, descripcion, porciones, tiempo_min, dificultad, notas, fuente, ingredientes, instrucciones, categorias, etiquetas`). Los 7 campos de coste que escandallo escribe (`coste_total`, `coste_porcion`, `coste_actualizado_at`, `postcode_usado`, `fuentes_precios`, `ingredientes_detalle`, `ingredientes_sin_precio`) **NO** estan en el whitelist. Si escandallo manda `cambios: { coste_total: 12.3 }`, recetas los ignora silenciosamente.
 
@@ -178,9 +206,33 @@ canonicos del propio repo antes de declarar drift.
 
 ---
 
-### 2.5 · Cross-check estatico en validator `llm-runtime-discipline` (PRIORIDAD MEDIA)
+### 2.5 · Cross-check estatico en validator `llm-runtime-discipline` ✅ PRIMERA CAPA CERRADA (2026-05-24)
 
-**Contexto**: el validator `llm-runtime-discipline.validate.js` esta implementado (commit `fead23b`) con 6 cross-checks que verifican:
+**Estado actual**: cross-check `drift_blueprint_fs_read_a_storage_ajeno`
+**implementado y wireado** en commit (este). PASS verde contra los 10
+blueprints actuales — 0 findings (consistente con la decision arquitectonica
+de escandallo de declarar `archivo_destino: /recetas.json` en su
+`estado_persistente`, que la heuristica respeta).
+
+**Refinamiento pendiente — "conflicto de propiedad"**: la heuristica actual
+detecta uso sin declaracion, pero NO detecta el sub-caso real "dos modulos
+declaran el mismo path como propio". Ese es el anti-patron de verdad cuando
+un blueprint declara `archivo_destino` apuntando al storage de otro modulo
+(escandallo declara /recetas.json, recetas tambien lo declara). El
+refinamiento requiere:
+1. Construir mapa global `path → [modulos que lo declaran]`.
+2. Si un path aparece en >1 modulo: **flag para revision humana**
+   (decision consciente legitima o drift inconsciente).
+3. Si el blueprint que declara el path "ajeno" tiene `_descripcion` que
+   justifica explicitamente la excepcion → warning informativo. Sin
+   `_descripcion` → error.
+
+Este refinamiento depende de resolver primero la disonancia del frente
+2.4 (opcion A enmendar contrato vs opcion B refactorizar). Si va A,
+el refinamiento debe formalizar la salvedad. Si va B, escandallo deja
+de declarar y el refinamiento se convierte en check estricto.
+
+**Contexto original (cumplido)**: el validator `llm-runtime-discipline.validate.js` esta implementado (commit `fead23b`) con 6 cross-checks que verifican:
 - Estructura del contrato.
 - Cada principio con anti_patron.
 - 10 principios (cardinalidad).
@@ -389,15 +441,16 @@ de esta sesion deberia prevenirlo.
 
 | # | Frente | Riesgo | Coste | Por que en este orden |
 |---|---|---|---|---|
-| 1 | **2.5** cross-check estatico en validator disciplina | bajo | ~1.5h | Bloquea anti-patrones NUEVOS desde CI. NO depende ya de 2.3 (era falso positivo). Heuristica obligatoria documentada en su seccion. |
-| 2 | **2.1** flag `navegable` para pages JS legacy | bajo-medio | ~1.5h | Cierra agujero conceptual de Fase 5 bis. Decision UX requerida (que modulos marcar). |
-| 3 | **2.4** refactor escandallo + recetas + verificar viabilidad | medio-alto | 3-5h | Sesion dedicada. Plan ya escrito en `escandallo-aislamiento-store.md`. Toca runtime. |
+| 1 | **2.1** flag `navegable` para pages JS legacy | bajo-medio | ~1.5h | Cierra agujero conceptual de Fase 5 bis. Decision UX requerida (que modulos marcar). |
+| 2 | **2.4** decidir A/B + ejecutar (refactor escandallo o enmendar contrato) | depende | ~30min decision + 3-5h si B / 30min si A | Decision arquitectural previa OBLIGATORIA. Ver seccion 2.4 (disonancia contrato vs blueprint documentada). |
+| 3 | **2.5 refinamiento** "conflicto de propiedad" en validator | bajo | ~1.5h | Solo cobra sentido despues de cerrar 2.4. Ver seccion 2.5 (primera capa ✅ cerrada; falta segunda capa). |
 | 4 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
 | 5 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
 
-(Frente **2.2** ya cerrado en commits `016961e4` + `255135f2` — ver seccion 2.2 con ✅.)
-(Frente **2.3** era FALSO POSITIVO de mi heuristica — ver seccion 2.3 con ❌. Los 5 blueprints carta-* declaran `estado_persistente` correctamente.)
-(Concepto **3.7** ya cerrado en commit `6c8c5b66`: `contexto/ui.json::panel_system.doble_registro_obligatorio` reforzado con ejemplo canonico + ejemplo de la trampa real + regla operativa.)
+(Frente **2.2** ya cerrado en commits `016961e4` + `255135f2`.)
+(Frente **2.3** era FALSO POSITIVO de mi heuristica — los 5 blueprints carta-* declaran `estado_persistente` correctamente.)
+(Frente **2.5 primera capa** ya cerrada (esta sesion): cross-check `drift_blueprint_fs_read_a_storage_ajeno` implementado y wireado, PASS verde contra los 10 blueprints. Refinamiento "conflicto de propiedad" depende de cerrar 2.4 — ver tarea #3 arriba.)
+(Concepto **3.7** ya cerrado en commit `6c8c5b66`.)
 
 **Recomendacion**: si arrancas con poco tiempo, **1 + 2 + 3** cierra 3 frentes (~2h total, cero runtime). **4** otro bloque chico. **5** requiere bloque dedicado.
 

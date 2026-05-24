@@ -212,6 +212,14 @@
       "regla": "Cada modulo blueprint del repo cuyo extends_blueprint_abstract apunta a un padre, ese padre tiene seccion disciplina.",
       "como_detectar": "Escanear hijos, resolver extends, validar.",
       "severidad": "warning"
+    },
+    {
+      "id": "drift_blueprint_fs_read_a_storage_ajeno",
+      "regla": "Ningun blueprint hijo invoca publishAndWait('fs.read.request' | 'fs.write.request', {path}) con un path que NO esta declarado en su propio estado_persistente. El estado_persistente puede declarar paths en cualquier shape (paths_relativos.*, paths_relativos_proyecto.*, archivo_destino, o strings sueltos) y puede usar templates como <carta_id>/<timestamp> que se normalizan a regex.",
+      "como_detectar": "Para cada blueprint: extraer paths declarados recursivamente del estado_persistente (filtrar strings que empiecen por '/'), convertir templates a regex, extraer paths usados de fs.(read|write).request en pseudocodigo, marcar como error cualquier path usado que NO matchee con (a) regex de algun declarado, (b) prefijo literal de algun declarado, ni (c) paths modules/<modulo>/ (built-in del modulo).",
+      "severidad": "error",
+      "implementado_en": "arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js::checkBlueprintsRespetanEstadoPersistente() — wireado a check-system desde 2026-05-24.",
+      "limitacion_conocida": "La heuristica respeta lo declarado en estado_persistente, por lo que NO detecta el sub-caso 'conflicto de propiedad' (dos modulos declaran el mismo path como propio — caso documentado en escandallo, que declara archivo_destino: /recetas.json como decision arquitectonica). El refinamiento futuro requiere cruzar declaraciones entre modulos y flag conflictos. Apuntado en cajones-frentes-abiertos-retomar.md para fase posterior."
     }
   ],
 

@@ -256,6 +256,23 @@ export const panels: Record<string, PanelDef> = {
     order: 99,
     showInBar: false,
     loader: () => import('$lib/modules/html-preview/HtmlPreviewPanel.svelte')
+  },
+
+  // === SYSTEM BAR (barra lateral del sistema — flotante derecha) ===
+  // Cajones Fase 5 bis: pagina-grafo. SystemBar.svelte renderiza UN BOTON;
+  // click abre RelatedPagesPanel flotante con paginas relacionadas del
+  // page_id activo (consumes + consumed_by del grafo construido por
+  // ai-gateway._buildPageGraph). El listener de chat.foco.cambiado vive
+  // en stores/chat.ts — funciona aunque este panel no este abierto.
+  'related-pages-panel': {
+    id: 'related-pages-panel',
+    title: 'Páginas relacionadas',
+    icon: '🧭',
+    size: 'sm',
+    position: 'right',
+    zone: 'system-bar',
+    order: 99,
+    loader: () => import('$lib/modules/related-pages/RelatedPagesPanel.svelte')
   }
 };
 

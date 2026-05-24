@@ -40,6 +40,15 @@
 | Fase 5 bis frontend (RelatedPagesBar + listener chat.foco.cambiado) | `frontend/src/lib/components/layout/RelatedPagesBar.svelte`, `frontend/src/lib/stores/chat.ts`, `frontend/src/lib/modules/panels.ts` | `513e18c` |
 | Migracion nav tools a tools.contract v1.2 (canonicas en module.json.tools[]) | `modules/conversacion/ai-gateway/{index.js,module.json}` | `9feda84` |
 | Cierre doc cajones (cabecera de cerrado) | `arquitectura/decisiones/propuestas/cajones-context-partitioning.md` | `60509a7` |
+| Validator `llm-runtime-discipline.validate.js` (6 cross-checks) + wireado a validate-all | `arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js` | `fead23b` |
+| Root cleanup (16 detritos archivados, 3 activos preservados) | `_archived/2026-05-23_root-cleanup/` | `a5231d6` |
+| Doc de deuda escandallo (plan en 5 fases, NO toca runtime) | `arquitectura/decisiones/propuestas/escandallo-aislamiento-store.md` | `285df6c` |
+| Restauracion de `_arranque-cajones.md` con 8 respuestas rellenas | `arquitectura/decisiones/propuestas/_arranque-cajones.md` | `a3d5eee5` |
+| Refactor canonico modulo `related-pages` (UI module en lib/modules/) | `frontend/src/lib/modules/related-pages/{manifest.json,index.ts,RelatedPagesPanel.svelte}` | `016961e4` |
+| Baseline regenerado (+1 validator llm-runtime-discipline, -2 obsoletos documentation) | `drift-baseline.json` | `6b6cb658` |
+| Fix icono 🧭 visible en system-bar (entry en panels.ts apuntando al modulo canonico) | `frontend/src/lib/modules/panels.ts` | `255135f2` |
+
+Mergeados a main en PRs #189 (cierre Fase 7 + housekeeping + UI module canonico + retomar doc) y #190 (fix icono panels.ts).
 
 ### Validacion en runtime (2 sesiones de audit confirmadas)
 
@@ -80,22 +89,18 @@
 
 ---
 
-### 2.2 · Layout `RelatedPagesBar` en `AppShell.svelte` (PRIORIDAD MEDIA)
+### 2.2 · Layout `RelatedPagesBar` en `AppShell.svelte` ✅ CERRADO (2026-05-24)
 
-**Contexto**: el componente `RelatedPagesBar.svelte` esta creado y testeado (commit `513e18c`). Llama a `mqttRequest('page', 'related', {page_id})`, renderiza lista de links con click → goto. Esta listo. **Pero NO esta montado en el AppShell**. El componente no aparece en pantalla todavia.
+**Resuelto** en commits `016961e4` (refactor canonico) + `255135f2` (entry en panels.ts).
 
-**Decision pendiente**: layout. Tres opciones que el doc de cajones (seccion 5.5.4) dejaba abiertas:
-- Flotante a la derecha del chat.
-- Panel apilable en `system-bar`.
-- Nueva zona dedicada `'related-pages'` (que ya esta declarada en `panels.ts` pero sin renderer).
+Decision final: **opcion B revisada** (system-bar como UI module canonico). El doc maestro de cajones decia "panel apilable en system-bar" — auditando `contexto/ui.json` se confirmo que NO existe el patron "barra lateral siempre visible"; el sistema declara solo 4 zonas y el principle es "1 click = 1 panel flotante". Reinterpretacion:
 
-**Que falta**:
-1. Decision UX del usuario (no la puede tomar Claude).
-2. Si la decision es "nueva zona dedicada", anyadir el slot en `AppShell.svelte` (2-3 lineas).
-3. Si es "system-bar", anyadirlo a `SystemBar.svelte` como componente apilable.
-4. Smoke visual: confirmar que la barra aparece, los links navegan, el caso de lista vacia no renderiza nada (ya cubierto por el componente).
+- Modulo UI en `frontend/src/lib/modules/related-pages/` (manifest.json + index.ts + RelatedPagesPanel.svelte) siguiendo patron de credentials.
+- Entry adicional `'related-pages-panel'` en `panels.ts` con `zone: 'system-bar'` (necesario porque SystemBar.svelte solo lee del registry estatico, ver concepto 3.7 mas abajo).
+- Aparece icono 🧭 en system-bar tras deploy. Click abre panel flotante; el usuario lo mantiene abierto el tiempo que quiera ("ambiental" del doc original = a discrecion del usuario).
+- Doc maestro seccion 5.5.4 actualizada con la reinterpretacion canonica.
 
-**Por que prioridad media**: el componente existe pero el grafo en `page.related` esta incompleto (frente 2.1 lo cierra). Tiene mas sentido cerrar 2.1 primero y luego montar la barra cuando muestre destinos utiles.
+Pendiente trivial: smoke visual tras el proximo deploy del frontend confirmando que el icono aparece y abre el panel correctamente.
 
 ---
 
@@ -288,27 +293,57 @@ Estos conceptos aparecieron en la sesion pero NO estan plenamente canonizados to
 
 **Si se diluye**: confianza ciega en validators verdes → blueprints con deuda semantica pasan sin detectar.
 
+### 3.7 · "Dos registries paralelos en el sistema UI" (DRIFT ESTRUCTURAL DETECTADO 2026-05-24)
+
+**Aparece en**: PR #190 (fix icono RelatedPagesPanel no visible en system-bar pese al modulo canonico bien formado).
+
+**Captura**: el sistema UI del frontend tiene DOS registries de paneles coexistiendo, ninguno marcado como obsoleto:
+
+1. **`frontend/src/lib/modules/<name>/manifest.json` + `loader.ts`** — autodiscovery via `import.meta.glob('./*/manifest.json')`. Alimenta `lazy-registry`. Lo usa `registerAllModules()` en `AppShell.svelte`. **Patron moderno**.
+
+2. **`frontend/src/lib/modules/panels.ts`** — objeto `panels: Record<string, PanelDef>` estatico, declarado manualmente. Lo usa `getPanelsByZone()`, consumido por `SystemBar.svelte`, `WorkBar.svelte` y `ChatConfig.svelte` para renderizar BOTONES por zona. **Patron legacy**.
+
+**Consecuencia**: para que un modulo UI nuevo APAREZCA EN UNA BARRA, hay que registrarlo en AMBOS sitios. El precedente del propio repo es `credentials`: su `manifest.json` tiene `zone: 'system-bar'` (registry #1) Y tiene entry `'credentials-list'` en `panels.ts` con `zone: 'chat-config'` (registry #2). El icono visible en la barra viene del #2 — el #1 alimenta al lazy-registry usado por otra parte del sistema.
+
+**Por que importa**:
+- Quien anyade un modulo nuevo solo con `manifest.json` cree que "ya esta" porque el patron canonico esta bien formado, pero la barra del sistema queda sin icono. Trampa silenciosa.
+- Mantener dos registries paralelos requiere disciplina dual y producira drift entre ambos con el tiempo (ya empieza: credentials declara `zone: 'system-bar'` en #1 pero `zone: 'chat-config'` en #2 — inconsistencia inocua hoy, riesgo manyana).
+
+**Si se diluye**: cada modulo nuevo que se anyada tropezara con el mismo gap. Sin documentar, el patron de "doble registro" se pierde. Cuando finalmente el frontend se rehaga, sera dificil saber cual de los dos registries era "el bueno".
+
+**Que falta documentar/canonizar**:
+- Anyadir nota explicita en `contexto/ui.json` describiendo los dos registries, cual usa cada componente (`SystemBar`/`WorkBar`/`ChatConfig` vs `LazyShell`/`lazy-registry`), y la regla operativa: "para que un modulo aparezca con boton en una barra, registralo TAMBIEN en `panels.ts` con loader explicito". ~5 min, riesgo nulo.
+- Decision a futuro: unificar los dos registries. Sesion dedicada de frontend, fuera de scope cajones.
+
 ---
 
 ## 4 · ORDEN RECOMENDADO DE RETOMA
 
 | # | Frente | Riesgo | Coste | Por que en este orden |
 |---|---|---|---|---|
-| 1 | **2.3** declaraciones completas en 5 carta-* | bajo | ~1h | Cero runtime. Habilita 2.5 sin falsos positivos. Habilita 2.4 escaneo Fase 1 sin ruido. |
-| 2 | **2.5** cross-check estatico en validator disciplina | bajo | ~1h | Bloquea anti-patrones NUEVOS desde CI. Requiere 2.3 cerrado. |
-| 3 | **2.1** flag `navegable` para pages JS legacy | bajo-medio | ~1.5h | Cierra agujero conceptual de Fase 5 bis. Decision UX requerida (qué modulos marcar). |
-| 4 | **2.2** montar `RelatedPagesBar` en AppShell | bajo | ~30min | Cosmetic. Util tras cerrar 2.1 (grafo completo). |
+| 1 | Nota en `contexto/ui.json` sobre **drift 3.7** (dos registries) | nulo | ~5min | Cierra trampa silenciosa antes de que otro modulo caiga. |
+| 2 | **2.3** declaraciones completas en 5 carta-* | bajo | ~1h | Cero runtime. Habilita 2.5 sin falsos positivos. Habilita 2.4 escaneo Fase 1 sin ruido. |
+| 3 | **2.5** cross-check estatico en validator disciplina | bajo | ~1h | Bloquea anti-patrones NUEVOS desde CI. Requiere 2.3 cerrado. |
+| 4 | **2.1** flag `navegable` para pages JS legacy | bajo-medio | ~1.5h | Cierra agujero conceptual de Fase 5 bis. Decision UX requerida (que modulos marcar). |
 | 5 | **2.4** refactor escandallo + recetas + verificar viabilidad | medio-alto | 3-5h | Sesion dedicada. Plan ya escrito en `escandallo-aislamiento-store.md`. Toca runtime. |
 | 6 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
 | 7 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
 
-**Recomendacion**: si arrancas con poco tiempo, **1 + 2** ya cierra 2 frentes (~2h total, cero runtime). **3 + 4** otro bloque chico (~2h). **5** requiere bloque dedicado.
+(Frente **2.2** ya cerrado en commits `016961e4` + `255135f2` — ver seccion 2.2 con ✅.)
+
+**Recomendacion**: si arrancas con poco tiempo, **1 + 2 + 3** cierra 3 frentes (~2h total, cero runtime). **4** otro bloque chico. **5** requiere bloque dedicado.
 
 ---
 
 ## 5 · COMMITS RELEVANTES (para navegar la historia)
 
 ```
+255135f2 fix(related-pages): registra icono en panels.ts (SystemBar.svelte solo lee de ahi)         [PR #190]
+ac1594df merge origin/main: resuelve add/add en _arranque-cajones.md
+6b6cb658 chore(baseline): regenera drift-baseline.json con los 2 validators nuevos
+016961e4 refactor(related-pages): migra a UI module canonico segun contexto/ui.json
+a3d5eee5 docs(arranque-cajones): restaura archivo perdido + cierra 8 respuestas
+cfe48809 docs(cajones): consolida 8 frentes abiertos + 6 conceptos pendientes para retomar       [este doc]
 285df6c  docs(escandallo): captura deuda de aislamiento del store de recetas
 fead23b  feat(llm-runtime-discipline): implementa validator (cierra trabajo pendiente)
 a5231d6  chore(repo): archive 16 artefactos sueltos del root del repo

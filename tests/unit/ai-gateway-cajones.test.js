@@ -811,6 +811,173 @@ test('page.related incluye menu-generator si esta conectado en grafo', () => {
 });
 
 // --------------------------------------------------
+// 16. Blueprint subscribers asincronos (frente 2.4)
+// --------------------------------------------------
+
+function makeBusMock() {
+  const subscriptions = new Map(); // event -> [handler]
+  return {
+    subscriptions,
+    subscribe(event, handler) {
+      const list = subscriptions.get(event) || [];
+      list.push(handler);
+      subscriptions.set(event, list);
+      return () => {
+        const arr = subscriptions.get(event);
+        if (arr) {
+          const idx = arr.indexOf(handler);
+          if (idx >= 0) arr.splice(idx, 1);
+        }
+      };
+    },
+    emit(event, envelope) {
+      for (const h of subscriptions.get(event) || []) h(envelope);
+    },
+    publish() {}
+  };
+}
+
+test('_wireBlueprintAsyncSubscribers ignora blueprints sin eventos_que_escucho', () => {
+  const m = makeInstance();
+  m.eventBus = makeBusMock();
+  m.blueprintModules.set('recetas', { child: { eventos_que_escucho: [] }, cajonesEnabled: true });
+  m._wireBlueprintAsyncSubscribers();
+  assert.strictEqual(m.asyncSubscriptions.size, 0);
+});
+
+test('_wireBlueprintAsyncSubscribers acepta forma objeto {evento, handler}', () => {
+  const m = makeInstance();
+  m.eventBus = makeBusMock();
+  m.blueprintModules.set('recetas', {
+    child: {
+      eventos_que_escucho: [{ evento: 'escandallo.coste.calculado', handler: '_aplicar_coste_calculado' }],
+      operaciones: { _aplicar_coste_calculado: { pseudocodigo: ['paso 1'] } }
+    },
+    cajonesEnabled: true
+  });
+  m._wireBlueprintAsyncSubscribers();
+  assert.strictEqual(m.asyncSubscriptions.size, 1);
+  assert.ok(m.asyncSubscriptions.has('escandallo.coste.calculado'));
+  const subs = m.asyncSubscriptions.get('escandallo.coste.calculado');
+  assert.strictEqual(subs.length, 1);
+  assert.strictEqual(subs[0].page_id, 'recetas');
+  assert.strictEqual(subs[0].handler_name, '_aplicar_coste_calculado');
+});
+
+test('_wireBlueprintAsyncSubscribers acepta forma string (handler auto-derivado)', () => {
+  const m = makeInstance();
+  m.eventBus = makeBusMock();
+  m.blueprintModules.set('foo', {
+    child: {
+      eventos_que_escucho: ['bar.algo.pasado'],
+      operaciones: { _on_bar_algo_pasado: { pseudocodigo: ['x'] } }
+    },
+    cajonesEnabled: true
+  });
+  m._wireBlueprintAsyncSubscribers();
+  const subs = m.asyncSubscriptions.get('bar.algo.pasado');
+  assert.strictEqual(subs.length, 1);
+  assert.strictEqual(subs[0].handler_name, '_on_bar_algo_pasado');
+});
+
+test('_wireBlueprintAsyncSubscribers omite si el handler no existe en operaciones', () => {
+  const m = makeInstance();
+  m.eventBus = makeBusMock();
+  m.blueprintModules.set('recetas', {
+    child: {
+      eventos_que_escucho: [{ evento: 'x.y.z', handler: '_handler_inexistente' }],
+      operaciones: { otra_op: {} }
+    },
+    cajonesEnabled: true
+  });
+  m._wireBlueprintAsyncSubscribers();
+  assert.strictEqual(m.asyncSubscriptions.size, 0, 'no registra suscripcion sin handler');
+});
+
+test('async subscriber: loop-guard descarta eventos emitidos por el propio subscriber', async () => {
+  const m = makeInstance();
+  const bus = makeBusMock();
+  m.eventBus = bus;
+  m.blueprintModules.set('recetas', {
+    child: {
+      eventos_que_escucho: [{ evento: 'receta.actualizada', handler: '_on_recursive' }],
+      operaciones: { _on_recursive: { pseudocodigo: ['x'] } }
+    },
+    cajonesEnabled: true
+  });
+  let invocaciones = 0;
+  m._handleBlueprintAsyncEvent = async () => { invocaciones++; };
+  m._wireBlueprintAsyncSubscribers();
+  // Emitir evento con source = recetas (auto-publicacion)
+  bus.emit('receta.actualizada', { data: { foo: 1 }, source: { module_id: 'recetas' } });
+  await new Promise(r => setImmediate(r));
+  assert.strictEqual(invocaciones, 0, 'loop-guard descarto evento auto-publicado');
+  // Emitir evento de OTRO source — debe procesarlo
+  bus.emit('receta.actualizada', { data: { foo: 1 }, source: { module_id: 'escandallo' } });
+  await new Promise(r => setImmediate(r));
+  assert.strictEqual(invocaciones, 1, 'evento externo SI se procesa');
+});
+
+test('_handleBlueprintAsyncEvent invoca _executeLLM con prompt sintetico + page_id correcto', async () => {
+  const m = makeInstance();
+  m.logger = { info(){}, warn(){}, error(){}, debug(){} };
+  m.eventBus = makeBusMock();
+  m.blueprintModules.set('recetas', { child: { operaciones: { _h: { pseudocodigo: ['x'] } } }, cajonesEnabled: true });
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [], toolsRegistry: new Map() };
+  let captured = null;
+  m._executeLLM = async (args) => { captured = args; return {}; };
+  await m._handleBlueprintAsyncEvent({
+    page_id: 'recetas',
+    handler_name: '_h',
+    evento: 'foo.bar.baz',
+    event_payload: { project_id: 'proj-1', receta_id: 'rec-1', coste_total: 12.3, correlation_id: 'corr-1' }
+  });
+  assert.ok(captured, '_executeLLM fue invocado');
+  assert.strictEqual(captured.page_id, 'recetas', 'page_id del subscriber');
+  assert.strictEqual(captured.project_id, 'proj-1', 'project_id viene del payload');
+  assert.strictEqual(captured.correlation_id, 'corr-1', 'correlation_id viene del payload');
+  assert.strictEqual(captured.user_id, 'async-subscriber');
+  assert.ok(captured.conversation_id, 'genera conversation_id nuevo');
+  assert.strictEqual(captured.intencion, 'async-handler');
+  assert.strictEqual(captured.context?.async_invocation, true);
+  // El mensaje sintetico debe contener evento + handler + payload serializado
+  const msg = captured.messages[0]?.content || '';
+  assert.ok(msg.includes('foo.bar.baz'), 'mensaje contiene evento');
+  assert.ok(msg.includes('_h'), 'mensaje contiene handler_name');
+  assert.ok(msg.includes('"receta_id": "rec-1"'), 'mensaje contiene payload serializado');
+});
+
+test('_handleBlueprintAsyncEvent NO propaga errores al publisher (fire-and-forget)', async () => {
+  const m = makeInstance();
+  const logged = [];
+  m.logger = { info(){}, warn(){}, error(e, p) { logged.push({ e, p }); }, debug(){} };
+  m.eventBus = makeBusMock();
+  m.blueprintModules.set('x', { child: {} });
+  m.moduleLoader = { loadedModules: new Map(), getToolsForAI: () => [], toolsRegistry: new Map() };
+  m._executeLLM = async () => { throw new Error('LLM down'); };
+  // No debe lanzar — el handler es fire-and-forget desde el publisher
+  await m._handleBlueprintAsyncEvent({
+    page_id: 'x', handler_name: '_h', evento: 'foo.bar',
+    event_payload: { project_id: 'p1' }
+  });
+  assert.ok(logged.some(l => l.e === 'ai-gateway.async-handler.failed'), 'fallo loggeado');
+});
+
+test('onUnload libera todas las async subscriptions', async () => {
+  const m = makeInstance();
+  m.providers = new Map();
+  m.credentialCache = new Map();
+  m.pendingCredentials = new Map();
+  m.pendingFsReads = new Map();
+  let unsubbed = 0;
+  m.asyncSubscriptions.set('evt.a', [{ page_id: 'x', handler_name: '_h', unsub: () => unsubbed++ }]);
+  m.asyncSubscriptions.set('evt.b', [{ page_id: 'y', handler_name: '_h2', unsub: () => unsubbed++ }]);
+  await m.onUnload();
+  assert.strictEqual(unsubbed, 2);
+  assert.strictEqual(m.asyncSubscriptions.size, 0);
+});
+
+// --------------------------------------------------
 // Runner
 // --------------------------------------------------
 

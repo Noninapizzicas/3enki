@@ -2,9 +2,10 @@
   "_doc": "Blueprint CONCRETO del modulo recetas v1.0.0. Reemplaza completamente al modulo recetas legacy v4.0.0 (cuyo index.js queda como referencia historica). Declara las 13 operaciones del dominio en formato declarativo: contrato + pseudocodigo + reglas. El LLM ES el runtime: lee este blueprint (junto con el padre) como su contrato, sigue el pseudocodigo de cada operacion publicando eventos al bus directamente via bus.publish / bus.publishAndWait. NO existe runtime intermedio. NO existen helpers JS del dominio.",
 
   "id": "recetas",
-  "version": "blueprint-1.0.0",
+  "version": "blueprint-1.1.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
+  "_v1_1_changelog": "v1.1.0 (2026-05-24): anyade subscriber asincrono al evento 'escandallo.coste.calculado' via mecanismo blueprint-subscribers-asincronos (ai-gateway commit 6cb2082c). Operacion interna nueva _aplicar_coste_calculado (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Recetas mantiene la propiedad absoluta de /recetas.json — escandallo NO escribe directo (paradigma event-core puro), publica el evento y recetas lo aplica. Operaciones pre-existentes (crear, listar, obtener, etc.) sin cambios.",
 
   "rol": "Aggregate root del subsistema-recetario. Custodio del dato canonico de cada receta y del catalogo de ingredientes del proyecto.",
 
@@ -727,6 +728,67 @@
         "Si no existe → devuelve instruccion textual para que el LLM caller la siga (proponer + confirmar antes de crear)."
       ],
       "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+    },
+
+    "_aplicar_coste_calculado": {
+      "_descripcion": "Operacion INTERNA — handler asincrono del evento 'escandallo.coste.calculado'. NO se expone como cajon al LLM en el chat normal (el prefijo _ es la convencion canonica para esto). Se invoca SOLO via blueprint-subscribers-asincronos cuando llega el evento. El LLM (en conversacion sintetica creada por ai-gateway) ejecuta este pseudocodigo igual que cualquier operacion.",
+      "input": "{ receta_id (uuid, req), project_id (uuid, req), coste_total?, coste_porcion?, coste_actualizado_at?, postcode_usado?, fuentes_precios?, ingredientes_detalle?, ingredientes_sin_precio?, correlation_id?, timestamp? } — payload del evento 'escandallo.coste.calculado'.",
+      "pseudocodigo": [
+        "async _aplicar_coste_calculado(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.receta_id) return INVALID_INPUT { field: 'receta_id' }",
+        "",
+        "  // 1. Leer store. Recetas es dueno absoluto de /recetas.json — esto es fs.read",
+        "  //    a un path PROPIO, NO viola no_explorar_estado_ajeno.",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/recetas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'recipe_store', hint: 'no hay recetas que actualizar' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  // 2. Encontrar la receta por id",
+        "  receta_idx = (store.recetas || []).findIndex(r => r.id === input.receta_id)",
+        "  if (receta_idx < 0) return RESOURCE_NOT_FOUND { entity_type: 'recipe', entity_ref: input.receta_id }",
+        "  r = store.recetas[receta_idx]",
+        "",
+        "  // 3. Aplicar los campos del evento (solo los que vienen explicitos — tolera ausencias).",
+        "  //    Los 7 campos canonicos de coste vienen de escandallo. El LLM NO inventa valores",
+        "  //    aqui — solo copia lo que viene en input. Marcador de fuente: 'modulo' (escandallo).",
+        "  aplicados = []",
+        "  for (campo of ['coste_total','coste_porcion','coste_actualizado_at','postcode_usado','fuentes_precios','ingredientes_detalle','ingredientes_sin_precio']) {",
+        "    if (input[campo] !== undefined && input[campo] !== null) {",
+        "      r[campo] = input[campo]",
+        "      aplicados.push(campo)",
+        "    }",
+        "  }",
+        "  if (aplicados.length === 0) return INVALID_INPUT { field: 'cambios', message: 'evento sin campos aplicables' }",
+        "",
+        "  // 4. Persistir el store completo",
+        "  store._updated_at = nowISO()",
+        "  await publishAndWait('fs.write.request', {",
+        "    project_id: input.project_id, path: '/recetas.json',",
+        "    content: JSON.stringify(store, null, 2), encoding: 'utf-8', atomic: true",
+        "  })",
+        "",
+        "  // 5. Publicar receta.actualizada para que otros consumers se enteren.",
+        "  //    'origen' indica que vino del subscriber asincrono, no de edicion del usuario.",
+        "  publish('receta.actualizada', {",
+        "    receta_id: r.id, nombre: r.nombre, version: r.version,",
+        "    campos_actualizados: aplicados,",
+        "    origen: 'escandallo.coste.calculado',",
+        "    correlation_id: input.correlation_id || null,",
+        "    timestamp: nowISO()",
+        "  })",
+        "",
+        "  return { status: 200, data: { applied: true, receta_id: r.id, campos_actualizados: aplicados } }"
+      ],
+      "reglas_clave": [
+        "Es handler de evento (fire-and-forget desde escandallo). NO devuelves response al publisher; tu output efectivo es el publish de receta.actualizada que haces tu mismo al final.",
+        "NO inventes valores: solo aplica los campos que vienen explicitos en input. Si falta uno, se mantiene el valor previo de la receta.",
+        "NO uses esta operacion como cajon en el chat normal — es solo handler. Su prefijo _ la marca como interna.",
+        "Si la receta del evento no existe (id desconocido), devuelves RESOURCE_NOT_FOUND. El publisher no se entera (fire-and-forget); el log de ai-gateway registra el fallo del handler para auditoria.",
+        "version de la receta NO se bumpea aqui — los campos de coste son derivacion calculada, no edicion editorial. El bump version queda para actualizar (cuando es el usuario quien edita)."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UNKNOWN_ERROR"]
     }
 
   },
@@ -739,7 +801,13 @@
     "ingrediente.precio.actualizado"
   ],
 
-  "eventos_que_escucho": [],
+  "eventos_que_escucho": [
+    {
+      "evento": "escandallo.coste.calculado",
+      "handler": "_aplicar_coste_calculado",
+      "_descripcion": "v1.1.0: cuando escandallo termina un calculo, publica este evento con los 7 campos de coste. Recetas (dueno del store /recetas.json) escucha y aplica los campos a la receta correspondiente. El LLM ejecuta el handler segun el mecanismo blueprint-subscribers-asincronos de ai-gateway (sin LLM en chat, conversacion sintetica con conversation_id nuevo, user_id='async-subscriber')."
+    }
+  ],
 
   "trabajo_pendiente": [
     "Primitiva universal del bus 'bus.newId' o 'uuid.generate.request/response' que devuelva UUIDv4 real generado por crypto.randomUUID() — para reemplazar el helper LLM-side uuid() que aluciña ids con shape regular.",

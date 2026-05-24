@@ -156,7 +156,26 @@ canonicos del propio repo antes de declarar drift.
 
 ---
 
-### 2.4 · Deuda escandallo + recetas + viabilidad (PRIORIDAD ALTA, DECISION CERRADA, EJECUCION PENDIENTE)
+### 2.4 · Deuda escandallo + recetas + viabilidad ✅ CERRADO (2026-05-24)
+
+**Resuelto** en 3 commits: `6cb2082c` (infraestructura ai-gateway) + `d4adf697` (refactor blueprints) + este commit (docs). Pendiente: audit runtime contra VPS tras deploy.
+
+**Resumen del cierre**:
+- **Mecanismo nuevo**: blueprint subscribers asincronos (ver `propuestas/blueprint-subscribers-asincronos.md`). El LLM ejecuta handlers de eventos del bus en conversaciones sinteticas. Cero parser JS, cero codigo de dominio en JS auxiliar.
+- **escandallo v3.0.0**: lecturas via `publishAndWait('recetas.obtener.request')` y `publishAndWait('recetas.listar.request')`. Escritura sustituida por `publish('escandallo.coste.calculado', {7 campos})` fire-and-forget. Cero `fs.read`/`fs.write` a archivos ajenos. `estado_persistente` ya no declara `archivo_destino`.
+- **recetas v1.1.0**: declara `eventos_que_escucho: [{evento:'escandallo.coste.calculado', handler:'_aplicar_coste_calculado'}]`. Operacion interna nueva (prefijo `_`) que aplica los 7 campos al store cuando llega el evento.
+- **viabilidad**: escaneado, NO necesita refactor (solo lee su propio `/viabilidad.json`).
+- **Cross-check `drift_blueprint_fs_read_a_storage_ajeno`** (frente 2.5 primera capa): PASS sin findings tras el refactor.
+
+**Trabajo pendiente** (no bloqueante):
+- Audit runtime contra VPS para verificar el flujo end-to-end. Sin esto, todo es "deberia funcionar" — no "valida".
+- Rate-limit del mecanismo (deuda v1 documentada).
+- Cross-checks adicionales (verificar `eventos_que_escucho` apunta a handler que existe, evento canonico publicado por alguien).
+- Eliminar alias deprecado `escandallo.coste.actualizado` cuando se verifique que ningun consumer lo escuchaba.
+
+---
+
+### 2.4 · Deuda escandallo + recetas + viabilidad (PRIORIDAD ALTA, DECISION CERRADA, EJECUCION PENDIENTE) — version superseded
 
 > **Recorrido de la atribucion (cerrado 2026-05-24)**:
 >
@@ -460,16 +479,19 @@ de esta sesion deberia prevenirlo.
 
 | # | Frente | Riesgo | Coste | Por que en este orden |
 |---|---|---|---|---|
-| 1 | **2.4** decidir A/B + ejecutar (refactor escandallo o enmendar contrato) | depende | ~30min decision + 3-5h si B / 30min si A | Decision arquitectural previa OBLIGATORIA. Ver seccion 2.4 (disonancia contrato vs blueprint documentada). |
-| 2 | **2.5 refinamiento** "conflicto de propiedad" en validator | bajo | ~1.5h | Solo cobra sentido despues de cerrar 2.4. Ver seccion 2.5 (primera capa ✅ cerrada; falta segunda capa). |
-| 3 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
-| 4 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
+| 1 | **2.4 audit runtime** post-deploy (verificar flujo end-to-end escandallo → recetas) | bajo | ~30min | Imprescindible para validar event-core puro en runtime. |
+| 2 | **2.5 refinamiento** (cross-check eventos_que_escucho apunta a handler existente + evento canonico) | bajo | ~1h | Defensa en profundidad del mecanismo nuevo. |
+| 3 | **Rate-limit** del mecanismo blueprint-subscribers-asincronos | bajo | ~1h | Deuda v1 documentada. No urgente hasta ver eventos en burst. |
+| 4 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
+| 5 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
 
-(Frente **2.1** menu-generator/pages JS legacy ya cerrado: reusa `target_page_id` existente, sin flag nuevo. Cualquier otro modulo JS legacy se anyade igual.)
+(Frente **2.1** menu-generator/pages JS legacy ya cerrado: reusa `target_page_id` existente, sin flag nuevo.)
 (Frente **2.2** ya cerrado en commits `016961e4` + `255135f2`.)
 (Frente **2.3** era FALSO POSITIVO de mi heuristica — los 5 blueprints carta-* declaran `estado_persistente` correctamente.)
-(Frente **2.5 primera capa** ya cerrada en commit `7d5ff4a0`: cross-check `drift_blueprint_fs_read_a_storage_ajeno` implementado y wireado, PASS verde. Refinamiento "conflicto de propiedad" depende de cerrar 2.4 — ver tarea #2 arriba.)
+(Frente **2.4** cerrado en commits `6cb2082c` + `d4adf697` (+ este de docs). Mecanismo blueprint-subscribers-asincronos implementado. escandallo v3.0.0 event-core puro. recetas v1.1.0 subscriber. Audit runtime pendiente — ver tarea #1 arriba.)
+(Frente **2.5 primera capa** ya cerrada en commit `7d5ff4a0`. Refinamiento "conflicto de propiedad" YA NO APLICA: el caso testigo (escandallo declarando `archivo_destino` ajeno) desaparecio con el refactor 2.4. Quedan checks adicionales menores — ver tarea #2 arriba.)
 (Concepto **3.7** ya cerrado en commit `6c8c5b66`.)
+(Patron nuevo: **blueprint subscribers asincronos** documentado en `propuestas/blueprint-subscribers-asincronos.md`. Habilita reactividad event-core pura para handlers de cualquier blueprint.)
 
 **Recomendacion**: si arrancas con poco tiempo, **1 + 2 + 3** cierra 3 frentes (~2h total, cero runtime). **4** otro bloque chico. **5** requiere bloque dedicado.
 

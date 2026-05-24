@@ -67,6 +67,14 @@ class AiGatewayModule extends BaseModule {
     // conversation_id → page_id "foco" actualizado por chat.cambiar_foco. Si no hay
     // entry, se respeta el page_id que viene en cada request del chat.
     this.conversationPageFoco = new Map();
+
+    // Blueprint subscribers asincronos (frente 2.4 cierre 2026-05-24):
+    // event_name → [{ page_id, handler_name, unsub }]. Poblado en _wireBlueprintAsyncSubscribers
+    // al arrancar leyendo eventos_que_escucho de cada blueprint hijo. Cuando llega
+    // un evento, ai-gateway arranca una conversacion sintetica e invoca al LLM
+    // para que ejecute el handler como cualquier otra operacion del blueprint.
+    // Patron documentado en arquitectura/decisiones/propuestas/blueprint-subscribers-asincronos.md.
+    this.asyncSubscriptions = new Map();
   }
 
   // ============================================================
@@ -81,9 +89,11 @@ class AiGatewayModule extends BaseModule {
 
     await this._initializeProviders();
     this._loadBlueprints();
+    this._wireBlueprintAsyncSubscribers();
     this.logger.info('ai-gateway.loaded', {
       providers: this.providers.size,
-      blueprints: this.blueprintModules.size
+      blueprints: this.blueprintModules.size,
+      async_subscribers: this.asyncSubscriptions.size
     });
   }
 
@@ -98,6 +108,13 @@ class AiGatewayModule extends BaseModule {
     this.conversationCajones.clear();
     this.pageGraph.clear();
     this.conversationPageFoco.clear();
+    // Liberar subscripciones asincronas de blueprint subscribers
+    for (const subs of this.asyncSubscriptions.values()) {
+      for (const sub of subs) {
+        try { if (typeof sub.unsub === 'function') sub.unsub(); } catch (_) {}
+      }
+    }
+    this.asyncSubscriptions.clear();
   }
 
   // ============================================================
@@ -692,6 +709,132 @@ class AiGatewayModule extends BaseModule {
   // Prefijos del bus que NO cuentan como "paginas" para el grafo (son primitivas
   // o utilidades transversales que muchos modulos consumen, no destinos de
   // navegacion del usuario).
+  // ============================================================
+  // Blueprint subscribers asincronos (frente 2.4)
+  //
+  // El LLM es el unico interprete del pseudocodigo. Hoy se invoca por chat
+  // del usuario. Este mecanismo amplia: cuando llega un evento del bus que
+  // algun blueprint declara escuchar en eventos_que_escucho, ai-gateway
+  // arranca una conversacion sintetica y le pide al LLM que ejecute el
+  // handler con el payload del evento. Cero parser nuevo, cero codigo de
+  // dominio en JS — la logica vive 100% en el pseudocodigo del blueprint.
+  //
+  // Diseño completo en propuestas/blueprint-subscribers-asincronos.md
+  // ============================================================
+
+  _wireBlueprintAsyncSubscribers() {
+    this.asyncSubscriptions.clear();
+    if (!this.eventBus?.subscribe) {
+      this.logger?.warn('ai-gateway.async-subs.unavailable', { reason: 'eventBus sin subscribe' });
+      return;
+    }
+    for (const [page_id, ctx] of this.blueprintModules.entries()) {
+      const escucha = ctx.child?.eventos_que_escucho;
+      if (!Array.isArray(escucha) || escucha.length === 0) continue;
+      for (const entry of escucha) {
+        // Acepta dos formas: {evento, handler} o string simple.
+        // String simple: el handler se infiere como `_on_<event_name>` con dots
+        // sustituidos por underscores. Recomendado el objeto explicito.
+        const evento = typeof entry === 'string' ? entry : entry?.evento;
+        const handler_name = typeof entry === 'string'
+          ? '_on_' + entry.replace(/\./g, '_')
+          : entry?.handler;
+        if (typeof evento !== 'string' || !evento || typeof handler_name !== 'string' || !handler_name) {
+          this.logger?.warn('ai-gateway.async-subs.entry-invalida', { page_id, entry });
+          continue;
+        }
+        // Validar que la operacion handler existe en el blueprint
+        const ops = ctx.child?.operaciones || {};
+        if (!ops[handler_name]) {
+          this.logger?.warn('ai-gateway.async-subs.handler-ausente', {
+            page_id, evento, handler_name,
+            operaciones_disponibles: Object.keys(ops)
+          });
+          continue;
+        }
+        // Suscribir al bus
+        try {
+          const unsub = this.eventBus.subscribe(evento, (eventEnvelope) => {
+            // Loop-guard: si el propio modulo subscriber es el publisher, skip
+            // (evita recursion infinita si un handler publica el evento que escucha).
+            const sourceModule = eventEnvelope?.source?.module_id || eventEnvelope?.source?.core_id || null;
+            if (sourceModule && sourceModule === page_id) {
+              this.logger?.debug('ai-gateway.async-subs.loop-skip', { page_id, evento });
+              return;
+            }
+            this._handleBlueprintAsyncEvent({
+              page_id, handler_name, evento,
+              event_payload: (eventEnvelope && typeof eventEnvelope === 'object' && 'data' in eventEnvelope)
+                ? eventEnvelope.data : eventEnvelope
+            });
+          });
+          // Registrar para liberar en onUnload
+          const list = this.asyncSubscriptions.get(evento) || [];
+          list.push({ page_id, handler_name, unsub });
+          this.asyncSubscriptions.set(evento, list);
+          this.logger?.info('ai-gateway.async-subs.wired', { page_id, evento, handler_name });
+        } catch (err) {
+          this.logger?.error('ai-gateway.async-subs.wire-failed', {
+            page_id, evento, error: err.message
+          });
+        }
+      }
+    }
+  }
+
+  async _handleBlueprintAsyncEvent({ page_id, handler_name, evento, event_payload }) {
+    // Construir conversacion sintetica que inyecta el blueprint del subscriber
+    // como system prompt y le pide al LLM ejecutar el handler con el payload.
+    // El LLM ejecuta el pseudocodigo del handler igual que cualquier operacion
+    // — usando bus.publish/bus.publishAndWait/cajon.* segun el modelo del blueprint.
+    const conv_id = crypto.randomUUID();
+    const correlation_id = event_payload?.correlation_id || crypto.randomUUID();
+    const project_id = event_payload?.project_id || null;
+    const user_id = 'async-subscriber';
+
+    // Prompt sintetico — el LLM lo procesa como mensaje del usuario.
+    // El system prompt (que se inyecta automaticamente por _executeLLM al ver
+    // page_id) contiene el blueprint del subscriber. El LLM lee el handler X
+    // y lo ejecuta.
+    const synthetic_message =
+      `[sistema interno — invocacion async]\n` +
+      `Has recibido el evento canonico \`${evento}\`. ` +
+      `Ejecuta el handler \`${handler_name}\` de tu blueprint siguiendo SU pseudocodigo paso a paso. ` +
+      `El payload del evento es el INPUT del handler.\n\n` +
+      `payload:\n\`\`\`json\n${JSON.stringify(event_payload || {}, null, 2)}\n\`\`\`\n\n` +
+      `IMPORTANTE: NO respondas al usuario en lenguaje natural — esta es una invocacion automatica del bus. ` +
+      `Solo ejecuta el pseudocodigo del handler y termina (los publish/publishAndWait que haga el handler son tu output efectivo).`;
+
+    try {
+      await this._executeLLM({
+        system: null,
+        messages: [{ role: 'user', content: synthetic_message }],
+        tools: this._getTools(page_id),
+        settings: {},
+        attachments: null,
+        project_id,
+        user_id,
+        conversation_id: conv_id,
+        correlation_id,
+        page_id,
+        context: { async_invocation: true, evento, handler_name },
+        prompt: null,
+        intencion: 'async-handler',
+        providerName: null
+      });
+      this.logger?.info('ai-gateway.async-handler.completed', {
+        page_id, handler_name, evento, correlation_id
+      });
+    } catch (err) {
+      // Fire-and-forget desde la perspectiva del publisher: si el handler falla,
+      // se registra pero no se propaga al publisher (no hay request_id que
+      // correlacionar). Es parte del paradigma event-core puro.
+      this.logger?.error('ai-gateway.async-handler.failed', {
+        page_id, handler_name, evento, correlation_id, error: err.message
+      });
+    }
+  }
+
   _isPrimitivePrefix(prefix) {
     const PRIMITIVE = new Set([
       'fs', 'project', 'llm', 'ai', 'agent', 'credential', 'security',

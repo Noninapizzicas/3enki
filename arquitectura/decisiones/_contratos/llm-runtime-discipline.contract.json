@@ -230,11 +230,13 @@
   "trabajo_pendiente": [
     {
       "id": "implementar_validator",
-      "estado": "abierto",
+      "estado": "cerrado",
       "naturaleza": "transversal",
       "descripcion": "Implementar arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js con los 6 cross-checks declarados. Registrar en scripts/validate-all.js. Wire al baseline.",
       "criterio_de_cierre": "npm run validate:ci incluye llm-runtime-discipline.validate.js. drift-baseline tiene seccion.",
-      "fecha_anotacion": "2026-05-19"
+      "fecha_anotacion": "2026-05-19",
+      "fecha_cierre": "2026-05-23",
+      "notas_de_cierre": "Validator implementado siguiendo patron de cajones-context-partitioning.validate.js: 3 cross-checks estructurales siempre + 3 cross-system con --check-system. PASS estructural verde. Cross-system detecta 6 warnings de divergencias literales sutiles entre contrato y padre (voz 2a/3a persona) — informativos, no bloqueantes. Wireado en scripts/validate-all.js como validator #29."
     },
     {
       "id": "iterar_segun_evidencia_empirica",

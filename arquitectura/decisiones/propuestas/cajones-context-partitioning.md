@@ -1,5 +1,50 @@
 # Cajones — context partitioning para blueprints
 
+> **✅ Documento cerrado (2026-05-23).** El guion de implementacion descrito
+> abajo se completo y mergeo a main en 3 PRs durante la sesion del 23 de
+> mayo (PRs #186, #187, #188). Lo que era propuesta es ahora paradigma
+> vivo del sistema.
+>
+> **Contrato canonico** (fuente de verdad, validable):
+> [`arquitectura/decisiones/_contratos/cajones-context-partitioning.contract.json`](../_contratos/cajones-context-partitioning.contract.json) v1.0.0.
+>
+> **Validator**:
+> [`arquitectura/decisiones/_validators/cajones-context-partitioning.validate.js`](../_validators/cajones-context-partitioning.validate.js) (8 cross-checks, wireado a `validate-all`).
+>
+> **Motor**:
+> [`modules/conversacion/ai-gateway/index.js`](../../../modules/conversacion/ai-gateway/index.js): `_extractCajones`, `_rankCajones`, `_buildCajonesSystemPrompt`, `_buildPageGraph`, `_executeCajonTool`, `_executeNavTool`, handlers publicos `handlePageRelated`/`handleChatCambiarFoco`.
+>
+> **Estado**:
+> - 10/10 blueprints del sistema con `cajones_enabled: true` (recetas, escandallo, viabilidad, tecnicas + 6 carta-*).
+> - 52/52 tests POC2 verdes.
+> - Validado en runtime real (deepseek): 0% cajones equivocados, reduccion 68% en system prompt (63 KB → 24 KB en recetas), foco dinamico funciona end-to-end (LLM invoca `chat.cambiar_foco` con recovery de `RESOURCE_NOT_FOUND`, evento `chat.foco.cambiado` publicado al bus, frontend listener registrado).
+>
+> **Las 8 decisiones abiertas se cerraron con las recomendaciones del propio doc:**
+> 1. Persistencia → **A** (cierre auto al siguiente turno).
+> 2. Aplicabilidad → **solo blueprints** en v1.
+> 3. Quien abre el cajon → **LLM autonomo** (cero router externo).
+> 4. Niveles de profundidad → **sin niveles** (catalogo plano).
+> 5. Detector de foco → **A** (LLM autonomo, +1 turno latencia aceptable).
+> 6. Ayuda UI al cambio de foco → **banner en chat** (transparencia, coste cero).
+> 7. Archivadores/cajones anidados → **C** (plano en v1).
+> 8. Almacenamiento fisico → **inline en blueprint hijo** (cero archivos nuevos).
+>
+> **Drift / deuda detectada durante el piloto** (no son de cajones, ortogonales):
+> - Anti-patron `cajon.listar` redundante en T1 chitchat → **mitigado** en commit `645f43d` (regla operativa explicita en `_buildCajonesSystemPrompt`).
+> - Blueprint `escandallo` y posibles otros usan `fs.read.request '/recetas.json'` directo en lugar de `publishAndWait('recetas.obtener.request', ...)`. Viola `no_explorar_estado_ajeno` de `llm-runtime-discipline`. Deuda preexistente del blueprint, no de cajones. Pendiente refactor.
+> - `menu-generator` y otros modulos JS legacy (`comandero`, `cocina`, `pedidos`, ...) no tienen blueprint, asi que no son destinos validos para `chat.cambiar_foco` ni aparecen en `page.related`. Pendiente decidir si se marcan como "page navegable" con flag explicito en `module.json` para incluirlos en el grafo sin migrarlos a blueprint.
+>
+> **Trabajo pendiente del propio contrato** (no bloqueante):
+> - Medicion de runtime continuada (tokens/turno, tasa de cajon equivocado, distraccion del LLM) durante 1-2 semanas de uso real.
+> - Decidir layout de `RelatedPagesBar.svelte` en el AppShell (system-bar / panel apilable / flotante). Componente listo, montaje pendiente.
+>
+> Este documento se conserva como **registro historico** del diseno
+> conversacional que produjo el contrato. La fuente de verdad operativa
+> ahora es el contrato + el codigo. Cualquier evolucion del patron se
+> hara bumpeando el contrato, no editando este documento.
+
+---
+
 > **Documento de retomar.** Escrito al final de la misma sesión que produjo
 > `capa-unica-tools-via-plugins.md`. Captura el diseño del concepto "cajones"
 > (context partitioning + lazy loading estilo buscador) para que la próxima

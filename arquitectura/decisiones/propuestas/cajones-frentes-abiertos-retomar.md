@@ -293,27 +293,48 @@ Estos conceptos aparecieron en la sesion pero NO estan plenamente canonizados to
 
 **Si se diluye**: confianza ciega en validators verdes → blueprints con deuda semantica pasan sin detectar.
 
-### 3.7 · "Dos registries paralelos en el sistema UI" (DRIFT ESTRUCTURAL DETECTADO 2026-05-24)
+### 3.7 · "Dos registries paralelos en el sistema UI" — REGLA YA DOCUMENTADA, FUE ERROR DE LECTURA MIO (corregido 2026-05-24)
 
-**Aparece en**: PR #190 (fix icono RelatedPagesPanel no visible en system-bar pese al modulo canonico bien formado).
+**Correccion respecto al primer pase de este doc**: lo describí como "drift
+estructural descubierto" — INCORRECTO. La regla ESTA documentada en
+`contexto/ui.json::panel_system.registro_obligatorio` desde antes de la
+sesion:
 
-**Captura**: el sistema UI del frontend tiene DOS registries de paneles coexistiendo, ninguno marcado como obsoleto:
+> *"Cada panel flotante DEBE estar en panels.ts con su loader. El
+> autodiscovery de manifest.json descubre módulos pero los paneles se
+> registran aparte."*
 
-1. **`frontend/src/lib/modules/<name>/manifest.json` + `loader.ts`** — autodiscovery via `import.meta.glob('./*/manifest.json')`. Alimenta `lazy-registry`. Lo usa `registerAllModules()` en `AppShell.svelte`. **Patron moderno**.
+Lo que paso es que en mi primer pase por `contexto/ui.json` (al hacer el
+refactor canonico de related-pages, commit `016961e4`/PR #189) lei los
+campos `layout`, `panel_system.flujo` y `ui_modules` pero NO me detuve
+en `registro_obligatorio`. Resultado: el modulo canonico quedo bien
+formado pero sin entry en `panels.ts`, asi que el icono no aparecio en
+system-bar. El fix vino en PR #190 — corregir mi error de lectura,
+NO de descubrir drift.
 
-2. **`frontend/src/lib/modules/panels.ts`** — objeto `panels: Record<string, PanelDef>` estatico, declarado manualmente. Lo usa `getPanelsByZone()`, consumido por `SystemBar.svelte`, `WorkBar.svelte` y `ChatConfig.svelte` para renderizar BOTONES por zona. **Patron legacy**.
+**La regla operativa sigue vigente**: para que un modulo UI con icono
+visible aparezca en una barra, necesita DOS registros (autodiscovery +
+panels.ts). Ver `contexto/ui.json::panel_system.doble_registro_obligatorio`
+(reforzado en esta sesion con ejemplo canonico de `credentials` + ejemplo
+real de la trampa de PR #189/#190 + regla operativa explicita para
+agentes futuros).
 
-**Consecuencia**: para que un modulo UI nuevo APAREZCA EN UNA BARRA, hay que registrarlo en AMBOS sitios. El precedente del propio repo es `credentials`: su `manifest.json` tiene `zone: 'system-bar'` (registry #1) Y tiene entry `'credentials-list'` en `panels.ts` con `zone: 'chat-config'` (registry #2). El icono visible en la barra viene del #2 — el #1 alimenta al lazy-registry usado por otra parte del sistema.
+**Captura mecanica**:
 
-**Por que importa**:
-- Quien anyade un modulo nuevo solo con `manifest.json` cree que "ya esta" porque el patron canonico esta bien formado, pero la barra del sistema queda sin icono. Trampa silenciosa.
-- Mantener dos registries paralelos requiere disciplina dual y producira drift entre ambos con el tiempo (ya empieza: credentials declara `zone: 'system-bar'` en #1 pero `zone: 'chat-config'` en #2 — inconsistencia inocua hoy, riesgo manyana).
+| Sistema | Que registra | Quien lo consume |
+|---|---|---|
+| `manifest.json` + `loader.ts` (autodiscovery via `import.meta.glob`) | el modulo como tal en `lazy-registry` para apertura de panel | `registerAllModules()` en `AppShell.svelte`, `LazyShell.svelte` para abrir paneles |
+| `panels.ts` (registry estatico manual con `PanelDef` por entrada) | `PanelDef` con `zone`, `icon`, `title`, `size`, `loader` para renderizar BOTON en una barra | `SystemBar.svelte`, `WorkBar.svelte`, `ChatConfig.svelte` via `getPanelsByZone()` |
 
-**Si se diluye**: cada modulo nuevo que se anyada tropezara con el mismo gap. Sin documentar, el patron de "doble registro" se pierde. Cuando finalmente el frontend se rehaga, sera dificil saber cual de los dos registries era "el bueno".
+**Precedente del propio repo**: `credentials/manifest.json` tiene
+`zone: 'system-bar'` (autodiscovery) y `panels.ts::'credentials-list'`
+tiene `zone: 'chat-config'` (estatico) — los dos pueden diferir, no
+contradiccion sino zonas distintas para roles distintos.
 
-**Que falta documentar/canonizar**:
-- Anyadir nota explicita en `contexto/ui.json` describiendo los dos registries, cual usa cada componente (`SystemBar`/`WorkBar`/`ChatConfig` vs `LazyShell`/`lazy-registry`), y la regla operativa: "para que un modulo aparezca con boton en una barra, registralo TAMBIEN en `panels.ts` con loader explicito". ~5 min, riesgo nulo.
-- Decision a futuro: unificar los dos registries. Sesion dedicada de frontend, fuera de scope cajones.
+**Si se diluye**: cualquier modulo nuevo cae en la misma trampa
+(manifest bien formado pero sin entry en panels.ts → boton invisible
+en barras). El refuerzo de `contexto/ui.json::doble_registro_obligatorio`
+de esta sesion deberia prevenirlo.
 
 ---
 
@@ -321,15 +342,15 @@ Estos conceptos aparecieron en la sesion pero NO estan plenamente canonizados to
 
 | # | Frente | Riesgo | Coste | Por que en este orden |
 |---|---|---|---|---|
-| 1 | Nota en `contexto/ui.json` sobre **drift 3.7** (dos registries) | nulo | ~5min | Cierra trampa silenciosa antes de que otro modulo caiga. |
-| 2 | **2.3** declaraciones completas en 5 carta-* | bajo | ~1h | Cero runtime. Habilita 2.5 sin falsos positivos. Habilita 2.4 escaneo Fase 1 sin ruido. |
-| 3 | **2.5** cross-check estatico en validator disciplina | bajo | ~1h | Bloquea anti-patrones NUEVOS desde CI. Requiere 2.3 cerrado. |
-| 4 | **2.1** flag `navegable` para pages JS legacy | bajo-medio | ~1.5h | Cierra agujero conceptual de Fase 5 bis. Decision UX requerida (que modulos marcar). |
-| 5 | **2.4** refactor escandallo + recetas + verificar viabilidad | medio-alto | 3-5h | Sesion dedicada. Plan ya escrito en `escandallo-aislamiento-store.md`. Toca runtime. |
-| 6 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
-| 7 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
+| 1 | **2.3** declaraciones completas en 5 carta-* | bajo | ~1h | Cero runtime. Habilita 2.5 sin falsos positivos. Habilita 2.4 escaneo Fase 1 sin ruido. |
+| 2 | **2.5** cross-check estatico en validator disciplina | bajo | ~1h | Bloquea anti-patrones NUEVOS desde CI. Requiere 2.3 cerrado. |
+| 3 | **2.1** flag `navegable` para pages JS legacy | bajo-medio | ~1.5h | Cierra agujero conceptual de Fase 5 bis. Decision UX requerida (que modulos marcar). |
+| 4 | **2.4** refactor escandallo + recetas + verificar viabilidad | medio-alto | 3-5h | Sesion dedicada. Plan ya escrito en `escandallo-aislamiento-store.md`. Toca runtime. |
+| 5 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
+| 6 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
 
 (Frente **2.2** ya cerrado en commits `016961e4` + `255135f2` — ver seccion 2.2 con ✅.)
+(Concepto **3.7** — la "tarea #1" que la version anterior listaba aqui ya esta cerrada: `contexto/ui.json::panel_system.doble_registro_obligatorio` reforzado en esta sesion con ejemplo canonico + ejemplo de la trampa real + regla operativa.)
 
 **Recomendacion**: si arrancas con poco tiempo, **1 + 2 + 3** cierra 3 frentes (~2h total, cero runtime). **4** otro bloque chico. **5** requiere bloque dedicado.
 

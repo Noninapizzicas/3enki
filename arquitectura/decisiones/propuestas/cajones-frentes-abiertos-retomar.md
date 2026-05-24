@@ -104,31 +104,49 @@ Pendiente trivial: smoke visual tras el proximo deploy del frontend confirmando 
 
 ---
 
-### 2.3 · 5 blueprints carta-* con `estado_persistente` incompleto (PRIORIDAD MEDIA, BAJO RIESGO)
+### 2.3 · 5 blueprints carta-* con `estado_persistente` incompleto ❌ FALSO POSITIVO (corregido 2026-05-24)
 
-**Contexto**: escaneo exhaustivo del 2026-05-24 detecto que **5 blueprints declaran `estado_persistente` parcial** (solo el archivo principal `/<modulo>.json`) pero en realidad operan con MAS paths propios:
+**Correccion respecto al primer pase de este doc**: lo describi como
+"5 blueprints con declaracion parcial — solo declaran `/<modulo>.json`
+pero usan mas paths propios". **INCORRECTO. Los 5 blueprints declaran
+correctamente sus paths propios** en `estado_persistente.paths_relativos.*`
+(o keys analogos). El problema NO era de los blueprints sino de mi
+heuristica de escaneo del 2026-05-24:
 
-| Blueprint | estado_persistente actual | Paths que USA pero no declara |
-|---|---|---|
-| `carta-design` | `/carta-design.json` | `/carta-design/profiles/`, `/carta-design/designs/` |
-| `carta-impresion` | `/carta-impresion.json` | `/cartas-impresion/` (plural) |
-| `carta-manager` | `/carta-manager.json` | `/cartas/`, `/cartas/versions/` |
-| `carta-scheduler` | `/carta-scheduler.json` | `/carta-scheduler-reglas.json`, `/carta-scheduler-pendientes.json` |
-| `carta-marketing` | `/carta-marketing.json` | `/storage/config/marca.json` |
+| Blueprint | estado_persistente real (verificado) |
+|---|---|
+| `carta-design` | `paths_relativos_proyecto.designs: '/carta-design/designs/<carta_id>__<timestamp>.html'` + `profiles_custom: '/carta-design/profiles/<profile_id>.json'` |
+| `carta-impresion` | `paths_relativos.html: '/cartas-impresion/<carta_id>.html'` + `meta: '/cartas-impresion/<carta_id>.meta.json'` |
+| `carta-manager` | `paths_relativos.carta_actual: '/cartas/<carta_id>.json'` + `version_archivada: '/cartas/versions/<carta_id>/<timestamp>.json'` |
+| `carta-scheduler` | `paths_relativos.reglas: '/carta-scheduler-reglas.json'` + `pendientes: '/carta-scheduler-pendientes.json'` |
+| `carta-marketing` | `paths_relativos.perfil_marca: '/storage/config/marca.json'` |
 
-**Verificado** (2026-05-24): `marca.json` solo lo referencia carta-marketing → es propio, no compartido.
+**Que paso con el escaneo**: el script que escribi para detectar el
+anti-patron `fs.read|fs.write` a storage ajeno comparaba los paths
+usados contra `'/' + moduleName + '.json'` por defecto, sin leer
+`estado_persistente.paths_relativos.*` ni normalizar templates como
+`<carta_id>` o `<timestamp>`. Por eso reporto 5 falsos positivos.
 
-**NO violan `no_explorar_estado_ajeno`** — son paths suyos. El escaneo los marca como falsos positivos por la heuristica simple "declara `/X.json` pero usa `/Y/`".
+**Que NO hay que hacer**: tocar los blueprints. Estan bien declarados.
 
-**Que falta**:
-1. Anyadir paths reales al `estado_persistente` de los 5 blueprints (refactor de declaracion, cero cambio de runtime).
-2. Bump menor en cada blueprint (v1.X.0 → v1.(X+1).0).
-3. Verificar que ningun escaneo posterior los marca como anti-patron.
-4. Idealmente: el validator `llm-runtime-discipline` deberia tener cross-check estatico `drift_blueprint_fs_read_a_storage_ajeno` que use exactamente esta heuristica MEJORADA (comparar paths usados vs `estado_persistente` declarado completo). Ver frente 2.5.
+**Que SI hay que hacer (heredado al frente 2.5)**: cuando se implemente
+el cross-check estatico en el validator `llm-runtime-discipline`, la
+heuristica DEBE:
+1. Leer `estado_persistente` del blueprint y extraer TODOS los paths
+   declarados (no asumir patron `/<modulo>.json`). Buscar en
+   `paths_relativos.*`, `paths_relativos_proyecto.*`, `paths_modulo*`,
+   y en cualquier valor string que empiece por `/` recursivamente.
+2. Normalizar templates: `<carta_id>` → matcher, `<timestamp>` →
+   matcher, etc. Un path declarado `/cartas/<carta_id>.json` matchea
+   `/cartas/abc-123.json` en el pseudocodigo.
+3. Cruzar contra paths usados en `fs.read.request`/`fs.write.request`
+   del pseudocodigo. Solo marcar como anti-patron si el path usado NO
+   matchea ninguno de los declarados.
 
-**Por que bajo riesgo**: cero modificacion del pseudocodigo, cero invocacion al LLM, cero deploy del VPS afectado. Solo metadata.
-
-**Estimacion**: ~1h.
+Patron general aprendido en esta sesion: heuristicas simples del
+agente producen falsos positivos que se reportan como "deuda del
+sistema". Cada heuristica nueva debe verificarse contra ≥2 ejemplos
+canonicos del propio repo antes de declarar drift.
 
 ---
 
@@ -175,14 +193,43 @@ Pendiente trivial: smoke visual tras el proximo deploy del frontend confirmando 
 **Que falta**:
 1. Anyadir funcion `checkBlueprintsRespetanEstadoPersistente(findings, blueprints)` al validator.
 2. Para cada blueprint, leer `estado_persistente`, escanear pseudocodigos buscando `fs.read.request`/`fs.write.request`, y reportar como `error` cualquier path que no este en el `estado_persistente` declarado.
-3. Para que esto no de los 5 falsos positivos actuales, primero hay que cerrar 2.3 (declarar paths reales).
-4. Wireo a `validate-all` (ya esta).
+3. Wireo a `validate-all` (ya esta).
+
+**Heuristica obligatoria (importante — sin esto produce falsos positivos masivos)**:
+
+Esta nota viene de la correccion del frente 2.3 (ver arriba): los
+blueprints declaran `estado_persistente` en formatos heterogeneos
+(claves `paths_relativos.*`, `paths_relativos_proyecto.*`, `paths_modulo*`,
+o strings sueltos). Y usan TEMPLATES en los paths declarados
+(`/cartas/<carta_id>.json`, `/carta-design/designs/<carta_id>__<timestamp>.html`)
+que NO matchearan literalmente contra los paths que el pseudocodigo
+construye en runtime. La heuristica DEBE:
+
+1. **Leer `estado_persistente` recursivamente** y extraer TODOS los
+   strings que empiecen por `/` (no asumir patron `/<modulo>.json`).
+   Cubrir al menos: `paths_relativos.*`, `paths_relativos_proyecto.*`,
+   `paths_modulo*`, y cualquier key del objeto cuyo valor sea string
+   empezando por `/`.
+2. **Normalizar templates** declarados a regex matchers:
+   `<carta_id>` → `[\w-]+`, `<timestamp>` → `[\w.-]+`, etc.
+3. **Cruzar contra paths usados** en `publishAndWait('fs.(read|write).request', {path: '/<X>...'})` del pseudocodigo. Marcar como anti-patron SOLO si ningun matcher declarado encaja.
+
+**Test obligatorio antes de wirear el cross-check**: correr la
+heuristica contra los 10 blueprints actuales del repo y verificar que
+**solo escandallo** sale como anti-patron (las 3 lecturas + 1
+escritura directa a `/recetas.json` desde escandallo, que es la deuda
+real documentada en `escandallo-aislamiento-store.md`). Si la
+heuristica produce findings en cualquier otro blueprint, esta mal
+escrita — los 5 carta-* son falsos positivos garantizados de
+heuristicas simples (ver frente 2.3).
 
 **Por que prioridad media**: defensa en profundidad — sin esto, el anti-patron puede reaparecer en blueprints futuros sin que nadie se entere hasta el runtime real.
 
-**Estimacion**: ~1h.
+**Estimacion**: ~1.5h (1h implementacion + 30min verificacion contra los 10 blueprints actuales).
 
-**Dependencia**: 2.3 cerrado primero (sin declaraciones limpias, este check da false positives masivos).
+**Dependencia (corregida)**: ya NO depende de 2.3 (2.3 era falso positivo).
+Depende solo de que la heuristica este bien escrita (ver nota obligatoria
+arriba).
 
 ---
 
@@ -342,15 +389,15 @@ de esta sesion deberia prevenirlo.
 
 | # | Frente | Riesgo | Coste | Por que en este orden |
 |---|---|---|---|---|
-| 1 | **2.3** declaraciones completas en 5 carta-* | bajo | ~1h | Cero runtime. Habilita 2.5 sin falsos positivos. Habilita 2.4 escaneo Fase 1 sin ruido. |
-| 2 | **2.5** cross-check estatico en validator disciplina | bajo | ~1h | Bloquea anti-patrones NUEVOS desde CI. Requiere 2.3 cerrado. |
-| 3 | **2.1** flag `navegable` para pages JS legacy | bajo-medio | ~1.5h | Cierra agujero conceptual de Fase 5 bis. Decision UX requerida (que modulos marcar). |
-| 4 | **2.4** refactor escandallo + recetas + verificar viabilidad | medio-alto | 3-5h | Sesion dedicada. Plan ya escrito en `escandallo-aislamiento-store.md`. Toca runtime. |
-| 5 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
-| 6 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
+| 1 | **2.5** cross-check estatico en validator disciplina | bajo | ~1.5h | Bloquea anti-patrones NUEVOS desde CI. NO depende ya de 2.3 (era falso positivo). Heuristica obligatoria documentada en su seccion. |
+| 2 | **2.1** flag `navegable` para pages JS legacy | bajo-medio | ~1.5h | Cierra agujero conceptual de Fase 5 bis. Decision UX requerida (que modulos marcar). |
+| 3 | **2.4** refactor escandallo + recetas + verificar viabilidad | medio-alto | 3-5h | Sesion dedicada. Plan ya escrito en `escandallo-aislamiento-store.md`. Toca runtime. |
+| 4 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
+| 5 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
 
 (Frente **2.2** ya cerrado en commits `016961e4` + `255135f2` — ver seccion 2.2 con ✅.)
-(Concepto **3.7** — la "tarea #1" que la version anterior listaba aqui ya esta cerrada: `contexto/ui.json::panel_system.doble_registro_obligatorio` reforzado en esta sesion con ejemplo canonico + ejemplo de la trampa real + regla operativa.)
+(Frente **2.3** era FALSO POSITIVO de mi heuristica — ver seccion 2.3 con ❌. Los 5 blueprints carta-* declaran `estado_persistente` correctamente.)
+(Concepto **3.7** ya cerrado en commit `6c8c5b66`: `contexto/ui.json::panel_system.doble_registro_obligatorio` reforzado con ejemplo canonico + ejemplo de la trampa real + regla operativa.)
 
 **Recomendacion**: si arrancas con poco tiempo, **1 + 2 + 3** cierra 3 frentes (~2h total, cero runtime). **4** otro bloque chico. **5** requiere bloque dedicado.
 

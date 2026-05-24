@@ -370,35 +370,52 @@ aplica igual.
 
 ### 5.5.4 Barra lateral de destinos — diseño
 
-**Vestigio en el frontend**: el `grep` no encontró nada explícito
-(`destinos`, `paginas-relacionadas`, `related-pages`, etc.). Pero la
-**infraestructura está perfecta**:
+> **Reinterpretación 2026-05-24**: la descripción original asumía "barra
+> lateral siempre visible" como navegación ambiental. Auditando
+> `contexto/ui.json` (fuente canónica de patrones UI) se confirma que el
+> sistema NO tiene ese patrón: las zonas válidas son exactamente cuatro
+> (`work-bar`, `chat-config`, `chat-tools`, `system-bar`) y el principle
+> declarado es *"1 click = 1 panel flotante"*. Inventar una zona nueva
+> rompía convención. La traducción canónica del "ambiental" del doc
+> original al patrón real del sistema: **UI module en
+> `frontend/src/lib/modules/related-pages/` con `zone: 'system-bar'`,
+> aparece como botón 🧭, click abre panel flotante que el usuario puede
+> dejar abierto el tiempo que quiera (el wrapper `Panel.svelte` ya soporta
+> drag + close ESC)**. El "ambiental" lo elige el usuario manteniendo el
+> panel abierto.
 
-- `frontend/src/lib/modules/panels.ts` declara zonas:
-  `'work-bar' | 'chat-config' | 'chat-tools' | 'system-bar'`.
-- Añadir una zona nueva `'related-pages'` es 1 línea + 1 componente.
-- `WorkBar.svelte` es el patrón a imitar: layout vertical, lista de items
-  con icono + título, click dispara acción.
+**Arquitectura canónica** (commit `9feda84`+ posterior reinterpretación):
 
-**Componente nuevo `RelatedPagesBar.svelte`**:
+- Módulo UI en `frontend/src/lib/modules/related-pages/`:
+  - `manifest.json` con `zone: 'system-bar'`, icono `🧭`, label "Páginas relacionadas".
+  - `index.ts` exportando el `UIModule` con `PanelComponent: RelatedPagesPanel`.
+  - `RelatedPagesPanel.svelte` con el contenido del panel.
+- Autodiscovery via `loader.ts::import.meta.glob('./*/manifest.json')` — sin
+  registro manual en `panels.ts`.
 
-- Suscrito al store de página activa (Svelte store o derivado del
-  `$page.url.pathname` de SvelteKit).
-- Llama a `page.related({ page_id: activa })` (tool nueva o store derivado
-  del grafo precargado).
-- Renderiza una lista de links a otras páginas. Cada link:
-  - Icono (del `module.json.icon` o del `panels.ts`).
-  - Título corto (del `module.json.name` o `panels.ts.title`).
-  - Click → `goto('/<page_id>')` de SvelteKit.
+**Comportamiento del componente**:
+
+- Suscrito al `$page.url.pathname` de SvelteKit (deriva `page_id` del
+  segundo segmento). Recarga al cambiar de page.
+- Llama `mqttRequest('page', 'related', { page_id })` → ai-gateway
+  responde con `{ page_id, consumes, consumed_by, related }` (ya filtrado
+  a páginas navegables registradas como blueprints).
+- Renderiza lista vertical de links a otras páginas. Cada link:
+  - Icono `→` decorativo (el icono del módulo destino se podría inferir
+    del `module.json.icon`, evolución futura).
+  - Título = page_id del destino.
+  - Click → `goto('/<projectParam>/<page_id>')` de SvelteKit.
   - Hover → tooltip con la razón de la relación ("consume recetas",
-    "alimentado por escandallo").
+    "alimentado por escandallo", "relación circular con X").
+- Si lista vacía → mensaje informativo (el panel NO se autocierra; el
+  usuario lo cierra con ESC o botón del wrapper).
 
 **Reglas de UI**:
-- Máximo ~5-7 destinos visibles. Si hay más, "ver todos" expande.
-- Orden = mismo ranking que cajones: cercanía en el grafo (1 salto > 2
-  saltos) + page más recientemente visitado.
-- Sin notificaciones, sin badges, sin presión visual. Es navegación
-  ambiental, no alerta.
+- Máximo `maxVisible=7` destinos visibles. Si hay más, "ver todos" expande.
+- Orden = el que devuelve el backend (consumes + consumed_by union,
+  ordenados alfabéticamente por ahora; ranking por saltos + recencia es
+  evolución futura del backend).
+- Sin notificaciones, sin badges, sin presión visual.
 
 ### 5.5.5 Lo que NO se añade (importante)
 

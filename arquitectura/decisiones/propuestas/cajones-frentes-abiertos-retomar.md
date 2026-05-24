@@ -168,7 +168,7 @@ canonicos del propio repo antes de declarar drift.
 - **Cross-check `drift_blueprint_fs_read_a_storage_ajeno`** (frente 2.5 primera capa): PASS sin findings tras el refactor.
 
 **Trabajo pendiente** (no bloqueante):
-- Audit runtime contra VPS para verificar el flujo end-to-end. Sin esto, todo es "deberia funcionar" — no "valida".
+- ~~Audit runtime contra VPS para verificar el flujo end-to-end.~~ ✅ **VALIDADO 2026-05-24** — conversación de 3 turnos (crear receta → calcular escandallo → mostrar receta). `escandallo.coste.calculado` publicado con los 7 campos. `receta.actualizada` con `origen='escandallo.coste.calculado'` capturado. Costes aplicados al store (~25s eventual consistency). Cero `fs.read`/`fs.write` directo a archivos ajenos. Trace en `audit/audit24-runtime-frente24-VALIDA.txt`.
 - Rate-limit del mecanismo (deuda v1 documentada).
 - Cross-checks adicionales (verificar `eventos_que_escucho` apunta a handler que existe, evento canonico publicado por alguien).
 - Eliminar alias deprecado `escandallo.coste.actualizado` cuando se verifique que ningun consumer lo escuchaba.
@@ -479,11 +479,10 @@ de esta sesion deberia prevenirlo.
 
 | # | Frente | Riesgo | Coste | Por que en este orden |
 |---|---|---|---|---|
-| 1 | **2.4 audit runtime** post-deploy (verificar flujo end-to-end escandallo → recetas) | bajo | ~30min | Imprescindible para validar event-core puro en runtime. |
-| 2 | **2.5 refinamiento** (cross-check eventos_que_escucho apunta a handler existente + evento canonico) | bajo | ~1h | Defensa en profundidad del mecanismo nuevo. |
-| 3 | **Rate-limit** del mecanismo blueprint-subscribers-asincronos | bajo | ~1h | Deuda v1 documentada. No urgente hasta ver eventos en burst. |
-| 4 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
-| 5 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
+| 1 | **2.5 refinamiento** (cross-check eventos_que_escucho apunta a handler existente + evento canonico) | bajo | ~1h | Defensa en profundidad del mecanismo nuevo. |
+| 2 | **Rate-limit** del mecanismo blueprint-subscribers-asincronos | bajo | ~1h | Deuda v1 documentada. No urgente hasta ver eventos en burst. |
+| 3 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
+| 4 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
 
 (Frente **2.1** menu-generator/pages JS legacy ya cerrado: reusa `target_page_id` existente, sin flag nuevo.)
 (Frente **2.2** ya cerrado en commits `016961e4` + `255135f2`.)

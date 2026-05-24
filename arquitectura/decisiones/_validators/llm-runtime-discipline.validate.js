@@ -178,6 +178,124 @@ function checkHijosExtendsPadreConDisciplina(findings, padresConSeccion) {
   }
 }
 
+// ============================================================================
+// drift_blueprint_fs_read_a_storage_ajeno (cross-check estatico)
+//
+// Detecta uso de fs.read.request/fs.write.request a paths que NO estan
+// declarados en el estado_persistente del propio blueprint.
+//
+// Heuristica verificada contra los 10 blueprints actuales: 0 findings esperados
+// con la implementacion actual (smoke test 2026-05-24). Detalle:
+// - extractDeclaredPaths recorre estado_persistente recursivamente y captura
+//   strings que empiezan por '/' (los formatos son heterogeneos: paths_relativos,
+//   paths_relativos_proyecto, archivo_destino, etc.).
+// - templatePathToRegex normaliza placeholders <carta_id>, <timestamp>, etc.
+// - 3 modos de match (declarado wins si CUALQUIERA pasa):
+//   1. regex exacto contra template normalizado
+//   2. prefijo: path usado es prefijo de algun declarado (cubre el patron
+//      pseudocodigo `path: '/cartas/' + carta_id + '.json'`)
+//   3. modulo built-in: paths que empiezan por 'modules/<modulo>/'
+//
+// Limitacion conocida (pendiente refinar): la heuristica NO detecta el caso
+// "conflicto de propiedad" (dos modulos declaran el mismo path como propio).
+// Ese es el anti-patron real cuando un blueprint declara archivo_destino
+// apuntando al storage de otro modulo (escandallo declara /recetas.json,
+// recetas tambien lo declara). Ver apuntes en cajones-frentes-abiertos-retomar.md
+// para la fase de refinamiento.
+// ============================================================================
+
+function extractDeclaredPathsRecursive(node, acc = []) {
+  if (node == null) return acc;
+  if (typeof node === 'string') {
+    const matches = node.match(/\/[\w\-/<>]+\.\w+|\/[\w\-/<>]+\/(?=[\s)<])|\/[\w\-/<>]+\/?$/g) || [];
+    for (const m of matches) {
+      const cleaned = m.replace(/[()]+$/, '').replace(/[.,;]+$/, '');
+      if (cleaned.length > 1) acc.push(cleaned);
+    }
+    return acc;
+  }
+  if (Array.isArray(node)) {
+    for (const v of node) extractDeclaredPathsRecursive(v, acc);
+    return acc;
+  }
+  if (typeof node === 'object') {
+    for (const k of Object.keys(node)) extractDeclaredPathsRecursive(node[k], acc);
+  }
+  return acc;
+}
+
+function templatePathToRegex(declaredPath) {
+  let escaped = declaredPath.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  escaped = escaped.replace(/<[^>]+>/g, '[\\w.-]+');
+  if (declaredPath.endsWith('/')) return new RegExp('^' + escaped);
+  return new RegExp('^' + escaped + '$');
+}
+
+function extractUsedFsPaths(blueprint) {
+  const usados = [];
+  const ops = blueprint.operaciones || {};
+  for (const [opName, opBody] of Object.entries(ops)) {
+    const pseudo = opBody?.pseudocodigo;
+    if (!Array.isArray(pseudo)) continue;
+    for (const step of pseudo) {
+      if (typeof step !== 'string') continue;
+      const rx = /publishAndWait\s*\(\s*['"]fs\.(read|write)\.request['"][^)]*?path:\s*['"]([^'"]+)['"]/g;
+      let m;
+      while ((m = rx.exec(step)) !== null) {
+        usados.push({ operacion: opName, fs_op: m[1], path: m[2] });
+      }
+    }
+  }
+  return usados;
+}
+
+function checkBlueprintsRespetanEstadoPersistente(findings) {
+  // Localizar todos los blueprints hijos
+  const blueprints = [];
+  function walk(dir, depth) {
+    if (depth > 6 || !fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      if (name === 'node_modules' || name === '_archived' || name === '_legacy' || name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) walk(full, depth + 1);
+        else if (name.endsWith('.blueprint.json')) blueprints.push(full);
+      } catch (_) {}
+    }
+  }
+  walk(path.join(REPO_ROOT, 'modules'), 0);
+
+  for (const bpPath of blueprints) {
+    const moduleName = path.basename(path.dirname(bpPath));
+    let bp;
+    try { bp = loadJson(bpPath); } catch (_) { continue; }
+    if (!bp || !bp.operaciones) continue;
+
+    // Paths declarados (incluyendo archivo_destino si existe)
+    const declarados = extractDeclaredPathsRecursive(bp.estado_persistente);
+    if (declarados.length === 0) declarados.push('/' + moduleName + '.json');
+    const matchers = declarados.map(p => ({ raw: p, regex: templatePathToRegex(p) }));
+
+    const usados = extractUsedFsPaths(bp);
+    for (const u of usados) {
+      // (3) modulo built-in
+      if (u.path.startsWith(`modules/pizzepos/${moduleName}/`)) continue;
+      // (1) match exacto
+      if (matchers.some(m => m.regex.test(u.path))) continue;
+      // (2) match por prefijo
+      const matchedPrefix = declarados.some(d => {
+        const dPrefix = d.split('<')[0];
+        return dPrefix.length > 1 && u.path.startsWith(dPrefix);
+      });
+      if (matchedPrefix) continue;
+      findings.errors.push(
+        `drift_blueprint_fs_read_a_storage_ajeno: ${path.relative(REPO_ROOT, bpPath)} operacion '${u.operacion}' invoca fs.${u.fs_op}.request path='${u.path}' fuera del estado_persistente declarado`
+      );
+    }
+  }
+}
+
 function reportFindings(f) {
   if (f.errors.length) { console.log(`${RED}cross-system errors (${f.errors.length})${RST}`); for (const e of f.errors) console.log(`  ${RED}✗${RST} ${e}`); }
   if (f.warnings.length) { console.log(`${YEL}cross-system warnings (${f.warnings.length})${RST}`); for (const w of f.warnings) console.log(`  ${YEL}!${RST} ${w}`); }
@@ -224,6 +342,8 @@ function main() {
       checkPrincipiosPadreCoincidenConContrato(f, contract, padresConSeccion);
       checkHijosExtendsPadreConDisciplina(f, padresConSeccion);
     }
+    // Cross-check estatico del anti-patron no_explorar_estado_ajeno
+    checkBlueprintsRespetanEstadoPersistente(f);
     reportFindings(f);
     if (f.errors.length > 0) process.exit(2);
   }

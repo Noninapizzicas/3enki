@@ -726,6 +726,91 @@ test('handlers publicos handlePageRelated / handleChatCambiarFoco delegan a _exe
 });
 
 // --------------------------------------------------
+// 15. Pages JS legacy navegables (target_page_id en modulos no-blueprint)
+// --------------------------------------------------
+
+test('_isNavegablePage reconoce blueprints + modulos con target_page_id', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('recetas', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: true });
+  // menu-generator es JS legacy con target_page_id declarado
+  m.moduleLoader = {
+    loadedModules: new Map([
+      ['menu-generator', { manifest: { target_page_id: 'menu-generator' } }],
+      ['filesystem', { manifest: { /* sin target_page_id — no navegable */ } }]
+    ])
+  };
+  assert.strictEqual(m._isNavegablePage('recetas'), true, 'blueprint navegable');
+  assert.strictEqual(m._isNavegablePage('menu-generator'), true, 'JS legacy con target_page_id navegable');
+  assert.strictEqual(m._isNavegablePage('filesystem'), false, 'modulo sin target_page_id no navegable');
+  assert.strictEqual(m._isNavegablePage('inexistente'), false);
+});
+
+test('_listNavegablePages devuelve union blueprints + target_page_id', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('recetas', { manifest: {} });
+  m.blueprintModules.set('escandallo', { manifest: {} });
+  m.moduleLoader = {
+    loadedModules: new Map([
+      ['menu-generator', { manifest: { target_page_id: 'menu-generator' } }],
+      ['recetas', { manifest: { target_page_id: 'recetas' } }] // duplicado con blueprint — no se cuenta dos veces
+    ])
+  };
+  const lista = m._listNavegablePages();
+  assert.deepStrictEqual(lista, ['escandallo', 'menu-generator', 'recetas']);
+});
+
+test('chat.cambiar_foco acepta target_page_id de modulo JS legacy (menu-generator)', () => {
+  const m = makeInstance();
+  m.eventBus = { publish() {} };
+  m.blueprintModules.set('recetas', { manifest: {}, cajonesEnabled: true });
+  m.moduleLoader = {
+    loadedModules: new Map([
+      ['menu-generator', { manifest: { target_page_id: 'menu-generator' } }]
+    ])
+  };
+  const r = m._executeNavTool('chat.cambiar_foco', { nuevo_page_id: 'menu-generator', motivo: 'usuario sube foto de menu' }, { conversation_id: 'c1', page_id: 'recetas' });
+  assert.strictEqual(r.status, 'ok');
+  assert.strictEqual(r.nuevo_page_id, 'menu-generator');
+  assert.strictEqual(r.anterior, 'recetas');
+});
+
+test('_buildPageGraph registra como nodos los modulos con target_page_id aunque no sean blueprints', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('recetas', {
+    manifest: {},
+    child: { operaciones: { x: { pseudocodigo: ["await publishAndWait('menu-generator.algo.request', {})"] } } },
+    parent: null, systemPrompt: '', cajonesEnabled: true
+  });
+  m.moduleLoader = {
+    loadedModules: new Map([
+      ['menu-generator', { manifest: { target_page_id: 'menu-generator' } }]
+    ])
+  };
+  m._buildPageGraph();
+  // recetas y menu-generator deben existir como nodos
+  assert.ok(m.pageGraph.has('recetas'));
+  assert.ok(m.pageGraph.has('menu-generator'));
+  // arista detectada del pseudocodigo: recetas consumes menu-generator
+  // (PERO el regex de _buildPageGraph filtra primitivas; verifica que menu-generator NO esta en la lista de primitivas)
+  // Si la arista no aparece (por filtro futuro), al menos el nodo SI existe via target_page_id branch.
+});
+
+test('page.related incluye menu-generator si esta conectado en grafo', () => {
+  const m = makeInstance();
+  m.blueprintModules.set('recetas', { manifest: {}, child: {}, parent: null, systemPrompt: '', cajonesEnabled: true });
+  m.moduleLoader = {
+    loadedModules: new Map([
+      ['menu-generator', { manifest: { target_page_id: 'menu-generator' } }]
+    ])
+  };
+  // Simular aristas hechas (override paginas_relacionadas o pseudocodigo)
+  m.pageGraph.set('recetas', { consumes: new Set(['menu-generator']), consumed_by: new Set() });
+  m.pageGraph.set('menu-generator', { consumes: new Set(), consumed_by: new Set(['recetas']) });
+  const r = m._executeNavTool('page.related', { page_id: 'recetas' }, { conversation_id: 'c1' });
+  assert.ok(r.consumes.includes('menu-generator'), 'menu-generator aparece como navegable en page.related');
+});
+
+// --------------------------------------------------
 // Runner
 // --------------------------------------------------
 

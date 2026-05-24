@@ -70,22 +70,28 @@ Mergeados a main en PRs #189 (cierre Fase 7 + housekeeping + UI module canonico 
 
 ## 2 · FRENTES ABIERTOS (en orden de prioridad)
 
-### 2.1 · `menu-generator` y pages JS legacy en el grafo (PRIORIDAD ALTA)
+### 2.1 · `menu-generator` y pages JS legacy en el grafo ✅ CERRADO (2026-05-24, menu-generator)
 
-**Contexto**: cajones-Fase 5 bis (foco dinamico + `page.related` + `chat.cambiar_foco`) solo contempla **los 10 blueprints**. Los pages JS legacy del sistema (`menu-generator`, `comandero`, `cocina`, `pedidos`, `productos`, `facturas`, `staff-manager`, etc.) **no aparecen** en el grafo ni son destinos validos para `chat.cambiar_foco` — el LLM no puede dirigir al usuario alli aunque la pregunta vaya por ese dominio.
+**Resuelto** sin introducir flag nuevo: el campo `target_page_id` que ya
+usaban los blueprints es el marcador natural. Si un modulo JS legacy lo
+declara en su `module.json`, ai-gateway lo trata como destino navegable
+(equivalente a un blueprint a efectos del grafo + `chat.cambiar_foco` +
+`page.related`), sin tocar su codigo. No es opcion B "navegable: true",
+es opcion mas simple aun: reusar target_page_id.
 
-**Caso testigo**: `menu-generator` v7.0.0. Sigue siendo JS legacy (`index.js` + pipeline OCR con pdfjs/sharp/Google Vision). Esta **bloqueado** como candidato a blueprint hasta que existan modulos JS deterministas separados (`ocr-vision`, `image-preprocessor`, `pdf-extractor`) — documentado en `modulos-blueprint-driven.contract.json`. Pero el frontend SI tiene rutas para menu-generator: el usuario puede navegar alli.
+**Cambios**:
+1. `modules/pizzepos/menu-generator/module.json`: anyade `"target_page_id": "menu-generator"` + nota `_target_page_id_nota` explicando el patron.
+2. `modules/conversacion/ai-gateway/index.js`:
+   - 2 helpers nuevos: `_isNavegablePage(p)` y `_listNavegablePages()`. "Navegable" = blueprint registrado O modulo cargado con `target_page_id`.
+   - `_buildPageGraph` registra como nodos del grafo los modulos no-blueprint con `target_page_id` (branch 3 del builder).
+   - `_executeNavTool('chat.cambiar_foco')` valida contra `_isNavegablePage` (en lugar de solo `blueprintModules`).
+   - `_executeNavTool('page.related')` filtra con `_isNavegablePage`.
+   - `_executeLLM` NO necesita cambio: si focoPersistido apunta a page no-blueprint, `blueprintCtx = undefined` → `blueprintPrompt = null` → cae a `effectiveSystem = system` (modo legacy del chat). Ya funcionaba.
+3. Tests anyadidos (`tests/unit/ai-gateway-cajones.test.js`, 5 nuevos = 57 totales): isNavegablePage, listNavegablePages, chat.cambiar_foco a menu-generator, _buildPageGraph registra nodo, page.related incluye menu-generator.
 
-**Decision tomada** (recomendacion de Claude, NO confirmada por usuario): **Opcion B — marcador explicito**. Anyadir `"navegable": true` al `module.json` de los pages JS, ampliar `_buildPageGraph` y `_executeNavTool` para consultarlos. Frontend conoce qué pages existen. ~1h.
+**Otros pages JS legacy NO marcados todavia**: `comandero`, `cocina`, `pedidos`, `productos`, `facturas`, `staff-manager`. La decision quedo enmarcada: cuando el usuario quiera anyadir alguno, basta con `"target_page_id": "<nombre>"` en su module.json. Mecanismo es generico.
 
-**Que falta**:
-1. Decidir cuales modulos marcar `navegable: true` (al menos `menu-generator`; probablemente tambien `comandero`, `cocina`, `pedidos`, `productos`, `facturas`, `staff-manager` si quieres que el LLM dirija a ellos).
-2. Ampliar `_buildPageGraph` para escanear TODOS los modulos cargados con flag `navegable: true`, no solo blueprints.
-3. Ampliar validacion en `_executeNavTool('chat.cambiar_foco', ...)`: validar contra `loadedModules` con `navegable: true`, no solo contra `blueprintModules`.
-4. Test que cubra el caso (menu-generator aparece como destino en `page.related` desde un blueprint que lo consume).
-5. Anyadir cross-check al validator de cajones para detectar pages marcados navegables sin module.json correspondiente.
-
-**Por que es prioridad alta**: el gap es conceptual y observable. Cualquier conversacion que mencione "sube foto de menu" o "ver el comandero" hoy choca contra `RESOURCE_NOT_FOUND` cuando el LLM intenta `chat.cambiar_foco`. Mitigacion temporal: el LLM lo intuye y pide al usuario navegar manualmente, pero la barra `RelatedPagesBar` tampoco mostrara estos pages como destinos.
+**Migracion futura de menu-generator a blueprint pleno**: sigue bloqueada por extraccion de modulos OCR (ver `modulos-blueprint-driven.contract.json`). Cuando se haga, se anyade `blueprint_driven: true` + blueprint.json + cajones_enabled SIN cambiar target_page_id. La declaracion actual no obstaculiza esa migracion futura.
 
 ---
 
@@ -441,15 +447,15 @@ de esta sesion deberia prevenirlo.
 
 | # | Frente | Riesgo | Coste | Por que en este orden |
 |---|---|---|---|---|
-| 1 | **2.1** flag `navegable` para pages JS legacy | bajo-medio | ~1.5h | Cierra agujero conceptual de Fase 5 bis. Decision UX requerida (que modulos marcar). |
-| 2 | **2.4** decidir A/B + ejecutar (refactor escandallo o enmendar contrato) | depende | ~30min decision + 3-5h si B / 30min si A | Decision arquitectural previa OBLIGATORIA. Ver seccion 2.4 (disonancia contrato vs blueprint documentada). |
-| 3 | **2.5 refinamiento** "conflicto de propiedad" en validator | bajo | ~1.5h | Solo cobra sentido despues de cerrar 2.4. Ver seccion 2.5 (primera capa ✅ cerrada; falta segunda capa). |
-| 4 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
-| 5 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
+| 1 | **2.4** decidir A/B + ejecutar (refactor escandallo o enmendar contrato) | depende | ~30min decision + 3-5h si B / 30min si A | Decision arquitectural previa OBLIGATORIA. Ver seccion 2.4 (disonancia contrato vs blueprint documentada). |
+| 2 | **2.5 refinamiento** "conflicto de propiedad" en validator | bajo | ~1.5h | Solo cobra sentido despues de cerrar 2.4. Ver seccion 2.5 (primera capa ✅ cerrada; falta segunda capa). |
+| 3 | **2.6** auditorias frescas (15 sub-modulos) | bajo | ~2h | Housekeeping. Sin valor inmediato. |
+| 4 | **2.7, 2.8** refactores grandes aparcados | - | - | No urgentes. Esperan disposicion. |
 
+(Frente **2.1** menu-generator/pages JS legacy ya cerrado: reusa `target_page_id` existente, sin flag nuevo. Cualquier otro modulo JS legacy se anyade igual.)
 (Frente **2.2** ya cerrado en commits `016961e4` + `255135f2`.)
 (Frente **2.3** era FALSO POSITIVO de mi heuristica — los 5 blueprints carta-* declaran `estado_persistente` correctamente.)
-(Frente **2.5 primera capa** ya cerrada (esta sesion): cross-check `drift_blueprint_fs_read_a_storage_ajeno` implementado y wireado, PASS verde contra los 10 blueprints. Refinamiento "conflicto de propiedad" depende de cerrar 2.4 — ver tarea #3 arriba.)
+(Frente **2.5 primera capa** ya cerrada en commit `7d5ff4a0`: cross-check `drift_blueprint_fs_read_a_storage_ajeno` implementado y wireado, PASS verde. Refinamiento "conflicto de propiedad" depende de cerrar 2.4 — ver tarea #2 arriba.)
 (Concepto **3.7** ya cerrado en commit `6c8c5b66`.)
 
 **Recomendacion**: si arrancas con poco tiempo, **1 + 2 + 3** cierra 3 frentes (~2h total, cero runtime). **4** otro bloque chico. **5** requiere bloque dedicado.

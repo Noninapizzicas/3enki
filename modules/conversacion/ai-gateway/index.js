@@ -670,6 +670,23 @@ class AiGatewayModule extends BaseModule {
         ensure(target).consumed_by.add(page_id);
       }
     }
+    // 3. Pages JS legacy navegables — modulos con target_page_id declarado en
+    //    su module.json aunque NO sean blueprint_driven. Aparecen como nodos
+    //    del grafo (sin aristas detectadas por pseudocodigo porque no tienen
+    //    blueprint hijo) y son destinos validos para chat.cambiar_foco /
+    //    page.related. Caso testigo 2026-05-24: menu-generator. Cuando se
+    //    migre a blueprint pleno, este branch se vuelve no-op para ese modulo
+    //    (su blueprint hijo ya lo ha registrado en la iteracion principal).
+    const loaded = this.moduleLoader?.loadedModules;
+    if (loaded && typeof loaded[Symbol.iterator] === 'function') {
+      for (const [, mod] of loaded) {
+        const m = mod?.manifest;
+        const tpid = m?.target_page_id;
+        if (typeof tpid !== 'string') continue;
+        if (this.blueprintModules.has(tpid)) continue; // ya registrado via blueprint
+        ensure(tpid); // nodo navegable sin aristas inferidas
+      }
+    }
   }
 
   // Prefijos del bus que NO cuentan como "paginas" para el grafo (son primitivas
@@ -717,6 +734,34 @@ class AiGatewayModule extends BaseModule {
     return this._executeNavTool('chat.cambiar_foco', args, ctx);
   }
 
+  // Page navegable = blueprint registrado en blueprintModules O modulo JS
+  // legacy con target_page_id declarado en su module.json. Mecanismo unico
+  // de "page" para chat.cambiar_foco y page.related, sin flag adicional —
+  // reusa el campo target_page_id que ya existia en blueprints.
+  // Caso testigo 2026-05-24: menu-generator (JS legacy con target_page_id).
+  _isNavegablePage(page_id) {
+    if (!page_id) return false;
+    if (this.blueprintModules.has(page_id)) return true;
+    const loaded = this.moduleLoader?.loadedModules;
+    if (!loaded || typeof loaded[Symbol.iterator] !== 'function') return false;
+    for (const [, mod] of loaded) {
+      if (mod?.manifest?.target_page_id === page_id) return true;
+    }
+    return false;
+  }
+
+  _listNavegablePages() {
+    const out = new Set(this.blueprintModules.keys());
+    const loaded = this.moduleLoader?.loadedModules;
+    if (loaded && typeof loaded[Symbol.iterator] === 'function') {
+      for (const [, mod] of loaded) {
+        const tpid = mod?.manifest?.target_page_id;
+        if (typeof tpid === 'string') out.add(tpid);
+      }
+    }
+    return Array.from(out).sort();
+  }
+
   _executeNavTool(toolName, rawArgs, ctx) {
     const args = (rawArgs && typeof rawArgs === 'object') ? rawArgs : {};
     if (toolName === 'page.related') {
@@ -737,7 +782,9 @@ class AiGatewayModule extends BaseModule {
       // blueprints (ej. eventos como 'mercadona.*' o 'carta.*' apuntan a un
       // prefijo que no es un page_id navegable). Devolverlos al LLM lo lleva
       // a intentar chat.cambiar_foco invalido. Mejor solo lo invocable.
-      const isNav = (p) => this.blueprintModules.has(p);
+      // "Navegable" = blueprint con cajones_enabled O modulo JS legacy con
+      // target_page_id declarado en su module.json (page registrada en frontend).
+      const isNav = (p) => this._isNavegablePage(p);
       const consumes = Array.from(node.consumes).filter(isNav).sort();
       const consumed_by = Array.from(node.consumed_by).filter(isNav).sort();
       const related = Array.from(new Set([...consumes, ...consumed_by])).sort();
@@ -750,13 +797,14 @@ class AiGatewayModule extends BaseModule {
         err.code = 'INVALID_INPUT';
         throw err;
       }
-      // Validar que el destino existe como blueprint registrado. Si no, devolver
+      // Validar que el destino es page navegable (blueprint registrado O
+      // modulo JS legacy con target_page_id en su manifest). Si no, devolver
       // RESOURCE_NOT_FOUND para que el LLM se rectifique o pida confirmacion al
       // usuario en lugar de mandarlo a un page fantasma.
-      if (!this.blueprintModules.has(nuevo)) {
-        const err = new Error(`page '${nuevo}' no esta registrado como modulo blueprint en este sistema`);
+      if (!this._isNavegablePage(nuevo)) {
+        const err = new Error(`page '${nuevo}' no esta registrado como destino navegable en este sistema`);
         err.code = 'RESOURCE_NOT_FOUND';
-        err.details = { kind: 'domain', page_id: nuevo, available: Array.from(this.blueprintModules.keys()) };
+        err.details = { kind: 'domain', page_id: nuevo, available: this._listNavegablePages() };
         throw err;
       }
       const anterior = this.conversationPageFoco.get(ctx.conversation_id) || ctx.page_id || null;

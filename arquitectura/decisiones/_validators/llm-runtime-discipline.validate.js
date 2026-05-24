@@ -296,6 +296,136 @@ function checkBlueprintsRespetanEstadoPersistente(findings) {
   }
 }
 
+// ============================================================================
+// Cross-checks del mecanismo blueprint-subscribers-asincronos (frente 2.4)
+//
+// Anyadidos 2026-05-24 tras validar el patron en runtime. Protegen los
+// declaraciones de eventos_que_escucho de blueprints contra typos y
+// referencias fantasma. El mecanismo runtime ya tolera estos casos (log warn
+// + skip), pero detectarlos estaticamente bloquea el error en CI antes de
+// llegar a runtime.
+// ============================================================================
+
+function extractAsyncSubscribers(blueprint) {
+  // Devuelve [{evento, handler_name}] normalizado para cada entry de
+  // eventos_que_escucho. Soporta forma objeto {evento, handler} y string
+  // simple (handler auto-derivado a '_on_<event_with_underscores>').
+  const out = [];
+  const arr = blueprint?.eventos_que_escucho;
+  if (!Array.isArray(arr)) return out;
+  for (const entry of arr) {
+    if (typeof entry === 'string') {
+      out.push({ evento: entry, handler_name: '_on_' + entry.replace(/\./g, '_') });
+    } else if (entry && typeof entry === 'object' && typeof entry.evento === 'string' && typeof entry.handler === 'string') {
+      out.push({ evento: entry.evento, handler_name: entry.handler });
+    }
+    // Entries invalidas se ignoran silenciosamente — los detectaria el
+    // wire-up de ai-gateway con un warn, no es responsabilidad de este check.
+  }
+  return out;
+}
+
+function checkEventosQueEscuchoApuntaAHandlerExistente(findings) {
+  // Para cada blueprint hijo con eventos_que_escucho, verificar que el
+  // handler declarado existe en operaciones del propio blueprint. Sin esto,
+  // ai-gateway al wireear emite warn y omite — pero detectarlo en CI antes
+  // del deploy evita que el subscriber quede silencioso en produccion.
+  function walk(dir, depth) {
+    if (depth > 6 || !fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      if (name === 'node_modules' || name === '_archived' || name === '_legacy' || name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) { walk(full, depth + 1); continue; }
+        if (!name.endsWith('.blueprint.json')) continue;
+        let bp; try { bp = loadJson(full); } catch (_) { continue; }
+        const subs = extractAsyncSubscribers(bp);
+        if (subs.length === 0) continue;
+        const ops = bp.operaciones || {};
+        for (const { evento, handler_name } of subs) {
+          if (!ops[handler_name]) {
+            findings.errors.push(
+              `eventos_que_escucho_apunta_a_handler_existente: ${path.relative(REPO_ROOT, full)} declara escuchar '${evento}' con handler '${handler_name}' pero la operacion no existe en operaciones[] (operaciones disponibles: ${Object.keys(ops).slice(0, 10).join(', ')}${Object.keys(ops).length > 10 ? ', ...' : ''})`
+            );
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  walk(path.join(REPO_ROOT, 'modules'), 0);
+}
+
+function collectAllPublishedEventsAcrossRepo() {
+  // Recolecta todos los eventos publicados en el sistema: tanto los
+  // declarados en blueprints (.blueprint.json::eventos_publicados) como los
+  // declarados en modulos POC2 JS (module.json::events.publishes[].event o
+  // module.json::publishes[]). Solo nombres canonicos (strings), no patterns.
+  const pub = new Set();
+  function walk(dir, depth) {
+    if (depth > 6 || !fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      if (name === 'node_modules' || name === '_archived' || name === '_legacy' || name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) { walk(full, depth + 1); continue; }
+        if (name === 'module.json') {
+          let m; try { m = loadJson(full); } catch (_) { return; }
+          // Forma POC2 actual: events.publishes[] con objetos {event: '...'}
+          const ev1 = m?.events?.publishes;
+          if (Array.isArray(ev1)) for (const e of ev1) {
+            const en = typeof e === 'string' ? e : e?.event;
+            if (typeof en === 'string') pub.add(en);
+          }
+          // Forma legacy: publishes[] top-level con strings
+          if (Array.isArray(m?.publishes)) for (const e of m.publishes) {
+            if (typeof e === 'string') pub.add(e);
+          }
+        } else if (name.endsWith('.blueprint.json')) {
+          let bp; try { bp = loadJson(full); } catch (_) { return; }
+          // Forma canonica blueprints: eventos_publicados[] con strings
+          if (Array.isArray(bp?.eventos_publicados)) for (const e of bp.eventos_publicados) {
+            if (typeof e === 'string') pub.add(e);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  walk(path.join(REPO_ROOT, 'modules'), 0);
+  return pub;
+}
+
+function checkEventosQueEscuchoApuntaAEventoCanonico(findings) {
+  // Para cada blueprint con eventos_que_escucho, verificar que el evento
+  // declarado lo publica alguien del repo (blueprint o modulo POC2 JS).
+  // Severidad warning (no error) porque algun evento podria venir de un
+  // origen externo no escaneable (cron, channel-*, etc.).
+  const todosLosPublicados = collectAllPublishedEventsAcrossRepo();
+  function walk(dir, depth) {
+    if (depth > 6 || !fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+      if (name === 'node_modules' || name === '_archived' || name === '_legacy' || name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) { walk(full, depth + 1); continue; }
+        if (!name.endsWith('.blueprint.json')) continue;
+        let bp; try { bp = loadJson(full); } catch (_) { continue; }
+        const subs = extractAsyncSubscribers(bp);
+        for (const { evento } of subs) {
+          if (!todosLosPublicados.has(evento)) {
+            findings.warnings.push(
+              `eventos_que_escucho_apunta_a_evento_canonico: ${path.relative(REPO_ROOT, full)} declara escuchar '${evento}' pero NINGUN blueprint ni module.json del repo lo publica (eventos_publicados / events.publishes). Posible typo o evento que viene de origen externo no escaneable.`
+            );
+          }
+        }
+      } catch (_) {}
+    }
+  }
+  walk(path.join(REPO_ROOT, 'modules'), 0);
+}
+
 function reportFindings(f) {
   if (f.errors.length) { console.log(`${RED}cross-system errors (${f.errors.length})${RST}`); for (const e of f.errors) console.log(`  ${RED}✗${RST} ${e}`); }
   if (f.warnings.length) { console.log(`${YEL}cross-system warnings (${f.warnings.length})${RST}`); for (const w of f.warnings) console.log(`  ${YEL}!${RST} ${w}`); }
@@ -344,6 +474,9 @@ function main() {
     }
     // Cross-check estatico del anti-patron no_explorar_estado_ajeno
     checkBlueprintsRespetanEstadoPersistente(f);
+    // Cross-checks del mecanismo blueprint-subscribers-asincronos (frente 2.4)
+    checkEventosQueEscuchoApuntaAHandlerExistente(f);
+    checkEventosQueEscuchoApuntaAEventoCanonico(f);
     reportFindings(f);
     if (f.errors.length > 0) process.exit(2);
   }

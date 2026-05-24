@@ -219,7 +219,23 @@
       "como_detectar": "Para cada blueprint: extraer paths declarados recursivamente del estado_persistente (filtrar strings que empiecen por '/'), convertir templates a regex, extraer paths usados de fs.(read|write).request en pseudocodigo, marcar como error cualquier path usado que NO matchee con (a) regex de algun declarado, (b) prefijo literal de algun declarado, ni (c) paths modules/<modulo>/ (built-in del modulo).",
       "severidad": "error",
       "implementado_en": "arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js::checkBlueprintsRespetanEstadoPersistente() — wireado a check-system desde 2026-05-24.",
-      "limitacion_conocida": "La heuristica respeta lo declarado en estado_persistente, por lo que NO detecta el sub-caso 'conflicto de propiedad' (dos modulos declaran el mismo path como propio — caso documentado en escandallo, que declara archivo_destino: /recetas.json como decision arquitectonica). El refinamiento futuro requiere cruzar declaraciones entre modulos y flag conflictos. Apuntado en cajones-frentes-abiertos-retomar.md para fase posterior."
+      "limitacion_conocida": "La heuristica respeta lo declarado en estado_persistente, por lo que NO detecta el sub-caso 'conflicto de propiedad' (dos modulos declaran el mismo path como propio). El caso testigo (escandallo declaraba archivo_destino: /recetas.json) DESAPARECIO con el refactor v3.0.0 que ejecuta el frente 2.4 — escandallo ya no declara archivo_destino, recetas es dueno absoluto via subscriber asincrono. El refinamiento queda como objetivo futuro si el patron reapareciera."
+    },
+    {
+      "id": "eventos_que_escucho_apunta_a_handler_existente",
+      "regla": "Cada entry de eventos_que_escucho[] en un blueprint hijo declara un handler (forma objeto {evento, handler} o string simple con auto-derivacion a '_on_<evento_con_underscores>'). Ese handler DEBE existir como operacion en operaciones[] del propio blueprint.",
+      "como_detectar": "Para cada blueprint hijo: leer eventos_que_escucho[]. Para cada entry, normalizar a {evento, handler_name} (objeto -> directo; string -> '_on_' + evento.replace('.','_')). Verificar que operaciones[handler_name] existe. Si no, error.",
+      "severidad": "error",
+      "implementado_en": "arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js::checkEventosQueEscuchoApuntaAHandlerExistente() — wireado a check-system desde 2026-05-24.",
+      "por_que_error_no_warning": "Sin el handler, ai-gateway al wireear emite warn y omite — el subscriber queda silencioso en runtime. Es exactamente el tipo de bug que el validador estatico debe bloquear antes del deploy."
+    },
+    {
+      "id": "eventos_que_escucho_apunta_a_evento_canonico",
+      "regla": "Cada evento declarado en eventos_que_escucho[] de un blueprint hijo debe ser publicado por ALGUIEN del repo (otro blueprint via eventos_publicados[], o un modulo POC2 JS via module.json.events.publishes[] o module.json.publishes[]). Eventos que ningun modulo publica son 'eventos fantasma' que apuntan a typo o a un origen externo no escaneable.",
+      "como_detectar": "Recolectar un Set<string> con todos los nombres canonicos de eventos publicados en el repo (escanear .blueprint.json::eventos_publicados + module.json::events.publishes y publishes). Para cada blueprint con eventos_que_escucho, comprobar que cada evento esta en el set.",
+      "severidad": "warning",
+      "implementado_en": "arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js::checkEventosQueEscuchoApuntaAEventoCanonico() — wireado a check-system desde 2026-05-24.",
+      "por_que_warning_no_error": "Algunos eventos pueden venir de origen externo no escaneable (cron del scheduler, channel-* recibiendo de Telegram/web, webhooks de servicios externos). Marcar como error daria falsos positivos. El warning alerta al lector humano para verificar manualmente; en muchos casos sera typo y se corregira."
     }
   ],
 

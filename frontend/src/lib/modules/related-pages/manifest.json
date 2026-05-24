@@ -1,0 +1,9 @@
+{
+  "id": "related-pages",
+  "name": "Páginas relacionadas",
+  "version": "1.0.0",
+  "zone": "system-bar",
+  "order": 99,
+  "icon": "🧭",
+  "label": "Páginas relacionadas"
+}

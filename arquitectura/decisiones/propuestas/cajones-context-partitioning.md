@@ -1,5 +1,50 @@
 # Cajones — context partitioning para blueprints
 
+> **✅ Documento cerrado (2026-05-23).** El guion de implementacion descrito
+> abajo se completo y mergeo a main en 3 PRs durante la sesion del 23 de
+> mayo (PRs #186, #187, #188). Lo que era propuesta es ahora paradigma
+> vivo del sistema.
+>
+> **Contrato canonico** (fuente de verdad, validable):
+> [`arquitectura/decisiones/_contratos/cajones-context-partitioning.contract.json`](../_contratos/cajones-context-partitioning.contract.json) v1.0.0.
+>
+> **Validator**:
+> [`arquitectura/decisiones/_validators/cajones-context-partitioning.validate.js`](../_validators/cajones-context-partitioning.validate.js) (8 cross-checks, wireado a `validate-all`).
+>
+> **Motor**:
+> [`modules/conversacion/ai-gateway/index.js`](../../../modules/conversacion/ai-gateway/index.js): `_extractCajones`, `_rankCajones`, `_buildCajonesSystemPrompt`, `_buildPageGraph`, `_executeCajonTool`, `_executeNavTool`, handlers publicos `handlePageRelated`/`handleChatCambiarFoco`.
+>
+> **Estado**:
+> - 10/10 blueprints del sistema con `cajones_enabled: true` (recetas, escandallo, viabilidad, tecnicas + 6 carta-*).
+> - 52/52 tests POC2 verdes.
+> - Validado en runtime real (deepseek): 0% cajones equivocados, reduccion 68% en system prompt (63 KB → 24 KB en recetas), foco dinamico funciona end-to-end (LLM invoca `chat.cambiar_foco` con recovery de `RESOURCE_NOT_FOUND`, evento `chat.foco.cambiado` publicado al bus, frontend listener registrado).
+>
+> **Las 8 decisiones abiertas se cerraron con las recomendaciones del propio doc:**
+> 1. Persistencia → **A** (cierre auto al siguiente turno).
+> 2. Aplicabilidad → **solo blueprints** en v1.
+> 3. Quien abre el cajon → **LLM autonomo** (cero router externo).
+> 4. Niveles de profundidad → **sin niveles** (catalogo plano).
+> 5. Detector de foco → **A** (LLM autonomo, +1 turno latencia aceptable).
+> 6. Ayuda UI al cambio de foco → **banner en chat** (transparencia, coste cero).
+> 7. Archivadores/cajones anidados → **C** (plano en v1).
+> 8. Almacenamiento fisico → **inline en blueprint hijo** (cero archivos nuevos).
+>
+> **Drift / deuda detectada durante el piloto** (no son de cajones, ortogonales):
+> - Anti-patron `cajon.listar` redundante en T1 chitchat → **mitigado** en commit `645f43d` (regla operativa explicita en `_buildCajonesSystemPrompt`).
+> - Blueprint `escandallo` y posibles otros usan `fs.read.request '/recetas.json'` directo en lugar de `publishAndWait('recetas.obtener.request', ...)`. Viola `no_explorar_estado_ajeno` de `llm-runtime-discipline`. Deuda preexistente del blueprint, no de cajones. Pendiente refactor.
+> - `menu-generator` y otros modulos JS legacy (`comandero`, `cocina`, `pedidos`, ...) no tienen blueprint, asi que no son destinos validos para `chat.cambiar_foco` ni aparecen en `page.related`. Pendiente decidir si se marcan como "page navegable" con flag explicito en `module.json` para incluirlos en el grafo sin migrarlos a blueprint.
+>
+> **Trabajo pendiente del propio contrato** (no bloqueante):
+> - Medicion de runtime continuada (tokens/turno, tasa de cajon equivocado, distraccion del LLM) durante 1-2 semanas de uso real.
+> - Decidir layout de `RelatedPagesBar.svelte` en el AppShell (system-bar / panel apilable / flotante). Componente listo, montaje pendiente.
+>
+> Este documento se conserva como **registro historico** del diseno
+> conversacional que produjo el contrato. La fuente de verdad operativa
+> ahora es el contrato + el codigo. Cualquier evolucion del patron se
+> hara bumpeando el contrato, no editando este documento.
+
+---
+
 > **Documento de retomar.** Escrito al final de la misma sesión que produjo
 > `capa-unica-tools-via-plugins.md`. Captura el diseño del concepto "cajones"
 > (context partitioning + lazy loading estilo buscador) para que la próxima
@@ -325,35 +370,52 @@ aplica igual.
 
 ### 5.5.4 Barra lateral de destinos — diseño
 
-**Vestigio en el frontend**: el `grep` no encontró nada explícito
-(`destinos`, `paginas-relacionadas`, `related-pages`, etc.). Pero la
-**infraestructura está perfecta**:
+> **Reinterpretación 2026-05-24**: la descripción original asumía "barra
+> lateral siempre visible" como navegación ambiental. Auditando
+> `contexto/ui.json` (fuente canónica de patrones UI) se confirma que el
+> sistema NO tiene ese patrón: las zonas válidas son exactamente cuatro
+> (`work-bar`, `chat-config`, `chat-tools`, `system-bar`) y el principle
+> declarado es *"1 click = 1 panel flotante"*. Inventar una zona nueva
+> rompía convención. La traducción canónica del "ambiental" del doc
+> original al patrón real del sistema: **UI module en
+> `frontend/src/lib/modules/related-pages/` con `zone: 'system-bar'`,
+> aparece como botón 🧭, click abre panel flotante que el usuario puede
+> dejar abierto el tiempo que quiera (el wrapper `Panel.svelte` ya soporta
+> drag + close ESC)**. El "ambiental" lo elige el usuario manteniendo el
+> panel abierto.
 
-- `frontend/src/lib/modules/panels.ts` declara zonas:
-  `'work-bar' | 'chat-config' | 'chat-tools' | 'system-bar'`.
-- Añadir una zona nueva `'related-pages'` es 1 línea + 1 componente.
-- `WorkBar.svelte` es el patrón a imitar: layout vertical, lista de items
-  con icono + título, click dispara acción.
+**Arquitectura canónica** (commit `9feda84`+ posterior reinterpretación):
 
-**Componente nuevo `RelatedPagesBar.svelte`**:
+- Módulo UI en `frontend/src/lib/modules/related-pages/`:
+  - `manifest.json` con `zone: 'system-bar'`, icono `🧭`, label "Páginas relacionadas".
+  - `index.ts` exportando el `UIModule` con `PanelComponent: RelatedPagesPanel`.
+  - `RelatedPagesPanel.svelte` con el contenido del panel.
+- Autodiscovery via `loader.ts::import.meta.glob('./*/manifest.json')` — sin
+  registro manual en `panels.ts`.
 
-- Suscrito al store de página activa (Svelte store o derivado del
-  `$page.url.pathname` de SvelteKit).
-- Llama a `page.related({ page_id: activa })` (tool nueva o store derivado
-  del grafo precargado).
-- Renderiza una lista de links a otras páginas. Cada link:
-  - Icono (del `module.json.icon` o del `panels.ts`).
-  - Título corto (del `module.json.name` o `panels.ts.title`).
-  - Click → `goto('/<page_id>')` de SvelteKit.
+**Comportamiento del componente**:
+
+- Suscrito al `$page.url.pathname` de SvelteKit (deriva `page_id` del
+  segundo segmento). Recarga al cambiar de page.
+- Llama `mqttRequest('page', 'related', { page_id })` → ai-gateway
+  responde con `{ page_id, consumes, consumed_by, related }` (ya filtrado
+  a páginas navegables registradas como blueprints).
+- Renderiza lista vertical de links a otras páginas. Cada link:
+  - Icono `→` decorativo (el icono del módulo destino se podría inferir
+    del `module.json.icon`, evolución futura).
+  - Título = page_id del destino.
+  - Click → `goto('/<projectParam>/<page_id>')` de SvelteKit.
   - Hover → tooltip con la razón de la relación ("consume recetas",
-    "alimentado por escandallo").
+    "alimentado por escandallo", "relación circular con X").
+- Si lista vacía → mensaje informativo (el panel NO se autocierra; el
+  usuario lo cierra con ESC o botón del wrapper).
 
 **Reglas de UI**:
-- Máximo ~5-7 destinos visibles. Si hay más, "ver todos" expande.
-- Orden = mismo ranking que cajones: cercanía en el grafo (1 salto > 2
-  saltos) + page más recientemente visitado.
-- Sin notificaciones, sin badges, sin presión visual. Es navegación
-  ambiental, no alerta.
+- Máximo `maxVisible=7` destinos visibles. Si hay más, "ver todos" expande.
+- Orden = el que devuelve el backend (consumes + consumed_by union,
+  ordenados alfabéticamente por ahora; ranking por saltos + recencia es
+  evolución futura del backend).
+- Sin notificaciones, sin badges, sin presión visual.
 
 ### 5.5.5 Lo que NO se añade (importante)
 

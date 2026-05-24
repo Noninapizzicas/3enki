@@ -1,5 +1,25 @@
 # Arranque cajones — mensaje y preguntas listas para la próxima conversación
 
+> **✅ Documento cerrado (2026-05-24).** Las 8 preguntas se cerraron en la
+> sesión del 2026-05-23/24 con las recomendaciones por defecto del propio
+> documento (el usuario respondió literalmente *"todas como recomienda"*).
+> Las decisiones están canonizadas en
+> `arquitectura/decisiones/_contratos/cajones-context-partitioning.contract.json`
+> v1.0.0 (commit `2af69f0`) como `decisiones_arquitectonicas`. El motor
+> + tests + piloto + Fase 6 + Fase 5 bis están implementados y mergeados a
+> main. Frentes abiertos posteriores inventariados en
+> `cajones-frentes-abiertos-retomar.md` (commit `cfe4880`).
+>
+> Este archivo se conserva como **registro literal** del guion de arranque
+> tal como se escribió en `e00f004`, ahora con las respuestas rellenas.
+>
+> Nota operativa: el archivo desapareció del disco en algún merge entre
+> `e00f004` (creación) y el checkout que arrancó la sesión de
+> implementación. La sesión lo redescubrió, recuperó el contenido del blob
+> y lo restauró en disco con las respuestas reales.
+
+---
+
 Este archivo NO es un contrato ni un plan — es **el guion literal** que tú
 pegas al arrancar la próxima sesión para implementar los cajones. Está
 diseñado para que la otra conversación no improvise ni pierda contexto.
@@ -51,7 +71,9 @@ Formato de cada pregunta: **enunciado · opciones · recomendación del doc
 Recomendación de partida en el doc: **A**. Si el LLM se queja de reabrir,
 evolucionar a C.
 
-Mi respuesta: ___
+Mi respuesta: **A** — cierre automático al siguiente turno. Más simple y
+predecible, conserva el espíritu de la metáfora ("cierra el cajón y sigue").
+Si emerge demanda de reapertura recurrente en runtime, evolucionar a C.
 
 ---
 
@@ -67,7 +89,9 @@ Mi respuesta: ___
 Recomendación de partida en el doc: **solo blueprints** en v1, donde se
 observó el dolor. Extender después si funciona.
 
-Mi respuesta: ___
+Mi respuesta: **Solo blueprints** en v1. El dolor (sobrecarga del system
+prompt) se observó allí; extender sin evidencia es premature optimization.
+Memorias y agentes — más adelante o nunca.
 
 ---
 
@@ -82,7 +106,9 @@ Mi respuesta: ___
 
 Recomendación de partida en el doc: **LLM autónomo**.
 
-Mi respuesta: ___
+Mi respuesta: **LLM autónomo**. Coherente con la metáfora y trivial de
+implementar (vía tool call `cajon.abrir`). +1 turno de latencia es marginal
+frente a los 5-25s que ya consume cada blueprint.
 
 ---
 
@@ -98,7 +124,9 @@ ocultos), o son todos planos en el catálogo?
 Recomendación de partida en el doc: **plano**. Introducir niveles solo si
 el catálogo crece a más de ~30 cajones.
 
-Mi respuesta: ___
+Mi respuesta: **Plano**. Sin niveles en v1. El blueprint mayor (carta-manager)
+tiene 13 cajones — muy lejos del umbral subjetivo de 30. Si crece, reabrir
+la decisión.
 
 ---
 
@@ -116,7 +144,9 @@ Mi respuesta: ___
 Recomendación de partida en el doc: **inline**. Partir a archivos solo si
 el blueprint se vuelve inmanejable.
 
-Mi respuesta: ___
+Mi respuesta: **Inline en el blueprint hijo**. Los blueprints actuales NO
+se tocan; ai-gateway extrae los cajones en memoria al arrancar
+(`_extractCajones` + `cajonesCatalog` Map). Cero archivos nuevos.
 
 ---
 
@@ -134,7 +164,10 @@ que moverse?
 Recomendación de partida en el doc: **A** en piloto. Si la tasa de
 cambios equivocados supera ~10%, evolucionar a D.
 
-Mi respuesta: ___
+Mi respuesta: **A — LLM autónomo**. Coherente con la decisión de la
+pregunta 3. Validado en runtime real (2026-05-24, audit multi-page): 3
+cambios de foco semánticamente correctos, 0% equivocados. La opción D
+queda como evolución condicional si emerge tasa de error.
 
 ---
 
@@ -152,7 +185,9 @@ Cuando el LLM cambia la página automáticamente, ¿cómo se entera el usuario?
 Recomendación de partida en el doc: **banner en el chat** (mínimo viable).
 Si confunde, añadir breadcrumb.
 
-Mi respuesta: ___
+Mi respuesta: **Banner en el chat**. Coste cero, máxima transparencia.
+Implementado vía `notifyInfo(motivo)` en el listener de `chat.foco.cambiado`
+del store del frontend. Si confunde, añadir breadcrumb persistente.
 
 ---
 
@@ -168,7 +203,9 @@ Mi respuesta: ___
 Recomendación de partida en el doc: **C** (plano) en v1. Evolucionar a B
 si duele.
 
-Mi respuesta: ___
+Mi respuesta: **C — plano** (sin archivadores). El LLM razona el
+agrupamiento mental cuando hace falta. Si emerge dolor concreto con
+catálogos planos > umbral, reabrir la decisión.
 
 ---
 

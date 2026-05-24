@@ -5,6 +5,8 @@
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
+  "target_page_id": "menu-generator",
+  "_target_page_id_nota": "Declarado como page navegable del sistema cajones aunque el modulo sigue siendo JS legacy (blueprint_driven: false). ai-gateway lo trata como destino valido para chat.cambiar_foco y como nodo del grafo page.related. Cuando se migre a blueprint plenamente (bloqueado por extraccion de modulos OCR — ver modulos-blueprint-driven.contract.json), se anyadira blueprint_driven: true sin cambiar target_page_id.",
   "events": {
     "publishes": [
       {

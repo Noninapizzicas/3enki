@@ -10,6 +10,37 @@
 
 Fecha: 2026-05-23.
 
+> **Actualizacion 2026-05-24 — la forma correcta es event-core puro,
+> NO una operacion `recetas.actualizar_coste` invocada via publishAndWait**:
+>
+> Mi version original de este doc proponia que escandallo invocase
+> `publishAndWait('recetas.actualizar_coste.request', {...})` para
+> escribir los campos de coste. El usuario corrigio: *"escandallo no
+> toca nada solo emite eventos y quien escucha y entiende hace o no lo
+> que es oportuno — la magia de los eventos"*. Es decir, **paradigma
+> event-core puro**, no request/response.
+>
+> Forma correcta:
+> 1. escandallo termina su calculo y publica
+>    `publish('escandallo.coste.calculado', { receta_id, coste_total,
+>    coste_porcion, coste_actualizado_at, postcode_usado,
+>    fuentes_precios, ingredientes_detalle, ingredientes_sin_precio,
+>    correlation_id, ... })`. **Fire-and-forget. Cero espera de
+>    response. Cero conocimiento de quien escucha.**
+> 2. recetas se subscribe a `escandallo.coste.calculado` y en su
+>    handler aplica los 7 campos al store. Sigue siendo dueno absoluto
+>    del archivo `/recetas.json`.
+> 3. Para LEER (escandallo necesita ingredientes para calcular):
+>    `publishAndWait('recetas.obtener.request', ...)` es legitimo
+>    (request/response es valido para LECTURAS de datos de otro modulo).
+>
+> "Decision arquitectural" cerrada (lo que en una version anterior de
+> `cajones-frentes-abiertos-retomar.md` aparecia como "Opcion A vs B"):
+> es B, refactor — y siempre lo fue bajo el paradigma. La opcion A
+> (enmendar contrato para permitir `archivo_destino` ajeno) era falsa
+> simetria. Lo conservo aqui solo como apunte de mi razonamiento
+> erroneo previo.
+
 ---
 
 ## 1 · El sintoma

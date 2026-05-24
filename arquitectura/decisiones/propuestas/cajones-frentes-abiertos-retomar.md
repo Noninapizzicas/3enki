@@ -156,59 +156,72 @@ canonicos del propio repo antes de declarar drift.
 
 ---
 
-### 2.4 · Deuda escandallo + recetas + viabilidad (PRIORIDAD ALTA, RIESGO ALTO — REQUIERE DECISION ARQUITECTURAL PREVIA)
+### 2.4 · Deuda escandallo + recetas + viabilidad (PRIORIDAD ALTA, DECISION CERRADA, EJECUCION PENDIENTE)
 
-> **Correccion 2026-05-24 (tercer hallazgo de atribucion)**: el doc
-> `escandallo-aislamiento-store.md` (commit `285df6c`) presento esto como
-> "deuda silenciosa". **INCORRECTO**. El blueprint de escandallo declara
-> EXPLICITAMENTE en su `estado_persistente`:
+> **Recorrido de la atribucion (cerrado 2026-05-24)**:
 >
-> > *"Escandallo NO tiene archivo propio. Persiste los campos de coste
-> > DENTRO del archivo del modulo recetas (/recetas.json). Decision
-> > arquitectonica: una sola fuente de verdad por receta — todos los
-> > modulos leen del mismo sitio."*
+> 1. **Primera lectura mia** (commit `285df6c`, doc `escandallo-aislamiento-store.md`):
+>    presente esto como "deuda silenciosa". Incompleto — el blueprint declara
+>    la decision conscientemente.
 >
-> Es decir: **excepcion consciente documentada**, no deuda oculta. Y
-> existe **disonancia real** con el contrato `llm-runtime-discipline.contract.json::no_explorar_estado_ajeno`
-> que cita TEXTUALMENTE como anti-patron *"Leer /recetas.json desde el
-> blueprint de escandallo. Lo correcto es publishAndWait('recetas.obtener.request', ...)"*.
-> Es decir, contrato y blueprint estan en oposicion explicita.
+> 2. **Segunda lectura mia** (al implementar el cross-check del frente 2.5):
+>    descubri que escandallo declara EXPLICITAMENTE
+>    `archivo_destino: /recetas.json` en su `estado_persistente` con
+>    `_descripcion`: *"Decision arquitectonica: una sola fuente de verdad
+>    por receta — todos los modulos leen del mismo sitio."* Concluí que
+>    habia "disonancia real" entre contrato y blueprint, y presente como
+>    Opcion A (enmendar contrato) vs Opcion B (refactor escandallo).
 >
-> **Antes de tocar codigo, hay que resolver la disonancia**:
-> - **Opcion A — enmendar el contrato**: anyadir salvedad para "archivo
->   compartido por decision arquitectonica documentada con `_descripcion`
->   en `estado_persistente`". Escandallo queda como esta. Mas conservador.
-> - **Opcion B — refactorizar escandallo**: revertir la decision del
->   blueprint y forzar fanout via `recetas.actualizar_coste`. Coherente
->   con el contrato. Mas trabajo. Plan en `escandallo-aislamiento-store.md`.
+> 3. **Correccion del usuario** (2026-05-24): *"escandallo no toca nada
+>    solo emite eventos y quien escucha y entiende hace o no lo que es
+>    oportuno — la magia de los eventos"*. Esto es el paradigma event-core
+>    puro. La declaracion `archivo_destino: /recetas.json` solo DOCUMENTA
+>    la violacion, NO la legitima. La opcion A era falsa simetria — no es
+>    opcion legitima bajo el paradigma del sistema. **La decision correcta
+>    es B y siempre lo fue.**
 >
-> **NO empezar Fase 1-5 sin haber elegido A o B**. El doc
-> `escandallo-aislamiento-store.md` asume B implicitamente — es solo
-> uno de los dos caminos posibles.
+> **Decision arquitectural CERRADA**: refactor (opcion B). El plan en 5
+> fases sigue valido y vive en `escandallo-aislamiento-store.md`. Lo unico
+> que sobra de aquel doc es la presentacion como "deuda silenciosa" — es
+> deuda DOCUMENTADA en el blueprint que el blueprint mismo no debio
+> documentar; documentarla no la legitima.
 
-**Contexto original (sigue valido como diagnostico de la disonancia)**: escandallo invoca `fs.read.request '/recetas.json'` (3 ocurrencias) y `fs.write.request '/recetas.json'` (1 ocurrencia) en su pseudocodigo. Documento detallado del refactor (opcion B) en `arquitectura/decisiones/propuestas/escandallo-aislamiento-store.md`.
+**Forma correcta del refactor (resumen del paradigma)**:
 
-**Bloqueo descubierto en la sesion**: `recetas.actualizar` tiene un whitelist limitado (`nombre, descripcion, porciones, tiempo_min, dificultad, notas, fuente, ingredientes, instrucciones, categorias, etiquetas`). Los 7 campos de coste que escandallo escribe (`coste_total`, `coste_porcion`, `coste_actualizado_at`, `postcode_usado`, `fuentes_precios`, `ingredientes_detalle`, `ingredientes_sin_precio`) **NO** estan en el whitelist. Si escandallo manda `cambios: { coste_total: 12.3 }`, recetas los ignora silenciosamente.
+- escandallo: cuando termine el calculo, publica
+  `escandallo.coste.calculado { receta_id, coste_total, coste_porcion,
+  coste_actualizado_at, postcode_usado, fuentes_precios,
+  ingredientes_detalle, ingredientes_sin_precio, correlation_id, ... }`.
+  Cero `fs.read`/`fs.write` directos a `/recetas.json`.
+- recetas: subscribe `escandallo.coste.calculado` y actualiza su propio
+  store con esos campos (operacion canonica nueva
+  `actualizar_coste` interna que no se expone como tool, solo como
+  handler de evento). Mantiene la propiedad del archivo.
+- Para LEER datos de recetas (escandallo necesita conocer ingredientes
+  para calcular): escandallo invoca
+  `publishAndWait('recetas.obtener.request', {project_id, receta_id})`
+  y recetas responde. Cero `fs.read.request '/recetas.json'`.
 
-**Decisiones tomadas**:
-- Opcion C del menu de opciones: documentar, NO tocar runtime ahora.
-- Documento `escandallo-aislamiento-store.md` redactado con plan en 5 fases.
-- Refactor canonico = Opcion A: anyadir operacion nueva `recetas.actualizar_coste` (NO ampliar el whitelist de `actualizar`). Separa semanticamente edicion humana vs actualizacion derivada.
+**Que falta ejecutar** (sin disonancia previa que resolver):
+1. Anyadir al blueprint de recetas: subscribe a `escandallo.coste.calculado`
+   con handler que aplica los 7 campos via operacion interna.
+2. Cambiar el blueprint de escandallo: las 3 lecturas a
+   `publishAndWait('recetas.obtener.request', ...)`. La escritura sustituida
+   por `publish('escandallo.coste.calculado', {...})`.
+3. Remover el `archivo_destino: /recetas.json` del `estado_persistente`
+   de escandallo (era documentacion de la violacion). Anyadir nota que
+   escandallo NO tiene estado persistente propio porque sus calculos
+   son derivacion publicada como evento.
+4. Verificar `viabilidad` por el mismo patron (no comprobado por audit
+   truncado — la BD vacia corto la inspeccion).
+5. Tests + audit runtime corto en VPS.
 
-**Probablemente afecta a `viabilidad`** (no comprobado — el audit del 2026-05-24 lo corto antes de ejecutar lecturas profundas porque la BD del proyecto de prueba estaba vacia). Hipotesis del usuario: viabilidad consume escandallo, probablemente via publishAndWait, pero hay que verificar leyendo su pseudocodigo.
+**Por que alto riesgo**: toca runtime activo en el VPS (escandallo y
+recetas con cajones_enabled en produccion). Requiere coordinar 2
+blueprints simultaneamente — si solo se cambia uno, el otro queda
+desincronizado y los costes no se persisten.
 
-**Que falta** (ver `escandallo-aislamiento-store.md` para detalle):
-1. **Fase 1**: escaneo exhaustivo mejorado para detectar TODOS los blueprints con anti-patron real (no solo `/recetas.json` literal; cualquier path que apunte a `estado_persistente` de OTRO modulo, una vez que la Fase 2.3 de este documento haya completado las declaraciones).
-2. **Fase 2**: operaciones canonicas faltantes. Para cada par (modulo_A, modulo_B) detectado, anyadir operacion canonica al destino.
-3. **Fase 3**: refactor del consumer (escandallo → `publishAndWait('recetas.obtener.request', ...)` + `publishAndWait('recetas.actualizar_coste.request', ...)`).
-4. **Fase 4**: tests POC2 + audit runtime corto contra VPS.
-5. **Fase 5**: anyadir cross-check al validator `llm-runtime-discipline.validate.js` para detectar reaparicion del anti-patron.
-
-**Por que alto riesgo**: toca runtime activo (escandallo con cajones_enabled en produccion), modifica multiples blueprints, requiere verificar que el LLM ejecute el nuevo pseudocodigo correctamente. **NO empezar sin tener tiempo dedicado y la disposicion de revertir si algo falla**.
-
-**Estimacion**: 3-5h de cambios + audit.
-
-**Dependencia**: idealmente cerrar 2.3 antes (declaraciones limpias) para que el escaneo de Fase 1 no de falsos positivos.
+**Estimacion**: 3-5h.
 
 ---
 

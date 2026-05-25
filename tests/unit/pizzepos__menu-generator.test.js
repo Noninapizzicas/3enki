@@ -251,11 +251,11 @@ test('schema: ingrediente con emoji valida (ayuda visual del POS comandero)', ()
 // Group 4: integracion blueprint -> persistencia event-core
 // --------------------------------------------------
 
-test('integracion: pseudocodigo de generar publica carta.generar.terminada fire-and-forget (decision 5.3 refactor v8.1)', () => {
+test('integracion: pseudocodigo de generar publica carta.creada fire-and-forget (decision 5.3 refactor v8.1)', () => {
   const pseudo = blueprint.operaciones.generar.pseudocodigo.join('\n');
   assert.ok(
-    pseudo.includes("carta.generar.terminada"),
-    'generar debe publicar carta.generar.terminada (evento de dominio) — carta-manager lo escucha via eventos_que_escucho y persiste internamente'
+    pseudo.includes("carta.creada"),
+    'generar debe publicar carta.creada (evento de dominio) — carta-manager lo escucha via eventos_que_escucho y persiste internamente'
   );
   assert.ok(
     !pseudo.includes("publishAndWait('carta-manager.save.request'") &&
@@ -264,10 +264,10 @@ test('integracion: pseudocodigo de generar publica carta.generar.terminada fire-
   );
 });
 
-test('integracion: blueprint declara carta.generar.terminada en eventos_publicados', () => {
+test('integracion: blueprint declara carta.creada en eventos_publicados', () => {
   assert.ok(
-    blueprint.eventos_publicados.includes('carta.generar.terminada'),
-    'eventos_publicados debe incluir carta.generar.terminada (canonico v8.1)'
+    blueprint.eventos_publicados.includes('carta.creada'),
+    'eventos_publicados debe incluir carta.creada (canonico v8.1)'
   );
 });
 

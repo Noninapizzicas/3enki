@@ -88,7 +88,7 @@ function log(emoji, msg) { console.log(`[${ts()}] ${emoji} ${msg}`); }
   const subs = [
     'menu.generation.progress',
     'menu.generation.failed',
-    'carta.generar.terminada',         // canonico v8.1+ (fire-and-forget)
+    'carta.creada',         // canonico v8.1+ (fire-and-forget)
     'carta-manager.save.request',      // legacy v8.0 (RPC roto — detectar si VPS desactualizado)
     'carta.actualizada',
     'carta.generar.iniciada',
@@ -122,7 +122,7 @@ function log(emoji, msg) { console.log(`[${ts()}] ${emoji} ${msg}`); }
 
     if (ev === 'menu.generation.progress') { captured.menu_progress.push(data); log('->', `menu.generation.progress step=${data.step}`); }
     else if (ev === 'menu.generation.failed') { captured.menu_failed.push(data); log('X', `menu.generation.failed: ${JSON.stringify(data.error)}`); }
-    else if (ev === 'carta.generar.terminada') { captured.carta_generar_terminada.push(data); log('->', `carta.generar.terminada (project=${data.project_id?.slice(0,8)}, carta=${data.carta?.meta?.nombre})`); }
+    else if (ev === 'carta.creada') { captured.carta_generar_terminada.push(data); log('->', `carta.creada (project=${data.project_id?.slice(0,8)}, carta=${data.carta?.meta?.nombre})`); }
     else if (ev === 'carta-manager.save.request') { captured.carta_save_request_legacy.push(data); log('!!', `LEGACY carta-manager.save.request — VPS sigue corriendo blueprint v8.0.0, no v8.1.0`); }
     else if (ev === 'carta.actualizada') { captured.carta_actualizada.push(data); log('OK', `carta.actualizada id=${data.id || data.carta?.meta?.id}`); }
     else if (ev === 'carta.generar.iniciada') { captured.carta_generar_iniciada.push(data); log('->', `carta.generar.iniciada`); }
@@ -212,7 +212,7 @@ function log(emoji, msg) { console.log(`[${ts()}] ${emoji} ${msg}`); }
   console.log('Eventos capturados:');
   console.log(`  menu.generation.progress: ${captured.menu_progress.length}`);
   console.log(`  menu.generation.failed: ${captured.menu_failed.length}`);
-  console.log(`  carta.generar.terminada: ${captured.carta_generar_terminada.length}`);
+  console.log(`  carta.creada: ${captured.carta_generar_terminada.length}`);
   console.log(`  carta-manager.save.request (LEGACY v8.0): ${captured.carta_save_request_legacy.length}`);
   console.log(`  carta.actualizada: ${captured.carta_actualizada.length}`);
   console.log(`  carta.generar.iniciada: ${captured.carta_generar_iniciada.length}`);
@@ -244,9 +244,9 @@ function log(emoji, msg) { console.log(`[${ts()}] ${emoji} ${msg}`); }
   const check = (cond, label) => cond ? passed.push(label) : failed.push(label);
 
   check(captured.menu_progress.length >= 1, 'publica menu.generation.progress (step structuring)');
-  check(captured.carta_generar_terminada.length >= 1, 'publica carta.generar.terminada fire-and-forget (v8.1 canonico)');
+  check(captured.carta_generar_terminada.length >= 1, 'publica carta.creada fire-and-forget (v8.1 canonico)');
   check(captured.carta_save_request_legacy.length === 0, 'NO publica carta-manager.save.request legacy (RPC roto)');
-  check(captured.carta_actualizada.length >= 1, 'persistencia confirmada via carta.actualizada (carta-manager._on_carta_generar_terminada reacciono)');
+  check(captured.carta_actualizada.length >= 1, 'persistencia confirmada via carta.actualizada (carta-manager._on_carta_creada reacciono)');
   check(!captured.ai_chat_failed, 'ai.chat NO falla');
   check(!captured.menu_failed.length, 'menu.generation NO falla');
   check(!captured.carta_generar_fallida.length, 'carta.generar NO falla');

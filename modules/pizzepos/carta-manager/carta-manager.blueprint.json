@@ -5,7 +5,7 @@
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "version": "blueprint-1.1.0",
   "language": "es",
-  "_v1_1_changelog": "v1.1.0 (2026-05-25): anyade subscriber asincrono al evento 'carta.generar.terminada' via mecanismo blueprint-subscribers-asincronos (mismo wiring que recetas usa para escandallo.coste.calculado — frente 2.4). Operacion interna nueva _on_carta_generar_terminada (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Delega a save sin duplicar logica. Origen: audit runtime Fase 7b de la migracion menu-generator (decision 5.3 refactorizada de RPC a fire-and-forget). Operaciones pre-existentes (save, get, list, delete, etc.) sin cambios.",
+  "_v1_1_changelog": "v1.1.0 (2026-05-25): anyade subscriber asincrono al evento 'carta.creada' via mecanismo blueprint-subscribers-asincronos (mismo wiring que recetas usa para escandallo.coste.calculado — frente 2.4). Operacion interna nueva _on_carta_creada (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Delega a save sin duplicar logica. Origen: audit runtime Fase 7b de la migracion menu-generator (decision 5.3 refactorizada de RPC a fire-and-forget). Operaciones pre-existentes (save, get, list, delete, etc.) sin cambios.",
 
   "rol": "Aggregate root del subsistema-carta. Custodio del dato canonico de cada carta del proyecto. CRUD + versionado + manipulacion estructurada de productos y categorias dentro de cada carta. Otros modulos del subsistema (carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler) leen cartas via carta-manager pero NUNCA escriben al store directamente.",
 
@@ -68,19 +68,19 @@
 
   "eventos_que_escucho": [
     {
-      "evento": "carta.generar.terminada",
-      "handler": "_on_carta_generar_terminada",
-      "_descripcion": "v1.1.0 (2026-05-25): Wireado via blueprint-subscribers-asincronos canonico (frente 2.4). Cuando menu-generator termina de generar una carta, publica 'carta.generar.terminada' fire-and-forget. carta-manager (dueno del store /cartas/) escucha y aplica el save internamente. El LLM ejecuta el handler en conversacion sintetica creada por ai-gateway — sin RPC sync blueprint->blueprint (que NO esta wireado). Mismo mecanismo que recetas usa para escandallo.coste.calculado."
+      "evento": "carta.creada",
+      "handler": "_on_carta_creada",
+      "_descripcion": "v1.1.0 (2026-05-25): Wireado via blueprint-subscribers-asincronos canonico (frente 2.4). Cuando menu-generator termina de generar una carta, publica 'carta.creada' fire-and-forget. carta-manager (dueno del store /cartas/) escucha y aplica el save internamente. El LLM ejecuta el handler en conversacion sintetica creada por ai-gateway — sin RPC sync blueprint->blueprint (que NO esta wireado). Mismo mecanismo que recetas usa para escandallo.coste.calculado."
     }
   ],
 
   "operaciones": {
 
-    "_on_carta_generar_terminada": {
-      "_descripcion": "Operacion INTERNA — handler asincrono del evento 'carta.generar.terminada' publicado por menu-generator (u otros generadores futuros). NO se expone como cajon al LLM en el chat normal (prefijo _ canonico). Se invoca SOLO via blueprint-subscribers-asincronos cuando llega el evento. Delega en this.save(...) para evitar duplicar logica de persistencia.",
+    "_on_carta_creada": {
+      "_descripcion": "Operacion INTERNA — handler asincrono del evento 'carta.creada' publicado por menu-generator (u otros generadores futuros). NO se expone como cajon al LLM en el chat normal (prefijo _ canonico). Se invoca SOLO via blueprint-subscribers-asincronos cuando llega el evento. Delega en this.save(...) para evitar duplicar logica de persistencia.",
       "input": "{ project_id (req), correlation_id?, request_id?, user_id?, carta (req — shape carta-pizzepos), motivo? } — payload del evento.",
       "pseudocodigo": [
-        "async _on_carta_generar_terminada(input):",
+        "async _on_carta_creada(input):",
         "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
         "  if (!input.carta?.meta?.nombre) return INVALID_INPUT { field: 'carta.meta.nombre' }",
         "",

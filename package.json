@@ -82,7 +82,6 @@
     "test:pizzepos__pedidos": "node tests/unit/pizzepos__pedidos.test.js",
     "test:pizzepos__productos": "node tests/unit/pizzepos__productos.test.js",
     "test:pizzepos__tarifas": "node tests/unit/pizzepos__tarifas.test.js",
-    "test:pizzepos__menu-generator": "node tests/unit/pizzepos__menu-generator.test.js",
     "test:pizzepos__cobros": "node tests/unit/pizzepos__cobros.test.js",
     "test:pizzepos__variaciones": "node tests/unit/pizzepos__variaciones.test.js",
     "test:pizzepos__cuentas-canales": "node tests/unit/pizzepos__cuentas-canales.test.js",

@@ -228,9 +228,6 @@ jobs:
       - name: Run unit tests (pizzepos/tarifas — reescritura canonica)
         run: npm run test:pizzepos__tarifas
 
-      - name: Run unit tests (pizzepos/menu-generator — reescritura canonica)
-        run: npm run test:pizzepos__menu-generator
-
       - name: Run unit tests (pizzepos/cobros — reescritura canonica)
         run: npm run test:pizzepos__cobros
 

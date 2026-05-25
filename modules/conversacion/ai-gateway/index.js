@@ -710,14 +710,54 @@ class AiGatewayModule extends BaseModule {
   // El grafo se sirve a la tool page.related y al frontend para la barra lateral.
   _buildPageGraph() {
     this.pageGraph.clear();
-    const PA_RE = /publishAndWait\s*\(\s*['"]([a-z][a-z0-9-]*)\.[\w.]+\.request['"]/gi;
     const ensure = (page) => {
       if (!this.pageGraph.has(page)) this.pageGraph.set(page, { consumes: new Set(), consumed_by: new Set() });
       return this.pageGraph.get(page);
     };
+    // Asegurar nodo para cada blueprint, incluso si no tiene aristas detectadas.
+    for (const page_id of this.blueprintModules.keys()) ensure(page_id);
+
+    // --- 1. Aristas desde el catalogo curado eventos-publish-subscribe.json ---
+    // El catalogo lo regenera blueprint-eventos-conscientes.validate.js cada
+    // vez que corre validate:ci. Captura publishers (bus.publish Y
+    // bus.publishAndWait) y subscribers (eventos_que_escucho declarados),
+    // resolviendo los 3 bugs del regex antiguo:
+    //   (1) bus.publish fire-and-forget no se capturaba.
+    //   (2) el primer segmento del evento (e.g. 'carta.creada' -> 'carta') no
+    //       coincide con el page_id real (carta-manager) -> resuelve usando el
+    //       source path del publisher/subscriber, no el name del evento.
+    //   (3) las aristas inversas (carta-digital escucha carta.actualizada que
+    //       carta-manager publica) no se creaban -> ahora si.
+    const catalogo = this._loadEventCatalog();
+    const pathToPageId = this._buildPathToPageIdMap();
+    let catalogUsed = false;
+
+    if (catalogo && catalogo.eventos) {
+      catalogUsed = true;
+      for (const [event_name, entry] of Object.entries(catalogo.eventos)) {
+        // Skip eventos primitivos transversales (fs.*, llm.*, etc.).
+        const firstSegment = String(event_name).split('.')[0];
+        if (this._isPrimitivePrefix(firstSegment)) continue;
+        const publishers = Array.isArray(entry.publishers) ? entry.publishers : [];
+        const subscribers = Array.isArray(entry.subscribers) ? entry.subscribers : [];
+        if (publishers.length === 0 || subscribers.length === 0) continue;
+        for (const pub of publishers) {
+          const pubPage = pathToPageId.get(pub.source);
+          if (!pubPage) continue;
+          for (const sub of subscribers) {
+            const subPage = pathToPageId.get(sub.source);
+            if (!subPage || subPage === pubPage) continue;
+            ensure(pubPage).consumes.add(subPage);
+            ensure(subPage).consumed_by.add(pubPage);
+          }
+        }
+      }
+    }
+
+    // --- 2. Fallback: parseo regex del pseudocodigo (compat si catalogo no
+    //       existe, o complemento para blueprints no indexados en el catalogo) ---
+    const PA_RE = /(?:publishAndWait|publish)\s*\(\s*['"]([a-z][a-z0-9-]*)\.[\w.]+['"]/gi;
     for (const [page_id, ctx] of this.blueprintModules.entries()) {
-      ensure(page_id);
-      // 1. Extraer referencias del pseudocodigo del child.
       const ops = ctx.child?.operaciones || {};
       for (const op of Object.values(ops)) {
         const pseudo = op?.pseudocodigo;
@@ -728,18 +768,21 @@ class AiGatewayModule extends BaseModule {
           let m;
           while ((m = PA_RE.exec(step)) !== null) {
             const target = m[1];
-            // Filtrar primitivas globales del bus (fs, project, llm, ai, agent...) — no
-            // son "paginas relacionadas", son utilidades transversales. Solo nos
-            // interesan modulos del dominio que el usuario navegaria.
             if (this._isPrimitivePrefix(target)) continue;
             if (target === page_id) continue;
+            // Solo crear arista si el target es un page_id real (blueprint
+            // cargado). Esto evita falsos positivos cuando el primer segmento
+            // del evento es una entidad y no un modulo (caso 'carta' vs
+            // 'carta-manager'). Si el catalogo ya lo capturo, esta arista es
+            // redundante (add a Set es idempotente).
+            if (!this.blueprintModules.has(target)) continue;
             ensure(page_id).consumes.add(target);
             ensure(target).consumed_by.add(page_id);
           }
         }
       }
-      // 2. Override declarativo: module.json.paginas_relacionadas anyade aristas
-      //    bidireccionales (afinidad tematica que no se infiere del codigo).
+
+      // --- 3. Override declarativo: module.json.paginas_relacionadas[] ---
       const declaradas = Array.isArray(ctx.manifest?.paginas_relacionadas) ? ctx.manifest.paginas_relacionadas : [];
       for (const target of declaradas) {
         if (typeof target !== 'string' || target === page_id) continue;
@@ -747,23 +790,92 @@ class AiGatewayModule extends BaseModule {
         ensure(target).consumed_by.add(page_id);
       }
     }
-    // 3. Pages JS legacy navegables — modulos con target_page_id declarado en
-    //    su module.json aunque NO sean blueprint_driven. Aparecen como nodos
-    //    del grafo (sin aristas detectadas por pseudocodigo porque no tienen
-    //    blueprint hijo) y son destinos validos para chat.cambiar_foco /
-    //    page.related. Caso testigo 2026-05-24: menu-generator. Cuando se
-    //    migre a blueprint pleno, este branch se vuelve no-op para ese modulo
-    //    (su blueprint hijo ya lo ha registrado en la iteracion principal).
+
+    // --- 4. Pages JS legacy navegables (target_page_id sin blueprint) ---
     const loaded = this.moduleLoader?.loadedModules;
     if (loaded && typeof loaded[Symbol.iterator] === 'function') {
       for (const [, mod] of loaded) {
         const m = mod?.manifest;
         const tpid = m?.target_page_id;
         if (typeof tpid !== 'string') continue;
-        if (this.blueprintModules.has(tpid)) continue; // ya registrado via blueprint
-        ensure(tpid); // nodo navegable sin aristas inferidas
+        if (this.blueprintModules.has(tpid)) continue;
+        ensure(tpid);
       }
     }
+
+    this.logger?.debug?.('ai-gateway.page-graph.source', {
+      catalog_used: catalogUsed,
+      nodes: this.pageGraph.size
+    });
+  }
+
+  // Cargar catalogo curado de eventos generado por
+  // blueprint-eventos-conscientes.validate.js. Devuelve null si no existe (el
+  // grafo cae al fallback regex).
+  _loadEventCatalog() {
+    try {
+      const path = require('path');
+      const fs = require('fs');
+      const candidate = path.resolve(__dirname, '../../../arquitectura/decisiones/_outputs/eventos-publish-subscribe.json');
+      if (!fs.existsSync(candidate)) return null;
+      return JSON.parse(fs.readFileSync(candidate, 'utf8'));
+    } catch (err) {
+      if (this.logger) {
+        this.logger.warn('ai-gateway.page-graph.catalog_load_failed', {
+          error_message: err && err.message ? err.message : String(err)
+        });
+      }
+      return null;
+    }
+  }
+
+  // Construir mapa inverso source_path -> page_id para resolver entries del
+  // catalogo. El source del catalogo es un path relativo al repo root (e.g.
+  // 'modules/pizzepos/menu-generator/menu-generator.blueprint.json'). El
+  // page_id es el campo target_page_id del module.json del modulo.
+  _buildPathToPageIdMap() {
+    const map = new Map();
+    // 1. Blueprints cargados: para cada page_id en blueprintModules, inferir
+    //    su path canonico desde el manifest (target_page_id + nombre).
+    for (const [page_id, ctx] of this.blueprintModules.entries()) {
+      const moduleName = ctx.manifest?.name || page_id;
+      // Path canonico estimado: el blueprint hijo vive junto al module.json
+      // del modulo, con nombre <module>.blueprint.json. Caminos relativos al
+      // repo root tipo 'modules/pizzepos/menu-generator/menu-generator.blueprint.json'.
+      // Como no tenemos el path absoluto del modulo aqui directamente, hacemos
+      // un mejor esfuerzo recorriendo loadedModules.
+      const loaded = this.moduleLoader?.loadedModules;
+      if (loaded && typeof loaded.get === 'function') {
+        const mod = loaded.get(moduleName);
+        if (mod?.path) {
+          const path = require('path');
+          const REPO_ROOT = path.resolve(__dirname, '../../..');
+          const blueprintPath = path.relative(REPO_ROOT, path.join(mod.path, `${moduleName}.blueprint.json`));
+          map.set(blueprintPath, page_id);
+          // Tambien indexar el module.json (algunos modulos pueden aparecer
+          // ahi en el catalogo si declaran subscribes via events.subscribes).
+          const moduleJsonPath = path.relative(REPO_ROOT, path.join(mod.path, 'module.json'));
+          map.set(moduleJsonPath, page_id);
+        }
+      }
+    }
+    // 2. Modulos JS legacy navegables: si tienen target_page_id, indexar su
+    //    module.json al page_id correspondiente para que aristas que apunten
+    //    a ellos se construyan correctamente.
+    const loaded = this.moduleLoader?.loadedModules;
+    if (loaded && typeof loaded[Symbol.iterator] === 'function') {
+      const path = require('path');
+      const REPO_ROOT = path.resolve(__dirname, '../../..');
+      for (const [moduleName, mod] of loaded) {
+        const tpid = mod?.manifest?.target_page_id;
+        if (typeof tpid !== 'string') continue;
+        if (this.blueprintModules.has(tpid)) continue; // ya indexado arriba
+        if (!mod?.path) continue;
+        const moduleJsonPath = path.relative(REPO_ROOT, path.join(mod.path, 'module.json'));
+        map.set(moduleJsonPath, tpid);
+      }
+    }
+    return map;
   }
 
   // Prefijos del bus que NO cuentan como "paginas" para el grafo (son primitivas

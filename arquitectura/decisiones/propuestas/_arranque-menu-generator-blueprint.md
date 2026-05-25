@@ -124,7 +124,7 @@ como mencionaba el doc maestro). El blueprint nuevo invoca `carta-manager.save.r
 Recomendación de partida en el doc: **A**. Preserva integración con
 carta-scheduler y otros emisores del evento, no cambia API externa.
 
-Mi respuesta: ___
+Mi respuesta: **A** — `eventos_que_escucho: [{evento: 'carta.generar.solicitada', handler: '_on_carta_generar_solicitada'}]`. Mecanismo blueprint-subscribers-asincronos ya canonizado en main (frente 2.4, caso testigo `recetas` escuchando `escandallo.coste.calculado`). Esta es la 2ª aplicación del patrón — refuerza la convergencia.
 
 ---
 

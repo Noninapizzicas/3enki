@@ -81,7 +81,10 @@ Mi respuesta: **A** — `modules/pizzepos/menu-generator/menu-generator.blueprin
 Recomendación de partida en el doc: **A**. Preserva contrato implícito
 con consumers actuales, evita romper integraciones existentes.
 
-Mi respuesta: ___
+Mi respuesta: **A** — extraer del legacy + congelar como
+`arquitectura/decisiones/_schemas/menu-generator/carta-pizzepos.schema.json`.
+Verificado: el legacy ya tiene `modules/pizzepos/menu-generator/schemas/`,
+por lo que A es ~0 trabajo extra (copiar y registrar como canónico AJV).
 
 ---
 

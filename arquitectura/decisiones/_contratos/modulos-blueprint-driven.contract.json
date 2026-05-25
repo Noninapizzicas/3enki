@@ -1,9 +1,9 @@
 {
   "_doc": "Paradigma 'modulos blueprint-driven'. Captura la decision arquitectonica de mover un subconjunto del sistema (~13 de ~70 modulos) de codigo JS procedural a blueprint JSON declarativo que el LLM ejecuta como runtime via 2 tools universales (bus.publish, bus.publishAndWait). Documento maestro al estilo companero-viaje.contract.json y extensibilidad-modular.contract.json — captura vision, no validable mecanicamente. Los contratos derivados por subsistema (ej: subsistema-recetario.contract) son los que llevaran validator.",
   "id": "modulos-blueprint-driven",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "creada": "2026-05-18",
-  "supersedes_nota": "v1.1.0 (2026-05-19): reclasificacion de la linea carta — carta-manager, carta-scheduler, carta-digital, carta-design, carta-impresion, carta-marketing — desde verticales_operacionales_alto_volumen hacia candidatos_a_blueprint.subsistema_carta. Razon: el v1.0.0 generalizo 'vertical pizzepos = no blueprint' por el grueso del POS (productos/pedidos/cobros/cocina/comandero — POS real-time genuino), pero la linea carta NO es transaccional: es composicion editorial con razonamiento (descripciones de productos, branding, layout, planificacion). Latencia 5-25s tolerable, frecuencia baja (cartas se editan, no se sirven a miles por dia), valor anyadido del LLM = decisivo. menu-generator se queda en verticales operacionales con nota: NO es POS pero su pipeline OCR (pdfjs/sharp/Google Vision) requiere librerias nativas que el LLM no puede ejecutar — pendiente extraer modulos OCR separados antes de migrar.",
+  "supersedes_nota": "v1.2.0 (2026-05-25): menu-generator migrado a blueprint puro v8.0.0 (modules/pizzepos/menu-generator/menu-generator.blueprint.json) — pasa de verticales_operacionales_alto_volumen.modulos_pipeline_externo (donde estaba bloqueado por la nota OCR) a candidatos_a_blueprint.subsistema_carta. Cierre del bloqueo: decision 4.4 del doc maestro arquitectura/decisiones/propuestas/migracion-menu-generator-blueprint.md eliminó completamente la capa OCR (no funcionaba en produccion); decision 4.1 acoto el input v8 a texto pegado/dictado o JSON ya estructurado. NO se construyeron modulos OCR sustitutos — si vuelve a hacer falta, sera horizontal futuro con modulos JS dedicados (pdf-extractor, ocr-vision). subkey verticales_operacionales_alto_volumen.modulos_pipeline_externo eliminado (vacio tras la migracion). Conteos actualizados: candidatos_a_blueprint pasa de 19 a 20 modulos; se_quedan_en_js_determinista de ~57 a ~56.\n\nv1.1.0 (2026-05-19): reclasificacion de la linea carta — carta-manager, carta-scheduler, carta-digital, carta-design, carta-impresion, carta-marketing — desde verticales_operacionales_alto_volumen hacia candidatos_a_blueprint.subsistema_carta. Razon: el v1.0.0 generalizo 'vertical pizzepos = no blueprint' por el grueso del POS (productos/pedidos/cobros/cocina/comandero — POS real-time genuino), pero la linea carta NO es transaccional: es composicion editorial con razonamiento (descripciones de productos, branding, layout, planificacion). Latencia 5-25s tolerable, frecuencia baja (cartas se editan, no se sirven a miles por dia), valor anyadido del LLM = decisivo. menu-generator se quedo en verticales operacionales con nota: NO es POS pero su pipeline OCR (pdfjs/sharp/Google Vision) requiere librerias nativas que el LLM no puede ejecutar — pendiente extraer modulos OCR separados antes de migrar. [Cerrado en v1.2.0 con OCR eliminado en lugar de extraido.]",
   "tipo": "documento_maestro",
 
   "esencia": {
@@ -77,16 +77,16 @@
     "_doc": "Lista cerrada de los ~70 modulos del sistema clasificados con los 4 criterios. Si un modulo nuevo entra al sistema, se evalua y se actualiza este mapa. Disciplina alta, ambigüedad cero.",
 
     "candidatos_a_blueprint": {
-      "_doc": "19 modulos que cumplen las 4 condiciones. Subsistema-recetario completo + linea carta (composicion editorial, no POS transaccional) + memorias del companero + agentes + prompt-manager. Su valor viene del razonamiento LLM, sus operaciones son de bajo volumen y latencia conversacional.",
+      "_doc": "20 modulos que cumplen las 4 condiciones. Subsistema-recetario completo + linea carta + menu-generator (composicion editorial, no POS transaccional) + memorias del companero + agentes + prompt-manager. Su valor viene del razonamiento LLM, sus operaciones son de bajo volumen y latencia conversacional.",
       "subsistema_recetario": ["recetas", "escandallo", "viabilidad", "tecnicas", "recetario-creativo", "pase-cocina", "mise-en-place"],
-      "subsistema_carta": ["carta-manager", "carta-scheduler", "carta-digital", "carta-design", "carta-impresion", "carta-marketing"],
+      "subsistema_carta": ["carta-manager", "carta-scheduler", "carta-digital", "carta-design", "carta-impresion", "carta-marketing", "menu-generator"],
       "memorias_del_companero": ["memory-user-profile", "memory-conversation-summary", "memory-rag"],
       "gestion_de_agentes": ["bot-manager", "agent-observer"],
       "configuracion_llm": ["prompt-manager"]
     },
 
     "se_quedan_en_js_determinista": {
-      "_doc": "~57 modulos. La gran mayoria del sistema. Cada categoria tiene su razon especifica para NO ir a blueprint.",
+      "_doc": "~56 modulos. La gran mayoria del sistema. Cada categoria tiene su razon especifica para NO ir a blueprint.",
       "infraestructura_del_chat": {
         "modulos": ["ai-gateway", "prompt-builder", "chat-io", "channel-manager", "ai-agent-framework"],
         "razon": "Son LA infraestructura del LLM, no usuarios del LLM. Latencia y determinismo criticos."
@@ -106,8 +106,7 @@
       "verticales_operacionales_alto_volumen": {
         "modulos_pizzepos": ["categorias", "cobros", "cocina", "comandero", "cuentas", "cuentas-canales", "ingredientes", "pedidos", "persistencia-comandero", "productos", "tarifas", "variaciones"],
         "modulos_contables": ["facturas", "asesoria", "fuentes", "staff-manager"],
-        "modulos_pipeline_externo": ["menu-generator"],
-        "razon": "POS con cientos a miles de transacciones/dia, latencia critica (<1s), determinismo legal/contable no negociable. Coste de inferencia LLM seria inviable a ese volumen.\n\nNOTA sobre menu-generator: NO es POS transaccional, pero su pipeline depende de librerias nativas (pdfjs, sharp, Google Vision OCR) que el LLM como runtime no puede ejecutar. Bloqueado como candidato blueprint hasta que existan modulos JS deterministas separados (ocr-vision, image-preprocessor, pdf-extractor) que el blueprint pueda invocar via bus.publishAndWait. Hasta entonces, se queda en JS."
+        "razon": "POS con cientos a miles de transacciones/dia, latencia critica (<1s), determinismo legal/contable no negociable. Coste de inferencia LLM seria inviable a ese volumen."
       },
       "canales_externos": {
         "modulos": ["telegram-service"],

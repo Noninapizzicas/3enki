@@ -475,7 +475,7 @@ function setupBlueprintsWithReferences(m) {
   });
 }
 
-test('_buildPageGraph extrae aristas correctas del pseudocodigo', () => {
+test('_buildPageGraph extrae aristas correctas del pseudocodigo (solo hacia blueprints reales)', () => {
   const m = makeInstance();
   setupBlueprintsWithReferences(m);
   m._buildPageGraph();
@@ -484,11 +484,58 @@ test('_buildPageGraph extrae aristas correctas del pseudocodigo', () => {
   assert.ok(recetasNode, 'recetas debe existir en grafo');
   assert.strictEqual(recetasNode.consumes.size, 0, 'recetas no consume otros modulos (fs.* es primitiva)');
   assert.ok(recetasNode.consumed_by.has('escandallo'), 'escandallo consume recetas');
-  // escandallo consume recetas y mercadona-api, consumido por viabilidad
+  // escandallo consume recetas (blueprint cargado). mercadona-api NO crea arista
+  // porque no esta en blueprintModules (solo se crean aristas hacia destinos
+  // navegables reales — fix del bug de "nodos fantasma" del 2026-05-25).
   const eNode = m.pageGraph.get('escandallo');
-  assert.ok(eNode.consumes.has('recetas'));
-  assert.ok(eNode.consumes.has('mercadona-api'));
-  assert.ok(eNode.consumed_by.has('viabilidad'));
+  assert.ok(eNode.consumes.has('recetas'), 'escandallo consume recetas');
+  assert.ok(!eNode.consumes.has('mercadona-api'), 'mercadona-api no es blueprint => no aparece como destino');
+  assert.ok(eNode.consumed_by.has('viabilidad'), 'viabilidad consume escandallo');
+});
+
+test('_buildPageGraph usa catalogo eventos-publish-subscribe.json si esta disponible (fix bug bus.publish + carta vs carta-manager)', () => {
+  const m = makeInstance();
+  // 2 blueprints simulando el caso real menu-generator → carta-manager.
+  m.blueprintModules.set('menu-generator', {
+    manifest: { name: 'menu-generator' },
+    child: { operaciones: { generar: { pseudocodigo: ["await bus.publish('carta.creada', {...})"] } } },
+    parent: null, systemPrompt: '', cajonesEnabled: true
+  });
+  m.blueprintModules.set('carta-manager', {
+    manifest: { name: 'carta-manager' },
+    child: {
+      operaciones: { save: { pseudocodigo: ["// no invoca otros modulos"] } },
+      eventos_que_escucho: [{ evento: 'carta.creada', handler: '_on_carta_creada' }]
+    },
+    parent: null, systemPrompt: '', cajonesEnabled: true
+  });
+  // Mock loadedModules para que pathToPageIdMap pueda resolver paths.
+  const fakeLoaded = new Map([
+    ['menu-generator', { path: '/repo/modules/pizzepos/menu-generator', manifest: { name: 'menu-generator', target_page_id: 'menu-generator' } }],
+    ['carta-manager', { path: '/repo/modules/pizzepos/carta-manager', manifest: { name: 'carta-manager', target_page_id: 'carta-manager' } }]
+  ]);
+  m.moduleLoader = { loadedModules: fakeLoaded };
+  // Stub _loadEventCatalog para inyectar catalogo simulado (no depende de
+  // que exista el archivo en disco — el test verifica logica, no IO).
+  m._loadEventCatalog = () => ({
+    eventos: {
+      'carta.creada': {
+        publishers: [{ source: 'modules/pizzepos/menu-generator/menu-generator.blueprint.json', ref: 'operaciones.pseudocodigo' }],
+        subscribers: [{ source: 'modules/pizzepos/carta-manager/carta-manager.blueprint.json', handler: '_on_carta_creada' }]
+      }
+    }
+  });
+  // Stub _buildPathToPageIdMap para reflejar los paths del catalogo simulado.
+  // (alternativa: configurar process.cwd o REPO_ROOT, mas complejo).
+  m._buildPathToPageIdMap = () => new Map([
+    ['modules/pizzepos/menu-generator/menu-generator.blueprint.json', 'menu-generator'],
+    ['modules/pizzepos/carta-manager/carta-manager.blueprint.json', 'carta-manager']
+  ]);
+  m._buildPageGraph();
+  const mgNode = m.pageGraph.get('menu-generator');
+  const cmNode = m.pageGraph.get('carta-manager');
+  assert.ok(mgNode.consumes.has('carta-manager'), 'menu-generator -> carta-manager (via carta.creada del catalogo)');
+  assert.ok(cmNode.consumed_by.has('menu-generator'), 'carta-manager <- menu-generator (arista inversa)');
 });
 
 test('_buildPageGraph filtra prefijos primitivos (fs, project, llm, ai, etc.)', () => {
@@ -552,21 +599,24 @@ test('page.related devuelve consumes + consumed_by + related — solo NAVEGABLES
   assert.ok(!r.related.includes('mercadona-api'), 'no incluir nodos no navegables (no son blueprints registrados)');
 });
 
-test('page.related filtra prefijos del pseudocodigo que no son blueprints navegables', () => {
+test('_buildPageGraph no crea aristas hacia targets que no son blueprints (fix nodos fantasma 2026-05-25)', () => {
   const m = makeInstance();
-  // foo (blueprint navegable) consume bar-no-blueprint via publishAndWait
+  // foo (blueprint navegable) referencia bar-no-blueprint via publishAndWait.
+  // Antes del fix: el grafo creaba un nodo fantasma 'bar-no-blueprint' con
+  // arista, y page.related lo filtraba a posteriori. Tras el fix: el grafo
+  // ya no crea la arista en origen (target no esta en blueprintModules).
   m.blueprintModules.set('foo', {
     manifest: {},
     child: { operaciones: { x: { pseudocodigo: ["await publishAndWait('bar-no-blueprint.do.request', {...})"] } } },
     parent: null, systemPrompt: '', cajonesEnabled: true
   });
   m._buildPageGraph();
-  // El grafo SI registra la arista (puede ser util para audit/tooling),
-  // pero page.related la filtra porque bar-no-blueprint no es invocable
-  // via chat.cambiar_foco.
-  assert.ok(m.pageGraph.get('foo').consumes.has('bar-no-blueprint'), 'grafo interno mantiene la arista');
+  assert.ok(!m.pageGraph.get('foo').consumes.has('bar-no-blueprint'),
+    'grafo NO crea arista hacia target no-blueprint (limpieza en origen)');
+  assert.ok(!m.pageGraph.has('bar-no-blueprint'),
+    'grafo NO contiene nodo fantasma para target no-blueprint');
   const r = m._executeNavTool('page.related', { page_id: 'foo' }, { conversation_id: 'c1' });
-  assert.deepStrictEqual(r.consumes, [], 'page.related filtra no-navegables');
+  assert.deepStrictEqual(r.consumes, [], 'page.related coherente: nada que filtrar');
   assert.deepStrictEqual(r.related, []);
 });
 

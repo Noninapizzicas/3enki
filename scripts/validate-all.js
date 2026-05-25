@@ -59,7 +59,8 @@ const VALIDATORS = [
   { id: 'subsistema-recetario', file: 'arquitectura/decisiones/_validators/subsistema-recetario.validate.js' },
   { id: 'cajones-context-partitioning', file: 'arquitectura/decisiones/_validators/cajones-context-partitioning.validate.js' },
   { id: 'llm-runtime-discipline', file: 'arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js' },
-  { id: 'blueprint-eventos-conscientes', file: 'arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js' }
+  { id: 'blueprint-eventos-conscientes', file: 'arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js' },
+  { id: 'dinamica-de-trabajo-companero', file: 'arquitectura/decisiones/_validators/dinamica-de-trabajo-companero.validate.js' }
 ];
 
 const RED   = '\x1b[31m';

@@ -101,7 +101,12 @@ por lo que A es ~0 trabajo extra (copiar y registrar como canónico AJV).
 Recomendación de partida en el doc: **A**. Cumple event-core, delega
 persistencia al dueño del dominio carta.
 
-Mi respuesta: ___
+Mi respuesta: **A** — `publishAndWait('carta-manager.save.request', ...)`.
+Coherente con el principio rector (sección 3 del doc): todo el flujo pasa
+al blueprint en una sola pasada del LLM (sin invocar agente, el agente
+menu-structurer queda archivado por decisión 4.2). Matiz: la operación
+canónica en `carta-manager.blueprint.json` se llama `save` (no `crear`
+como mencionaba el doc maestro). El blueprint nuevo invoca `carta-manager.save.request`.
 
 ---
 

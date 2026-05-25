@@ -509,7 +509,8 @@ class FilesystemModule extends BaseModule {
           data: {
             path: data.path, content: buffer.toString('base64'),
             encoding: 'base64', size: stats.size,
-            modified: stats.mtime, type: 'binary'
+            modified: stats.mtime, type: 'binary',
+            hash: this._computeHash(buffer)
           }
         };
       }
@@ -521,7 +522,8 @@ class FilesystemModule extends BaseModule {
         data: {
           path: data.path, content,
           encoding: 'utf-8', size: stats.size,
-          modified: stats.mtime, type: 'text'
+          modified: stats.mtime, type: 'text',
+          hash: this._computeHash(content)
         }
       };
     } catch (err) {
@@ -548,6 +550,38 @@ class FilesystemModule extends BaseModule {
       try { await fs.stat(safePath); }
       catch (e) { if (e.code === 'ENOENT') isNew = true; }
 
+      // Versionado optimista (CAS): si llega expected_hash, verificar que
+      // el contenido actual del disco lo cumple antes de escribir. Cierra
+      // la clase de bugs read-modify-write fragiles (caso testigo:
+      // salmorejo perdido en audit 2026-05-25). Opt-in: si no se pasa
+      // expected_hash, comportamiento sin cambio (silent allow per
+      // decision 2A de Critica 1).
+      if (typeof data.expected_hash === 'string') {
+        if (isNew) {
+          // El caller esperaba que el archivo existiera con un hash
+          // concreto pero no existe. Otro proceso lo borro entre el read
+          // y el write -> conflicto.
+          this.metrics?.increment('filesystem.write.cas_conflict', { reason: 'file_missing' });
+          return this._errorResponse(409, 'CONFLICT_STATE',
+            'File no longer exists; expected_hash cannot match',
+            { kind: 'domain', path: filePath,
+              expected_hash: data.expected_hash, current_hash: null });
+        }
+        const currentBuffer = await fs.readFile(safePath);
+        const ext = path.extname(filePath).toLowerCase();
+        const currentRepresentation = BINARY_EXTS.includes(ext)
+          ? currentBuffer
+          : currentBuffer.toString('utf-8');
+        const currentHash = this._computeHash(currentRepresentation);
+        if (currentHash !== data.expected_hash) {
+          this.metrics?.increment('filesystem.write.cas_conflict', { reason: 'hash_mismatch' });
+          return this._errorResponse(409, 'CONFLICT_STATE',
+            'File hash changed since read; reload and retry',
+            { kind: 'domain', path: filePath,
+              expected_hash: data.expected_hash, current_hash: currentHash });
+        }
+      }
+
       let contentBuffer, fileSize;
       if (data.encoding === 'base64') {
         contentBuffer = Buffer.from(data.content, 'base64');
@@ -564,16 +598,35 @@ class FilesystemModule extends BaseModule {
       });
       this.metrics?.increment('filesystem.write.success', { kind: isNew ? 'created' : 'updated' });
 
+      // Hash post-escritura: permite encadenar writes sin re-read.
+      const newHashRepresentation = data.encoding === 'base64'
+        ? contentBuffer
+        : data.content;
+      const newHash = this._computeHash(newHashRepresentation);
+
       return {
         status: isNew ? 201 : 200,
         data: {
           path: filePath, file_path: filePath,
-          created: isNew, size: fileSize
+          created: isNew, size: fileSize,
+          hash: newHash
         }
       };
     } catch (err) {
       return this._handleHandlerError('filesystem.write.failed', err, 'write');
     }
+  }
+
+  // Hash canonico para el versionado optimista CAS de fs.write.
+  // SHA-256 hex del contenido raw (utf-8 para texto, buffer para binario).
+  // Patron tipo ETag de HTTP. Cero normalizacion en v1 (per decision 2A):
+  // si dos blueprints serializan el mismo JSON con orden de keys distinto
+  // y emergen falsos conflictos, evolucionar a normalizado en v2.
+  _computeHash(content) {
+    const h = crypto.createHash('sha256');
+    if (Buffer.isBuffer(content)) h.update(content);
+    else h.update(content, 'utf-8');
+    return h.digest('hex');
   }
 
   async handleDelete(data) {

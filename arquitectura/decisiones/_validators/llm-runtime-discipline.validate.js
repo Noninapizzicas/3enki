@@ -40,7 +40,9 @@ const SECCIONES_CANONICAS = [
 ];
 
 const SECCION_DISCIPLINA_KEY = 'disciplina_del_llm_runtime';
-const EXPECTED_PRINCIPIO_COUNT = 10;
+// Bumped to 11 in contract v2.0.0 (2026-05-25) — anyadido principio
+// read_modify_write_con_cas tras audit cross-blueprint del salmorejo.
+const EXPECTED_PRINCIPIO_COUNT = 11;
 
 function loadJson(p) { return JSON.parse(fs.readFileSync(p, 'utf-8')); }
 

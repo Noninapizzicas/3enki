@@ -36,7 +36,7 @@
     },
     {
       "name": "fs.read",
-      "description": "Lee el contenido de un archivo.",
+      "description": "Lee el contenido de un archivo. La response incluye hash (SHA-256 hex) que el caller puede pasar como expected_hash a fs.write para versionado optimista (CAS).",
       "handler": "handleRead",
       "parameters": {
         "type": "object",
@@ -47,17 +47,18 @@
     },
     {
       "name": "fs.write",
-      "description": "Escribe contenido a un archivo (crea si no existe).",
+      "description": "Escribe contenido a un archivo (crea si no existe). Soporta versionado optimista opt-in: si llega expected_hash, verifica que el contenido actual en disco lo cumple antes de escribir; si no coincide devuelve CONFLICT_STATE con current_hash y expected_hash. Sin expected_hash, comportamiento legacy (sobrescribe sin verificar).",
       "handler": "handleWrite",
       "parameters": {
         "type": "object",
         "properties": {
-          "path":    { "type": "string", "description": "Ruta del archivo" },
-          "content": { "type": "string", "description": "Contenido a escribir" }
+          "path":          { "type": "string", "description": "Ruta del archivo" },
+          "content":       { "type": "string", "description": "Contenido a escribir" },
+          "expected_hash": { "type": "string", "description": "SHA-256 hex del contenido actual del archivo (obtenido del fs.read previo). Si se pasa, fs.write valida que el disco no cambio desde el read y devuelve CONFLICT_STATE si difiere. Opcional; omitir para escritura sin verificacion (crear nuevo, single-writer puro, scripts de migracion)." }
         },
         "required": ["path", "content"]
       },
-      "errores_conocidos": ["INVALID_INPUT", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
     {
       "name": "fs.delete",

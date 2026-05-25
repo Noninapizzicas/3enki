@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enki.local/arquitectura/decisiones/menu-generator/carta-pizzepos.schema.json",
+  "title": "menu-generator carta pizzepos — payload schema",
+  "description": "Shape canónico de la carta que el módulo menu-generator produce y que carta-manager.save persiste. Origen: extraído del legacy modules/pizzepos/menu-generator/schemas/carta-output.json (decisión 5.2 del doc maestro migracion-menu-generator-blueprint.md = A). Adaptado al canon AJV draft 2020-12 del repo (era draft-07). Preserva el contrato implícito con el frontend POS (comandero renderiza productos[].ingredientes[] con emojis como ayuda visual — ver pantalla pizzepos.es/nor). carta-manager.save persiste cualquier shape via JSON.stringify(input.carta) literal — este schema documenta y valida el shape que el menu-generator emite.",
+
+  "type": "object",
+  "required": ["meta", "categorias", "productos"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["id", "nombre", "generado_desde", "created_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^carta_[a-z0-9_]+$",
+          "description": "ID único de la carta generada por menu-generator. Pattern carta_<slug>. carta-manager.save lo respeta si viene (no sobreescribe con uuid)."
+        },
+        "nombre": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Nombre de la carta o restaurante. Campo OBLIGATORIO por carta-manager (única validación dura: carta.meta.nombre)."
+        },
+        "generado_desde": {
+          "type": "string",
+          "enum": ["texto", "foto", "pdf"],
+          "description": "Tipo de fuente usada para generar. En v8 blueprint puro: solo 'texto' es válido (decisión 4.1: alcance del input = texto/JSON; OCR eliminado). Los valores 'foto'/'pdf' se mantienen en el enum para compat histórica con cartas previamente generadas."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 — momento de generación por menu-generator. NO se confunde con meta.updated_at que rellena carta-manager."
+        }
+      }
+    },
+
+    "categorias": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "nombre", "orden"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$",
+            "description": "ID slug de la categoría (sin prefijo carta_, solo el slug interno)."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Nombre original de la categoría tal como aparece en el menú original."
+          },
+          "orden": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Orden de presentación. 1 = primero."
+          }
+        }
+      }
+    },
+
+    "productos": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "nombre", "categoria", "precio", "ingredientes"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$",
+            "description": "ID: {categoria_id}_{nombre_slug}. Único dentro de la carta."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Nombre original del producto."
+          },
+          "categoria": {
+            "type": "string",
+            "description": "ID de la categoría a la que pertenece. Debe matchear con alguna categorias[].id."
+          },
+          "precio": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Precio base. 0 si no fue detectado en el input — carta-manager / frontend deciden cómo mostrarlo."
+          },
+          "ingredientes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["nombre"],
+              "additionalProperties": false,
+              "properties": {
+                "nombre": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Nombre del ingrediente."
+                },
+                "emoji": {
+                  "type": "string",
+                  "description": "Emoji representativo. El comandero (pantalla del POS) los renderiza como ayuda visual del cliente al añadir/quitar ingredientes de un producto. Verificado en runtime real 2026-05-25."
+                }
+              }
+            },
+            "description": "Lista de ingredientes del producto. Shape canónico del POS pizzepos — el comandero los muestra agrupados por categoría con emojis (caso testigo: producto 'Blues' de Pizzicas con QUESO/VERDURA/CARNE Y EMBUTIDO)."
+          }
+        }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "meta": {
+        "id": "carta_pizzicas",
+        "nombre": "Carta Pizzicas",
+        "generado_desde": "texto",
+        "created_at": "2026-02-04T14:30:00.000Z"
+      },
+      "categorias": [
+        { "id": "pizzicas", "nombre": "Pizzicas", "orden": 1 },
+        { "id": "entrantes", "nombre": "Entrantes", "orden": 2 }
+      ],
+      "productos": [
+        {
+          "id": "pizzicas_country",
+          "nombre": "Country",
+          "categoria": "pizzicas",
+          "precio": 11.50,
+          "ingredientes": [
+            { "nombre": "Tomate", "emoji": "🍅" },
+            { "nombre": "Salsa BBQ", "emoji": "🔥" },
+            { "nombre": "Nata", "emoji": "🥛" },
+            { "nombre": "Pollo", "emoji": "🍗" },
+            { "nombre": "Mezcla de quesos", "emoji": "🧀" },
+            { "nombre": "Cebolla", "emoji": "🧅" },
+            { "nombre": "Bacon", "emoji": "🥓" }
+          ]
+        },
+        {
+          "id": "entrantes_huevos_salseros",
+          "nombre": "Huevos Salseros",
+          "categoria": "entrantes",
+          "precio": 3.50,
+          "ingredientes": [
+            { "nombre": "Huevos", "emoji": "🥚" },
+            { "nombre": "Salsa de ajo asado", "emoji": "🧄" },
+            { "nombre": "Trufa", "emoji": "🍄" },
+            { "nombre": "Mayonesa", "emoji": "🥫" }
+          ]
+        }
+      ]
+    }
+  ]
+}

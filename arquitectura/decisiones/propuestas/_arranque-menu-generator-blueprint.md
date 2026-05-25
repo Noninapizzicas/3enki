@@ -63,7 +63,7 @@ Formato de cada pregunta: **enunciado · opciones · recomendación del doc
 Recomendación de partida en el doc: **A**. Mínima fricción, mantiene
 path histórico, `target_page_id` no cambia, frontend no se entera.
 
-Mi respuesta: ___
+Mi respuesta: **A** — `modules/pizzepos/menu-generator/menu-generator.blueprint.json`. Coherente con la convención actual del repo (los 6 blueprints del subsistema-carta ya viven bajo `modules/pizzepos/`); A es la única opción con precedente vivo.
 
 ---
 
@@ -81,7 +81,10 @@ Mi respuesta: ___
 Recomendación de partida en el doc: **A**. Preserva contrato implícito
 con consumers actuales, evita romper integraciones existentes.
 
-Mi respuesta: ___
+Mi respuesta: **A** — extraer del legacy + congelar como
+`arquitectura/decisiones/_schemas/menu-generator/carta-pizzepos.schema.json`.
+Verificado: el legacy ya tiene `modules/pizzepos/menu-generator/schemas/`,
+por lo que A es ~0 trabajo extra (copiar y registrar como canónico AJV).
 
 ---
 
@@ -98,7 +101,12 @@ Mi respuesta: ___
 Recomendación de partida en el doc: **A**. Cumple event-core, delega
 persistencia al dueño del dominio carta.
 
-Mi respuesta: ___
+Mi respuesta: **A** — `publishAndWait('carta-manager.save.request', ...)`.
+Coherente con el principio rector (sección 3 del doc): todo el flujo pasa
+al blueprint en una sola pasada del LLM (sin invocar agente, el agente
+menu-structurer queda archivado por decisión 4.2). Matiz: la operación
+canónica en `carta-manager.blueprint.json` se llama `save` (no `crear`
+como mencionaba el doc maestro). El blueprint nuevo invoca `carta-manager.save.request`.
 
 ---
 
@@ -116,7 +124,7 @@ Mi respuesta: ___
 Recomendación de partida en el doc: **A**. Preserva integración con
 carta-scheduler y otros emisores del evento, no cambia API externa.
 
-Mi respuesta: ___
+Mi respuesta: **A** — `eventos_que_escucho: [{evento: 'carta.generar.solicitada', handler: '_on_carta_generar_solicitada'}]`. Mecanismo blueprint-subscribers-asincronos ya canonizado en main (frente 2.4, caso testigo `recetas` escuchando `escandallo.coste.calculado`). Esta es la 2ª aplicación del patrón — refuerza la convergencia.
 
 ---
 

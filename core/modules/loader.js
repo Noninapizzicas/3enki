@@ -655,6 +655,25 @@ class ModuleLoader {
       });
     }
 
+    // Emit canonical bus event so late wirings (e.g. ai-gateway blueprint
+    // async subscribers) can hook reliably after all modules are loaded.
+    // Replaces the lazy-rewire workaround in ai-gateway (PR #206) by a
+    // deterministic signal. The lazy-rewire stays as defense-in-depth.
+    if (this.core?.eventBus?.publish) {
+      try {
+        await this.core.eventBus.publish('core.modules.loaded.all', {
+          total: discovered.length,
+          successful,
+          failed,
+          timestamp: new Date().toISOString()
+        });
+      } catch (err) {
+        this.logger?.warn('core.modules.loaded.all.publish_failed', {
+          error_message: err && err.message ? err.message : String(err)
+        });
+      }
+    }
+
     return results;
   }
 

@@ -236,7 +236,18 @@ class AiGatewayModule extends BaseModule {
       for (const [, mod] of this.moduleLoader.loadedModules) {
         if (mod?.manifest?.blueprint_driven === true) { hasBp = true; break; }
       }
-      if (hasBp) this._loadBlueprints();
+      if (hasBp) {
+        this._loadBlueprints();
+        // Re-wire los blueprint async subscribers ahora que blueprintModules
+        // tiene contenido. Sin esto, los handlers declarados en
+        // eventos_que_escucho NUNCA se registran en el bus — bug observado en
+        // produccion 2026-05-25: onLoad llama _wireBlueprintAsyncSubscribers
+        // con blueprintModules vacio porque los blueprint modules cargan
+        // DESPUES que ai-gateway en el loadAll del loader. carta-manager
+        // declaraba listener para carta.creada pero nunca se suscribia, las
+        // cartas generadas por menu-generator se perdian silenciosamente.
+        this._wireBlueprintAsyncSubscribers();
+      }
     }
     // Blueprint-driven pages: catalogo = solo las 2 tools universales (+ 2 de
     // cajones si el blueprint tiene cajones_enabled). No mezclamos con

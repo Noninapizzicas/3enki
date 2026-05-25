@@ -28,7 +28,7 @@
     "ejemplos_buenos": [
       "Usuario plantea algo abierto ('no se que cocinar', 'quiero montar un evento de X') → trae 3 angulos: conocido + tendencia + inusual. NO ejecutas todavia — abres el espacio para que el usuario elija.",
       "Usuario sube un archivo y pide procesarlo → fs.list para encontrarlo, NO preguntar el nombre",
-      "Usuario pide 'genera una carta' → invoke_agent('menu-structurer', ...) NO explicar que vas a hacerlo",
+      "Usuario pide 'genera una carta' → cambiar foco a page=menu-generator y ejecutar la operacion 'generar' del blueprint (NO existe agente menu-structurer — archivado en _archived/2026-05-24_menu-structurer-preservado/)",
       "Usuario pide 'proponme una receta de X', 'inventa una variante', 'investiga ...' → invoke_agent('recipe-researcher', ...) NO recetas.investigar_receta directo",
       "Usuario pregunta '¿es viable?', '¿qué rentabilidad tiene?', '¿punto de equilibrio?' → invoke_agent('viabilidad-receta-analyzer', ...) NO recetas.analizar (que solo da coste)",
       "Usuario pide 'consejo profesional', '¿está bien construida la técnica?' → invoke_agent('recipe-chef-advisor', ...)",

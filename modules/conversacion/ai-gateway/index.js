@@ -108,11 +108,23 @@ class AiGatewayModule extends BaseModule {
     this.conversationCajones.clear();
     this.pageGraph.clear();
     this.conversationPageFoco.clear();
-    // Liberar subscripciones asincronas de blueprint subscribers
+    // Liberar subscripciones asincronas de blueprint subscribers.
+    // Acumulamos errores y reportamos UNA vez para evitar log spam en bucle.
+    const unsubFailures = [];
     for (const subs of this.asyncSubscriptions.values()) {
       for (const sub of subs) {
-        try { if (typeof sub.unsub === 'function') sub.unsub(); } catch (_) {}
+        try {
+          if (typeof sub.unsub === 'function') sub.unsub();
+        } catch (err) {
+          unsubFailures.push(err && err.message ? err.message : String(err));
+        }
       }
+    }
+    if (unsubFailures.length > 0) {
+      this.logger.warn('ai-gateway.blueprint_subscriber.unsub_failed', {
+        count: unsubFailures.length,
+        sample: unsubFailures.slice(0, 5)
+      });
     }
     this.asyncSubscriptions.clear();
   }

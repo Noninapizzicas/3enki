@@ -58,7 +58,8 @@ const VALIDATORS = [
   { id: 'resilience',    file: 'arquitectura/decisiones/_validators/resilience.validate.js' },
   { id: 'subsistema-recetario', file: 'arquitectura/decisiones/_validators/subsistema-recetario.validate.js' },
   { id: 'cajones-context-partitioning', file: 'arquitectura/decisiones/_validators/cajones-context-partitioning.validate.js' },
-  { id: 'llm-runtime-discipline', file: 'arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js' }
+  { id: 'llm-runtime-discipline', file: 'arquitectura/decisiones/_validators/llm-runtime-discipline.validate.js' },
+  { id: 'blueprint-eventos-conscientes', file: 'arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js' }
 ];
 
 const RED   = '\x1b[31m';

@@ -63,7 +63,7 @@ Formato de cada pregunta: **enunciado · opciones · recomendación del doc
 Recomendación de partida en el doc: **A**. Mínima fricción, mantiene
 path histórico, `target_page_id` no cambia, frontend no se entera.
 
-Mi respuesta: ___
+Mi respuesta: **A** — `modules/pizzepos/menu-generator/menu-generator.blueprint.json`. Coherente con la convención actual del repo (los 6 blueprints del subsistema-carta ya viven bajo `modules/pizzepos/`); A es la única opción con precedente vivo.
 
 ---
 

@@ -2,16 +2,16 @@
   "_doc": "Blueprint CONCRETO del modulo menu-generator v8.0.0. Reemplaza completamente al modulo legacy JS v7.0.0 (cuyo index.js queda archivado en _legacy/ via Fase 5 de la migracion). Generador puro: recibe input (texto pegado/dictado o JSON estructurado) y produce una carta con shape canonico carta-pizzepos (ver arquitectura/decisiones/_schemas/menu-generator/carta-pizzepos.schema.json). Persiste la carta via publishAndWait('carta-manager.save.request', ...) — menu-generator NO toca filesystem (paradigma event-core puro: cada modulo es dueno de su dominio; carta-manager es dueno de /cartas/). Origen de la migracion: arquitectura/decisiones/propuestas/migracion-menu-generator-blueprint.md (4 decisiones cerradas en _arranque-menu-generator-blueprint.md).",
 
   "id": "menu-generator",
-  "version": "blueprint-8.0.0",
+  "version": "blueprint-8.1.0",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
   "language": "es",
-  "_v8_changelog": "v8.0.0 (2026-05-25): migracion JS legacy v7.0.0 -> blueprint puro. Cambios estructurales: (1) Pipeline OCR (pdfjs/sharp/google-vision) ELIMINADO entero — no funcionaba en produccion (decision 4.4 del doc maestro). (2) Agente menu-structurer ARCHIVADO — el LLM principal del blueprint absorbe la estructuracion + transformacion en una sola pasada (decision 4.2). (3) Persistencia via carta-manager.save.request — menu-generator NO escribe filesystem (decision 5.3 = A). (4) Subscribe a carta.generar.solicitada preservado via mecanismo blueprint-subscribers-asincronos canonico (decision 5.4 = A). (5) Tool canonica generar (sin cambio del nombre publico — decision 4.3). (6) target_page_id 'menu-generator' preservado. Cierra el bloqueo OCR del contrato modulos-blueprint-driven v1.1.0 (Fase 6 bumpea a v1.2.0 quitando la nota).",
+  "_v8_changelog": "v8.1.0 (2026-05-25): refactor persistencia event-core puro tras audit runtime Fase 7b. Cambio en operacion 'generar' paso 5: publishAndWait('carta-manager.save.request', ...) RPC sync -> publish('carta.generar.terminada', ...) fire-and-forget. Razon: el wiring RPC blueprint->blueprint NO esta operacional en ai-gateway (solo existe _wireBlueprintAsyncSubscribers para fire-and-forget); el patron canonico verificado runtime es el de frente 2.4 (escandallo.coste.calculado -> recetas via eventos_que_escucho). carta-manager se extiende con eventos_que_escucho: 'carta.generar.terminada' + handler interno _on_carta_generar_terminada en commit emparejado. Response del modulo pasa de 200/Created a 202/Accepted — la generacion termino pero la persistencia es eventual. Frontend que necesite confirmacion se suscribe a carta.actualizada filtrando por correlation_id.\n\nv8.0.0 (2026-05-25): migracion JS legacy v7.0.0 -> blueprint puro. Cambios estructurales: (1) Pipeline OCR (pdfjs/sharp/google-vision) ELIMINADO entero — no funcionaba en produccion (decision 4.4 del doc maestro). (2) Agente menu-structurer ARCHIVADO — el LLM principal del blueprint absorbe la estructuracion + transformacion en una sola pasada (decision 4.2). (3) Persistencia via carta-manager.save.request — menu-generator NO escribe filesystem (decision 5.3 = A). [Refactorizado a fire-and-forget en v8.1 — ver arriba.] (4) Subscribe a carta.generar.solicitada preservado via mecanismo blueprint-subscribers-asincronos canonico (decision 5.4 = A). (5) Tool canonica generar (sin cambio del nombre publico — decision 4.3). (6) target_page_id 'menu-generator' preservado. Cierra el bloqueo OCR del contrato modulos-blueprint-driven v1.1.0 (Fase 6 bumpea a v1.2.0 quitando la nota).",
 
   "rol": "Generador puro de cartas estructuradas para pizzepos. Recibe input (texto pegado/dictado en lenguaje libre, o JSON ya estructurado importado de otra herramienta) y produce una carta JSON conforme al shape canonico carta-pizzepos. La persistencia la dispara delegando en carta-manager (event-core puro: cada modulo dueno de su dominio). NO hace OCR — si el input es archivo PDF/imagen, eso queda fuera del scope v8 (horizontal futuro si vuelve a hacer falta).",
 
   "garantiza": [
     "Output canonico con shape carta-pizzepos: { meta: {id, nombre, generado_desde, created_at}, categorias[], productos[] } validable contra arquitectura/decisiones/_schemas/menu-generator/carta-pizzepos.schema.json.",
-    "Si input incluye nombre + texto/JSON + project_id, persiste la carta via publishAndWait('carta-manager.save.request', ...) y devuelve la carta resultante al caller con su id final asignado por carta-manager.",
+    "Si input incluye nombre + texto/JSON + project_id, dispara la persistencia via publish('carta.generar.terminada', { carta, project_id, correlation_id, ... }) fire-and-forget y responde inmediatamente con status 202 Accepted + la carta generada localmente. carta-manager (que declara eventos_que_escucho a 'carta.generar.terminada') reacciona en su propio tiempo invocando su operacion save internamente; publica carta.actualizada al terminar — frontend que necesite confirmacion se suscribe a ese evento filtrando por correlation_id.",
     "Si input.nombre falta, devuelve INVALID_INPUT { field: 'nombre' } — pregunta al usuario antes de invocar. Es el unico campo verdaderamente obligatorio (carta-manager tambien lo exige).",
     "Acepta dos modos de input: 'texto' (lenguaje libre — el LLM estructura) o 'json' (carta ya estructurada — el LLM valida y normaliza al shape canonico).",
     "Cada producto generado tiene id (slug derivado de categoria + nombre), nombre, categoria (id de la categoria a la que pertenece), precio (0 si no detectado), e ingredientes[] (cada uno con nombre y emoji opcional — ayudas visuales del POS comandero verificadas en pizzepos.es/nor).",
@@ -29,8 +29,8 @@
   ],
 
   "estado_persistente": {
-    "_descripcion": "menu-generator NO tiene estado persistente propio. Es generador puro: recibe input, transforma, delega persistencia a carta-manager via publishAndWait('carta-manager.save.request', ...). Coherente con el paradigma event-core: cada modulo dueno de su dominio. La carta resultante vive en /cartas/<carta_id>.json bajo propiedad de carta-manager.",
-    "evento_de_salida": "carta-manager.save.request (request al modulo dueno del dominio carta) + carta.generar.iniciada / carta.generar.fallida (notificacion al caller via bus, preservando contrato del v7 legacy)."
+    "_descripcion": "menu-generator NO tiene estado persistente propio. Es generador puro: recibe input, transforma, dispara persistencia via publish('carta.generar.terminada', ...) fire-and-forget. Coherente con el paradigma event-core: cada modulo dueno de su dominio. La carta resultante vive en /cartas/<carta_id>.json bajo propiedad de carta-manager (que escucha el evento y aplica su save internamente).",
+    "evento_de_salida": "carta.generar.terminada (evento de dominio que dispara persistencia en carta-manager) + carta.generar.iniciada / carta.generar.fallida (notificacion al caller via bus, preservando contrato del v7 legacy)."
   },
 
   "fuentes_aceptadas": {
@@ -107,32 +107,32 @@
         "    return UPSTREAM_INVALID_RESPONSE { hint: 'el input no tiene productos/categorias detectables' }",
         "  }",
         "",
-        "  // 5. Persistir via carta-manager.save (event-core puro: menu-generator NO toca filesystem).",
-        "  save_resp = await publishAndWait('carta-manager.save.request', {",
+        "  // 5. Disparar persistencia via evento de dominio fire-and-forget (patron canonico",
+        "  //    frente 2.4: 'emite evento, quien sabe hace, tu no sabes como'). carta-manager",
+        "  //    declara eventos_que_escucho: 'carta.generar.terminada' y reacciona invocando",
+        "  //    su operacion save internamente. NO publishAndWait — el wiring RPC blueprint",
+        "  //    -> blueprint NO esta operacional en ai-gateway; el wiring fire-and-forget SI",
+        "  //    (_wireBlueprintAsyncSubscribers).",
+        "  await publish('carta.generar.terminada', {",
         "    project_id: input.project_id,",
-        "    request_id: uuid(),",
         "    correlation_id: input.correlation_id,",
+        "    request_id: input.request_id,",
         "    user_id: 'menu-generator',",
         "    carta: carta,",
-        "    motivo: 'generada por menu-generator'",
+        "    motivo: 'generada por menu-generator',",
+        "    timestamp: nowISO()",
         "  })",
-        "  if (save_resp.status >= 400) {",
-        "    // carta-manager fallo — propaga error al caller sin reintento",
-        "    await publish('menu.generation.failed', {",
-        "      project_id: input.project_id, nombre: input.nombre, step: 'persistence',",
-        "      error: save_resp.error,",
-        "      correlation_id: input.correlation_id, timestamp: nowISO()",
-        "    })",
-        "    return save_resp",
-        "  }",
         "",
-        "  // 6. Devolver al caller la carta persistida (con meta enriquecido por carta-manager: id final, version, timestamps).",
+        "  // 6. Responder al caller. La carta esta en transito hacia carta-manager; el evento",
+        "  //    canonico 'esta persistida' es carta.actualizada, que carta-manager publica al",
+        "  //    completar el save. Frontend/consumers que necesiten la confirmacion se suscriben",
+        "  //    a carta.actualizada filtrando por correlation_id.",
         "  return {",
-        "    status: 200,",
+        "    status: 202,",
         "    data: {",
-        "      carta: save_resp.data,",
+        "      carta: carta,",
         "      pipeline: 'text',",
-        "      message: 'Carta \"' + input.nombre + '\" generada y persistida.'",
+        "      message: 'Carta \"' + input.nombre + '\" generada. Persistiendose en background — se notificara via carta.actualizada cuando carta-manager termine.'",
         "    }",
         "  }"
       ],
@@ -142,7 +142,8 @@
         "Emojis SI los puedes razonar — son ayuda visual (🍅 tomate, 🧀 queso, etc.). Si dudas, omite el campo emoji.",
         "Slug ids: lowercase, sin acentos, espacios -> '_'. NO uses caracteres especiales.",
         "Si input incluye json parcial, RESPETA los campos que vienen (no los sobrescribas) y rellena los faltantes.",
-        "La persistencia es responsabilidad de carta-manager. Si falla, propaga el error al caller — NO intentes fs.write por tu cuenta (eso violaria no_explorar_estado_ajeno)."
+        "La persistencia es responsabilidad de carta-manager. menu-generator emite el evento canonico 'carta.generar.terminada' y termina — NO intenta fs.write por su cuenta (eso violaria no_explorar_estado_ajeno) NI publishAndWait blueprint->blueprint (no wireado en ai-gateway).",
+        "Status 202 (Accepted) y no 201 (Created): la generacion termino pero la persistencia es async. El caller asume eventual consistency."
       ],
       "errores_posibles": ["INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
     },
@@ -207,10 +208,11 @@
     "menu.generation.progress",
     "menu.generation.failed",
     "carta.generar.iniciada",
-    "carta.generar.fallida"
+    "carta.generar.fallida",
+    "carta.generar.terminada"
   ],
 
-  "_nota_eventos_v8": "v8.0.0 preserva los 4 eventos canonicos del v7 legacy (menu.generation.progress, menu.generation.failed, carta.generar.iniciada, carta.generar.fallida) — son consumidos por frontend/src/lib/stores/menu-generator.ts para UI feedback. NO se publica 'agent.execute.request' (v7 lo emitia para invocar al agente menu-structurer; v8 absorbe la estructuracion en el blueprint principal, agente archivado por decision 4.2). Tampoco se publica carta.generar.completada — el evento canonico 'la carta esta persistida' es carta.actualizada publicado por carta-manager.save al final del pipeline. Caller que necesite saber 'cuando termine' se subscribe a carta.actualizada filtrado por correlation_id.",
+  "_nota_eventos_v8": "v8.1.0 anyade 'carta.generar.terminada' (evento de dominio fire-and-forget que dispara persistencia en carta-manager — patron frente 2.4). v8.0 preserva los 4 eventos canonicos del v7 legacy (menu.generation.progress, menu.generation.failed, carta.generar.iniciada, carta.generar.fallida) — son consumidos por frontend/src/lib/stores/menu-generator.ts para UI feedback. NO se publica 'agent.execute.request' (v7 lo emitia para invocar al agente menu-structurer; v8 absorbe la estructuracion en el blueprint principal, agente archivado por decision 4.2). El evento canonico 'la carta esta persistida' es carta.actualizada publicado por carta-manager (operacion save) tras procesar carta.generar.terminada. Caller que necesite saber 'cuando termine' se subscribe a carta.actualizada filtrado por correlation_id.",
 
   "eventos_que_escucho": [
     {
@@ -223,8 +225,8 @@
   "trabajo_pendiente": [
     {
       "id": "validar_runtime_end_to_end",
-      "estado": "pendiente",
-      "descripcion": "Audit runtime contra VPS verificando: (1) el usuario invoca 'genera carta X desde este texto' en page=menu-generator, (2) menu-generator publica progress + invoca carta-manager.save, (3) carta-manager persiste y publica carta.actualizada, (4) UI del POS muestra la carta nueva con productos y ingredientes con emojis. Reemplaza el smoke artificial de Fase 7 con validacion real."
+      "estado": "diferido",
+      "descripcion": "Audit runtime contra VPS verificando: (1) el usuario invoca 'genera carta X desde este texto' en page=menu-generator, (2) menu-generator publica progress + invoca carta-manager.save, (3) carta-manager persiste y publica carta.actualizada, (4) UI del POS muestra la carta nueva con productos y ingredientes con emojis. Reemplaza el smoke artificial de Fase 7 con validacion real. Script preparado: scripts/audit-helpers/audit-menu-generator-runtime.js. DIFERIDO 2026-05-25: VPS reporta /opt/enki/db inexistente al crear conversacion (UNKNOWN_ERROR/ENOENT en ui/request/conversation/create) — infraestructura SQLite rota, independiente del modulo menu-generator. Probes paralelas confirman bus operativo y llm-flow alcanzable (llm.complete.* funciona, retorna 400 de DeepSeek por shape del probe — no por VPS). Re-ejecutar audit cuando el VPS este sano. Smoke estructural de Fase 7a (tests/unit/pizzepos__menu-generator.test.js, 29/29 verde) valida shape blueprint + module.json + schema canonico sin invocar LLM."
     },
     {
       "id": "verificar_compat_frontend_menu_generator",

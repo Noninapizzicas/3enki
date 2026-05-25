@@ -223,8 +223,8 @@
   "trabajo_pendiente": [
     {
       "id": "validar_runtime_end_to_end",
-      "estado": "pendiente",
-      "descripcion": "Audit runtime contra VPS verificando: (1) el usuario invoca 'genera carta X desde este texto' en page=menu-generator, (2) menu-generator publica progress + invoca carta-manager.save, (3) carta-manager persiste y publica carta.actualizada, (4) UI del POS muestra la carta nueva con productos y ingredientes con emojis. Reemplaza el smoke artificial de Fase 7 con validacion real."
+      "estado": "diferido",
+      "descripcion": "Audit runtime contra VPS verificando: (1) el usuario invoca 'genera carta X desde este texto' en page=menu-generator, (2) menu-generator publica progress + invoca carta-manager.save, (3) carta-manager persiste y publica carta.actualizada, (4) UI del POS muestra la carta nueva con productos y ingredientes con emojis. Reemplaza el smoke artificial de Fase 7 con validacion real. Script preparado: scripts/audit-helpers/audit-menu-generator-runtime.js. DIFERIDO 2026-05-25: VPS reporta /opt/enki/db inexistente al crear conversacion (UNKNOWN_ERROR/ENOENT en ui/request/conversation/create) — infraestructura SQLite rota, independiente del modulo menu-generator. Probes paralelas confirman bus operativo y llm-flow alcanzable (llm.complete.* funciona, retorna 400 de DeepSeek por shape del probe — no por VPS). Re-ejecutar audit cuando el VPS este sano. Smoke estructural de Fase 7a (tests/unit/pizzepos__menu-generator.test.js, 29/29 verde) valida shape blueprint + module.json + schema canonico sin invocar LLM."
     },
     {
       "id": "verificar_compat_frontend_menu_generator",

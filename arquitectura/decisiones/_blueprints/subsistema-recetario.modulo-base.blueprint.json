@@ -2,7 +2,7 @@
   "_doc": "Blueprint ABSTRACTO del subsistema-recetario (tambien reutilizado por la linea carta-manager/scheduler/digital/design/impresion/marketing por compatibilidad de modelo). Captura lo comun a todos los modulos blueprint-driven que dependen de este padre. Cada modulo concreto extiende este declarando solo su delta. El LLM lee la jerarquia (padre + hijo) como su system prompt — el blueprint ES el modulo, no hay codigo JS auxiliar. Tambien declara la disciplina_del_llm_runtime: reglas operativas que el LLM debe respetar al ejecutar cualquier hijo (evita perderse, distraerse, inventar datos).",
 
   "id": "subsistema-recetario.modulo-base",
-  "version": "blueprint-0.5.0",
+  "version": "blueprint-0.6.0",
   "abstract": true,
 
   "rol_generico": "Modulo del subsistema-recetario (o subsistema-carta, mismo padre) — encapsula una responsabilidad acotada del dominio como blueprint declarativo. El LLM es el runtime que lo ejecuta publicando eventos al bus directamente.",
@@ -212,6 +212,29 @@
     "nowISO()":  "Devuelve la fecha-hora actual en ISO 8601. El LLM la pone literal en el payload.",
     "JSON.stringify(obj, null, 2)": "Serializa un objeto a JSON con indentacion. El LLM lo escribe explicito en el payload de fs.write.request.",
     "safeUpdate(path, mutator)": "Patron canonico read-modify-write seguro contra race conditions (cierra clase de bugs tipo 'salmorejo perdido' del audit 2026-05-25). El LLM lo expande mentalmente al pseudocodigo:\n  1. raw = publishAndWait('fs.read.request', { path })\n  2. if (raw.status === 404) store = mutator(undefined)\n     else store = mutator(JSON.parse(raw.content))\n  3. write_args = { path, content: JSON.stringify(store, null, 2) }\n     if (raw.status === 200) write_args.expected_hash = raw.data.hash\n  4. result = publishAndWait('fs.write.request', write_args)\n  5. if (result.error?.code === 'CONFLICT_STATE') -> reintenta desde 1 (max 3 veces). Si tras 3 reintentos sigue CONFLICT_STATE, devuelve CONFLICT_STATE al caller.\nUsar SIEMPRE que la operacion sea 'leer store + modificar + escribir store'. NO usar para crear archivos donde el caller no espera previo (en ese caso fs.write sin expected_hash)."
+  },
+
+  "checklist_eventos_al_disenar_blueprint": {
+    "_descripcion": "Sirve al disenador HUMANO que crea o refactoriza un blueprint hijo — NO al LLM-runtime. Antes de declarar operaciones[] terminadas, recorre estas 5 preguntas para asegurar que el blueprint participa correctamente en el ecosistema event-core. Cubre la clase de bugs detectada en el audit cross-blueprint 2026-05-25 (handoff carta.creada huerfano, eventos publicados sin consumer). El validador blueprint-eventos-conscientes.validate.js cruza las declaraciones derivadas de esta reflexion contra el catalogo real del repo.",
+    "preguntas": [
+      "1. Que eventos del bus podrian moldear mi comportamiento? Consulta el catalogo de eventos publicados por otros modulos (output: _outputs/eventos-publish-subscribe.json). Declara los relevantes en eventos_que_escucho[] del blueprint hijo (formato canonico: { evento: 'modulo.entidad.verbo', handler: '_on_X' }).",
+      "2. Que eventos publica mi pseudocodigo que NECESITAN consumer? Para cada uno, declara entrada en eventos_publicados_que_requieren_consumer[] indicando consumer_esperado (nombre del modulo) y consecuencia_si_sin_consumer (texto humano). Ejemplo: menu-generator publica carta.creada -> consumer carta-manager (persistencia) -> sin consumer = carta perdida silenciosamente.",
+      "3. Alguno de mis eventos publicados es fire-and-forget sin consumer requerido? (telemetria, metricas, observabilidad, logs de auditoria). En ese caso NO lo declares en eventos_publicados_que_requieren_consumer[]. El validator lo marca como info-level (recordatorio), no como error.",
+      "4. Hay un evento canonico que YA existe y soluciona mi necesidad, en lugar de inventar uno nuevo? Revisa el catalogo antes de anyadir nombres nuevos. Reutilizar > duplicar.",
+      "5. Mis eventos publicados respetan naming.contract (prefijo del modulo, verbo canonico del idioma)? Si tu modulo es idioma 'es', usa verbos espanyoles. Si es 'en', ingleses. NO mezclar."
+    ],
+    "campo_canonico_publishing_side": {
+      "nombre": "eventos_publicados_que_requieren_consumer",
+      "tipo": "array de objetos",
+      "shape_de_cada_entrada": {
+        "evento":                    "string — nombre canonico del evento (e.g. 'carta.creada')",
+        "consumer_esperado":         "string — nombre del modulo o blueprint que se espera lo escuche (e.g. 'carta-manager')",
+        "publicado_en":              "string — referencia interna al pseudocodigo donde se emite (e.g. 'operaciones.generar.pseudocodigo')",
+        "consecuencia_si_sin_consumer": "string — texto humano que describe el impacto (e.g. 'La carta generada se pierde silenciosamente.')"
+      },
+      "opt_in_en_v1": true,
+      "_opt_in_nota": "v1 del patron: los blueprints sin este campo NO se quejan. El validator solo verifica donde se ha declarado. Migracion del campo es perezosa — cada blueprint lo anyade cuando se toque. Cuando todos los 11 blueprints actuales lo declaren, decision para endurecer (campo obligatorio + warning si publica sin declarar) se reabre."
+    }
   },
 
   "limite_del_modulo": {

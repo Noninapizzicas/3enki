@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-24T03:40:40.375Z",
-  "total": 2271,
+  "generated_at": "2026-05-25T02:40:29.468Z",
+  "total": 2268,
   "by_validator": {
     "naming": 39,
     "events": 185,
@@ -12,9 +12,9 @@
     "chat-flow": 2,
     "agent-flow": 7,
     "llm-flow": 1,
-    "tools": 356,
+    "tools": 354,
     "agents-config": 173,
-    "module-rewrite": 65,
+    "module-rewrite": 66,
     "frontend": 375,
     "security": 1,
     "testing": 45,
@@ -22,15 +22,15 @@
     "documentation": 85,
     "versionado": 1,
     "deployment": 4,
-    "module-loading": 4,
+    "module-loading": 1,
     "modulo-clase-robusta": 20,
     "scheduling": 1,
-    "llm-runtime-discipline": 6
+    "llm-runtime-discipline": 7
   },
   "by_severity": {
     "warning": 2090,
     "info": 117,
-    "error": 92
+    "error": 89
   },
   "signatures": [
     "agent-flow|drift_publish_agent_flow_sin_correlation_id|pizzepos/carta-digital publica agent.execute.request en modules/pizzepos/carta-digital/index.js:120 — payload.campos_visibles no incluye correlation_id",
@@ -1306,15 +1306,13 @@
     "lifecycle|drift_signature_no_canonica|system-inspector modules/system-inspector/index.js:107 — método prohibido \"stop\" (usar onLoad/onUnload)",
     "lifecycle|drift_signature_no_canonica|system-inspector modules/system-inspector/index.js:167 — método prohibido \"start\" (usar onLoad/onUnload)",
     "llm-flow|drift_modulo_subsistema_sin_schema_ref|conversacion/ai-agent-framework publica \"llm.complete.request\" sin response_schema_ref/schema_ref en module.json",
+    "llm-runtime-discipline|eventos_que_escucho_apunta_a_evento_canonico|modules/pizzepos/menu-generator/menu-generator.blueprint.json declara escuchar 'carta.generar.solicitada' pero NINGUN blueprint ni module.json del repo lo publica (eventos_publicados / events.publishes). Posible typo o evento que viene de origen externo no escaneable.",
     "llm-runtime-discipline|principios_padre_coinciden_con_contrato|arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json anti_patron de 'marcador_de_fuente_por_dato' diverge: contrato='Mezclar datos del usuario con estimaciones del LLM...' vs padre='Mezclar datos del usuario con estimaciones tuyas s...'",
     "llm-runtime-discipline|principios_padre_coinciden_con_contrato|arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json principio 'correlacion_request_id' diverge: contrato='Cada publishAndWait downstream usa un request_id N...' vs padre='Cada publishAndWait que TU hagas usa un request_id...'",
     "llm-runtime-discipline|principios_padre_coinciden_con_contrato|arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json principio 'enfoque_una_operacion' diverge: contrato='Cuando el usuario invoca la operacion X, el LLM ej...' vs padre='Cuando el usuario invoca la operacion X, ejecutas ...'",
     "llm-runtime-discipline|principios_padre_coinciden_con_contrato|arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json principio 'no_explorar_estado_ajeno' diverge: contrato='El LLM accede SOLO al estado_persistente declarado...' vs padre='Accedes SOLO a tu propio estado_persistente (decla...'",
     "llm-runtime-discipline|principios_padre_coinciden_con_contrato|arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json principio 'no_inventes_datos' diverge: contrato='Si falta un campo requerido del input → devuelve I...' vs padre='Si falta un campo requerido del input → devuelves ...'",
     "llm-runtime-discipline|principios_padre_coinciden_con_contrato|arquitectura/decisiones/_blueprints/subsistema-recetario.modulo-base.blueprint.json principio 'response_unico_por_invocacion' diverge: contrato='Cada invocacion a una operacion del blueprint prod...' vs padre='Cada invocacion a TU operacion produce UNA sola re...'",
-    "module-loading|drift_dependency_referencia_inexistente|modules/pizzepos/menu-generator/module.json declara dependency \"google-vision\" que no existe en modules/",
-    "module-loading|drift_dependency_referencia_inexistente|modules/pizzepos/menu-generator/module.json declara dependency \"pdfjs\" que no existe en modules/",
-    "module-loading|drift_dependency_referencia_inexistente|modules/pizzepos/menu-generator/module.json declara dependency \"sharp\" que no existe en modules/",
     "module-loading|drift_dependency_referencia_inexistente|modules/text-editor/module.json declara dependency \"file-browser\" que no existe en modules/",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|code-executor — faltan secciones obligatorias: config.persistence",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|conversation-export — faltan secciones obligatorias: events.publishes, observability.metrics",
@@ -1322,6 +1320,7 @@
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|firmware-manager — faltan secciones obligatorias: config.persistence",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|log-manager — faltan secciones obligatorias: events.publishes, config.persistence, observability.metrics",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|pdf-viewer — faltan secciones obligatorias: config.persistence",
+    "module-rewrite|drift_modulo_migrado_module_json_incompleto|pizzepos__menu-generator — faltan secciones obligatorias: events.publishes, events.subscribes, config.persistence, observability.metrics",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|scheduler — faltan secciones obligatorias: config.persistence",
     "module-rewrite|drift_modulo_migrado_module_json_incompleto|telegram-service — faltan secciones obligatorias: config.persistence",
     "module-rewrite|drift_modulo_migrado_returns_con_error_string|facturacion__asesoria — 1 returns detectados con shape error:'<string suelto>' (debe ser error: { code, message })",
@@ -2197,8 +2196,6 @@
     "tools|drift_ui_handlers_con_shape_de_dispatch|pizzepos__ingredientes ui_handlers[6] tiene campo 'domain' (ingredientes). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",
     "tools|drift_ui_handlers_con_shape_de_dispatch|pizzepos__ingredientes ui_handlers[7] tiene campo 'domain' (ingredientes). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",
     "tools|drift_ui_handlers_con_shape_de_dispatch|pizzepos__ingredientes ui_handlers[8] tiene campo 'domain' (ingredientes). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",
-    "tools|drift_ui_handlers_con_shape_de_dispatch|pizzepos__menu-generator ui_handlers[0] tiene campo 'domain' (menu). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",
-    "tools|drift_ui_handlers_con_shape_de_dispatch|pizzepos__menu-generator ui_handlers[1] tiene campo 'domain' (menu). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",
     "tools|drift_ui_handlers_con_shape_de_dispatch|pizzepos__pedidos ui_handlers[0] tiene campo 'domain' (pedido). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",
     "tools|drift_ui_handlers_con_shape_de_dispatch|pizzepos__pedidos ui_handlers[10] tiene campo 'domain' (pedido). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",
     "tools|drift_ui_handlers_con_shape_de_dispatch|pizzepos__pedidos ui_handlers[1] tiene campo 'domain' (pedido). tools.contract v1.2 + frontend.contract v1.2: ui_handlers[] es solo surface metadata {type, zone, action, handler}. El dispatch se declara en tools[] (el loader deriva domain/action automaticamente del tool name).",

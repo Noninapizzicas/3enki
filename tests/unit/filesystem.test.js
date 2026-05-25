@@ -585,5 +585,106 @@ function publishedOf(mocks, name) {
     await cleanup(tmpDir);
   });
 
+  // ==========================================
+  // Group X: Versionado optimista CAS (Critica 1)
+  // ==========================================
+
+  await testAsync('handleRead devuelve hash SHA-256 hex valido en text', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/cas-text.json', content: '{"a":1}' });
+    const r = await m.handleRead({ path: '/cas-text.json' });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(typeof r.data.hash, 'string');
+    assert.strictEqual(r.data.hash.length, 64, 'sha256 hex length');
+    assert.ok(/^[a-f0-9]{64}$/.test(r.data.hash), 'hex format');
+    // hash determinista del contenido conocido
+    const expected = crypto.createHash('sha256').update('{"a":1}', 'utf-8').digest('hex');
+    assert.strictEqual(r.data.hash, expected);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleWrite con expected_hash correcto pasa y devuelve nuevo hash', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/cas-ok.json', content: 'v1' });
+    const read1 = await m.handleRead({ path: '/cas-ok.json' });
+    const w2 = await m.handleWrite({
+      path: '/cas-ok.json',
+      content: 'v2',
+      expected_hash: read1.data.hash
+    });
+    assert.ok(isCanonicalSuccess(w2), 'write con expected_hash correcto pasa');
+    assert.strictEqual(w2.data.created, false);
+    assert.strictEqual(typeof w2.data.hash, 'string', 'response trae nuevo hash');
+    assert.notStrictEqual(w2.data.hash, read1.data.hash, 'hash cambia tras write');
+    // verificar persistencia
+    const read2 = await m.handleRead({ path: '/cas-ok.json' });
+    assert.strictEqual(read2.data.content, 'v2');
+    assert.strictEqual(read2.data.hash, w2.data.hash);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleWrite con expected_hash incorrecto devuelve CONFLICT_STATE', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/cas-conflict.json', content: 'original' });
+    const result = await m.handleWrite({
+      path: '/cas-conflict.json',
+      content: 'should-not-persist',
+      expected_hash: 'a'.repeat(64) // hash ficticio
+    });
+    assert.ok(isCanonicalError(result), 'response es error canonico');
+    assert.strictEqual(result.status, 409);
+    assert.strictEqual(result.error.code, 'CONFLICT_STATE');
+    assert.strictEqual(result.error.details.expected_hash, 'a'.repeat(64));
+    assert.strictEqual(typeof result.error.details.current_hash, 'string');
+    // verificar que el archivo NO se sobrescribio
+    const verify = await m.handleRead({ path: '/cas-conflict.json' });
+    assert.strictEqual(verify.data.content, 'original');
+    // metric registrada
+    const conflictMetric = mocks.metricsCalls.find(c =>
+      c[1] === 'filesystem.write.cas_conflict' && c[2]?.reason === 'hash_mismatch'
+    );
+    assert.ok(conflictMetric, 'metric cas_conflict registrada');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleWrite sin expected_hash funciona como antes (silent allow)', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    await m.handleWrite({ path: '/cas-no-hash.json', content: 'a' });
+    const result = await m.handleWrite({ path: '/cas-no-hash.json', content: 'b' });
+    assert.ok(isCanonicalSuccess(result), 'write sobrescribe sin verificar');
+    const verify = await m.handleRead({ path: '/cas-no-hash.json' });
+    assert.strictEqual(verify.data.content, 'b');
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
+  await testAsync('handleWrite con expected_hash en archivo inexistente devuelve CONFLICT_STATE', async () => {
+    const mocks = makeMocks();
+    const { module: m, tmpDir } = await instantiate(mocks);
+    const result = await m.handleWrite({
+      path: '/cas-missing.json',
+      content: 'cualquier',
+      expected_hash: 'b'.repeat(64)
+    });
+    assert.ok(isCanonicalError(result));
+    assert.strictEqual(result.status, 409);
+    assert.strictEqual(result.error.code, 'CONFLICT_STATE');
+    assert.strictEqual(result.error.details.current_hash, null,
+      'current_hash es null cuando archivo no existe');
+    const conflictMetric = mocks.metricsCalls.find(c =>
+      c[1] === 'filesystem.write.cas_conflict' && c[2]?.reason === 'file_missing'
+    );
+    assert.ok(conflictMetric);
+    await m.onUnload();
+    await cleanup(tmpDir);
+  });
+
   console.log('\nTodos los tests pasaron.');
 })();

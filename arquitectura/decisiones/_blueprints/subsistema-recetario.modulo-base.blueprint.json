@@ -2,7 +2,7 @@
   "_doc": "Blueprint ABSTRACTO del subsistema-recetario (tambien reutilizado por la linea carta-manager/scheduler/digital/design/impresion/marketing por compatibilidad de modelo). Captura lo comun a todos los modulos blueprint-driven que dependen de este padre. Cada modulo concreto extiende este declarando solo su delta. El LLM lee la jerarquia (padre + hijo) como su system prompt — el blueprint ES el modulo, no hay codigo JS auxiliar. Tambien declara la disciplina_del_llm_runtime: reglas operativas que el LLM debe respetar al ejecutar cualquier hijo (evita perderse, distraerse, inventar datos).",
 
   "id": "subsistema-recetario.modulo-base",
-  "version": "blueprint-0.4.0",
+  "version": "blueprint-0.5.0",
   "abstract": true,
 
   "rol_generico": "Modulo del subsistema-recetario (o subsistema-carta, mismo padre) — encapsula una responsabilidad acotada del dominio como blueprint declarativo. El LLM es el runtime que lo ejecuta publicando eventos al bus directamente.",
@@ -63,6 +63,11 @@
     "10_no_dejes_pending_huerfanos": {
       "principio": "Cada publishAndWait debe terminar con: response recibida, timeout, o error upstream. NO inicies un publishAndWait y luego abandones la ejecucion sin procesar el resultado. Si el upstream falla → propagas el error (return raw_response) o devuelves error canonico equivalente.",
       "anti_patron": "Iniciar 3 publishAndWait, procesar 2, ignorar el 3o."
+    },
+
+    "11_read_modify_write_con_cas": {
+      "principio": "Toda secuencia 'leer store + modificar + escribir store' DEBE usar el patron safeUpdate (helper canonico) o equivalente explicito con expected_hash. El fs.read devuelve hash; el fs.write con expected_hash valida CAS y devuelve CONFLICT_STATE si difiere. Si llega CONFLICT_STATE, reintenta desde el read (max 3 veces). Cierra la clase de bugs read-modify-write fragiles (caso testigo: salmorejo perdido, audit 2026-05-25 — el LLM compuso mal la secuencia y sobrescribio el store entero).",
+      "anti_patron": "Hacer fs.write con el contenido modificado SIN pasar expected_hash. Si entre el read y el write el disco cambio (otro turno del LLM, otro proceso, race), tu write destruye el cambio ajeno sin avisar."
     }
   },
 
@@ -205,7 +210,8 @@
     "_descripcion": "Funciones que el LLM puede asumir disponibles en el pseudocodigo. No son tools — son referencias semanticas que el LLM razona/calcula mentalmente.",
     "uuid()":    "Genera un UUIDv4 nuevo. El LLM lo genera el mismo cuando lo necesita (para request_id, para nuevos objetos del dominio).",
     "nowISO()":  "Devuelve la fecha-hora actual en ISO 8601. El LLM la pone literal en el payload.",
-    "JSON.stringify(obj, null, 2)": "Serializa un objeto a JSON con indentacion. El LLM lo escribe explicito en el payload de fs.write.request."
+    "JSON.stringify(obj, null, 2)": "Serializa un objeto a JSON con indentacion. El LLM lo escribe explicito en el payload de fs.write.request.",
+    "safeUpdate(path, mutator)": "Patron canonico read-modify-write seguro contra race conditions (cierra clase de bugs tipo 'salmorejo perdido' del audit 2026-05-25). El LLM lo expande mentalmente al pseudocodigo:\n  1. raw = publishAndWait('fs.read.request', { path })\n  2. if (raw.status === 404) store = mutator(undefined)\n     else store = mutator(JSON.parse(raw.content))\n  3. write_args = { path, content: JSON.stringify(store, null, 2) }\n     if (raw.status === 200) write_args.expected_hash = raw.data.hash\n  4. result = publishAndWait('fs.write.request', write_args)\n  5. if (result.error?.code === 'CONFLICT_STATE') -> reintenta desde 1 (max 3 veces). Si tras 3 reintentos sigue CONFLICT_STATE, devuelve CONFLICT_STATE al caller.\nUsar SIEMPRE que la operacion sea 'leer store + modificar + escribir store'. NO usar para crear archivos donde el caller no espera previo (en ese caso fs.write sin expected_hash)."
   },
 
   "limite_del_modulo": {

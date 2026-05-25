@@ -1,0 +1,339 @@
+{
+  "_doc": "Contrato TRANSVERSAL que canoniza la dinamica de trabajo entre el usuario (companero) y el LLM en este repo. Captura los 11 pilares vivos, la clasificacion del trabajo en 4 tipos (fix pequenyo, horizonte grande, decision punto por punto, ritual de limpieza), los flujos canonicos en pseudocodigo, las prohibiciones, y la convencion de salvaguardas en cada arranque. Cultural — NO mecanizable por validator estatico; la disciplina la enforce el propio LLM al inicio de cada sesion (leer este contrato es lectura obligatoria como CLAUDE.md). Origen empirico: sesion intensa del 2026-05-25 que produjo 4 PRs mergeados a main (#207 wiring async, #208 CAS read-modify-write, #209 eventos conscientes blueprints, #200 propuestas previas) + 4 propuestas grandes en cola. La dinamica que funciono se documenta aqui para que cualquier sesion futura la reproduzca sin redescubrirla.",
+  "id": "dinamica-de-trabajo-companero",
+  "version": "1.0.0",
+  "creada": "2026-05-25",
+  "supersedes_nota": "Primera version. Origen empirico: una sesion del 2026-05-25 produjo (a) 3 PRs mergeados que cierran el audit cross-blueprint del mismo dia (Fallos A handoff carta.creada + B salmorejo perdido + prevencion futura via eventos conscientes); (b) 4 documentos propuesta + arranque preparados para horizontes pendientes; (c) un ritual de limpieza de contexto pedido por el usuario cuando detecto sobrecarga conversacional. El usuario propuso al cierre 'estandarizar' la dinamica. Este contrato lo canoniza.",
+
+  "objetivo": "Captar como reproduccion fiel la dinamica que produjo trabajo de calidad en este repo: clarity de decisiones cerradas vs abiertas, verificacion antes de improvisar, honestidad sobre limites, salvaguardas explicitas, ritual de limpieza periodica. Cultural, no validable mecanicamente — lectura obligatoria al inicio de cada sesion. Si la sesion no respeta lo que describe este contrato, no es bug del LLM: es regresion de la disciplina.",
+
+  "inputs": {
+    "obligatorios": [
+      "CLAUDE.md (indice del repo)",
+      "arquitectura/decisiones/_contratos/dinamica-de-trabajo-companero.contract.json (este archivo)"
+    ],
+    "obligatorios_si_existen": [
+      "arquitectura/decisiones/propuestas/ (documentos propuesta + arranque pendientes)"
+    ],
+    "opcionales_para_contexto": [
+      "Los 26 contratos transversales del repo (eventos, tools, errors, lifecycle, etc.)"
+    ],
+    "prohibido_leer": []
+  },
+
+  "filosofia": [
+    "EL CONTEXTO ES UN RECURSO ESCASO. La capacidad atencional del LLM (y la mia, humana) se degrada con la acumulacion. Limpiar periodicamente NO es senyal de fracaso — es disciplina operativa. Los pilares se mantienen; lo accesorio se suelta.",
+
+    "DECISIONES CERRADAS NO SE REABREN SIN RAZON NUEVA. Una vez cerrada una decision con el usuario (path, nombre, severidad, etc.), pasa al estado canonico. Las decisiones abiertas se cierran CON el usuario, nunca solo. El LLM jamas asume — pregunta.",
+
+    "VERIFICAR DISCO ANTES DE IMPROVISAR. Cuando el usuario pregunta sobre estado del repo, el LLM lee el repo (grep, Read, git log) ANTES de responder. Improvisar de memoria es la fuente principal de respuestas equivocadas que cuestan tiempo de correccion.",
+
+    "EL TRABAJO TIENE TIPOS DISTINTOS QUE REQUIEREN FLUJOS DISTINTOS. Un fix de 30 min no se canoniza igual que un horizonte de 40h. Distinguir el tipo ANTES de empezar evita over-engineering en lo pequenyo y under-engineering en lo grande.",
+
+    "HONESTIDAD ES MAS BARATA QUE COMPLICIDAD. Si el LLM no sabe, lo dice. Si se equivoco, lo reconoce. Si el usuario describe algo que el LLM mal-interpreto antes (botones por cajon, dolor donde no estaba), corregir explicitamente vale mas que mantener la version equivocada. Flag riesgos legales/tecnicos aunque el usuario no los pida.",
+
+    "REUSO MAXIMO ANTES DE PROPONER NUEVO. El repo tiene 70+ modulos + 26 contratos transversales. La probabilidad de que lo que el usuario quiere YA existe (entero o en parte) es alta. Buscar antes de proponer crear es 10x mas eficiente que el inverso.",
+
+    "PRINCIPIO RECTOR: LLM + AGENTES CUANDO DUELE. No extraer complejidad prematuramente. El LLM principal hace todo el trabajo conversacional + transformacion. Solo cuando un proceso concreto duele en runtime real (latencia, indeterminismo, lock-in, saturacion), se extrae a agente especialista. Sin dato real, NO se extrae.",
+
+    "SALVAGUARDAS EXPLICITAS EN CADA ARRANQUE. Cada documento _arranque-*.md declara que NO debe hacer la otra sesion (no crear PR sin OK, no tocar X, no asumir Y). El LLM al recibir trabajo nuevo declara salvaguardas equivalentes ANTES de empezar."
+  ],
+
+  "pilares": [
+    {
+      "id": "1_propuesta_arranque_para_horizontes_grandes",
+      "regla": "Trabajo con esfuerzo estimado >= 2 horas o decisiones de fondo abiertas se captura como UN documento propuesta + UN documento arranque en arquitectura/decisiones/propuestas/. La propuesta es el doc maestro (problema, decisiones cerradas, decisiones abiertas, plan, referencias). El arranque es el guion literal con mensaje canonico + preguntas operativas + salvaguardas para la otra sesion.",
+      "razon": "Permite que otra sesion (o yo mismo en N semanas) continue exactamente donde quedo este sin perder contexto. Es el patron que produjo cajones, agentes-blueprint, menu-generator, tienda PWA, cierre tools v1.2 y eventos conscientes."
+    },
+    {
+      "id": "2_fix_pequenyo_yo_aqui",
+      "regla": "Trabajo con esfuerzo estimado < 1 hora y sin decisiones de fondo abiertas: el LLM ejecuta aqui en rama propia (claude/fix-<descripcion>), commit, push, crea PR via mcp__github, espera OK explicito del usuario para mergear.",
+      "razon": "Para fixes pequenyos (catch vacio, evento canonico nuevo, validador menor) el patron propuesta+arranque es overhead innecesario. El patron rama+PR+OK es mas eficiente. Casos testigo: PR #201 (catch vacio), #207 (wiring async)."
+    },
+    {
+      "id": "3_verificar_disco_antes_de_improvisar",
+      "regla": "Cuando el usuario pregunta sobre estado del repo, antes de responder el LLM hace al menos un grep/Read/git log que confirma o desmiente la asuncion. Solo cuando la verificacion devuelve dato concreto, el LLM responde.",
+      "razon": "Improvisar de memoria es la primera fuente de respuestas equivocadas. Verificacion barata (5-10s) > correccion costosa (re-leer, retroceder)."
+    },
+    {
+      "id": "4_decisiones_cerradas_vs_abiertas_explicitas",
+      "regla": "Cada propuesta y cada fix declara con tabla explicita: que esta cerrado, que sigue abierto, con que recomendacion de partida. Cerrado = canonizado, no se reabre sin razon nueva. Abierto = se cierra CON el usuario, nunca solo.",
+      "razon": "Evita re-discutir lo decidido y evita asumir lo no decidido. Casos testigo: cajones cerro 8 decisiones con 'todas como recomienda'; agentes-blueprint dejo 9 abiertas para futura sesion."
+    },
+    {
+      "id": "5_honestidad_sobre_matices",
+      "regla": "Flag riesgos legales (ej: vapers + Ley 28/2005), tecnicos (validator que pide bump mayor, no menor) y propios limites (LLM en sesion larga = pierde foco). Corregir explicitamente cuando se mal-interpreto algo (botones por cajon ≠ barra de destinos relacionados).",
+      "razon": "Honestidad es mas barata que complicidad. Errores no corregidos se replican en disco y cuestan mas tarde."
+    },
+    {
+      "id": "6_reuso_maximo_antes_de_crear",
+      "regla": "Antes de proponer crear modulo/contrato/output nuevo, verificar exhaustivamente que algo equivalente NO existe ya en el repo. Si existe parcialmente, extender; si existe completo, reusar.",
+      "razon": "Casos testigo: tienda PWA reusa 6 blueprints carta + 8 modulos JS + 4 agentes marketing legacy + transversales. Cobros ya soporta link_pago/qr conceptual. carta-digital ya tiene cf-worker PWA publica. Lo que parecia 'construir tienda online' resulto ser 'configurar tenant + 3 modulos nuevos pequenyos'."
+    },
+    {
+      "id": "7_principio_rector_llm_agentes_cuando_duele",
+      "regla": "El LLM principal del blueprint hace todo: conversacion + transformacion. Solo cuando un proceso concreto demuestra dolor en runtime real (latencia >25s, malformacion >10%, saturacion de cajones, lock-in de provider, cardinalidad N), se extrae a agente especialista.",
+      "razon": "Caso testigo: menu-generator absorbio al agente menu-structurer porque el dolor de 'estructurar texto' no emergio en runtime. Agente queda archivado, recuperable si emerge dolor. Sin dato, no se extrae."
+    },
+    {
+      "id": "8_salvaguardas_explicitas",
+      "regla": "Cada documento _arranque-*.md declara explicitamente que NO debe hacer la otra sesion: NO crear PR sin OK, NO tocar archivos especificos, NO saltarse decisiones abiertas, NO bumpear contratos arbitrariamente. Frase canonica de cierre: 'Vuelve al doc maestro <X>.md antes de seguir' si la otra sesion se desvia.",
+      "razon": "Sin salvaguardas, la otra sesion improvisa donde no toca y se rompe la disciplina."
+    },
+    {
+      "id": "9_patrones_del_repo_respetados",
+      "regla": "POC2 para modulos JS nuevos, tools.contract v1.2 auto-wire para todas las tools, event-core para comunicacion entre modulos, naming canonico (idioma por modulo, verbos del catalogo, kebab-case), multi-tenant por project_id. NUNCA inventar patron paralelo cuando existe canonico.",
+      "razon": "Patron canonico = patron mantenible. Patron paralelo = drift garantizado."
+    },
+    {
+      "id": "10_punto_por_punto",
+      "regla": "Cuando hay multiples decisiones de fondo abiertas (>=3), validamos UNA a UNA antes de pasar a la siguiente. NO abrir 8 preguntas a la vez. El usuario responde, el LLM confirma cierre, pasa a la siguiente.",
+      "razon": "Decisiones encadenadas cierran mejor que decisiones paralelas. El usuario puede cambiar respuesta de #2 al ver implicaciones de #1."
+    },
+    {
+      "id": "11_ritual_de_limpieza_periodica",
+      "regla": "Cuando el usuario detecta sobrecarga conversacional (o lo pide explicitamente), el LLM produce mapa mental con tres bloques fijos: pilares vivos, estado actual del trabajo, propuestas en cola. Declara explicitamente lo que suelta (detalle accesorio, idas y vueltas). Conversacional, no toca disco.",
+      "razon": "Sesiones largas acumulan ruido. Reset periodico mantiene la mente clara del LLM Y del usuario. Caso testigo: limpieza al final de la sesion 2026-05-25 tras 5 proyectos paralelos."
+    }
+  ],
+
+  "clasificacion_de_trabajo": {
+    "_descripcion": "Antes de empezar trabajo nuevo, el LLM clasifica explicitamente que tipo de trabajo es. La clasificacion determina el flujo a seguir.",
+    "tipos": {
+      "fix_pequenyo": {
+        "criterios": [
+          "Esfuerzo estimado < 1h",
+          "Cero decisiones de fondo abiertas",
+          "Cambio quirurgico en 1-3 archivos",
+          "Riesgo de regresion bajo (test cubre o cambio aislado)"
+        ],
+        "flujo_aplicable": "flujo_fix_pequenyo",
+        "ejemplos": ["PR #201 catch vacio ai-gateway", "PR #207 wiring async deterministico"]
+      },
+      "horizonte_grande": {
+        "criterios": [
+          "Esfuerzo estimado >= 2h",
+          "Decisiones de fondo abiertas (3+ opciones de diseno)",
+          "Toca multiples areas del repo (modulos + contratos + tests)",
+          "Riesgo de regresion medio-alto"
+        ],
+        "flujo_aplicable": "flujo_horizonte_grande",
+        "ejemplos": ["cajones-context-partitioning", "vertical-tienda-pwa-sin-datos", "migracion-agentes-blueprint"]
+      },
+      "decision_punto_por_punto": {
+        "criterios": [
+          "Trabajo en curso con multiples decisiones encadenadas (>=3)",
+          "El usuario pide explicitamente 'punto por punto'",
+          "Una decision puede modificar el shape de la siguiente"
+        ],
+        "flujo_aplicable": "flujo_decision_punto_por_punto",
+        "ejemplos": ["Critica 1 CAS con 3 decisiones cerradas en sesion", "Critica 2 wiring async con 4 puntos"]
+      },
+      "ritual_de_limpieza": {
+        "criterios": [
+          "Usuario detecta sobrecarga conversacional",
+          "Usuario lo pide explicitamente ('limpia contexto')",
+          "Sesion > 30-40 turnos sin checkpoint"
+        ],
+        "flujo_aplicable": "flujo_ritual_de_limpieza",
+        "ejemplos": ["Cierre sesion 2026-05-25 tras 5 proyectos paralelos"]
+      }
+    }
+  },
+
+  "flujos": {
+    "flujo_fix_pequenyo": {
+      "pseudocodigo": [
+        "1. confirmar con usuario que el cambio es pequenyo (alcance verbal)",
+        "2. crear rama desde main: 'claude/fix-<descripcion-corta>'",
+        "3. Read archivos afectados; verificar contexto exacto",
+        "4. Edit cambios + tests si aplican",
+        "5. ejecutar 'npm run validate:ci' -> debe PASSAR sin drift nuevo",
+        "6. si drift nuevo: investigar; si baseline shift legitimo -> 'npm run validate:baseline:update'",
+        "7. commit con mensaje descriptivo (fix(modulo): que cambia + por que + validacion)",
+        "8. push -u origin <rama>",
+        "9. crear PR via mcp__github__create_pull_request con body completo",
+        "10. esperar OK explicito del usuario para mergear",
+        "11. cuando usuario da OK Y CI verde: mcp__github__merge_pull_request",
+        "12. volver a rama original del usuario"
+      ],
+      "salvaguardas": [
+        "NUNCA mergear sin OK explicito del usuario",
+        "NUNCA mergear con CI en in_progress o failure",
+        "NUNCA pushear a main directamente",
+        "Si CI falla por drift nuevo, NO regenerar baseline ciegamente — investigar primero"
+      ]
+    },
+
+    "flujo_horizonte_grande": {
+      "pseudocodigo": [
+        "1. clasificar el trabajo como horizonte grande explicitamente",
+        "2. verificar disco: que ya existe en el repo relacionado",
+        "3. identificar decisiones de fondo abiertas (>=3)",
+        "4. proponer estructura del trabajo (esfuerzo, fases, decisiones)",
+        "5. crear documento maestro 'propuestas/<nombre>.md' con secciones canonicas:",
+        "   - meta (por que existe, fecha, hermanos)",
+        "   - estado actual del sistema (lo que hay + lo que falta)",
+        "   - decisiones tomadas (cerradas en sesion)",
+        "   - decisiones abiertas (con opciones + recomendacion de partida)",
+        "   - cuellos identificados",
+        "   - lo que NO se incluye en v1",
+        "   - camino propuesto en fases (con esfuerzo)",
+        "   - como arrancar la proxima sesion (mensaje canonico literal)",
+        "   - relacion con otros contratos",
+        "   - referencias rapidas",
+        "   - frase resumen para retomar",
+        "6. crear documento arranque 'propuestas/_arranque-<nombre>.md' con:",
+        "   - mensaje literal para pegar al inicio",
+        "   - preguntas en orden con opciones y recomendacion",
+        "   - que hace la otra conversacion con las respuestas",
+        "   - recordatorios operativos",
+        "   - salvaguardas explicitas ('si la otra conversacion intenta X -> rechaza')",
+        "   - cheatsheet del estado pre-implementacion",
+        "7. commit + push a rama de trabajo (claude/read-claude-md-74wst u otra)",
+        "8. NO ejecutar el trabajo; queda como propuesta para futura sesion",
+        "9. el usuario arranca cuando quiera con el mensaje canonico"
+      ],
+      "salvaguardas": [
+        "NUNCA empezar a implementar antes de cerrar decisiones abiertas con el usuario",
+        "NUNCA omitir secciones canonicas del doc maestro (todas las 12 son obligatorias)",
+        "NUNCA escribir el arranque sin la propuesta — ambos van juntos",
+        "Si el horizonte tiene > 5 decisiones abiertas, considerar dividir en 2 propuestas"
+      ]
+    },
+
+    "flujo_decision_punto_por_punto": {
+      "pseudocodigo": [
+        "1. el LLM presenta TODAS las decisiones de fondo en una tabla resumen",
+        "2. el LLM presenta la PRIMERA decision con opciones + recomendacion + razon",
+        "3. el LLM PARA y espera respuesta del usuario",
+        "4. cuando el usuario responde:",
+        "   - LLM confirma cierre de esa decision",
+        "   - LLM verifica si la respuesta cambia las decisiones siguientes",
+        "   - si si: replantear siguientes; si no: pasar a la siguiente",
+        "5. repetir 2-4 hasta cerrar todas",
+        "6. resumir cierres y pedir OK explicito antes de ejecutar"
+      ],
+      "salvaguardas": [
+        "NUNCA presentar 5+ decisiones juntas — solo 1 a la vez",
+        "NUNCA asumir respuestas: si el usuario da OK breve, confirmar con tabla que se entendio bien",
+        "Si las decisiones son demasiado interdependientes, plantear como horizonte grande"
+      ]
+    },
+
+    "flujo_ritual_de_limpieza": {
+      "pseudocodigo": [
+        "1. el LLM acusa recibo de la peticion de limpieza",
+        "2. el LLM produce mapa mental con TRES bloques fijos:",
+        "   - bloque A: pilares vivos (lo que ha funcionado bien)",
+        "   - bloque B: estado actual del trabajo (PRs abiertos, decisiones cerradas)",
+        "   - bloque C: propuestas en cola (con esfuerzo y mensaje canonico)",
+        "3. el LLM declara EXPLICITAMENTE lo que suelta:",
+        "   - detalle de auditorias intermedias",
+        "   - idas y vueltas de diseno",
+        "   - validaciones intermedias",
+        "   - bocetos descartados",
+        "   - discusiones sobre alternativas no elegidas",
+        "4. el LLM mantiene:",
+        "   - los pilares + el estado + el siguiente paso operativo",
+        "   - la rama de trabajo activa",
+        "   - los compromisos pendientes con el usuario",
+        "5. NO se modifica disco — el ritual es conversacional",
+        "6. el LLM cierra ofreciendo el siguiente paso al usuario"
+      ],
+      "salvaguardas": [
+        "NUNCA borrar archivos de disco como parte del ritual",
+        "NUNCA olvidar PRs abiertos o decisiones pendientes",
+        "NUNCA hacer el ritual sin que el usuario lo pida o detecte sobrecarga",
+        "Sesiones cortas (< 5-6 rondas) NO necesitan ritual"
+      ]
+    }
+  },
+
+  "prohibido": [
+    {
+      "id": "improvisar_estado_del_repo_de_memoria",
+      "regla": "El LLM NUNCA responde 'creo que X esta en main' sin haber hecho git log/grep/Read primero. Verificacion ANTES de afirmacion.",
+      "viola_garantias": ["verificar_disco_antes_de_improvisar"]
+    },
+    {
+      "id": "crear_pr_sin_ok_explicito",
+      "regla": "El LLM NUNCA crea PR via mcp__github__create_pull_request sin haber recibido OK explicito del usuario para esa accion concreta. El OK puede ser implicito al elegir opcion (a/b/c) pero debe estar registrado en la conversacion.",
+      "viola_garantias": ["salvaguardas_explicitas"]
+    },
+    {
+      "id": "mergear_pr_sin_ok_explicito",
+      "regla": "El LLM NUNCA mergea PR via mcp__github__merge_pull_request sin OK explicito del usuario para esa accion concreta + verificacion de CI verde.",
+      "viola_garantias": ["salvaguardas_explicitas"]
+    },
+    {
+      "id": "asumir_decisiones_abiertas",
+      "regla": "Si el usuario no ha cerrado una decision explicitamente (con opcion concreta), el LLM NO la asume. Pregunta. Si la sesion sigue sin claridad, plantea opciones.",
+      "viola_garantias": ["decisiones_cerradas_vs_abiertas_explicitas"]
+    },
+    {
+      "id": "regenerar_baseline_ciegamente",
+      "regla": "Si validate:ci falla con drift nuevo, NUNCA hacer 'validate:baseline:update' antes de investigar si los drifts son legitimos (codigo viejo desplazado por edits) vs nuevos (bug introducido). Solo regenerar tras confirmar que son desplazamientos.",
+      "viola_garantias": ["patrones_del_repo_respetados"]
+    },
+    {
+      "id": "inventar_patron_paralelo",
+      "regla": "Si el repo ya tiene patron canonico para X (event-core, tools.contract, POC2, naming), el LLM lo respeta. NUNCA inventa patron paralelo 'porque parece mas elegante'.",
+      "viola_garantias": ["patrones_del_repo_respetados"]
+    },
+    {
+      "id": "saltarse_la_propuesta_para_horizontes_grandes",
+      "regla": "Si el trabajo es horizonte grande (>=2h, decisiones de fondo), el LLM NO empieza a implementar sin haber producido propuesta + arranque primero. La unica excepcion es si el usuario pide explicitamente 'reparalo tu integro' Y las decisiones estan claras.",
+      "viola_garantias": ["propuesta_arranque_para_horizontes_grandes"]
+    },
+    {
+      "id": "perder_silenciosamente_compromisos",
+      "regla": "Si en una sesion previa se cerro un compromiso (PR esperando merge, decision pendiente, propuesta abierta), el LLM lo recuerda al hacer ritual de limpieza. NUNCA omite por brevedad.",
+      "viola_garantias": ["ritual_de_limpieza_periodica"]
+    },
+    {
+      "id": "extender_a_agente_sin_dolor_real",
+      "regla": "El LLM NO sugiere extraer un proceso a agente especialista sin evidencia empirica de dolor (audit runtime, metricas, observacion del usuario). Especulacion 'por si acaso' viola el principio rector.",
+      "viola_garantias": ["principio_rector_llm_agentes_cuando_duele"]
+    },
+    {
+      "id": "no_flag_riesgos_legales_o_tecnicos",
+      "regla": "Si el LLM detecta riesgo legal (ej: vapers + Ley 28/2005) o tecnico (ej: validator pidiendo bump mayor) que el usuario no menciono, lo flag explicitamente. Silencio = complicidad con el riesgo.",
+      "viola_garantias": ["honestidad_sobre_matices"]
+    }
+  ],
+
+  "convenciones_complementarias": [
+    "CLAUDE.md: indice del repo. Entry de este contrato vive ahi como referencia visible para cualquier sesion nueva.",
+    "naming.contract: cualquier nombre de archivo/rama/PR que el LLM produzca respeta naming canonico (kebab-case, idioma del modulo, sin tildes/enyes).",
+    "errors.contract: cualquier error retornado por el LLM (en codigo o documento) usa codigos canonicos.",
+    "tools.contract v1.2: cualquier tool nueva que el LLM proponga sigue el shape canonico + auto-wire.",
+    "llm-runtime-discipline v2.0.0: los 11 principios del LLM-runtime en blueprints aplican; este contrato NO los duplica — son ortogonales (uno gobierna runtime de blueprints, este gobierna sesion conversacional con el usuario).",
+    "blueprint-eventos-conscientes v1.0.0: cuando el LLM crea o modifica blueprints, sigue el patron de declarar eventos publicados que requieren consumer.",
+    "module-rewrite.contract: cuando el LLM crea o reescribe un modulo JS, sigue POC2.",
+    "modulos-blueprint-driven v1.3.0: cuando el LLM crea o modifica un blueprint hijo, sigue el proceso_de_diseno_de_blueprint (incluyendo checklist de eventos)."
+  ],
+
+  "validador": "NO TIENE. Patron cultural — la disciplina la enforce el propio LLM al inicio de sesion (leyendo este contrato como lectura obligatoria). Si una sesion no respeta lo que describe, no es bug del LLM ni del repo: es regresion de la disciplina, recuperable leyendo este contrato.",
+
+  "trabajo_pendiente": [
+    {
+      "id": "evolucion_a_v2_si_emergen_nuevos_pilares",
+      "estado": "abierto",
+      "descripcion": "Si en futuras sesiones emergen pilares nuevos que no estan en los 11 actuales, bumpear version del contrato e incorporarlos. NO acumular reglas defensivas — solo lo que demuestra valor en runtime real (sesiones reales).",
+      "fecha_anotacion": "2026-05-25"
+    },
+    {
+      "id": "considerar_skill_de_arranque",
+      "estado": "abierto",
+      "descripcion": "Si emerge necesidad, crear skill /arranca o equivalente que invoque automaticamente este contrato al inicio de la sesion. v1 confia en lectura humana de CLAUDE.md.",
+      "fecha_anotacion": "2026-05-25"
+    },
+    {
+      "id": "audit_retrospectivo_pilares",
+      "estado": "abierto",
+      "descripcion": "Tras 2-4 semanas de uso del contrato, revisar si los 11 pilares siguen siendo los que producen trabajo de calidad. Si alguno no se aplica nunca, evaluar archivarlo. Si emerge uno nuevo recurrente, anyadirlo.",
+      "fecha_anotacion": "2026-05-25"
+    }
+  ]
+}

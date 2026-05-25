@@ -89,7 +89,33 @@ class AiGatewayModule extends BaseModule {
 
     await this._initializeProviders();
     this._loadBlueprints();
+    // Wire intent al arranque: si los blueprint modules ya estan cargados
+    // (eg. ai-gateway carga ultimo) el wiring se completa aqui. Si no,
+    // este bucle no hace nada y nos apoyamos en core.modules.loaded.all
+    // (abajo) + el lazy rewire en _getTools como defensa en profundidad.
     this._wireBlueprintAsyncSubscribers();
+
+    // Suscripcion canonica: cuando el loader termina loadAll(), publica
+    // core.modules.loaded.all. Garantiza que el wiring de blueprint async
+    // subscribers se ejecuta despues de que TODOS los modulos esten
+    // cargados, sustituyendo el lazy-rewire del PR #206 por un disparo
+    // deterministico. El lazy-rewire se conserva 1-2 semanas como red
+    // defensiva por si la suscripcion se registra despues de la emision.
+    if (this.eventBus?.subscribe) {
+      this._modulesLoadedAllUnsub = this.eventBus.subscribe(
+        'core.modules.loaded.all',
+        () => {
+          try {
+            this._wireBlueprintAsyncSubscribers();
+          } catch (err) {
+            this.logger?.warn('ai-gateway.modules-loaded-all.handler_failed', {
+              error_message: err && err.message ? err.message : String(err)
+            });
+          }
+        }
+      );
+    }
+
     this.logger.info('ai-gateway.loaded', {
       providers: this.providers.size,
       blueprints: this.blueprintModules.size,
@@ -108,6 +134,17 @@ class AiGatewayModule extends BaseModule {
     this.conversationCajones.clear();
     this.pageGraph.clear();
     this.conversationPageFoco.clear();
+    // Liberar suscripcion al evento canonico core.modules.loaded.all.
+    if (typeof this._modulesLoadedAllUnsub === 'function') {
+      try {
+        this._modulesLoadedAllUnsub();
+      } catch (err) {
+        this.logger?.warn('ai-gateway.modules-loaded-all.unsub_failed', {
+          error_message: err && err.message ? err.message : String(err)
+        });
+      }
+      this._modulesLoadedAllUnsub = null;
+    }
     // Liberar subscripciones asincronas de blueprint subscribers.
     // Acumulamos errores y reportamos UNA vez para evitar log spam en bucle.
     const unsubFailures = [];

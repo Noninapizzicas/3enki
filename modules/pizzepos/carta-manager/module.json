@@ -1,7 +1,8 @@
 {
   "_doc": "Manifest del modulo carta-manager. NO tiene index.js — blueprint-driven. El LLM ejecuta el blueprint declarativo publicando eventos al bus via ai-gateway. Activable via page_id='carta-manager'. 13 operaciones (CRUD + manipulacion productos/categorias + versionado + restore + search + stats). Persistencia multi-archivo: data/projects/{slug}/cartas/<id>.json + cartas/versions/<id>/<timestamp>.json. Sustituye al modulo carta-manager v1.1.0 legacy JS (826 lineas + tests + 13 tools polyfunctional al LLM).",
   "name": "carta-manager",
-  "version": "1.1.0",
+  "version": "1.2.0",
+  "_version_nota": "v1.2.0 (2026-05-25): subscriber a 'carta.generar.terminada' anyadido al blueprint (cierra deuda subsistema-carta cross-blueprint runtime tras audit menu-generator Fase 7b). v1.1.0 (2026-05-19): migracion a blueprint-driven (legacy JS 826 LOC archivado).",
   "description": "Modulo carta-manager en modo blueprint-driven. Aggregate root del subsistema-carta. CRUD/versionado/manipulacion de cartas, productos y categorias del proyecto. Los hermanos del subsistema (carta-design, carta-digital, carta-impresion, carta-marketing, carta-scheduler) leen via carta-manager pero NUNCA escriben al store directamente.",
   "language": "es",
   "blueprint_driven": true,

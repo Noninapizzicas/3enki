@@ -55,8 +55,8 @@ const CORRELATION_ID = crypto.randomUUID();
 const captured = {
   menu_progress: [],
   menu_failed: [],
-  carta_save_request: [],
-  carta_save_response: [],
+  carta_generar_terminada: [],
+  carta_save_request_legacy: [],
   carta_actualizada: [],
   carta_generar_iniciada: [],
   carta_generar_fallida: [],
@@ -88,8 +88,8 @@ function log(emoji, msg) { console.log(`[${ts()}] ${emoji} ${msg}`); }
   const subs = [
     'menu.generation.progress',
     'menu.generation.failed',
-    'carta-manager.save.request',
-    'carta-manager.save.response',
+    'carta.generar.terminada',         // canonico v8.1+ (fire-and-forget)
+    'carta-manager.save.request',      // legacy v8.0 (RPC roto — detectar si VPS desactualizado)
     'carta.actualizada',
     'carta.generar.iniciada',
     'carta.generar.fallida',
@@ -122,8 +122,8 @@ function log(emoji, msg) { console.log(`[${ts()}] ${emoji} ${msg}`); }
 
     if (ev === 'menu.generation.progress') { captured.menu_progress.push(data); log('->', `menu.generation.progress step=${data.step}`); }
     else if (ev === 'menu.generation.failed') { captured.menu_failed.push(data); log('X', `menu.generation.failed: ${JSON.stringify(data.error)}`); }
-    else if (ev === 'carta-manager.save.request') { captured.carta_save_request.push(data); log('->', `carta-manager.save.request (project=${data.project_id?.slice(0,8)})`); }
-    else if (ev === 'carta-manager.save.response') { captured.carta_save_response.push(data); log('<-', `carta-manager.save.response (status=${data.status || 'ok'})`); }
+    else if (ev === 'carta.generar.terminada') { captured.carta_generar_terminada.push(data); log('->', `carta.generar.terminada (project=${data.project_id?.slice(0,8)}, carta=${data.carta?.meta?.nombre})`); }
+    else if (ev === 'carta-manager.save.request') { captured.carta_save_request_legacy.push(data); log('!!', `LEGACY carta-manager.save.request — VPS sigue corriendo blueprint v8.0.0, no v8.1.0`); }
     else if (ev === 'carta.actualizada') { captured.carta_actualizada.push(data); log('OK', `carta.actualizada id=${data.id || data.carta?.meta?.id}`); }
     else if (ev === 'carta.generar.iniciada') { captured.carta_generar_iniciada.push(data); log('->', `carta.generar.iniciada`); }
     else if (ev === 'carta.generar.fallida') { captured.carta_generar_fallida.push(data); log('X', `carta.generar.fallida: ${JSON.stringify(data.error)}`); }
@@ -212,8 +212,8 @@ function log(emoji, msg) { console.log(`[${ts()}] ${emoji} ${msg}`); }
   console.log('Eventos capturados:');
   console.log(`  menu.generation.progress: ${captured.menu_progress.length}`);
   console.log(`  menu.generation.failed: ${captured.menu_failed.length}`);
-  console.log(`  carta-manager.save.request: ${captured.carta_save_request.length}`);
-  console.log(`  carta-manager.save.response: ${captured.carta_save_response.length}`);
+  console.log(`  carta.generar.terminada: ${captured.carta_generar_terminada.length}`);
+  console.log(`  carta-manager.save.request (LEGACY v8.0): ${captured.carta_save_request_legacy.length}`);
   console.log(`  carta.actualizada: ${captured.carta_actualizada.length}`);
   console.log(`  carta.generar.iniciada: ${captured.carta_generar_iniciada.length}`);
   console.log(`  carta.generar.fallida: ${captured.carta_generar_fallida.length}`);
@@ -221,15 +221,15 @@ function log(emoji, msg) { console.log(`[${ts()}] ${emoji} ${msg}`); }
   console.log(`  ai.chat.failed: ${captured.ai_chat_failed ? 'SI' : 'NO'}`);
   console.log('');
   console.log(`Tools invocadas por LLM: [${captured.tool_calls_invocados.join(', ')}]`);
-  if (captured.carta_save_request[0]) {
-    const saveReq = captured.carta_save_request[0];
+  const firstEvent = captured.carta_generar_terminada[0] || captured.carta_save_request_legacy[0];
+  if (firstEvent) {
     console.log('');
-    console.log('Primer save.request:');
-    console.log(`  carta.meta.nombre: ${saveReq.carta?.meta?.nombre}`);
-    console.log(`  carta.categorias: ${saveReq.carta?.categorias?.length || 0}`);
-    console.log(`  carta.productos: ${saveReq.carta?.productos?.length || 0}`);
-    if (saveReq.carta?.productos?.[0]) {
-      const p = saveReq.carta.productos[0];
+    console.log('Primera carta emitida:');
+    console.log(`  carta.meta.nombre: ${firstEvent.carta?.meta?.nombre}`);
+    console.log(`  carta.categorias: ${firstEvent.carta?.categorias?.length || 0}`);
+    console.log(`  carta.productos: ${firstEvent.carta?.productos?.length || 0}`);
+    if (firstEvent.carta?.productos?.[0]) {
+      const p = firstEvent.carta.productos[0];
       console.log(`  primer producto: ${p.nombre} (cat=${p.categoria}, precio=${p.precio}, ingredientes=${p.ingredientes?.length || 0})`);
     }
   }
@@ -244,13 +244,14 @@ function log(emoji, msg) { console.log(`[${ts()}] ${emoji} ${msg}`); }
   const check = (cond, label) => cond ? passed.push(label) : failed.push(label);
 
   check(captured.menu_progress.length >= 1, 'publica menu.generation.progress (step structuring)');
-  check(captured.carta_save_request.length >= 1, 'invoca carta-manager.save.request (persistencia event-core)');
-  check(captured.carta_actualizada.length >= 1, 'persistencia confirmada via carta.actualizada');
+  check(captured.carta_generar_terminada.length >= 1, 'publica carta.generar.terminada fire-and-forget (v8.1 canonico)');
+  check(captured.carta_save_request_legacy.length === 0, 'NO publica carta-manager.save.request legacy (RPC roto)');
+  check(captured.carta_actualizada.length >= 1, 'persistencia confirmada via carta.actualizada (carta-manager._on_carta_generar_terminada reacciono)');
   check(!captured.ai_chat_failed, 'ai.chat NO falla');
   check(!captured.menu_failed.length, 'menu.generation NO falla');
   check(!captured.carta_generar_fallida.length, 'carta.generar NO falla');
-  if (captured.carta_save_request[0]) {
-    const c = captured.carta_save_request[0].carta;
+  if (firstEvent) {
+    const c = firstEvent.carta;
     check(c?.meta?.nombre === TEST_NAME || (c?.meta?.nombre || '').includes(TEST_NAME), `carta.meta.nombre = "${TEST_NAME}"`);
     check((c?.categorias?.length || 0) >= 1, 'carta.categorias[] >= 1');
     check((c?.productos?.length || 0) >= 1, 'carta.productos[] >= 1');

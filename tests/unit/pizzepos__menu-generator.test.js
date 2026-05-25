@@ -85,7 +85,7 @@ test('module.json: NO declara dependencies nativas (pdfjs/sharp/google-vision el
 
 test('blueprint: id, version, extends correctos', () => {
   assert.strictEqual(blueprint.id, 'menu-generator');
-  assert.strictEqual(blueprint.version, 'blueprint-8.0.0');
+  assert.strictEqual(blueprint.version, 'blueprint-8.1.0');
   assert.strictEqual(blueprint.extends_blueprint_abstract, 'subsistema-recetario.modulo-base');
   assert.strictEqual(blueprint.language, 'es');
 });
@@ -251,15 +251,23 @@ test('schema: ingrediente con emoji valida (ayuda visual del POS comandero)', ()
 // Group 4: integracion blueprint -> persistencia event-core
 // --------------------------------------------------
 
-test('integracion: pseudocodigo de generar invoca carta-manager.save.request (decision 5.3)', () => {
+test('integracion: pseudocodigo de generar publica carta.generar.terminada fire-and-forget (decision 5.3 refactor v8.1)', () => {
   const pseudo = blueprint.operaciones.generar.pseudocodigo.join('\n');
   assert.ok(
-    pseudo.includes('carta-manager.save.request'),
-    'generar debe persistir via publishAndWait(carta-manager.save.request, ...) — event-core puro'
+    pseudo.includes("carta.generar.terminada"),
+    'generar debe publicar carta.generar.terminada (evento de dominio) — carta-manager lo escucha via eventos_que_escucho y persiste internamente'
   );
   assert.ok(
-    pseudo.includes('publishAndWait'),
-    'persistencia debe ser publishAndWait (correlacionada), no publish fire-and-forget'
+    !pseudo.includes("publishAndWait('carta-manager.save.request'") &&
+    !pseudo.includes('publishAndWait(\'carta-manager.save.request\''),
+    'NO debe usar publishAndWait("carta-manager.save.request", ...) — wiring RPC blueprint->blueprint NO operacional en ai-gateway. Patron canonico: publish fire-and-forget + consumer declara eventos_que_escucho (frente 2.4)'
+  );
+});
+
+test('integracion: blueprint declara carta.generar.terminada en eventos_publicados', () => {
+  assert.ok(
+    blueprint.eventos_publicados.includes('carta.generar.terminada'),
+    'eventos_publicados debe incluir carta.generar.terminada (canonico v8.1)'
   );
 });
 
@@ -268,7 +276,7 @@ test('integracion: pseudocodigo de generar publica menu.generation.progress al i
   assert.ok(pseudo.includes('menu.generation.progress'));
 });
 
-test('integracion: pseudocodigo de generar publica menu.generation.failed en error path', () => {
+test('integracion: pseudocodigo de generar publica menu.generation.failed en error path de estructuracion', () => {
   const pseudo = blueprint.operaciones.generar.pseudocodigo.join('\n');
   assert.ok(pseudo.includes('menu.generation.failed'));
 });

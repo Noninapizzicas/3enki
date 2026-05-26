@@ -1,0 +1,38 @@
+{
+  "name": "Vapers (piloto vertical tienda PWA)",
+  "description": "Caso piloto de la vertical tienda PWA + WhatsApp escueto. Comercio local de vapers con catalogo en PWA publica, pedido enviado por wa.me al bot del negocio, notificacion al staff por Telegram, recogida y pago en efectivo presencial. Sin CRM, datos del cliente transitorios, RGPD cero.",
+  "vertical": "tienda-pwa",
+
+  "_NOTA_FASE_1": "Estructura creada en Fase 1 del horizonte vertical-tienda-pwa-sin-datos.md. Los campos <PENDIENTE> los rellena el usuario tras completar el alta de Meta Business + WABA (ver arquitectura/decisiones/propuestas/_arranque-vertical-tienda-pwa-sin-datos.md seccion 1.4). Los secretos (token de acceso a Meta + verify_token del webhook) NO viven en este archivo: se dan de alta en credential-manager via POST /credentials.",
+
+  "whatsapp": {
+    "_NOTA": "Metadata estable del numero del negocio. Los secretos viven en credential-manager: provider META_WHATSAPP (token de acceso a Cloud API) y provider META_WHATSAPP_VERIFY_TOKEN (verify token del webhook). Level PROJECT, identifier 'vapers'. Resuelve en runtime via credential.resolve.request.",
+    "waba_id": "<PENDIENTE: WhatsApp Business Account ID, lo da Meta tras crear la WABA>",
+    "phone_number_id": "<PENDIENTE: ID del numero registrado en la WABA (no es el numero, es el ID)>",
+    "display_number": "<PENDIENTE: numero visible al cliente, formato E.164 ej +34600000000>",
+    "webhook_path": "/whatsapp/webhook/vapers"
+  },
+
+  "telegram": {
+    "_NOTA": "Chat de staff que recibe notificacion de pedidos nuevos. Reusa telegram-service v3.1.0 ya en repo. botName y chatId pueden gestionarse via credential-manager (provider TELEGRAM, level PROJECT, identifier 'vapers') con prioridad sobre este JSON; ver patron en data/projects/_ejemplo/config/project.json.",
+    "botName": "<PENDIENTE>",
+    "chatId": "<PENDIENTE: chat_id del grupo de staff que recibe pedidos>"
+  },
+
+  "verificacion_edad": {
+    "_NOTA": "Decision 6.2 cerrada = C (configurable por proyecto). Vapers activa gate al entrar a la PWA por regulacion. Panaderia/floristeria/fruteria/carniceria pondrian activa: false.",
+    "activa": true,
+    "modo": "gate"
+  },
+
+  "inventario": {
+    "_NOTA": "Decision 6.3 cerrada = B (configurable por proyecto). Vapers no es perecedero -> reserva 48h. Panaderia pondria 3h.",
+    "reserva_expiracion_horas": 48
+  },
+
+  "antifraude_recogida": {
+    "_NOTA": "Decision 6.1 cerrada = B (codigo + palabra clave). El cliente elige una palabra clave de 3 chars al confirmar pedido en la PWA; viaja en el mensaje wa.me al bot; se persiste con el pedido; el dependiente la pregunta al recoger. La palabra clave NO se manda al staff por Telegram (se pregunta al cliente, no se lee previamente — anti-fraude real).",
+    "modo": "palabra_clave",
+    "longitud_palabra_clave": 3
+  }
+}

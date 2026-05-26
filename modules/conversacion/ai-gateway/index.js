@@ -101,11 +101,21 @@ class AiGatewayModule extends BaseModule {
     // cargados, sustituyendo el lazy-rewire del PR #206 por un disparo
     // deterministico. El lazy-rewire se conserva 1-2 semanas como red
     // defensiva por si la suscripcion se registra despues de la emision.
+    //
+    // Tambien reconstruimos blueprintModules + pageGraph aqui: si ai-gateway
+    // se cargo antes que los blueprint modules (caso comun cuando los blueprints
+    // van al final del loadAll por no estar en config.modules.enabled), el
+    // _loadBlueprints() de onLoad encontro loadedModules sin blueprints y
+    // dejo el grafo a 0 nodos. Sin esta reconstruccion, page.related devuelve
+    // related:[] tras cualquier restart hasta que un chat dispare el lazy-load
+    // en _getTools — caso testigo 2026-05-26: deploy con grafo a 0/0 al
+    // arranque, panel "Sin paginas relacionadas" persistente sin chat previo.
     if (this.eventBus?.subscribe) {
       this._modulesLoadedAllUnsub = this.eventBus.subscribe(
         'core.modules.loaded.all',
         () => {
           try {
+            this._loadBlueprints();
             this._wireBlueprintAsyncSubscribers();
           } catch (err) {
             this.logger?.warn('ai-gateway.modules-loaded-all.handler_failed', {

@@ -1,0 +1,165 @@
+{
+  "name": "inventario",
+  "version": "1.0.0",
+  "description": "Inventario por proyecto con stock_real + reservas con expiracion. Multi-proyecto: cada proyecto tiene su propio data/projects/<slug>/inventario.json con shape { productos: { <id>: { nombre, stock_real, stock_minimo, reservas: [{ pedido_id, cantidad, expira_at }] } } }. Stock disponible = stock_real - suma(reservas vivas). Cierra clase de bugs 'salmorejo perdido' (audit cross-blueprint 2026-05-25) usando services/safe-update.js (lock por path + read+mutate+atomic write tmp+rename). Job interno cada 60s libera reservas expiradas y publica inventario.reserva.expirada. Escucha pedido.completado (filtra tipo='tienda') para confirmar y decrementar stock_real. Configurable por proyecto: reserva_expiracion_horas (default 24) leido de data/projects/<slug>/config/project.json en seccion inventario (decision 6.3=B del horizonte vertical-tienda-pwa-sin-datos).",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+
+  "horizonte": "vertical-tienda-pwa-sin-datos",
+  "horizonte_doc": "arquitectura/decisiones/propuestas/vertical-tienda-pwa-sin-datos.md",
+
+  "events": {
+    "publishes": [
+      {
+        "event": "inventario.reserva.creada",
+        "description": "Reserva temporal creada (pedido_id + cantidad + expira_at). Informativo para audit.",
+        "payload": "{ project_slug, producto_id, pedido_id, cantidad, expira_at, stock_disponible_restante, correlation_id }"
+      },
+      {
+        "event": "inventario.reserva.expirada",
+        "description": "Reserva liberada por expiracion (job interno). Stock vuelve a estar disponible.",
+        "payload": "{ project_slug, producto_id, pedido_id, cantidad, expira_at, motivo: 'expirada', correlation_id }"
+      },
+      {
+        "event": "inventario.reserva.liberada",
+        "description": "Reserva liberada explicitamente (cancelacion). Stock vuelve a estar disponible.",
+        "payload": "{ project_slug, producto_id, pedido_id, cantidad, motivo, correlation_id }"
+      },
+      {
+        "event": "inventario.confirmado",
+        "description": "Reserva confirmada: stock_real decrementado, reserva borrada. Tras recogida del cliente.",
+        "payload": "{ project_slug, producto_id, pedido_id, cantidad, stock_real_restante, correlation_id }"
+      },
+      {
+        "event": "inventario.ajustado",
+        "description": "Ajuste manual del stock_real (entrada de proveedor, merma, recuento). Informativo para audit.",
+        "payload": "{ project_slug, producto_id, delta, motivo, stock_real_nuevo, correlation_id }"
+      },
+      {
+        "event": "inventario.stock.bajo_minimo",
+        "description": "El stock_disponible de un producto cayo por debajo del stock_minimo configurado. Sugerencia al staff de reponer. Publicado tras reserva o ajuste cuando aplique.",
+        "payload": "{ project_slug, producto_id, stock_disponible, stock_minimo, correlation_id }"
+      }
+    ],
+    "subscribes": [
+      {
+        "event": "pedido.completado",
+        "handler": "onPedidoCompletado",
+        "description": "Pedido recogido y cobrado en presencial: confirma reservas asociadas. Filtra por tipo='tienda' (los POS no usan inventario en v1)."
+      },
+      {
+        "event": "pedido.cancelado",
+        "handler": "onPedidoCancelado",
+        "description": "Pedido cancelado antes de recoger: libera reservas asociadas."
+      }
+    ]
+  },
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del modulo inventario."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "inventario.consultar",
+      "description": "Consulta stock disponible (real - reservas vivas) de un producto en un proyecto. Devuelve tambien stock_real, stock_minimo, reservas_vivas_count.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": { "type": "string", "description": "Slug del proyecto (ej: vapers)." },
+          "producto_id":  { "type": "string", "description": "Id del producto en el catalogo del inventario." }
+        },
+        "required": ["project_slug", "producto_id"]
+      },
+      "handler": "handleConsultar",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "inventario.reservar",
+      "description": "Crea una reserva temporal de cantidad unidades sobre producto_id para pedido_id, con expira_at calculado segun project.inventario.reserva_expiracion_horas (default 24). Si stock disponible < cantidad devuelve CONFLICT_STATE. Idempotente por (project_slug, pedido_id, producto_id): re-llamar con mismos parametros NO duplica la reserva.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": { "type": "string", "description": "Slug del proyecto." },
+          "producto_id":  { "type": "string", "description": "Id del producto." },
+          "cantidad":     { "type": "integer", "minimum": 1, "description": "Unidades a reservar." },
+          "pedido_id":    { "type": "string", "description": "Identificador del pedido que reserva." },
+          "expira_horas": { "type": "integer", "minimum": 1, "maximum": 720, "description": "Horas hasta expiracion (opcional, default desde config del proyecto)." }
+        },
+        "required": ["project_slug", "producto_id", "cantidad", "pedido_id"]
+      },
+      "handler": "handleReservar",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "inventario.confirmar",
+      "description": "Confirma todas las reservas de un pedido_id en un proyecto: decrementa stock_real por la cantidad reservada y borra las reservas. Operacion idempotente.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": { "type": "string", "description": "Slug del proyecto." },
+          "pedido_id":    { "type": "string", "description": "Identificador del pedido." }
+        },
+        "required": ["project_slug", "pedido_id"]
+      },
+      "handler": "handleConfirmar",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "inventario.liberar",
+      "description": "Libera todas las reservas de un pedido_id en un proyecto SIN decrementar stock_real. Usado para cancelaciones.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": { "type": "string", "description": "Slug del proyecto." },
+          "pedido_id":    { "type": "string", "description": "Identificador del pedido." },
+          "motivo":       { "type": "string", "description": "Motivo de la liberacion (opcional)." }
+        },
+        "required": ["project_slug", "pedido_id"]
+      },
+      "handler": "handleLiberar",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "inventario.ajustar",
+      "description": "Ajusta stock_real de un producto (delta entero positivo o negativo). Para entradas de proveedor (positivo) o mermas/recuentos (negativo). El stock_real resultante NO puede ser negativo.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": { "type": "string", "description": "Slug del proyecto." },
+          "producto_id":  { "type": "string", "description": "Id del producto." },
+          "delta":        { "type": "integer", "description": "Delta a aplicar (positivo o negativo, no cero)." },
+          "motivo":       { "type": "string", "description": "Motivo del ajuste (entrada, merma, recuento, ...)." }
+        },
+        "required": ["project_slug", "producto_id", "delta", "motivo"]
+      },
+      "handler": "handleAjustar",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "inventario.estado_catalogo",
+      "description": "Devuelve estado completo del catalogo de un proyecto: cada producto con stock_real, stock_minimo, reservas_vivas (count + cantidad total), stock_disponible.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": { "type": "string", "description": "Slug del proyecto." }
+        },
+        "required": ["project_slug"]
+      },
+      "handler": "handleEstadoCatalogo",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "config": {
+    "projects_dir": "data/projects",
+    "default_reserva_expiracion_horas": 24,
+    "expiration_job_interval_ms": 60000
+  }
+}

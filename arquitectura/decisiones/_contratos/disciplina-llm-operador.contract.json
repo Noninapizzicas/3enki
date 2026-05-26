@@ -281,7 +281,7 @@
     "glossary.contract: terminos canonicos (audit, finding, hilo, axioma, mente, observador) usados consistentemente."
   ],
 
-  "validador": "NO TIENE. Patron cultural — la disciplina la enforce el propio LLM al arrancar sesion de audit/debug/investigacion (leyendo este contrato + declarando el protocolo verbal de fase 1 del protocolo_de_observacion). Si una sesion no respeta lo que describe, no es bug del LLM ni del repo: es regresion de la disciplina, recuperable releyendo este contrato y arrancando con la declaracion de axiomas.",
+  "validador": "Estructural minimo en arquitectura/decisiones/_validators/disciplina-llm-operador.validate.js — verifica shape del contrato (existencia, JSON valido, 16 secciones canonicas presentes, principios[] no vacio con id+regla+anti_patron por entrada, protocolo_de_observacion.fases con las 6 fases canonicas y pseudocodigo[] no vacio por fase, prohibido[] y casos_testigo[] no vacios). NO valida comportamiento — no es posible chequear mecanicamente que el LLM 'haya tirado del hilo' o 'haya verificado codigo sobre doc'. La disciplina semantica la enforce el propio LLM al arrancar sesion de audit/debug/investigacion (leyendo este contrato + declarando el protocolo verbal de fase 1). Si una sesion no respeta lo que describe, no es bug del LLM ni del repo: es regresion de la disciplina, recuperable releyendo este contrato y arrancando con la declaracion de axiomas.",
 
   "trabajo_pendiente": [
     {

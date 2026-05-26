@@ -219,6 +219,12 @@ codes por entidad. Sin stack traces en payloads del bus.
   `fs.write.request` (canónico).
 - **`project-manager`**: para resolver `project_id` activo en tools
   invocadas sin él explícito.
+- **`tienda-api` (módulo hermano de Fase 6a, ver mapa propio)**: el
+  bundle PWA generado hace `fetch('POST /tienda/pedido/:project')`
+  para enviar el pedido del cliente final al sistema. tienda-api
+  emite `pedido.crear-tienda` al bus y `pizzepos/pedidos` crea la
+  comanda. Acoplamiento por contrato HTTP, no por código (el
+  builder solo embebe la URL en el template).
 - **`cf-worker-deployer` (futuro, Fase 6b)**: cuando exista, el
   builder le pasa el bundle vía `bundle.publicacion.solicitada` y
   escucha su respuesta. No se crea en Fase 6a.
@@ -227,8 +233,11 @@ codes por entidad. Sin stack traces en payloads del bus.
 
 - **Carrito persistente, login del cliente, checkout, pagos online** —
   fuera de scope. El gesto final del cliente en la PWA generada es
-  "enviar pedido" → emite vía MQTT/HTTP de vuelta al sistema (handoff
-  específico se cierra en el contrato de salida del bundle, Fase 6).
+  "enviar pedido" → `fetch('POST /tienda/pedido/:project')` al módulo
+  hermano `tienda-api` (Fase 6a), que emite `pedido.crear-tienda` al
+  bus interno y `pizzepos/pedidos` crea la comanda. Sin login, sin
+  pagos online; el cliente se identifica con nombre + teléfono que
+  viajan en el body del POST.
 - **Editor visual web de catálogo** — sin UI HTTP en v1. Edición por
   tools del LLM desde el chat del agente que orquesta la vertical.
 - **Generación de QR, plantillas WhatsApp para el link** — son
@@ -280,17 +289,25 @@ Wireo: `test:comandero-cliente-builder` en `package.json` +
 
 ## Plan por fases (compromiso de scope)
 
-- **Fase 6a — este builder, MVP a disco**:
-  - Crear `modules/comandero-cliente-builder/` con `module.json`,
-    `index.js` POC2, 2 tablas en sqlite, 4 tools de presentación + 1
-    de build (sin `bundle.publicar`).
-  - Copiar `static-template.js` desde `pizzepos/carta-digital` y
-    especializarlo añadiendo carrito + gesto "enviar pedido" → MQTT
-    de vuelta al sistema.
-  - Bundle se persiste vía `fs.write.request` y el operador lo sube
-    manualmente con `wrangler` mientras Fase 6b no exista.
-  - Tests por capas wireados a CI.
-  - Validate:ci PASS.
+- **Fase 6a — 2 módulos hermanos, MVP a disco**:
+  - **1. `tienda-api`** (módulo nuevo, mapa propio en
+    `tienda-api-mapa.md`): canal HTTP que recibe POST del cliente y
+    emite `pedido.crear-tienda` al bus. Stateless. Tipo
+    `modulo_de_canal`. Análogo simétrico a `whatsapp-bot`. Se
+    implementa **antes** del builder para tener el endpoint real
+    contra el que probar el bundle.
+  - **2. `comandero-cliente-builder`** (este módulo):
+    - `modules/comandero-cliente-builder/` con `module.json` (ya en
+      `97e0659`), `index.js` POC2, 2 JSON-files-per-project, 4 tools
+      de presentación + 1 de build (sin `bundle.publicar`).
+    - Copiar `static-template.js` desde `pizzepos/carta-digital` y
+      especializarlo añadiendo carrito + gesto "enviar pedido" →
+      `fetch('POST /tienda/pedido/:project')` al endpoint de
+      `tienda-api`.
+    - Bundle se persiste vía `fs.write.request` y el operador lo
+      sube manualmente con `wrangler` mientras Fase 6b no exista.
+    - Tests por capas wireados a CI.
+    - Validate:ci PASS.
 - **Fase 6b — cf-worker-deployer reusable (módulo hermano nuevo)**:
   - Extraer la lógica de `modules/pizzepos/carta-digital/cf-worker/`
     a módulo independiente que consume `*.bundle.publicacion.solicitada`

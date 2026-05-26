@@ -21,6 +21,7 @@
     },
 
     "pedido_creado": {
+      "_doc": "Shape ampliado en v3.1.0 para soportar pedidos tipo='tienda' (vertical tienda PWA): cuenta_id puede ser null, canal puede ser null, campos opcionales codigo_recogida + canal_origen + expira_at + total_centimos + project_slug. cuenta_id sale de required.",
       "allOf": [
         {"$ref": "#/definitions/event_envelope"},
         {
@@ -28,15 +29,25 @@
             "event_type": {"const": "pedido.creado"},
             "payload": {
               "type": "object",
-              "required": ["pedido_id", "cuenta_id", "estado"],
+              "required": ["pedido_id", "estado"],
               "properties": {
                 "pedido_id": {"type": "string"},
-                "cuenta_id": {"type": "string"},
-                "canal": {"type": "string", "enum": ["mesa", "telefono", "llevar", "glovo", "whatsapp"]},
+                "cuenta_id": {"type": ["string", "null"]},
+                "canal": {"type": ["string", "null"]},
+                "tipo": {"type": "string", "enum": ["pos", "tienda"]},
+                "canal_origen": {"type": "string", "enum": ["whatsapp", "web", "manual"]},
+                "codigo_recogida": {"type": "string", "pattern": "^[A-HJ-NP-Z2-9]{4,8}$"},
+                "expira_at": {"type": "string", "format": "date-time"},
+                "total_centimos": {"type": "integer", "minimum": 0},
+                "project_slug": {"type": "string"},
+                "project_id": {"type": ["string", "null"]},
+                "ref_display": {"type": ["string", "null"]},
                 "estado": {"type": "string"},
+                "total": {"type": "number"},
+                "items": {"type": "array"},
                 "created_at": {"type": "string", "format": "date-time"}
               },
-              "additionalProperties": false
+              "additionalProperties": true
             }
           }
         }

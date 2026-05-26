@@ -1,10 +1,23 @@
 /**
- * Modulo Pedidos v3.0.0 — POC2 canonico.
+ * Modulo Pedidos v3.1.0 — POC2 canonico.
  *
- * Gestion completa de pedidos formales pizzepos. Recibe del comandero
- * (bridge `comandero.enviar_cocina`) o se crea via UI handler. Persiste
- * en memoria (Map pedidos + Map pedidosPorCuenta) con restauracion
- * desde cuentas_activas.json al arrancar (delegacion a persistencia-comandero).
+ * Gestion completa de pedidos pizzepos. Dos tipos:
+ *   - tipo: 'pos'    — flujo clasico POS pizzeria con cuenta_id (cuentas-canales),
+ *                      items en pasos separados, enviado a cocina, etc.
+ *   - tipo: 'tienda' — flujo plano vertical tienda PWA: cuenta_id null, todos los
+ *                      items de una, codigo_recogida + palabra_clave anti-fraude,
+ *                      estado pendiente_recogida -> recogido_y_cobrado / expirado.
+ *
+ * Maps internos:
+ *   - this.pedidos = Map<pedido_id, pedido>             (todos los tipos)
+ *   - this.pedidosPorCuenta = Map<cuenta_id, Set<pedido_id>>   (solo tipo pos)
+ *   - this.pedidosPorProject = Map<project_slug, Set<pedido_id>>  (solo tipo tienda)
+ *
+ * Recibe POS del comandero (bridge `comandero.enviar_cocina`) o se crea via UI handler.
+ * Recibe tienda via tool pedido.crear-tienda (auto-wire bus).
+ *
+ * Persiste en memoria con restauracion desde cuentas_activas.json al arrancar
+ * (delegacion a persistencia-comandero; aplica solo a tipo pos en v3.1.0).
  *
  * Cache de productos invalidada por catalogo.actualizado / producto.{creado,actualizado}.
  */
@@ -21,10 +34,11 @@ class PedidosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'pedidos';
-    this.version = '3.0.0';
+    this.version = '3.1.0';
 
     this.pedidos = new Map();
     this.pedidosPorCuenta = new Map();
+    this.pedidosPorProject = new Map();
     this.productosCache = new Map();
     this.uiHandler = null;
     this.config = null;
@@ -55,6 +69,7 @@ class PedidosModule extends BaseModule {
     // El loader desregistra uiHandler entries automaticamente.
     this.pedidos.clear();
     this.pedidosPorCuenta.clear();
+    this.pedidosPorProject.clear();
     this.productosCache.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
@@ -159,23 +174,32 @@ class PedidosModule extends BaseModule {
   }
 
   async onCajaCerrada(event) {
-    const size = this.pedidos.size;
-    this.pedidos.clear();
+    const before = this.pedidos.size;
+    // Solo limpiar pedidos tipo='pos' — los pedidos tipo='tienda' NO estan atados
+    // al ciclo de caja del POS, viven con su propio expira_at.
+    for (const [id, p] of this.pedidos) {
+      if (p.tipo !== 'tienda') this.pedidos.delete(id);
+    }
     this.pedidosPorCuenta.clear();
-    this.metrics?.gauge?.('pedidos.activos.count', 0);
+    this.metrics?.gauge?.('pedidos.activos.count', this.pedidos.size);
     this.logger.info('pedidos.reset.caja_cerrada', {
-      pedidos_limpiados: size,
+      pedidos_pos_limpiados: before - this.pedidos.size,
+      pedidos_tienda_preservados: this.pedidos.size,
       correlation_id: event?.metadata?.correlationId
     });
   }
 
   async onDiaIniciado(event) {
-    const size = this.pedidos.size;
-    this.pedidos.clear();
+    const before = this.pedidos.size;
+    // Solo limpiar pedidos tipo='pos' (idem onCajaCerrada).
+    for (const [id, p] of this.pedidos) {
+      if (p.tipo !== 'tienda') this.pedidos.delete(id);
+    }
     this.pedidosPorCuenta.clear();
-    this.metrics?.gauge?.('pedidos.activos.count', 0);
+    this.metrics?.gauge?.('pedidos.activos.count', this.pedidos.size);
     this.logger.info('pedidos.reset.dia_iniciado', {
-      pedidos_limpiados: size,
+      pedidos_pos_limpiados: before - this.pedidos.size,
+      pedidos_tienda_preservados: this.pedidos.size,
       correlation_id: event?.metadata?.correlationId
     });
   }
@@ -343,6 +367,152 @@ class PedidosModule extends BaseModule {
       return { status: 201, data: pedido };
     } catch (err) {
       return this._handleHandlerError('pedidos.create.error', err);
+    }
+  }
+
+  // ==========================================
+  // Handlers Tienda PWA (tipo='tienda')
+  // ==========================================
+
+  async handleCreatePedidoTienda(data) {
+    try {
+      const start_time = Date.now();
+      const {
+        project_slug,
+        items,
+        total_centimos,
+        canal_origen,
+        cliente_telefono,
+        palabra_clave,
+        expira_horas,
+        notas_generales,
+        correlation_id
+      } = data || {};
+
+      if (!project_slug || typeof project_slug !== 'string') {
+        this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'project_slug es requerido', { field: 'project_slug' });
+      }
+      if (!Array.isArray(items) || items.length === 0) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'items es requerido (array no vacio)', { field: 'items' });
+      }
+      if (!Number.isInteger(total_centimos) || total_centimos < 0) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
+        return this._errorResponse(400, 'INVALID_INPUT', 'total_centimos debe ser entero >= 0', { field: 'total_centimos' });
+      }
+      if (!canal_origen || !['whatsapp', 'web', 'manual'].includes(canal_origen)) {
+        this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
+        return this._errorResponse(400, 'INVALID_INPUT', "canal_origen debe ser 'whatsapp' | 'web' | 'manual'", { field: 'canal_origen' });
+      }
+      if (palabra_clave !== undefined && palabra_clave !== null) {
+        if (typeof palabra_clave !== 'string' || !/^[a-z]{3}$/.test(palabra_clave)) {
+          this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
+          return this._errorResponse(400, 'INVALID_INPUT', 'palabra_clave debe ser 3 chars [a-z]', { field: 'palabra_clave' });
+        }
+      }
+
+      // Construir items canonicos del shape tienda. Items vienen del parser
+      // (modules/whatsapp-bot/services/pedido-parser.js) o de la PWA directamente.
+      const items_tienda = [];
+      for (let i = 0; i < items.length; i++) {
+        const raw = items[i] || {};
+        const cantidad = Number(raw.cantidad);
+        if (!Number.isInteger(cantidad) || cantidad <= 0) {
+          this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
+          return this._errorResponse(400, 'INVALID_INPUT', `items[${i}].cantidad debe ser entero > 0`, { field: `items[${i}].cantidad` });
+        }
+        const descripcion = typeof raw.descripcion === 'string' ? raw.descripcion.trim() : '';
+        if (!descripcion) {
+          this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
+          return this._errorResponse(400, 'INVALID_INPUT', `items[${i}].descripcion es requerida`, { field: `items[${i}].descripcion` });
+        }
+        items_tienda.push({
+          item_id: crypto.randomUUID(),
+          cantidad,
+          descripcion,
+          producto_id: raw.producto_id || null,
+          precio_unitario_centimos: Number.isInteger(raw.precio_unitario_centimos) ? raw.precio_unitario_centimos : null,
+          precio_total_centimos: Number.isInteger(raw.precio_total_centimos) ? raw.precio_total_centimos : null
+        });
+      }
+
+      const codigo_recogida = this._generarCodigoRecogidaUnico();
+      const horas = Number.isInteger(expira_horas) && expira_horas > 0 ? expira_horas : 24;
+      const expira_at = new Date(Date.now() + horas * 3600_000).toISOString();
+      const pedido_id = crypto.randomUUID();
+      const created_at = new Date().toISOString();
+
+      const pedido = {
+        id: pedido_id,
+        tipo: 'tienda',
+        cuenta_id: null,
+        canal: null,
+        canal_origen,
+        project_slug,
+        project_id: project_slug,
+        items: items_tienda,
+        estado: 'pendiente_recogida',
+        total_centimos,
+        total: total_centimos / 100,
+        codigo_recogida,
+        palabra_clave: palabra_clave || null,
+        cliente_telefono: cliente_telefono || null,
+        expira_at,
+        notas_generales: notas_generales || null,
+        created_at,
+        updated_at: created_at
+      };
+
+      this.pedidos.set(pedido_id, pedido);
+      if (!this.pedidosPorProject.has(project_slug)) {
+        this.pedidosPorProject.set(project_slug, new Set());
+      }
+      this.pedidosPorProject.get(project_slug).add(pedido_id);
+
+      this.metrics?.increment?.('pedidos.creado.total');
+      this.metrics?.increment?.('pedidos.tienda.creado', { project: project_slug });
+      this.metrics?.gauge?.('pedidos.activos.count', this.pedidos.size);
+      this.metrics?.timing?.('pedidos.create_tienda.duration', Date.now() - start_time);
+
+      await this._publishPedidoCreado(pedido, { correlation_id });
+
+      this.logger.info('pedidos.tienda.creado', {
+        pedido_id,
+        project_slug,
+        items_count: items_tienda.length,
+        total_centimos,
+        codigo_recogida,
+        canal_origen,
+        duration: Date.now() - start_time
+      });
+
+      return {
+        status: 201,
+        data: {
+          pedido_id,
+          codigo_recogida,
+          expira_at,
+          estado: pedido.estado,
+          total_centimos,
+          tipo: 'tienda'
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.create_tienda.error', err);
+    }
+  }
+
+  async handleGenerarCodigoRecogida(data) {
+    try {
+      const longitud = Number.isInteger(data?.longitud) ? data.longitud : 6;
+      if (longitud < 4 || longitud > 8) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'longitud debe estar en [4, 8]', { field: 'longitud' });
+      }
+      const codigo = this._generarCodigoRecogida(longitud);
+      return { status: 200, data: { codigo_recogida: codigo } };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.generar_codigo.error', err);
     }
   }
 
@@ -689,7 +859,7 @@ class PedidosModule extends BaseModule {
   // ==========================================
 
   async _publishPedidoCreado(pedido, sourcePayload) {
-    await this._publicarEvento('pedido.creado', {
+    const payload = {
       pedido_id: pedido.id,
       cuenta_id: pedido.cuenta_id,
       canal: pedido.canal || null,
@@ -699,7 +869,19 @@ class PedidosModule extends BaseModule {
       total: pedido.total,
       items: pedido.items || [],
       created_at: pedido.created_at
-    }, sourcePayload);
+    };
+    // Campos del shape tienda (solo presentes cuando tipo='tienda').
+    // cliente_telefono y palabra_clave NO se incluyen aqui (anti-fraude + RGPD-cero):
+    // viven solo en el shape persistido y se desechan al cerrar/expirar el pedido.
+    if (pedido.tipo) payload.tipo = pedido.tipo;
+    if (pedido.canal_origen) payload.canal_origen = pedido.canal_origen;
+    if (pedido.codigo_recogida) payload.codigo_recogida = pedido.codigo_recogida;
+    if (pedido.expira_at) payload.expira_at = pedido.expira_at;
+    if (pedido.project_slug) payload.project_slug = pedido.project_slug;
+    if (pedido.total_centimos !== undefined && pedido.total_centimos !== null) {
+      payload.total_centimos = pedido.total_centimos;
+    }
+    await this._publicarEvento('pedido.creado', payload, sourcePayload);
   }
 
   async _publishItemAgregado(pedido, item, sourcePayload) {
@@ -866,6 +1048,31 @@ class PedidosModule extends BaseModule {
       if (cuenta_id.startsWith(prefix)) return canal;
     }
     return null;
+  }
+
+  // Alfabeto 30 chars sin ambiguos (sin 0, O, 1, I, L). 30^6 = 729M combinaciones.
+  _generarCodigoRecogida(longitud = 6) {
+    const alfabeto = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    const bytes = crypto.randomBytes(longitud);
+    let out = '';
+    for (let i = 0; i < longitud; i++) {
+      out += alfabeto[bytes[i] % alfabeto.length];
+    }
+    return out;
+  }
+
+  _generarCodigoRecogidaUnico(longitud = 6, maxIntentos = 16) {
+    for (let intento = 0; intento < maxIntentos; intento++) {
+      const codigo = this._generarCodigoRecogida(longitud);
+      let colision = false;
+      for (const p of this.pedidos.values()) {
+        if (p.codigo_recogida === codigo) { colision = true; break; }
+      }
+      if (!colision) return codigo;
+    }
+    const err = new Error(`No se pudo generar codigo_recogida unico tras ${maxIntentos} intentos`);
+    err._code = 'CONFLICT_STATE';
+    throw err;
   }
 }
 

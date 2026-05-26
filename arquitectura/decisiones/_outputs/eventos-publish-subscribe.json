@@ -7,7 +7,7 @@
     "generado_por": "arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js",
     "notas": "Catalogo curado de eventos del bus indexado por nombre. Incluye publishers (blueprints con publish/publishAndWait en su pseudocodigo + module.json.events.publishes[]) y subscribers (blueprints con eventos_que_escucho[] + module.json.events.subscribes[]). El validador lo regenera cada vez. NO editar a mano."
   },
-  "total_eventos": 405,
+  "total_eventos": 410,
   "eventos": {
     "*.actualizado": {
       "publishers": [],
@@ -1158,6 +1158,10 @@
         {
           "source": "modules/telegram-service/module.json",
           "handler": "onCredentialDeleted"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onCredentialDeleted"
         }
       ]
     },
@@ -1207,6 +1211,10 @@
         },
         {
           "source": "modules/telegram-service/module.json",
+          "handler": "onCredentialSaved"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
           "handler": "onCredentialSaved"
         }
       ]
@@ -3094,6 +3102,19 @@
         {
           "source": "modules/pizzepos/persistencia-comandero/module.json",
           "handler": "onPedidoCreado"
+        },
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onPedidoCreado"
+        }
+      ]
+    },
+    "pedido.crear.failed": {
+      "publishers": [],
+      "subscribers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "handler": "onPedidoCrearFailed"
         }
       ]
     },
@@ -4545,6 +4566,42 @@
         {
           "source": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
           "ref": "operaciones.pseudocodigo"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.envio.fallido": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.mensaje.enviado": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.mensaje.recibido": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
+        }
+      ],
+      "subscribers": []
+    },
+    "whatsapp.pedido.detectado": {
+      "publishers": [
+        {
+          "source": "modules/whatsapp-bot/module.json",
+          "ref": "module.json.events.publishes"
         }
       ],
       "subscribers": []

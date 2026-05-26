@@ -278,3 +278,6 @@ jobs:
 
       - name: Run unit tests (log-manager — reescritura canonica)
         run: npm run test:log-manager
+
+      - name: Run unit tests (tienda-api — Fase 6a vertical-tienda-pwa-sin-datos)
+        run: npm run test:tienda-api

@@ -1028,6 +1028,96 @@ test('onUnload libera todas las async subscriptions', async () => {
 });
 
 // --------------------------------------------------
+// 17. Reconstruccion del grafo en core.modules.loaded.all (fix bug 2026-05-26)
+// --------------------------------------------------
+
+test('core.modules.loaded.all reconstruye pageGraph cuando ai-gateway carga antes que los blueprints', async () => {
+  // Reproduce el caso de produccion 2026-05-26: ai-gateway corre onLoad ANTES
+  // que los blueprint modules. _loadBlueprints itera loadedModules vacio y
+  // deja pageGraph a 0 nodos. Sin este fix, page.related devuelve [] tras
+  // cualquier restart hasta que un chat dispare el lazy-load en _getTools.
+  const m = makeInstance();
+  m.eventBus = makeBusMock();
+
+  // Estado inicial: loadedModules sin blueprints — simula que ai-gateway cargo primero.
+  m.moduleLoader = { loadedModules: new Map() };
+  let loadBlueprintsCalls = 0;
+  let wireCalls = 0;
+  const realLoad = m._loadBlueprints.bind(m);
+  const realWire = m._wireBlueprintAsyncSubscribers.bind(m);
+  m._loadBlueprints = () => { loadBlueprintsCalls++; realLoad(); };
+  m._wireBlueprintAsyncSubscribers = () => { wireCalls++; realWire(); };
+
+  // Registrar el handler de core.modules.loaded.all igual que hace onLoad.
+  m._modulesLoadedAllUnsub = m.eventBus.subscribe(
+    'core.modules.loaded.all',
+    () => {
+      try {
+        m._loadBlueprints();
+        m._wireBlueprintAsyncSubscribers();
+      } catch (err) {
+        // ignorado en test
+      }
+    }
+  );
+
+  // Antes del evento: pageGraph vacio (no se llamo _loadBlueprints aun).
+  assert.strictEqual(m.pageGraph.size, 0);
+  assert.strictEqual(loadBlueprintsCalls, 0);
+
+  // Simular que los blueprints se cargaron entre tanto.
+  m.moduleLoader.loadedModules.set('menu-generator', {
+    manifest: { name: 'menu-generator', blueprint_driven: true, target_page_id: 'menu-generator' },
+    path: '/tmp/fake/menu-generator'
+  });
+
+  // Emitir el evento canonico.
+  m.eventBus.emit('core.modules.loaded.all', { data: { total: 1, successful: 1, failed: 0 } });
+
+  // Verificar: _loadBlueprints Y _wireBlueprintAsyncSubscribers se llamaron.
+  assert.strictEqual(loadBlueprintsCalls, 1, '_loadBlueprints debe llamarse al recibir core.modules.loaded.all');
+  assert.strictEqual(wireCalls, 1, '_wireBlueprintAsyncSubscribers debe llamarse al recibir core.modules.loaded.all');
+});
+
+test('handler de core.modules.loaded.all captura errores sin propagarlos', () => {
+  // Si _loadBlueprints o _wireBlueprintAsyncSubscribers lanzan, el handler
+  // debe registrarlo via logger.warn y NO propagar al bus. El bus no debe
+  // ver una excepcion en uno de sus subscribers (rompe a otros listeners).
+  const m = makeInstance();
+  m.eventBus = makeBusMock();
+  let warned = false;
+  m.logger = {
+    debug(){}, info(){}, error(){},
+    warn(event, payload) {
+      if (event === 'ai-gateway.modules-loaded-all.handler_failed') warned = true;
+    }
+  };
+  m._loadBlueprints = () => { throw new Error('simulated_load_failure'); };
+  m._wireBlueprintAsyncSubscribers = () => {};
+
+  // Registrar handler igual que hace onLoad.
+  m.eventBus.subscribe(
+    'core.modules.loaded.all',
+    () => {
+      try {
+        m._loadBlueprints();
+        m._wireBlueprintAsyncSubscribers();
+      } catch (err) {
+        m.logger.warn('ai-gateway.modules-loaded-all.handler_failed', {
+          error_message: err && err.message ? err.message : String(err)
+        });
+      }
+    }
+  );
+
+  // No debe lanzar.
+  assert.doesNotThrow(() => {
+    m.eventBus.emit('core.modules.loaded.all', { data: {} });
+  });
+  assert.strictEqual(warned, true, 'logger.warn debe registrar el fallo del handler');
+});
+
+// --------------------------------------------------
 // Runner
 // --------------------------------------------------
 

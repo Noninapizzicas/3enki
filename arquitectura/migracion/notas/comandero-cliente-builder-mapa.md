@@ -1,8 +1,8 @@
 # comandero-cliente-builder — mapa de eventos (PASO 0)
 
-> Sin mapa no se toca el módulo. Este documento se valida con el operador
-> antes de declarar `module.json`. Cualquier decisión marcada como
-> `PENDIENTE` requiere OK explícito antes de pasar al PASO 1.
+> Sin mapa no se toca el módulo. Validado con el operador 2026-05-26
+> (decisiones cerradas al final del documento). Listo para PASO 1
+> (declarar `module.json`).
 
 ## 1. Identidad
 
@@ -33,13 +33,13 @@
 
 ## 2. Eventos publicados
 
-| evento | cuándo | payload mínimo | declarado |
+| evento | cuándo | payload mínimo | fase |
 |---|---|---|---|
-| `comandero-cliente.producto.presentacion.actualizada` | tras editar imagen/descripción/orden de un producto | `{producto_id, project_id, presentacion: {imagen_url?, descripcion_publica?, orden_publico?, oculto_publico?}}` | sí |
-| `comandero-cliente.bundle.generado` | tras compilar el artefacto PWA del proyecto | `{project_id, bundle_id, bundle_path, productos_count, generado_en}` | sí |
-| `comandero-cliente.bundle.publicacion.solicitada` | el builder pide al deployer que suba el bundle al cf-worker | `{project_id, bundle_id, bundle_path, target_url}` | sí |
-| `comandero-cliente.bundle.publicado` | tras confirmar publicación exitosa | `{project_id, bundle_id, public_url, publicado_en}` | sí |
-| `comandero-cliente.bundle.fallido` | error en cualquier fase (build o publish) | `{project_id, bundle_id?, fase, error: {code, message}}` | sí |
+| `comandero-cliente.producto.presentacion.actualizada` | tras editar imagen/descripción/orden de un producto | `{producto_id, project_id, presentacion: {imagen_url?, descripcion_publica?, orden_publico?, oculto_publico?}}` | 6a |
+| `comandero-cliente.bundle.generado` | tras compilar el artefacto PWA del proyecto | `{project_id, bundle_id, bundle_path, productos_count, generado_en}` | 6a |
+| `comandero-cliente.bundle.fallido` | error en la fase de build | `{project_id, bundle_id?, fase: 'generar', error: {code, message}}` | 6a |
+| `comandero-cliente.bundle.publicacion.solicitada` | el builder pide al deployer que suba el bundle al cf-worker | `{project_id, bundle_id, bundle_path, target_url}` | 6b |
+| `comandero-cliente.bundle.publicado` | tras confirmar publicación exitosa | `{project_id, bundle_id, public_url, publicado_en}` | 6b |
 
 **Verbos**: `actualizada`, `generado`, `solicitada`, `publicado`,
 `fallido` — todos canónicos en `naming.json` (es).
@@ -47,11 +47,22 @@
 **`correlation_id`**: propagado en todos. Originador = la tool que el
 operador invoca desde el agente que orquesta la vertical.
 
-**PENDIENTE A**: ¿el deployer al cf-worker es un módulo existente del
-sistema o lo creamos en esta fase? Si existe ya `cf-worker-deployer` o
-similar, `comandero-cliente.bundle.publicacion.solicitada` apunta a su
-evento canónico de input. Si no, queda como deuda anotada y el builder
-solo escribe el bundle a disco en una primera iteración.
+**Alcance por fases (cerrado 2026-05-26)**:
+
+- **Fase 6a (este módulo en su v1)**: solo emite `producto.presentacion.actualizada`,
+  `bundle.generado`, `bundle.fallido`. El bundle se escribe a disco y
+  punto. **NO emite** `bundle.publicacion.solicitada` ni
+  `bundle.publicado` en v1 (no hay consumer). La tool
+  `comandero-cliente.bundle.publicar` queda fuera del catálogo de tools
+  de v1.
+- **Fase 6b (módulo hermano nuevo `cf-worker-deployer`)**: cuando ese
+  módulo exista, este builder añade los dos eventos restantes y la tool
+  de publicar. El `module.json` declara desde v1 todos los eventos
+  posibles para no romper schema cuando se activen.
+- **Razón**: el único deploy a cf-worker que existe hoy es manual
+  (`modules/pizzepos/carta-digital/cf-worker/deploy.js`, CLI via
+  wrangler). No hay deployer modular reusable. Crearlo está fuera del
+  scope de Fase 6a — se aborda en 6b sin bloquear 6a.
 
 ## 3. Eventos escuchados
 
@@ -77,13 +88,13 @@ Tools del builder invocables por el agente que lo orquesta. Todas con
 shape canónico de `tools.contract` (parameters JSON Schema 2020-12,
 retorno `{status, data | error: {code, message}}`).
 
-| tool | qué hace | parámetros |
-|---|---|---|
-| `comandero-cliente.producto.presentacion.actualizar` | añade/edita imagen, descripción, orden público de un producto | `{project_id, producto_id, imagen_url?, descripcion_publica?, orden_publico?, oculto_publico?}` |
-| `comandero-cliente.producto.imagen.subir` | sube imagen al storage y devuelve url canónica | `{project_id, producto_id, imagen_base64, content_type}` |
-| `comandero-cliente.categoria.orden.actualizar` | reordena categorías para la vista pública | `{project_id, orden: [categoria_id, ...]}` |
-| `comandero-cliente.bundle.generar` | compila el bundle PWA del proyecto y devuelve `bundle_path` | `{project_id, identidad: {marca, colores, logo_url?}}` |
-| `comandero-cliente.bundle.publicar` | dispara la publicación al cf-worker (emite `bundle.publicacion.solicitada`) | `{project_id, bundle_id}` |
+| tool | qué hace | parámetros | fase |
+|---|---|---|---|
+| `comandero-cliente.producto.presentacion.actualizar` | añade/edita imagen, descripción, orden público de un producto | `{project_id, producto_id, imagen_url?, descripcion_publica?, orden_publico?, oculto_publico?}` | 6a |
+| `comandero-cliente.producto.imagen.subir` | sube imagen al storage y devuelve url canónica | `{project_id, producto_id, imagen_base64, content_type}` | 6a |
+| `comandero-cliente.categoria.orden.actualizar` | reordena categorías para la vista pública | `{project_id, orden: [categoria_id, ...]}` | 6a |
+| `comandero-cliente.bundle.generar` | compila el bundle PWA del proyecto y devuelve `bundle_path` | `{project_id, identidad: {marca, colores, logo_url?}}` | 6a |
+| `comandero-cliente.bundle.publicar` | dispara la publicación al cf-worker (emite `bundle.publicacion.solicitada`) | `{project_id, bundle_id}` | 6b |
 
 **Acotación deliberada**: el builder NO expone tools de precio,
 inventario ni modificadores. Esas mutaciones pertenecen a
@@ -118,11 +129,12 @@ operativo.
 de otros módulos. Cualquier consulta cross-módulo va por
 `db.query.*` events.
 
-**PENDIENTE B**: ¿persiste el bundle en disco (en directorio gestionado
-por el módulo `filesystem`) o lo sube directamente al cf-worker en
-streaming sin paso intermedio en disco? La opción "a disco primero" da
-trazabilidad y permite reintentar la publicación sin regenerar.
-Recomiendo a disco. OK necesario.
+**Cerrado 2026-05-26**: el bundle se persiste a disco vía
+`fs.write.request` (evento canónico del módulo `filesystem`). El
+`bundle_path` resultante queda registrado en `comandero_cliente_bundles`
+y el operador puede inspeccionarlo, reintentarlo o subirlo
+manualmente con `wrangler` mientras Fase 6b no exista. Esto da
+trazabilidad y desacopla el build de la publicación.
 
 ## 6. Decisión cerrada en la conversación: campos visuales
 
@@ -143,9 +155,12 @@ Razón del cambio respecto a lo que dije antes:
   en el build, pero eso es trivial — ambas viven en cache local del
   mismo módulo.
 
-**PENDIENTE C**: confirmar esta decisión (mover los campos visuales al
-builder en vez de a productos). Es un cambio sobre lo que dije en la
-conversación.
+**Cerrado 2026-05-26**: tabla propia del builder. La filosofía del
+sistema (granularidad acotada, un módulo = una responsabilidad)
+favorece la separación: `productos` gobierna el catálogo operativo,
+el builder gobierna la capa de presentación pública. Otros consumers
+del catálogo (cocina, escandallo, comandero interno) no ven los
+campos visuales, que para ellos serían ruido.
 
 ## 7. APIs HTTP
 
@@ -175,11 +190,26 @@ codes por entidad. Sin stack traces en payloads del bus.
 - **`pizzepos/comandero`**: gemelo conceptual (mismo catálogo, distinta
   cara). Cero acoplamiento entre los dos módulos — ambos consumen
   productos por separado.
+- **`pizzepos/carta-digital`**: gemelo conceptual del lado "vista pura"
+  (catálogo visual sin carrito ni pedido). Tiene su propio
+  `static-template.js` y `cf-worker/deploy.js` internos. **No hay
+  acoplamiento entre ambos módulos**. La duplicación deliberada del
+  template (copia inicial en este builder, especializada con carrito y
+  gesto de pedido) es preferible a una abstracción prematura. Si la
+  duplicación duele en el futuro, se extrae a un módulo común
+  `catalogo-pwa-template` (Fase 6c, opcional).
+- **`pizzepos/carta-marketing`**: enriquece descripciones operativas
+  del catálogo con LLM. Sus outputs viven en `pizzepos/productos` /
+  `carta-manager` y le llegan al builder por `catalogo.actualizado`
+  como cualquier otro cambio. **No es consumer ni emisor especial**
+  desde la óptica del builder.
 - **`filesystem`**: para escribir el bundle a disco. Vía evento
   `fs.write.request` (canónico).
 - **`project-manager`**: para resolver `project_id` activo en tools
   invocadas sin él explícito.
-- **`cf-worker` (deployer)**: PENDIENTE A — depende de si existe ya.
+- **`cf-worker-deployer` (futuro, Fase 6b)**: cuando exista, el
+  builder le pasa el bundle vía `bundle.publicacion.solicitada` y
+  escucha su respuesta. No se crea en Fase 6a.
 
 ## 10. Lo que NO está en este módulo (y por qué)
 
@@ -218,17 +248,49 @@ Wireo: `test:comandero-cliente-builder` en `package.json` +
 
 ---
 
-## Decisiones a cerrar antes de pasar al PASO 1
+## Decisiones cerradas con el operador (2026-05-26)
 
-- **PENDIENTE A**: ¿existe ya un módulo deployer al cf-worker reusable,
-  o el builder solo escribe a disco en v1 y la publicación queda como
-  trabajo pendiente del proyecto?
-- **PENDIENTE B**: ¿bundle a disco primero (recomendado) o stream
-  directo al cf-worker?
-- **PENDIENTE C**: ¿OK al cambio de "extender productos" → "tabla
-  propia en el builder" para los campos visuales?
-- **PENDIENTE D**: ¿el slug `comandero-cliente-builder` en raíz, o
-  prefieres `pizzepos/comandero-cliente-builder` para mantenerlo bajo
-  el namespace que consume?
-- **PENDIENTE E**: ¿algún evento que falte o que sobre en el catálogo
-  declarado en la sec. 2?
+- **A — Deployer al cf-worker**: NO existe módulo reusable. El único
+  deploy actual es manual y privado de `pizzepos/carta-digital`. Fase
+  6a escribe bundle solo a disco; Fase 6b separada creará
+  `cf-worker-deployer` como módulo hermano reusable. Documentado en
+  sección 2.
+- **B — Persistencia del bundle**: a disco vía `fs.write.request`.
+  Documentado en sección 5.
+- **C — Campos visuales (imagen, descripción pública, orden público)**:
+  tabla propia del builder, NO extender `productos`. Documentado en
+  sección 6.
+- **D — Slug y ubicación**: `comandero-cliente-builder` en raíz
+  (`modules/comandero-cliente-builder/`). Documentado en sección 1.
+- **E — Catálogo de eventos**: OK al catálogo declarado. Los dos
+  eventos de publicación quedan declarados pero solo se activan en
+  Fase 6b (ver sección 2).
+
+## Plan por fases (compromiso de scope)
+
+- **Fase 6a — este builder, MVP a disco**:
+  - Crear `modules/comandero-cliente-builder/` con `module.json`,
+    `index.js` POC2, 2 tablas en sqlite, 4 tools de presentación + 1
+    de build (sin `bundle.publicar`).
+  - Copiar `static-template.js` desde `pizzepos/carta-digital` y
+    especializarlo añadiendo carrito + gesto "enviar pedido" → MQTT
+    de vuelta al sistema.
+  - Bundle se persiste vía `fs.write.request` y el operador lo sube
+    manualmente con `wrangler` mientras Fase 6b no exista.
+  - Tests por capas wireados a CI.
+  - Validate:ci PASS.
+- **Fase 6b — cf-worker-deployer reusable (módulo hermano nuevo)**:
+  - Extraer la lógica de `modules/pizzepos/carta-digital/cf-worker/`
+    a módulo independiente que consume `*.bundle.publicacion.solicitada`
+    y publica `*.bundle.publicado` / `*.bundle.publicacion.fallida`.
+  - Migrar `carta-digital` a usarlo (no toca su template, solo el
+    deploy).
+  - Activar las 2 tools/eventos restantes del builder.
+- **Fase 6c — `catalogo-pwa-template` común (opcional, solo si duele)**:
+  - Si la duplicación del template entre `carta-digital` y este
+    builder genera bugs o divergencia molesta, extraer a módulo
+    común. Hasta entonces, "tres líneas similares mejor que
+    abstracción prematura".
+
+Solo Fase 6a entra en este horizonte de trabajo. 6b y 6c son
+horizontes separados que se planifican cuando lleguen.

@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-05-26T23:04:08.273Z",
-  "total": 2280,
+  "generated_at": "2026-05-26T23:40:20.715Z",
+  "total": 2287,
   "by_validator": {
     "naming": 40,
     "events": 185,
@@ -12,7 +12,7 @@
     "chat-flow": 2,
     "agent-flow": 7,
     "llm-flow": 1,
-    "tools": 365,
+    "tools": 372,
     "agents-config": 169,
     "module-rewrite": 69,
     "frontend": 375,
@@ -29,8 +29,8 @@
     "project-identity": 10
   },
   "by_severity": {
-    "warning": 2086,
-    "info": 132,
+    "warning": 2090,
+    "info": 135,
     "error": 90
   },
   "signatures": [
@@ -1950,6 +1950,10 @@
     "testing|drift_test_sin_step_ci|npm script \"test:whatsapp-bot\" sin step en .github/workflows/validate.yml",
     "tools|drift_dos_modulos_con_misma_tool_name|name \"whatsapp.enviar\" declarado por 2 modulos: pizzepos__cuentas-canales, whatsapp-bot",
     "tools|drift_dos_tools_con_misma_clave_ui_derivada|clave UI \"whatsapp.enviar\" producida por 2 fuentes: pizzepos__cuentas-canales (tools[]: \"whatsapp.enviar\") vs whatsapp-bot (tools[]: \"whatsapp.enviar\"). El segundo register en uiHandler sobrescribira el primero con warn 'ui.request.handler.overwrite'. Cada tool debe producir una clave (domain, action) unica cross-repo.",
+    "tools|drift_tool_errores_conocidos_codigo_no_canonico|pizzepos__comandero tool \"comandero.agregar_item\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
+    "tools|drift_tool_errores_conocidos_codigo_no_canonico|pizzepos__comandero tool \"comandero.eliminar_item\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
+    "tools|drift_tool_errores_conocidos_codigo_no_canonico|pizzepos__comandero tool \"comandero.enviar_cocina\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
+    "tools|drift_tool_errores_conocidos_codigo_no_canonico|pizzepos__comandero tool \"comandero.obtener_pedido\" — codigo \"INTERNAL_ERROR\" no esta en catalogo errors.json",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|code-executor tool \"shell.exec\" en modules/code-executor/index.js:61 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|code-executor tool \"shell.script\" en modules/code-executor/index.js:174 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|facturacion__asesoria tool \"asesoria.historial\" en modules/facturacion/asesoria/index.js:269 — algun return no parece shape canonico {status, data|error}",
@@ -1969,6 +1973,9 @@
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__cocina tool \"cocina.mark-ready\" en modules/pizzepos/cocina/index.js:667 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__cocina tool \"cocina.prepare-item\" en modules/pizzepos/cocina/index.js:527 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__cocina tool \"cocina.register-device\" en modules/pizzepos/cocina/index.js:702 — algun return no parece shape canonico {status, data|error}",
+    "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__comandero tool \"comandero.agregar_item\" en modules/pizzepos/comandero/index.js:288 — algun return no parece shape canonico {status, data|error}",
+    "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__comandero tool \"comandero.eliminar_item\" en modules/pizzepos/comandero/index.js:381 — algun return no parece shape canonico {status, data|error}",
+    "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__comandero tool \"comandero.enviar_cocina\" en modules/pizzepos/comandero/index.js:518 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__cuentas-canales tool \"mesa.list\" en modules/pizzepos/cuentas-canales/strategies/mesa.js:362 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__cuentas-canales tool \"mesa.renombrar\" en modules/pizzepos/cuentas-canales/strategies/mesa.js:230 — algun return no parece shape canonico {status, data|error}",
     "tools|drift_tool_handler_que_devuelve_valor_pelado|pizzepos__cuentas-canales tool \"telefono.contactos\" en modules/pizzepos/cuentas-canales/strategies/telefono.js:307 — algun return no parece shape canonico {status, data|error}",

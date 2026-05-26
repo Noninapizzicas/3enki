@@ -1,7 +1,7 @@
 {
   "name": "comandero",
-  "version": "3.1.0",
-  "description": "Buffer de pedido por cuenta del POS — items, variaciones, envio a cocina. Persistencia transitoria atomica. Resolucion precio-por-canal via cache local hidratado por tarifas.config.actualizada (sin acceso directo a otros modulos).",
+  "version": "3.2.0",
+  "description": "Buffer de pedido por cuenta del POS — items, variaciones, envio a cocina. Persistencia transitoria atomica. Resolucion precio-por-canal via cache local hidratado por tarifas.config.actualizada (sin acceso directo a otros modulos). Las 4 operaciones principales se exponen como tools del LLM (agregar/eliminar/enviar/obtener) compartiendo los mismos handlers que los ui_handlers del frontend.",
   "author": "Pizzepos Team",
   "language": "es",
   "main": "index.js",
@@ -43,7 +43,76 @@
     { "domain": "comandero", "action": "buffers",      "handler": "handleListBuffers",   "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "comandero", "action": "health",       "handler": "handleHealthCheck",   "type": "workspace_module", "zone": "barra_modulos" }
   ],
-  "tools": [],
+  "tools": [
+    {
+      "name": "comandero.agregar_item",
+      "description": "Añade un item al buffer de pedido de una cuenta. El precio se resuelve segun el canal de venta (mesa/llevar/glovo/...) usando la carta asignada en tarifas. Si no se especifica precio, se toma del catalogo del proyecto. Publica comandero.item_agregado.",
+      "handler": "handleAddItem",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cuenta_id", "producto_id"],
+        "properties": {
+          "cuenta_id":   { "type": "string", "minLength": 1, "description": "ID de la cuenta destino (p.ej. 'mesa_5_xxx', 'glovo_001')" },
+          "producto_id": { "type": "string", "minLength": 1, "description": "ID del producto a anyadir" },
+          "nombre":      { "type": "string", "description": "Opcional: nombre legible del producto. Si se omite, se toma del cache de productos" },
+          "precio":      { "type": "number", "minimum": 0, "description": "Opcional: precio unitario. Si se omite, se resuelve por canal" },
+          "cantidad":    { "type": "integer", "minimum": 1, "description": "Cantidad a anyadir (default 1)" },
+          "notas":       { "type": "string", "description": "Notas adicionales del item" },
+          "tipo":        { "type": "string", "enum": ["mitad_mitad", "al_gusto"], "description": "Tipo especial: pizza mitad-mitad o al-gusto" },
+          "variaciones": { "type": "array", "description": "Variaciones aplicadas (extras, sin cebolla, etc.)" },
+          "project_id":  { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+        }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "INTERNAL_ERROR"]
+    },
+    {
+      "name": "comandero.eliminar_item",
+      "description": "Elimina un item del buffer de pedido (solo items aun no enviados a cocina). Publica comandero.item_eliminado.",
+      "handler": "handleRemoveItem",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cuenta_id", "item_id"],
+        "properties": {
+          "cuenta_id":  { "type": "string", "minLength": 1, "description": "ID de la cuenta" },
+          "item_id":    { "type": "string", "minLength": 1, "description": "ID del item (devuelto al anyadirlo via comandero.agregar_item)" },
+          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+        }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "INTERNAL_ERROR"]
+    },
+    {
+      "name": "comandero.enviar_cocina",
+      "description": "Envia el pedido completo de una cuenta a cocina: marca los items como 'enviado' y publica comandero.enviar_cocina para que el modulo cocina los reciba. Si todos los items ya fueron enviados o no hay items, devuelve CONFLICT_STATE.",
+      "handler": "handleEnviarCocina",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cuenta_id"],
+        "properties": {
+          "cuenta_id":  { "type": "string", "minLength": 1, "description": "ID de la cuenta" },
+          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+        }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "INTERNAL_ERROR"]
+    },
+    {
+      "name": "comandero.obtener_pedido",
+      "description": "Devuelve el estado actual del pedido de una cuenta: items (enviados y no enviados), notas y total. Si no hay pedido aun, devuelve estructura vacia (items:[], total:0). Operacion de solo lectura.",
+      "handler": "handleGetPedido",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cuenta_id"],
+        "properties": {
+          "cuenta_id":  { "type": "string", "minLength": 1, "description": "ID de la cuenta" },
+          "project_id": { "type": "string", "description": "ID del proyecto (default: ultimo activo)" }
+        }
+      },
+      "errores_conocidos": ["INVALID_INPUT", "INTERNAL_ERROR"]
+    }
+  ],
   "config": {
     "persistence": {
       "type":   "json-file",

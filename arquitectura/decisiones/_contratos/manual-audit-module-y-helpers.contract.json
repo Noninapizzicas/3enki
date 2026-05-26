@@ -1,13 +1,14 @@
 {
   "_doc": "Manual operativo de la skill audit-module v7 y de los helpers MQTT/HTTP que la soportan. Cubre como crear/listar conversaciones, dialogar con paginas concretas, forzar providers/modelos, sacar partido al conversation-export, y verificar estado real contra el bus. Documento de referencia — no contiene valoraciones, solo procedimientos.",
   "id": "manual-audit-module-y-helpers",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "creada": "2026-05-20",
   "tipo": "manual_operativo",
+  "supersedes_nota": "v1.1.0 (2026-05-26): integra la pareja capture-bus.js + analyze-session.js (manual-audit-bus-capture.contract.json) en el flujo de la skill audit-module. Anade paso 0 'captura del bus en background' antes de la conversacion y paso 4 'cierre + analyze-session' antes del reporte narrativo. El reporte ahora lee analysis.json como insumo estructurado en vez de inspeccionar timeline crudo. Sin cambios al shape de los helpers existentes ni al output_directory_pattern.",
 
   "skill_audit_module": {
     "ubicacion": ".claude/skills/audit-module/SKILL.md",
-    "version": "v7",
+    "version": "v8",
     "invocacion": "/audit-module <slug_modulo>  (slash command de Claude Code)",
     "argumento": "slug del modulo a auditar (recetas, escandallo, viabilidad, etc.)",
     "filosofia": [
@@ -15,17 +16,22 @@
       "Claude conduce y adapta cada mensaje a la respuesta anterior.",
       "Cubre tools + delegacion + coherencia con proposito en el mismo hilo.",
       "Forced-agent SOLO como triage si un agente fallo en la sesion natural.",
-      "Output narrativo con juicio. Sin schema YAML, sin metricas obligatorias."
+      "Captura del bus en background desde el inicio — el observable real es el bus, no el habla del LLM.",
+      "Output narrativo con juicio que LEE el analysis.json (audit-session-analysis-v1) en vez de inspeccionar timeline crudo."
     ],
     "fases": {
+      "0_captura_bus_background": "Arrancar capture-bus.js en background apuntando a audit/<modulo>-<provider>-<TS>/bus-capture.jsonl. Captura TODOS los eventos del bus durante la sesion (incluso los que no propagan conversation_id).",
       "1_comprender": "Leer module.json, prompt.json, context.json del modulo. Identificar tools y agentes con scope incluyendo el modulo.",
       "2_conversacion_natural": "Una conversacion con page_id=<modulo>. 10-15 mensajes mezclando: lectura de estado, acciones del dominio, preguntas abiertas que invitan a delegar, pivots/ambigüedad/errores intencionados, cierre con vision de conjunto.",
       "3_triage_condicional": "SOLO si en la conversacion natural un agente fallo: lanzar force-agent dirigido a ese agente en conversacion separada. Pregunta: ¿esta roto el agente o le llego mal contexto?",
-      "4_reporte": "Generar audit/<modulo>-<provider>-<TS>/reporte.md con secciones libres: Resumen, Lo que funciono, Lo que fallo o costo, Agentes no invocados, Triage si aplica, Patrones, Sugerencias accionables."
+      "4_cierre_y_analyze": "fetch-export.js → cerrar capture-bus (SIGINT) → analyze-session.js produce audit/<modulo>-<provider>-<TS>/analysis.json con secciones turns/orphans/errors_and_warnings/latencies/coverage/events_by_module.",
+      "5_reporte": "Generar audit/<modulo>-<provider>-<TS>/reporte.md con secciones libres: Resumen, Lo que funciono, Lo que fallo o costo, Agentes no invocados, Triage si aplica, Patrones, Sugerencias accionables. Lectura primaria: analysis.json (no chat-export.json crudo)."
     },
     "output_directory_pattern": "audit/<modulo>-<provider>-<TS>/",
     "output_files": {
+      "bus-capture.jsonl": "Captura cruda de TODOS los eventos del bus durante la sesion. Append-only, una linea por evento (shape definido en manual-audit-bus-capture.contract.json).",
       "chat-export.json": "La conversacion exportada completa (timeline + messages_raw).",
+      "analysis.json": "Output de analyze-session.js — JSON estructurado audit-session-analysis-v1. Insumo primario para el reporte.",
       "reporte.md": "Reporte narrativo con juicio.",
       "triage/<agente>.json": "Solo si hubo escalacion forced-agent."
     }
@@ -82,6 +88,22 @@
       "ejecucion": "SOLO en el VPS (lee /opt/enki/data/projects/ directamente)",
       "publica": "project.list.request al bus para obtener la fuente de verdad",
       "modo": "DRY-RUN — solo lista candidatos clasificados (OK / TEMPLATE / REPO_LEAK / BAD_NAME / ORPHAN / DB_NO_DISK). NO borra nada."
+    },
+
+    "capture-bus.js": {
+      "uso": "node scripts/audit-helpers/capture-bus.js <output.jsonl> [--idle-timeout <ms>] [--max-duration <ms>] [--topic-filter <regex>]",
+      "rol": "Cliente MQTT externo que se suscribe a wildcard 'core/+/events/#' y appendea cada envelope al JSONL con _captured_at + _topic + envelope canonico tal cual. Cero impacto en event-core.",
+      "uso_en_la_skill": "Arranca en background al inicio del audit (fase 0). Cierra al final con SIGINT o se autocierra con --idle-timeout.",
+      "shape_jsonl": "Definido en manual-audit-bus-capture.contract.json — campos canonicos por linea: _captured_at + _topic + spread del envelope (event_id, event_type, timestamp, source, data, metadata).",
+      "eventos_malformados": "Se loguean como entrada con _parse_error + _raw truncado a 2KB. No se silencian."
+    },
+
+    "analyze-session.js": {
+      "uso": "node scripts/audit-helpers/analyze-session.js --export <chat-export.json> --capture <bus-capture.jsonl> [--conversation <id>] [--out <path>]",
+      "rol": "Correla el export del modulo conversation-export con el JSONL del capture-bus. Output JSON estructurado audit-session-analysis-v1.",
+      "uso_en_la_skill": "Se invoca en la fase 4 tras cerrar la captura y descargar el export. El analysis.json es el insumo primario del reporte narrativo.",
+      "shape_output": "Definido en manual-audit-bus-capture.contract.json — secciones: window, turns[], events_by_module, orphans, errors_and_warnings, latencies, coverage. Cero juicio, solo datos.",
+      "detector_de_alucinacion": "Un tool_calls_reported del assistant que no aparece en events_by_module o cuyo .request esta en orphans = el LLM dijo haber hecho algo que el bus no refleja."
     }
   },
 

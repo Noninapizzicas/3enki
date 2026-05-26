@@ -1,12 +1,18 @@
-# Arranque vertical tienda PWA sin datos — guion para la próxima sesión
+# Arranque vertical tienda PWA + WhatsApp escueto — guion para la próxima sesión
 
 Este archivo NO es un contrato ni un plan — es **el guion literal** que tú
 pegas al arrancar la próxima sesión para implementar la vertical tienda
-PWA sin datos (caso piloto: vapers). Está diseñado para que la otra
-conversación no improvise ni pierda contexto.
+PWA con WhatsApp escueto (caso piloto: vapers). Está diseñado para que
+la otra conversación no improvise ni pierda contexto.
 
 Doc maestro de referencia:
 `arquitectura/decisiones/propuestas/vertical-tienda-pwa-sin-datos.md`.
+
+> **Última actualización: auditoría 2026-05-26 ("ojos limpios").** El
+> modelo previo era miope (omití el chat LLM ya existente en
+> carta-digital, omití el flujo conversacional WhatsApp, asumí reusos
+> que no aplicaban). Esta versión recoge el modelo real tras 8 rondas
+> de clarificación con el usuario.
 
 ---
 
@@ -14,148 +20,111 @@ Doc maestro de referencia:
 
 Cópialo tal cual:
 
-> *"Vamos a implementar la vertical tienda PWA sin datos. Caso piloto:
-> vapers. Lee
+> *"Vamos a implementar la vertical tienda PWA + WhatsApp escueto. Caso
+> piloto: vapers. Lee
 > `arquitectura/decisiones/propuestas/vertical-tienda-pwa-sin-datos.md`
 > entero.
 >
 > Verifica antes de tocar nada:
-> - `modules/pizzepos/carta-digital/` existe y es blueprint-driven con cf-worker.
-> - `modules/pizzepos/{productos,pedidos,cobros,cuentas,cuentas-canales,tarifas,variaciones}/` existen.
-> - `modules/pizzepos/cuentas-canales/strategies/` tiene strategies (mesa, whatsapp, etc.) — ahí añadiremos tienda-online.
-> - No existen aún `modules/inventario/` ni `modules/verificacion-edad/` ni `modules/tienda-publica/`.
+> - `modules/pizzepos/carta-digital/cf-worker/worker.js` existe y es
+>   AI Chat Proxy a DeepSeek (esto es lo que reusamos como base de PWA).
+> - `modules/pizzepos/carta-digital/static-template.js` y `export-cli.js` existen.
+> - `modules/telegram-service/` existe (reusamos para notificación staff).
+> - `modules/cobros/` v3.0.0 con método `efectivo` canónico.
+> - NO existen aún `modules/whatsapp-bot/`, `modules/inventario/`,
+>   `modules/verificacion-edad/`.
 >
 > Reporta estado en una tabla.
 >
-> Luego salta a **Fase 0**: cerrar conmigo las **5 decisiones abiertas**
+> Luego salta a **Fase 0**: cerrar conmigo las **3 decisiones abiertas**
 > de la sección 6 del doc maestro. Hazme las preguntas en el orden de
 > este archivo y guarda mis respuestas aquí mismo.
 >
-> Solo cuando las 5 estén cerradas, para a pedirme OK antes de Fase 1
-> (módulo inventario). Después itera fase por fase pidiéndome OK entre
-> cada una.
+> Solo cuando las 3 estén cerradas, para a pedirme OK antes de Fase 1
+> (setup Meta Cloud API).
 >
-> NO escribas código hasta que las 5 estén respondidas Y yo haya dado OK
+> NO toques código hasta que las 3 estén respondidas Y yo haya dado OK
 > explícito. NO crees PR sin OK explícito mío."*
 
 ---
 
-## 2 · Las 5 preguntas en orden (la otra conversación me las hace una a una)
+## 2 · Las 3 preguntas en orden (la otra conversación me las hace una a una)
 
 Formato: **enunciado · opciones · recomendación del doc**.
 
-### Pregunta 1 — Path/naming del módulo PWA pública (sección 6.1)
-
-¿Cómo se materializa la PWA pública nueva con carrito interactivo?
-
-- **A**: Generalizar `carta-digital` añadiendo operaciones públicas
-  (`crear_pedido_publico`, etc.). Sigue siendo el mismo módulo.
-- **B**: Crear módulo nuevo `tienda-publica` clon de `carta-digital`
-  con su propio `cf-worker` adaptado. Distinción ontológica clara.
-- **C**: Crear módulo nuevo `tienda-publica` ligero que invoca a
-  `carta-digital` para la parte vitrina y añade solo lo de carrito.
-
-Recomendación de partida en el doc: **B**. Mantiene la distinción
-restaurante vs tienda, permite evolución independiente.
-
-Mi respuesta: ___
-
----
-
-### Pregunta 2 — Anti-fraude del código de recogida (sección 6.2)
+### Pregunta 1 — Anti-fraude del código de recogida (sección 6.1)
 
 ¿Cómo se evita que alguien recoja un pedido ajeno con el código filtrado?
 
-- **A**: Solo código + descripción visual del pedido (el dependiente
-  cruza con lo que ve en la pantalla del cliente).
-- **B**: Código + palabra clave (3 chars) que el cliente elige al
-  confirmar y dice al recoger.
-- **C**: Código + QR firmado criptográficamente (timestamp + hash). El
-  dependiente escanea con la app admin.
+- **A**: Solo código + descripción visual del pedido (dependiente cruza con pantalla del cliente).
+- **B**: Código + palabra clave (3 chars) que el cliente elige al confirmar y dice al recoger.
+- **C**: Código + QR firmado criptográficamente.
 
-Recomendación de partida en el doc: **A**. Suficiente para volumen bajo
-de barrio. Si emerge problema real, evolucionar a B.
+Recomendación del doc: **A**. Suficiente para volumen bajo de barrio. Si emerge problema, evolucionar a B.
 
 Mi respuesta: ___
 
 ---
 
-### Pregunta 3 — Cuándo se usa `menu-generator` para cargar el catálogo (sección 6.3)
+### Pregunta 2 — Verificación edad: antes del catálogo o solo al confirmar pedido (sección 6.2)
 
-- **A**: Esperar a que `menu-generator` se migre a blueprint puro (ver
-  `migracion-menu-generator-blueprint.md`) y luego usarlo.
-- **B**: Usar `menu-generator` legacy ahora (texto/JSON sí funciona,
-  OCR no se usa). Cuando se migre, no cambia nada para esta vertical.
+- **A**: Gate al entrar a la PWA.
+- **B**: Checkbox al confirmar pedido.
+- **C**: Configuración por proyecto. Vapers SÍ gate. Panadería nada.
 
-Recomendación de partida en el doc: **B**. No acoplar este horizontal
-con otro pendiente.
+Recomendación del doc: **C**. Por proyecto.
 
 Mi respuesta: ___
 
 ---
 
-### Pregunta 4 — Verificación de edad: antes del catálogo o solo al confirmar (sección 6.4)
-
-- **A**: Gate al entrar a la PWA. El cliente confirma edad antes de ver
-  productos. Más estricto.
-- **B**: Checkbox al confirmar pedido (justo antes de generar código).
-  Menos fricción.
-- **C**: Configuración por proyecto. Vapers SÍ gate (A). Panadería/otros
-  sin regulación, nada.
-
-Recomendación de partida en el doc: **C**. Configuración por proyecto.
-
-Mi respuesta: ___
-
----
-
-### Pregunta 5 — Expiración de reserva de stock (sección 6.5)
+### Pregunta 3 — Expiración de reserva de stock (sección 6.3)
 
 Default 24h. ¿Configurable por proyecto o fijo?
 
-- **A**: Fijo 24h en v1. Si emerge necesidad, se vuelve configurable.
-- **B**: Configurable por proyecto desde el principio (un campo en
-  `data/projects/{slug}/inventario.config.json`).
+- **A**: Fijo 24h en v1.
+- **B**: Configurable por proyecto desde el principio (un campo en `data/projects/{slug}/inventario.config.json`).
 
-Recomendación de partida en el doc: **B**. Cero trabajo extra, permite
-ajustar por tipo de negocio (panadería 3h, vapers 48h).
+Recomendación del doc: **B**. Cero trabajo extra, permite ajustar por tipo de negocio.
 
 Mi respuesta: ___
 
 ---
 
-## 3 · Qué hace la otra conversación con mis 5 respuestas
+## 3 · Qué hace la otra conversación con mis 3 respuestas
 
-1. Las guarda en este mismo archivo (sustituye los `___` por las
-   respuestas + 1 línea de motivo si la hay).
-2. Para y pide tu OK explícito antes de ejecutar Fase 1.
-3. Si das OK, ejecuta **Fase 1** (~3-4h):
-   - Crea `modules/inventario/` POC2 con module.json + index.js + tests.
-   - 6 tools canónicas: consultar, reservar, confirmar, liberar,
-     ajustar, estado_catalogo.
-   - 3 eventos: stock.bajo_minimo, reserva.creada, reserva.expirada.
-   - `npm run validate:ci` PASS verde.
-4. Para a pedirte OK para Fase 2.
-5. Itera Fases 2-7 pidiéndote OK entre cada una.
-6. **NUNCA crear PR ni mergear sin OK explícito mío.**
+1. Las guarda en este archivo (sustituye los `___` por las respuestas + 1 línea de motivo si la hay).
+2. Para y pide OK explícito antes de Fase 1 (setup Meta Cloud API).
+3. Ejecuta Fases 1-9 según el doc maestro, parando a pedir OK entre cada una:
+   - Fase 1: setup WhatsApp Cloud API (1-2h).
+   - Fase 2: módulo `whatsapp-bot` POC2 (3-4h).
+   - Fase 3: módulo `inventario` POC2 con safeUpdate (3-4h).
+   - Fase 4: módulo `verificacion-edad` mini (30 min).
+   - Fase 5: tool `pedido.generar_codigo_recogida` (1h).
+   - Fase 6: componentes Svelte PWA sobre carta-digital (2-3h).
+   - Fase 7: configuración inicial proyecto vapers (1-2h).
+   - Fase 8: tests + audit runtime E2E (1-2h).
+   - Fase 9: cierre + commit + push.
+4. **NUNCA crear PR ni mergear sin OK explícito.**
 
 ---
 
 ## 4 · Recordatorios para la próxima conversación
 
 - Idioma de los archivos: español (canónico del repo).
-- Sin emojis en código ni archivos salvo que el usuario los pida.
-- Branch de trabajo: la que diga el system prompt de esa sesión, NUNCA
-  pushear a otra sin permiso explícito.
-- `validate:ci` tiene que pasar antes de cualquier merge/push.
-- **NUNCA crear PR sin OK explícito del usuario.**
-- **NUNCA mergear PR sin OK explícito del usuario.**
-- Los módulos nuevos siguen POC2 (BaseModule + 5 helpers + tests por
-  capa). Excepción: PWA pública es blueprint si decisión 1 = A o B con
-  blueprint, JS si decisión 1 = C con frontend Svelte puro.
-- Reutilizar `tools.contract v1.2` para todas las tools nuevas.
-- Catalogar las nuevas tools de `inventario` en formato canónico para
-  que el LLM las pueda invocar.
+- Los 3 módulos nuevos siguen POC2 (BaseModule + 5 helpers + tests por capa).
+- **`inventario` DEBE usar `safeUpdate(path, mutator)`** del blueprint padre
+  para todas las secuencias read-modify-write — sigue principio 11 del
+  contrato `llm-runtime-discipline` v2.0.0 (evita la clase de bugs estilo
+  salmorejo perdido del audit 2026-05-25).
+- Los módulos nuevos deben declarar **`eventos_publicados_que_requieren_consumer[]`**
+  en su `module.json` cuando publiquen eventos fire-and-forget que necesiten consumer
+  (contrato `blueprint-eventos-conscientes` v1.0.0 vivo en main).
+- Cualquier tool nueva sigue `tools.contract` v1.2.0 auto-wire.
+- Sin emojis en código ni archivos.
+- Branch de trabajo: la que diga el system prompt de esa sesión.
+- **NUNCA crear PR sin OK explícito.**
+- **NUNCA mergear PR sin OK explícito + CI verde.**
 
 ---
 
@@ -163,22 +132,16 @@ Mi respuesta: ___
 
 Si la otra conversación intenta:
 
-- Construir `whatsapp-service` para canal transaccional → **rechaza**,
-  decisión 2 cerrada (WhatsApp solo promocional v1).
-- Añadir CRM / módulo `cliente` → **rechaza**, decisión 5 cerrada (sin
-  datos personales).
-- Implementar pasarela de pago online → **rechaza**, decisión 3 cerrada
-  (v1 solo efectivo presencial).
-- Añadir notificaciones outbound vía templates Meta → **rechaza**,
-  decisión 5 cerrada.
-- Construir módulos OCR para cargar catálogo → **rechaza**, usar
-  `menu-generator` con texto/JSON (decisión 3).
-- Tocar `whatsapp.js` strategy de `cuentas-canales` → **rechaza**, esa
-  strategy es del restaurante, no de la tienda. La tienda añade nueva
-  strategy `tienda-online`.
-- Saltarse Fase 0 (5 preguntas) → **rechaza**, vuelve a sección 2.
-- Crear PR sin tu OK → **rechaza**.
-- Mergear sin tu OK → **rechaza**.
+- Reactivar el chat LLM en PWA dentro de este horizonte → **rechaza**, decisión 4 cerrada (queda dormido).
+- Construir pasarela de pago online → **rechaza**, decisión 5 cerrada (sin pago online v1).
+- Reusar `staff-manager` o `pdf-viewer` o `tarifas` o `cuentas-canales` o `cuentas` → **rechaza**, decisiones cerradas en sección 3 (NO se reusan, explicación por qué).
+- Usar `whatsapp-web.js` o Twilio → **rechaza**, decisión 2 cerrada (Meta Cloud API oficial).
+- Generar albarán PDF → **rechaza**, decisión 13 cerrada (sin PDF v1, solo QR en pantalla).
+- Crear CRM o persistir datos del cliente → **rechaza**, decisión 7 cerrada (RGPD cero).
+- Hacer el bot WhatsApp como blueprint LLM rico → **rechaza**, decisión 3 cerrada (máquina de estados pequeña, NO chat conversacional rico).
+- Construir módulos OCR para cargar catálogo → **rechaza**, fuera de scope v1.
+- Crear PR sin tu OK explícito → **rechaza**.
+- Mergear sin tu OK explícito → **rechaza**.
 
 Si dudas, frase canónica: *"Vuelve al doc maestro
 `vertical-tienda-pwa-sin-datos.md` antes de seguir."*
@@ -187,76 +150,97 @@ Si dudas, frase canónica: *"Vuelve al doc maestro
 
 ## 6 · Cheatsheet del estado pre-implementación
 
-### Decisiones YA cerradas (10)
+### Decisiones YA cerradas (15)
 
 | # | Decisión | Cierre |
 |---|---|---|
 | 1 | Deploy | Multi-tenant compartido con pizzepos |
-| 2 | WhatsApp | Solo promocional, sin integración técnica v1 |
-| 3 | Pasarela | No en v1, solo efectivo presencial |
-| 4 | Verificación edad | Checkbox mínimo + flag en pedido |
-| 5 | Datos personales | Cero. Cliente anónimo por código |
-| 6 | Catálogo público | PWA con cf-worker (decisión final entre extender/clonar pendiente) |
-| 7 | Carrito | Local en navegador (localStorage), no conversacional |
-| 8 | Anti-fraude recogida | Código + verificación visual (B/C son evoluciones) |
-| 9 | Stock | Reserva al confirmar + expiración (default 24h) |
-| 10 | Onboarding catálogo | menu-generator (legacy o blueprint, decisión 3 abierta) |
+| 2 | WhatsApp técnico | **Meta Cloud API oficial** |
+| 3 | WhatsApp modo de uso | **Escueto**, máquina de estados pequeña, NO LLM rico |
+| 4 | Chat LLM en PWA | Disponible (carta-digital lo tiene) pero **NO se usa** v1 |
+| 5 | Pasarela online | **NO en v1**, solo efectivo presencial |
+| 6 | Verificación edad | Checkbox mínimo + flag, sin guardar identidad |
+| 7 | Datos personales | **Ninguno persistido**, RGPD cero |
+| 8 | PWA pública | Sobre `carta-digital` v1.1.0 (cf-worker + static-template ya hacen 80%) |
+| 9 | Carrito | Local en navegador (`localStorage`) |
+| 10 | Identificación al recoger | Código + QR + descripción visual |
+| 11 | Stock | Reserva al confirmar pedido en bot, expiración configurable |
+| 12 | Onboarding catálogo | Manual desde frontend admin |
+| 13 | Albarán/ticket | **Sin PDF** v1, solo QR en pantalla |
+| 14 | Tarifas | **NO se usan**, precio directo en producto |
+| 15 | Notificación staff | `telegram-service` (ya en repo) reusado |
 
-### Decisiones abiertas (5)
+### Decisiones abiertas (3)
 
-1. Path/naming PWA pública (extender vs clonar vs híbrido).
-2. Anti-fraude código (visual / palabra clave / QR firmado).
-3. Cuándo menu-generator (legacy ya o esperar blueprint).
-4. Gate edad (antes catálogo / antes pedido / por proyecto).
-5. Expiración stock (fija 24h / configurable por proyecto).
+1. Anti-fraude código (visual / palabra clave / QR firmado).
+2. Gate edad (antes catálogo / antes pedido / por proyecto).
+3. Expiración stock (fija 24h / configurable por proyecto).
 
 ### Módulos nuevos a crear (3)
 
 | Módulo | Esfuerzo | Tipo |
 |---|---|---|
-| `inventario` | 3-4h | JS POC2 |
+| `whatsapp-bot` | 3-4h | JS POC2, máquina de estados sobre Meta Cloud API |
+| `inventario` | 3-4h | JS POC2 con `safeUpdate` (CAS) obligatorio |
 | `verificacion-edad` | 30 min | JS POC2 mini |
-| PWA pública (nombre según decisión 1) | 4-6h | Blueprint + componentes Svelte + cf-worker adaptado |
 
 ### Módulos a tocar (sin reescribir)
 
 | Módulo | Cambio |
 |---|---|
 | `pedidos` | Tool nueva `pedido.generar_codigo_recogida` (~1h) |
-| `cuentas-canales` | Nueva strategy `tienda-online.js` (~1h) |
-| `tarifas` | Configuración nueva (canal `tienda-online`) — sin código |
+| `carta-digital` (frontend Svelte) | Nuevos componentes catálogo + carrito + serializador wa.me (~2-3h) |
 
 ### Módulos a configurar (sin código)
 
-- `productos`, `categorias`, `variaciones`, `cobros`, `cuentas`,
-  `staff-manager`, `facturas`, `pdf-viewer`, `scheduler`,
-  `credential-manager`, `escandallo`, `viabilidad`, `carta-marketing`,
-  4 agentes marketing.
+- `productos`, `cobros`, `telegram-service`, `credential-manager`.
 
-### Fases del camino (7)
+### Las 9 fases del camino
 
-1. Inventario (3-4h).
-2. Pedido recogida + strategy tienda-online (1-2h).
-3. Verificación edad (30 min).
-4. PWA pública (4-6h).
-5. Configuración inicial proyecto vapers (2-3h).
-6. Tests + audit runtime E2E (1-2h).
-7. Cierre.
+1. Setup WhatsApp Cloud API (1-2h).
+2. Módulo `whatsapp-bot` (3-4h).
+3. Módulo `inventario` (3-4h).
+4. Módulo `verificacion-edad` mini (30 min).
+5. Tool `pedido.generar_codigo_recogida` (1h).
+6. Componentes Svelte PWA (2-3h).
+7. Configuración inicial proyecto vapers (1-2h).
+8. Tests + audit runtime E2E (1-2h).
+9. Cierre.
 
 **Total v1: 12-18h en 2-3 sesiones.**
 
 ---
 
-## 7 · Visión multi-vertical después de v1
+## 7 · Lecciones nuevas a aplicar (post-auditoría 2026-05-26)
 
-Una vez vapers funcione, la misma infraestructura sirve para:
-panadería, floristería, carnicería, frutería, estanco. Todo es
-configuración del `project_id`, no código nuevo. Diferencias mínimas:
+Cosas que aprendimos en sesiones desde el 25-mayo y deben aplicarse:
 
-- Checkbox edad sí/no por proyecto.
-- Expiración stock configurable por proyecto.
+1. **PR #208 — CAS con `safeUpdate`**: el módulo `inventario` lo usa
+   obligatoriamente para read-modify-write seguro.
+2. **PR #209 — eventos conscientes blueprints**: los 3 módulos nuevos
+   declaran `eventos_publicados_que_requieren_consumer[]` cuando aplique.
+   Si publica `pedido.crear.request` esperando que `pedidos` lo
+   escuche, declararlo + verificar que `pedidos` lo escucha.
+3. **PR #210 — contrato `dinamica-de-trabajo-companero`**: esta
+   propuesta es ejemplo de horizonte grande siguiendo el patrón
+   propuesta + arranque + decisiones cerradas vs abiertas explícitas
+   + auditoría "ojos limpios" cuando se acumula entropía.
+4. **PR #211 — page graph usa catálogo**: la PWA pública debe declarar
+   `target_page_id` (e.g. `"tienda"`) en su `module.json` para aparecer
+   en el grafo de páginas navegables del frontend admin.
+5. **Catálogo `_outputs/eventos-publish-subscribe.json` (PR #209)**: la
+   sesión que implemente puede consultarlo para ver qué eventos del
+   sistema ya existen antes de inventar nombres nuevos.
+
+---
+
+## 8 · Visión multi-vertical (futuro, post-vapers)
+
+Una vez vapers funcione, panadería/floristería/carnicería/frutería/
+estanco son configuración del `project_id`, no código nuevo. Mismo
+`whatsapp-bot` sirve a todas — solo cambia catálogo de productos y
+número de WhatsApp del negocio. Cambios opcionales:
+
+- Verificación edad ON/OFF por proyecto.
+- Expiración stock configurable (perecederos vs no).
 - Stock por unidades vs por peso (adaptación menor en `inventario` v2).
-- Personalidad del LLM via `carta-marketing` por proyecto.
-
-Cuando se valide vapers en runtime real, el segundo proyecto se monta en
-~1-2h de configuración.

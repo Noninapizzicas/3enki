@@ -35,11 +35,16 @@
 
 | evento | cuándo | payload mínimo | fase |
 |---|---|---|---|
-| `comandero-cliente.producto.presentacion.actualizada` | tras editar imagen/descripción/orden de un producto | `{producto_id, project_id, presentacion: {imagen_url?, descripcion_publica?, orden_publico?, oculto_publico?}}` | 6a |
+| `comandero-cliente.presentacion.actualizada` | tras editar imagen/descripción/orden de un producto | `{producto_id, project_id, presentacion: {imagen_url?, descripcion_publica?, orden_publico?, oculto_publico?}}` | 6a |
 | `comandero-cliente.bundle.generado` | tras compilar el artefacto PWA del proyecto | `{project_id, bundle_id, bundle_path, productos_count, generado_en}` | 6a |
 | `comandero-cliente.bundle.fallido` | error en la fase de build | `{project_id, bundle_id?, fase: 'generar', error: {code, message}}` | 6a |
-| `comandero-cliente.bundle.publicacion.solicitada` | el builder pide al deployer que suba el bundle al cf-worker | `{project_id, bundle_id, bundle_path, target_url}` | 6b |
+| `comandero-cliente.publicacion.solicitada` | el builder pide al deployer que suba el bundle al cf-worker | `{project_id, bundle_id, bundle_path, target_url}` | 6b |
 | `comandero-cliente.bundle.publicado` | tras confirmar publicación exitosa | `{project_id, bundle_id, public_url, publicado_en}` | 6b |
+
+**Nota de naming**: los eventos cumplen `<module-prefix>.<entity>.<verb>` (3
+segmentos máx según `naming.json::form_regex`). Los nombres originales del
+borrador (`producto.presentacion.actualizada`, `bundle.publicacion.solicitada`)
+tenían 4 segmentos y violaban la forma canónica. Renombrados al subir.
 
 **Verbos**: `actualizada`, `generado`, `solicitada`, `publicado`,
 `fallido` — todos canónicos en `naming.json` (es).
@@ -90,11 +95,11 @@ retorno `{status, data | error: {code, message}}`).
 
 | tool | qué hace | parámetros | fase |
 |---|---|---|---|
-| `comandero-cliente.producto.presentacion.actualizar` | añade/edita imagen, descripción, orden público de un producto | `{project_id, producto_id, imagen_url?, descripcion_publica?, orden_publico?, oculto_publico?}` | 6a |
-| `comandero-cliente.producto.imagen.subir` | sube imagen al storage y devuelve url canónica | `{project_id, producto_id, imagen_base64, content_type}` | 6a |
-| `comandero-cliente.categoria.orden.actualizar` | reordena categorías para la vista pública | `{project_id, orden: [categoria_id, ...]}` | 6a |
+| `comandero-cliente.presentacion.actualizar` | añade/edita imagen, descripción, orden público de un producto | `{project_id, producto_id, imagen_url?, descripcion_publica?, orden_publico?, oculto_publico?}` | 6a |
+| `comandero-cliente.imagen.subir` | sube imagen al storage y devuelve url canónica | `{project_id, producto_id, imagen_base64, content_type}` | 6a |
+| `comandero-cliente.categorias.reordenar` | reordena categorías para la vista pública | `{project_id, orden: [categoria_id, ...]}` | 6a |
 | `comandero-cliente.bundle.generar` | compila el bundle PWA del proyecto y devuelve `bundle_path` | `{project_id, identidad: {marca, colores, logo_url?}}` | 6a |
-| `comandero-cliente.bundle.publicar` | dispara la publicación al cf-worker (emite `bundle.publicacion.solicitada`) | `{project_id, bundle_id}` | 6b |
+| `comandero-cliente.bundle.publicar` | dispara la publicación al cf-worker (emite `publicacion.solicitada`) | `{project_id, bundle_id}` | 6b |
 
 **Acotación deliberada**: el builder NO expone tools de precio,
 inventario ni modificadores. Esas mutaciones pertenecen a
@@ -104,44 +109,51 @@ operativo.
 
 ## 5. Persistencia
 
-- **Tabla `comandero_cliente_presentacion`** (sqlite, propietaria):
-  - `producto_id` (PK + FK lógico a productos)
-  - `project_id`
-  - `imagen_url` (nullable)
-  - `descripcion_publica` (nullable)
-  - `orden_publico` (nullable)
-  - `oculto_publico` (boolean, default false)
-  - `actualizada_en`
-  - El cruce con `productos` es por evento, no por JOIN cross-módulo.
-    El catálogo operativo vive en su módulo; el builder solo posee la
-    capa de presentación.
+**Patrón canónico del horizonte `vertical-tienda-pwa-sin-datos`**:
+JSON-file-per-project, no SQLite. Cada proyecto tiene su carpeta en
+`data/projects/<slug>/` y cada módulo del horizonte persiste ahí
+(igual que `inventario`, `whatsapp-bot`, `pedidos-tienda`).
 
-- **Tabla `comandero_cliente_bundles`** (sqlite, propietaria):
-  - `bundle_id` (PK uuid)
-  - `project_id`
-  - `bundle_path` (relativo a un dir gestionado por filesystem)
-  - `productos_count`
-  - `generado_en`
-  - `publicado_en` (nullable)
-  - `public_url` (nullable)
+Ficheros bajo `{project.base_path}/storage/comandero-cliente-builder/`:
 
-**Cumple `persistence.contract`**: tablas propias, sin acceso a tablas
-de otros módulos. Cualquier consulta cross-módulo va por
-`db.query.*` events.
+- **`presentacion.json`** — capa visual del catálogo del proyecto.
+  Shape: `{ <producto_id>: { imagen_url?, descripcion_publica?, orden_publico?, oculto_publico?, actualizada_en } }`.
+  Lectura+escritura atómica (read+mutate+tmp write+rename), patrón del
+  `safeUpdate` de `inventario/services` para evitar perdidas por
+  escritura concurrente (clase de bugs "salmorejo perdido" del audit
+  cross-blueprint 2026-05-25).
 
-**Cerrado 2026-05-26**: el bundle se persiste a disco vía
-`fs.write.request` (evento canónico del módulo `filesystem`). El
-`bundle_path` resultante queda registrado en `comandero_cliente_bundles`
-y el operador puede inspeccionarlo, reintentarlo o subirlo
-manualmente con `wrangler` mientras Fase 6b no exista. Esto da
-trazabilidad y desacopla el build de la publicación.
+- **`bundles.json`** — índice de bundles generados.
+  Shape: `[{ bundle_id, bundle_path, productos_count, generado_en, publicado_en?, public_url? }, ...]`.
+  Mismo patrón atómico.
+
+- **`bundles/<bundle_id>.html`** — el artefacto PWA single-file
+  generado. Write-only por el builder; el operador lo sube a cf-worker
+  con `wrangler` o el deployer de Fase 6b lo consume.
+
+- **`imagenes/<producto_id>.{png,jpg,webp}`** — imágenes subidas por
+  `comandero-cliente.imagen.subir`. La `imagen_url` canónica se
+  resuelve relativa al `base_path` del proyecto.
+
+**Escrituras vía `fs.write.request`** (evento canónico del módulo
+`filesystem`). Cero acceso directo a `fs.*` desde el index.js del
+builder.
+
+**Cumple `persistence.contract`**: solo escribe en
+`{project.base_path}/storage/comandero-cliente-builder/`, no accede a
+storage de otros módulos. Cualquier necesidad de cruzar datos pasa por
+eventos del bus.
+
+**Cerrado 2026-05-26 (PENDIENTE B)**: bundle a disco primero. El
+operador puede inspeccionar el HTML antes de publicar, reintentarlo o
+subirlo manualmente con `wrangler` mientras Fase 6b no exista.
 
 ## 6. Decisión cerrada en la conversación: campos visuales
 
 **Decidido en este mapa**: opción 1 — extender `pizzepos/productos`
 con campos opcionales `imagen_url`, `descripcion_publica`,
 `orden_publico`, `oculto_publico` está **rechazada**. En su lugar, el
-builder tiene su propia tabla `comandero_cliente_presentacion` (sec. 5).
+builder tiene su propio `presentacion.json` por proyecto (sec. 5).
 
 Razón del cambio respecto a lo que dije antes:
 
@@ -174,7 +186,7 @@ HTTP/UI.
 
 | fallo | comportamiento esperado |
 |---|---|
-| `catalogo.actualizado` no ha llegado aún cuando se invoca `bundle.generar` | tool retorna error con `code: CATALOGO_NO_HIDRATADO` |
+| `catalogo.actualizado` no ha llegado aún cuando se invoca `bundle.generar` | tool retorna error con `code: PRECONDITION_FAILED`, `details.kind: 'catalogo_no_hidratado'` (code canónico del catálogo cerrado `errors.json`; código local `CATALOGO_NO_HIDRATADO` rechazado por validator de tools) |
 | imagen subida supera límite de tamaño | tool retorna error con `code: INVALID_INPUT`, `details.field: imagen_base64` |
 | el deployer al cf-worker falla o no existe | emite `comandero-cliente.bundle.fallido` con `fase: publicar`. El bundle queda en disco para reintento manual. |
 | producto referenciado por presentación no existe en catálogo al momento del build | warn + omite el producto del bundle. NO bloquea el build (el catálogo es la fuente; presentación huérfana se purga después por job de housekeeping, fuera de scope de v1). |

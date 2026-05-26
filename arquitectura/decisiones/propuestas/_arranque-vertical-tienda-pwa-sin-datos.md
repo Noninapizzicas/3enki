@@ -62,7 +62,7 @@ Formato: **enunciado · opciones · recomendación del doc**.
 
 Recomendación del doc: **A**. Suficiente para volumen bajo de barrio. Si emerge problema, evolucionar a B.
 
-Mi respuesta: ___
+Mi respuesta: **B — Código + palabra clave (3 chars) que el cliente elige al confirmar y dice al recoger.** (Cerrada 2026-05-26.)
 
 ---
 
@@ -74,7 +74,7 @@ Mi respuesta: ___
 
 Recomendación del doc: **C**. Por proyecto.
 
-Mi respuesta: ___
+Mi respuesta: **C — Configurable por proyecto.** Vapers/estanco → gate al entrar. Panadería/floristería/frutería/carnicería → nada. (Cerrada 2026-05-26.)
 
 ---
 
@@ -87,7 +87,7 @@ Default 24h. ¿Configurable por proyecto o fijo?
 
 Recomendación del doc: **B**. Cero trabajo extra, permite ajustar por tipo de negocio.
 
-Mi respuesta: ___
+Mi respuesta: **B — Configurable por proyecto** desde día 1 (campo en `data/projects/{slug}/inventario.config.json`). (Cerrada 2026-05-26.)
 
 ---
 
@@ -170,11 +170,11 @@ Si dudas, frase canónica: *"Vuelve al doc maestro
 | 14 | Tarifas | **NO se usan**, precio directo en producto |
 | 15 | Notificación staff | `telegram-service` (ya en repo) reusado |
 
-### Decisiones abiertas (3)
+### Decisiones abiertas (3) → cerradas 2026-05-26
 
-1. Anti-fraude código (visual / palabra clave / QR firmado).
-2. Gate edad (antes catálogo / antes pedido / por proyecto).
-3. Expiración stock (fija 24h / configurable por proyecto).
+1. ~~Anti-fraude código~~ → **B**: código + palabra clave (3 chars) que el cliente elige y dice al recoger.
+2. ~~Gate edad~~ → **C**: configurable por proyecto (vapers/estanco gate; resto no).
+3. ~~Expiración stock~~ → **B**: configurable por proyecto desde día 1 (`data/projects/{slug}/inventario.config.json`).
 
 ### Módulos nuevos a crear (3)
 

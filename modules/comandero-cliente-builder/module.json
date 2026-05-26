@@ -124,7 +124,7 @@
     },
     {
       "name": "comandero-cliente.bundle.generar",
-      "description": "Compila el bundle PWA del proyecto fusionando catalogo (cache local) + presentacion (disco) + identidad (parametro). Escribe el bundle a disco via fs.write.request. Devuelve bundle_id y bundle_path. Emite comandero-cliente.bundle.generado en exito o comandero-cliente.bundle.fallido en error.",
+      "description": "Compila el bundle PWA del proyecto fusionando catalogo (cache local) + presentacion (disco) + identidad (parametro). Escribe el bundle HTML a disco via fs nativo (patron del horizonte vertical-tienda-pwa-sin-datos). Devuelve bundle_id y bundle_path. Emite comandero-cliente.bundle.generado en exito o comandero-cliente.bundle.fallido en error.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -133,10 +133,23 @@
             "type": "object",
             "properties": {
               "marca":    { "type": "string", "description": "Nombre comercial mostrado al cliente." },
-              "colores":  { "type": "object", "description": "Paleta de colores de la marca (primary, secondary, background, etc.)." },
+              "colores":  { "type": "object", "description": "Paleta de colores de la marca con claves opcionales primario, fondo, texto, acento. Cada valor es un color CSS (hex, rgb, etc.)." },
               "logo_url": { "type": "string", "description": "URL del logo de la marca (opcional)." }
             },
             "required": ["marca"]
+          },
+          "tienda_api_url": { "type": "string", "description": "Origen HTTP del modulo tienda-api al que la PWA generada hara POST /tienda/pedido/<project_slug>. Ej: 'https://enki-ai.online'. Necesario porque el bundle se aloja en subdominio del proyecto y la API en dominio principal (cross-origin obligado). Si no se pasa, el builder lee tienda_api_url del config/project.json del proyecto." },
+          "opciones": {
+            "type": "object",
+            "description": "Configuracion del template por proyecto. Todas opcionales con defaults razonables.",
+            "properties": {
+              "moneda":              { "type": "string", "description": "Simbolo de moneda (default '€')." },
+              "requiere_telefono":   { "type": "boolean", "description": "Pedir telefono en el form (default true)." },
+              "requiere_nombre":     { "type": "boolean", "description": "Pedir nombre en el form (default true)." },
+              "requiere_mayor_edad": { "type": "boolean", "description": "Mostrar checkbox de confirmacion mayoria de edad (default false; true para tabaco/vapeo/alcohol)." },
+              "permite_notas":       { "type": "boolean", "description": "Mostrar campo de notas (default true)." },
+              "textos":              { "type": "object", "description": "Override de strings del template (titulo, subtitulo, boton_enviar, exito_titulo, etc.)." }
+            }
           }
         },
         "required": ["project_id", "identidad"],
